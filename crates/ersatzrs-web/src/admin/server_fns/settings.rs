@@ -436,7 +436,9 @@ async fn load_ffmpeg_settings_with_capabilities(
 
 #[cfg(feature = "ssr")]
 fn reconcile_mpeg_ts_script_selection(selected: &mut String, scripts: &[SelectOption]) {
-    if scripts.iter().any(|script| script.value == *selected) {
+    // Empty explicitly selects the typed built-in wrapper; absence still
+    // defaults to "default" in the existing application settings query.
+    if selected.is_empty() || scripts.iter().any(|script| script.value == *selected) {
         return;
     }
     if let Some(script) = scripts
@@ -826,6 +828,39 @@ mod tests {
         selected = "removed".into();
         reconcile_mpeg_ts_script_selection(&mut selected, &[]);
         assert_eq!(selected, "removed");
+        selected.clear();
+        reconcile_mpeg_ts_script_selection(&mut selected, &scripts);
+        assert!(selected.is_empty());
+        reconcile_mpeg_ts_script_selection(&mut selected, &[]);
+        assert!(selected.is_empty());
+    }
+
+    #[tokio::test]
+    async fn load_ffmpeg_settings_distinguishes_builtin_from_missing_script_setting() {
+        let pool = fresh_pool().await;
+        let key = ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT;
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key"=?"#)
+            .bind(key)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let repository = ersatzrs_infra::repositories::SqliteAdminSettingsRepository(pool.clone());
+        // Test the absent-setting contract before filesystem-dependent UI
+        // reconciliation may select an operator's only available script.
+        let data = ersatzrs_app::queries::load_ffmpeg_settings(&repository)
+            .await
+            .unwrap();
+        assert_eq!(data.form.default_mpeg_ts_script, "default");
+        save_config_value(&repository, key, "").await.unwrap();
+        let data = load_ffmpeg_settings_with_pool(&pool).await.unwrap();
+        assert!(data.form.default_mpeg_ts_script.is_empty());
+        assert_eq!(
+            ersatzrs_app::queries::get_optional_setting(key, &repository)
+                .await
+                .unwrap(),
+            Some(String::new())
+        );
+        pool.close().await;
     }
 
     #[tokio::test]

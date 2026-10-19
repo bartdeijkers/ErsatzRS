@@ -143,7 +143,8 @@ fn settings_result_view<T>(
 fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let active_transcode_capacity = data.active_transcode_capacity;
     let mut form = data.form;
-    let mpeg_ts_scripts = localize_mpeg_ts_script_options(data.mpeg_ts_scripts);
+    let mpeg_ts_scripts =
+        localize_mpeg_ts_script_options(data.mpeg_ts_scripts, &form.default_mpeg_ts_script);
     let audio_languages = playback_language_options(
         &data.languages,
         &form.preferred_audio_language_code,
@@ -322,8 +323,11 @@ fn auto_detect_help(resolved: &str) -> String {
     }
 }
 
-fn localize_mpeg_ts_script_options(options: Vec<SelectOption>) -> Vec<SelectOption> {
-    options
+fn localize_mpeg_ts_script_options(
+    options: Vec<SelectOption>,
+    selected: &str,
+) -> Vec<SelectOption> {
+    let mut options: Vec<_> = options
         .into_iter()
         .map(|mut option| {
             if option.value.eq_ignore_ascii_case("default") && option.label == "Default" {
@@ -331,7 +335,22 @@ fn localize_mpeg_ts_script_options(options: Vec<SelectOption>) -> Vec<SelectOpti
             }
             option
         })
-        .collect()
+        .collect();
+    // If discovery has no fallback, retain the stored unavailable ID so a save
+    // of unrelated settings cannot implicitly choose the new built-in option.
+    if !selected.is_empty() && !options.iter().any(|option| option.value == selected) {
+        options.push(SelectOption {
+            value: selected.to_owned(),
+            label: format!("{selected} ({})", tr(TextKey::Unavailable)),
+        });
+    }
+    // Keep existing script positions, including default at its discovered
+    // position, when browsers restore form state after a script disappears.
+    options.push(SelectOption {
+        value: String::new(),
+        label: tr(TextKey::BuiltInMpegTsWrapper).to_owned(),
+    });
+    options
 }
 
 fn active_transcode_readout(capacity: ActiveTranscodeCapacityStatus) -> String {
@@ -765,6 +784,60 @@ mod tests {
         assert!(ffprobe_input.contains(r#"placeholder="/usr/bin/ffprobe""#));
         assert!(html.contains("(/usr/bin/ffmpeg)"));
         assert!(html.contains("(/usr/bin/ffprobe)"));
+    }
+
+    #[test]
+    fn ffmpeg_wrapper_choices_preserve_native_scripts_and_missing_selection() {
+        let scripts = vec![
+            SelectOption {
+                value: "default".into(),
+                label: "Operator default".into(),
+            },
+            SelectOption {
+                value: "custom".into(),
+                label: "Operator custom".into(),
+            },
+        ];
+        for selected in ["", "default", "custom", "removed"] {
+            let options = localize_mpeg_ts_script_options(scripts.clone(), selected);
+            assert_eq!(
+                options[..2]
+                    .iter()
+                    .map(|option| option.value.as_str())
+                    .collect::<Vec<_>>(),
+                ["default", "custom"]
+            );
+            let html = Select(SelectProps {
+                name: "default_mpeg_ts_script",
+                selected: selected.into(),
+                options,
+                include_none: false,
+            })
+            .to_html();
+            assert!(html.contains(tr(TextKey::BuiltInMpegTsWrapper)));
+            assert!(html.contains("Operator default"));
+            assert!(html.contains("Operator custom"));
+            let chosen: Vec<_> = html
+                .split("<option")
+                .skip(1)
+                .filter_map(|option| option.split_once('>'))
+                .filter(|(attributes, _)| attributes.contains(" selected"))
+                .collect();
+            assert_eq!(chosen.len(), 1);
+            assert!(chosen[0].0.contains(&format!("value=\"{selected}\"")));
+        }
+        let options = localize_mpeg_ts_script_options(Vec::new(), "missing");
+        assert!(options
+            .iter()
+            .any(|option| option.value == "missing"
+                && option.label.contains(tr(TextKey::Unavailable))));
+        assert_eq!(
+            options
+                .iter()
+                .filter(|option| option.value.is_empty())
+                .count(),
+            1
+        );
     }
 
     #[test]

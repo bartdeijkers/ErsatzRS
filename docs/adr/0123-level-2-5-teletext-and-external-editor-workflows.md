@@ -1218,6 +1218,26 @@ authored Level 2.5, complete QTeletextMaker interchange and all existing final
 criteria remain mandatory. Production TV-guide work still waits for independent
 full Phase 9A acceptance, not the standalone base boundary.
 
+### Explicit built-in MPEG-TS output selection
+
+Authored output requires the existing typed final-output contract. The settings
+admin exposes the existing empty `ffmpeg.default_mpegts_script` value as a
+localized built-in MPEG-TS output choice. Empty is an explicit stored selection;
+an absent setting still selects `default`. Preserve that distinction through
+application queries, settings load/save, display reconciliation and restart.
+Existing discovered/default/custom script selections and operator names remain
+valid. An unavailable stored script with no discovered fallback must not become
+a built-in selection merely because the new option is first in a browser.
+
+This authored extension to ErsatzTV's script-only selector reuses the existing
+application settings mutation and runtime fallback; it introduces no new engine,
+setting, command arguments or automatic publication. Opaque bundled/operator
+scripts never gain inferred mux ownership. Choosing the built-in output affects
+new streams; existing viewers keep their owned processes/output snapshots. The
+admin explains which choice carries authored teletext. Ordinary playback,
+source captions/selected audio and the remaining output/platform gates still
+apply. P9A-04 owns the scoped admin/runtime proof and outstanding acceptance.
+
 ### One model through Level 2.5
 
 The generic engine must support designing, validating, encoding, publishing and

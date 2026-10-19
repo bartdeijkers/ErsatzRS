@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: typed Hybrid cleanup proven; expose admin built-in-wrapper choice; receiver/platform gates remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: native output choice delivered; next Cyrillic/Hebrew authoring qualification; receiver/platform gates remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on

@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, readFileSync, renameSync, statSync, writeFile
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import { test } from './isolated-web-host';
 import { waitForHydration } from './hydration';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
@@ -29,6 +30,19 @@ async function submit(page: Page, form: Locator, button: string, js: boolean): P
   await form.getByRole('button', { name: button, exact: true }).click();
   expect((await posted).status()).toBe(303);
   await navigated; await ready(page, js);
+}
+async function saveWrapperChoice(page: Page, selected: string, module: string, js: boolean): Promise<void> {
+  await page.goto('/settings/ffmpeg'); await ready(page, js);
+  const form = page.locator('form[action="/admin-api/settings/ffmpeg/save"]');
+  const choice = form.locator('select[name="default_mpeg_ts_script"]');
+  await expect(choice.locator('option[value=""]')).toHaveText(text(module)('BuiltInMpegTsWrapper'));
+  await choice.selectOption(selected);
+  const posted = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/admin-api/settings/ffmpeg/save');
+  const navigated = page.waitForEvent('framenavigated', { predicate: frame => frame === page.mainFrame() });
+  await form.getByRole('button', { name: text(module)('SaveSettings'), exact: true }).click();
+  expect((await posted).status()).toBe(303); await navigated; await ready(page, js);
+  await expect(choice).toHaveValue(selected);
 }
 async function createProfile(page: Page, fixture: TeletextChannelFixture, theme: string, js: boolean): Promise<number> {
   const form = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
@@ -583,14 +597,9 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
   test.setTimeout(150_000);
   const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
   fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
-  // The bundled/operator shell wrapper is intentionally opaque to authored
-  // output policy. Qualify the existing typed built-in wrapper explicitly;
-  // no script is edited or granted guessed mux/transport authority.
+  // The built-in choice must now be made through the ordinary settings form;
+  // bundled/operator scripts retain their separate opaque output contract.
   const configuredScript = fixture.setting('ffmpeg.default_mpegts_script');
-  if (mode === 'Hybrid') {
-    fixture.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)')
-      .run('ffmpeg.default_mpegts_script', '');
-  }
   // The selected source must outlive the entire30s observer budget: a12s EOF
   // near the10s shutdown grace cannot establish cancellation independently.
   const original = join(fixture.root, 'synthetic-client-source.ts');
@@ -617,6 +626,10 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
   };
   try {
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    if (mode === 'Hybrid') {
+      await saveWrapperChoice(page, '', 'en_us', true);
+      expect(fixture.setting('ffmpeg.default_mpegts_script')).toBe('');
+    }
     await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
     const profiles = [await createProfile(page, fixture, 'day', true), await createProfile(page, fixture, 'night', true)];
     for (const [index, profile] of profiles.entries()) {
@@ -648,9 +661,16 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
         expect(prefix[offset]).toBe(0x47);
         pids.add(((prefix[offset + 1] & 0x1f) << 8) | prefix[offset + 2]);
       }
-      writeFileSync(testInfo.outputPath(`active-${viewers.length}.prefix.ts`), prefix);
+      const prefixPath = testInfo.outputPath(`active-${viewers.length}.prefix.ts`);
+      writeFileSync(prefixPath, prefix);
       for (const pid of [0, 256, 257, 512]) {
         expect(pids.has(pid), `Missing PID${pid}; observed ${[...pids].sort((a, b) => a - b)}`).toBe(true);
+      }
+      if (mode === 'Hybrid') {
+        // Same bounded decode as the existing finite capture helper. Full source
+        // clock/caption/selected-audio gates remain reused in their exact scope.
+        execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', prefixPath,
+          '-t', '1', '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'], { timeout: 30_000, maxBuffer: 65_536 });
       }
       return viewer;
     };
@@ -683,6 +703,10 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
     expect(recovered.safety.workerEpoch).not.toBe(retained.safety.workerEpoch);
     expect({ ...recovered, safety: recovered.safety.snapshot }).toEqual({ ...retained, safety: retained.safety.snapshot });
     expect(fixture.calls()).toEqual(['day', 'night']); expect(fixture.unchangedPackage()).toBe(true);
+    if (mode === 'Hybrid') {
+      await page.goto('/settings/ffmpeg'); await ready(page, true);
+      await expect(page.locator('select[name="default_mpeg_ts_script"]')).toHaveValue('');
+    }
     writeFileSync(testInfo.outputPath('active-viewer-success.json'), JSON.stringify({ result, viewers: [firstClosed, day], processes: [...owned.values()], resident, source: { duration: source.format.duration, bytes: sourceBytes },
       mode, retainedSource, configuredScript, effectiveScript: fixture.setting('ffmpeg.default_mpegts_script'),
       scope: `Linux ordinary ${mode} at default2: live2, caller disconnect${mode === 'Legacy' ? 0 : 1}, reopened2, host restart0; known source/process identities disappear. Hybrid retains and reuses its shared HLS encoder until host shutdown; idle expiry is separate. No complete AV/transport/decoder/native-platform/9A acceptance; unchanged normal-stream evidence is reused.` }, null, 2));
@@ -692,4 +716,62 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
     await context.close(); fixture.close();
   }
 });
+}
+
+for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: false },
+  { module: 'nl', language: 'nl', js: false, dark: true }]) {
+  test(`built-in MPEG-TS choice persists through localized settings and host restart (${variant.language}/${variant.js ? 'JS' : 'no-JS'})`,
+    async ({ browser, browserName, isolatedWebHost }, testInfo) => {
+      test.skip(process.platform === 'win32', 'Intentional Unix graceful-host restart; native Windows launcher acceptance remains separate.');
+      test.setTimeout(180_000);
+      const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL,
+        javaScriptEnabled: variant.js, viewport: { width: 1280, height: 900 } });
+      const page = await context.newPage(); const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => { if (message.type() === 'error' && /hydrate|marker|wasm|checksum/i.test(message.text())) errors.push(message.text()); });
+      const db = new DatabaseSync(isolatedWebHost.databasePath, { readOnly: true });
+      const saved = (): string | undefined => (db.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?')
+        .get('ffmpeg.default_mpegts_script') as { Value: string } | undefined)?.Value;
+      // Settings Save may materialize absent defaults; compare effective values.
+      const preferences = () => Object.fromEntries(Object.entries({
+        'ffmpeg.preferred_language_code': 'eng', 'ffmpeg.preferred_subtitle_language_code': '',
+        'ffmpeg.fallback_subtitle_language_code': '', 'ffmpeg.active_transcode_limit': '2',
+      }).map(([key, fallback]) => [key, (db.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?')
+        .get(key) as { Value: string } | undefined)?.Value ?? fallback]));
+      const setLanguage = async (module: string, language: string, dark: boolean) => {
+        expect((await page.request.post('/admin-api/settings/ui/save', { form: { language, is_dark_mode: String(dark) }, maxRedirects: 0 })).status()).toBe(303);
+        await page.goto('/settings/ffmpeg'); await ready(page, variant.js);
+        await expect(page.locator('select[name="default_mpeg_ts_script"] option[value=""]')).toHaveText(text(module)('BuiltInMpegTsWrapper'));
+        await expect(page.getByText(text(module)('DefaultMpegTsScriptHelp'), { exact: true })).toBeVisible();
+      };
+      try {
+        const before = preferences();
+        if (variant.js && browserName === 'chromium') {
+          for (const [index, module] of ['en_us', 'nl', 'de_de', 'fr_fr', 'it_it', 'pl', 'pt_br', 'es_es', 'es_419'].entries()) {
+            await setLanguage(module, module.replace('_', '-'), index % 2 === 1);
+            const choice = page.locator('select[name="default_mpeg_ts_script"]');
+            await choice.selectOption(''); await choice.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: testInfo.outputPath(`native-wrapper-${module}.png`) });
+          }
+        }
+        await setLanguage(variant.module, variant.language, variant.dark);
+        await saveWrapperChoice(page, '', variant.module, variant.js); expect(saved()).toBe('');
+        await page.reload(); await ready(page, variant.js);
+        await expect(page.locator('select[name="default_mpeg_ts_script"]')).toHaveValue('');
+        await page.locator('select[name="default_mpeg_ts_script"]').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath('native-wrapper-saved.png') });
+        const restarted = await isolatedWebHost.restart();
+        expect(restarted.stop).toMatchObject({ closed: true, forced: false, exitCode: 0, signalCode: null });
+        await page.reload(); await ready(page, variant.js);
+        await expect(page.locator('select[name="default_mpeg_ts_script"]')).toHaveValue('');
+        expect(saved()).toBe(''); expect(preferences()).toEqual(before);
+        await saveWrapperChoice(page, 'default', variant.module, variant.js); expect(saved()).toBe('default');
+        await saveWrapperChoice(page, '', variant.module, variant.js); expect(saved()).toBe('');
+        expect(preferences()).toEqual(before); expect(errors).toEqual([]);
+        writeFileSync(testInfo.outputPath('native-wrapper-settings-success.json'), JSON.stringify({
+          language: variant.language, javaScript: variant.js, browser: browserName, restarted,
+          native_after_save_reload_restart: true, default_can_be_reselected: true,
+          preferences_unchanged: true, errors, scope: 'Localized admin settings only; ordinary Hybrid and complete base/9A acceptance remain separate.' }, null, 2));
+      } finally { db.close(); await context.close(); }
+    });
 }

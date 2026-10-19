@@ -25,6 +25,11 @@ release section when tagging a release.
 
 ### Added
 
+- Offer a localized built-in MPEG-TS output choice in FFmpeg settings for
+  authored teletext on Hybrid streams. Preserve the explicit choice across
+  settings saves and restarts while retaining existing default/custom scripts
+  and their output behavior.
+
 - Let native MPEG-TS and Hybrid channels carry selected source teletext captions
   as DVB bitmap subtitles while copying video. Preserve the active caption,
   updates, clearing and selected alternate audio when capacity waiting hands
