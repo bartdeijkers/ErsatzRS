@@ -41,6 +41,99 @@ fn native_g2_greek_text() {
     encode(0x37, "Α£aΊΑ");
 }
 
+#[test]
+fn generated_base_text_edits_bind_exact_original_cells_and_recompile_supported_contexts() {
+    for (primary, before_character, after_character, code) in [
+        (0x20, '£', '¥', 0x25_u8),
+        (0x24, '£', '¥', 0x25),
+        (0x25, '£', '¥', 0x25),
+        (0x37, '£', 'e', 0x24),
+        (0x01, '£', '¥', 0x25),
+        (0x00, 'é', 'Á', 0x41),
+    ] {
+        let original = original(primary, &before_character.to_string());
+        let owner = original.semantic().base().pages[0].address;
+        let encoded = encode_teletext_authored_service(original.clone(), &[], &limits()).unwrap();
+        let EncodedTeletextAuthoredPage::CompiledDisplay(page) = &encoded.pages()[0] else {
+            panic!("generated text needs checked X26")
+        };
+        let position = page
+            .normalized()
+            .encoded()
+            .command_positions()
+            .iter()
+            .find(|position| {
+                position.original_base_glyph()
+                    == Some(TeletextEnhancementPosition::new(1, 8).unwrap())
+            })
+            .unwrap();
+        assert!(position.original_local_command().is_none());
+        assert!(position.original_object_source().is_none());
+        let before = project_encoded_teletext_display(page.page(), encoded.unit_count())
+            .unwrap()
+            .records
+            .into_iter()
+            .find_map(|record| match record {
+                TeletextEncodedDisplayRecord::Triplets {
+                    row: 26,
+                    designation,
+                    words,
+                } if usize::from(designation) == position.semantic_word() / 13 => {
+                    Some(words[position.semantic_word() % 13])
+                }
+                _ => None,
+            })
+            .unwrap();
+        let after = (before & 0x7ff) | (u32::from(code) << 11);
+        let edit =
+            resolve_teletext_base_text_edit(&encoded, owner, position, before, after).unwrap();
+        assert_eq!(edit.expected(), before_character);
+        assert_eq!(edit.replacement(), after_character);
+        let derived = original
+            .clone()
+            .with_base_text_edits(&[edit], semantic_limits())
+            .unwrap();
+        let result = encode_teletext_authored_service(derived, &[], &limits()).unwrap();
+        assert!(result.compiler_drcs_resources().is_empty());
+        assert_eq!(
+            result.declared().semantic().base().pages[0].rows[0].runs[0].content,
+            TeletextRunContent::Text {
+                text: after_character.to_string()
+            }
+        );
+        assert_eq!(
+            original.semantic().base().pages[0].rows[0].runs[0].content,
+            TeletextRunContent::Text {
+                text: before_character.to_string()
+            }
+        );
+        if matches!(primary, 0x20 | 0x24 | 0x25) {
+            // '$' is a canonical native G0 byte. Import must not silently
+            // normalize an uploaded G2 spelling and change its physical rows.
+            let noncanonical = (before & 0x7ff) | (0x24 << 11);
+            assert!(resolve_teletext_base_text_edit(
+                &encoded,
+                owner,
+                position,
+                before,
+                noncanonical
+            )
+            .is_none());
+        }
+        for (old_word, new_word) in [
+            (before ^ 1, after),
+            (before, after ^ 1),
+            (before, (after & !(31 << 6)) | (1 << 6)),
+            (before, (after & 0x7ff) | (0x80 << 11)),
+        ] {
+            assert!(
+                resolve_teletext_base_text_edit(&encoded, owner, position, old_word, new_word)
+                    .is_none()
+            );
+        }
+    }
+}
+
 fn preview(original: &TeletextDeclaredService) -> TeletextMainComposition {
     let composition = compose_teletext_main_program(
         original.semantic(),

@@ -12,6 +12,8 @@ mod attribute_observations;
 mod attribute_transmission;
 mod attribute_values;
 mod base_display;
+mod base_text_edit;
+pub use base_text_edit::*;
 mod base_footprints;
 mod charset_execution;
 mod charset_execution_values;

@@ -57,6 +57,7 @@ fn original_position_merge_retains_root_anchors_and_inserted_scalar_lineage() {
         )
         .unwrap();
         let incoming = TeletextEditorialChanges {
+            base_text_edits: Vec::new(),
             resource_programs: vec![intent.clone()],
             ..TeletextEditorialChanges::default()
         };
@@ -71,10 +72,12 @@ fn original_position_merge_retains_root_anchors_and_inserted_scalar_lineage() {
         assert!(operands.is_empty());
         assert_eq!(programs, [intent]);
         let previous = TeletextEditorialChanges {
+            base_text_edits: Vec::new(),
             resource_programs: programs,
             ..TeletextEditorialChanges::default()
         };
         let incoming = TeletextEditorialChanges {
+            base_text_edits: Vec::new(),
             resource_operands: vec![Operand::new(identity(global), 3, 6, g(b'R'), g(b'S')).unwrap()],
             ..TeletextEditorialChanges::default()
         };
@@ -117,6 +120,7 @@ fn original_position_merge_refuses_transient_add_intent_in_either_generation() {
         )
         .unwrap();
         let changes = TeletextEditorialChanges {
+            base_text_edits: Vec::new(),
             resource_programs: vec![transient],
             ..TeletextEditorialChanges::default()
         };
@@ -149,10 +153,12 @@ fn original_position_restoration_folds_exact_history_without_saving_inverse_auth
         .unwrap();
         let inverse = Program::restore_original_positions(&previous, budget()).unwrap();
         let prior = TeletextEditorialChanges {
+            base_text_edits: Vec::new(),
             resource_programs: vec![previous],
             ..TeletextEditorialChanges::default()
         };
         let incoming = TeletextEditorialChanges {
+            base_text_edits: Vec::new(),
             resource_programs: vec![inverse],
             ..TeletextEditorialChanges::default()
         };

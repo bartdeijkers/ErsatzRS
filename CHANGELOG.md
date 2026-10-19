@@ -872,6 +872,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Import qualified generated supplementary teletext Text edits as concepts while
+  retaining their Base role, original producer data, region permissions and
+  channel isolation. Preview, re-export, repeated edits, undo and explicit
+  publication use the same validated page model.
+
 - Preserve selected audio-language metadata through copy and filtering in the
   locally qualified Next compatibility candidate; managed adoption remains pending.
 

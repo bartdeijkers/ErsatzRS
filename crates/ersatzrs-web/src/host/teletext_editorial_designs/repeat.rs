@@ -21,6 +21,8 @@ use ersatzrs_domain::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "repeat/base_text.rs"]
+mod base_text;
 #[path = "repeat/main_programs.rs"]
 mod main_programs;
 #[path = "repeat/object_operands.rs"]
@@ -171,6 +173,7 @@ pub(super) fn qualify_latest(
 /// Borrowed getter restoration preserves the root-relative stored addition role.
 pub(super) fn from_overlay(overlay: &TeletextSavedEditorialOverlay) -> TeletextEditorialChanges {
     TeletextEditorialChanges {
+        base_text_edits: overlay.base_text_edits().to_vec(),
         resource_additions: overlay.resource_object_definition_additions().to_vec(),
         resource_operands: overlay.resource_object_operands().to_vec(),
         resource_programs: overlay.resource_object_program_overlays().to_vec(),
@@ -630,6 +633,12 @@ fn merge_changes(
             main_programs::merge(pages, previous, incoming, budget, deadline)?
         };
     Ok(TeletextEditorialChanges {
+        base_text_edits: base_text::merge(
+            &previous.base_text_edits,
+            &incoming.base_text_edits,
+            budget,
+            deadline,
+        )?,
         resource_additions,
         resource_operands,
         resource_programs,
@@ -675,6 +684,7 @@ fn prepare(
                 )?,
                 None,
                 TeletextEditorialChanges {
+                    base_text_edits: Vec::new(),
                     resource_additions: Vec::new(),
                     resource_operands: Vec::new(),
                     resource_programs: Vec::new(),
@@ -906,6 +916,34 @@ pub(super) fn cumulative_overlay(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
 ) -> Result<TeletextSavedEditorialOverlay> {
+    if changes.base_text_edits.is_empty() {
+        return cumulative_overlay_siblings(provenance, changes);
+    }
+    if changes.rows.is_empty()
+        && changes.operands.is_empty()
+        && changes.object_operands.is_empty()
+        && changes.object_programs.is_empty()
+        && changes.main_programs.is_empty()
+        && changes.resource_operands.is_empty()
+        && changes.resource_programs.is_empty()
+        && changes.resource_additions.is_empty()
+        && changes.bitmaps.is_empty()
+    {
+        return TeletextSavedEditorialOverlay::new_with_base_text_edits(
+            provenance.clone(),
+            changes.base_text_edits.clone(),
+        )
+        .map_err(Into::into);
+    }
+    cumulative_overlay_siblings(provenance, changes)?
+        .with_base_text_edits(changes.base_text_edits.clone())
+        .map_err(Into::into)
+}
+
+fn cumulative_overlay_siblings(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
     if !changes.main_programs.is_empty() {
         return main_programs::overlay(provenance, changes);
     }
@@ -1087,6 +1125,7 @@ fn local_invocation_overlay(
     // Resource additions are attached once by cumulative_overlay after this
     // explicit installation, which must preserve the newer role.
     let siblings = TeletextEditorialChanges {
+        base_text_edits: Vec::new(),
         rows: changes.rows.clone(),
         operands: changes.operands.clone(),
         object_operands: changes.object_operands.clone(),
@@ -1107,7 +1146,8 @@ fn local_invocation_overlay(
 }
 
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
-    let document = if prepared.cumulative.rows.is_empty()
+    let document = if prepared.cumulative.base_text_edits.is_empty()
+        && prepared.cumulative.rows.is_empty()
         && prepared.cumulative.operands.is_empty()
         && prepared.cumulative.object_operands.is_empty()
         && prepared.cumulative.resource_operands.is_empty()
@@ -1196,6 +1236,7 @@ fn make_document(
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
         TeletextEditorialEdits {
+            base_text_edits: &prepared.incoming.base_text_edits,
             resource_additions: &prepared.incoming.resource_additions,
             resource_operands: &prepared.incoming.resource_operands,
             resource_programs: &prepared.incoming.resource_programs,
@@ -1207,6 +1248,7 @@ fn make_document(
             bitmaps: &prepared.incoming.bitmaps,
         },
         TeletextEditorialEdits {
+            base_text_edits: &prepared.cumulative.base_text_edits,
             resource_additions: &prepared.cumulative.resource_additions,
             resource_operands: &prepared.cumulative.resource_operands,
             resource_programs: &prepared.cumulative.resource_programs,

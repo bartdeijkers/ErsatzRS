@@ -296,6 +296,7 @@ fn check_operands(
 ) -> Result<()> {
     fn edits(object_operands: &[TeletextLocalObjectOperandOverlay]) -> TeletextEditorialEdits<'_> {
         TeletextEditorialEdits {
+            base_text_edits: &[],
             rows: &[],
             operands: &[],
             object_operands,

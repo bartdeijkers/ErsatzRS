@@ -255,11 +255,10 @@ pub(super) fn compile_augmented_with_context_and_usage<'a>(
             ));
         }
         let maps = state.map_all(original, actual)?;
-        physical.bind_original_local_commands(|source| match augmented.emitter_source(source) {
-            Some(TeletextAugmentedOriginSource::RetainedMain {
-                provenance: TeletextMainCompositionSource::OriginalPage { command },
-                ..
-            }) => Some(command),
+        physical.bind_original_main_sources(|source| match augmented.emitter_source(source) {
+            Some(TeletextAugmentedOriginSource::RetainedMain { provenance, .. }) => {
+                Some(provenance)
+            }
             _ => None,
         });
         physical.bind_original_object_sources(|source| augmented.original_object_source(source));

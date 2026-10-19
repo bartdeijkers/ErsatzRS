@@ -4,6 +4,8 @@ use super::*;
 
 #[path = "supplementary/generated_edit.rs"]
 mod generated_edit;
+#[path = "supplementary/generated_lifecycle.rs"]
+mod generated_lifecycle;
 
 const CONTEXTS_G2: [Context; 4] = [
     Context {

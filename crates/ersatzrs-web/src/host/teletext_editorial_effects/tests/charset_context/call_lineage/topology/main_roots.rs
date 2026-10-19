@@ -85,6 +85,7 @@ fn main_call_insert_delete_maps_retained_charset_roots_without_granting_new_writ
             a,
             b,
             TeletextEditorialEdits {
+                base_text_edits: &[],
                 main_programs: &changes,
                 ..edits(&[])
             },

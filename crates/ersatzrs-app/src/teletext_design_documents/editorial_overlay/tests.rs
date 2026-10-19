@@ -108,7 +108,7 @@ fn resource() -> TeletextResourceIdentity {
     )
     .unwrap()
 }
-fn original_value(v3: bool) -> Value {
+pub(super) fn original_value(v3: bool) -> Value {
     let contract = if v3 { 3 } else { 1 };
     let transmissions = if v3 {
         serde_json::to_value([TeletextSavedResourceTransmission {

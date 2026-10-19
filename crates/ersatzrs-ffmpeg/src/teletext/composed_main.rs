@@ -438,11 +438,11 @@ impl EncodedTeletextPhysicalDisplayProgram {
         self.encoded.bind_original_object_sources(original);
     }
 
-    pub(super) fn bind_original_local_commands(
+    pub(super) fn bind_original_main_sources(
         &mut self,
-        original: impl FnMut(TeletextEnhancementSource) -> Option<usize>,
+        original: impl FnMut(TeletextEnhancementSource) -> Option<super::TeletextMainCompositionSource>,
     ) {
-        self.encoded.bind_original_local_commands(original);
+        self.encoded.bind_original_main_sources(original);
     }
 
     #[must_use]

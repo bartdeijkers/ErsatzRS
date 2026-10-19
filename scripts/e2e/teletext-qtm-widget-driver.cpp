@@ -164,7 +164,8 @@ static DriverContext driverContext() {
     if (fragmentCall && ((fragmentSelector & 0x38) != 0x30 || ((fragmentSelector >> 6) & 31) != 19))
         qFatal("Native fragment call selector must retain authenticated Public Passive scope/type");
     const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology || fragmentCall || firstDefinitionPosition || interiorDefinitionRow;
-    const bool mainG2 = mode == "single-page-main-g2";
+    const bool generatedBaseG2 = mode == "single-page-base-g2";
+    const bool mainG2 = mode == "single-page-main-g2" || generatedBaseG2;
     const bool nativeG0 = mode == "single-page-native-g0";
     if (nativeG0 != qEnvironmentVariableIsSet("ERSATZRS_QTM_NATIVE_G0_UNICODE"))
         qFatal("Native G0 input requires exactly the fixed native trial");
@@ -211,7 +212,8 @@ static DriverContext driverContext() {
     if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && !attribute && !drcsSelection && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
         || (glyphMode == 1 && (fromGlyph != 33 || toGlyph != 34))))
         qFatal("Fixed local glyph trial requires G0 A-to-B or G1 0x21-to-0x22");
-    if (extendedGlyph && !((glyphMode == 15 && toGlyphMode == 15 && fromGlyph == 35 && toGlyph == 66)
+    if (extendedGlyph && !((glyphMode == 15 && toGlyphMode == 15 && fromGlyph == 35
+            && (generatedBaseG2 ? (toGlyph == 36 || toGlyph == 37) : toGlyph == 66))
         || (glyphMode == 25 && toGlyphMode == 28 && fromGlyph == 65 && toGlyph == 65)))
         qFatal("Fixed extended trial requires G2 35-to-66 or A diacritic9-to12");
     if (remainingGlyph && !((glyphMode == 1 && fromGlyph == 65 && toGlyph == 64)
@@ -302,9 +304,10 @@ static DriverContext driverContext() {
     if ((localGlyph || glyphStructure || mixedGlyphStructure || styleStructure) && !mainG2 && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     if (mainG2 && (left != 0 || right != 0 || !drcs.isEmpty() || !globalDrcs.isEmpty()
-        || triplet != 206 || column != 0 || glyphMode != 15 || toGlyphMode != 15
-        || fromGlyph != 35 || toGlyph != 66))
-        qFatal("Fixed standalone Level 1.5 Main requires word206 G2 35-to66, zero panels and no banks");
+        || glyphMode != 15 || toGlyphMode != 15 || fromGlyph != 35
+        || (generatedBaseG2 ? (triplet != 1 || column != 8 || (toGlyph != 36 && toGlyph != 37))
+            : (triplet != 206 || column != 0 || toGlyph != 66))))
+        qFatal("Fixed standalone Main/Base G2 requires its exact word/data, zero panels and no banks");
     if (nativeG0 && (left != 0 || right != 0 || !drcs.isEmpty() || !globalDrcs.isEmpty()))
         qFatal("Fixed native G0 trial requires zero panels and no banks");
     if (resourceTrial && (left != 0 || right != 0
@@ -873,6 +876,17 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
     QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, table->visualRect(target).center());
     if (table->currentIndex().row() != context.tripletIndex)
         qFatal("Actual X/26 row selection failed");
+    // Selecting a row updates the cooked operand controls through Qt signals.
+    // Wait for that existing UI transition; never assign model/control values.
+    if (context.editMainG2 && !QTest::qWaitFor([dock, main, expectedFrom, offset, comboSize] {
+        int matching = 0;
+        for (QComboBox *candidate : dock->findChildren<QComboBox *>())
+            if (candidate->isVisible() && candidate->isEnabled()
+                && candidate->count() == comboSize
+                && candidate->currentIndex() == expectedFrom - offset) ++matching;
+        return matching == 1 && !main->isWindowModified();
+    }, 3000))
+        qFatal("Actual operand controls did not settle on the original tuple");
     if (context.editLocalDrcsSubtable || context.editLocalDrcsScope) {
         editDrcsSelection(main, dock, table, model, context);
         return;

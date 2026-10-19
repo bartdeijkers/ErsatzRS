@@ -384,6 +384,7 @@ fn qualify_rows(
     let overlay = parts
         .overlay()
         .ok_or(NativeTeletextEditorialImportError::Association)?;
+    let base_text_edits = overlay.base_text_edits().to_vec();
     let overlays = overlay.pages().to_vec();
     let operands = overlay.local_program_operands().to_vec();
     let object_operands = overlay.local_object_operands().to_vec();
@@ -427,6 +428,7 @@ fn qualify_rows(
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
         TeletextEditorialEdits {
+            base_text_edits: &base_text_edits,
             resource_additions: &resource_additions,
             resource_operands: &resource_operands,
             resource_programs: &resource_programs,
@@ -638,6 +640,7 @@ fn reconcile_files(
                 expected_status,
                 encoded,
             )?;
+            changes.base_text_edits.extend(incoming.base_text_edits);
             changes.rows.extend(incoming.rows);
             changes.operands.extend(incoming.operands);
             changes.object_operands.extend(incoming.object_operands);
@@ -670,7 +673,8 @@ fn reconcile_files(
             return Err(NativeTeletextEditorialImportError::Association);
         }
     }
-    if changes.rows.is_empty()
+    if changes.base_text_edits.is_empty()
+        && changes.rows.is_empty()
         && changes.operands.is_empty()
         && changes.object_operands.is_empty()
         && changes.resource_operands.is_empty()

@@ -292,6 +292,7 @@ fn mixed_bank_authored_bitmap_edit_preserves_separate_compiler_permissions() {
         &after,
         &project,
         TeletextEditorialEdits {
+            base_text_edits: &[],
             rows: &[],
             operands: &[],
             object_operands: &[],
@@ -303,6 +304,7 @@ fn mixed_bank_authored_bitmap_edit_preserves_separate_compiler_permissions() {
             bitmaps: &changes,
         },
         TeletextEditorialEdits {
+            base_text_edits: &[],
             rows: &baseline_rows,
             operands: &[],
             object_operands: &[],

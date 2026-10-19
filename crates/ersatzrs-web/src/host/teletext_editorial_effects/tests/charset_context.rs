@@ -139,6 +139,7 @@ fn check(
         new,
         &project("zone", 1, 8, width, 1),
         TeletextEditorialEdits {
+            base_text_edits: &[],
             rows: &[],
             operands: &changes,
             object_operands: &[],

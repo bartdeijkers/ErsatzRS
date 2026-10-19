@@ -46,6 +46,16 @@ pub(super) const fn unicode_national_subset(primary: TeletextPageCharsetDesignat
     })
 }
 
+const LATIN_G2: [(u8, &str); 7] = [
+    (0x20, "\u{a0}¡¢£$¥#§¤‘“«←↑→↓"),
+    (0x30, "°±²³×µ¶·÷’”»¼½¾¿"),
+    (0x50, "—¹®©™♪₠‰ɑ"),
+    (0x5c, "⅛⅜⅝⅞"),
+    (0x60, "\u{2126}ÆÐªĦ"),
+    (0x66, "ĲĿŁØŒºÞŦŊŉ"),
+    (0x70, "ĸæđðħıĳŀłøœßþŧŋ■"),
+];
+
 /// A Level 1 byte, optionally overwritten by an exact Level 1.5 character.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Character {
@@ -124,15 +134,7 @@ pub(super) fn encode_without_national_subset(character: char) -> Option<Characte
         });
     }
     // Fixed G2 symbols/letters. Reserved G2 positions are deliberately absent.
-    let groups = [
-        (0x20, "\u{a0}¡¢£$¥#§¤‘“«←↑→↓"),
-        (0x30, "°±²³×µ¶·÷’”»¼½¾¿"),
-        (0x50, "—¹®©™♪₠‰ɑ"),
-        (0x5c, "⅛⅜⅝⅞"),
-        (0x60, "\u{2126}ÆÐªĦ"),
-        (0x66, "ĲĿŁØŒºÞŦŊŉ"),
-        (0x70, "ĸæđðħıĳŀłøœßþŧŋ■"),
-    ];
+    let groups = LATIN_G2;
     for (start, symbols) in groups {
         if let Some(index) = symbols.chars().position(|value| value == character) {
             let data = start + u8::try_from(index).ok()?;
@@ -211,7 +213,23 @@ pub(super) fn encode_cyrillic_hebrew_g0(
 /// Qualified standalone Table41/43 symbols and letters, not column4 combining
 /// marks, prohibited positions, rectangle aliases or a borrowed Latin table.
 pub(super) fn encode_native_g2(character: char, pair: TeletextCharsetPair) -> Option<Character> {
-    let groups = match pair {
+    let groups = native_g2_groups(pair)?;
+    for (start, symbols) in groups {
+        if let Some(index) = symbols
+            .chars()
+            .position(|value| value != '\0' && value == character)
+        {
+            return Some(Character {
+                fallback: b' ',
+                enhancement: Some((0x0f, start + u8::try_from(index).ok()?)),
+            });
+        }
+    }
+    None
+}
+
+fn native_g2_groups(pair: TeletextCharsetPair) -> Option<[(u8, &'static str); 5]> {
+    Some(match pair {
         TeletextCharsetPair::Cyrillic1Cyrillic
         | TeletextCharsetPair::Cyrillic2Cyrillic
         | TeletextCharsetPair::Cyrillic3Cyrillic => [
@@ -229,19 +247,57 @@ pub(super) fn encode_native_g2(character: char, pair: TeletextCharsetPair) -> Op
             (0x70, "cdfgjlqrsuvwyzΈ\0"),
         ],
         _ => return None,
-    };
-    for (start, symbols) in groups {
-        if let Some(index) = symbols
-            .chars()
-            .position(|value| value != '\0' && value == character)
-        {
-            return Some(Character {
-                fallback: b' ',
-                enhancement: Some((0x0f, start + u8::try_from(index).ok()?)),
-            });
+    })
+}
+
+/// Inverse only for the existing qualified authored conversion tables. A caller
+/// must still require the same native encoder to reproduce the exact operation.
+pub(super) fn decode_generated_replacement(
+    mode: u8,
+    code: u8,
+    pair: TeletextCharsetPair,
+) -> Option<char> {
+    if mode == 0x0f {
+        let native;
+        let groups = if pair == TeletextCharsetPair::LatinLatin {
+            &LATIN_G2[..]
+        } else {
+            native = native_g2_groups(pair)?;
+            &native[..]
+        };
+        for &(start, symbols) in groups {
+            if let Some(offset) = code.checked_sub(start) {
+                if let Some(character) = symbols.chars().nth(usize::from(offset)) {
+                    return (character != '\0').then_some(character);
+                }
+            }
         }
+        return None;
     }
-    None
+    if pair != TeletextCharsetPair::LatinLatin || !(0x10..=0x1f).contains(&mode) {
+        return None;
+    }
+    let base = char::from(code);
+    if mode == 0x10 {
+        return Some(if code == b'*' { '@' } else { base });
+    }
+    let mark = match mode & 15 {
+        1 => '\u{300}',
+        2 => '\u{301}',
+        3 => '\u{302}',
+        4 => '\u{303}',
+        5 => '\u{304}',
+        6 => '\u{306}',
+        7 => '\u{307}',
+        8 => '\u{308}',
+        10 => '\u{30a}',
+        11 => '\u{327}',
+        13 => '\u{30b}',
+        14 => '\u{328}',
+        15 => '\u{30c}',
+        _ => return None,
+    };
+    compose(base, mark)
 }
 
 fn encode_hebrew_g0(character: char) -> Option<Character> {

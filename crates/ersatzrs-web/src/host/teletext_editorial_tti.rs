@@ -28,6 +28,7 @@ mod structural;
 /// Reconciled intents, without region permission or publication authority.
 #[derive(Default, Clone)]
 pub(super) struct TeletextEditorialChanges {
+    pub base_text_edits: Vec<ersatzrs_domain::TeletextBaseTextEdit>,
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
     pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
@@ -42,6 +43,7 @@ pub(super) struct TeletextEditorialChanges {
 impl TeletextEditorialChanges {
     pub(super) fn edits(&self) -> super::teletext_editorial_effects::TeletextEditorialEdits<'_> {
         super::teletext_editorial_effects::TeletextEditorialEdits {
+            base_text_edits: &self.base_text_edits,
             rows: &self.rows,
             operands: &self.operands,
             object_operands: &self.object_operands,
@@ -589,7 +591,11 @@ pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
             service,
             owner,
             &page,
-            (&changes.operands, &changes.object_operands),
+            (
+                &changes.operands,
+                &changes.object_operands,
+                &changes.base_text_edits,
+            ),
             location,
             deadline,
         )

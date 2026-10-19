@@ -85,6 +85,7 @@ pub struct TeletextCompiledCommandPosition {
     first_word: usize,
     semantic_word: usize,
     original_local_command: Option<usize>,
+    original_base_glyph: Option<ersatzrs_domain::TeletextEnhancementPosition>,
 }
 impl TeletextCompiledCommandPosition {
     /// Original-only packing evidence; actual word coverage always uses `source`.
@@ -110,6 +111,17 @@ impl TeletextCompiledCommandPosition {
     #[must_use]
     pub const fn original_local_command(&self) -> Option<usize> {
         self.original_local_command
+    }
+
+    /// Original Unicode Base-cell glyph, bound by the normalized factory's
+    /// retained-main provenance. Selector/restore/default/object/carrier words
+    /// have no Base glyph association. This is not edit permission or a claim
+    /// that any uploaded word represents the original authored scalar.
+    #[must_use]
+    pub const fn original_base_glyph(
+        &self,
+    ) -> Option<ersatzrs_domain::TeletextEnhancementPosition> {
+        self.original_base_glyph
     }
 
     /// Read-only correspondence with the original or directly supplied catalogue.
@@ -183,15 +195,30 @@ impl EncodedTeletextLocalObjectProgram {
             }
         }
     }
-    pub(super) fn bind_original_local_commands(
+    pub(super) fn bind_original_main_sources(
         &mut self,
-        mut original: impl FnMut(TeletextEnhancementSource) -> Option<usize>,
+        mut original: impl FnMut(
+            TeletextEnhancementSource,
+        ) -> Option<super::TeletextMainCompositionSource>,
     ) {
         for position in &mut self.commands {
-            position.original_local_command = if position.source.object.is_none() {
+            let source = if position.source.object.is_none() {
                 original(position.source)
             } else {
                 None
+            };
+            position.original_local_command = match source {
+                Some(super::TeletextMainCompositionSource::OriginalPage { command }) => {
+                    Some(command)
+                }
+                _ => None,
+            };
+            position.original_base_glyph = match source {
+                Some(super::TeletextMainCompositionSource::BaseCell {
+                    position,
+                    kind: super::TeletextBaseCellCommandKind::Glyph,
+                }) => Some(position),
+                _ => None,
             };
         }
     }
@@ -578,6 +605,7 @@ impl Input<'_> {
                 first_word,
                 semantic_word: emission.index - 1,
                 original_local_command: None,
+                original_base_glyph: None,
             });
         }
         Ok(())

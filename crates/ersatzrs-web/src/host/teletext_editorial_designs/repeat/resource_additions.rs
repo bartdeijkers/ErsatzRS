@@ -60,6 +60,7 @@ pub(super) fn merge(
         }
     }
     let ordinary = TeletextEditorialChanges {
+        base_text_edits: Vec::new(),
         resource_operands: incoming
             .resource_operands
             .iter()
@@ -90,6 +91,7 @@ pub(super) fn merge(
         };
     let additions = fold(&previous.resource_additions, incoming, budget, deadline)?;
     let combined = TeletextEditorialChanges {
+        base_text_edits: Vec::new(),
         resource_operands: operands,
         resource_programs: programs,
         resource_additions: additions,

@@ -26,7 +26,9 @@ pub(super) fn install(
         &value.local_object_operands,
         ProgramPolicy::InvocationChanges,
     )?;
-    value.schema_version = if value.main_local_invocation_program_overlays.is_empty() {
+    value.schema_version = if !value.base_text_edits.is_empty() {
+        super::BASE_TEXT_EDIT_VERSION
+    } else if value.main_local_invocation_program_overlays.is_empty() {
         LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
     } else {
         super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
@@ -51,7 +53,9 @@ pub(super) fn install_structure(
         &value.local_object_operands,
         ProgramPolicy::InvocationStructure,
     )?;
-    value.schema_version = if value.main_local_invocation_program_overlays.is_empty() {
+    value.schema_version = if !value.base_text_edits.is_empty() {
+        super::BASE_TEXT_EDIT_VERSION
+    } else if value.main_local_invocation_program_overlays.is_empty() {
         LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
     } else {
         super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION

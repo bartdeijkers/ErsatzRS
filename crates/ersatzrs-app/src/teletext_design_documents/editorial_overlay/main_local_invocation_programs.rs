@@ -95,7 +95,11 @@ pub(super) fn install(
     value
         .main_local_invocation_program_overlays
         .extend(programs);
-    value.schema_version = super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION;
+    value.schema_version = if value.base_text_edits.is_empty() {
+        super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
+    } else {
+        super::BASE_TEXT_EDIT_VERSION
+    };
     Ok(value)
 }
 pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignDocumentError> {

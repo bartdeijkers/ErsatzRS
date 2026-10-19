@@ -27,6 +27,7 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextResourceFullUpdate,
 };
 
+mod base_text;
 mod charset_context;
 mod compiler_resources;
 mod definition_additions;
@@ -114,6 +115,7 @@ pub(super) fn validate_teletext_editorial_effects(
 /// permissions. These borrowed intents never grant edit authority themselves.
 #[derive(Clone, Copy)]
 pub(super) struct TeletextEditorialEdits<'a> {
+    pub base_text_edits: &'a [ersatzrs_domain::TeletextBaseTextEdit],
     pub rows: &'a [TeletextPhysicalBaseOverlay],
     pub operands: &'a [TeletextLocalProgramOperandOverlay],
     pub object_operands: &'a [TeletextLocalObjectOperandOverlay],
@@ -155,6 +157,7 @@ pub(super) fn validate_teletext_editorial_transition(
         edited,
         project,
         TeletextEditorialEdits {
+            base_text_edits: &[],
             resource_additions: &[],
             rows: incoming,
             operands: &[],
@@ -166,6 +169,7 @@ pub(super) fn validate_teletext_editorial_transition(
             bitmaps: &[],
         },
         TeletextEditorialEdits {
+            base_text_edits: &[],
             resource_additions: &[],
             rows: cumulative,
             operands: &[],
@@ -229,7 +233,12 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         };
         let owner = old.owner();
         let overlay = incoming.rows.iter().find(|value| value.owner() == owner);
-        let operand_change = incoming.operands.iter().any(|value| value.owner() == owner)
+        let base_text_change = incoming
+            .base_text_edits
+            .iter()
+            .any(|value| value.owner() == owner);
+        let operand_change = base_text_change
+            || incoming.operands.iter().any(|value| value.owner() == owner)
             || incoming
                 .object_operands
                 .iter()
@@ -265,7 +274,7 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             new_page,
             &allowed,
             operand_change,
-            overlay.is_some() || structural_change,
+            overlay.is_some() || structural_change || base_text_change,
             budget.max_units,
             compiler_links,
         )?;
@@ -298,6 +307,7 @@ fn display(
 fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize) -> bool {
     let mut remaining = maximum;
     let counts = [
+        edits.base_text_edits.len(),
         edits.operands.len(),
         edits.object_operands.len(),
         edits.resource_operands.len(),
@@ -381,7 +391,6 @@ fn check_service(
     let after = new.semantic();
     compiler_resources::check(original, edited, incoming.rows, deadline)?;
     if original.magazine_units() != edited.magazine_units()
-        || before.base() != after.base()
         || before.magazine_presentations() != after.magazine_presentations()
         || old.mots() != new.mots()
         || old.selections() != new.selections()
@@ -395,6 +404,12 @@ fn check_service(
             TeletextEditorialEffectsFailure::ProtectedStructure,
         ));
     }
+    base_text::check(
+        before.base(),
+        after.base(),
+        incoming.base_text_edits,
+        deadline,
+    )?;
     definition_additions::check_declarations(old, new, incoming.resource_additions, deadline)?;
     object_operands::check(
         before.objects(),

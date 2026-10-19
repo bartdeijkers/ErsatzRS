@@ -47,6 +47,11 @@ const RESOURCE_OBJECT_POSITION_OVERLAY_VERSION: u16 = 19;
 const LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 20;
 const LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 21;
 const MAIN_LOCAL_INVOCATION_OVERLAY_VERSION: u16 = 22;
+const BASE_TEXT_EDIT_VERSION: u16 = 23;
+
+#[path = "editorial_overlay/base_text.rs"]
+pub(super) mod base_text;
+use base_text::{BorrowedBaseTextEdits, OptionalStoredBaseTextEdits};
 
 #[path = "editorial_overlay/main_local_invocation_programs.rs"]
 pub(super) mod main_local_invocation_programs;
@@ -117,6 +122,7 @@ pub struct TeletextSavedEditorialOverlay {
     resource_object_operands: Vec<TeletextResourceObjectOperandOverlay>,
     resource_object_program_overlays: Vec<TeletextResourceObjectProgramOverlay>,
     resource_object_definition_additions: Vec<TeletextResourceObjectDefinitionAddition>,
+    base_text_edits: Vec<ersatzrs_domain::TeletextBaseTextEdit>,
     schema_version: u16,
 }
 impl TeletextSavedEditorialOverlay {
@@ -882,6 +888,7 @@ impl TeletextSavedEditorialOverlay {
                 | LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
                 | LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
                 | MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
+                | BASE_TEXT_EDIT_VERSION
         ) {
             self.schema_version = RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
         }
@@ -997,6 +1004,7 @@ impl TeletextSavedEditorialOverlay {
             resource_object_operands: Vec::new(),
             resource_object_program_overlays: Vec::new(),
             resource_object_definition_additions: Vec::new(),
+            base_text_edits: Vec::new(),
             schema_version,
         })
     }
@@ -1351,6 +1359,8 @@ macro_rules! closed_map {
 }
 closed_map!(StoredOverlay {
     schema_version: u16,
+    #[serde(default, skip_serializing_if = "OptionalStoredBaseTextEdits::is_absent")]
+    base_text_edits: OptionalStoredBaseTextEdits,
     export_receipt_id: EntityId,
     export_receipt_digest: String,
     original_design_id: EntityId,
@@ -1522,6 +1532,10 @@ impl StoredOverlay {
     }
 
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        base_text::check_version(self)?;
+        if self.schema_version == BASE_TEXT_EDIT_VERSION {
+            return Ok(());
+        }
         main_local_invocation_programs::check_version(self)?;
         if self.schema_version == MAIN_LOCAL_INVOCATION_OVERLAY_VERSION {
             return Ok(());
@@ -1643,6 +1657,9 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
+        if self.schema_version == BASE_TEXT_EDIT_VERSION {
+            return base_text::restore(self, documents, budget);
+        }
         if self.schema_version == MAIN_LOCAL_INVOCATION_OVERLAY_VERSION {
             return main_local_invocation_programs::restore(self, documents, budget);
         }
@@ -1783,8 +1800,9 @@ pub(super) fn validate_association(
         budget.validation.service.max_records,
         "editorial pages",
     )?;
+    base_text::validate_association(overlay, documents, budget)?;
     let mut items = overlay.pages.len();
-    let mut bytes = 0_usize;
+    let mut bytes = base_text::content_bytes(overlay, budget)?;
     for page in &overlay.pages {
         items = items
             .checked_add(page.rows().len())
@@ -1815,6 +1833,7 @@ pub(super) fn validate_association(
             .len()
             .checked_add(overlay.local_object_operands.len())
             .and_then(|count| count.checked_add(overlay.resource_object_operands.len()))
+            .and_then(|count| count.checked_add(overlay.base_text_edits.len()))
             .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?,
         budget.validation.service.max_commands,
         "editorial operands",
@@ -1823,6 +1842,7 @@ pub(super) fn validate_association(
         .checked_add(overlay.local_program_operands.len())
         .and_then(|count| count.checked_add(overlay.local_object_operands.len()))
         .and_then(|count| count.checked_add(overlay.resource_object_operands.len()))
+        .and_then(|count| count.checked_add(overlay.base_text_edits.len()))
         .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
     limit(
         items,
@@ -1931,6 +1951,8 @@ fn unique_original_owner(
 #[derive(Serialize)]
 struct BorrowedOverlay<'a> {
     schema_version: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    base_text_edits: Option<BorrowedBaseTextEdits<'a>>,
     export_receipt_id: EntityId,
     export_receipt_digest: &'a str,
     original_design_id: EntityId,
@@ -2120,6 +2142,8 @@ fn write_appended(
         &mut *writer,
         &BorrowedOverlay {
             schema_version: overlay.schema_version(),
+            base_text_edits: (!overlay.base_text_edits.is_empty())
+                .then_some(BorrowedBaseTextEdits(&overlay.base_text_edits)),
             export_receipt_id: value.export_receipt_id,
             export_receipt_digest: &value.export_receipt_digest,
             original_design_id: value.original_design_id,
@@ -2241,3 +2265,7 @@ mod local_object_invocation_program_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/main_local_invocation_program_tests.rs"]
 mod main_local_invocation_program_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/base_text_tests.rs"]
+mod base_text_tests;

@@ -44,6 +44,7 @@ type EditorialProgramDocuments<'a> = (
 
 /// Trusted replay inputs; receipt and shared-effect qualification stay with callers.
 pub(super) struct EditorialResourceDocuments<'a> {
+    pub(super) base_text_edits: &'a [ersatzrs_domain::TeletextBaseTextEdit],
     pub(super) main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub(super) programs: EditorialProgramDocuments<'a>,
     pub(super) resource_operands: &'a [TeletextResourceObjectOperandOverlay],
@@ -499,6 +500,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
         entry_addon_id,
         documents,
         EditorialResourceDocuments {
+            base_text_edits: &[],
             main_programs: &[],
             programs: editorial,
             resource_operands: &[],
@@ -527,6 +529,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
         && editorial.resource_additions.is_empty()
         && editorial.programs.4.is_empty()
         && editorial.main_programs.is_empty()
+        && editorial.base_text_edits.is_empty()
     {
         let (rows, page, objects, bitmaps, _) = editorial.programs;
         return encode_original_channel_documents_with_editorial_overlays(
@@ -641,6 +644,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
         entry_producer,
         documents,
         EditorialResourceDocuments {
+            base_text_edits: &[],
             main_programs: &[],
             programs: editorial,
             resource_operands: &[],
@@ -676,9 +680,13 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
         || !resource_programs.is_empty()
         || !resource_additions.is_empty()
         || !editorial.main_programs.is_empty()
+        || !editorial.base_text_edits.is_empty()
     {
         check_editorial_resource_budget(
-            operands.len(),
+            operands
+                .len()
+                .checked_add(editorial.base_text_edits.len())
+                .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
             object_operands.len(),
             (programs, editorial.main_programs),
             resource_operands.len(),
@@ -694,21 +702,14 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
             || !bitmaps.is_empty()
             || !programs.is_empty()
             || !editorial.main_programs.is_empty()
+            || !editorial.base_text_edits.is_empty()
             || !resource_operands.is_empty()
             || !resource_programs.is_empty()
             || !resource_additions.is_empty()
         {
             return Err(ChannelTeletextDocumentEncodingError::Association);
         }
-        return Ok(EncodedChannelTeletextOriginals {
-            v1_region: None,
-            producers: Vec::new(),
-            provenance: Vec::new(),
-            metadata: None,
-            encoded: None,
-            descriptor: None,
-            transmissions: Vec::new(),
-        });
+        return Ok(empty_editorial_originals());
     }
     let has_v1 = documents
         .iter()
@@ -763,12 +764,29 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     })
 }
 
+fn empty_editorial_originals() -> EncodedChannelTeletextOriginals {
+    EncodedChannelTeletextOriginals {
+        v1_region: None,
+        producers: Vec::new(),
+        provenance: Vec::new(),
+        metadata: None,
+        encoded: None,
+        descriptor: None,
+        transmissions: Vec::new(),
+    }
+}
+
 fn apply_editorial_operands(
     mut declared: ersatzrs_domain::TeletextDeclaredService,
     editorial: &EditorialResourceDocuments<'_>,
     budget: ersatzrs_domain::TeletextServiceBudget,
 ) -> Result<ersatzrs_domain::TeletextDeclaredService, ChannelTeletextDocumentEncodingError> {
     let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
+    if !editorial.base_text_edits.is_empty() {
+        declared = declared
+            .with_base_text_edits(editorial.base_text_edits, budget)
+            .map_err(editorial_semantic_error)?;
+    }
     let resource_operands = editorial.resource_operands;
     if !editorial.resource_additions.is_empty() {
         declared = declared

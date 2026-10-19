@@ -1284,6 +1284,8 @@ enum Path {
     EditorialRows,
     EditorialRow,
     EditorialCells,
+    EditorialBaseTexts,
+    EditorialBaseText,
     EditorialOperands,
     EditorialOperand,
     EditorialObjectOperands,
@@ -1344,6 +1346,13 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
             self.inner
                 .scan
                 .check(storage::<editorial_overlay::StoredPage>(self.count))?;
+        }
+        if matches!(self.inner.path, Path::EditorialBaseText) {
+            self.inner
+                .scan
+                .check(storage::<editorial_overlay::base_text::StoredBaseTextEdit>(
+                    self.count,
+                ))?;
         }
         if matches!(self.inner.path, Path::EditorialOperand) {
             self.inner
@@ -1414,6 +1423,7 @@ impl Scan {
             Path::EditorialPage
                 | Path::EditorialRow
                 | Path::EditorialOperand
+                | Path::EditorialBaseText
                 | Path::EditorialObjectOperand
                 | Path::EditorialResourceOperand
                 | Path::EditorialGlyphProgram
@@ -1431,6 +1441,7 @@ impl Scan {
         if matches!(
             path,
             Path::EditorialOperand
+                | Path::EditorialBaseText
                 | Path::EditorialObjectOperand
                 | Path::EditorialResourceOperand
                 | Path::EditorialProgramCommand
@@ -1590,6 +1601,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Root, "guide_source") => Path::GuideSource,
                 (Path::Root, "editorial_overlay") => Path::EditorialOverlay,
                 (Path::EditorialOverlay, "pages") => Path::EditorialPages,
+                (Path::EditorialOverlay, "base_text_edits") => Path::EditorialBaseTexts,
                 (Path::EditorialOverlay, "local_program_operands") => Path::EditorialOperands,
                 (Path::EditorialOverlay, "drcs_bitmap_overlays") => Path::EditorialBitmaps,
                 (Path::EditorialOverlay, "local_object_operands") => Path::EditorialObjectOperands,
@@ -1682,6 +1694,11 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 self.scan.budget.validation.service.max_records,
                 Path::EditorialPage,
                 "editorial pages",
+            ),
+            Path::EditorialBaseTexts => (
+                self.scan.budget.validation.service.max_commands,
+                Path::EditorialBaseText,
+                "editorial operands",
             ),
             Path::EditorialOperands => (
                 self.scan.budget.validation.service.max_commands,

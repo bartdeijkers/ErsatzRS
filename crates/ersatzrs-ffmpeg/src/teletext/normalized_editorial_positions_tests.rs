@@ -148,6 +148,18 @@ fn shifted_carrier_positions_retain_original_local_ordinal_and_physical_source()
                 }
             };
             assert_eq!(position.original_local_command(), expected);
+            let expected_base = match augmented.emitter_source(position.source()) {
+                Some(TeletextAugmentedOriginSource::RetainedMain {
+                    provenance:
+                        TeletextMainCompositionSource::BaseCell {
+                            position: cell,
+                            kind: TeletextBaseCellCommandKind::Glyph,
+                        },
+                    ..
+                }) if position.source().object.is_none() => Some(cell),
+                _ => None,
+            };
+            assert_eq!(position.original_base_glyph(), expected_base);
         }
         assert!(excluded > 0);
         assert!(encoded
@@ -447,5 +459,24 @@ fn default_and_generated_base_commands_never_gain_original_local_ordinals() {
             .command_positions()
             .iter()
             .all(|position| position.original_local_command().is_none()));
+        let positions = compiled.physical().encoded().command_positions();
+        assert!(positions
+            .iter()
+            .any(|position| position.original_base_glyph()
+                == Some(TeletextEnhancementPosition::new(1, 8).unwrap())));
+        for position in positions {
+            let expected = match augmented.emitter_source(position.source()) {
+                Some(TeletextAugmentedOriginSource::RetainedMain {
+                    provenance:
+                        TeletextMainCompositionSource::BaseCell {
+                            position: cell,
+                            kind: TeletextBaseCellCommandKind::Glyph,
+                        },
+                    ..
+                }) if position.source().object.is_none() => Some(cell),
+                _ => None,
+            };
+            assert_eq!(position.original_base_glyph(), expected);
+        }
     });
 }

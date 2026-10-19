@@ -112,6 +112,7 @@ fn local_service_at(
 }
 fn edits(operands: &[TeletextLocalProgramOperandOverlay]) -> TeletextEditorialEdits<'_> {
     TeletextEditorialEdits {
+        base_text_edits: &[],
         rows: &[],
         operands,
         object_operands: &[],
@@ -608,6 +609,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         &candidate,
         &project("free", 1, 8, 32, 1),
         TeletextEditorialEdits {
+            base_text_edits: &[],
             rows: &changes.rows,
             operands: &changes.operands,
             object_operands: &[],

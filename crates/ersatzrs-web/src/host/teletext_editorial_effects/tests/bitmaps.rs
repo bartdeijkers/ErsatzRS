@@ -30,6 +30,7 @@ fn change(old: u16, new: u16) -> TeletextDrcsBitmapOverlay {
 }
 fn edits(bitmaps: &[TeletextDrcsBitmapOverlay]) -> TeletextEditorialEdits<'_> {
     TeletextEditorialEdits {
+        base_text_edits: &[],
         rows: &[],
         operands: &[],
         object_operands: &[],

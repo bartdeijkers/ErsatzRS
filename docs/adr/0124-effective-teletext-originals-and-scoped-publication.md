@@ -81,6 +81,24 @@ original, then validate only new effects against the latest export's permissions
 Earlier edits cannot grant new permissions. The original document bytes, role,
 scope and expiry remain unchanged beneath that one overlay.
 
+Private overlay version23 adds exact Unicode Base Text edits separately from
+original Local commands. A checked complete-factory binding identifies the
+original Base glyph; same-family qualified G2/diacritic edits must re-encode to
+the exact uploaded word in its retained charset. No pixel inversion, fabricated
+Local ordinal or silent alias normalization is permitted. Concept restoration
+rebuilds the derived Base through the existing semantic constructor while
+retaining immutable producer bytes, metadata, other editorial roles and resource
+bounds. Every other uploaded packet and protected effect remains checked.
+Repeated imports compare the latest scalar, retain original-root intent and
+remove it on true original-equal undo under a fresh receipt. Versions1–22 reject
+the new field; version23 is closed and nonempty, with aggregate streaming
+preflight bounds. This private version does not change public TTI/sidecar formats,
+edit-region authority or explicit publication, and grants no broader repertoire,
+editor-capacity or suitable-client acceptance. Required conversions that are
+not yet lossless, including a G2 spelling canonically encoded as G0 Text, remain
+explicitly rejected and recorded as open interchange debt in P9A-04.
+
+
 A later export subset may edit an owner outside the first subset. When needed,
 retain a bounded native-generated original export covering the cumulative owner
 union through the existing export confirmation and current-head CAS. Requalify

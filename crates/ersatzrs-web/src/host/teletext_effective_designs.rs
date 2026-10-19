@@ -685,6 +685,10 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
         entry,
         parts.documents,
         EditorialResourceDocuments {
+            base_text_edits: parts
+                .editorial_overlay
+                .as_ref()
+                .map_or(&[][..], |overlay| overlay.base_text_edits()),
             main_programs: parts.editorial_overlay.as_ref().map_or(&[][..], |overlay| {
                 overlay.main_local_invocation_program_overlays()
             }),

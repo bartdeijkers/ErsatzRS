@@ -236,6 +236,7 @@ fn changed_resource_call_charset_writer_cannot_alias_original_through_equal_payl
             .unwrap(),
         ];
         let edits = TeletextEditorialEdits {
+            base_text_edits: &[],
             rows: &[],
             operands: &[],
             object_operands: &[],

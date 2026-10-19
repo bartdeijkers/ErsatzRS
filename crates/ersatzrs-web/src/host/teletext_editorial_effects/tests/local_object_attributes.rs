@@ -127,6 +127,7 @@ fn retained_sized_object_attributes_require_the_whole_original_lower_and_right_f
         after.pages()[1].data_units()
     );
     let edits = TeletextEditorialEdits {
+        base_text_edits: &[],
         rows: &[],
         operands: &[],
         object_operands: &changes,

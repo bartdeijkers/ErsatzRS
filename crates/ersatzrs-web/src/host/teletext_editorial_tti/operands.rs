@@ -68,6 +68,19 @@ pub(super) fn reconcile(
                 continue;
             }
             let position = position_at_word(encoded, word, location, deadline)?;
+            if position.original_base_glyph().is_some() {
+                result.base_text_edits.push(
+                    ersatzrs_ffmpeg::teletext::resolve_teletext_base_text_edit(
+                        service,
+                        owner,
+                        position,
+                        before[slot],
+                        after[slot],
+                    )
+                    .ok_or_else(|| located_word(location, word))?,
+                );
+                continue;
+            }
             if position.source().object.is_some() {
                 result.object_operands.push(objects::reconcile(
                     service,
@@ -275,6 +288,7 @@ pub(super) fn check_recompiled_packets(
     changes: (
         &[TeletextLocalProgramOperandOverlay],
         &[TeletextLocalObjectOperandOverlay],
+        &[ersatzrs_domain::TeletextBaseTextEdit],
     ),
     location: Location,
     deadline: Instant,
@@ -291,8 +305,14 @@ pub(super) fn check_recompiled_packets(
         .iter()
         .filter(|change| change.owner() == owner)
         .count();
+    let base_count = changes
+        .2
+        .iter()
+        .filter(|edit| edit.owner() == owner)
+        .count();
     if page_count
         .checked_add(object_count)
+        .and_then(|count| count.checked_add(base_count))
         .is_none_or(|count| count > 16 * 13)
     {
         return Err(location.error(NativeTeletextEditorialTtiFailure::Packet));
@@ -303,7 +323,7 @@ pub(super) fn check_recompiled_packets(
         service,
         owner,
         &uploaded_words,
-        changes,
+        (changes.0, changes.1),
         location,
         deadline,
     )?;
@@ -357,6 +377,25 @@ pub(super) fn check_recompiled_packets(
             location,
         )?;
     }
+    qualify_base_text_edits(
+        (baseline, service, owner),
+        (&before, &after),
+        uploaded,
+        changes.2,
+        &mut allowed,
+        location,
+        deadline,
+    )?;
+    check_allowed_upload_packets(&before, uploaded, &allowed, location, deadline)
+}
+
+fn check_allowed_upload_packets(
+    before: &PacketWords,
+    uploaded: &Page<'_>,
+    allowed: &[Option<u32>; 16 * 13],
+    location: Location,
+    deadline: Instant,
+) -> Result<()> {
     for designation in 0..16 {
         location.check_deadline(deadline)?;
         match (before[designation], uploaded.packets[0][designation]) {
@@ -374,6 +413,72 @@ pub(super) fn check_recompiled_packets(
         }
     }
     Ok(())
+}
+
+fn qualify_base_text_edits(
+    services: (
+        &EncodedTeletextAuthoredService,
+        &EncodedTeletextAuthoredService,
+        TeletextPageAddress,
+    ),
+    packets: (&PacketWords, &PacketWords),
+    uploaded: &Page<'_>,
+    edits: &[ersatzrs_domain::TeletextBaseTextEdit],
+    allowed: &mut [Option<u32>; 16 * 13],
+    location: Location,
+    deadline: Instant,
+) -> Result<()> {
+    let (baseline, service, owner) = services;
+    let (before, after) = packets;
+    for edit in edits.iter().filter(|edit| edit.owner() == owner) {
+        location.check_deadline(deadline)?;
+        let old_position =
+            base_text_position(baseline, owner, edit.position(), location, deadline)?;
+        let new_position = base_text_position(service, owner, edit.position(), location, deadline)?;
+        let old = old_position.semantic_word();
+        let final_word = new_position.semantic_word();
+        if old >= 208 || final_word >= 208 {
+            return Err(located_word(location, old));
+        }
+        let original = before[old / 13]
+            .map(|words| words[old % 13])
+            .ok_or_else(|| located_word(location, old))?;
+        let edited = uploaded.packets[0][old / 13]
+            .map(|words| words[old % 13])
+            .ok_or_else(|| located_word(location, old))?;
+        if ersatzrs_ffmpeg::teletext::resolve_teletext_base_text_edit(
+            baseline,
+            owner,
+            old_position,
+            original,
+            edited,
+        ) != Some(*edit)
+            || allowed[old].replace(edited).is_some()
+            || after[final_word / 13].map(|words| words[final_word % 13]) != Some(edited)
+        {
+            return Err(located_word(location, old));
+        }
+    }
+    Ok(())
+}
+
+fn base_text_position(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    cell: ersatzrs_domain::TeletextEnhancementPosition,
+    location: Location,
+    deadline: Instant,
+) -> Result<&TeletextCompiledCommandPosition> {
+    let program = compiled_program(service, owner)
+        .ok_or_else(|| location.error(NativeTeletextEditorialTtiFailure::Packet))?;
+    let mut found = None;
+    for position in program.command_positions() {
+        location.check_deadline(deadline)?;
+        if position.original_base_glyph() == Some(cell) && found.replace(position).is_some() {
+            return Err(located_word(location, position.semantic_word()));
+        }
+    }
+    found.ok_or_else(|| location.error(NativeTeletextEditorialTtiFailure::Packet))
 }
 
 fn check_changed_word(

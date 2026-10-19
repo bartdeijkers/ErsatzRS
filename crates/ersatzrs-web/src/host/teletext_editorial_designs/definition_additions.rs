@@ -295,6 +295,7 @@ fn encode(
         deadline,
     )?;
     let incoming = TeletextEditorialChanges {
+        base_text_edits: Vec::new(),
         resource_additions: additions,
         ..Default::default()
     };

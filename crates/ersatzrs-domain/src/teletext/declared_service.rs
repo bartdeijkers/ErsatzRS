@@ -214,6 +214,19 @@ impl TeletextDeclaredService {
     pub const fn semantic(&self) -> &TeletextSemanticService {
         &self.semantic
     }
+    /// Derive exact Unicode Base text changes while retaining all declarations.
+    /// The host must authenticate source correspondence and protected effects;
+    /// this does not grant concept or publication authority.
+    /// # Errors
+    /// Rejects empty, duplicate, unbound or stale Text cells and exceeded budgets.
+    pub fn with_base_text_edits(
+        mut self,
+        edits: &[super::TeletextBaseTextEdit],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self.semantic.with_base_text_edits(edits, budget)?;
+        Ok(self)
+    }
     /// Replace checked existing local colour/attribute/glyph operands, preserving the
     /// authenticated declarations and resource selections. Hosts must still
     /// enforce captured edit permissions, recompile and publish explicitly.

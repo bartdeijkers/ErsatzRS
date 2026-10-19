@@ -58,6 +58,7 @@ fn change(
 }
 fn edits(changes: &[TeletextResourceObjectProgramOverlay]) -> TeletextEditorialEdits<'_> {
     TeletextEditorialEdits {
+        base_text_edits: &[],
         rows: &[],
         operands: &[],
         object_operands: &[],

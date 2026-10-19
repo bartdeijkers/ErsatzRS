@@ -16,6 +16,7 @@ use ersatzrs_ffmpeg::teletext::{
 };
 use serde_json::json;
 use std::time::Duration;
+mod base_text;
 mod bitmaps;
 mod charset_context;
 mod compiler_resources;

@@ -28,6 +28,9 @@ use super::{
 mod drcs_extension;
 pub use drcs_extension::*;
 
+#[path = "base_text_edit_service.rs"]
+mod base_text_edits;
+
 #[path = "local_object_operand_service.rs"]
 mod local_object_operands;
 
@@ -204,6 +207,14 @@ pub enum TeletextEffectiveProgramSource {
 /// Located semantic failure. No programme text or partial candidate is returned.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextServiceError {
+    #[error("teletext Base text changes must not be empty")]
+    EmptyBaseTextEdits,
+    #[error("teletext Base text at {owner:?}, {position:?}: {reason}")]
+    BaseTextEdit {
+        owner: TeletextPageAddress,
+        position: super::TeletextEnhancementPosition,
+        reason: super::TeletextBaseTextEditError,
+    },
     #[error("teletext DRCS bitmap changes must not be empty")]
     EmptyDrcsBitmapOverlays,
     #[error("teletext DRCS bitmap {identity:?}, slot {slot:?}: {reason}")]
