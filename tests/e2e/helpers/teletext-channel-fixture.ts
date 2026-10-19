@@ -314,14 +314,15 @@ export class TeletextChannelFixture {
     } catch (error) { this.database.exec('ROLLBACK;'); throw error; }
   }
 
-  writeScriptedControls(channel: number, profile: number | null, count: number): void {
+  // Undefined emits no teletext commands: a fresh control-free Lua build.
+  writeScriptedControls(channel: number, profile: number | null | undefined, count: number): void {
     if (!this.scripted || !this.channels.includes(channel) || !Number.isInteger(count) || count < 1 || count > 80) {
       throw new Error('Scripted controls must stay within the owned bounded fixture.');
     }
-    if (profile !== null && !this.profiles().some(row => row.Id === profile && !row.IsDeleted)) {
+    if (profile !== null && profile !== undefined && !this.profiles().some(row => row.Id === profile && !row.IsDeleted)) {
       throw new Error('Scripted controls require an existing fixture profile.');
     }
-    const controls = profile === null
+    const controls = profile === undefined ? '' : profile === null
       ? `assert(teletext_enabled('${this.addonId}',false).ok)`
       : `assert(teletext_profile('${this.addonId}',${profile}).ok)\nassert(teletext_enabled('${this.addonId}',true).ok)`;
     writeFileSync(join(this.root, `synthetic-controls-${channel}.lua`),

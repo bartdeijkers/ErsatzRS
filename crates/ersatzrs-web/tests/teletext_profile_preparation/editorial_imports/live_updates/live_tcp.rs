@@ -834,6 +834,10 @@ pub(in super::super::super) fn assert_uninterrupted_source_clock(bytes: &[u8]) {
     assert!(super::live_tcp_clock::verify_clock_gaps(bytes).is_empty());
 }
 
+pub(in super::super::super) fn assert_plain_source_clock(bytes: &[u8]) {
+    super::live_tcp_clock::verify_plain_source_clock(bytes);
+}
+
 async fn verify_native(
     directory: &Path,
     tools: (&str, &str, &str),

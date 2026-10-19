@@ -369,7 +369,7 @@ async fn bounded_read(
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum ToolInput {
+pub(super) enum ToolInput {
     Complete,
     ProbePrefix,
 }
@@ -439,7 +439,7 @@ pub(super) async fn probe_with_environment(
     .await
 }
 
-async fn probe_with_input(
+pub(super) async fn probe_with_input(
     executable: &str,
     args: &[&str],
     input: &[u8],

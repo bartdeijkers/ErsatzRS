@@ -3,6 +3,9 @@
 
 use super::*;
 
+#[path = "standalone_base/scoped_restart.rs"]
+mod scoped_restart;
+
 #[path = "standalone_base/updates.rs"]
 mod updates;
 

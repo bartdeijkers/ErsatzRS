@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: coded Greek/Arabic header7 corrected; scoped Lua/output host-restart proof next'
+current_focus = 'P9A-04 standalone Level 1/1.5: scoped On/Off/post-Off-expiry host proof green; bounded new base-client qualification next'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -137,12 +137,30 @@ path mistakes are retained separately from the reproduced product rejection.
 Strict domain/FFmpeg Clippy and formatting pass; no actual editor/client/stream/
 platform or complete Unicode/font/base/full9A claim. No scope waiver.
 
-Next concrete product-flow gap: use existing host-restart and scoped Lua/output
-fixtures to prove interval/On/Off/expiry recovery inside/after scope against
-accepted ordinary output. Preserve exact clock/authority/config and source AV;
-reuse unmodified editor/publication/F6 evidence. Complete logical non-Latin
-Unicode/font/editor contexts and remaining shared control/client/platform/full2.5
-obligations remain independently open. No unchanged negative client retry.
+L15-C scoped_host_restart now has headed EN/JS/light Chromium151 proof:
+existing hydrated Reset/Lua/native authoring/explicit publication survive three
+real graceful replacements insideOn, insideOff and after the originalOffexpiry.
+Fresh control-freeContinue retains that same72sOffinterval and supplies future
+programmes without a new override. Exact publication/current pointers, published
+intervals/checkpoints/build/config/package/calls stay unchanged across each
+replacement; all four owned host generations close without force. Seven ordinary
+responses pass final exact model/sourceAV/PCR/TSDuck and literalOff PMT/data
+absence;45 stock0.2.42 cache/subpage/colour/fallback/Index results remain valid on
+byteidentical final units. Existing parser has a separate strict source-onlyOff
+entry (no teletext allowed), with four negative controls; authored-clock minima
+are unchanged. Seven focused regressions, final native verifier and strict web
+Clippy/fmt pass. Original harness failures remain canonical; no product fix,
+new editor/suitable receiver/platform or fullbase/full9A claim. Future-scope and
+On-expiry host edges, activeclients, shared-profile/mirror/multibinding/error/
+RefreshReset matrices and full repertoire/editor/platform obligations stay open.
+
+Next concrete acceptance gap: bounded primary-source qualification of the
+previously unexamined VDR/osdteletext base-client route, with its HTTP/TS input
+path. Require pinned applicableX26, reveal, timedflash and page/subpage capability
+before any build/runtime attempt; stop source-negative candidates. Do not repeat
+unchanged VLC/Kaffeine/GE/enhanced negatives or modify external decoders. This is
+base-specific; full2.5 X1 remains deferred and X3 waits for upstream QTM native
+banks/over208 context. Keep independent product/host/platform work executable.
 
 L15-D still needs an available exact client with positively qualified ordinary
 HTTP/TS, conceal/reveal, timed flash, relevantX26 and page/subpage/update controls.

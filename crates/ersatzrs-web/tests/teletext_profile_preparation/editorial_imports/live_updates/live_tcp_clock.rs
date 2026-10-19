@@ -330,6 +330,25 @@ impl Evidence {
 /// its PSI shape/rate assertions are not production engine restrictions.
 /// The caller still runs the full `TSDuck`, ffprobe and unchanged source-AV gates.
 pub(super) fn verify_clock_gaps(bytes: &[u8]) -> Vec<ClockGap> {
+    let evidence = read_clock_evidence(bytes, true);
+    assert!(
+        evidence.pcr_count >= 2 && evidence.pts_count >= 2,
+        "complete clock evidence"
+    );
+    evidence.gaps
+}
+
+/// A literal Off response has no authored clock. Preserve every source-PCR,
+/// ownership and framing check, while requiring no teletext declaration/data.
+/// The caller still verifies ordinary video/audio PTS and AV through `TSDuck`.
+pub(super) fn verify_plain_source_clock(bytes: &[u8]) {
+    let evidence = read_clock_evidence(bytes, false);
+    assert!(evidence.pcr_count >= 2, "complete source PCR evidence");
+    assert_eq!(evidence.pts_count, 0);
+    assert!(evidence.gaps.is_empty());
+}
+
+fn read_clock_evidence(bytes: &[u8], allow_authored: bool) -> Evidence {
     assert_eq!(bytes.len() % 188, 0, "all complete captured packets");
     assert!(bytes.len() <= super::MAX_CAPTURE);
     let mut evidence = Evidence::default();
@@ -341,6 +360,7 @@ pub(super) fn verify_clock_gaps(bytes: &[u8]) -> Vec<ClockGap> {
         let control = packet[3] & 0x30;
         assert_ne!(control, 0, "valid source adaptation control");
         if pid == AUTHORED_PID {
+            assert!(allow_authored, "literal Off cannot carry authored packets");
             assert!(evidence.announced, "authored packet while PMT absent");
         }
         let payload_start = if control & 0x20 != 0 {
@@ -369,16 +389,16 @@ pub(super) fn verify_clock_gaps(bytes: &[u8]) -> Vec<ClockGap> {
         }
         if evidence.owner.is_some_and(|(_, pmt_pid)| pid == pmt_pid) && start {
             evidence.observe_pmt(payload, index);
+            assert!(
+                allow_authored || !evidence.announced,
+                "literal Off cannot announce teletext"
+            );
         }
         if pid == AUTHORED_PID {
             evidence.observe_pes(packet, payload, index);
         }
     }
-    assert!(
-        evidence.pcr_count >= 2 && evidence.pts_count >= 2,
-        "complete clock evidence"
-    );
-    evidence.gaps
+    evidence
 }
 
 #[cfg(test)]
@@ -564,6 +584,46 @@ mod tests {
                 _ => packets[28][5] |= 0x80,
             }
             assert!(std::panic::catch_unwind(|| verify_clock_gaps(&bytes(&packets))).is_err());
+        }
+    }
+
+    #[test]
+    fn plain_off_keeps_exact_source_clock_and_rejects_declaration_data_drift_or_missing_pcr() {
+        let (original, _) = fixture();
+        let mut null = [0xff; 188];
+        null[..4].copy_from_slice(&[0x47, 31, 255, 0x10]);
+        let plain: Vec<_> = original
+            .into_iter()
+            .map(|packet| {
+                let pid = u16::from_be_bytes([packet[1] & 31, packet[2]]);
+                match pid {
+                    4096 => pmt_packet(0, false),
+                    AUTHORED_PID => null,
+                    _ => packet,
+                }
+            })
+            .collect();
+        verify_plain_source_clock(&bytes(&plain));
+        // The existing authored oracle still requires actual teletext PTS.
+        assert!(std::panic::catch_unwind(|| verify_clock_gaps(&bytes(&plain))).is_err());
+        for mode in 0..4 {
+            let mut broken = plain.clone();
+            match mode {
+                0 => broken[10] = pmt_packet(1, true),
+                1 => broken[11] = pts_packet(83 + FRAME_TICKS, 0),
+                2 => broken[28][9] ^= 1,
+                _ => {
+                    for packet in broken.iter_mut().skip(4) {
+                        if packet[3] & 0x20 != 0 && packet[4] > 0 && packet[5] & 0x10 != 0 {
+                            *packet = null;
+                        }
+                    }
+                }
+            }
+            assert!(
+                std::panic::catch_unwind(|| verify_plain_source_clock(&bytes(&broken))).is_err(),
+                "mode{mode}"
+            );
         }
     }
 }
