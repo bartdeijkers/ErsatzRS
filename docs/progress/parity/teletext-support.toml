@@ -4,14 +4,15 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: independently usable base first, then full2.5/protected fallback;
-neither accepted. P9A-04 owns scoped base/editor/Lua/publication, localized
-native output choice and LinuxLegacy/typedHybrid cleanup. Native Cyrillic/
-Hebrew Text now encodes380 qualified G0 positions without banks; native wire/
-pixels/provenance pass. Stock0.2.42 has six differing alias slots, not waived.
-Actual QTM1.0 Romanian/Greek Main208 context proof stays valid; next bundle
-four new native contexts. Supplementary Unicode/font, base receiver, lifecycle,
-platform and full2.5 client/editor capabilities remain mandatory and open.
+ADR0123: base first, then full2.5/protected fallback; neither accepted.
+P9A-04 owns scoped editor/Lua/publication, native output choice and LinuxLegacy/
+typedHybrid cleanup. Native Cyrillic/Hebrew G0 text and four actual QTM1.0
+keyboard/SaveAs/concept/preview/reexport/reopen contexts pass without banks;
+accepted channels stay unchanged. Stock0.2.42 has six differing alias slots,
+not waived. Romanian/Greek Main208 and prior publication/stream proofs retain
+scope. Supplementary text/font, base receiver, lifecycle/platform and full2.5
+client/editor capabilities stay open; next context-aware supplementary Text.
+
 
 
 Typed services/provenance/resources, physical ownership, X26/X27/X28/M29,

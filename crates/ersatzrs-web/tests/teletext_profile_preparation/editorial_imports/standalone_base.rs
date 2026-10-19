@@ -8,6 +8,9 @@ use serde_json::{json, Value};
 #[path = "standalone_base/national_editor.rs"]
 mod national_editor;
 
+#[path = "standalone_base/native_editor.rs"]
+mod native_editor;
+
 fn commands() -> Value {
     let mut commands = Vec::new();
     for row in 1..=5 {

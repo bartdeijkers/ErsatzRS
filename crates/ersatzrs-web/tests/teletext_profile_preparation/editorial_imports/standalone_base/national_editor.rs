@@ -71,7 +71,7 @@ fn greek(theme: &str, page: u16, subcode: u16) -> Value {
     national_response(Context::Greek, theme, page, subcode)
 }
 
-fn assert_files(actual: &[TeletextExportFile], expected: &[TeletextExportFile]) {
+pub(super) fn assert_files(actual: &[TeletextExportFile], expected: &[TeletextExportFile]) {
     assert_eq!(actual.len(), expected.len());
     for before in expected {
         let after = actual.iter().find(|file| file.name == before.name).unwrap();

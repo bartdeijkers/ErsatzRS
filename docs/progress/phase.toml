@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: native Cyrillic/Hebrew authoring delivered; next grouped editor-context proof; decoder aliases/receiver/platform gates remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: native G0 editor proof delivered; next context-aware supplementary text; decoder/client/platform gates remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -78,8 +78,17 @@ cases and strictFFmpegClippy pass. Stock0.2.42 agrees on2244/2280 observations;
 capability gap, not accepted complete national/client proof or scope waiver.
 Canonical standalone_level15_followup/native_cyrillic_hebrew owns sources,
 standard review, immutable inputs, retained negatives and sensitivity controls.
-Next bundle actual pinnedQTM export/edit/save/concept/preview for these four
-contexts using existing tools; reuse unaffected publication/stream/F6 evidence.
+Native_editor_interop now supplies that scoped actual pinnedQTM proof for all
+four contexts: real Unicode key and SaveAs atLevel1.5, noMain/no banks, exact
+remaining TTI records/native sentinels/sidecar, one-cell-only shared preview,
+concept/reexport/SQLite reopen and unchanged accepted channels. Five regular
+standalone controls plus one bundled actual-editor test and strict affected-test
+Clippy/fmt pass. New proof only; publication/stream/F6 retain earlier scope.
+Original invalid-DZE/borrow setup failures remain; no normative weakening.
+Next reproduce context-aware supplementary Unicode symbol rejection in Cyrillic/
+Greek Text and make the smallest supported converter/composition correction
+under L15-A/F3, retaining nativeG0 and explicit Level1 fallback. Reuse existing
+factory/decoder tools; no general standards audit or new editor-variant loop.
 Complete supplementary Unicode/font, base receiver, lifecycle/platform and
 full2.5 editor/client gates stay distinct and open. No automatic editor repair.
 

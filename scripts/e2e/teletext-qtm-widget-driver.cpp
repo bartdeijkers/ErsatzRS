@@ -20,6 +20,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QProcess>
+#include <QKeyEvent>
 #include <QTimer>
 #include <QWindow>
 #include <QtTest/QTest>
@@ -99,6 +100,8 @@ struct DriverContext {
     bool addFirstDefinitionPosition = false;
     bool addInteriorDefinitionRow = false;
     bool editMainG2 = false;
+    bool editNativeG0 = false;
+    int nativeUnicode = 0;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -162,6 +165,13 @@ static DriverContext driverContext() {
         qFatal("Native fragment call selector must retain authenticated Public Passive scope/type");
     const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology || fragmentCall || firstDefinitionPosition || interiorDefinitionRow;
     const bool mainG2 = mode == "single-page-main-g2";
+    const bool nativeG0 = mode == "single-page-native-g0";
+    if (nativeG0 != qEnvironmentVariableIsSet("ERSATZRS_QTM_NATIVE_G0_UNICODE"))
+        qFatal("Native G0 input requires exactly the fixed native trial");
+    const int nativeUnicode = nativeG0 ? boundedDecimal("ERSATZRS_QTM_NATIVE_G0_UNICODE", 0xffff) : 0;
+    if (nativeG0 && nativeUnicode != 0x0409 && nativeUnicode != 0x0416
+        && nativeUnicode != 0x0406 && nativeUnicode != 0x05d0)
+        qFatal("Native G0 trial supports only the four qualified keyboard inputs");
     const bool extendedGlyph = mode == "single-page-local-extended-glyph" || mainG2;
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
@@ -263,7 +273,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !nativeG0 && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -295,12 +305,14 @@ static DriverContext driverContext() {
         || triplet != 206 || column != 0 || glyphMode != 15 || toGlyphMode != 15
         || fromGlyph != 35 || toGlyph != 66))
         qFatal("Fixed standalone Level 1.5 Main requires word206 G2 35-to66, zero panels and no banks");
+    if (nativeG0 && (left != 0 || right != 0 || !drcs.isEmpty() || !globalDrcs.isEmpty()))
+        qFatal("Fixed native G0 trial requires zero panels and no banks");
     if (resourceTrial && (left != 0 || right != 0
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -2553,7 +2565,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow), context.inputName.constData(), context.outputName.constData());
+                (context.editNativeG0 || context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -2578,11 +2590,12 @@ extern "C" int _ZN16QCoreApplication4execEv() {
         if (destination.exists() || destination.isSymLink())
             qFatal("Audit destination must not exist or be a symlink");
         bool selected = false;
-        const QString level = context.editMainG2 ? "1.5" : "2.5";
+        const bool level15 = context.editMainG2 || context.editNativeG0;
+        const QString level = level15 ? "1.5" : "2.5";
         for (QRadioButton *radio : main->findChildren<QRadioButton *>())
             if (radio->text() == level) { radio->click(); selected = radio->isChecked(); }
         if (!selected) qFatal("Required fixed presentation-level radio absent");
-        capture(context.captureName(context.editMainG2 ? "level15" : "level25").toUtf8().constData());
+        capture(context.captureName(level15 ? "level15" : "level25").toUtf8().constData());
         loadNormalDrcs(main, context);
         loadGlobalDrcs(main, context);
         if (context.singlePage) {
@@ -2607,6 +2620,23 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.insertFragmentCall || context.deleteFragmentCall) editNativeFragmentCalls(main,context);
             if (context.addFirstDefinitionPosition) editFirstDefinitionPosition(main, context);
             if (context.addInteriorDefinitionRow) editInteriorDefinitionRow(main, context);
+            if (context.editNativeG0) {
+                if (main->isWindowModified()
+                    || !view->grab().save(QString("/work/") + context.captureName("native-g0-before-widget")))
+                    qFatal("Native G0 keyboard trial requires a pristine visible page");
+                QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, QPoint(102, 15));
+                // Send a real Unicode text key to the unchanged editor handler.
+                // Its own charset mapping and undo command perform the edit.
+                const QString text(QChar(context.nativeUnicode));
+                QKeyEvent press(QEvent::KeyPress, 0, Qt::NoModifier, text);
+                QKeyEvent release(QEvent::KeyRelease, 0, Qt::NoModifier, text);
+                QApplication::sendEvent(view, &press);
+                QApplication::sendEvent(view, &release);
+                if (!QTest::qWaitFor([main] { return main->isWindowModified(); }, 3000)
+                    || !view->grab().save(QString("/work/") + context.captureName("native-g0-edited-widget")))
+                    qFatal("Native G0 text key did not produce a visible modified page");
+                std::printf("QTM actual native G0 keyboard: row1 column8 UnicodeU+%04x\n", context.nativeUnicode);
+            }
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));
