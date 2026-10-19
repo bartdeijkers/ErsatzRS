@@ -100,10 +100,14 @@ fn themed_pages(theme: &str) -> Value {
 }
 
 pub(super) async fn installed_profiles(tools: &Tools) -> (Fixture, Vec<u8>) {
-    installed_profiles_with(tools, themed_pages).await
+    installed_profiles_with(tools, themed_pages, 12).await
 }
 
-async fn installed_profiles_with(tools: &Tools, response: fn(&str) -> Value) -> (Fixture, Vec<u8>) {
+async fn installed_profiles_with(
+    tools: &Tools,
+    response: fn(&str) -> Value,
+    seconds: u8,
+) -> (Fixture, Vec<u8>) {
     let fixture = Fixture::new_persistent().await;
     channel_documents::install_contract(&fixture, ADDON, "first", 2).await;
     tokio::fs::write(
@@ -142,9 +146,11 @@ async fn installed_profiles_with(tools: &Tools, response: fn(&str) -> Value) -> 
         let profile = fixture.profile(theme, theme, "good").await;
         fixture.bind(channel, &profile, None).await;
     }
-    let source = client_capture::generate_source(&tools.ffmpeg, fixture.root.path()).await;
+    let source =
+        client_capture::generate_source_with_duration(&tools.ffmpeg, fixture.root.path(), seconds)
+            .await;
     client_capture::configure_source_for_channels(&fixture, &source, &[1, 2]).await;
-    // The clip still ends after 12 seconds; the schedule remains selectable
+    // The generated clip remains finite; the schedule remains selectable
     // through these sequential fallback trials without becoming a new source.
     let schedule = fixture.root.path().join("synthetic-client-schedule.json");
     let mut body: Value =

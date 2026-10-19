@@ -112,7 +112,7 @@ pub(super) async fn source_fixture_with_response_and_writer(
     (fixture, flow, bytes)
 }
 
-fn cycle_units(carousel: &mut TeletextCarousel) -> Vec<Unit> {
+pub(in super::super) fn cycle_units(carousel: &mut TeletextCarousel) -> Vec<Unit> {
     let mut units = Vec::new();
     for _ in 0..4096 {
         let batch = carousel.next_batch().unwrap();
@@ -159,11 +159,11 @@ fn pattern(candidate: &AcceptedTeletextOutputCandidate, counter: usize) -> Patte
         .collect()
 }
 
-pub(super) struct ObservedCycle {
-    pub(super) end: usize,
-    pub(super) units: Vec<Unit>,
+pub(in super::super) struct ObservedCycle {
+    pub(in super::super) end: usize,
+    pub(in super::super) units: Vec<Unit>,
 }
-pub(super) async fn wait_cycle(
+pub(in super::super) async fn wait_cycle(
     capture: &Capture,
     after: usize,
     expected: &Pattern,

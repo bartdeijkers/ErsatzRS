@@ -258,10 +258,15 @@ async fn tee_response(State(state): State<Tee>, request: Request, next: Next) ->
             if let Ok(bytes) = &result {
                 capture.wire.lock().unwrap().append(bytes);
                 capture.changed.notify_one();
-            } else if index == 1 {
+            } else {
                 let diagnostic = body_diagnostic(result.as_ref().unwrap_err(), started);
+                let filename = if index == 1 {
+                    "observer-body-error.json".to_owned()
+                } else {
+                    format!("viewer-{index}-body-error.json")
+                };
                 if write_new(
-                    &directory.join("observer-body-error.json"),
+                    &directory.join(filename),
                     &serde_json::to_vec_pretty(&diagnostic).unwrap(),
                 )
                 .is_err()
@@ -334,6 +339,9 @@ impl Origin {
     }
     pub(in super::super::super) fn single_requests(&self) -> bool {
         *self.state.seen.lock().unwrap() == [true; 3]
+    }
+    pub(in super::super::super) fn requests_seen(&self) -> [bool; 3] {
+        *self.state.seen.lock().unwrap()
     }
 }
 

@@ -3,6 +3,9 @@
 
 use super::*;
 
+#[path = "standalone_base/updates.rs"]
+mod updates;
+
 fn response(theme: &str) -> Value {
     let mut value: Value = serde_json::from_str(include_str!(
         "../../fixtures/teletext-level15-restart-v2.json"
@@ -80,10 +83,25 @@ fn shared_restart_fixture_is_standalone_and_preserves_exact_subpage_navigation()
 }
 
 async fn accept_base(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputCandidate {
+    let request = request_base(fixture, channel, None).await;
+    publish_base(fixture, request, None).await
+}
+
+fn base_policy(
+) -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy {
     // The browser explicitly chooses 200/0000. Two subpages make inference
     // deliberately ambiguous; preserve the existing EntryRequired safeguard.
     let mut policy = channel_documents::policy();
     policy.entry = Some(channel_documents::address(200, 0));
+    policy
+}
+
+async fn request_base(
+    fixture: &Fixture,
+    channel: i64,
+    expected_request: Option<i64>,
+) -> ersatzrs_domain::TeletextPublicationRequest {
+    let policy = base_policy();
     let candidate = prepare_channel_teletext_document_candidate(
         &fixture.state.application,
         channel,
@@ -100,7 +118,7 @@ async fn accept_base(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputC
         saved.head().revision,
         saved.digest().to_owned(),
         saved.head().revision,
-        None,
+        expected_request,
         designs::budget(),
         policy.clone(),
         designs::deadline(),
@@ -114,15 +132,23 @@ async fn accept_base(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputC
         designs::units(saved.candidate().encoded().unwrap()),
         designs::units(requested.design().encoded().unwrap())
     );
+    requested.request().clone()
+}
+
+async fn publish_base(
+    fixture: &Fixture,
+    request: ersatzrs_domain::TeletextPublicationRequest,
+    expected_generation_id: Option<i64>,
+) -> AcceptedTeletextOutputCandidate {
     let accepted = accept_original_teletext_generation(
         &fixture.state.application,
         TeletextGenerationTarget {
-            expected_design_head: requested.request().revision,
-            request: requested.request().clone(),
-            expected_generation_id: None,
+            expected_design_head: request.revision,
+            request,
+            expected_generation_id,
         },
         designs::budget(),
-        policy,
+        base_policy(),
         designs::deadline(),
     )
     .await
@@ -138,7 +164,7 @@ async fn accept_base(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputC
 async fn served_level15_restart_retains_exact_subpages_navigation_and_source_av() {
     let tools = Tools::load().await;
     let prefix = client_capture::selected("ERSATZRS_TELETEXT_RESTART_CAPTURE");
-    let (fixture, _) = installed_profiles_with(&tools, response).await;
+    let (fixture, _) = installed_profiles_with(&tools, response, 12).await;
     let source = tokio::fs::read(format!("{prefix}.source.ts"))
         .await
         .unwrap();

@@ -67,6 +67,9 @@ mod drcs_bitmap_delivery;
 mod drcs_bitmap_warm;
 #[path = "editorial_imports/drcs_bitmap_warm_delivery.rs"]
 mod drcs_bitmap_warm_delivery;
+pub(super) use drcs_bitmap_warm_delivery::{
+    cycle_units as observed_cycle_units, wait_cycle as wait_observed_cycle, ObservedCycle,
+};
 #[path = "editorial_imports/drcs_companion.rs"]
 mod drcs_companion;
 #[path = "editorial_imports/forward_header.rs"]

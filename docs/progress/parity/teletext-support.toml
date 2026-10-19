@@ -6,12 +6,14 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
 P9A-04 owns proof. Standalone subpage/profile/publication recovery now has scoped
-headed actual-host/ordinary-stream evidence; national Unicode retains context.
+headed actual-host/ordinary-stream evidence. Same two responses/default2 now
+retain pending originals, then explicitly adopt only Day200/0020 label/X26;
+72 scoped stock-decoder checks/sourceAV/TSDuck/cleanup/reopen pass. National
+Unicode retains context; assigned non-Latin contexts remain open.
 Complete glyph/client/QTM/metadata/shared runtime/safety/platform remain mandatory.
 
-Typed services, provenance, resource identities/defaults, physical
-ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
-are partial. Original bytes, fallback, ancestry, absent/default distinctions and
+Typed services/provenance/resources, physical ownership, X26/X27/X28/M29,
+replay/raster and glyph/charset normalization are partial. Original bytes, fallback, ancestry, absent/default distinctions and
 pending charset uncertainty stay protected. Remaining A7/A8/C3, row-zero/foreign-
 X26, repertoire/aliases, resource/object/panel and independent client coverage
 remain required.
@@ -21,17 +23,15 @@ scalar/style and call/topology edits with original identities, lineage and
 protected consumers. V18/19 qualify Add/Copy/empty/positive-row/interior saves;
 V20/21 Local and V22 Main calls compose with one-word scalars. Exact-root undo
 uses fresh receipts and a trusted ephemeral inverse, never a saved inverse.
-Old formats and complete catalogue/source authority remain closed. P9A-04 owns
-native/repeat/undo/publication/cold-reopen and localized compound-save proof.
+Old formats and complete catalogue/source authority remain closed. P9A-04 owns scoped native/editor/headed proof.
 r1→r2 creates resources in new originals; same-design creation stays open.
 Unqualified style/position/context, complete resource/link/set and oversized
 QTM context remain open. No truncation, silent editor restriction, suitable-
 client waiver or full engine acceptance follows.
 
-F3 header/suffix and scoped foreign MOT default realization retain original
-source/roots/fallback, complete effects and bounds. Private physical wrappers
-never become authored sources; strict selected-link calls remain. F1 child
-structure imports retain protected spans. P9A-04 owns proof and context gaps.
+F3 header/suffix/foreign MOT retain source/roots/fallback/effects/bounds;
+physical wrappers are not authored sources. F1 child imports protect spans.
+P9A-04 owns exact proof/context gaps.
 National/bank/panel receipts, nine-culture headed SSR and two-theme navigation
 retain scope. Explicit supplied banks/defaults, stock failures and sparse/G1
 candidates stay distinct; enlarged clients, hydration, Hebrew/acquisition remain.
