@@ -251,3 +251,210 @@ async fn genuine_edit(directory: &Path, flow: &Flow) -> NativeTeletextEditorialI
         live_client::read_bounded(&directory.join("edited.tti"), policy().tti.max_bytes).unwrap();
     qtm::actual_request(directory, flow, &bytes)
 }
+
+fn invalid_enrichments(original: &Value) -> [(&'static str, Value); 3] {
+    let mut palette = original.clone();
+    let mut presentation = super::super::documents::document(
+        super::super::documents::DocumentFixture::Authored,
+        "day",
+    )["magazines"][0]["presentation"]
+        .clone();
+    presentation["palette"]["clut2"][0][0] = json!(16); // RGB4 is 0..15.
+    palette["service"]["page_enhancements"][0]["presentation"] = presentation;
+
+    let mut drcs = original.clone();
+    // Structurally known enhanced operation, but no declared DRCS source/body.
+    drcs["service"]["page_enhancements"][0]["local_program"] = json!({"commands":[
+        {"kind":"set_position","position":{"row":1,"column":0}},
+        {"kind":"at_column","column":0,"operation":{"kind":"drcs",
+            "reference":{"table":"normal","subtable":0,"slot":0}}}
+    ]});
+
+    let mut pop = original.clone();
+    let mut companion = super::super::documents::document(
+        super::super::documents::DocumentFixture::Companion,
+        "day",
+    )["page_enhancements"][0]
+        .clone();
+    companion["address"] = json!({"page":124,"subcode":32});
+    // Keep the required X27/public page, omit the explicit empty POP body.
+    pop["service"]["page_enhancements"][0] = companion;
+    [
+        ("RGB4 out of range", palette),
+        ("missing DRCS", drcs),
+        ("missing POP body", pop),
+    ]
+}
+
+async fn assert_accepted_base_unchanged(fixture: &Fixture, flow: &Flow) {
+    for (index, channel) in [1, 2].into_iter().enumerate() {
+        assert_eq!(
+            fixture
+                .state
+                .application
+                .teletext_publication_request(channel)
+                .await
+                .unwrap(),
+            Some(flow.pending[index].clone())
+        );
+        assert_eq!(
+            fixture
+                .state
+                .application
+                .accepted_teletext_generation(channel)
+                .await
+                .unwrap(),
+            Some(flow.accepted[index].generation().clone())
+        );
+        generations::assert_same_output_width(
+            &recover(fixture, channel).await,
+            &flow.accepted[index],
+            480,
+        );
+        assert_eq!(
+            original(fixture, &flow.saved[index]).await,
+            flow.originals[index]
+        );
+        assert_eq!(
+            receipt(fixture, &flow.exported[index]).await,
+            flow.receipts[index]
+        );
+        assert_eq!(
+            fixture
+                .state
+                .application
+                .teletext_design_head(flow.saved[index].head().id)
+                .await
+                .unwrap()
+                .unwrap()
+                .revision,
+            1
+        );
+    }
+    assert_eq!(designs::config(fixture).await, flow.config);
+    assert!(fixture.playout.is_empty());
+}
+
+fn assert_enrichment_error(
+    index: usize,
+    error: ersatzrs_web::host::teletext_channel_documents::ChannelTeletextDocumentEncodingError,
+) {
+    use ersatzrs_app::{
+        teletext_channel_documents::ChannelTeletextDocumentError,
+        teletext_pages_v2::{TeletextAuthoredPagesError, TeletextAuthoredValueError},
+        teletext_pages_v3::TeletextAuthoredPagesV3Error,
+        teletext_profile_documents::BoundTeletextDocumentError,
+    };
+    use ersatzrs_domain::teletext::{
+        TeletextDrcsResourceError, TeletextEnhancementValueError, TeletextServiceError,
+        TeletextX27LinkRole,
+    };
+    use ersatzrs_web::host::teletext_channel_documents::ChannelTeletextDocumentEncodingError as Error;
+    let Error::Preparation(ChannelTeletextDocumentError::Document { binding: 0, error }) = error
+    else {
+        panic!("complete original must reject during semantic response validation")
+    };
+    let BoundTeletextDocumentError::AuthoredMetadataResponse(error) = *error else {
+        panic!("must retain the selected V3 contract")
+    };
+    let TeletextAuthoredPagesV3Error::Authored(error) = *error else {
+        panic!("input framing must be valid; the enrichment itself is invalid")
+    };
+    match (index, error) {
+        (
+            0,
+            TeletextAuthoredPagesError::Conversion {
+                location,
+                reason:
+                    TeletextAuthoredValueError::Enhancement(
+                        TeletextEnhancementValueError::RgbComponent { component: 0 },
+                    ),
+            },
+        ) => {
+            assert_eq!(location.record, 0);
+        }
+        (1, TeletextAuthoredPagesError::Service(error)) => {
+            let TeletextServiceError::CollectedDrcs { error, .. } = *error else {
+                panic!("the referenced DRCS must remain required")
+            };
+            assert_eq!(error.source_location.unwrap().command, 1);
+            let TeletextDrcsResourceError::MissingLink {
+                display,
+                reference: 0,
+                ..
+            } = error.error
+            else {
+                panic!("missing normal DRCS link must not become a base glyph")
+            };
+            assert_eq!(display, channel_documents::address(124, 32));
+        }
+        (2, TeletextAuthoredPagesError::Service(error)) => {
+            let TeletextServiceError::CompositionalResource {
+                display,
+                role: TeletextX27LinkRole::Pop,
+                page,
+                subpage,
+            } = *error
+            else {
+                panic!("the announced POP body must remain required")
+            };
+            assert_eq!(display, channel_documents::address(124, 32));
+            assert_eq!((page.magazine(), page.page(), subpage.get()), (1, 0xa0, 0));
+        }
+        other => panic!("wrong semantic rejection for enrichment {index}: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn valid_standalone_base_never_silently_drops_invalid_optional_enrichments() {
+    use ersatzrs_web::host::teletext_channel_documents::prepare_channel_teletext_document_candidate;
+    let (fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
+        response,
+        Fixture::new_persistent().await,
+        channel_documents::policy,
+        authoring_metadata::write_compact,
+    ))
+    .await;
+    let original = response("day", 124, 32);
+    for (index, (name, invalid)) in invalid_enrichments(&original).into_iter().enumerate() {
+        authoring_metadata::write_compact(&fixture, "day", &invalid);
+        let result = prepare_channel_teletext_document_candidate(
+            &fixture.state.application,
+            1,
+            Some(ADDON),
+            &guide(&[]),
+            channel_documents::policy(),
+        )
+        .await;
+        let Err(error) = result else {
+            panic!("{name}: malformed enrichment must reject the complete candidate")
+        };
+        println!("standalone-base rejection: {name}: {error:?}");
+        assert_enrichment_error(index, error);
+        assert_accepted_base_unchanged(&fixture, &flow).await;
+        assert_eq!(
+            std::fs::read_to_string(fixture.root.path().join("authoring-calls")).unwrap(),
+            format!(
+                "{}{}",
+                std::str::from_utf8(&flow.calls).unwrap(),
+                "day:teletext.pages.v3\n".repeat(index + 1)
+            )
+        );
+    }
+    // A genuine valid base remains independently preparable afterwards; no
+    // resource installation, fallback stripping or configuration change repairs it.
+    authoring_metadata::write_compact(&fixture, "day", &original);
+    let valid = prepare_with_policy(&fixture, 1, channel_documents::policy()).await;
+    assert!(valid
+        .encoded()
+        .unwrap()
+        .declared()
+        .resource_inventory()
+        .is_empty());
+    assert_eq!(
+        designs::units(valid.encoded().unwrap()),
+        designs::units(flow.accepted[0].service())
+    );
+    assert_accepted_base_unchanged(&fixture, &flow).await;
+    fixture.state.pool.close().await;
+}
