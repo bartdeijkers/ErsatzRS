@@ -229,6 +229,19 @@ impl TeletextDeclaredService {
             .with_local_program_operand_overlays(overlays, budget)?;
         Ok(self)
     }
+    /// Replace exact explicit Main call structure without changing declarations.
+    /// # Errors
+    /// Rejects stale, duplicate or absent Main programs, invalid targets and budgets.
+    pub fn with_main_local_invocation_program_overlays(
+        mut self,
+        overlays: &[super::TeletextMainLocalInvocationProgramOverlay],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self
+            .semantic
+            .with_main_local_invocation_program_overlays(overlays, budget)?;
+        Ok(self)
+    }
     /// Replace checked glyph/colour/attribute operands in existing local definitions.
     /// Authenticated declarations, object identities/types and resource selections
     /// remain unchanged. Hosts must check all protected effects before publication.

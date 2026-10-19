@@ -26,13 +26,14 @@ pub(super) mod resources;
 mod structural;
 
 /// Reconciled intents, without region permission or publication authority.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(super) struct TeletextEditorialChanges {
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
     pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     pub resource_operands: Vec<ersatzrs_domain::TeletextResourceObjectOperandOverlay>,
     pub object_programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    pub main_programs: Vec<ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay>,
     pub resource_programs: Vec<ersatzrs_domain::TeletextResourceObjectProgramOverlay>,
     pub resource_additions: Vec<ersatzrs_domain::TeletextResourceObjectDefinitionAddition>,
     pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
@@ -45,6 +46,7 @@ impl TeletextEditorialChanges {
             operands: &self.operands,
             object_operands: &self.object_operands,
             object_programs: &self.object_programs,
+            main_programs: &self.main_programs,
             resource_operands: &self.resource_operands,
             resource_programs: &self.resource_programs,
             resource_additions: &self.resource_additions,
@@ -575,6 +577,10 @@ pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
         .object_programs
         .iter()
         .any(|program| program.owner() == owner)
+        || changes
+            .main_programs
+            .iter()
+            .any(|program| program.owner() == owner)
     {
         structural::qualify_recompiled(baseline, service, owner, &page, changes, location, deadline)
     } else {

@@ -53,6 +53,22 @@ publication remain mandatory. This adds neither invocation insertion/deletion
 nor general target/resource editing authority. P9A-04 owns scoped verification
 and the remaining full editor, client and engine acceptance.
 
+Private concept version21 separately records Local-definition call insertion and
+omission; versions1–20 retain their previous closed roles. Version22 addresses
+existing explicit page-Main programs by page/subpage owner, rather than inventing
+a Local object identity. Inserted or omitted Main calls may target only sealed
+same-owner Local definitions; retained calls and all other commands remain exact
+and ordered in this role. Retained Public/Global calls remain protected anchors.
+Separately validated scalar operands apply before Main replacement. Deleting the
+last call retains an explicit empty Main program; it must not activate defaults
+through an absent declaration. All original definitions and resource identities
+remain present. Root-relative correspondence covers both command sources and
+Main invocation roots, so inserted/retired subtrees cannot borrow an old writer's
+permissions. Complete native prefix/producer equality, protected consumers, fresh
+receipts, explicit publication and recovery remain mandatory. Older stored roles
+reject the Main field. P9A-04 owns verification and remaining interchange scope;
+this is neither a complete editor/client qualification nor full engine acceptance.
+
 The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit
 trusted authoring bounds are separate from per-channel entry/region/resource

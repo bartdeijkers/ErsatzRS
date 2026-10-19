@@ -303,6 +303,7 @@ fn check_operands(
             resource_programs: &[],
             resource_additions: &[],
             object_programs: &[],
+            main_programs: &[],
             bitmaps: &[],
         }
     }

@@ -13,10 +13,10 @@ use crate::teletext_profile_documents::TeletextProfileDocument;
 use ersatzrs_domain::{
     EntityId, TeletextColumnOperation, TeletextDrcsBitmap, TeletextDrcsBitmapOverlay,
     TeletextDrcsGlyphSlot, TeletextEnhancementCommand, TeletextLocalObjectGlyphProgramOverlay,
-    TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
-    TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextResourceIdentity,
-    TeletextResourceObjectDefinitionAddition, TeletextResourceObjectOperandOverlay,
-    TeletextResourceObjectProgramOverlay,
+    TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay,
+    TeletextMainLocalInvocationProgramOverlay, TeletextPageAddress, TeletextPhysicalBaseOverlay,
+    TeletextPhysicalBaseRow, TeletextResourceIdentity, TeletextResourceObjectDefinitionAddition,
+    TeletextResourceObjectOperandOverlay, TeletextResourceObjectProgramOverlay,
 };
 use serde::{
     de::{SeqAccess, Visitor},
@@ -46,6 +46,11 @@ const RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION: u16 = 18;
 const RESOURCE_OBJECT_POSITION_OVERLAY_VERSION: u16 = 19;
 const LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 20;
 const LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 21;
+const MAIN_LOCAL_INVOCATION_OVERLAY_VERSION: u16 = 22;
+
+#[path = "editorial_overlay/main_local_invocation_programs.rs"]
+pub(super) mod main_local_invocation_programs;
+use main_local_invocation_programs::{BorrowedMainPrograms, OptionalStoredMainPrograms};
 
 #[path = "editorial_overlay/local_object_invocation_programs.rs"]
 mod local_object_invocation_programs;
@@ -108,6 +113,7 @@ pub struct TeletextSavedEditorialOverlay {
     drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
     local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     local_object_glyph_program_overlays: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    main_local_invocation_program_overlays: Vec<TeletextMainLocalInvocationProgramOverlay>,
     resource_object_operands: Vec<TeletextResourceObjectOperandOverlay>,
     resource_object_program_overlays: Vec<TeletextResourceObjectProgramOverlay>,
     resource_object_definition_additions: Vec<TeletextResourceObjectDefinitionAddition>,
@@ -627,6 +633,47 @@ impl TeletextSavedEditorialOverlay {
         local_object_invocation_programs::install_structure(self, programs)
     }
 
+    /// Capture version22 exact-owner Main Local call insertion/deletion.
+    /// All noncalls and retained calls remain exact after scalar application.
+    /// This grants no catalogue, permission or publication authority.
+    /// # Errors
+    /// Rejects invalid provenance, empty batches and duplicate Main owners.
+    pub fn new_with_main_local_invocation_programs(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        programs: Vec<TeletextMainLocalInvocationProgramOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            Vec::new(),
+            Vec::new(),
+            OperandFamilies::DrcsSelections,
+        )?
+        .with_main_local_invocation_programs(programs)
+    }
+
+    /// Compose Main call structure with previously accepted sibling roles.
+    /// # Errors
+    /// Rejects empty batches and repeated Main owners. Attachment still verifies
+    /// exact originals, same-owner targets, aggregate budgets and full execution.
+    pub fn with_main_local_invocation_programs(
+        self,
+        programs: Vec<TeletextMainLocalInvocationProgramOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        main_local_invocation_programs::install(self, programs)
+    }
+
+    /// Checked Main call correspondence, without edit or publication authority.
+    #[must_use]
+    pub fn main_local_invocation_program_overlays(
+        &self,
+    ) -> &[TeletextMainLocalInvocationProgramOverlay] {
+        &self.main_local_invocation_program_overlays
+    }
+
     /// Capture version14 exact-original POP/GPOP scalar intent, optionally with
     /// existing Local, row, bitmap and structural Local program changes.
     ///
@@ -834,6 +881,7 @@ impl TeletextSavedEditorialOverlay {
             RESOURCE_OBJECT_POSITION_OVERLAY_VERSION
                 | LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
                 | LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+                | MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
         ) {
             self.schema_version = RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
         }
@@ -945,6 +993,7 @@ impl TeletextSavedEditorialOverlay {
             drcs_bitmap_overlays,
             local_object_operands,
             local_object_glyph_program_overlays: Vec::new(),
+            main_local_invocation_program_overlays: Vec::new(),
             resource_object_operands: Vec::new(),
             resource_object_program_overlays: Vec::new(),
             resource_object_definition_additions: Vec::new(),
@@ -1316,6 +1365,8 @@ closed_map!(StoredOverlay {
     local_object_operands: OptionalStoredObjectOperands,
     #[serde(default, skip_serializing_if = "OptionalStoredGlyphPrograms::is_absent")]
     local_object_glyph_program_overlays: OptionalStoredGlyphPrograms,
+    #[serde(default, skip_serializing_if = "OptionalStoredMainPrograms::is_absent")]
+    main_local_invocation_program_overlays: OptionalStoredMainPrograms,
     #[serde(default, skip_serializing_if = "OptionalStoredResourceObjectOperands::is_absent")]
     resource_object_operands: OptionalStoredResourceObjectOperands,
     #[serde(default, skip_serializing_if = "OptionalStoredResourcePrograms::is_absent")]
@@ -1471,19 +1522,15 @@ impl StoredOverlay {
     }
 
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        main_local_invocation_programs::check_version(self)?;
+        if self.schema_version == MAIN_LOCAL_INVOCATION_OVERLAY_VERSION {
+            return Ok(());
+        }
         if self.is_local_invocation_overlay() {
             return local_object_invocation_programs::check_version(self);
         }
         if self.schema_version == RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
-            if self
-                .resource_object_definition_additions
-                .0
-                .as_ref()
-                .is_some_and(Vec::is_empty)
-            {
-                return Err(invalid());
-            }
-            return resource_object_programs::check_version(self);
+            return self.check_resource_position_version();
         }
         if self.schema_version == RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION
             || self.resource_object_definition_additions.0.is_some()
@@ -1570,6 +1617,18 @@ impl StoredOverlay {
         Ok(())
     }
 
+    fn check_resource_position_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        if self
+            .resource_object_definition_additions
+            .0
+            .as_ref()
+            .is_some_and(Vec::is_empty)
+        {
+            return Err(invalid());
+        }
+        resource_object_programs::check_version(self)
+    }
+
     fn program_policy(&self) -> ProgramPolicy {
         match self.schema_version {
             LOCAL_STYLE_PROGRAM_OVERLAY_VERSION => ProgramPolicy::StyleCommands,
@@ -1584,6 +1643,9 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
+        if self.schema_version == MAIN_LOCAL_INVOCATION_OVERLAY_VERSION {
+            return main_local_invocation_programs::restore(self, documents, budget);
+        }
         if self.is_local_invocation_overlay() {
             if self.schema_version == LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION {
                 return local_object_invocation_programs::restore_structure(
@@ -1775,6 +1837,7 @@ pub(super) fn validate_association(
         budget.validation.service.max_structure_items,
         "editorial structure items",
     )?;
+    main_local_invocation_programs::validate_association(overlay, documents, budget)?;
     resource_object_additions::validate_association(overlay, documents, budget)?;
     validate_bitmap_association(&overlay.drcs_bitmap_overlays, documents)?;
     object_operands::validate_association(&overlay.local_object_operands, documents)?;
@@ -1882,6 +1945,8 @@ struct BorrowedOverlay<'a> {
     local_object_operands: Option<BorrowedObjectOperands<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     local_object_glyph_program_overlays: Option<BorrowedGlyphPrograms<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    main_local_invocation_program_overlays: Option<BorrowedMainPrograms<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     resource_object_operands: Option<BorrowedResourceObjectOperands<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2073,6 +2138,12 @@ fn write_appended(
             .then_some(BorrowedGlyphPrograms(
                 &overlay.local_object_glyph_program_overlays,
             )),
+            main_local_invocation_program_overlays: (!overlay
+                .main_local_invocation_program_overlays
+                .is_empty())
+            .then_some(BorrowedMainPrograms(
+                &overlay.main_local_invocation_program_overlays,
+            )),
             resource_object_operands: (!overlay.resource_object_operands.is_empty()).then_some(
                 BorrowedResourceObjectOperands(&overlay.resource_object_operands),
             ),
@@ -2166,3 +2237,7 @@ mod resource_object_position_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/local_object_invocation_program_tests.rs"]
 mod local_object_invocation_program_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/main_local_invocation_program_tests.rs"]
+mod main_local_invocation_program_tests;

@@ -390,6 +390,28 @@ pub(super) fn reserve_budgets(
         "editorial object programs",
     )?;
     let mut commands = overlay.resource_object_operands.len();
+    limit(
+        overlay.main_local_invocation_program_overlays.len(),
+        budget.validation.service.max_records,
+        "editorial Main programs",
+    )?;
+    for program in &overlay.main_local_invocation_program_overlays {
+        let count = add(
+            program.expected().commands().len(),
+            program.replacement().commands().len(),
+        )?;
+        commands = add(commands, count)?;
+        items = add(
+            items,
+            add(1, add(count, program.retained_commands().len())?)?,
+        )?;
+        limit(
+            items,
+            budget.validation.service.max_structure_items,
+            "editorial structure items",
+        )?;
+    }
+
     for addition in &overlay.resource_object_definition_additions {
         let count = addition.definition().program.commands().len();
         commands = add(commands, count)?;
@@ -436,7 +458,9 @@ pub(super) fn validate_association(
     budget: TeletextDesignDocumentBudget,
 ) -> Result<(), TeletextDesignDocumentError> {
     if overlay.resource_object_program_overlays.is_empty() {
-        return if overlay.resource_object_definition_additions.is_empty() {
+        return if overlay.resource_object_definition_additions.is_empty()
+            && overlay.main_local_invocation_program_overlays.is_empty()
+        {
             Ok(())
         } else {
             validate_result_budgets(overlay, documents, budget)
@@ -490,12 +514,21 @@ fn validate_result_budgets(
             continue;
         };
         let mut original = 0;
+        let mut candidate = 0;
         for page in service.semantic().page_enhancements().values() {
             if let Some(program) = &page.local_program {
                 original = add(original, program.commands().len())?;
+                let replacement = overlay
+                    .main_local_invocation_program_overlays
+                    .iter()
+                    .find(|intent| intent.owner() == page.address)
+                    .map_or(
+                        program,
+                        ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay::replacement,
+                    );
+                candidate = add(candidate, replacement.commands().len())?;
             }
         }
-        let mut candidate = original;
         for addition in &overlay.resource_object_definition_additions {
             if addition
                 .identity()

@@ -26,7 +26,11 @@ pub(super) fn install(
         &value.local_object_operands,
         ProgramPolicy::InvocationChanges,
     )?;
-    value.schema_version = LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION;
+    value.schema_version = if value.main_local_invocation_program_overlays.is_empty() {
+        LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
+    } else {
+        super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
+    };
     Ok(value)
 }
 
@@ -47,7 +51,11 @@ pub(super) fn install_structure(
         &value.local_object_operands,
         ProgramPolicy::InvocationStructure,
     )?;
-    value.schema_version = LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION;
+    value.schema_version = if value.main_local_invocation_program_overlays.is_empty() {
+        LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+    } else {
+        super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
+    };
     Ok(value)
 }
 
@@ -98,7 +106,12 @@ pub(super) fn restore(
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
-    restore_for_policy(stored, documents, budget, ProgramPolicy::InvocationChanges)
+    restore_for_policy(
+        stored,
+        documents,
+        budget,
+        Some(ProgramPolicy::InvocationChanges),
+    )
 }
 
 pub(super) fn restore_structure(
@@ -110,22 +123,30 @@ pub(super) fn restore_structure(
         stored,
         documents,
         budget,
-        ProgramPolicy::InvocationStructure,
+        Some(ProgramPolicy::InvocationStructure),
     )
+}
+
+pub(super) fn restore_siblings(
+    stored: StoredOverlay,
+    documents: &[TeletextProfileDocument],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+    restore_for_policy(stored, documents, budget, None)
 }
 
 fn restore_for_policy(
     stored: StoredOverlay,
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,
-    policy: ProgramPolicy,
+    policy: Option<ProgramPolicy>,
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
     let programs = local_object_glyph_programs::restore(
         stored
             .local_object_glyph_program_overlays
             .0
             .unwrap_or_default(),
-        policy,
+        policy.unwrap_or(ProgramPolicy::InvocationStructure),
     )?;
     let (calls, siblings) = programs.into_iter().partition(|program| {
         program.has_invocation_structure_changes() || program.has_invocation_changes()
@@ -199,7 +220,14 @@ fn restore_for_policy(
     if let Some(additions) = stored.resource_object_definition_additions.0 {
         value = resource_object_additions::restore(value, additions, budget)?;
     }
-    let value = if matches!(policy, ProgramPolicy::InvocationStructure) {
+    let value = if policy.is_none() && calls.is_empty() {
+        value
+    } else if matches!(policy, Some(ProgramPolicy::InvocationStructure))
+        || (policy.is_none()
+            && calls
+                .iter()
+                .any(TeletextLocalObjectGlyphProgramOverlay::has_invocation_structure_changes))
+    {
         install_structure(value, calls)?
     } else {
         install(value, calls)?

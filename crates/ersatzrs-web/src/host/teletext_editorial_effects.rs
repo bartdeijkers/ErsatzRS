@@ -31,6 +31,7 @@ mod charset_context;
 mod compiler_resources;
 mod definition_additions;
 mod lineage;
+mod main_programs;
 mod object_operands;
 mod programs;
 mod resource_objects;
@@ -120,6 +121,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     pub resource_additions: &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
+    pub main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
 
@@ -160,6 +162,7 @@ pub(super) fn validate_teletext_editorial_transition(
             resource_operands: &[],
             resource_programs: &[],
             object_programs: &[],
+            main_programs: &[],
             bitmaps: &[],
         },
         TeletextEditorialEdits {
@@ -170,6 +173,7 @@ pub(super) fn validate_teletext_editorial_transition(
             resource_operands: &[],
             resource_programs: &[],
             object_programs: &[],
+            main_programs: &[],
             bitmaps: &[],
         },
         budget,
@@ -236,6 +240,10 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             .object_programs
             .iter()
             .any(|value| value.owner() == owner)
+            || incoming
+                .main_programs
+                .iter()
+                .any(|value| value.owner() == owner)
             || !incoming.resource_programs.is_empty()
             || !incoming.resource_additions.is_empty();
         let operand_change =
@@ -296,6 +304,13 @@ fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize)
     ]
     .into_iter()
     .chain(edits.object_programs.iter().flat_map(|program| {
+        [
+            program.expected().commands().len(),
+            program.replacement().commands().len(),
+            program.retained_commands().len(),
+        ]
+    }))
+    .chain(edits.main_programs.iter().flat_map(|program| {
         [
             program.expected().commands().len(),
             program.replacement().commands().len(),
@@ -398,8 +413,8 @@ fn check_service(
     check_enhancements(
         before.page_enhancements(),
         after.page_enhancements(),
-        incoming.operands,
-        cumulative.operands,
+        incoming,
+        cumulative,
         deadline,
     )?;
     if after.physical_base_overlays().len() != overlays.len() {
@@ -602,12 +617,13 @@ fn check_resource(
 fn check_enhancements(
     before: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
     after: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
-    incoming: &[TeletextLocalProgramOperandOverlay],
-    cumulative: &[TeletextLocalProgramOperandOverlay],
+    incoming: TeletextEditorialEdits<'_>,
+    cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
 ) -> Result<()> {
     let mut changes = BTreeMap::new();
-    for change in incoming {
+    let main = main_programs::check(before, after, incoming, cumulative, deadline)?;
+    for change in incoming.operands {
         check_deadline(deadline)?;
         if changes
             .insert((change.owner(), change.command()), change)
@@ -626,10 +642,10 @@ fn check_enhancements(
         }
     }
     let mut final_changes = BTreeSet::new();
-    for change in cumulative {
+    for change in cumulative.operands {
         check_deadline(deadline)?;
         if !final_changes.insert((change.owner(), change.command()))
-            || local_command(after, change)
+            || main_programs::final_command(after, change, cumulative.main_programs)
                 != Some(TeletextEnhancementCommand::AtColumn {
                     column: change.column(),
                     operation: change.replacement(),
@@ -667,6 +683,9 @@ fn check_enhancements(
             return Err(failure());
         }
         match (&old.local_program, &new.local_program) {
+            (Some(old), Some(new)) if main.contains_key(owner) => {
+                main_programs::check_transition(*owner, old, new, &changes, main[owner], deadline)?;
+            }
             (None, None) => {}
             (Some(old), Some(new)) if old.commands().len() == new.commands().len() => {
                 for (ordinal, (old, new)) in old.commands().iter().zip(new.commands()).enumerate() {
@@ -1256,7 +1275,7 @@ struct OriginSignature {
     priority: ersatzrs_domain::TeletextGlyphPriority,
     operation: Option<ersatzrs_domain::TeletextColumnOperation>,
     source: Option<lineage::CanonicalSource>,
-    root: Option<ersatzrs_domain::TeletextSpatialRootSource>,
+    root: Option<lineage::CanonicalRoot>,
     invocation: Option<ersatzrs_domain::TeletextSpatialInvocationId>,
 }
 fn origin_signature(
@@ -1284,7 +1303,14 @@ fn origin_signature(
                 lineage.source_at_invocation(source, candidate.invocation())
             })
         }),
-        root: candidate.root_source(),
+        root: candidate.root_source().map(|root| {
+            lineage.map_or(lineage::CanonicalRoot::Existing(root), |lineage| {
+                lineage.root_source(root).map_or(
+                    lineage::CanonicalRoot::Inserted(root),
+                    lineage::CanonicalRoot::Existing,
+                )
+            })
+        }),
         invocation: lineage.map_or(candidate.invocation(), |lineage| {
             lineage.canonical_invocation(candidate.invocation())
         }),

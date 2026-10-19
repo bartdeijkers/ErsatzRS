@@ -8,6 +8,7 @@ use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 mod alignment;
 mod intents;
+mod main;
 mod program;
 mod qualify;
 mod raw;
@@ -59,12 +60,11 @@ fn reconcile_with_carriers(
     let new = stream::Image::read(edited, location, deadline)?;
     if old.markers.len() != new.markers.len()
         || old.markers.len() != native.definition_positions().len()
-        || old.markers.first() != new.markers.first()
     {
         return Err(fail(location));
     }
     let mut aligned = old.words.clone();
-    main_words(
+    let main = main::reconcile(
         service,
         owner,
         native,
@@ -119,6 +119,9 @@ fn reconcile_with_carriers(
     aligned_page.packets[0] = packets.each_ref().map(Option::as_ref);
     let mut result =
         super::operands::reconcile(service, owner, baseline, &aligned_page, location, deadline)?;
+    if let Some(main) = main {
+        result.main_programs.push(main);
+    }
     let mut carriers = Vec::new();
     for mut candidate in candidates {
         patch_anchors(&mut candidate, &result, location)?;
@@ -127,7 +130,7 @@ fn reconcile_with_carriers(
         }
         intents::append(candidate, &mut result, location)?;
     }
-    if result.object_programs.is_empty() {
+    if result.object_programs.is_empty() && result.main_programs.is_empty() {
         return Err(fail(location));
     }
     Ok((result, carriers))

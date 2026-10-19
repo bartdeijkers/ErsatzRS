@@ -2,6 +2,7 @@
 use super::*;
 
 mod definition_additions;
+mod main_roots;
 
 fn native(commands: Vec<TeletextEnhancementCommand>) -> EncodedTeletextAuthoredService {
     let mut definitions = object_definitions(None);
@@ -64,6 +65,7 @@ fn edits(changes: &[TeletextResourceObjectProgramOverlay]) -> TeletextEditorialE
         resource_programs: changes,
         resource_additions: &[],
         object_programs: &[],
+        main_programs: &[],
         bitmaps: &[],
     }
 }

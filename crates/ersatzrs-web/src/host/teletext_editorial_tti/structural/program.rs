@@ -12,6 +12,7 @@ use std::time::Instant;
 mod call_structure;
 mod calls;
 pub(super) use call_structure::ProspectiveCarrier;
+pub(super) use calls::decode_main;
 pub(super) struct Candidate {
     pub identity: TeletextObjectIdentity,
     pub expected: TeletextEnhancementProgram,

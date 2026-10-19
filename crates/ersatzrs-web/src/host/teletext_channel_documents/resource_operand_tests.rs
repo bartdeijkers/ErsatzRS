@@ -179,6 +179,7 @@ fn edits(
     resource_operands: &[TeletextResourceObjectOperandOverlay],
 ) -> EditorialResourceDocuments<'_> {
     EditorialResourceDocuments {
+        main_programs: &[],
         programs: (vec![], &[], &[], &[], &[]),
         resource_operands,
         resource_programs: &[],
@@ -370,6 +371,7 @@ fn resource_replay_bounds_combined_raw_operands_before_producer_allocation() {
         Some(ADDON),
         vec![TeletextProfileDocument::Authored(Box::new(source(1)))],
         EditorialResourceDocuments {
+            main_programs: &[],
             programs: (vec![], &local, &[], &[], &[]),
             resource_operands: &resource,
             resource_programs: &[],

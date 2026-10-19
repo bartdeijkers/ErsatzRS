@@ -44,6 +44,7 @@ type EditorialProgramDocuments<'a> = (
 
 /// Trusted replay inputs; receipt and shared-effect qualification stay with callers.
 pub(super) struct EditorialResourceDocuments<'a> {
+    pub(super) main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub(super) programs: EditorialProgramDocuments<'a>,
     pub(super) resource_operands: &'a [TeletextResourceObjectOperandOverlay],
     pub(super) resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
@@ -498,6 +499,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
         entry_addon_id,
         documents,
         EditorialResourceDocuments {
+            main_programs: &[],
             programs: editorial,
             resource_operands: &[],
             resource_programs: &[],
@@ -524,6 +526,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
         && editorial.resource_programs.is_empty()
         && editorial.resource_additions.is_empty()
         && editorial.programs.4.is_empty()
+        && editorial.main_programs.is_empty()
     {
         let (rows, page, objects, bitmaps, _) = editorial.programs;
         return encode_original_channel_documents_with_editorial_overlays(
@@ -638,6 +641,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
         entry_producer,
         documents,
         EditorialResourceDocuments {
+            main_programs: &[],
             programs: editorial,
             resource_operands: &[],
             resource_programs: &[],
@@ -671,11 +675,12 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     if !resource_operands.is_empty()
         || !resource_programs.is_empty()
         || !resource_additions.is_empty()
+        || !editorial.main_programs.is_empty()
     {
         check_editorial_resource_budget(
             operands.len(),
             object_operands.len(),
-            programs,
+            (programs, editorial.main_programs),
             resource_operands.len(),
             resource_programs,
             resource_additions,
@@ -688,6 +693,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
             || !object_operands.is_empty()
             || !bitmaps.is_empty()
             || !programs.is_empty()
+            || !editorial.main_programs.is_empty()
             || !resource_operands.is_empty()
             || !resource_programs.is_empty()
             || !resource_additions.is_empty()
@@ -784,6 +790,11 @@ fn apply_editorial_operands(
             .with_local_object_operand_overlays(object_operands, budget)
             .map_err(editorial_semantic_error)?;
     }
+    if !editorial.main_programs.is_empty() {
+        declared = declared
+            .with_main_local_invocation_program_overlays(editorial.main_programs, budget)
+            .map_err(editorial_semantic_error)?;
+    }
     if !programs.is_empty() {
         declared = declared
             .with_local_object_glyph_program_overlays(programs, budget)
@@ -810,7 +821,10 @@ fn apply_editorial_operands(
 fn check_editorial_resource_budget(
     page_operands: usize,
     object_operands: usize,
-    programs: &[TeletextLocalObjectGlyphProgramOverlay],
+    programs: (
+        &[TeletextLocalObjectGlyphProgramOverlay],
+        &[ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
+    ),
     resource_operands: usize,
     resource_programs: &[ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     resource_additions: &[ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
@@ -819,10 +833,17 @@ fn check_editorial_resource_budget(
     let mut remaining = maximum;
     let counts = [page_operands, object_operands, resource_operands]
         .into_iter()
-        .chain(programs.iter().flat_map(|program| {
+        .chain(programs.0.iter().flat_map(|program| {
             [
                 program.expected().commands().len(),
                 program.replacement().commands().len(),
+            ]
+        }))
+        .chain(programs.1.iter().flat_map(|program| {
+            [
+                program.expected().commands().len(),
+                program.replacement().commands().len(),
+                program.retained_commands().len(),
             ]
         }))
         .chain(resource_programs.iter().flat_map(|program| {

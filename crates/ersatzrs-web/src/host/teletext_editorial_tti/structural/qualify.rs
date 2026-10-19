@@ -71,7 +71,20 @@ pub(in super::super) fn check(
             return Err(fail(location));
         }
     }
-    main_sources(old, new, &a, &b, location, deadline)
+    if let Some(main) = derived.main_programs.first() {
+        let translated = a.words[..a.markers[0]]
+            .iter()
+            .map(|word| translate(*word, old, new, &a, &b, location))
+            .collect::<Result<Vec<_>>>()?;
+        if tokens(&translated, location, deadline)?
+            != tokens(&b.words[..b.markers[0]], location, deadline)?
+        {
+            return Err(fail(location));
+        }
+        super::main::qualify(final_service, new, &b, main, location, deadline)
+    } else {
+        main_sources(old, new, &a, &b, location, deadline)
+    }
 }
 fn exact(
     a: &TeletextEditorialChanges,
@@ -94,9 +107,21 @@ fn exact(
         .iter()
         .filter(|value| value.owner() == owner)
         .collect::<Vec<_>>();
+    let main = b
+        .main_programs
+        .iter()
+        .filter(|value| value.owner() == owner)
+        .collect::<Vec<_>>();
     if pages.len() != a.operands.len()
         || object.len() != a.object_operands.len()
         || programs.len() != a.object_programs.len()
+        || main.len() != a.main_programs.len()
+        || a.main_programs.iter().any(|value| {
+            main.iter()
+                .filter(|candidate| ***candidate == *value)
+                .count()
+                != 1
+        })
         || a.operands.iter().any(|value| {
             pages
                 .iter()

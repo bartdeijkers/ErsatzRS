@@ -1292,6 +1292,8 @@ enum Path {
     EditorialResourceOperand,
     EditorialGlyphPrograms,
     EditorialGlyphProgram,
+    EditorialMainPrograms,
+    EditorialMainProgram,
     EditorialDefinitionAdditions,
     EditorialDefinitionAddition,
     EditorialResourcePrograms,
@@ -1363,6 +1365,11 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::local_object_glyph_programs::StoredGlyphProgram,
             >(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialMainProgram) {
+            self.inner.scan.check(storage::<
+                editorial_overlay::main_local_invocation_programs::StoredMainProgram,
+            >(self.count))?;
+        }
         if matches!(self.inner.path, Path::EditorialDefinitionAddition) {
             self.inner.scan.check(storage::<
                 editorial_overlay::resource_object_additions::StoredDefinitionAddition,
@@ -1410,6 +1417,7 @@ impl Scan {
                 | Path::EditorialObjectOperand
                 | Path::EditorialResourceOperand
                 | Path::EditorialGlyphProgram
+                | Path::EditorialMainProgram
                 | Path::EditorialResourceProgram
                 | Path::EditorialDefinitionAddition
                 | Path::EditorialProgramCommand
@@ -1591,6 +1599,9 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "local_object_glyph_program_overlays") => {
                     Path::EditorialGlyphPrograms
                 }
+                (Path::EditorialOverlay, "main_local_invocation_program_overlays") => {
+                    Path::EditorialMainPrograms
+                }
                 (Path::EditorialOverlay, "resource_object_definition_additions") => {
                     Path::EditorialDefinitionAdditions
                 }
@@ -1607,11 +1618,12 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialResourceProgram, "retained_commands") => {
                     Path::EditorialResourceRetainedCommands
                 }
-                (Path::EditorialGlyphProgram, "expected" | "replacement") => {
-                    Path::EditorialProgramDefinition
-                }
+                (
+                    Path::EditorialGlyphProgram | Path::EditorialMainProgram,
+                    "expected" | "replacement",
+                ) => Path::EditorialProgramDefinition,
                 (Path::EditorialProgramDefinition, "commands") => Path::EditorialProgramCommands,
-                (Path::EditorialGlyphProgram, "retained_commands") => {
+                (Path::EditorialGlyphProgram | Path::EditorialMainProgram, "retained_commands") => {
                     Path::EditorialRetainedCommands
                 }
                 (Path::EditorialBitmap, "expected" | "replacement") => Path::EditorialBitmapRows,
@@ -1726,6 +1738,11 @@ fn glyph_program_sequence_limits(
     budget: TeletextDesignDocumentBudget,
 ) -> (usize, Path, &'static str) {
     match path {
+        Path::EditorialMainPrograms => (
+            budget.validation.service.max_records,
+            Path::EditorialMainProgram,
+            "editorial Main programs",
+        ),
         Path::EditorialGlyphPrograms => (
             budget.validation.service.max_objects,
             Path::EditorialGlyphProgram,

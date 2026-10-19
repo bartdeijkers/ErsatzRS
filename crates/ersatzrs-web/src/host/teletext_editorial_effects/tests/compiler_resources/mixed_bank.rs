@@ -299,6 +299,7 @@ fn mixed_bank_authored_bitmap_edit_preserves_separate_compiler_permissions() {
             resource_programs: &[],
             resource_additions: &[],
             object_programs: &[],
+            main_programs: &[],
             bitmaps: &changes,
         },
         TeletextEditorialEdits {
@@ -309,6 +310,7 @@ fn mixed_bank_authored_bitmap_edit_preserves_separate_compiler_permissions() {
             resource_programs: &[],
             resource_additions: &[],
             object_programs: &[],
+            main_programs: &[],
             bitmaps: &changes,
         },
         &policy().encoding,

@@ -193,6 +193,6 @@ fn same_declaration(
         && a.position() == b.position()
         && lineage.source_at_invocation(b.source(), b.invocation())
             == super::lineage::CanonicalSource::Existing(a.source())
-        && a.root_source() == b.root_source()
+        && Some(a.root_source()) == lineage.root_source(b.root_source())
         && a.invocation() == lineage.canonical_invocation(b.invocation())
 }

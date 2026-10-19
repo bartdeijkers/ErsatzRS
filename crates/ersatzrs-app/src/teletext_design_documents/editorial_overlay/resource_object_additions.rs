@@ -96,6 +96,7 @@ pub(super) fn distinct(
             overlay.schema_version,
             super::LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
                 | super::LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+                | super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
         ) && overlay.resource_object_program_overlays.iter().any(
             ersatzrs_domain::TeletextResourceObjectProgramOverlay::is_original_position_intent,
         ))

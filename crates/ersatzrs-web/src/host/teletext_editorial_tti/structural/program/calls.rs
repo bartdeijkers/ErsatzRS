@@ -3,6 +3,7 @@ use super::{fail, raw, stream, Location, Result};
 use ersatzrs_domain::{
     TeletextEnhancementCommand as Command, TeletextEnhancementObjectCatalog,
     TeletextEnhancementObjectDefinition, TeletextObjectOffset, TeletextObjectType,
+    TeletextPageAddress,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextLocalObjectProgram;
 
@@ -66,6 +67,42 @@ pub(super) fn decode(
     image: &stream::Image,
     location: Location,
 ) -> Result<Command> {
+    decode_at(
+        words,
+        (definition.identity.owner(), Some(definition.object_type)),
+        catalog,
+        program,
+        image,
+        location,
+    )
+}
+
+pub(in super::super) fn decode_main(
+    words: &[u32],
+    owner: TeletextPageAddress,
+    catalog: &TeletextEnhancementObjectCatalog,
+    program: &EncodedTeletextLocalObjectProgram,
+    image: &stream::Image,
+    location: Location,
+) -> Result<Command> {
+    decode_at(
+        words,
+        (Some(owner), None),
+        catalog,
+        program,
+        image,
+        location,
+    )
+}
+
+fn decode_at(
+    words: &[u32],
+    context: (Option<TeletextPageAddress>, Option<TeletextObjectType>),
+    catalog: &TeletextEnhancementObjectCatalog,
+    program: &EncodedTeletextLocalObjectProgram,
+    image: &stream::Image,
+    location: Location,
+) -> Result<Command> {
     let invalid = || fail(location);
     if words.iter().any(|word| *word > 0x3ffff) {
         return Err(invalid());
@@ -113,11 +150,13 @@ pub(super) fn decode(
         | (call & (31 << 6))
         | (u32::try_from(((index / 13) & 7) * 16 + index % 13).map_err(|_| invalid())? << 11);
     if call != canonical
-        || target.owner() != definition.identity.owner()
+        || target.owner() != context.0
         || target.owner().is_none()
         || original.object_type != object_type
         || position.object_type() != object_type
-        || !definition.object_type.may_invoke(object_type)
+        || context
+            .1
+            .is_some_and(|parent| !parent.may_invoke(object_type))
     {
         return Err(invalid());
     }

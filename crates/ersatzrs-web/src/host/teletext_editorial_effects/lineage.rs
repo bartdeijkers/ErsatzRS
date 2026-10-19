@@ -7,7 +7,7 @@ use super::{
 };
 use ersatzrs_domain::{
     TeletextAttributeSource, TeletextEnhancementObjectDefinition, TeletextEnhancementSource,
-    TeletextObjectIdentity, TeletextSpatialEvent, TeletextSpatialRootSource,
+    TeletextObjectIdentity, TeletextSpatialRootSource,
 };
 use ersatzrs_ffmpeg::teletext::{TeletextAuthoredServiceEncodingBudget, TeletextMainComposition};
 use std::{collections::BTreeMap, time::Instant};
@@ -20,6 +20,12 @@ pub(super) enum CanonicalSource {
     Inserted(TeletextEnhancementSource),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CanonicalRoot {
+    Existing(TeletextSpatialRootSource),
+    Inserted(TeletextSpatialRootSource),
+}
+
 type EventKey = (
     Option<TeletextObjectIdentity>,
     usize,
@@ -29,6 +35,7 @@ type EventKey = (
 
 #[derive(Default)]
 pub(super) struct ProtectedLineage<'a> {
+    main_program: Option<&'a ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay>,
     programs: BTreeMap<TeletextObjectIdentity, Program<'a>>,
     additions: BTreeMap<TeletextObjectIdentity, &'a TeletextEnhancementObjectDefinition>,
     events: Option<Vec<Option<usize>>>,
@@ -43,6 +50,16 @@ impl<'a> ProtectedLineage<'a> {
         deadline: Instant,
     ) -> Result<Self> {
         let mut result = Self::default();
+        for program in edits
+            .main_programs
+            .iter()
+            .filter(|program| program.owner() == before.owner())
+        {
+            check_deadline(deadline)?;
+            if result.main_program.replace(program).is_some() {
+                return Err(association());
+            }
+        }
         for addition in edits.resource_additions {
             check_deadline(deadline)?;
             if result
@@ -67,7 +84,10 @@ impl<'a> ProtectedLineage<'a> {
                 return Err(association());
             }
         }
-        if result.programs.is_empty() && result.additions.is_empty() {
+        if result.programs.is_empty()
+            && result.additions.is_empty()
+            && result.main_program.is_none()
+        {
             return Ok(result);
         }
         let old = before.spatial_trace();
@@ -95,7 +115,7 @@ impl<'a> ProtectedLineage<'a> {
             check_deadline(deadline)?;
             if indexed
                 .insert(
-                    event_key(*event, event.source(), event.invocation()),
+                    event_key(event.root_source(), event.source(), event.invocation()),
                     ordinal,
                 )
                 .is_some()
@@ -114,7 +134,9 @@ impl<'a> ProtectedLineage<'a> {
                     CanonicalSource::Existing(source) => Some(
                         *indexed
                             .get(&event_key(
-                                *event,
+                                result
+                                    .root_source(event.root_source())
+                                    .ok_or_else(association)?,
                                 source,
                                 result.canonical_invocation(event.invocation()),
                             ))
@@ -128,6 +150,17 @@ impl<'a> ProtectedLineage<'a> {
     }
 
     fn check_source_command(&self, source: TeletextEnhancementSource) -> Result<()> {
+        if source.object.is_none()
+            && self.main_program.is_some_and(|program| {
+                program
+                    .replacement()
+                    .commands()
+                    .get(source.command)
+                    .is_none()
+            })
+        {
+            return Err(association());
+        }
         if source
             .object
             .and_then(|object| self.additions.get(&object))
@@ -149,6 +182,16 @@ impl<'a> ProtectedLineage<'a> {
     }
 
     pub(super) fn source(&self, source: TeletextEnhancementSource) -> CanonicalSource {
+        if source.object.is_none() {
+            if let Some(program) = self.main_program {
+                return program.original_command(source.command).map_or(
+                    CanonicalSource::Inserted(source),
+                    |command| {
+                        CanonicalSource::Existing(TeletextEnhancementSource { command, ..source })
+                    },
+                );
+            }
+        }
         if source
             .object
             .is_some_and(|object| self.additions.contains_key(&object))
@@ -192,6 +235,18 @@ impl<'a> ProtectedLineage<'a> {
         self.source(after) == CanonicalSource::Existing(before)
     }
 
+    pub(super) fn root_source(
+        &self,
+        root: TeletextSpatialRootSource,
+    ) -> Option<TeletextSpatialRootSource> {
+        match (root, self.main_program) {
+            (TeletextSpatialRootSource::Local { command }, Some(program)) => program
+                .original_command(command)
+                .map(|command| TeletextSpatialRootSource::Local { command }),
+            _ => Some(root),
+        }
+    }
+
     pub(super) fn same_attribute_source(
         &self,
         before: TeletextAttributeSource,
@@ -231,7 +286,7 @@ impl<'a> ProtectedLineage<'a> {
         });
         same_event
             && self.same_source(a_location, b_location)
-            && a_root == b_root
+            && Some(a_root) == self.root_source(b_root)
             && !self.calls.inserted(b_invocation)
             && a_invocation == self.canonical_invocation(b_invocation)
             && a_start == b_start
@@ -239,11 +294,11 @@ impl<'a> ProtectedLineage<'a> {
     }
 }
 fn event_key(
-    event: TeletextSpatialEvent,
+    root_source: TeletextSpatialRootSource,
     source: TeletextEnhancementSource,
     invocation: Option<ersatzrs_domain::TeletextSpatialInvocationId>,
 ) -> EventKey {
-    let root = match event.root_source() {
+    let root = match root_source {
         TeletextSpatialRootSource::Local { command } => (0, command),
         TeletextSpatialRootSource::DefaultSlot { slot } => (1, usize::from(slot)),
     };

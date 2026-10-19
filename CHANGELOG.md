@@ -71,8 +71,9 @@ release section when tagging a release.
   Concept preview and cold reopen retain the original definitions and metadata.
   Existing Local object calls can now be moved or retargeted to another original
   definition on the same page through concept import. Supported Local definitions
-  also accept same-page call insertion and removal while preserving original
-  position anchors and keeping generated header attributes out of authored edits.
+  and existing page Main programs also accept same-page Local call insertion and
+  removal, retaining complete original catalogues and position anchors while
+  keeping generated header attributes out of authored edits.
   Repeat edits, undo and cold recovery preserve unrelated edits; publication stays
   explicit and protected shared consumers remain guarded even when pixels match.
   Native preview,

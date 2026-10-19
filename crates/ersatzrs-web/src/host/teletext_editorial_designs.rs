@@ -392,6 +392,7 @@ fn qualify_rows(
     let resource_additions = overlay.resource_object_definition_additions().to_vec();
     let bitmaps = overlay.drcs_bitmap_overlays().to_vec();
     let object_programs = overlay.local_object_glyph_program_overlays().to_vec();
+    let main_programs = overlay.main_local_invocation_program_overlays().to_vec();
     let encoding = policy.encoding;
     let has_existing_resource_edits =
         !resource_operands.is_empty() || !resource_programs.is_empty();
@@ -433,6 +434,7 @@ fn qualify_rows(
             operands: &operands,
             object_operands: &object_operands,
             object_programs: &object_programs,
+            main_programs: &main_programs,
             bitmaps: &bitmaps,
         },
         &encoding,
@@ -640,6 +642,7 @@ fn reconcile_files(
             changes.operands.extend(incoming.operands);
             changes.object_operands.extend(incoming.object_operands);
             changes.object_programs.extend(incoming.object_programs);
+            changes.main_programs.extend(incoming.main_programs);
         } else if body.project.assets.iter().any(|asset| {
             asset.name==original.name && matches!(asset.scope,
                 ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectContextTtiV1{..} |
@@ -673,6 +676,7 @@ fn reconcile_files(
         && changes.resource_operands.is_empty()
         && changes.bitmaps.is_empty()
         && changes.object_programs.is_empty()
+        && changes.main_programs.is_empty()
         && changes.resource_programs.is_empty()
     {
         return Err(NativeTeletextEditorialImportError::NoChanges);
@@ -701,6 +705,7 @@ fn validate_reconciled_display_files(
                 .map_err(|_| NativeTeletextEditorialImportError::Association)?,
         };
         if incoming.rows.iter().any(|overlay| overlay.owner() == owner)
+            || incoming.main_programs.iter().any(|program| program.owner() == owner)
             || incoming.has_drcs_selection(Some(owner))
             // A resource edit can also change compiler-owned display lowering.
             // Uploaded display words remain bound to the sealed baseline.

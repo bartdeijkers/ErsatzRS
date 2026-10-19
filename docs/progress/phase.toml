@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 V5 Lua rebuild checkpoint; F1 Main calls next, X1/X2/X3 open'
+current_focus = 'P9A-04 F1 Main call structure; V5 checkpoint a4102313, X1/X2/X3 open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,28 +62,28 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Local checkpoint10b04709 implements F1 Local-definition call insertion/deletion;
- tmp/phase9-header-c2/identity.json/local_call_structure_followup retains exact
-sources, all negatives and237 focused/13 composed native outcomes.
-Current V5 new evidence: real Lua Refresh, Reset+KeepCurrent and default Reset
-compose through durable application reopen and actual schedule prepare/commit.
-Fresh BaseDay On/Off, exact half-open expiry, retained/clipped or replaced Night,
-items/history/checkpoints, channel2/configuration and no automatic activation are
-proven. Handled missing-profile and uncaught compile/runtime errors preserve the
-appropriate candidate or previous publication. Final7 native cases passb4462a76;
- tmp/phase9-lua-intervals/identity.json/rebuild_reopen_followup owns final checks,
-source/checkpoint identities and scope. No product defect or new whole-process,
-authored-generation/ordinary-stream/client proof is claimed. Reuse earlier QTM,
-headed admin, transport, decoder and F6 evidence only within their proven scope.
-Next concrete F1 product gap: page-Main insertion/deletion of existing Local
-object invocations through receipt-bound editor import. First qualify the exact
-current parser/model seam, then reuse the smallest existing bounded path; native
-concept/preview/publication/protected-consumer proof is the closure condition.
-Full V5/restart and every other9A clause remain. X1 lacks a source-positive
-suitable client (DVB Inspector1.21 already negative); X2 needs accepted native
-artifacts/environments; X3 needs bank/native-call/editor capacity. F5 adoption
-needs restored baseline Docker WSLintegration. Unused-object removal remains
-deferred. No waiver, production guide work, push or publication.
+Current F1 Main-call structure has four composed native outcomes,322 document/
+service and231 final host passes. Distinct private22 preserves complete original
+catalogues and checked Main source/root authority; raw-root false refusals and
+one independently established visual-coordinate fixture error are corrected.
+Concept/repeat/preview, explicit changed publication/cold recovery, unpublished
+root undo and atomic protected/malformed refusal retain their exact scopes in
+ tmp/phase9-header-c2/identity.json/main_call_structure_followup. The canonical
+receipt preserves every negative, source/run identity and relevant process.
+Strict domain/app/web all-target Clippy, format, progress and architecture checks
+pass. Commit only the verified owned slice, then qualify F5's baseline package
+build environment after the reboot: source/debug Next already proves the source-
+out correction, but ordinary managed playback cannot use it without accepted
+packages. A bounded Docker WSLintegration check determines whether the existing
+baseline build path can proceed; if still unavailable, retain the exact external
+block and continue independent necessary work. No new build infrastructure.
+Earlier10b04709 Local-body and a4102313 Lua-rebuild checkpoints remain local;
+reuse QTM/headed/transport/decoder/F6 evidence only in its proven scope. All9A
+clauses remain open as recorded in P9A-04; no new client/whole-process/platform
+claim. X1 needs a suitable source-positive client, X2 accepted native artifacts/
+environments, X3 editor bank/native-call/capacity capability. F5 package adoption
+needs baseline Docker WSLintegration restored. Unused-object removal stays
+deferred. No waiver, production guide, push or publication.
 
 Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
 (docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).

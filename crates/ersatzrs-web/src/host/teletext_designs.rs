@@ -567,9 +567,13 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         .as_ref()
         .map_or(&[][..], |overlay| overlay.drcs_bitmap_overlays());
     let editorial = (overlays, operands, object_operands, bitmaps, programs);
+    let main_programs = parts.editorial_overlay.as_ref().map_or(&[][..], |overlay| {
+        overlay.main_local_invocation_program_overlays()
+    });
     let originals = if resource_operands.is_empty()
         && resource_programs.is_empty()
         && resource_additions.is_empty()
+        && main_programs.is_empty()
     {
         encode_original_channel_documents_with_editorial_programs(
             &parts.selection,
@@ -586,6 +590,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
             parts.entry_addon_id.as_deref(),
             parts.documents,
             EditorialResourceDocuments {
+                main_programs,
                 programs: editorial,
                 resource_operands,
                 resource_programs,

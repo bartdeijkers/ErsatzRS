@@ -40,6 +40,9 @@ mod resource_object_programs;
 #[path = "resource_object_definition_addition_service.rs"]
 mod resource_object_definition_additions;
 
+#[path = "main_local_invocation_program_service.rs"]
+mod main_local_invocation_programs;
+
 #[path = "local_object_glyph_program_service.rs"]
 mod local_object_glyph_programs;
 
@@ -211,6 +214,13 @@ pub enum TeletextServiceError {
     },
     #[error("teletext local operand changes must not be empty")]
     EmptyLocalProgramOperandOverlays,
+    #[error("teletext Main call overlay set is empty")]
+    EmptyMainLocalInvocationProgramOverlays,
+    #[error("teletext Main call overlay failed for {owner:?}: {reason}")]
+    MainLocalInvocationProgramOverlay {
+        owner: TeletextPageAddress,
+        reason: super::TeletextMainLocalInvocationProgramFailure,
+    },
     #[error("teletext local operand {address:?}, command {command}: {reason}")]
     LocalProgramOperandOverlay {
         address: TeletextPageAddress,

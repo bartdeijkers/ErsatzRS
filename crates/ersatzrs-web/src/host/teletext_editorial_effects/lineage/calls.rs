@@ -33,6 +33,12 @@ fn command(call: TeletextSpatialInvocation) -> TeletextEnhancementCommand {
 
 fn inserted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'_>) -> bool {
     let source = call.source();
+    if source.object.is_none() {
+        return lineage.main_program.is_some_and(|program| {
+            program.original_command(source.command).is_none()
+                && program.replacement().commands().get(source.command) == Some(&command(call))
+        });
+    }
     if let Some(definition) = source
         .object
         .and_then(|object| lineage.additions.get(&object))
@@ -58,6 +64,12 @@ fn inserted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'
 
 fn omitted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'_>) -> bool {
     let source = call.source();
+    if source.object.is_none() {
+        return lineage.main_program.is_some_and(|program| {
+            program.replacement_command(source.command).is_none()
+                && program.expected().commands().get(source.command) == Some(&command(call))
+        });
+    }
     source
         .object
         .and_then(|object| lineage.programs.get(&object))
@@ -162,7 +174,11 @@ impl Calls {
             };
             let key = (
                 parent,
-                root(call.root_source()),
+                root(
+                    lineage
+                        .root_source(call.root_source())
+                        .ok_or_else(association)?,
+                ),
                 source.object,
                 source.command,
             );

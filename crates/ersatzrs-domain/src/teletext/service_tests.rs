@@ -1372,3 +1372,6 @@ mod resource_object_operand_tests;
 
 #[path = "resource_object_definition_addition_tests.rs"]
 mod resource_object_definition_addition_tests;
+
+#[path = "main_local_invocation_program_tests.rs"]
+mod main_local_invocation_program_tests;

@@ -581,3 +581,6 @@ async fn normalized_header_wrapper_native_protects_second_child_consumer() {
 
 #[path = "forward_anchor/retained_calls.rs"]
 mod retained_calls;
+
+#[path = "forward_anchor/main_calls.rs"]
+mod main_calls;

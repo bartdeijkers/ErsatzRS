@@ -119,6 +119,7 @@ fn edits(operands: &[TeletextLocalProgramOperandOverlay]) -> TeletextEditorialEd
         resource_programs: &[],
         resource_additions: &[],
         object_programs: &[],
+        main_programs: &[],
         bitmaps: &[],
     }
 }
@@ -614,6 +615,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
             resource_programs: &[],
             resource_additions: &[],
             object_programs: &[],
+            main_programs: &[],
             bitmaps: &[],
         },
         &policy().encoding,
