@@ -15,8 +15,10 @@ COPY scripts/release/next-patches/ /build-tools/next-patches/
 # Named context contains the reviewed upstream source archive. Its checksum
 # is verified before extraction by the same helper used for macOS candidates.
 COPY --from=next-source source.tar.gz /inputs/source.tar.gz
+ARG NEXT_REVIEW_MANIFEST=manifest.json
 RUN python3 /build-tools/prepare-next-source.py \
-    --source-archive /inputs/source.tar.gz --output /build/next-source
+    --source-archive /inputs/source.tar.gz --output /build/next-source \
+    --manifest "/build-tools/next-patches/$NEXT_REVIEW_MANIFEST"
 WORKDIR /build/next-source
 ENV CARGO_BUILD_JOBS=4
 ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \

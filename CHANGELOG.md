@@ -557,6 +557,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Allow local Linux Next candidate builds to select a reviewed source manifest
+  while preserving the accepted runtime defaults. Keep exact patch and package
+  provenance; candidate builds do not activate or publish a runtime.
+
 - Provide an opt-in Next source candidate that caps copied-video captions at the
   original subtitle source outpoint while retaining keyframe and pass alignment.
   Managed-runtime adoption still requires verified replacement packages.

@@ -859,6 +859,13 @@ package the resulting executable and source license with the exact verified
 The previous unmodified ARMv7 helper refuses a patched pin to prevent
 accidentally shipping an unpatched executable under the new distribution.
 
+For an unpublished reviewed candidate, add
+`--build-arg NEXT_REVIEW_MANIFEST=v0.2.2/manifest-sourceout-candidate.json`
+to the Docker invocation and pass the same manifest under
+`scripts/release/next-patches/` to the packager's `--manifest` option. The default
+still selects the accepted distribution. Candidate packaging does not change
+managed runtime selection or authorize publication.
+
 For every Next revision update, first prepare the comparison with
 `--unpatched` and run the existing
 `real_next_direct_http_and_rtsp_preserve_audio_and_source_clock` and
