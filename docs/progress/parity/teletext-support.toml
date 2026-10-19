@@ -5,8 +5,8 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: standalone1/1.5 first, then full2.5/protected fallback. P9A-04 L15/F/V/X
-own proof; neither gate accepted. Main208 without banks passes real QTM1.5/native
-flow; VLC bitmap reveal/flash is source/binary-negative. Full QTM/metadata,
+own proof; neither accepted. Main208 realQTM/native and18 fresh-process Lua
+observations pass; VLC reveal/flash is source/binary-negative. Full QTM/metadata,
 decoder/transport/client, shared safety and all9A criteria remain mandatory.
 
 Typed services, provenance, resource identities/defaults, physical

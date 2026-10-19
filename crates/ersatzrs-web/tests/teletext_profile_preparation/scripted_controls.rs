@@ -15,6 +15,9 @@ mod continue_after_reopen;
 #[path = "scripted_controls/rebuild_after_reopen.rs"]
 mod rebuild_after_reopen;
 
+#[path = "scripted_controls/process_restart.rs"]
+mod process_restart;
+
 async fn bindings(fixture: &Fixture) -> Vec<(i64, String, i64, bool, i64)> {
     sqlx::query_as(
         r#"SELECT "ChannelId","AddonId","ProfileId","Enabled","Revision"

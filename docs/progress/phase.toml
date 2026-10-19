@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: Main208 editor proof closeout; suitable base client and process restart remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: native process-restart proof; suitable base client and conformance remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -89,8 +89,14 @@ base client for ordinary stream input, conceal/reveal, timed flash and page/
 subpage navigation. Exact VLC3.0.20 source/binary qualification fails those base
 render controls; retain its prior MAIN/navigation proof, do not rerun its full-base
 trial or start decoder maintenance. Current receipt names exact versions/functions.
-Independent L15-C action: actual OS-process restart inside/after Lua intervals,
-with profile/error isolation, using existing fixtures and unchanged durable proof.
+L15-C native process-restart proof6ef50fc7 passes18 exact two-channel observations
+across On/Off/expiry in a distinct OS process, plus stored programme checkpoint and
+fresh Continue Day/Off. No prior Lua globals, automatic publication or addon calls;
+base/config/other channel remain exact. Canonical standalone_level15_followup/
+process_restart owns the receipt. Supplied application clocks/native AppState are
+not real-time whole-web-host/active-stream restart or new output/client proof.
+Reuse unchanged a4102313 seven-case lifecycle/error evidence; scoped accepted-output
+host restart and complete shared-profile/invalid-profile matrices remain open.
 Remaining base repertoire/spacing/height/conceal/flash/subpage/set and rejection
 coverage must be bundled by functional closure, not small object variants.
 No full editor/publication/isolation/F6 replay unless its boundary actually changes.
