@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: active mirror scoped-On/Base/Off isolation verified; suitable-client input/control is the next determining gap, finite A1/A2/B2/C/D/E1/E2 remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: ProgDVB playlist input verified, channel control/shared storage still block D; continue existing A1 product-conversion gap, all finite/end gates remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -109,18 +109,19 @@ release publication. Exact SHA and push result belong to the canonical receipt.
 Next independent work is the remaining C live/shared/Lua/whole-host restart
 matrix using existing fixtures; D still requires usable native client control.
 All finite base packages and enhanced X1/X3/platform/adoption gates stay open.
-Bounded L15-D ProgDVB Standard7.73.2 qualification now obtains the official
-installer7260f799, pins executable7.73.2.0 and starts a private native Windows
-process/source dialog. It does not prove capture/ordinaryHTTP input or any
-teletext capability: current native UIAutomation patterns are unavailable and
-bounded message/final keyboard attempts leave Open unchanged. This is a
-test-control/session limitation, not an absent-feature or decoder failure.
-Canonical base_client_qualification/progdvb_runtime owns exact hashes and cleanup;
-only our private process/copy was stopped/removed. No installer/registration or
-security-policy change. Need usable native interactive/automation control or a
-documented input route before this exact candidate can receive fixed-oracle
-HTTP/X26/navigation/update/reveal/timedflash qualification. Do not repeat unchanged
-attempts or repair clients. Full2.5 X1/X3 remain separate mandatory blockers.
+Bounded L15-D ProgDVB Standard7.73.2/executable7.73.2.0 now ingests the
+synthetic M3U provider through documented storage and identified visible native
+BUTTON/BM_CLICK; two actual playlist GETs and the inspected channel screenshot
+pass. No capture playback/ordinary live stream or teletext capability is proven.
+The custom channel list has no selection pattern/recognized TreeView; no blind
+selection is dispatched. All test owners/private copies/HTTP servers close.
+Vendor CommonApplicationData persists shared state despite private environment
+overrides:9 new files and5 changed older files, no complete baseline. Shared
+settings remain preserved, not reset; prior private-profile wording excludes
+this storage. Canonical base_client_qualification/progdvb_runtime/input_route_followup
+owns pins, staged failures, requests, control metadata and storage correction.
+Need validated private settings plus reliable operator/channel/teletext control
+before another client trial; no unchanged retry, client maintenance or waiver.
 L15-E1 Next generated final-wrapper carriage and scoped Local/Scripted active
 caller/reopen/host cleanup are verified, not complete F5/base acceptance. P9A-04
 and canonical active_next_shutdown own unit, matched-build/headed, retained
@@ -203,7 +204,7 @@ closure failed; reuse actual complete cycles, not synthetic headers/increased
 bounds. Original negatives remain. Eleven affected regressions and strict web
 Clippy pass. No new QTM/headed receiver/platform or base/full9A claim.
 
-L15-A non_latin_coded_context closes the concrete exact coded Greek37/Arabic47/57
+L15-A non_latin_coded_context closes the concrete exact coded Greek37/Arabic0x47/0x57
 header7 rejection in layout/typed Base trace. Matching explicit context admits
 coded rows/G1 without optional banks; missing/mismatched context and unqualified
 logical Unicode remain rejected. Original identities, no-bank inventory, wire
@@ -340,11 +341,14 @@ active_mirror_scope_followup retain all pins, qualified-gap distinctions and
 negative/setup records under work.json/standalone_level15_followup. No product
 change or suitable client/fullC/base/9A acceptance follows; broader Lua/wholehost/
 browser matching, A1/A2/B2 and runtime/native/adoption requirements remain.
-Next: D's concrete native ProgDVB input/control prerequisite. Check only an
-untried documented input route against retained attempts; no runtime retry
-without a new concrete hypothesis. If none exists, retain the operator/session
-blocker and continue independent necessary product work. E1/E2 native/adoption
-and enhanced X1-deferred/X3-upstream gates stay separate and mandatory. No push.
+D's bounded documented-provider/BM_CLICK branch now proves playlist input only;
+custom channel control and shared storage still block full receiver proof.
+Next: A1 assigned Arabic0x47/0x57 logical Text is still rejected by layout's
+NationalOption path while coded rows work. Reuse the existing fixture/normative
+tables for one grouped Arabic Text discriminator and smallest justified product
+correction, preserving positions/context/fallback/cross-script guards. No new
+general audit, isolated glyph/editor/stream variant or client maintenance.
+E1/E2 native/adoption and enhanced X1-deferred/X3-upstream stay mandatory. No push.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.
