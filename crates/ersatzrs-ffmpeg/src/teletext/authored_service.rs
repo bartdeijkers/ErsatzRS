@@ -818,7 +818,7 @@ fn encode_display(
         .iter()
         .find(|page| page.address == owner)
         .ok_or_else(|| located(Failure::MissingResourceBody))?;
-    let layout = layout::compile_for_composition(page)
+    let layout = layout::compile_for_service_composition(service, page)
         .map_err(|reason| located(Failure::Layout(Box::new(reason))))?;
     clock.check(Some(owner), None)?;
     let local = service

@@ -693,3 +693,6 @@ mod foreign_defaults;
 
 #[path = "authored_service_tests/standalone_base.rs"]
 mod standalone_base;
+
+#[path = "authored_service_tests/standalone_national.rs"]
+mod standalone_national;

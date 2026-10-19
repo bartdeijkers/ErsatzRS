@@ -258,10 +258,11 @@ fn may_need_carrier(
         .iter()
         .find(|page| page.address == owner)
         .ok_or_else(|| error(Failure::MissingResourceBody))?;
-    let layout = layout::compile_for_composition(page).map_err(|reason| Error {
-        display: Some(owner),
-        ..error(Failure::Layout(Box::new(reason)))
-    })?;
+    let layout =
+        layout::compile_for_service_composition(service, page).map_err(|reason| Error {
+            display: Some(owner),
+            ..error(Failure::Layout(Box::new(reason)))
+        })?;
     Ok(local || !layout.base_glyphs().is_empty())
 }
 

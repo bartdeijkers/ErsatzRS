@@ -5,10 +5,10 @@
 //! the legacy selector stream is not a context-free program to prepend.
 
 use ersatzrs_domain::{
-    TeletextColour, TeletextColumnOperation, TeletextDiacriticIndex, TeletextEnhancementPosition,
-    TeletextGlyphCode, TeletextHeight, TeletextPageDraft, TeletextPageKind, TeletextRunContent,
-    TeletextSemanticService, TeletextStructureError, TeletextStyle, TELETEXT_COLUMNS,
-    TELETEXT_ROWS,
+    TeletextCharsetPair, TeletextColour, TeletextColumnOperation, TeletextDiacriticIndex,
+    TeletextEnhancementPosition, TeletextGlyphCode, TeletextHeight, TeletextPageDraft,
+    TeletextPageKind, TeletextRunContent, TeletextSemanticService, TeletextStructureError,
+    TeletextStyle, TELETEXT_COLUMNS, TELETEXT_ROWS,
 };
 
 use super::{charset, TeletextEncodingError};
@@ -17,6 +17,16 @@ pub(super) struct Layout {
     pub rows: [[u8; TELETEXT_COLUMNS]; TELETEXT_ROWS],
     base_glyphs: Vec<PositionedBaseGlyph>,
     physical_rows: [bool; TELETEXT_ROWS],
+    national_subset: Option<u8>,
+}
+
+impl Layout {
+    pub(super) fn encode_character(&self, character: char) -> Option<charset::Character> {
+        match self.national_subset {
+            Some(national) => charset::encode(character, national),
+            None => charset::encode_without_national_subset(character),
+        }
+    }
 }
 
 /// One exact Western Latin replacement for a fallback cell, before composition.
@@ -144,10 +154,19 @@ pub(super) fn compile_for_composition(
             address: page.address,
         });
     }
+    compile_with_national_subset(page, Some(page.national_option.get()))
+}
+
+fn compile_with_national_subset(
+    page: &TeletextPageDraft,
+    national: Option<u8>,
+) -> Result<Layout, TeletextEncodingError> {
+    page.validate_structure()?;
     let mut layout = Layout {
         rows: [[b' '; TELETEXT_COLUMNS]; TELETEXT_ROWS],
         base_glyphs: Vec::new(),
         physical_rows: [false; TELETEXT_ROWS],
+        national_subset: national,
     };
     let mut rows: Vec<_> = page.rows.iter().collect();
     rows.sort_by_key(|row| row.row);
@@ -195,13 +214,14 @@ pub(super) fn compile_for_composition(
             match &run.content {
                 TeletextRunContent::Text { text } => {
                     for (column, character) in (run.column..).zip(text.chars()) {
-                        let encoded = charset::encode(character, page.national_option.get())
-                            .ok_or(TeletextEncodingError::Character {
+                        let encoded = layout.encode_character(character).ok_or(
+                            TeletextEncodingError::Character {
                                 address: page.address,
                                 row: row.row,
                                 column,
                                 codepoint: u32::from(character),
-                            })?;
+                            },
+                        )?;
                         layout.rows[usize::from(row.row)][usize::from(column)] = encoded.fallback;
                         if let Some((mode, data)) = encoded.enhancement {
                             layout.base_glyphs.push(
@@ -240,7 +260,21 @@ pub(super) fn compile_for_service_composition(
     service: &TeletextSemanticService,
     page: &TeletextPageDraft,
 ) -> Result<Layout, TeletextEncodingError> {
-    let mut layout = compile_for_composition(page)?;
+    // Header option seven is reserved only in the legacy region-zero context.
+    // An explicit assigned Latin primary ending in seven establishes its own
+    // context; never substitute another national table for its Unicode text.
+    let assigned_latin_seven = page.national_option.get() == 7
+        && service
+            .effective_presentation(page.address)
+            .and_then(|value| value.primary_designation().ok())
+            .is_some_and(|primary| {
+                primary.get() & 7 == 7 && primary.pair() == TeletextCharsetPair::LatinLatin
+            });
+    let mut layout = if assigned_latin_seven {
+        compile_with_national_subset(page, None)?
+    } else {
+        compile_for_composition(page)?
+    };
     let Some(overlay) = service.physical_base_overlay(page.address) else {
         return Ok(layout);
     };

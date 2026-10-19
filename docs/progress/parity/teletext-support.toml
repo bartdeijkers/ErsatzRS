@@ -4,10 +4,10 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: standalone1/1.5 first, then full2.5/protected fallback. P9A-04 L15/F/V/X
-own proof; neither accepted. Main208/QTM, Lua restart, atomic refusal and scoped
-base wire/pixel/independent decoding pass; complete base client remains open. Full QTM/metadata,
-decoder/transport/client, shared safety and all9A criteria remain mandatory.
+ADR0123: base first, then full2.5/protected fallback; neither accepted.
+P9A-04 L15/F/V/X own proof. Romanian1F/header7 now works without banks;
+all13/169 coded cells and84 scoped stock decodes pass. Full glyph/client,
+QTM/metadata and shared runtime/safety/platform criteria remain mandatory.
 
 Typed services, provenance, resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization

@@ -858,6 +858,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve valid Romanian teletext pages with explicit national charset context and
+  matching header bits through shared preview and authored-service encoding, without
+  requiring optional object banks or weakening legacy-context validation.
 - Preserve a finite Local teletext caption in Next without a final clear through the
   proven selected-video presentation end, clipped by earlier programme cuts.
   Keep prior text and clocks exact, isolate caches by video and clock policy,

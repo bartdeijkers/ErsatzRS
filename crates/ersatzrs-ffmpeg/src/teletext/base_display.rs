@@ -14,7 +14,7 @@ use ersatzrs_domain::{
     TeletextRunContent, TeletextSpacingTiming, TELETEXT_COLUMNS, TELETEXT_ROWS,
 };
 
-use super::{charset, layout::Layout, TeletextColourContext, TeletextEncodingError};
+use super::{layout::Layout, TeletextColourContext, TeletextEncodingError};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextBaseDisplayFailure {
@@ -155,20 +155,19 @@ fn authored_cells(
             match &run.content {
                 TeletextRunContent::Text { text } => {
                     for (column, character) in (run.column..).zip(text.chars()) {
-                        let encoded = charset::encode(character, page.national_option.get())
-                            .ok_or_else(|| {
-                                error(
-                                    page.address,
-                                    None,
-                                    TeletextEncodingError::Character {
-                                        address: page.address,
-                                        row: row.row,
-                                        column,
-                                        codepoint: u32::from(character),
-                                    }
-                                    .into(),
-                                )
-                            })?;
+                        let encoded = layout.encode_character(character).ok_or_else(|| {
+                            error(
+                                page.address,
+                                None,
+                                TeletextEncodingError::Character {
+                                    address: page.address,
+                                    row: row.row,
+                                    column,
+                                    codepoint: u32::from(character),
+                                }
+                                .into(),
+                            )
+                        })?;
                         insert_authored(
                             page,
                             layout,

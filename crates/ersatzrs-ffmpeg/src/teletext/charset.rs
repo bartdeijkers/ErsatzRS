@@ -31,6 +31,12 @@ pub(super) fn encode(character: char, national: u8) -> Option<Character> {
             enhancement: None,
         });
     }
+    encode_without_national_subset(character)
+}
+
+/// Latin invariants and explicit X26 replacements without borrowing a national
+/// table. Exact regional national cells are supplied by checked physical rows.
+pub(super) fn encode_without_national_subset(character: char) -> Option<Character> {
     if character.is_ascii() {
         let code = u8::try_from(u32::from(character)).ok()?;
         if (0x20..=0x7e).contains(&code) && !NATIONAL_CODES.contains(&code) {
