@@ -2,6 +2,9 @@
 //! Genuine editor and ordinary-output requirements remain separately scoped.
 use super::*;
 
+#[path = "supplementary/generated_edit.rs"]
+mod generated_edit;
+
 const CONTEXTS_G2: [Context; 4] = [
     Context {
         sentinels: "£ŁD 200",

@@ -4,16 +4,13 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: base first, then full2.5/protected fallback; neither accepted.
-P9A-04 owns scoped G0 editor/Lua/publication/output/cleanup proof. Native Greek/
-Cyrillic supplementary Text now retains actual G2 context, Base priority and
-Level1 fallback without banks;300 qualified positions and four Local-restore
-controls pass native/pixel/application checks. Stock decoder has distinct old
-G0 and GreekG2 alias gaps, not waived. Next actual generated-G2 editor intent.
-Existing native editor/publication/stream scope remains. Full font/alias,
-receiver, lifecycle/platform and full2.5 editor/client gates remain open.
-
-
+ADR0123: base first, full2.5/protected fallback later; neither accepted.
+P9A-04 owns finite L15-A1/A2/B1/B2/C/D/E1/E2 product/proof/external gaps and
+scoped native/editor/runtime receipts. Generated G2 edits reject at124/0020,
+X26/0/1; grouped atomic-rejection/reopen proof preserves both channels. Internal
+intent/import gap, not proven QTM incapability. Next bounded1.5 stream-client
+qualification, then independent Next/lifecycle/platform proof. Full2.5 X1/X3
+remain distinct; no waiver.
 
 Typed services/provenance/resources, physical ownership, X26/X27/X28/M29,
 replay/raster and glyph/charset normalization are partial. Original bytes, fallback, ancestry, absent/default distinctions and

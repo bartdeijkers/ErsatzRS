@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: native G2 Unicode delivered; next generated-G2 editor interchange; decoder/client/platform gates remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: close generated-G2 refusal checkpoint; bounded suitable-stream-client qualification determines route, then independent runtime/lifecycle'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -68,39 +68,25 @@ neither base nor full9A is accepted. Production guide waits for independent9A.
 This current handoff supersedes older next-action prose below. No scope waiver,
 new general audit, external decoder/editor maintenance or push/publication.
 
-Delivered L15-A/F3 native_cyrillic_hebrew corrects four demonstrated native headline
-rejections in the shared private text converter.380 G0 positions in20/24/25/55
-preserve original text/context, exact coded wire/pixels, no optional banks, row
-bounds and Base/localX26 provenance.1012 teletext regressions/18 final national
-cases and strictFFmpegClippy pass. Stock0.2.42 agrees on2244/2280 observations;
-36 failures are six alias slots repeated across levels/extensions (24,25/4A,6A;
-25/26;55/23). Normative expectations remain unchanged; this is a concrete decoder
-capability gap, not accepted complete national/client proof or scope waiver.
-Canonical standalone_level15_followup/native_cyrillic_hebrew owns sources,
-standard review, immutable inputs, retained negatives and sensitivity controls.
-Native_editor_interop now supplies that scoped actual pinnedQTM proof for all
-four contexts: real Unicode key and SaveAs atLevel1.5, noMain/no banks, exact
-remaining TTI records/native sentinels/sidecar, one-cell-only shared preview,
-concept/reexport/SQLite reopen and unchanged accepted channels. Five regular
-standalone controls plus one bundled actual-editor test and strict affected-test
-Clippy/fmt pass. New proof only; publication/stream/F6 retain earlier scope.
-Original invalid-DZE/borrow setup failures remain; no normative weakening.
-Native_g2_text now corrects four reproduced mixed native/supplementary Text
-rejections.300 qualified Table41/43 positions retain G2 context in shared layout,
-merge/raster/physical realization/full-origin comparison, Level1 blank fallback,
-Base priority and original Local context/values/provenance without banks.
-1644 domain/FFmpeg teletext regressions,25 national cases and four-context native
-application export/concept/preview/reexport/reopen pass. Stock0.2.42 proves1916/
-1920 observations; four Greek×34->x aliases remain failed, not weakened. Two
-wrong namespace/fallback goldens add exactly4/2 failures; canonical same followup/
-native_g2_text retains inputs, pins and code/fixture correction history.
-Next qualify actual pinnedQTM edits of generated native-G2 positions using the
-existing projection/intent tools. Current app proof edits G0 while preserving G2;
-it is not genuine generated-G2 editing. Reuse unmodified publication/stream/F6
-and old byteidentical native inputs. Complete font/alias, suitable base receiver,
-lifecycle/platform and full2.5 editor/client obligations stay open.
-Complete supplementary Unicode/font, base receiver, lifecycle/platform and
-full2.5 editor/client gates stay distinct and open. No automatic editor repair.
+P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
+list, separated into missing product, mandatory proof and external prerequisites.
+Every existing acceptance condition remains; full9A X1/X3 are separate from the
+base-specific receiver gate. Canonical standalone_level15_followup retains all
+prior native/editor/independent/publication/runtime pins and negative results.
+Native G2 conversion and scoped application preservation remain verified at
+5e2ed7b7; actual generated-word editing is not implemented. The bounded followup
+reproduces exact Packet refusal124/0020/X26/0/1 rather than a QTM limitation.
+Its grouped regression protects original receipts/metadata, both channels,
+concept heads, pending selection and cold reopen. L15-B1 stays open; no generic
+intent/storage expansion is started merely to extend this checkpoint.
+Next qualify one available promising ordinary-stream Level1.5 receiver against
+X26/page-subpage/update/manual reveal/timedflash oracles, using existing inputs.
+No unchanged negative candidate or external decoder/editor repair. If unavailable,
+record exact missing access/capability/maintainer decision and continueL15-E1:
+active Next caller/reopen/host cleanup with existing source/worker/lease controls,
+then named F5 compatibility/output/platform cells. Two macOS artifacts/native
+ARM/macOS and managed adoption remain open; managed.1 is accepted, candidate.3
+is not. Do not reopen F6 without a concrete relevant regression. No scope waiver.
 
 Verified local base checkpoints:3bd0a2f2 Main208/no-bank realQTM1.5 edit/concept/
 preview/explicit publication/SQLite reopen;ef447f99 native OS-process Lua recovery
