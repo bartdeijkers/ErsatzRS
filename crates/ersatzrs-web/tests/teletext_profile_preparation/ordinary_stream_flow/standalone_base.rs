@@ -12,6 +12,9 @@ mod scoped_restart;
 #[path = "standalone_base/updates.rs"]
 mod updates;
 
+#[path = "standalone_base/profile_lifecycle.rs"]
+mod profile_lifecycle;
+
 fn response(theme: &str) -> Value {
     let mut value: Value = serde_json::from_str(include_str!(
         "../../fixtures/teletext-level15-restart-v2.json"
