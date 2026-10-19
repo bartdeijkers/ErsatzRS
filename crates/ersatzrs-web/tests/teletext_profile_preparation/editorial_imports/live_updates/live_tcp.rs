@@ -217,7 +217,9 @@ fn viewer_index(request: &Request) -> Option<usize> {
     match (request.uri().path(), request.uri().query()) {
         ("/iptv/hls-direct/1.ts", Some("teletext_test_viewer=day")) => Some(0),
         ("/iptv/hls-direct/1.ts", Some("teletext_test_viewer=observer")) => Some(1),
-        ("/iptv/hls-direct/2.ts", Some("teletext_test_viewer=night")) => Some(2),
+        ("/iptv/hls-direct/2.ts" | "/iptv/hls-direct/3.ts", Some("teletext_test_viewer=night")) => {
+            Some(2)
+        }
         _ => None,
     }
 }

@@ -1,6 +1,9 @@
 //! Mirror programme source and teletext output ownership stay independent.
 use super::*;
 
+#[path = "mirror/active_scoped.rs"]
+mod active_scoped;
+
 async fn install_mirror(fixture: &Fixture) {
     let repositories = make_repositories(fixture.state.pool.clone());
     let mut channel = repositories.channel.get_with_profile(1).await.unwrap();

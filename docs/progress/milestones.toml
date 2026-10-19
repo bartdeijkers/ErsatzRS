@@ -10727,7 +10727,7 @@ Missing mandatory evidence (existing implementation is partial; a failing fixed 
 | --- | --- | --- |
 | L15-A2 / F3,V1 | Read correct national characters, mosaics, spacing/height, conceal, flash and applicable X26 at the intended level | Reuse base_conformance, national_base_context, regional_unicode_context, non_latin_coded_context, greek_native_unicode, native_cyrillic_hebrew and native_g2_text. Complete fixed expected glyph/font/attribute/position coverage at1/1.5 and intended fallback; independent decoding must distinguish the retained Greek/Cyrillic/Hebrew namespace/alias failures from product defects. Stock near-matches do not close the failed matrix. Interactive timing/reveal belongs toL15-D |
 | L15-B2 / F1,F2,V2,V4 | Complete the supported base page/subpage/set and attribute/repertoire edit workflow while retaining template/theme/zone/dynamic information | Reuse native_main_capacity, repertoire_editor_interop, native_editor_interop, native_spelling_followup/integration and existing populated-sidecar/template-version/geometry receipts. Bundle remaining supported base editor cases; exact pinnedQTM edits and full retained identity/navigation/attributes/sidecar/Free-Zone-Generated checks, concept preview/reopen and separate explicit publication must cover each outstanding functional boundary. Reuse unchanged publication/stream and localized headed UI proof; test only newly changed admin paths. No general visual theme/template editor or production guide requirement |
-| L15-C / F4,V5 | Reliably control all agreed channel bindings/profile/theme/Lua/error/restart cases without disturbing another channel or ordinary playback | Reuse shared_profile_lifecycle_followup for fresh ordinary-HTTP shared-profile change/deletion across two channels, one-channel extra binding, missing/wrong/deleted/invalid/unavailable rejections, explicit republish and application/SQLite reopen; mirror output3 independently proves unbound/ownNight/ownOff against source1. Thirteen exact-model/TSDuck/sourceAV captures pass; no automatic producer invocation. Existing publication_update_followup, scoped/future host restart, Lua Continue/Refresh/Reset, atomic_enrichments and headed admin remain valid in scope. Close the remaining live/shared/mirror/Lua interval/precedence/error and inside/after-scope whole-host restart matrix, matching browser/stream generations, package inactivity, automatic Base recovery and isolation. active_shared_profile_followup adds two retained ordinary HTTP responses at default2: shared change withdraws both, pending requests keep both Off and explicit publication independently restores exact Day-to-Night services, with full raw clock/sourceAV/TSDuck and cleanup. active_lua_expiry_followup additionally proves actual finite Lua Off, uncaught-script rollback and automatic Base return on the same responses while the other channel retains Night. Remaining live mirror/scoped-On, broader Lua/whole-host/browser matching and client/platform cases stay open |
+| L15-C / F4,V5 | Reliably control all agreed channel bindings/profile/theme/Lua/error/restart cases without disturbing another channel or ordinary playback | Reuse shared_profile_lifecycle_followup for shared settings/deletion, multibinding, rejected/unavailable controls and fresh mirror unbound/Night/Off with cold recovery. active_shared_profile_followup proves shared invalidation/pending/independent republication on retained responses; active_lua_expiry_followup proves real Lua Off/error/automatic Base return; active_mirror_scope_followup now proves live mirror-owned pending/explicit scoped-On, own Base expiry and Off while source1 remains Day. Full model/clock/AV/TSDuck and cleanup retain exact scope. Scoped/future whole-host, durable Lua Continue/Refresh/Reset/errors, atomic_enrichments and headed admin receipts stay valid. Complete remaining broader Lua/precedence/error/inside-after-scope whole-host and browser/stream generation matching, package inactivity and isolation requirements. Suitable client/native platforms remain separate; these scoped proofs do not accept all C/base/9A |
 
 
 External capability/environment blockers (block only dependent acceptance):
@@ -10841,6 +10841,26 @@ in scope. No new subtitle/alternate-audio, suitable receiver, full Lua/wholehost
 platform/base/9A acceptance. This closes retained-response Off/error/automatic
 Base-expiry evidence; remaining active mirror/scoped-On and broader C conditions
 stay open. No new infrastructure or decoder/editor maintenance follows.
+
+Current active mirror scope proof (partialC/F4,V5): canonical
+standalone_level15_followup/active_mirror_scope_followup owns
+level15-active-mirror/identity.json and run-1. Two original HTTP responses at
+default2 carry source1 Day and mirror3's own Night. Real Lua publishes a12s On
+scope for mirror3; pending intent stays Off until explicit generation acceptance.
+The unique SCOPED MIRROR label, whole page/subpage cycles and exact Scripted
+channel/profile/playout provenance exclude source inheritance and stale Base.
+At expiry the same response restores its own original Night, then a mirror-only
+Off binding suppresses teletext while source1 remains Day. All unfiltered raw
+clocks/TSDuck have zero CC/PCR/PTS errors; selected-English sourceAV, both plain
+windows and independent pinned-FFmpeg scoped-label decoding pass. Configuration,
+packages, other bindings, accepted history, exact half-open intervals/cold
+application recovery and bounded full owner/lease cleanup pass; no automatic
+producer invocation. The observer only needed literal mirror3 URL admission;
+existing clock/model oracles remain unchanged. No product correction, suitable
+GUI client, new caption/alternate-audio/native-platform or fullC/base/9A claim.
+Reuse prior evidence within its scope. Remaining broader C conditions and all
+A1/A2/B2/D/E1/E2/full9A requirements stay mandatory; next prioritize D's concrete
+native input/control prerequisite rather than more unmotivated stream variants.
 
 The finite base remainder is exactlyA1,A2,B2,C,D,E1,E2 above, plus any actual
 regression against their existing F/V conditions. No character/editor variant is
