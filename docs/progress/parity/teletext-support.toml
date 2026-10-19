@@ -7,8 +7,9 @@ summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
 P9A-04 scopes base flow/Lua recovery, unreadHTTP drain repair and Linux active
 Legacy cleanup at default2 on60s source. Other engines/providers/platforms remain.
-Pending originals require explicit publication.
-Greek nativeG0 Unicode/coded Arabic header7 pass without banks; other Unicode/font
+Pending originals require explicit publication. Actual QTM1.0 Romanian1F/Greek37
+header7 Main208 saves preserve context/content through concept, preview, explicit
+publication/reexport and SQLite recovery without banks. Other Unicode/font
 coverage stays open. VDR source-negative for requiredG2; no build.
 Glyph/client/QTM/metadata/lifecycle/safety/platform remain mandatory.
 
@@ -59,9 +60,8 @@ a new host delivers FINAL FRESH AV/audio/cues. Local EOF now retains the final c
 X1 work is maintainer-deferred; X3 waits for
 upstream editor support. No waiver; F5/charset remains open.
 
-Interop/crossbuild proof is partial; native six-RID gates remain.
-P9A-02 owns decoder Health/licensing. Burn/Convert/copy, carriage, HLS/browser,
-playback, publication/refresh/restart and localized management gates remain.
+Native six-RID/interop gates remain. P9A-02 owns decoder Health/licensing;
+playback, HLS, caption and localized management gates stay mandatory.
 Production guide waits for full P9A-04; Phase10 for P9B-02.
 '''
 
