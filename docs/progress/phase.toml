@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: atomic enrichment refusal verified; grouped base conformance and suitable client remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: grouped base wire/pixel/independent proof; suitable client and remaining shared gates open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -90,10 +90,23 @@ preparation for exact semantic reasons, no partial candidate. Originals/heads/
 receipts/pending/accepted units and shared native preview/config/other channel
 stay exact; restoring valid source works with zero banks. No product change, new
 TTI/client/transport or AV claim. Canonical standalone_level15_followup/
-atomic_enrichments retains scoped receipt and valid controls. Next independent
-package: grouped base standards fixture with existing native/independent decoder
-helpers, beginning with spacing/height/conceal/flash and national repertoire
-oracles. Reuse actual QTM/explicit publication proof; repeat only affected seams.
+atomic_enrichments retains scoped receipt and valid controls.
+
+L15-A base_conformance now proves one complete factory-produced standalone page
+without optional banks (object/MOT/resource admission0; no X28/M29). Pinned
+imager0.2.0/2b0125b7 passes16 literal cells at1/1.5/2.5 in2af5ac33: spacing,
+height halves, mosaics, raw flash/conceal/box, G2/diacritic/Level15G3 and Level1 Z.
+Seven wrong-golden refusals, literal wire/native four-phase pixels4767f40e,
+legacy helper controls77ae4ef4 and pure input6 retain exact scope. Existing helper
+needed only explicit Level1/raw-attribute expectations; decoder sources unchanged.
+No visible receiver timer/font-wide/national repertoire/navigation or new editor/
+ordinary-stream/transport/platform acceptance follows. Canonical same followup/
+base_conformance owns source/tool/request hashes and all terminal/negative logs.
+Next integration gate: qualify at most one new promising base client against
+ordinary HTTP/TS, conceal/reveal, timed flash and page/subpage controls before
+build/runtime. Retain all unchanged negative candidates and full2.5 deferral.
+Continue independent national-context/lifecycle/platform gaps where possible;
+reuse realQTM/explicit publication/F6 proof and repeat only affected boundaries.
 
 Next L15-D action: qualify one genuinely new/changed, capability-positive pinned
 base client for ordinary stream input, conceal/reveal, timed flash and page/

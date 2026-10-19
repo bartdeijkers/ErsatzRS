@@ -690,3 +690,6 @@ mod attribute_quota_tests;
 
 #[path = "authored_service_tests/foreign_defaults.rs"]
 mod foreign_defaults;
+
+#[path = "authored_service_tests/standalone_base.rs"]
+mod standalone_base;
