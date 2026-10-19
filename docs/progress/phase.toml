@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 EOF policy/native qualification; source-replacement proof verified, X1 deferred/X3 awaits upstream'
+current_focus = 'P9A-04 F5 EOF policy decision pending; independent F3 context qualification, X1 deferred/X3 awaits upstream'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -185,15 +185,31 @@ checkout remains base7603285d with original source restored; the verified
 prepared-fixture fix was a recorded overlay, so sync reviewed source explicitly
 before any future native prepared-caption replay.
 
-Next concrete F5 case is the already named final nonempty caption without a
-following replacement/clear before physical EOF. Existing positives deliberately
-clear; qualification rejects an unknown final end. Current records do not choose
-sourceEOF, last AV presentation, programme outpoint or explicit unsupported
-selection as its accepted end policy. First qualify actual decoder/SRT behavior
-with existing tools; present the required policy decision before inventing any
-duration/oracle. No native EOF success or permanent restriction is accepted.
-All relevant current checks/processes are terminal. F6 stays closed absent a
-regression. Both macOS artifacts/environments and broader native/platform/output/
+Local checkpointa2c0f9d6 owns the verified callback replacement/rescan package.
+The already named EOF case is now concretely qualified by eof_unclosed_followup
+in the same canonical work.json. A private copy of the existing generator omits
+only final889 clear, reusing original AV and exact existing mux/probe/SRT flags.
+Closed control has9events/8SRTcues includingFINAL; unclosed source has8nonempty
+events but7SRTcues, silently omittingFINAL from rawFFmpeg output. Last event ends
+at UINT32MAX. Complete500H264 and bothAAC packet payloads remain identical; AV
+decode succeeds. Existing product qualification refuses unknownend. This is a
+native decoder precondition, no actualNext delivery or EOF acceptance claim.
+
+Required policy decision is pending: hold the last cue until a trustworthy
+selected-video presentation end clipped by earlier programme/outpoint boundaries,
+with exact sourceclock/cache isolation, or defer that choice and keep the gap
+open under current explicit refusal. Do not invent a duration or treat elapsed
+time as approval. No permanent limitation/scope waiver is accepted. While this
+blocks dependent EOF work, independently qualify one named remaining F3 authored
+context/publish case from its current canonical receipt; no whole-phase audit,
+client/editor maintenance or small editor-variant loop. No new source change is
+started for EOF. All relevant runtime/build/check processes are terminal; the
+existing agent performs only a bounded original-secondary clause assessment.
+The prior F3 lookup found no new fixed-oracle product RED: header/MOT leads are
+superseded and cross-emitter C2 remains an intentional strict negative. Locate
+the original-secondary rejection branch and exact EN300706 state clause before
+choosing a lawful programme and expected physical cells; no guessed colour or
+new variant loop. F6 stays closed absent regression. macOS/native/platform/output/
 adoption gates remain open; managed.1 unchanged.
 
 Maintainer2026-10-19 defers further X1 suitable-client work and chooses to wait
