@@ -263,15 +263,16 @@ pub(super) fn compile_for_service_composition(
     // Header option seven is reserved only in the legacy region-zero context.
     // An explicit assigned Latin primary ending in seven establishes its own
     // context; never substitute another national table for its Unicode text.
-    let assigned_latin_seven = page.national_option.get() == 7
-        && service
-            .effective_presentation(page.address)
-            .and_then(|value| value.primary_designation().ok())
-            .is_some_and(|primary| {
-                primary.get() & 7 == 7 && primary.pair() == TeletextCharsetPair::LatinLatin
-            });
-    let mut layout = if assigned_latin_seven {
-        compile_with_national_subset(page, None)?
+    let primary = service
+        .effective_presentation(page.address)
+        .and_then(|value| value.primary_designation().ok());
+    let latin = primary.filter(|primary| primary.pair() == TeletextCharsetPair::LatinLatin);
+    let assigned_latin_seven =
+        page.national_option.get() == 7 && latin.is_some_and(|primary| primary.get() & 7 == 7);
+    let mut layout = if let Some(primary) =
+        latin.filter(|_| page.national_option.get() < 7 || assigned_latin_seven)
+    {
+        compile_with_national_subset(page, charset::unicode_national_subset(primary))?
     } else {
         compile_for_composition(page)?
     };

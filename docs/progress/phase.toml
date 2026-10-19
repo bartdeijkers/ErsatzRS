@@ -78,23 +78,28 @@ process recovery is not whole-web-host/active-stream restart. Canonical
  tmp/phase9-next-local-teletext/work.json/standalone_level15_followup owns exact
 sources, inputs, tests, negative history, scopes and checkpoint receipts.
 
-L15-A national-base context checkpoint: the unchanged all13/169 literal matrix
-exposed a real validRomanian1F/header7 rejection. Shared layout/model/factory now
-admit that assigned Latin context, keep legacy missing/mismatched context and
-physical generated-glyph guards, and retain original inputs/no optional banks.
-Scoped stocklibzvbi0.2.42 decoding passes84 cases (with/withoutX28, correct regional
-default, levels1/1.5/2.5):26 unambiguous Table36 scalar goldens/BASE200 and Romanian
-Unicode X26 plus Level1 fallback; a wrongRomanian5B golden rejects. Other glyph
-shapes/tokens are observations, not full font conformance. Canonical same followup/
-national_base_context owns inputs, REDs, decoder/library pins and final checks.
-No new editor, ordinary transport, suitable-client or platform acceptance.
+L15-A national-base checkpointafe62c3d fixes validRomanian1F/header7. The followup
+regional_unicode_context fixes the demonstrated Polish £-># Unicode defect using
+the actual Table32/36 context; existing Polish# native oracle stays unchanged.
+160 qualified national Unicode positions retain native Level1 cells across13
+subsets; nine ambiguous/unqualified aliases remain coded-only, not guessed or
+removed. Mixed8-character text across27 assignedLatin aliases retains exact1.5+
+text and explicit Level1 fallback, zero optional banks and diagnostic-free shared
+preview/invariantA. Stock0.2.42 proves162 mixed plus78 native cases, with/without
+X28 and proper regional default; two wrong goldens reject. Original13 coded-page
+fixtures stay byte-exact, reusing84 decoder cases. Wholetext cross-font pixel
+identity was a rejected test hypothesis: native and composedÄ differ in vertical
+fitting under the established glyph-mask contract. It is not a scalar, fallback
+or full-font acceptance oracle. No new editor/ordinary-route/client/platform claim.
+Canonical standalone_level15_followup/{national_base_context,regional_unicode_context}
+own sources, inputs, negative history, pins and final checks.
 
-Next L15-A product action: qualify logical Unicode text against explicit regional
-contexts using existing factory/decoder boundaries; raw national cell identity is
-now covered, but it does not establish every logical Unicode-to-regional mapping.
-Other assigned non-Latin header7 contexts remain an implementation gap, not a
-standard restriction or waiver. Complete national font, subpage/update/client and
-shared runtime/platform gates still need their specified evidence.
+Next base workflow action: use the existing ordinary-host/editor fixtures for
+base subpage/update and accepted-output restart evidence. Native selection
+OS-process reopen is not whole-host/active-output restart. Complete glyph/font,
+other assigned non-Latin header7 and remaining base lifecycle/output/platform
+criteria stay open. Missing suitable-client controls block dependent actual
+receiver evidence only; do not repeat unchanged candidates or repair decoders.
 
 L15-D still needs an available exact client with positively qualified ordinary
 HTTP/TS, conceal/reveal, timed flash, relevantX26 and page/subpage/update controls.

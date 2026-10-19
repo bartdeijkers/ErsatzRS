@@ -284,3 +284,153 @@ fn all_169_national_base_glyphs_keep_header_context_and_need_no_object_banks() {
     }
     println!("13 full-factory native contexts,169 literal Table36 identities and code cells; no object/MOT/DRCS banks or inferred Unicode aliases");
 }
+
+#[test]
+fn regional_unicode_text_remains_exact_at_the_shared_layout_boundary() {
+    for (primary, _) in SUBSETS {
+        let mut draft = draft(primary);
+        draft.base.pages[0].rows = rows("£");
+        let declared = declare(draft);
+        let service = declared.semantic();
+        let layout =
+            layout::compile_for_service_composition(service, &service.base().pages[0]).unwrap();
+        if matches!(primary, 0 | 3) {
+            assert_eq!(layout.rows[1][8], 0x23, "{primary:02x}");
+            assert!(layout.base_glyphs().is_empty());
+        } else {
+            assert_eq!(
+                layout.rows[1][8], b' ',
+                "{primary:02x}: £ must not become another national glyph"
+            );
+            assert_eq!(layout.base_glyphs().len(), 1);
+            assert_eq!(
+                TeletextColumnOperation::from(&layout.base_glyphs()[0]),
+                TeletextColumnOperation::G2 {
+                    code: TeletextGlyphCode::new(0x23).unwrap()
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn all_assigned_latin_aliases_encode_unicode_without_optional_resource_banks() {
+    const A: [u16; 10] = [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0];
+    let mut cases = Vec::new();
+    for primary in (0..=0x7f).filter(|&code| {
+        TeletextPageCharsetDesignation::new(code)
+            .is_ok_and(|primary| primary.pair() == TeletextCharsetPair::LatinLatin)
+    }) {
+        let mut draft = draft(primary);
+        draft.base.pages[0].rows = rows("A£@#éÄçí");
+        let declared = declare(draft);
+        let encoded = encode_teletext_authored_service(declared.clone(), &[], &limits()).unwrap();
+        assert_eq!(encoded.declared(), &declared);
+        assert!(encoded.compiler_drcs_resources().is_empty());
+        assert!(encoded.magazine_units().is_empty());
+        assert_eq!(encoded.pages().len(), 1);
+        let EncodedTeletextAuthoredPage::CompiledDisplay(display) = &encoded.pages()[0] else {
+            panic!("the Unicode replacement fixture requires X26")
+        };
+        let raster = render_teletext_composition(
+            display.normalized().original(),
+            TeletextColourPixelOptions {
+                reveal_concealed: false,
+                flash_phase: TeletextFlashPhase::Original,
+            },
+            TeletextRasterBudget {
+                max_pixels: 120_000,
+                max_diagnostics: 1400,
+            },
+        )
+        .unwrap();
+        assert!(raster.diagnostics().is_empty());
+        // A fixed invariant glyph has an absolute atlas oracle. National atlas
+        // letters and composed diacritics may differ in vertical fitting (the
+        // glyph-mask contract); cross-font pixel equality is not an oracle.
+        for (y, mask) in A.into_iter().enumerate() {
+            for x in 0..12 {
+                let expected = if mask & (1 << (11 - x)) != 0 {
+                    [15, 15, 15]
+                } else {
+                    [0, 0, 0]
+                };
+                assert!(
+                    matches!(raster.pixel(8*12+x,10+y), Some(TeletextRasterPixel::Colour(TeletextColourPixel::Rgb(rgb))) if rgb.get()==expected)
+                );
+            }
+        }
+        let mut units = encoded.pages()[0].data_units().to_vec();
+        units.push(super::super::packets::terminator(2));
+        cases.push(json!({"name":format!("unicode_{primary:02x}"),"primary":primary,"page":0x200,"subcode":0,
+            "units":units.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>()}));
+    }
+    assert_eq!(cases.len(), 27);
+    if let Some(path) =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_REGIONAL_UNICODE_FIXTURE"])
+    {
+        std::fs::write(path, serde_json::to_vec(&json!({"cases":cases})).unwrap()).unwrap();
+    }
+}
+
+#[test]
+fn qualified_national_unicode_keeps_its_native_level1_cells() {
+    // Literal Table36 scalar inputs. Blanks leave unresolved Unicode aliases
+    // unclaimed; all thirteen original coded cells have separate raw fixtures.
+    const TEXTS: [&str; 13] = [
+        "£$@←½→↑#—¼‖¾÷",
+        "#$§ÄÖÜ^_°äöüß",
+        "#¤ÉÄÖÅÜ_éäöåü",
+        "£$é°ç→↑#ùàòèì",
+        "éïàëêùî#èâôûç",
+        "ç$¡áéíóú¿üñèà",
+        "#ůčťžýířéáěúš",
+        "#ńą ŚŁćóężśłź",
+        " ğİŞÖÇÜĞışöçü",
+        "#ËČĆŽ Šëčćž š",
+        "# ŢÂŞ  ıţâş î",
+        "#õŠÄÖŽÜÕšäöžü",
+        "#$Šė Žčūšąųžį",
+    ];
+    let mut cases = Vec::new();
+    for ((primary, _), text) in SUBSETS.into_iter().zip(TEXTS) {
+        assert_eq!(text.chars().count(), 13);
+        let mut draft = draft(primary);
+        draft.base.pages[0].rows = vec![TeletextRow {
+            row: 1,
+            runs: vec![TeletextRun {
+                column: 2,
+                style: TeletextStyle::default(),
+                content: TeletextRunContent::Text { text: text.into() },
+            }],
+        }];
+        let declared = declare(draft);
+        let encoded = encode_teletext_authored_service(declared.clone(), &[], &limits()).unwrap();
+        assert_eq!(encoded.declared(), &declared);
+        assert!(encoded.compiler_drcs_resources().is_empty());
+        assert!(matches!(
+            &encoded.pages()[0],
+            EncodedTeletextAuthoredPage::NativeDisplay(_)
+        ));
+        let expected: Vec<_> = text
+            .chars()
+            .zip(CODES)
+            .map(|(ch, code)| if ch == ' ' { b' ' } else { code })
+            .collect();
+        let actual = encoded.pages()[0]
+            .data_units()
+            .iter()
+            .find(|u| packet(u) == 1)
+            .unwrap();
+        assert_eq!(&body(actual).map(|c| c & 0x7f)[2..15], expected);
+        let mut units = encoded.pages()[0].data_units().to_vec();
+        units.push(super::super::packets::terminator(2));
+        cases.push(json!({"name":format!("native_unicode_{primary:02x}"),"primary":primary,"page":0x200,"subcode":0,"text":text,
+            "units":units.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>()}));
+    }
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_NATIVE_NATIONAL_UNICODE_FIXTURE",
+    ]) {
+        std::fs::write(path, serde_json::to_vec(&json!({"cases":cases})).unwrap()).unwrap();
+    }
+}

@@ -2,11 +2,15 @@
 
 use unicode_normalization::char::{compose, decompose_canonical};
 
+use ersatzrs_domain::TeletextPageCharsetDesignation;
+
 const NATIONAL_CODES: [u8; 13] = [
     0x23, 0x24, 0x40, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x7b, 0x7c, 0x7d, 0x7e,
 ];
-// Normative character repertoires, indexed by table 32 region-zero option.
-const NATIONAL: [&str; 7] = [
+// Table36 scalar positions; first seven retain the region-zero index. NUL is
+// an explicitly unqualified Unicode alias, never an encodable character. Exact
+// coded rows can still carry those original glyphs without inventing an alias.
+const NATIONAL: [&str; 13] = [
     "£$@←½→↑#—¼‖¾÷",
     "#$§ÄÖÜ^_°äöüß",
     "#¤ÉÄÖÅÜ_éäöåü",
@@ -14,7 +18,33 @@ const NATIONAL: [&str; 7] = [
     "éïàëêùî#èâôûç",
     "ç$¡áéíóú¿üñèà",
     "#ůčťžýířéáěúš",
+    "#ńą\0ŚŁćóężśłź",
+    "\0ğİŞÖÇÜĞışöçü",
+    "#ËČĆŽ\0Šëčćž\0š",
+    "#\0ŢÂŞ\0\0ıţâş\0î",
+    "#õŠÄÖŽÜÕšäöžü",
+    "#$Šė\0Žčūšąųžį",
 ];
+
+/// Table32 aliases select the actual Table36 subset, never only header bits.
+pub(super) const fn unicode_national_subset(primary: TeletextPageCharsetDesignation) -> Option<u8> {
+    Some(match primary.get() {
+        0x00 | 0x10 | 0x40 => 0,
+        0x01 | 0x09 | 0x11 | 0x21 => 1,
+        0x02 | 0x0a | 0x12 => 2,
+        0x03 | 0x0b | 0x13 => 3,
+        0x04 | 0x0c | 0x14 | 0x44 => 4,
+        0x05 | 0x15 => 5,
+        0x06 | 0x0e | 0x26 => 6,
+        0x08 => 7,
+        0x16 | 0x36 => 8,
+        0x1d => 9,
+        0x1f => 10,
+        0x22 => 11,
+        0x23 => 12,
+        _ => return None,
+    })
+}
 
 /// A Level 1 byte, optionally overwritten by an exact Level 1.5 character.
 #[derive(Debug, Clone, Copy)]
@@ -25,7 +55,10 @@ pub(super) struct Character {
 
 pub(super) fn encode(character: char, national: u8) -> Option<Character> {
     let subset = NATIONAL.get(usize::from(national))?;
-    if let Some(index) = subset.chars().position(|value| value == character) {
+    if let Some(index) = subset
+        .chars()
+        .position(|value| value != '\0' && value == character)
+    {
         return Some(Character {
             fallback: NATIONAL_CODES[index],
             enhancement: None,
