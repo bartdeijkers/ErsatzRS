@@ -753,6 +753,31 @@ Source replacement/rescan reconciles stale pages without deleting unrelated
 subtitle or alternate-audio state. Subpages carry updates to the same selected
 page; they do not automatically become new subtitle preferences.
 
+### Finite source-caption EOF
+
+Maintainer decision (2026-10-19): when a complete finite Local source ends with
+a nonempty selected caption and no later update/clear, retain that last caption
+until the demonstrable presentation end of the selected video, clipped by any
+earlier programme/outpoint. Preserve the original source clock and cache isolation.
+Neither format duration, last PCR, another video track nor an arbitrary timeout
+establishes that presentation end. Unknown end evidence remains an explicit
+preparation failure, not permission to omit the caption or harm ordinary playback.
+
+The finite Next text adapter retains its ordinary fixed-duration decode. Only
+an infinite final event can use a second native text decode without duration
+fixing: all event starts/durations, previous text and fixed cue intervals must
+agree before the missing final text is recovered. A complete retained-snapshot
+video decode must match the selected index/PID/program and provide ordered PTS
+and positive frame durations without reported frame errors. Its presentation
+end is normalized against the held original format origin using checked rational
+arithmetic; ambiguous millisecond rounding rejects. SRT uses its existing
+millisecond precision. Existing programme/outpoint clipping remains downstream.
+The versioned clock policy and selected video identity separate cached results;
+occurrence seeks/cuts do not change complete-source text. Additional passes use
+the existing absolute deadline, work/source/snapshot ownership and joined cleanup.
+P9A-04 owns scoped runtime proof; this policy does not establish the remaining
+provider, native-output/platform or full engine acceptance.
+
 ### Authored DVB transport
 
 Implement standards-based encoding in safe Rust within the existing FFmpeg

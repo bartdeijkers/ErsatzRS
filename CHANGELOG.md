@@ -854,6 +854,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve a finite Local teletext caption in Next without a final clear through the
+  proven selected-video presentation end, clipped by earlier programme cuts.
+  Keep prior text and clocks exact, isolate caches by video and clock policy,
+  and retain bounded preparation and cleanup. Linux Next copy/alternate-audio
+  evidence is scoped; remaining native/output/platform acceptance stays open.
 - Compile declared teletext pages whose MOT defaults belong to a different
   object bank than the selected explicit link when Base compatibility requires
   X/26. Preserve original defaults, object identities, full effects and fallback

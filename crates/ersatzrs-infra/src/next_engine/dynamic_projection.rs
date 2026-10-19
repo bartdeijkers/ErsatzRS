@@ -246,6 +246,18 @@ pub(crate) async fn fingerprint(
             .as_object_mut()
             .ok_or_else(unavailable)?
             .insert("source_teletext".to_owned(), text.identity());
+        // EOF text depends on the actual selected video, never another track's
+        // or a previous clock policy's cached presentation end.
+        binding.as_object_mut().ok_or_else(unavailable)?.insert(
+            "source_teletext_video".to_owned(),
+            source_text_video_identity(
+                projection
+                    .item
+                    .tracks
+                    .as_ref()
+                    .and_then(|tracks| tracks.video.as_ref()),
+            ),
+        );
     }
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
@@ -259,6 +271,16 @@ pub(crate) async fn fingerprint(
         }))?,
         cache_key: digest(&binding)?,
     })
+}
+
+fn source_text_video_identity(video: Option<&super::protocol::Track>) -> serde_json::Value {
+    json!(video.map(|video| {
+        let path = match video.source.as_ref() {
+            Some(Source::Local { path, .. }) => Some(path),
+            _ => None,
+        };
+        json!({"index": video.stream_index, "path": path})
+    }))
 }
 
 pub(super) fn digest(value: &serde_json::Value) -> Result<String> {

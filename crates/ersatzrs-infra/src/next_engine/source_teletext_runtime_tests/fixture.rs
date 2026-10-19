@@ -56,7 +56,7 @@ pub(super) async fn source_with_untransmitted_caption(ffmpeg: &Path, root: &Path
     clip
 }
 
-async fn source_inner(
+pub(super) async fn source_inner(
     ffmpeg: &Path,
     root: &Path,
     mux_rate: Option<u32>,

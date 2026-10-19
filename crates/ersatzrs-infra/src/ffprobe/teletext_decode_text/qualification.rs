@@ -6,6 +6,10 @@ use tokio::time::Instant;
 
 use super::{FfprobeCommand, PreparedLocalTeletextSource, SourceTeletextPageDecodeError};
 
+#[path = "eof.rs"]
+mod eof;
+pub(super) use eof::{recover, video_command, video_end};
+
 #[derive(Deserialize)]
 struct Output {
     streams: Vec<super::super::Stream>,
@@ -32,6 +36,17 @@ pub(super) fn check(
     content: &str,
     deadline: Instant,
 ) -> Result<(), SourceTeletextPageDecodeError> {
+    let (output, origin) = output(source, bytes)?;
+    if cues(content)? != expected(&output.frames, origin, deadline)? {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn output(
+    source: &PreparedLocalTeletextSource,
+    bytes: &[u8],
+) -> Result<(Output, (i64, i64)), SourceTeletextPageDecodeError> {
     let output: Output = serde_json::from_slice(bytes).map_err(|_| invalid())?;
     if output.frames.is_empty()
         || output.frames.len() > super::super::MAX_FRAMES
@@ -69,16 +84,31 @@ pub(super) fn check(
             crate::ffprobe::teletext_origin::NativeSourceTime::ffprobe_n9_format_microsecond_bounds,
         )
         .ok_or_else(invalid)?;
-    if cues(content)? != expected(&output.frames, origin, deadline)? {
-        return Err(invalid());
-    }
-    Ok(())
+    Ok((output, origin))
+}
+
+/// No synthetic EOF policy is needed for a real clear or finite final event.
+pub(super) fn needs_eof_end(bytes: &[u8]) -> Result<bool, SourceTeletextPageDecodeError> {
+    let output: Output = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+    Ok(output
+        .frames
+        .last()
+        .is_some_and(|frame| frame.num_rects != 0 && frame.end_display_time == u32::MAX))
 }
 
 fn expected(
     frames: &[Frame],
     origin: (i64, i64),
     deadline: Instant,
+) -> Result<Vec<(i64, i64)>, SourceTeletextPageDecodeError> {
+    expected_with_end(frames, origin, deadline, None)
+}
+
+fn expected_with_end(
+    frames: &[Frame],
+    origin: (i64, i64),
+    deadline: Instant,
+    video_end: Option<i64>,
 ) -> Result<Vec<(i64, i64)>, SourceTeletextPageDecodeError> {
     if frames.is_empty() || frames.len() > super::super::MAX_FRAMES {
         return Err(invalid());
@@ -110,7 +140,13 @@ fn expected(
                 .map_err(|_| invalid())?
                 .min(frame.end_display_time),
             None if frame.end_display_time != u32::MAX => frame.end_display_time,
-            None => return Err(invalid()), // FFmpeg fix_sub_duration cannot certify a queued infinite last cue.
+            None => u32::try_from(
+                video_end
+                    .ok_or_else(invalid)?
+                    .checked_sub(normalized(pts, origin)?)
+                    .ok_or_else(invalid)?,
+            )
+            .map_err(|_| invalid())?,
         };
         if duration <= frame.start_display_time {
             return Err(invalid());

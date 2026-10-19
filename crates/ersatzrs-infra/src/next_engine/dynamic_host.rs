@@ -260,6 +260,7 @@ impl NextHost {
                 super::source_teletext::Preparation {
                     pending: text,
                     source: &pending.source,
+                    video: before.projection.selected_video(),
                     key: &before.identity.cache_key,
                     expires: before.projection.item.finish.max(Utc::now()),
                     ffmpeg: &request.ffmpeg,

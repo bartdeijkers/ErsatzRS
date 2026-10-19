@@ -32,6 +32,10 @@ pub(crate) struct DeferredProjection {
 }
 
 impl DeferredProjection {
+    pub(super) fn selected_video(&self) -> Option<&wire::Track> {
+        self.item.tracks.as_ref()?.video.as_ref()
+    }
+
     pub(super) fn publish_graphics(
         &mut self,
         relay: &super::media::MediaRelay,

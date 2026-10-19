@@ -172,7 +172,7 @@ def generate_caption_lifecycle_fixture():
     return bytes(transport.output)
 
 
-def generate_two_caption_fixture(first_dutch_cycle=0):
+def generate_two_caption_fixture(first_dutch_cycle=0, final_clear=True):
     """Two subtitle pages on one PID, without a forced/default descriptor claim."""
     transport = FixtureTransport()
     pages = [(b"eng", 888, b"\x0b\x0bENGLISH PAGE 888\x0a\x0a"),
@@ -197,7 +197,7 @@ def generate_two_caption_fixture(first_dutch_cycle=0):
     # Positive wire clear completes the last finite nonempty caption. Silence
     # or an EOF is not a substitute for a transmitted page update.
     transport.tables([(language, page) for language, page, _ in pages])
-    if first_dutch_cycle is not None:
+    if first_dutch_cycle is not None and final_clear:
         pts = 90000 + cycles * 90000 + 36000
         transport.pes([data_unit(889, 0, page_header(889, True), True)], pts)
         transport.pes([data_unit(889, row, page_row(b""), True) for row in range(1, 25)], pts + 3600)
@@ -215,16 +215,22 @@ def generate_untransmitted_caption_fixture():
     return generate_two_caption_fixture(first_dutch_cycle=None)
 
 
+def generate_unclosed_caption_fixture():
+    """Retain the last nonempty Dutch page through physical EOF, without a clear."""
+    return generate_two_caption_fixture(final_clear=False)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="Destination TS fixture")
-    parser.add_argument("--scenario", choices=("default", "caption-lifecycle", "two-captions", "late-caption", "untransmitted-caption"),
+    parser.add_argument("--scenario", choices=("default", "caption-lifecycle", "two-captions", "late-caption", "untransmitted-caption", "unclosed-caption"),
                         default="default", help="Optional source-state qualification scenario")
     args = parser.parse_args()
     scenarios = {"default": generate_fixture,
                  "caption-lifecycle": generate_caption_lifecycle_fixture,
                  "two-captions": generate_two_caption_fixture,
                  "late-caption": generate_late_caption_fixture,
-                 "untransmitted-caption": generate_untransmitted_caption_fixture}
+                 "untransmitted-caption": generate_untransmitted_caption_fixture,
+                 "unclosed-caption": generate_unclosed_caption_fixture}
     fixture = scenarios[args.scenario]()
     args.output.write_bytes(fixture)

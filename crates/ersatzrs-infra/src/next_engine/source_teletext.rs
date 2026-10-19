@@ -34,7 +34,7 @@ use super::{
     schedule::ScheduledMedia,
 };
 
-pub(super) const CLOCK_POLICY: &str = "complete-source-copyts-start-at-zero-srt-v1";
+pub(super) const CLOCK_POLICY: &str = "complete-source-copyts-selected-video-eof-srt-v2";
 
 /// Database intent only. This is deliberately neither serialized nor a ready Track.
 pub(crate) struct PendingText {
@@ -127,6 +127,7 @@ pub(super) async fn pending(
 pub(super) struct Preparation<'a> {
     pub(super) pending: &'a PendingText,
     pub(super) source: &'a Source,
+    pub(super) video: Option<&'a super::protocol::Track>,
     pub(super) key: &'a str,
     pub(super) expires: DateTime<Utc>,
     pub(super) ffmpeg: &'a Path,
@@ -278,6 +279,17 @@ where
                     .prepare_local_teletext_text(
                         source,
                         request.ffmpeg,
+                        request
+                            .video
+                            .and_then(|video| match (&video.source, request.source) {
+                                (
+                                    Some(Source::Local {
+                                        path: video_path, ..
+                                    }),
+                                    Source::Local { path, .. },
+                                ) if video_path == path => video.stream_index,
+                                _ => None,
+                            }),
                         request.deadline,
                         build_hold.clone(),
                     )

@@ -3,6 +3,38 @@ use chrono::Duration;
 use ersatzrs_core::locking::PlayoutLockGuard;
 use ersatzrs_domain::{Channel, ChannelSubtitleMode};
 
+#[test]
+fn finite_source_text_cache_fences_selected_video_but_keeps_occurrence_independence() {
+    let mut video = super::super::protocol::Track {
+        stream_index: Some(0),
+        source: Some(Source::Local {
+            path: "source.ts".into(),
+            probe_hint: None,
+            in_point_ms: Some(2000),
+            out_point_ms: Some(9200),
+        }),
+    };
+    let initial = source_text_video_identity(Some(&video));
+    if let Some(Source::Local {
+        in_point_ms,
+        out_point_ms,
+        ..
+    }) = &mut video.source
+    {
+        *in_point_ms = Some(10000);
+        *out_point_ms = Some(17000);
+    }
+    assert_eq!(source_text_video_identity(Some(&video)), initial);
+    video.stream_index = Some(4);
+    assert_ne!(source_text_video_identity(Some(&video)), initial);
+    video.stream_index = Some(0);
+    if let Some(Source::Local { path, .. }) = &mut video.source {
+        *path = "other.ts".into();
+    }
+    assert_ne!(source_text_video_identity(Some(&video)), initial);
+    assert_ne!(source_text_video_identity(None), initial);
+}
+
 async fn fixture() -> (
     DbPool,
     EntityLocker,

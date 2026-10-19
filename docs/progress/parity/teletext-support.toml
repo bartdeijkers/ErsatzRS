@@ -5,8 +5,7 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
-QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns F/V/X; flows are partial proof.
+QTM TTI/metadata interchange, TSDuck, independent decoding and client display/navigation. Kodi is optional. P9A-04 owns F/V/X; flows are partial proof.
 
 Typed services, provenance, resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
@@ -55,7 +54,7 @@ remain. Composed27 native Windows caption/provider/RTSP/image and refusal checks
 pass after a fixture-only portable-path correction; Linux affected case/guards,
 strict lint/fmt pass. Actual Linux callback replacement/rescan now proves503/no
 stale artifact and fresh FINAL FRESH AV/audio/cue delivery; sameHTTP recovery is
-not claimed. EOF end-policy/native proof, macOS/platform/output/adoption remain.
+not claimed. Local EOF now retains the final cue to proven video end/earlier cuts; platform/adoption remain.
 X1 work is maintainer-deferred; X3 waits for
 upstream editor support. No waiver; F5/charset remains open.
 

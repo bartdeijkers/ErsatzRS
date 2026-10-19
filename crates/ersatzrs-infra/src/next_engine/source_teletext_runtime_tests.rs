@@ -11,6 +11,9 @@ mod clock;
 #[path = "source_teletext_runtime_tests/fixture.rs"]
 mod fixture;
 
+#[path = "source_teletext_runtime_tests/eof.rs"]
+mod eof;
+
 // The bounded executable decoder gate intentionally requires Unix permissions.
 #[cfg(unix)]
 #[path = "source_teletext_runtime_tests/replacement.rs"]

@@ -74,6 +74,7 @@ impl FfprobeExtractor {
         &self,
         source: Arc<PreparedLocalTeletextSource>,
         ffmpeg: &Path,
+        video_stream_index: Option<u32>,
         deadline: Instant,
         hold: TeletextWorkHold,
     ) -> Result<SourceTeletextTextPreparation, SourceTeletextPageDecodeError> {
@@ -120,20 +121,53 @@ impl FfprobeExtractor {
             Some(deadline),
             Some(
                 local::ProbeRetention::new(hold.clone(), source.guard.clone())
-                    .with_shared_snapshot(snapshot),
+                    .with_shared_snapshot(snapshot.clone()),
             ),
         )
         .await
         .map_err(probe_error)?;
-        let content = crate::subtitles::rebase_text_cues_milliseconds(
-            bytes,
-            ersatzrs_ffmpeg::SubtitleTextFormat::Srt,
-            0,
-            MAX_TEXT_BYTES,
-        )
-        .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)?
-        .ok_or(SourceTeletextPageDecodeError::InvalidOutput)?;
-        qualification::check(&source, &frames, &content, deadline)?;
+        let needs_end = qualification::needs_eof_end(&frames)?;
+        let mut content = if needs_end && bytes.is_empty() {
+            String::new()
+        } else {
+            normalize(bytes)?
+        };
+        if needs_end {
+            let index = video_stream_index.ok_or(SourceTeletextPageDecodeError::InvalidOutput)?;
+            let video = local::capture_retained(
+                qualification::video_command(&self.ffprobe_path, index, snapshot.path())?,
+                "finite source teletext selected video end".into(),
+                Some(deadline),
+                Some(
+                    local::ProbeRetention::new(hold.clone(), source.guard.clone())
+                        .with_shared_snapshot(snapshot.clone()),
+                ),
+            )
+            .await
+            .map_err(probe_error)?;
+            let end = qualification::video_end(&source, index, &video, deadline)?;
+            let raw = local::capture_retained(
+                raw_text_command(ffmpeg, &source.request, snapshot.path())?,
+                "finite source teletext final text".into(),
+                Some(deadline),
+                Some(
+                    local::ProbeRetention::new(hold.clone(), source.guard.clone())
+                        .with_shared_snapshot(snapshot),
+                ),
+            )
+            .await
+            .map_err(probe_error)?;
+            content = qualification::recover(
+                &source,
+                &frames,
+                &content,
+                &normalize(raw)?,
+                end,
+                deadline,
+            )?;
+        } else {
+            qualification::check(&source, &frames, &content, deadline)?;
+        }
         source.check_source(deadline, hold).await?;
         Ok(SourceTeletextTextPreparation::Ready(
             SourceTeletextTextArtifact {
@@ -143,6 +177,28 @@ impl FfprobeExtractor {
             },
         ))
     }
+}
+
+fn normalize(bytes: Vec<u8>) -> Result<String, SourceTeletextPageDecodeError> {
+    crate::subtitles::rebase_text_cues_milliseconds(
+        bytes,
+        ersatzrs_ffmpeg::SubtitleTextFormat::Srt,
+        0,
+        MAX_TEXT_BYTES,
+    )
+    .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)?
+    .ok_or(SourceTeletextPageDecodeError::InvalidOutput)
+}
+
+fn raw_text_command(
+    ffmpeg: &Path,
+    request: &super::SourceTeletextPageDecodeRequest,
+    snapshot: &Path,
+) -> Result<FfprobeCommand, SourceTeletextPageDecodeError> {
+    let mut command = text_command(ffmpeg, request, snapshot)?;
+    let option = format!("-fix_sub_duration:{}", request.stream_index);
+    command.args.retain(|arg| arg != &option);
+    Ok(command)
 }
 
 fn text_command(
@@ -234,6 +290,31 @@ text
 mpegts
 -i
 synthetic-source-window.ts
+-map
+0:2
+-c:s
+srt
+-f
+srt
+pipe:1
+");
+        let raw =
+            raw_text_command(Path::new("ffmpeg"), &request, Path::new("held-source.ts")).unwrap();
+        insta::assert_snapshot!(raw.args.join("\n"), @r"
+-nostdin
+-hide_banner
+-loglevel
+error
+-copyts
+-start_at_zero
+-txt_page:2
+889
+-txt_format:2
+text
+-f
+mpegts
+-i
+held-source.ts
 -map
 0:2
 -c:s

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 EOF policy decision pending; independent F3 context qualification, X1 deferred/X3 awaits upstream'
+current_focus = 'P9A-04 finite EOF checkpoint closeout, then standalone Level 1/1.5 acceptance before complete Level 2.5'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -195,22 +195,29 @@ at UINT32MAX. Complete500H264 and bothAAC packet payloads remain identical; AV
 decode succeeds. Existing product qualification refuses unknownend. This is a
 native decoder precondition, no actualNext delivery or EOF acceptance claim.
 
-Required policy decision is pending: hold the last cue until a trustworthy
-selected-video presentation end clipped by earlier programme/outpoint boundaries,
-with exact sourceclock/cache isolation, or defer that choice and keep the gap
-open under current explicit refusal. Do not invent a duration or treat elapsed
-time as approval. No permanent limitation/scope waiver is accepted. While this
-blocks dependent EOF work, independently qualify one named remaining F3 authored
-context/publish case from its current canonical receipt; no whole-phase audit,
-client/editor maintenance or small editor-variant loop. No new source change is
-started for EOF. All relevant runtime/build/check processes are terminal; the
-existing agent performs only a bounded original-secondary clause assessment.
-The prior F3 lookup found no new fixed-oracle product RED: header/MOT leads are
-superseded and cross-emitter C2 remains an intentional strict negative. Locate
-the original-secondary rejection branch and exact EN300706 state clause before
-choosing a lawful programme and expected physical cells; no guessed colour or
-new variant loop. F6 stays closed absent regression. macOS/native/platform/output/
-adoption gates remain open; managed.1 unchanged.
+Maintainer2026-10-19 explicitly chooses selected-video presentation end clipped
+by earlier programme/outpoint. The scoped EOF implementation keeps the original
+fixed-duration decode and recovers only its missing final text after exact native
+event/text/prefix and selected-video frame qualification. Policy/video identity
+fences the cache; complete-source text still ignores occurrence seeks/cuts.
+Final48d8d4f9 passes11 pure/snapshot/cache cases plus one actual Linux Next case
+with earlier9.2s and20.559s video-end subcases, exact H264/DutchAAC/cues/cleanup.
+Preserve timeout and normalizer RED; the second native run's20.560s expected end
+was a fixture arithmetic error: exact video ticks yield20.5594s, nearest SRTms
+20.559. No tolerance or production timing change followed that correction.
+Canonical eof_unclosed_followup/implementation_followup owns final controls/lint.
+Broader provider/live/browser/charset/output/platform/adoption remain open.
+
+The bounded F3 original-secondary assessment is complete: EN300706 AnnexD.2.1(2)
+leaves absent X28/M29 second-language defaults decoder-dependent. Existing code
+preserves Header/POP absence without guessing a sentinel/glyph; both regressions
+pass (f91ab796). Canonical tmp/phase9-header-c2/identity.json/
+original_secondary_followup records this classification, not a new product fix
+or fullF3 acceptance. ad28cd81 original/Base/physical oracles stay unchanged.
+The newer maintainer instruction now prioritizes a separately testable standalone
+Level1/1.5 delivery boundary before full2.5, preserving every final criterion.
+Next update existing ADR0123/P9A-04 acceptance from current F/V/X/evidence only;
+no general audit or new plan. F6 stays closed absent regression; managed.1 unchanged.
 
 Maintainer2026-10-19 defers further X1 suitable-client work and chooses to wait
 for upstream QTM support under X3. No vendor contact/trial/purchase, external

@@ -78,6 +78,7 @@ pub(super) async fn prepare_complete_text(
                 .prepare_local_teletext_text(
                     std::sync::Arc::new(source),
                     ffmpeg,
+                    Some(0),
                     deadline,
                     work.hold_work(),
                 )
@@ -239,6 +240,7 @@ impl Fixture {
             source_teletext::Preparation {
                 pending: text,
                 source: &pending.source,
+                video: before.projection.selected_video(),
                 key: &before.identity.cache_key,
                 expires: before.projection.item.finish,
                 ffmpeg: decoder,
