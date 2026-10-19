@@ -6,7 +6,7 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns acceptance/F/V/X. Flows are not full acceptance.
+rendering/navigation. Kodi is optional. P9A-04 owns F/V/X; flows are partial proof.
 
 Typed services, provenance, resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
@@ -38,14 +38,15 @@ remain distinct; enlarged clients, hydration, Hebrew and general acquisition
 stay open. No decoder-repair expansion.
 
 Producer contracts retain selection/model/deadline fences, aggregate quotas,
-persistence and cancellation ownership. Two-channel themes, Lua Continue,
-finite Off/base restoration/restart and acknowledged resource updates have
-scoped proof. MAIN On→Base passes; Off→Base emission passes but VLC needs reselection.
+persistence and cancellation ownership. Two-channel themes, Lua Continue and
+Refresh/Reset timing/rollback have durable proof; full restart stays open.
+Off/Base and resource updates retain scope. MAIN On→Base passes;
+Off→Base emission passes but VLC needs reselection.
 Broader error/restart/client, work bounds, resource retirement,
 Header/POP uncertainty and open-client shutdown remain open. F6 default2 Copy/DVB handoff passes;
  tmp/phase9-f6-native-carriage/work.json owns runtime/admin/ownership,
 lint and smoke/TSDuck87/87 proof.
-Captured regions/bindings have native/localized headed proof.
+Regions/bindings have native/headed proof.
 
 P9A-03 owns source acquisition/leases; missing stays NotAcquired and descriptors/
 PTS grant no readiness. Local888 native/Hybrid caption proof keeps its scope.

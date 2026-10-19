@@ -269,6 +269,8 @@ release section when tagging a release.
   preserving target revisions, rollback, expiry and restart observations.
   Fresh Continue builds reload the channel base after reopening while retaining
   the earlier profile intervals and programme checkpoints.
+  Durable Lua rebuild checks now cover Refresh, preserving and replacing Reset,
+  exact On/Off boundaries and unchanged published schedules after script errors.
   Bound the actual worker and snapshot reads; active overrides cannot emit a
   stale base artifact. Localized Health explains unavailable selections and pages
   that are not ready, with headed proof in every culture and both themes. Scoped

@@ -17,7 +17,7 @@ use ersatzrs_infra::repositories::{SqlitePlayoutRepository, SqliteSchedulingCont
 use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Debug, PartialEq)]
-struct Configuration {
+pub(super) struct Configuration {
     bindings: Vec<(i64, String, i64, bool, i64)>,
     settings: Vec<(String, Option<String>)>,
     profiles: Vec<TeletextProfileRead>,
@@ -25,7 +25,7 @@ struct Configuration {
 }
 
 impl Configuration {
-    async fn read(fixture: &Fixture) -> Self {
+    pub(super) async fn read(fixture: &Fixture) -> Self {
         let app = &fixture.state.application;
         Self {
             bindings: bindings(fixture).await,
@@ -36,7 +36,7 @@ impl Configuration {
     }
 }
 
-async fn reference(fixture: &Fixture, channel: i64) -> SchedulingReferenceData {
+pub(super) async fn reference(fixture: &Fixture, channel: i64) -> SchedulingReferenceData {
     SqliteSchedulingContentRepository::new(fixture.state.pool.clone())
         .scripted_reference_data(92 + channel, BTreeMap::new(), None)
         .await
@@ -98,7 +98,7 @@ async fn continue_from_storage(
         .unwrap()
 }
 
-async fn assert_no_activation(fixture: &mut Fixture) {
+pub(super) async fn assert_no_activation(fixture: &mut Fixture) {
     assert_no_publication_or_invocation(fixture).await;
     for statement in [
         r#"SELECT COUNT(*) FROM "TeletextEffectivePublicationRequestCurrent""#,
