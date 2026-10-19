@@ -133,6 +133,31 @@ execution and production adoption remain separate. F6 stays closed absent a
 concrete regression; unused-object removal stays deferred. No small editor-variant
 loop, production guide, push or publication.
 
+F5 followup after7603285d fixes a demonstrated candidate.2 defect: native Windows
+ordinarySRT finalcue ends56ms early on the identicalb0c58 source after AV/audio
+and earlier-cue checks pass. The original negative and package are retained.
+The helper incorrectly shifts an immutable full-source outpoint backward for a
+negative copylanding. Candidate.3 shifts only partial-pass ends, keeping the
+mapping cursor and complete source trim fixed. Separate negative full/partial/
+independent-origin controls produce6pass/2fail before correction;26 focused
+source/playlist cases and strict Next all-target Clippy pass afterward.
+
+Canonical shared_copy_sourceout_followup/native_windows_playback_followup in
+ tmp/phase9-next-local-teletext/work.json owns exact source/patch/lock/tool hashes,
+original native/pure RED,26 green, reproduction and package/native proof.
+Four refreshed candidate.3 archives pass provenance; Linux GLIBCmax2.34 and
+actual offline/read-only Bookworm x64 startup pass. Both unchanged ordinarySRT
+and late889 oracles pass on actual unpacked native Windows AND Linux candidates,
+with exact cues/source clocks, selected copiedAV/audio, cache and joined cleanup.
+ARM builds remain crossbuilds. Prior18 broad compatibility receipts retain their
+predecessor/unchanged-path scope; no full.3 six-RID/adoption acceptance follows.
+The native source checkout is exact7603285d; temporary Nextest0.9.140 matches Linux
+and is digest-verified/process-PATH only. No global install/target override or
+permanent policy change; all relevant checks terminal. Next localcheckpoint,
+then remaining native Windows caption/output-policy gates via the existing warm
+checkout. macOS artifacts/environments and broader native/compatibility/adoption,
+X1/X3 and every9A clause remain open. No push/publication.
+
 Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
 (docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).
 All generic engine acceptance remains required; current F6 work is unchanged.

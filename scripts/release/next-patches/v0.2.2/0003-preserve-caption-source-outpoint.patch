@@ -50,7 +50,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
          }
          input_settings.video_copy_seek = Some(plan.seek);
  
-@@ -1945,6 +1958,24 @@
+@@ -1945,6 +1958,32 @@
      (finish - reached > SHORTFALL_TOLERANCE).then_some(reached)
  }
  
@@ -69,13 +69,21 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
 +            Some(value.saturating_sub(target - landing))
 +        }
 +    };
-+    Some((shift(start)?, shift(end)?.min(original_out)))
++    let start = shift(start)?;
++    // A full-source trim is not a pass cursor. Only intermediate pass edges
++    // follow the landing delta; the authored exclusive source cutoff is fixed.
++    let end = if end >= original_out {
++        original_out
++    } else {
++        shift(end)?.min(original_out)
++    };
++    Some((start, end))
 +}
 +
  /// Without an out point, the source runs for the scheduled duration.
  fn source_points_ms(item: &PlayoutItem, source: &PlayoutItemSource) -> (u64, u64) {
      let item_duration_ms = (item.finish - item.start).whole_milliseconds() as u64;
-@@ -2080,6 +2111,126 @@
+@@ -2080,6 +2119,143 @@
      }
  
      #[test]
@@ -88,16 +96,29 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
 +    }
 +
 +    #[test]
-+    fn copied_subtitle_negative_landing_delta_retains_shifted_pass_edge() {
++    fn copied_subtitle_negative_landing_keeps_original_full_source_out() {
 +        let ms = Duration::from_millis;
-+        assert_eq!(
-+            copy_subtitle_timing((ms(2559), ms(9200)), ms(2559), ms(2131), ms(9200)),
-+            Some((ms(2131), ms(8772)))
-+        );
-+        assert_eq!(
-+            copy_subtitle_timing((ms(100), ms(9200)), ms(2559), ms(2131), ms(9200)),
-+            Some((Duration::ZERO, ms(8772)))
-+        );
++        for (start, target, landing) in [(2559, 2559, 2131), (2615, 2615, 2559)] {
++            assert_eq!(
++                copy_subtitle_timing((ms(start), ms(9200)), ms(target), ms(landing), ms(9200)),
++                Some((ms(landing), ms(9200)))
++            );
++        }
++    }
++
++    #[test]
++    fn copied_subtitle_negative_partial_pass_retains_shifted_edge() {
++        let ms = Duration::from_millis;
++        for (start, target, landing, expected_start, expected_end) in [
++            (2559, 2559, 2131, 2131, 5572),
++            (2615, 2615, 2559, 2559, 5944),
++            (100, 2559, 2131, 0, 5572),
++        ] {
++            assert_eq!(
++                copy_subtitle_timing((ms(start), ms(6000)), ms(target), ms(landing), ms(9200)),
++                Some((ms(expected_start), ms(expected_end)))
++            );
++        }
 +    }
 +
 +    #[test]
@@ -114,6 +135,10 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
 +        let ms = Duration::from_millis;
 +        assert_eq!(
 +            copy_subtitle_timing((ms(100131), ms(107200)), ms(2131), ms(2559), ms(107200)),
++            Some((ms(100559), ms(107200)))
++        );
++        assert_eq!(
++            copy_subtitle_timing((ms(100615), ms(107200)), ms(2615), ms(2559), ms(107200)),
 +            Some((ms(100559), ms(107200)))
 +        );
 +    }

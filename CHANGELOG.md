@@ -868,6 +868,9 @@ release section when tagging a release.
   When the complete checked source never transmits an announced page, retain
   ordinary programme/audio/subtitle selection without inventing a ready caption.
   Source, publication, deadline and cleanup failures still refuse explicitly.
+  Reviewed Next candidates preserve full caption source cutoffs for either
+  keyframe-landing direction while retaining shifted intermediate pass limits.
+  Accepted runtime adoption remains separate from candidate verification.
 - Reject native source-teletext burn-in with video stream-copy during command
   construction, avoiding an incompatible FFmpeg filter/copy command. Verified
   caption carriage for copied video remains open.

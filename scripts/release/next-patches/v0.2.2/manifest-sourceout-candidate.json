@@ -3,7 +3,7 @@
   "upstream_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
   "source_archive_sha256": "2b3108b5b5d4d40ae243c6e98ce018f939ac17953dec0383fe664c8e49212742",
   "source_lock_sha256": "3ef515507bbaf4e75043f59ecee515abad16fb4a4be5c2c53f0e7b097dc37fbb",
-  "distribution_version": "0.2.2-4a0b59a-ersatzrs.2",
+  "distribution_version": "0.2.2-4a0b59a-ersatzrs.3",
   "adr": "0117",
   "patches": [
     {
@@ -24,10 +24,10 @@
     },
     {
       "file": "0003-preserve-caption-source-outpoint.patch",
-      "sha256": "bb33b50bbfef7edf6b8677cfdbd707cf05aeb717af80ac0a3da774cdc3a27fc2",
-      "retire_when": "Unpatched upstream passes the unchanged ordinary-SRT and source-teletext original-source-outpoint regressions with copied video and selected alternate audio, plus active-cue, pass-edge, compatibility and platform acceptance. Remove this patch, not the tests.",
+      "sha256": "72aff2ec4f91eb6c97572c56508114d119b02309806f33830ba37f184ed1002a",
+      "retire_when": "Unpatched upstream passes the unchanged ordinary-SRT and source-teletext original-source-outpoint regressions with copied video and selected alternate audio, with both keyframe-landing directions, complete source boundaries and genuine partial-pass edges, plus active-cue, compatibility and platform acceptance. Remove this patch, not the tests.",
       "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
-      "unpatched_regression": "Official checksum-verified Next0.2.2/tag4a0b59a reproduces exact FINAL source-out extension (f7b8af64); candidate passes unchanged ordinary-SRT8d16a912 and late-source-teletext7dac0380 controls, plus25 focused timing/playlist tests. Current upstream2ed7266d retains the same shifted-out block; no equivalent correction located.",
+      "unpatched_regression": "Official checksum-verified Next0.2.2/tag4a0b59a reproduces exact FINAL source-out extension (f7b8af64); candidate passes unchanged ordinary-SRT8d16a912 and late-source-teletext7dac0380 controls, plus25 focused timing/playlist tests. Reviewed upstream2ed7266d retains the same shifted-out block; no equivalent correction located. Native Windows candidate .2 also exposes a negative keyframe landing that shortens a complete immutable source end by56ms on byte-identical source; negative full/partial/independent-origin controls reproduce it. Candidate .3 preserves complete source ends and shifts only partial-pass edges; native/platform acceptance remains required.",
       "evidence": "docs/progress/milestones.toml (P9A-04/F5); canonical tmp/phase9-next-local-teletext/work.json/shared_copy_sourceout_followup"
     }
   ],
