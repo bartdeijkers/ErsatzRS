@@ -81,11 +81,21 @@ pub(super) async fn publish_fixture(pool: &crate::db::DbPool, clip: &Path) {
         INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","SourceUrl","ProviderLiveness","EffectiveLiveness","Published","MediaItemId")
           VALUES (11,1,'item','Fixture',4,0,'Fixture','https://example.test/unavailable',1,1,1,10);
     "#).execute(pool).await.unwrap();
+    let processed_root = crate::file_system_layout::addon_processed_media_folder();
+    // Published artifact paths use the portable slash-separated storage format.
     let relative = clip
-        .strip_prefix(crate::file_system_layout::addon_processed_media_folder())
+        .strip_prefix(&processed_root)
         .unwrap()
-        .to_str()
-        .unwrap();
+        .components()
+        .map(|part| part.as_os_str().to_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("/");
+    assert_eq!(
+        crate::addon_media_list_artifacts::confined_file(&processed_root, &relative)
+            .await
+            .expect("published fixture path must resolve before playback"),
+        clip
+    );
     let bytes = i64::try_from(tokio::fs::metadata(clip).await.unwrap().len()).unwrap();
     sqlx::query(r#"INSERT INTO "AddonMediaListArtifact" ("Id","AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","RelativePath","ByteLength","DurationMilliseconds","CreatedAt","UpdatedAt")
           VALUES (1,1,11,'fixture',1,2,?,?,60000,'2026-09-23','2026-09-23')"#)

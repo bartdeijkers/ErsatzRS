@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 candidate compatibility/platform adoption; F3 ad28cd81 verified, X1/X3 capability decisions open'
+current_focus = 'P9A-04 F5 final HTTP source/revision fence; native Windows caption/provider slice verified, X1 deferred/X3 awaits upstream'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -104,7 +104,8 @@ valid broad passes plus the two corrected helper passes. Final focused9 passes;
 canonical receipt records final lint/progress outcomes. No new client,
 editor/stream or full-F3/9A acceptance follows.
 
-X1/X3 now determine the completion route. Canonical end_blocker_followup in
+X1/X3 remain mandatory end gates; the later maintainer decisions below govern
+next work. Canonical end_blocker_followup in
  tmp/phase9-header-c2/identity.json records bounded primary-source qualification:
 DVBViewer Pro7.3.2.0 has HTTP/TS/page/subpage input/navigation, but required
 Local/POP/GPOP/MOT/X27/DRCS enlargement/panels remain unknown; its Level2.5 claim
@@ -133,7 +134,7 @@ execution and production adoption remain separate. F6 stays closed absent a
 concrete regression; unused-object removal stays deferred. No small editor-variant
 loop, production guide, push or publication.
 
-F5 followup after7603285d fixes a demonstrated candidate.2 defect: native Windows
+F5 local checkpoint4801d008 fixes a demonstrated candidate.2 defect: native Windows
 ordinarySRT finalcue ends56ms early on the identicalb0c58 source after AV/audio
 and earlier-cue checks pass. The original negative and package are retained.
 The helper incorrectly shifts an immutable full-source outpoint backward for a
@@ -153,10 +154,30 @@ ARM builds remain crossbuilds. Prior18 broad compatibility receipts retain their
 predecessor/unchanged-path scope; no full.3 six-RID/adoption acceptance follows.
 The native source checkout is exact7603285d; temporary Nextest0.9.140 matches Linux
 and is digest-verified/process-PATH only. No global install/target override or
-permanent policy change; all relevant checks terminal. Next localcheckpoint,
-then remaining native Windows caption/output-policy gates via the existing warm
-checkout. macOS artifacts/environments and broader native/compatibility/adoption,
-X1/X3 and every9A clause remain open. No push/publication.
+permanent policy change; its checks are terminal. Native Windows compatibility
+is now qualified by native_windows_output_followup in the same canonical receipt:
+7 valid initial runtime passes, corrected prepared parent plus2DBguards and17
+provider/HTTP/RTSP/image passes compose27 distinct checks. Original7/8 and retained
+fallback/silentPCM diagnostic stay negative. The fixture stored backslashes,
+violating unchanged production confinement; portable components joined with /
+and an actual prepublication confinement check fix the fixture only. Original
+AV/audio/caption oracles pass on Windows and Linux; affected strict lint/fmt pass.
+Linux sandbox TCPbind denial is retained; only its affected parent was rerun.
+No new production audio fix or full Windows/sixRID/adoption claim follows.
+
+Next F5 proof: replace/rescan a source during in-flight caption preparation and
+finalHTTP resolution; stale captions must refuse, workers/admission join, and
+fresh acquisition must deliver the actual changed programme/audio/captions.
+Existing cache-validator positives do not prove that composed final boundary;
+no product defect is established. Reuse existing callback/worker/snapshot seams.
+All relevant processes are terminal; preserve warm native checkout and canonical
+receipts. F6 remains closed absent regression. Both macOS artifacts/environments
+and broader platform/output/adoption gates remain open; managed.1 unchanged.
+
+Maintainer2026-10-19 defers further X1 suitable-client work and chooses to wait
+for upstream QTM support under X3. No vendor contact/trial/purchase, external
+editor maintenance or scope waiver follows. V3/full interchange and every9A
+criterion remain mandatory; no production guide, push or publication.
 
 Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
 (docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).
