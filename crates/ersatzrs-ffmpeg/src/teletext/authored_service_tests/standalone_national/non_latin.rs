@@ -3,6 +3,9 @@
 #[path = "non_latin/greek_unicode.rs"]
 mod greek_unicode;
 
+#[path = "non_latin/cyrillic_hebrew.rs"]
+mod cyrillic_hebrew;
+
 use super::*;
 
 fn coded(primary: u8) -> TeletextDeclaredService {

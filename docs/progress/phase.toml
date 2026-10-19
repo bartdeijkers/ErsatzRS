@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: native output choice delivered; next Cyrillic/Hebrew authoring qualification; receiver/platform gates remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: native Cyrillic/Hebrew authoring delivered; next grouped editor-context proof; decoder aliases/receiver/platform gates remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -67,6 +67,21 @@ Level2.5 with protected base. ADR0123 and P9A-04 L15-A..E/F/V/X own acceptance;
 neither base nor full9A is accepted. Production guide waits for independent9A.
 This current handoff supersedes older next-action prose below. No scope waiver,
 new general audit, external decoder/editor maintenance or push/publication.
+
+Latest L15-A/F3 native_cyrillic_hebrew corrects four demonstrated native headline
+rejections in the shared private text converter.380 G0 positions in20/24/25/55
+preserve original text/context, exact coded wire/pixels, no optional banks, row
+bounds and Base/localX26 provenance.1012 teletext regressions/18 final national
+cases and strictFFmpegClippy pass. Stock0.2.42 agrees on2244/2280 observations;
+36 failures are six alias slots repeated across levels/extensions (24,25/4A,6A;
+25/26;55/23). Normative expectations remain unchanged; this is a concrete decoder
+capability gap, not accepted complete national/client proof or scope waiver.
+Canonical standalone_level15_followup/native_cyrillic_hebrew owns sources,
+standard review, immutable inputs, retained negatives and sensitivity controls.
+Next bundle actual pinnedQTM export/edit/save/concept/preview for these four
+contexts using existing tools; reuse unaffected publication/stream/F6 evidence.
+Complete supplementary Unicode/font, base receiver, lifecycle/platform and
+full2.5 editor/client gates stay distinct and open. No automatic editor repair.
 
 Verified local base checkpoints:3bd0a2f2 Main208/no-bank realQTM1.5 edit/concept/
 preview/explicit publication/SQLite reopen;ef447f99 native OS-process Lua recovery

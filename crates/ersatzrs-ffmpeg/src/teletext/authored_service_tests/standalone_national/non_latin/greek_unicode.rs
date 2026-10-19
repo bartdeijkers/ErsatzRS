@@ -52,7 +52,7 @@ fn original_greek_points() -> Vec<(char, u8)> {
     points
 }
 
-fn preview(original: &TeletextDeclaredService) -> TeletextMainComposition {
+pub(super) fn preview(original: &TeletextDeclaredService) -> TeletextMainComposition {
     let composition = compose_teletext_main_program(
         original.semantic(),
         owner(0),

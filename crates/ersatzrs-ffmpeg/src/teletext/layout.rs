@@ -24,6 +24,7 @@ pub(super) struct Layout {
 enum TextCharset {
     Latin(Option<u8>),
     Greek,
+    CyrillicHebrew(TeletextCharsetPair),
 }
 
 impl Layout {
@@ -32,6 +33,9 @@ impl Layout {
             TextCharset::Latin(Some(national)) => charset::encode(character, national),
             TextCharset::Latin(None) => charset::encode_without_national_subset(character),
             TextCharset::Greek => charset::encode_greek_g0(character),
+            TextCharset::CyrillicHebrew(pair) => {
+                charset::encode_cyrillic_hebrew_g0(character, pair)
+            }
         }
     }
 }
@@ -287,6 +291,17 @@ pub(super) fn compile_for_service_composition(
         latin.filter(|_| page.national_option.get() < 7 || assigned_latin_seven)
     {
         compile_with_national_subset(page, charset::unicode_national_subset(primary))?
+    } else if let Some(primary) = primary.filter(|primary| {
+        primary.get() & 7 == page.national_option.get()
+            && matches!(
+                primary.pair(),
+                TeletextCharsetPair::Cyrillic1Cyrillic
+                    | TeletextCharsetPair::Cyrillic2Cyrillic
+                    | TeletextCharsetPair::Cyrillic3Cyrillic
+                    | TeletextCharsetPair::HebrewArabic
+            )
+    }) {
+        compile_with_text_charset(page, TextCharset::CyrillicHebrew(primary.pair()))?
     } else if page.national_option.get() == 7
         && primary.is_some_and(|primary| primary.get() == 0x37)
     {

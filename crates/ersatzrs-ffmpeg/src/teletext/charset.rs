@@ -1,8 +1,8 @@
-//! EN 300 706 tables 35–37 and X/26 column modes from table 29.
+//! EN 300 706 G0/G2 Unicode conversions and X/26 column modes from table 29.
 
 use unicode_normalization::char::{compose, decompose_canonical};
 
-use ersatzrs_domain::TeletextPageCharsetDesignation;
+use ersatzrs_domain::{TeletextCharsetPair, TeletextPageCharsetDesignation};
 
 const NATIONAL_CODES: [u8; 13] = [
     0x23, 0x24, 0x40, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x7b, 0x7c, 0x7d, 0x7e,
@@ -166,6 +166,66 @@ pub(super) fn encode_greek_g0(character: char) -> Option<Character> {
     };
     Some(Character {
         fallback: u8::try_from(code).ok()?,
+        enhancement: None,
+    })
+}
+
+/// Native G0 scalars from Tables38–40/46, in authored cell order. No bidi,
+/// normalization, approximate aliases or Latin G2 replacements are implied.
+pub(super) fn encode_cyrillic_hebrew_g0(
+    character: char,
+    pair: TeletextCharsetPair,
+) -> Option<Character> {
+    let alphabet = match pair {
+        TeletextCharsetPair::Cyrillic1Cyrillic => {
+            "ЧАБЦДЕФГХИЈКЛМНОПЌРСТУВЃЉЊЗЋЖЂШЏчабцдефгхијклмнопќрстувѓљњзћжђш"
+        }
+        TeletextCharsetPair::Cyrillic2Cyrillic => {
+            "ЮАБЦДЕФГХИЙКЛМНОПЯРСТУЖВЬЪЗШЭЩЧЫюабцдефгхийклмнопярстужвьъзшэщч"
+        }
+        TeletextCharsetPair::Cyrillic3Cyrillic => {
+            "ЮАБЦДЕФГХИЙКЛМНОПЯРСТУЖВЬІЗШЄЩЧЇюабцдефгхийклмнопярстужвьізшєщч"
+        }
+        TeletextCharsetPair::HebrewArabic => {
+            return encode_hebrew_g0(character);
+        }
+        _ => return None,
+    };
+    let code = if character == 'ы' && pair == TeletextCharsetPair::Cyrillic2Cyrillic
+        || character == 'ї' && pair == TeletextCharsetPair::Cyrillic3Cyrillic
+    {
+        0x26
+    } else if (' '..='?').contains(&character)
+        && (character != '&' || pair == TeletextCharsetPair::Cyrillic1Cyrillic)
+    {
+        u8::try_from(u32::from(character)).ok()?
+    } else {
+        0x40 + u8::try_from(alphabet.chars().position(|value| value == character)?).ok()?
+    };
+    Some(Character {
+        fallback: code,
+        enhancement: None,
+    })
+}
+
+fn encode_hebrew_g0(character: char) -> Option<Character> {
+    let code = match character {
+        '£' => 0x23,
+        '#' => 0x5f,
+        ' '..='Z' => u8::try_from(u32::from(character)).ok()?,
+        '←' => 0x5b,
+        '½' => 0x5c,
+        '→' => 0x5d,
+        '↑' => 0x5e,
+        'א'..='ת' => 0x60 + u8::try_from(u32::from(character) - u32::from('א')).ok()?,
+        '₪' => 0x7b,
+        '‖' => 0x7c,
+        '¾' => 0x7d,
+        '÷' => 0x7e,
+        _ => return None,
+    };
+    Some(Character {
+        fallback: code,
         enhancement: None,
     })
 }

@@ -25,6 +25,11 @@ release section when tagging a release.
 
 ### Added
 
+- Allow native Cyrillic and Hebrew Unicode text in matching authored teletext
+  pages without optional object banks. Preserve the supplied cell order,
+  character context and Level 1 fallback, with explicit errors for unsupported
+  characters or mismatched contexts.
+
 - Offer a localized built-in MPEG-TS output choice in FFmpeg settings for
   authored teletext on Hybrid streams. Preserve the explicit choice across
   settings saves and restarts while retaining existing default/custom scripts
