@@ -1,5 +1,8 @@
 //! Table36 identities remain coded glyphs, never inferred Unicode aliases.
 
+#[path = "standalone_national/non_latin.rs"]
+mod non_latin;
+
 use super::*;
 use serde_json::{json, Value};
 
@@ -97,7 +100,7 @@ fn original(primary: u8) -> TeletextDeclaredService {
 
 #[test]
 fn reserved_header_without_matching_latin_context_stays_rejected() {
-    for primary in [None, Some(0), Some(0x37)] {
+    for primary in [None, Some(0), Some(0x37), Some(0x47), Some(0x57)] {
         let mut draft = draft(primary.unwrap_or(0));
         draft.base.pages[0].national_option = TeletextNationalOption::new(7).unwrap();
         if primary.is_none() {

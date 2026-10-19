@@ -454,7 +454,7 @@ impl TeletextBaseDisplay {
     /// Assemble a fixed trace after the transport adapter has decoded its actual
     /// emitted spacing subset. This validates record structure, not full rendering.
     /// # Errors
-    /// Rejects reserved fallback national bits without an assigned matching Latin
+    /// Rejects reserved fallback national bits without an assigned matching
     /// presentation, conflicting presentation identity,
     /// cells placed at another row/column, fictitious coded attribute sources,
     /// or an unconfirmed paired Start Box origin in the fixed array.
@@ -465,11 +465,9 @@ impl TeletextBaseDisplay {
         presentation: Option<TeletextLevel25PresentationDefaults>,
         cells: Box<[[TeletextBaseDisplayCell; TELETEXT_COLUMNS]; TELETEXT_ROWS]>,
     ) -> Result<Self, TeletextBaseDisplayValueError> {
-        let assigned_latin_seven = national_option.get() == 7
-            && primary.get() & 7 == 7
-            && primary.pair() == super::TeletextCharsetPair::LatinLatin
-            && presentation.is_some();
-        if (national_option.get() >= 7 && !assigned_latin_seven)
+        let assigned_seven =
+            national_option.get() == 7 && primary.get() & 7 == 7 && presentation.is_some();
+        if (national_option.get() >= 7 && !assigned_seven)
             || presentation.map_or_else(
                 || primary.get() != national_option.get(),
                 |value| value.primary != primary,

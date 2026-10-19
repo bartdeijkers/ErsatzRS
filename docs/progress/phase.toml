@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: same-response explicit subpage publication proven; assigned non-Latin context gap next'
+current_focus = 'P9A-04 standalone Level 1/1.5: coded Greek/Arabic header7 corrected; scoped Lua/output host-restart proof next'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -123,12 +123,26 @@ closure failed; reuse actual complete cycles, not synthetic headers/increased
 bounds. Original negatives remain. Eleven affected regressions and strict web
 Clippy pass. No new QTM/headed receiver/platform or base/full9A claim.
 
-Next product action: qualify the named L15-A assigned non-Latin header7/context
-rejection with the existing whole-factory fixtures; correct only a demonstrated
-namespace defect while preserving logical Unicode validation and original raw
-context. No optional2.5 bank dependency or silent content removal. Lua scoped
-host recovery, other shared control matrices and complete font/editor/client/
-platform obligations remain distinct. Reuse existing unmodified evidence.
+L15-A non_latin_coded_context closes the concrete exact coded Greek37/Arabic47/57
+header7 rejection in layout/typed Base trace. Matching explicit context admits
+coded rows/G1 without optional banks; missing/mismatched context and unqualified
+logical Unicode remain rejected. Original identities, no-bank inventory, wire
+header/cells and shared diagnostic-free raster pass.1576 teletext regressions
+pass; final G1 extension8-test group passes. Stock0.2.42 proves6 literal Greek
+scalar cases and12 Arabic-context-only cases at1/1.5/2.5, with/withoutX28 and
+correct local Code of Practice. Arabic private tokens are not a normative glyph
+or Unicode-font oracle. Two wrong goldens reject. Original13 Latin factory
+requests remain byteidentical, reusing84 decodes. Initial test-constructor/export
+path mistakes are retained separately from the reproduced product rejection.
+Strict domain/FFmpeg Clippy and formatting pass; no actual editor/client/stream/
+platform or complete Unicode/font/base/full9A claim. No scope waiver.
+
+Next concrete product-flow gap: use existing host-restart and scoped Lua/output
+fixtures to prove interval/On/Off/expiry recovery inside/after scope against
+accepted ordinary output. Preserve exact clock/authority/config and source AV;
+reuse unmodified editor/publication/F6 evidence. Complete logical non-Latin
+Unicode/font/editor contexts and remaining shared control/client/platform/full2.5
+obligations remain independently open. No unchanged negative client retry.
 
 L15-D still needs an available exact client with positively qualified ordinary
 HTTP/TS, conceal/reveal, timed flash, relevantX26 and page/subpage/update controls.

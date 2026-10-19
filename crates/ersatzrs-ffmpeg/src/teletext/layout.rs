@@ -273,6 +273,18 @@ pub(super) fn compile_for_service_composition(
         latin.filter(|_| page.national_option.get() < 7 || assigned_latin_seven)
     {
         compile_with_national_subset(page, charset::unicode_national_subset(primary))?
+    } else if page.national_option.get() == 7
+        && primary.is_some_and(|primary| primary.get() & 7 == 7)
+        && page.rows.iter().all(|row| {
+            row.runs
+                .iter()
+                .all(|run| matches!(run.content, TeletextRunContent::Mosaics { .. }))
+        })
+    {
+        // Exact coded rows and G1 mosaics require no Latin Unicode conversion.
+        // Assigned Greek/Arabic header7 is not reserved region-zero7. Keep
+        // unqualified logical text on the original explicit rejection path.
+        compile_with_national_subset(page, None)?
     } else {
         compile_for_composition(page)?
     };

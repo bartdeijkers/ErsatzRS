@@ -8,8 +8,8 @@ ADR0123: base first, then full2.5/protected fallback; neither accepted.
 P9A-04 owns proof. Standalone subpage/profile/publication recovery now has scoped
 headed actual-host/ordinary-stream evidence. Same two responses/default2 now
 retain pending originals, then explicitly adopt only Day200/0020 label/X26;
-72 scoped stock-decoder checks/sourceAV/TSDuck/cleanup/reopen pass. National
-Unicode retains context; assigned non-Latin contexts remain open.
+72 scoped stock-decoder checks/sourceAV/TSDuck/cleanup/reopen pass. Greek/Arabic coded header7
+passes; logical non-Latin Unicode/font remains open.
 Complete glyph/client/QTM/metadata/shared runtime/safety/platform remain mandatory.
 
 Typed services/provenance/resources, physical ownership, X26/X27/X28/M29,

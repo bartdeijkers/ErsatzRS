@@ -866,3 +866,46 @@ fn whole_candidate_budget_includes_all_base_roles_and_blames_original_object_ins
     assert_eq!(error.invocation.unwrap().get(), 0);
     assert_eq!(original, before);
 }
+
+#[test]
+fn assigned_header_seven_trace_preserves_non_latin_identity_and_rejects_missing_context() {
+    for primary in [0x1f, 0x37, 0x47, 0x57] {
+        let presentation = presentation(primary);
+        let original = base(presentation);
+        let cells = || Box::new(*original.cells());
+        let trace = TeletextBaseDisplay::new(
+            owner(),
+            presentation.primary,
+            TeletextNationalOption::new(7).unwrap(),
+            Some(presentation),
+            cells(),
+        )
+        .unwrap();
+        assert_eq!(trace.primary().get(), primary);
+        assert_eq!(trace.national_option().get(), 7);
+        assert_eq!(trace.cells(), original.cells());
+        for wrong in [None, Some(self::presentation(0))] {
+            assert_eq!(
+                TeletextBaseDisplay::new(
+                    owner(),
+                    presentation.primary,
+                    TeletextNationalOption::new(7).unwrap(),
+                    wrong,
+                    cells()
+                ),
+                Err(TeletextBaseDisplayValueError::Presentation)
+            );
+        }
+    }
+    let original = base(presentation(0));
+    assert_eq!(
+        TeletextBaseDisplay::new(
+            owner(),
+            original.primary(),
+            TeletextNationalOption::new(7).unwrap(),
+            Some(presentation(0)),
+            Box::new(*original.cells())
+        ),
+        Err(TeletextBaseDisplayValueError::Presentation)
+    );
+}

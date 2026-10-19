@@ -858,6 +858,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Accept exact coded teletext pages with assigned Greek or Arabic header-code
+  seven contexts without requiring optional object banks. Preserve original
+  glyph identities and reject unqualified logical Unicode conversion.
+
 - Preserve valid Romanian teletext pages with explicit national charset context and
   matching header bits through shared preview and authored-service encoding, without
   requiring optional object banks or weakening legacy-context validation.
