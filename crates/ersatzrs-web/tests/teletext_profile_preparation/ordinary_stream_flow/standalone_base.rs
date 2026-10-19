@@ -12,6 +12,9 @@ mod scoped_restart;
 #[path = "standalone_base/updates.rs"]
 mod updates;
 
+#[path = "standalone_base/scoped_lua.rs"]
+mod scoped_lua;
+
 #[path = "standalone_base/profile_lifecycle.rs"]
 mod profile_lifecycle;
 

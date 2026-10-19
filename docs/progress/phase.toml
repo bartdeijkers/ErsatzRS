@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: active shared-profile withdrawal and independent republication verified; suitable stream-client access and finite A1/A2/B2/C/D/E1/E2 remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: retained-stream Lua Off/error/Base expiry verified; suitable client and finite A1/A2/B2/C/D/E1/E2 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -337,10 +337,16 @@ PMT-Off-qualified authored PTS gap per viewer; AV/PCR/CC remain clean. Four plai
 windows and six clock-oracle regressions pass. Fixture marker/window-epoch setup
 errors stay canonical; no production change, suitable-client/fullC/base/9A claim.
 Canonical level15-active-shared/identity.json owns pins, negatives and checkpoint.
-Next: qualify the remaining existing Lua interval/precedence/live Base-recovery
-cell with existing fixtures; clientD access/control and E1/E2 adoption/native
-platforms remain independent acceptance blockers. No new client retry, editor
-variant, decoder maintenance or push follows from this evidence-only checkpoint.
+The active_lua_expiry_followup now closes retained-response real-Lua Off/error/
+automatic Base-expiry evidence: exact eight-second half-open scope, error rollback,
+unchanged isolated Night, no implicit publication/replay, exact model/sourceAV/
+clock/TSDuck/cold-state and cleanup pass on original responses/default2.
+level15-active-lua/identity.json owns native run-1, pins and local checkpoint.
+No product change or completeC/base/9A acceptance follows. Next: bundle remaining
+active mirror output ownership and temporary scoped-On expiry with existing
+fixtures; reuse this Off proof. ClientD control/access and E1/E2 adoption/native
+platforms stay independent blockers. No new client retry, editor variant,
+decoder maintenance or push follows from these evidence-only checkpoints.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.
