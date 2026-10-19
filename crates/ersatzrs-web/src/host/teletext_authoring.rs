@@ -1332,6 +1332,11 @@ fn layout_location(error: &TeletextEncodingError, location: &mut TeletextAuthori
             row,
             column,
         }
+        | TeletextEncodingError::BaseTextSpelling {
+            address,
+            row,
+            column,
+        }
         | TeletextEncodingError::BlackForeground {
             address,
             row,
@@ -1426,4 +1431,32 @@ pub(crate) async fn editorial_transfer_work<T: Send + 'static>(
     })
     .await
     .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))?
+}
+
+#[cfg(test)]
+mod base_spelling_location_tests {
+    use super::*;
+    #[test]
+    fn native_base_spelling_error_retains_exact_page_subpage_and_cell() {
+        let owner = ersatzrs_domain::TeletextPageAddress {
+            page: ersatzrs_domain::TeletextPageNumber::new(124).unwrap(),
+            subcode: ersatzrs_domain::TeletextSubcode::new(32).unwrap(),
+        };
+        let mut location = TeletextAuthoringLocation {
+            owner: None,
+            resource: None,
+            position: None,
+            source: None,
+        };
+        layout_location(
+            &TeletextEncodingError::BaseTextSpelling {
+                address: owner,
+                row: 3,
+                column: 8,
+            },
+            &mut location,
+        );
+        assert_eq!(location.owner, Some(owner));
+        assert_eq!(location.position, Some((3, 8)));
+    }
 }

@@ -146,6 +146,7 @@ impl TeletextColdProducerComposition {
             mots,
             selections,
             overlays,
+            text_spellings,
         } = compose_inputs(&producers, &metadata, &indexes, &magazines, &mut work)?;
         let semantic = TeletextSemanticService::new_with_object_companions(
             draft,
@@ -155,6 +156,9 @@ impl TeletextColdProducerComposition {
         .map_err(|reason| semantic_error(reason, &indexes))?;
         let semantic = semantic
             .with_physical_base_overlays(overlays, budget.service)
+            .map_err(|reason| semantic_error(reason, &indexes))?;
+        let semantic = semantic
+            .with_base_text_spellings(text_spellings, budget.service)
             .map_err(|reason| semantic_error(reason, &indexes))?;
         let composed = TeletextDeclaredService::new(
             semantic,
@@ -331,7 +335,8 @@ fn semantic_error(
         )
         | TeletextServiceError::DuplicatePage { address }
         | TeletextServiceError::MissingPage { address }
-        | TeletextServiceError::PhysicalBaseOverlayOwner { address, .. } => Some(*address),
+        | TeletextServiceError::PhysicalBaseOverlayOwner { address, .. }
+        | TeletextServiceError::BaseTextSpelling { owner: address, .. } => Some(*address),
         TeletextServiceError::MissingLocalOwner { identity }
         | TeletextServiceError::LocalPresence { identity } => identity.owner(),
         TeletextServiceError::ObjectLink { display, .. }
@@ -510,6 +515,11 @@ fn preflight_producer(
         service.physical_base_overlays().len(),
         work,
     )?;
+    work.records::<super::TeletextBaseTextSpelling>(service.base_text_spellings().len())?;
+    work.commands(service.base_text_spellings().len())?;
+    for spelling in service.base_text_spellings().values() {
+        work.content(spelling.character().len_utf8() + 4)?;
+    }
     work.records::<TeletextMagazinePresentationDraft>(service.magazine_presentations().len())?;
     for metadata in service.page_enhancements().values() {
         if let Some(program) = &metadata.local_program {
@@ -831,6 +841,7 @@ struct ComposedInputs {
     mots: Vec<TeletextMotLevel25Declaration>,
     selections: Vec<TeletextDisplayMotSelection>,
     overlays: Vec<super::TeletextPhysicalBaseOverlay>,
+    text_spellings: Vec<super::TeletextBaseTextSpelling>,
 }
 #[derive(Default)]
 struct InputCounts {
@@ -840,6 +851,7 @@ struct InputCounts {
     companions: usize,
     mots: usize,
     overlays: usize,
+    text_spellings: usize,
 }
 fn capacities(
     producers: &[TeletextProducerPresentation],
@@ -861,6 +873,10 @@ fn capacities(
             ),
             (&mut counts.companions, service.empty_object_pages().len()),
             (&mut counts.mots, service.mots().len()),
+            (
+                &mut counts.text_spellings,
+                service.semantic().base_text_spellings().len(),
+            ),
             (
                 &mut counts.overlays,
                 service.semantic().physical_base_overlays().len(),
@@ -898,11 +914,22 @@ fn compose_inputs(
         mots: Vec::with_capacity(counts.mots),
         selections: Vec::with_capacity(counts.pages),
         overlays: Vec::with_capacity(counts.overlays),
+        text_spellings: Vec::with_capacity(counts.text_spellings),
     };
     for (ordinal, producer) in producers.iter().enumerate() {
         work.producer = Some(ordinal);
         copy_pages(producer, ordinal, magazines, indexes, &mut output, work)?;
         copy_resources(producer, ordinal, indexes, &mut output, work)?;
+        for spelling in producer
+            .original()
+            .semantic()
+            .base_text_spellings()
+            .values()
+        {
+            work.visit(1)?;
+            output.text_spellings.push(*spelling);
+        }
+
         for overlay in producer
             .original()
             .semantic()

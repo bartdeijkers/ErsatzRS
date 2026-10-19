@@ -374,6 +374,17 @@ impl TeletextDeclaredService {
             .with_physical_base_overlays(overlays, budget)?;
         Ok(self)
     }
+    /// Retain explicit native Base Text spelling in the same checked service.
+    /// # Errors
+    /// Rejects target/scalar/duplicate and combined native/service budget failures.
+    pub fn with_base_text_spellings(
+        mut self,
+        spellings: Vec<super::TeletextBaseTextSpelling>,
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self.semantic.with_base_text_spellings(spellings, budget)?;
+        Ok(self)
+    }
     #[must_use]
     pub fn mots(&self) -> &[TeletextMotLevel25Declaration] {
         &self.mots

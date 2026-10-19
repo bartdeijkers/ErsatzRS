@@ -13,12 +13,16 @@ use ersatzrs_domain::{
 };
 
 use super::{charset, TeletextEncodingError};
+use std::collections::BTreeMap;
+#[path = "layout/native_spelling.rs"]
+mod native_spelling;
 
 pub(super) struct Layout {
     pub rows: [[u8; TELETEXT_COLUMNS]; TELETEXT_ROWS],
     base_glyphs: Vec<PositionedBaseGlyph>,
     physical_rows: [bool; TELETEXT_ROWS],
     text_charset: TextCharset,
+    native_text_encodings: BTreeMap<TeletextEnhancementPosition, (char, charset::Character)>,
 }
 
 #[derive(Clone, Copy)]
@@ -191,12 +195,13 @@ fn compile_with_national_subset(
     page: &TeletextPageDraft,
     national: Option<u8>,
 ) -> Result<Layout, TeletextEncodingError> {
-    compile_with_text_charset(page, TextCharset::Latin(national))
+    compile_with_text_charset(page, TextCharset::Latin(national), None)
 }
 
 fn compile_with_text_charset(
     page: &TeletextPageDraft,
     text_charset: TextCharset,
+    service: Option<&TeletextSemanticService>,
 ) -> Result<Layout, TeletextEncodingError> {
     page.validate_structure()?;
     let mut layout = Layout {
@@ -204,7 +209,11 @@ fn compile_with_text_charset(
         base_glyphs: Vec::new(),
         physical_rows: [false; TELETEXT_ROWS],
         text_charset,
+        native_text_encodings: BTreeMap::new(),
     };
+    if let Some(service) = service {
+        native_spelling::initialize(&mut layout, service, page)?;
+    }
     let mut rows: Vec<_> = page.rows.iter().collect();
     rows.sort_by_key(|row| row.row);
     for row in rows {
@@ -251,14 +260,14 @@ fn compile_with_text_charset(
             match &run.content {
                 TeletextRunContent::Text { text } => {
                     for (column, character) in (run.column..).zip(text.chars()) {
-                        let encoded = layout.encode_character(character).ok_or(
-                            TeletextEncodingError::Character {
+                        let encoded = layout
+                            .encode_character_at(row.row, column, character)
+                            .ok_or(TeletextEncodingError::Character {
                                 address: page.address,
                                 row: row.row,
                                 column,
                                 codepoint: u32::from(character),
-                            },
-                        )?;
+                            })?;
                         layout.rows[usize::from(row.row)][usize::from(column)] = encoded.fallback;
                         if let Some((mode, data)) = encoded.enhancement {
                             layout.base_glyphs.push(
@@ -316,7 +325,11 @@ pub(super) fn compile_for_service_composition(
     let mut layout = if let Some(primary) =
         latin.filter(|_| page.national_option.get() < 7 || assigned_latin_seven)
     {
-        compile_with_national_subset(page, charset::unicode_national_subset(primary))?
+        compile_with_text_charset(
+            page,
+            TextCharset::Latin(charset::unicode_national_subset(primary)),
+            Some(service),
+        )?
     } else if let Some(primary) = primary.filter(|primary| {
         primary.get() & 7 == page.national_option.get()
             && matches!(
@@ -327,13 +340,17 @@ pub(super) fn compile_for_service_composition(
                     | TeletextCharsetPair::HebrewArabic
             )
     }) {
-        compile_with_text_charset(page, TextCharset::CyrillicHebrew(primary.pair()))?
+        compile_with_text_charset(
+            page,
+            TextCharset::CyrillicHebrew(primary.pair()),
+            Some(service),
+        )?
     } else if page.national_option.get() == 7
         && primary.is_some_and(|primary| primary.get() == 0x37)
     {
         // Matching Greek context admits its actual native Unicode scalars.
         // Unsupported/cross-script input stays a located character error.
-        compile_with_text_charset(page, TextCharset::Greek)?
+        compile_with_text_charset(page, TextCharset::Greek, Some(service))?
     } else if page.national_option.get() == 7
         && primary.is_some_and(|primary| primary.get() & 7 == 7)
         && page.rows.iter().all(|row| {
@@ -345,9 +362,18 @@ pub(super) fn compile_for_service_composition(
         // Exact coded rows and G1 mosaics require no Latin Unicode conversion.
         // Assigned Arabic header7 is not reserved region-zero7. Keep
         // unqualified logical text on the original explicit rejection path.
-        compile_with_national_subset(page, None)?
+        compile_with_text_charset(page, TextCharset::Latin(None), Some(service))?
     } else {
-        compile_for_composition(page)?
+        if page.national_option.get() >= 7 {
+            return Err(TeletextEncodingError::NationalOption {
+                address: page.address,
+            });
+        }
+        compile_with_text_charset(
+            page,
+            TextCharset::Latin(Some(page.national_option.get())),
+            Some(service),
+        )?
     };
     let Some(overlay) = service.physical_base_overlay(page.address) else {
         return Ok(layout);

@@ -401,3 +401,6 @@ fn native_g2_keeps_existing_compiler_budget_and_physical_overlay_refusals() {
                 if *address==owner(0))));
     }
 }
+
+#[path = "native_g2/spelling.rs"]
+mod spelling;

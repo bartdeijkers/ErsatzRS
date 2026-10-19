@@ -61,7 +61,8 @@ impl TeletextSemanticService {
             self.mot_fallbacks,
             budget,
         )?
-        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)
+        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)?
+        .with_base_text_spellings(self.base_text_spellings.into_values().collect(), budget)
     }
 
     fn check_glyph_program_overlay_budgets(

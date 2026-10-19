@@ -300,6 +300,27 @@ pub(super) fn decode_generated_replacement(
     compose(base, mark)
 }
 
+/// Meaning of an explicitly retained Base spelling, without requiring the
+/// canonical forward encoder to choose that same spelling. Table35's X26 G0
+/// differs from ASCII at24/7C, and clause12.3.4 replaces2A with@ in mode10.
+/// The rectangle at7F has no qualified Unicode alias in this conversion.
+pub(super) fn decode_base_text_spelling(
+    mode: u8,
+    code: u8,
+    pair: TeletextCharsetPair,
+) -> Option<char> {
+    if mode == 0x10 && pair == TeletextCharsetPair::LatinLatin {
+        return Some(match code {
+            0x24 => '¤',
+            0x2a => '@',
+            0x7c => '¦',
+            0x20..=0x7e => char::from(code),
+            _ => return None,
+        });
+    }
+    decode_generated_replacement(mode, code, pair)
+}
+
 fn encode_hebrew_g0(character: char) -> Option<Character> {
     let code = match character {
         '£' => 0x23,

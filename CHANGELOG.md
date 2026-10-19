@@ -25,6 +25,10 @@ release section when tagging a release.
 
 ### Added
 
+- Support checked native spellings of authored teletext Text cells, preserving
+  their exact fallback, charset and enhancement word alongside logical text.
+  Noncanonical editor imports remain gated pending concept/receipt integration.
+
 - Encode qualified supplementary Unicode symbols and letters in authored
   Cyrillic and Greek teletext without optional object banks. Use their actual
   G2 repertoires while preserving Level 1 fallback and Local charset changes.

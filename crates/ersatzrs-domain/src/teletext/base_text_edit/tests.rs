@@ -194,3 +194,6 @@ fn base_text_edit_shape_rejects_header_controls_and_unchanged_scalars() {
         );
     }
 }
+
+#[path = "tests/spelling.rs"]
+mod spelling;

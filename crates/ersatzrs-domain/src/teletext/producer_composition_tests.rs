@@ -1163,3 +1163,77 @@ fn aggregate_raw_counts_have_literal_exact_fit_and_one_short_cutoffs_before_deri
         }
     }
 }
+
+#[test]
+fn native_text_spellings_survive_cold_composition_with_raw_command_and_storage_fences() {
+    let hinted = |number| {
+        let mut page = page(number, 0);
+        page.rows = vec![TeletextRow {
+            row: 1,
+            runs: vec![TeletextRun {
+                column: 8,
+                style: TeletextStyle::default(),
+                content: TeletextRunContent::Text { text: "$".into() },
+            }],
+        }];
+        let original = producer(draft(vec![page]), vec![]).original().clone();
+        let hint = TeletextBaseTextSpelling::new(
+            address(number, 0),
+            TeletextEnhancementPosition::new(1, 8).unwrap(),
+            '$',
+            TeletextGlyphCode::new(b' ').unwrap(),
+            TeletextEnhancementCharsetDesignation::new(0).unwrap(),
+            TeletextColumnOperation::G2 {
+                code: TeletextGlyphCode::new(0x24).unwrap(),
+            },
+        )
+        .unwrap();
+        TeletextProducerPresentation::new(
+            original
+                .with_base_text_spellings(vec![hint], service_budget())
+                .unwrap(),
+            TeletextProducerPresentationBudget { max_pages: 128 },
+        )
+        .unwrap()
+    };
+    let inputs = vec![hinted(200), hinted(201)];
+    let metadata = TeletextProducerCompositionMetadata {
+        language: language("nld"),
+        entry: address(200, 0),
+    };
+    let expected: Vec<_> = inputs
+        .iter()
+        .flat_map(|input| {
+            input
+                .original()
+                .semantic()
+                .base_text_spellings()
+                .values()
+                .copied()
+        })
+        .collect();
+    let complete =
+        TeletextColdProducerComposition::new(inputs, metadata.clone(), budget()).unwrap();
+    assert_eq!(
+        complete.composed().semantic().base_text_spellings().len(),
+        2
+    );
+    for hint in &expected {
+        assert_eq!(
+            complete
+                .composed()
+                .semantic()
+                .base_text_spellings()
+                .get(&(hint.owner(), hint.position())),
+            Some(hint)
+        );
+    }
+    let mut limited = budget();
+    limited.max_input_commands = 1;
+    assert!(TeletextColdProducerComposition::new(
+        vec![hinted(200), hinted(201)],
+        metadata,
+        limited
+    )
+    .is_err());
+}

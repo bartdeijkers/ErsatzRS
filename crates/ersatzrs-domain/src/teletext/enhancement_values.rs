@@ -39,6 +39,12 @@ pub struct TeletextEnhancementPosition {
 }
 
 impl TeletextEnhancementPosition {
+    pub(crate) const FIRST: Self = Self { row: 0, column: 0 };
+    pub(crate) const LAST: Self = Self {
+        row: 24,
+        column: 39,
+    };
+
     /// Preserve checked relative coordinates without origin arithmetic.
     /// # Errors
     /// Returns `Position` outside rows 0–24 or columns 0–39.

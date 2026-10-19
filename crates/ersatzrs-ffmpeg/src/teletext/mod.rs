@@ -236,6 +236,16 @@ pub enum TeletextEncodingError {
         row: u8,
         column: u8,
     },
+    /// An explicit Base Text spelling has an unqualified charset or different
+    /// meaning from its logical scalar; it is never silently normalized.
+    #[error(
+        "teletext page {address:?} row {row} column {column} has an invalid native Text spelling"
+    )]
+    BaseTextSpelling {
+        address: TeletextPageAddress,
+        row: u8,
+        column: u8,
+    },
     /// EN 300 706 bounds the per-page X/26 packets to sixteen.
     #[error("teletext page {address:?} exceeds sixteen character enhancement packets")]
     Enhancements { address: TeletextPageAddress },

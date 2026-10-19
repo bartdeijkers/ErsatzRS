@@ -28,6 +28,7 @@ impl TeletextSemanticService {
             return Err(TeletextServiceError::EmptyBaseTextEdits);
         }
         let mut indexed = index_edits(edits, self.original_base_content_bytes, budget)?;
+        let edited_positions: std::collections::BTreeSet<_> = indexed.keys().copied().collect();
         let mut base = self.base;
         for page in &mut base.pages {
             for row in &mut page.rows {
@@ -95,7 +96,20 @@ impl TeletextSemanticService {
             self.mot_fallbacks,
             budget,
         )?
-        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)
+        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)?
+        .with_base_text_spellings(
+            self.base_text_spellings
+                .into_values()
+                .filter(|spelling| {
+                    !edited_positions.contains(&(
+                        spelling.owner(),
+                        spelling.position().row(),
+                        spelling.position().column(),
+                    ))
+                })
+                .collect(),
+            budget,
+        )
     }
 }
 

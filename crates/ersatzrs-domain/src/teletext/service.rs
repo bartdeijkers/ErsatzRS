@@ -31,6 +31,9 @@ pub use drcs_extension::*;
 #[path = "base_text_edit_service.rs"]
 mod base_text_edits;
 
+#[path = "base_text_spelling_service.rs"]
+mod base_text_spellings;
+
 #[path = "local_object_operand_service.rs"]
 mod local_object_operands;
 
@@ -111,12 +114,14 @@ pub struct TeletextServiceBudget {
     pub max_records: usize,
     pub max_objects: usize,
     /// Aggregate rows, runs, navigation links, metadata records, glyphs and
-    /// physical-overlay owner/row records.
+    /// physical-overlay owner/row records and explicit native Text spellings.
     pub max_structure_items: usize,
     /// UTF-8 text bytes, one byte per six-bit mosaic cell and physical overlay
-    /// cells, without truncation. Overlay storage shares the original budget.
+    /// cells and native Text spellings, without truncation. Derived storage
+    /// shares the original budget.
     pub max_base_content_bytes: usize,
-    /// Authored local/object commands and populated default slots, even suppressed.
+    /// Authored local/object commands, populated default slots (even suppressed)
+    /// and explicit native Text spellings.
     pub max_commands: usize,
     /// Aggregate expanded work across every display, including repeated calls.
     pub max_collected_commands: usize,
@@ -207,6 +212,12 @@ pub enum TeletextEffectiveProgramSource {
 /// Located semantic failure. No programme text or partial candidate is returned.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextServiceError {
+    #[error("teletext Base Text spelling for {owner:?}/{position:?}: {reason}")]
+    BaseTextSpelling {
+        owner: TeletextPageAddress,
+        position: super::TeletextEnhancementPosition,
+        reason: super::TeletextBaseTextSpellingError,
+    },
     #[error("teletext Base text changes must not be empty")]
     EmptyBaseTextEdits,
     #[error("teletext Base text at {owner:?}, {position:?}: {reason}")]
@@ -374,6 +385,10 @@ pub struct TeletextSemanticService {
     object_companions: Vec<super::TeletextResourceIdentity>,
     drcs: TeletextDrcsCatalog,
     physical_base_overlays: BTreeMap<TeletextPageAddress, super::TeletextPhysicalBaseOverlay>,
+    base_text_spellings: BTreeMap<
+        (TeletextPageAddress, super::TeletextEnhancementPosition),
+        super::TeletextBaseTextSpelling,
+    >,
     original_structure_items: usize,
     original_base_content_bytes: usize,
     collected: BTreeMap<
@@ -465,6 +480,7 @@ impl TeletextSemanticService {
             object_companions: companions,
             drcs,
             physical_base_overlays: BTreeMap::new(),
+            base_text_spellings: BTreeMap::new(),
             original_structure_items,
             original_base_content_bytes,
             collected: BTreeMap::new(),
@@ -591,7 +607,8 @@ impl TeletextSemanticService {
             self.mot_fallbacks,
             budget,
         )?
-        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)
+        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)?
+        .with_base_text_spellings(self.base_text_spellings.into_values().collect(), budget)
     }
 
     /// Replace existing DRCS glyph bitmaps under exact original expectations.
@@ -652,7 +669,8 @@ impl TeletextSemanticService {
             self.mot_fallbacks,
             budget,
         )?
-        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)
+        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)?
+        .with_base_text_spellings(self.base_text_spellings.into_values().collect(), budget)
     }
 
     fn validate_drcs_bitmap_overlays<'a>(
@@ -777,6 +795,7 @@ impl TeletextSemanticService {
             self.physical_base_overlays.values(),
             budget,
         )?;
+        self.check_base_spelling_budgets(self.base_text_spellings.values(), budget)?;
         // Reuse the ordinary collision/count checker: it charges each unique
         // resource before allocating an entry, even under a reduced record cap.
         check_resource_records(
@@ -852,6 +871,7 @@ impl TeletextSemanticService {
             .into_iter()
             .map(|overlay| (overlay.owner(), overlay))
             .collect();
+        self.check_base_spelling_budgets(self.base_text_spellings.values(), budget)?;
         Ok(self)
     }
     #[must_use]
