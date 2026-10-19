@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 coordinated Main scalar/call edits; F5 Linux checkpoint 7bea7119, X1/X2/X3 open'
+current_focus = 'P9A-04 F3 foreign-default qualification; F1 checkpoint 02d60cc5, F5 Linux 7bea7119, X1/X2/X3 open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,7 +62,7 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F1 qualified Main single-word scalar/call coordination now passes native import.
+Local F1 checkpoint02d60cc5 qualifies Main single-word scalar/call coordination.
 After exact independent targetTTI equality, RED1e11b725 refused Packet124/32d0c3.
 The bounded parser reuses authenticated original spans and existing operand/
 geometry checks, then scalar-before-Main V22; no new format or app/domain change.
@@ -87,15 +87,33 @@ linux_package_followup owns artifacts, scope, foreign7/index and checkpointSHA.
 Windows/macOS replacement artifacts, full compatibility/native/platform gates
 and managed adoption remain; the production runtime pin is unchanged.
 
-Next independent F3 action: qualify the retained row-zero/foreign-X26/context
-case using existing normative fixtures and factory; name one exact blocked
-legal authoring action before changing model/compiler/validation. Require full
-native target/fallback identity and existing protected consumers; no general
-audit, new infrastructure or unchanged client retry. X1 needs a changed suitable
-source-positive runtime; X2 accepted native artifacts/environments; X3 complete
-editor bank/native-call/capacity capability. All9A clauses remain required;
-unused-object removal stays deferred. Engine-first; no production guide, push
-or publication.
+Current F3 foreign-default checkpoint corrects a complete-factory refusal:
+RED55b09203 rejects implicit MOT POP2A0 against explicit X27 POP2A1 before
+physical realization. Only fully declared services now settle the original
+resource context and derive distinct whole-body physical Local wrappers;
+original semantic owners, sparse DefaultSlot/root instances and resource bytes
+remain immutable. Actual physical C2, ancestry, all glyph/effect/plane comparisons,
+shared work/identity/catalogue limits and strict standalone link refusal remain.
+Canonical tmp/phase9-header-c2/identity.json/f3_foreign_default_qualification
+owns original RED, candidate/test negatives, source hashes and final check state.
+The original Base representation is SPACE plus authored £; physical G2£ and
+original-authored projection must agree. The independent unchanged pinned imager
+passes actual emitted Level1.5/2.5 A/£/Z cells and four wrong-golden
+refusals. Seven grouped cases and strict standalone rejection pass; retain941
+valid broad passes plus the two corrected helper passes. Final focused9 passes;
+canonical receipt records final lint/progress outcomes. No new client,
+editor/stream or full-F3/9A acceptance follows.
+
+After this checkpoint, X1/X3 determine the completion route: retain unchanged
+negative clients and editor limits; qualify only a changed or unexamined
+source-positive pinned option. Record missing capability, bounded direction,
+maintainer decision and exact closure in the existing F/V/X rows. No implicit
+scope restriction or external maintenance programme. Independently prioritize
+F5 compatibility/native-platform gates and accepted runtime adoption over more
+small editor variants. Linux crossbuild, native execution and managed adoption
+are separate claims. X2 native environments/artifacts remain open; F6 stays
+closed absent a concrete regression. Unused-object removal stays deferred.
+Engine-first; no production guide, push or publication.
 
 Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
 (docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).

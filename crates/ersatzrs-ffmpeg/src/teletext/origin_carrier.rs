@@ -465,7 +465,7 @@ fn preflight(
     }
     Ok(())
 }
-fn free_identity(
+pub(super) fn free_identity(
     owner: TeletextPageAddress,
     catalog: &TeletextEnhancementObjectCatalog,
     maximum: usize,

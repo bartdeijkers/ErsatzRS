@@ -18,7 +18,7 @@ use super::{
 };
 use ersatzrs_domain::{
     TeletextDefaultObjectSelection, TeletextEnhancementCollectionBudget,
-    TeletextObjectCatalogBudget, TeletextPageAddress, TeletextSemanticService,
+    TeletextObjectCatalogBudget, TeletextObjectScope, TeletextPageAddress, TeletextSemanticService,
 };
 use std::time::Instant;
 
@@ -197,6 +197,42 @@ pub(super) fn compose_normalization_original(
         )))
     })?;
     check_deadline(owner, context.deadline)?;
+    // This target has implicit MOT roots, not wire-level explicit calls. Only
+    // the complete declared-service factory supplies their actual resource
+    // transmission context and can subsequently realize distinct physical
+    // wrappers. Packing them here would incorrectly require their owner to
+    // equal the page's explicit X27 selection. No unvalidated wire escapes:
+    // the augmented candidate still passes packing, ancestry and both complete
+    // comparisons below. Standalone composed/normalized entry points stay strict.
+    if context.declared_foreign_defaults
+        && context.resources.is_some()
+        && has_foreign_defaults(service, owner)
+    {
+        let original = super::main_composition::compose_teletext_main_program_with_context(
+            service,
+            owner,
+            budget.composition,
+            context,
+        )
+        .map_err(|error| {
+            fail(TeletextNormalizedMainProgramFailure::Original(Box::new(
+                error.into(),
+            )))
+        })?;
+        let original = super::resource_transmission::settle_native_with_context(
+            original,
+            service,
+            budget.composition.collection.max_commands,
+            context,
+        )
+        .map_err(|error| {
+            fail(TeletextNormalizedMainProgramFailure::Original(Box::new(
+                error.into(),
+            )))
+        })?;
+        check_deadline(owner, context.deadline)?;
+        return Ok(original);
+    }
     let original = compile_composed_with_header_positions(
         service,
         owner,
@@ -213,6 +249,28 @@ pub(super) fn compose_normalization_original(
     .into_composition();
     check_deadline(owner, context.deadline)?;
     Ok(original)
+}
+
+pub(super) fn has_foreign_defaults(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+) -> bool {
+    let Some(page) = service.page_enhancements().get(&owner) else {
+        return false;
+    };
+    page.local_program.is_none()
+        && page.resources.defaults.iter().flatten().any(|selection| {
+            let selected = match selection.target.scope() {
+                TeletextObjectScope::Public => page.resources.objects.public,
+                TeletextObjectScope::Global => page.resources.objects.global,
+                TeletextObjectScope::Local => return false,
+            };
+            selection
+                .target
+                .resource()
+                .map(ersatzrs_domain::TeletextResourceIdentity::page)
+                != selected
+        })
 }
 
 /// The caller owns the validated, additive effective service and retains the

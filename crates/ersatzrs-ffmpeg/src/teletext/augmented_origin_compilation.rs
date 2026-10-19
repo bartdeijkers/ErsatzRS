@@ -309,8 +309,7 @@ fn matches_original(
     }
 }
 fn same_facts(old: TeletextSpatialInvocation, actual: TeletextSpatialInvocation) -> bool {
-    old.target() == actual.target()
-        && old.object_type() == actual.object_type()
+    old.object_type() == actual.object_type()
         && old.origin() == actual.origin()
         && old.caller_position() == actual.caller_position()
         && old.offset() == actual.offset()
@@ -464,7 +463,20 @@ impl Ancestry<'_> {
             )
         })?;
         let old = original[index];
-        if old.id().get() != index || !same_facts(old, call) {
+        let target_matches = old.target() == call.target()
+            || (old.parent().is_none()
+                && matches!(
+                    source,
+                    TeletextAugmentedOriginSource::RetainedMain {
+                        provenance: TeletextMainCompositionSource::DefaultSlot { .. },
+                        ..
+                    }
+                )
+                && self
+                    .augmented
+                    .foreign_default_target(call.target(), old.id())
+                    == Some(old.target()));
+        if old.id().get() != index || !target_matches || !same_facts(old, call) {
             return Err(self.error(
                 Some(call),
                 Some(old.id()),
@@ -539,7 +551,10 @@ impl Ancestry<'_> {
         self.augmented
             .carriers()
             .len()
-            .checked_add(self.augmented.placement().catalog().definitions().len())
+            .checked_add(self.augmented.foreign_default_count())
+            .and_then(|count| {
+                count.checked_add(self.augmented.placement().catalog().definitions().len())
+            })
             .and_then(|count| count.checked_add(1))
             .ok_or_else(|| {
                 self.error(

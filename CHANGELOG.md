@@ -851,6 +851,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Compile declared teletext pages whose MOT defaults belong to a different
+  object bank than the selected explicit link when Base compatibility requires
+  X/26. Preserve original defaults, object identities, full effects and fallback
+  through bounded private physical realizations; standalone explicit calls still
+  enforce their selected resource links. Broader context and client acceptance
+  remain open.
 - Preserve late selected teletext captions when Next converts a finite Local
   source larger than one observation window. Decode a complete owned snapshot
   with bounded memory, unchanged source clocks, selected audio and cleanup;

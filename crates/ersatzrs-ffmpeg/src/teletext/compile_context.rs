@@ -23,7 +23,10 @@ use ersatzrs_domain::{
 };
 
 use super::augmented_origin_compilation::compile_augmented_with_context_and_usage;
-use super::augmented_origin_program::build_augmented_with_service_and_work_usage;
+use super::augmented_origin_program::{
+    build_augmented_with_foreign_defaults_and_work_usage,
+    build_augmented_with_service_and_work_usage,
+};
 use super::origin_carrier_placement::plan_teletext_origin_carrier_placement_with_context_and_usage;
 use super::physical_comparison::compare_augmented_physical_with_usage;
 use super::resource_transmission::ResourceTransmissionContext;
@@ -48,6 +51,9 @@ use super::{
 pub(super) struct TeletextCompileContext<'a, 'service> {
     pub resources: Option<&'a ResourceTransmissionContext<'service>>,
     pub deadline: Option<Instant>,
+    // Only the whole declared-service factory can realize implicit MOT roots.
+    // Standalone composed/normalized callers retain selected-link enforcement.
+    pub declared_foreign_defaults: bool,
     maximum_display_updates: Option<usize>,
     remaining_display_updates: Option<usize>,
     maximum_glyph_comparison_work: Option<usize>,
@@ -109,6 +115,7 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         Self {
             resources,
             deadline,
+            declared_foreign_defaults: false,
             maximum_display_updates,
             remaining_display_updates: maximum_display_updates,
             maximum_glyph_comparison_work: None,
@@ -488,8 +495,15 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
     ) -> Result<TeletextAugmentedOriginProgram<'b>, TeletextAugmentedOriginProgramError> {
         budget.max_work = self.assembly.cap(budget.max_work);
         budget.max_identity_checks = self.identity_checks.cap(budget.max_identity_checks);
-        let (result, admitted) =
-            build_augmented_with_service_and_work_usage(placement, service, budget);
+        let (result, admitted) = if self.declared_foreign_defaults
+            && super::normalized_main_program::has_foreign_defaults(
+                service,
+                placement.plan().composition().owner(),
+            ) {
+            build_augmented_with_foreign_defaults_and_work_usage(placement, service, budget)
+        } else {
+            build_augmented_with_service_and_work_usage(placement, service, budget)
+        };
         let assembly_ok = self.assembly.debit(admitted.work);
         let identity_ok = self.identity_checks.debit(admitted.identity_checks);
         if !assembly_ok || !identity_ok {

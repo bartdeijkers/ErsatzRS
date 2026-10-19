@@ -687,3 +687,6 @@ mod traversal_quota_tests;
 
 #[path = "authored_service_attribute_quota_tests.rs"]
 mod attribute_quota_tests;
+
+#[path = "authored_service_tests/foreign_defaults.rs"]
+mod foreign_defaults;

@@ -18,6 +18,9 @@ use ersatzrs_domain::{
     TeletextSpatialRootSource,
 };
 
+mod foreign_defaults;
+use foreign_defaults::ForeignDefault;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextAugmentedOriginProgramBudget {
     pub max_input_commands: usize,
@@ -120,6 +123,7 @@ pub struct TeletextAugmentedOriginProgram<'a> {
     object_sources: Option<super::object_header_positions::ObjectHeaderSources>,
     main_sources: Vec<TeletextAugmentedOriginSource>,
     carriers: Vec<TeletextAugmentedOriginCarrier>,
+    foreign_defaults: Vec<ForeignDefault>,
 }
 impl TeletextAugmentedOriginProgram<'_> {
     /// Preserve retained object ordinals and distinguish the derived AP writer.
@@ -128,7 +132,14 @@ impl TeletextAugmentedOriginProgram<'_> {
         &self,
         source: TeletextEnhancementSource,
     ) -> Option<TeletextMainCompositionSource> {
-        source.object?;
+        let identity = source.object?;
+        if self
+            .foreign_defaults
+            .iter()
+            .any(|wrapper| wrapper.identity() == identity)
+        {
+            return None;
+        }
         if let Some(TeletextAugmentedOriginSource::RetainedObject { identity, command }) =
             self.emitter_source(source)
         {
@@ -160,6 +171,21 @@ impl TeletextAugmentedOriginProgram<'_> {
     pub fn carriers(&self) -> &[TeletextAugmentedOriginCarrier] {
         &self.carriers
     }
+    /// Private comparison/ancestry mapping, never authored editor provenance.
+    pub(super) fn foreign_default_target(
+        &self,
+        physical: TeletextObjectIdentity,
+        original: TeletextSpatialInvocationId,
+    ) -> Option<TeletextObjectIdentity> {
+        self.foreign_defaults
+            .iter()
+            .find(|wrapper| wrapper.identity() == physical)?
+            .target(original)
+    }
+    pub(super) fn foreign_default_count(&self) -> usize {
+        self.foreign_defaults.len()
+    }
+
     /// Only the normalized factory may derive retained definition bodies. Raw
     /// assembly keeps its existing original-only behaviour and source mapping.
     pub(super) fn materialize_object_headers(
@@ -205,6 +231,16 @@ impl TeletextAugmentedOriginProgram<'_> {
             Some(sources) => sources.retained_source(source)?,
             None => source,
         };
+        let source = if let Some(wrapper) = self
+            .foreign_defaults
+            .iter()
+            .find(|wrapper| wrapper.identity() == identity)
+        {
+            wrapper.retained_source(source)?
+        } else {
+            source
+        };
+        let identity = source.object?;
         self.placement
             .catalog()
             .definition(identity)?
@@ -300,7 +336,7 @@ pub fn build_teletext_augmented_origin_program_with_work_usage<'a>(
     Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
     TeletextAugmentedOriginProgramUsage,
 ) {
-    build_with_optional_service_and_work_usage(placement, None, budget)
+    build_with_optional_service_and_work_usage(placement, None, budget, false)
 }
 
 pub(super) fn build_augmented_with_service_and_work_usage<'a>(
@@ -311,13 +347,26 @@ pub(super) fn build_augmented_with_service_and_work_usage<'a>(
     Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
     TeletextAugmentedOriginProgramUsage,
 ) {
-    build_with_optional_service_and_work_usage(placement, Some(service), budget)
+    build_with_optional_service_and_work_usage(placement, Some(service), budget, false)
+}
+
+/// Only a fully declared resource-bound factory may request this physical lowering.
+pub(super) fn build_augmented_with_foreign_defaults_and_work_usage<'a>(
+    placement: &'a TeletextOriginCarrierPlacement<'a>,
+    service: &TeletextSemanticService,
+    budget: TeletextAugmentedOriginProgramBudget,
+) -> (
+    Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
+    TeletextAugmentedOriginProgramUsage,
+) {
+    build_with_optional_service_and_work_usage(placement, Some(service), budget, true)
 }
 
 fn build_with_optional_service_and_work_usage<'a>(
     placement: &'a TeletextOriginCarrierPlacement<'a>,
     service: Option<&TeletextSemanticService>,
     budget: TeletextAugmentedOriginProgramBudget,
+    realize_foreign_defaults: bool,
 ) -> (
     Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
     TeletextAugmentedOriginProgramUsage,
@@ -331,6 +380,14 @@ fn build_with_optional_service_and_work_usage<'a>(
     };
     let result = (|| {
         let (count, original_commands) = builder.preflight()?;
+        let defaults = if realize_foreign_defaults {
+            builder.foreign_default_plan()?
+        } else {
+            Vec::new()
+        };
+        if !defaults.is_empty() {
+            builder.foreign_default_bounds(&defaults, count, original_commands)?;
+        }
         let mut commands = original_commands;
         for component in placement.components() {
             for call in component.calls() {
@@ -349,8 +406,16 @@ fn build_with_optional_service_and_work_usage<'a>(
             None,
         )?;
         builder.storage(count, commands)?;
+        if !defaults.is_empty() {
+            builder.foreign_default_bounds(&defaults, count, commands)?;
+        }
         let (catalog, carriers) = builder.emit_catalog(count, original_commands)?;
-        let (program, sources) = builder.emit_main(&carriers, count)?;
+        let (catalog, foreign_defaults) = if defaults.is_empty() {
+            (catalog, Vec::new())
+        } else {
+            builder.emit_foreign_defaults(catalog, &defaults)?
+        };
+        let (program, sources) = builder.emit_main(&carriers, count, &foreign_defaults)?;
         Ok(TeletextAugmentedOriginProgram {
             placement,
             program,
@@ -358,6 +423,7 @@ fn build_with_optional_service_and_work_usage<'a>(
             object_sources: None,
             main_sources: sources,
             carriers,
+            foreign_defaults,
         })
     })();
     (
@@ -439,6 +505,7 @@ impl<'a> Builder<'a, '_> {
         &mut self,
         carriers: &[TeletextAugmentedOriginCarrier],
         count: usize,
+        foreign_defaults: &[ForeignDefault],
     ) -> Result<
         (
             TeletextEnhancementProgram,
@@ -481,6 +548,11 @@ impl<'a> Builder<'a, '_> {
                 }
             }
             if let Some(&command) = main.get(gap) {
+                self.charge(foreign_defaults.len(), None)?;
+                let command = foreign_defaults
+                    .iter()
+                    .find_map(|wrapper| wrapper.replace(gap, command))
+                    .unwrap_or(command);
                 output.push(command);
                 sources.push(TeletextAugmentedOriginSource::RetainedMain {
                     composed_command: gap,
@@ -778,3 +850,7 @@ impl<'a> Builder<'a, '_> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "augmented_origin_program/foreign_defaults_tests.rs"]
+mod foreign_defaults_tests;

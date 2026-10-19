@@ -530,6 +530,7 @@ fn encode_owned_service(
     clock.check(None, None)?;
     let mut context =
         TeletextCompileContext::for_service(Some(&resource_context), clock.deadline, budget);
+    context.declared_foreign_defaults = true;
     let prepared = compiler_drcs::prepare(&declared, &defaults, budget, &mut context);
     *usage = context.used_work();
     let compiler_drcs::Prepared {
