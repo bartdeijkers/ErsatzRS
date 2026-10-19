@@ -5,9 +5,9 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
-P9A-04 scopes base host/subpage/publication and Lua scope/restart evidence.
-Unread-response drain repair passes8native/2headed/8ordinary/TSDuck and four-route
-smoke. Active viewers remain; pending originals require explicit publication.
+P9A-04 scopes base flow/Lua recovery, unreadHTTP drain repair and Linux active
+Legacy cleanup at default2 on60s source. Other engines/providers/platforms remain.
+Pending originals require explicit publication.
 Greek nativeG0 Unicode/coded Arabic header7 pass without banks; other Unicode/font
 coverage stays open. VDR source-negative for requiredG2; no build.
 Glyph/client/QTM/metadata/lifecycle/safety/platform remain mandatory.
@@ -255,7 +255,7 @@ id          = 'teletext-open-client-host-shutdown-is-unproven'
 adr         = '0123'
 description = 'Scoped base open-admin shutdown now has a verified unread-response repair; complete warm/active-viewer shutdown and source/worker/lease cleanup remain required. Preserve the historical forced incident and do not infer complete lifecycle/platform acceptance from finite captures or unforced parent exit.'
 discovered  = '2026-10-13'
-evidence    = 'Canonical standalone_level15_followup/open_admin_host_shutdown owns old forced/causal/quietTCP/control/setup negatives, source/runtime pins and repaired existing10s portable TCP drain. Eight native controls, rebuilt matched headedChromium EN/JS/light plusNL/noJS/dark with original pages open, four unforced host exits, eight model/AV/page/TSDuck captures, ordinary four-route smoke and strict lint pass. Complete active-viewer/source/worker/lease/platform proof remains separate. Historical2026-10-13 and finite-client receipts retain scope;200 response headers are not completed bodies.'
+evidence    = 'Canonical standalone_level15_followup/open_admin_host_shutdown owns old forced/causal/quietTCP/control/setup negatives, source/runtime pins and repaired existing10s portable TCP drain. Eight native controls, rebuilt matched headedChromium EN/JS/light plusNL/noJS/dark with original pages open, four unforced host exits, eight model/AV/page/TSDuck captures, ordinary four-route smoke and strict lint pass. active_viewer_shutdown adds actualLinuxLegacy default2 caller0/reopen2/host0 and source/mux/resident PID identity cleanup on60s source with unchanged30s observer/1MiB prefix. Exact persisted state survives unforced exit0; no product change or complete AV/transport/other-engine/provider/native-platform claim. Complete active-viewer/source/worker/lease/platform proof remains separate. Historical2026-10-13 and finite-client receipts retain scope;200 response headers are not completed bodies.'
 resolved    = false
 
 [[debt]]

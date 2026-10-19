@@ -1,4 +1,5 @@
 import { writeFileSync } from 'node:fs';
+import { get as httpGet } from 'node:http';
 
 export type TeletextTsCapture = { bytes: Buffer; ended: 'eof' | 'byte-limit' };
 
@@ -62,4 +63,64 @@ export async function captureTeletextChannelTs(
       await response.body.cancel().catch(() => undefined);
     }
   }
+}
+
+// Intentional host-stop observation, distinct from a complete finite capture.
+// Keep only a bounded initial TS window while consuming the live response. The
+// caller must independently prove host/worker cleanup and cannot infer it here.
+export function observeTeletextUntilStop(url: string, isStopping: () => boolean): {
+  ready: Promise<void>;
+  closed: Promise<{ ended: string; bytes: number }>;
+  prefix(): Buffer;
+  close(): Promise<{ ended: string; bytes: number }>;
+} {
+  const address = new URL(url);
+  if (address.protocol !== 'http:' || address.hostname !== '127.0.0.1' || address.username || address.password) {
+    throw new Error('Shutdown observer requires its owned loopback HTTP host.');
+  }
+  const chunks: Buffer[] = [];
+  const maximumPrefix = Math.floor(1024 * 1024 / 188) * 188;
+  let stored = 0; let bytes = 0; let done = false; let callerClosed = false;
+  let readyResolve!: () => void; let readyReject!: (error: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+  let closedResolve!: (value: { ended: string; bytes: number }) => void;
+  let closedReject!: (error: Error) => void;
+  const closed = new Promise<{ ended: string; bytes: number }>((resolve, reject) => { closedResolve = resolve; closedReject = reject; });
+  // Keep both failures observable by the owner without an unhandled-rejection
+  // race while it is still waiting for the other boundary.
+  void ready.catch(() => undefined); void closed.catch(() => undefined);
+  const finish = (ended: string, failure?: Error): void => {
+    if (done) return;
+    done = true; clearTimeout(timer);
+    const error = failure ?? (!callerClosed && !isStopping() ? new Error('Viewer ended before explicit host shutdown.') : undefined);
+    if (error) { readyReject(error); closedReject(error); }
+    else { readyResolve(); closedResolve({ ended, bytes }); }
+  };
+  const request = httpGet(address, { agent: false }, response => {
+    if (response.statusCode !== 200 || !response.headers['content-type']?.toLowerCase().startsWith('video/mp2t')) {
+      finish('invalid-response', new Error('Shutdown viewer did not receive MPEG-TS.'));
+      response.destroy(); return;
+    }
+    response.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (stored < maximumPrefix) {
+        const part = chunk.subarray(0, maximumPrefix - stored);
+        chunks.push(Buffer.from(part)); stored += part.length;
+        if (stored === maximumPrefix) readyResolve();
+      }
+    });
+    response.once('end', () => finish('eof'));
+    response.once('aborted', () => finish('aborted'));
+    response.once('error', () => finish('read-error'));
+  });
+  const timer = setTimeout(() => {
+    finish('timeout', new Error('Shutdown viewer exceeded its original 30-second time bound.'));
+    request.destroy();
+  }, 30_000);
+  request.once('error', () => finish('request-error'));
+  return {
+    ready, closed,
+    prefix: () => Buffer.concat(chunks, stored),
+    close: async () => { callerClosed = true; request.destroy(); finish('client-close'); return closed; },
+  };
 }

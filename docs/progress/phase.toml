@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: unread-response shutdown repaired; active-viewer cleanup and base receiver remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: active Legacy cleanup proven; repertoire/editor flow and suitable receiver remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -196,9 +196,21 @@ web all-target Clippy pass. Canonical same followup/open_admin_host_shutdown
 owns source/runtime pins, the old forced failure, rejected quietTCP hypothesis,
 causal WASM body proof and wrapper/setup negatives; unchanged editor/glyph/F6
 receipts retain scope. No full lifecycle/receiver/platform/base/full9A claim.
-Next qualify an ordinary continuous viewer open through shutdown using existing
-stream/host tools, including owned source/worker/lease cleanup. Finite captures
-and pending unit producers do not establish actual active-viewer acceptance.
+active_viewer_shutdown now adds genuine Linux Legacy cleanup evidence on the
+same matchedfec67e5b product code: coherent software fixture, default2 pair
+(wrapper+encoder), caller disconnect0 with source/mux PIDs gone, reopened2 and
+actual host restart0. Exact private resident preparation-worker identity remains
+on caller disconnect and disappears with old host. Long60.069s source/37MB,
+unchanged30s observer and1MiB prefix exclude naturalEOF: host stop after8.9MB,
+unforced exit0; publication/config/package/calls retained. Canonical same followup
+owns pins, source hash and earlier fixture/pair/resident/short-source scope
+negatives. This is new proof, no product change, complete AV/transport/client,
+active Hybrid/Next/provider/native-platform or base/full9A acceptance. Unchanged
+strict finite-capture semantics and normal-stream/F6/editor proof remain reused.
+Next L15-A/B functional package: qualify applicable Latin-national/Greek charset
+editing through the existing pinned QTM export/edit/import workflow; first reuse
+already-proven cases, then isolate missing native-G0/enhancement-context boundaries.
+No general audit, tiny-variant loop or full unaffected stream/client replay.
 
 Actual base receiver, complete repertoire/editor/shared lifecycle and native
 platform evidence remain required. Full2.5 X1 stays deferred; X3 waits upstream

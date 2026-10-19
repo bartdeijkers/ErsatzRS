@@ -254,6 +254,7 @@ export class TeletextChannelFixture {
       if (!template) throw new Error('Disposable E2E profile is unavailable.');
       const profile = { ...template, Id: id, Name: `Synthetic teletext ${id}`, ResolutionId: id,
         TranscodeVideo: 0, TranscodeAudio: 0, VideoFormat: 99, AudioFormat: 99,
+        VideoPreset: 'veryfast', VideoProfile: null,
         VideoBitrate: 4000, VideoBufferSize: 2000, AudioBitrate: 128, AudioBufferSize: 256,
         AudioChannels: 1, AudioSampleRate: 48, HardwareAcceleration: 0, ThreadCount: 1,
         OutputDynamicRange: 0, HdrMasteringDisplay: null, HdrMaxCll: null, HdrMaxFall: null,

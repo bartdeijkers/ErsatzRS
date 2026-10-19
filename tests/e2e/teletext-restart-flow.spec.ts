@@ -1,12 +1,12 @@
 import { expect, Locator, Page } from '@playwright/test';
-import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from './isolated-web-host';
 import { waitForHydration } from './hydration';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
-import { captureTeletextChannelTs } from './helpers/teletext-stream-capture';
+import { captureTeletextChannelTs, observeTeletextUntilStop } from './helpers/teletext-stream-capture';
 
 // Intentional Unix-only synthetic package, with an owned real host/database.
 // Publication setup is English; restart views prove EN and NL durability.
@@ -543,4 +543,131 @@ test('standalone Level 1.5 future On survives host replacement and expires to ba
     writeFileSync(`${prefix}.success.json`, JSON.stringify({ restarts, scopes: { on }, calls: fixture.calls(), browser: browser.version(),
       scope: 'Headed EN/JS/light genuine futureOn and postOnexpiry host recovery with finite ordinary captures. No implicit future publication, open-client shutdown, complete lifecycle/base/full9A or platform claim.' }, null, 2));
   } finally { try { await context.close(); } finally { fixture.close(); } }
+});
+
+// Intentional Linux process-identity qualification; native six-RID acceptance
+// remains separate. Only owned descendants' command lines are inspected.
+function ownedViewerProcesses(parent: number, source: string): { pid: number; start: string; command: string; readsSource: boolean; preparationWorker: boolean }[] {
+  const rows = execFileSync('ps', ['-eo', 'pid=,ppid=,comm='], { encoding: 'utf8', timeout: 3000, maxBuffer: 1024 * 1024 })
+    .trim().split('\n').map(line => {
+      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
+      if (!match) throw new Error('Invalid bounded process identity output.');
+      return { pid: Number(match[1]), parent: Number(match[2]), command: match[3] };
+    });
+  const owned = new Set([parent]);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const row of rows) if (owned.has(row.parent) && !owned.has(row.pid)) { owned.add(row.pid); changed = true; }
+  }
+  return rows.filter(row => row.pid !== parent && owned.has(row.pid)).flatMap(row => {
+    try {
+      const stat = readFileSync(`/proc/${row.pid}/stat`, 'utf8');
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      const command = readFileSync(`/proc/${row.pid}/cmdline`, 'utf8');
+      return [{ pid: row.pid, start: fields[19], command: row.command, readsSource: command.includes(source), preparationWorker: command.split('\0').includes('--internal-addon-preparation-worker') }];
+    } catch (error) { if (!existsSync(`/proc/${row.pid}`)) return []; throw error; }
+  });
+}
+function sameProcessAlive(process: { pid: number; start: string }): boolean {
+  try {
+    const stat = readFileSync(`/proc/${process.pid}/stat`, 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] === process.start;
+  } catch (error) { if (!existsSync(`/proc/${process.pid}`)) return false; throw error; }
+}
+
+test('standalone Level 1.5 active Legacy viewers release source processes and leases on shutdown', async ({ browser, isolatedWebHost }, testInfo) => {
+  test.skip(process.platform !== 'linux', 'Intentional Linux /proc identity proof; native platform acceptance remains mandatory.');
+  test.skip(testInfo.project.name !== 'chromium', 'Reuse existing localized/browser proof for unchanged UI.');
+  test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+  test.setTimeout(150_000);
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+  fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
+  // The selected source must outlive the entire30s observer budget: a12s EOF
+  // near the10s shutdown grace cannot establish cancellation independently.
+  const original = join(fixture.root, 'synthetic-client-source.ts');
+  const extended = join(fixture.root, 'synthetic-client-source-long.ts');
+  execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+    '-stream_loop', '4', '-i', original, '-t', '60', '-map', '0:v:0', '-map', '0:a:0',
+    '-c', 'copy', '-muxrate', '4953600', '-pcr_period', '20', '-mpegts_start_pid', '256',
+    '-mpegts_pmt_start_pid', '4096', '-f', 'mpegts', extended], { timeout: 30_000, maxBuffer: 65_536 });
+  renameSync(extended, original);
+  const source = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-show_entries',
+    'format=duration', '-of', 'json', original], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 }));
+  expect(Number(source.format.duration)).toBeGreaterThan(59);
+  const sourceBytes = statSync(original).size;
+  const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  let stopping = false;
+  const viewers: ReturnType<typeof observeTeletextUntilStop>[] = [];
+  const owned = new Map<number, ReturnType<typeof ownedViewerProcesses>[number]>();
+  const capacity = async (active: number): Promise<void> => {
+    await expect.poll(async () => {
+      const html = await (await page.request.get('/settings/ffmpeg')).text();
+      return html.includes(`${text('en_us')('StreamsInUse')}: ${active} / 2 (`);
+    }, { timeout: 10_000 }).toBe(true);
+  };
+  try {
+    await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    const profiles = [await createProfile(page, fixture, 'day', true), await createProfile(page, fixture, 'night', true)];
+    for (const [index, profile] of profiles.entries()) {
+      await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, true);
+      await bind(page, fixture, profile, true);
+      await prepare(page, fixture, `Active viewer ${index}`, true);
+      await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), true);
+      await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), true);
+    }
+    const retained = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
+    fixture.resetSourceStart();
+    const host = isolatedWebHost.processIdentity();
+    const resident = ownedViewerProcesses(host.pid, join(fixture.root, 'synthetic-client-source.ts'));
+    expect(resident.length).toBeGreaterThan(0);
+    expect(resident.every(process => process.preparationWorker)).toBe(true);
+    for (const process of resident) owned.set(process.pid, process);
+    writeFileSync(testInfo.outputPath('host-resident-processes.json'), JSON.stringify(resident, null, 2));
+    const isResident = (process: { pid: number; start: string }): boolean => resident.some(original => original.pid === process.pid && original.start === process.start);
+    const openViewer = async (): Promise<ReturnType<typeof observeTeletextUntilStop>> => {
+      const viewer = observeTeletextUntilStop(`${isolatedWebHost.baseURL}/iptv/channel/${fixture.channels[0]}.ts?mode=ts-legacy`, () => stopping);
+      viewers.push(viewer); await viewer.ready; await capacity(2);
+      const processes = ownedViewerProcesses(host.pid, join(fixture.root, 'synthetic-client-source.ts'));
+      writeFileSync(testInfo.outputPath(`active-${viewers.length}.processes.json`), JSON.stringify(processes, null, 2));
+      expect(processes.some(process => process.readsSource)).toBe(true);
+      for (const process of processes) owned.set(process.pid, process);
+      const prefix = viewer.prefix(); const pids = new Set<number>();
+      for (let offset = 0; offset < prefix.length; offset += 188) {
+        expect(prefix[offset]).toBe(0x47);
+        pids.add(((prefix[offset + 1] & 0x1f) << 8) | prefix[offset + 2]);
+      }
+      for (const pid of [0, 256, 257, 512]) expect(pids.has(pid)).toBe(true);
+      writeFileSync(testInfo.outputPath(`active-${viewers.length}.prefix.ts`), prefix);
+      return viewer;
+    };
+    // Existing Legacy admission is a pair: wrapper + itemencoder, not one slot
+    // per viewer. No capacity increase or source-ownership exemption is used.
+    const first = await openViewer();
+    const firstClosed = await first.close(); expect(firstClosed.ended).toBe('client-close');
+    await capacity(0);
+    expect([...owned.values()].filter(process => !isResident(process)).filter(sameProcessAlive)).toEqual([]);
+    expect(resident.every(sameProcessAlive)).toBe(true);
+    fixture.resetSourceStart();
+    const active = await openViewer();
+    stopping = true;
+    const result = await isolatedWebHost.restart();
+    const day = await active.closed;
+    expect(day.bytes).toBeGreaterThanOrEqual(active.prefix().length);
+    expect(day.bytes).toBeLessThan(sourceBytes / 2);
+    expect(result.stop).toMatchObject({ closed: true, forced: false, exitCode: 0, signalCode: null });
+    await expect.poll(() => [...owned.values()].filter(sameProcessAlive), { timeout: 5000 }).toEqual([]);
+    await capacity(0);
+    const recovered = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
+    expect(recovered.safety.workerEpoch).not.toBe(retained.safety.workerEpoch);
+    expect({ ...recovered, safety: recovered.safety.snapshot }).toEqual({ ...retained, safety: retained.safety.snapshot });
+    expect(fixture.calls()).toEqual(['day', 'night']); expect(fixture.unchangedPackage()).toBe(true);
+    writeFileSync(testInfo.outputPath('active-viewer-success.json'), JSON.stringify({ result, viewers: [firstClosed, day], processes: [...owned.values()], resident, source: { duration: source.format.duration, bytes: sourceBytes },
+      scope: 'Linux ordinary Legacy wrapper+encoder at default2: live2, caller disconnect0, reopened2, host restart0; known source/process identities disappear. No complete AV/transport/decoder/native-platform/9A acceptance; unchanged normal-stream evidence is reused.' }, null, 2));
+  } finally {
+    stopping = true;
+    await Promise.allSettled(viewers.map(viewer => viewer.close()));
+    await context.close(); fixture.close();
+  }
 });
