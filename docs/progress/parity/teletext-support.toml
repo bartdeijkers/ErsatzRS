@@ -5,12 +5,12 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
-P9A-04 scopes base host/subpage/publication and insideOn/Off/postOffexpiry
-recovery. Same responses/default2 retain pending originals before publication;
-sourceAV/TSDuck and45 stock glyph/cache/Index checks pass.
+P9A-04 scopes base host/subpage/publication, insideOn/Off and futureOn/postexpiry
+recovery. SourceAV/TSDuck plus54 new stock glyph/cache/Index checks pass; open
+admin-client shutdown remains. Pending originals require explicit publication.
 Greek nativeG0 Unicode/coded Arabic header7 pass without banks; other Unicode/font
-coverage stays open. VDR base receiver source-negative for requiredG2; no build.
-Complete glyph/client/QTM/metadata/shared lifecycle/safety/platform remain mandatory.
+coverage stays open. VDR source-negative for requiredG2; no build.
+Glyph/client/QTM/metadata/lifecycle/safety/platform remain mandatory.
 
 Typed services/provenance/resources, physical ownership, X26/X27/X28/M29,
 replay/raster and glyph/charset normalization are partial. Original bytes, fallback, ancestry, absent/default distinctions and

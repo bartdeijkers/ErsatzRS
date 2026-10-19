@@ -258,11 +258,11 @@ for (const standalone of [false, true]) for (const [language, module, js, dark] 
 // Same existing isolated host and real hydrated scheduler action as the effective
 // authoring flow. No interval/checkpoint/publication rows are seeded or rewritten.
 async function queueScripted(page: Page, fixture: TeletextChannelFixture, channel: number,
-  mode: 'reset' | 'continue', profile: number | null | undefined, count: number): Promise<void> {
+  mode: 'reset' | 'continue', profile: number | null | undefined, count: number, leading = 0): Promise<void> {
   const before = fixture.database.prepare('SELECT COUNT(*) AS count FROM "PlayoutItem" WHERE "PlayoutId"=?').get(channel) as { count: number };
   const previous = fixture.database.prepare('SELECT "LastBuild" FROM "PlayoutBuildStatus" WHERE "PlayoutId"=?').get(channel) as { LastBuild: string } | undefined;
   const intervals = fixture.scriptedIntervals(channel);
-  fixture.writeScriptedControls(channel, profile, count);
+  fixture.writeScriptedControls(channel, profile, count, leading);
   const tr = text('en_us');
   await page.goto('/playouts'); await ready(page, true);
   const name = fixture.database.prepare('SELECT "Name" FROM "Channel" WHERE "Id"=?').get(channel) as { Name: string };
@@ -294,7 +294,7 @@ async function queueScripted(page: Page, fixture: TeletextChannelFixture, channe
       : actual.length === 1 && actual[0].State === Number(profile !== null) && actual[0].ProfileId === profile;
     return status?.Success === 1 && status.LastBuild !== previous?.LastBuild
       && status.LastSuccessfulBuild === status.LastBuild && scopeMatches
-      && items.count === count + (mode === 'continue' ? before.count : 0);
+      && items.count === count + leading + (mode === 'continue' ? before.count : 0);
   }, { timeout: 45_000 }).toBe(true);
 }
 
@@ -441,5 +441,100 @@ test('standalone Level 1.5 Lua scopes survive real host restarts and expire to a
     expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
     writeFileSync(`${prefix}.success.json`, JSON.stringify({ restarts, scopes: { enabled, off }, calls: fixture.calls(), browser: browser.version(),
       scope: 'Headed EN/JS/light real-host scoped On/Off/expiry, finite ordinary responses. No open-client shutdown, all-locales/platform/complete base or9A acceptance.' }, null, 2));
+  } finally { try { await context.close(); } finally { fixture.close(); } }
+});
+
+// Future On and post-On expiry are distinct from the retained insideOn/Off trial.
+// Real Lua builds own all intervals and UTC boundaries; no table/clock mutation.
+test('standalone Level 1.5 future On survives host replacement and expires to base', async ({ browser, isolatedWebHost }, testInfo) => {
+  test.skip(process.platform === 'win32', 'Intentional POSIX synthetic package; native Windows remains separate.');
+  test.skip(testInfo.project.name !== 'chromium', 'Existing composed browser/localization evidence remains scoped.');
+  test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+  test.setTimeout(300_000);
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+  fixture.configureScripted(); fixture.setAuthoringPolicy();
+  const policy = JSON.parse(readFileSync(fileURLToPath(new URL('../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl)), 'utf8'));
+  policy.version = 2; policy.live_updates = { poll_interval_ms: 25, recovery_timeout_ms: 2000 };
+  fixture.setOutputPolicy(JSON.stringify(policy));
+  for (const channel of fixture.channels) fixture.database.prepare('UPDATE "Channel" SET "Name"=? WHERE "Id"=?').run(`Synthetic future Lua ${channel}`, channel);
+  const prefix = testInfo.outputPath('future');
+  copyFileSync(join(fixture.root, 'synthetic-client-source.ts'), `${prefix}.source.ts`);
+  let context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+  let page = await context.newPage();
+  const errors: string[] = [];
+  const watch = (): void => {
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  };
+  watch();
+  const restarts: unknown[] = [];
+  const restart = async (stage: string, beforeBoundary?: number): Promise<void> => {
+    if (beforeBoundary !== undefined) expect(Date.now()).toBeLessThan(beforeBoundary);
+    const before = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
+    const calls = fixture.calls(); await context.close();
+    const result = await isolatedWebHost.restart();
+    expect(result.stop).toMatchObject({ closed: true, forced: false, exitCode: 0, signalCode: null });
+    expect(result.after.pid).not.toBe(result.before.pid);
+    const after = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
+    expect(after.safety.workerEpoch).not.toBe(before.safety.workerEpoch);
+    expect({ ...after, safety: after.safety.snapshot }).toEqual({ ...before, safety: before.safety.snapshot });
+    expect(fixture.calls()).toEqual(calls);
+    if (beforeBoundary !== undefined) expect(Date.now()).toBeLessThan(beforeBoundary);
+    restarts.push({ stage, ...result, observed_utc: new Date().toISOString(), beforeBoundary });
+    writeFileSync(`${prefix}.restarts.json`, JSON.stringify(restarts, null, 2));
+    context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    page = await context.newPage(); watch();
+  };
+  const publish = async (): Promise<void> => {
+    await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), true);
+    await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), true);
+    await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+  };
+  try {
+    await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    const day = await createProfile(page, fixture, 'day', true);
+    const night = await createProfile(page, fixture, 'night', true);
+    const bases: string[] = [];
+    for (const [index, theme, profile] of [[0, 'day', day], [1, 'night', night]] as const) {
+      await queueScripted(page, fixture, fixture.channels[index], 'reset', undefined, 80);
+      await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, true);
+      await bind(page, fixture, profile, true);
+      bases.push(await prepare(page, fixture, `Future scope base ${theme}`, true)); await publish();
+    }
+    await queueScripted(page, fixture, fixture.channels[0], 'reset', night, 6, 6);
+    const on = fixture.scriptedIntervals(fixture.channels[0]);
+    expect(on).toHaveLength(1); expect(on[0].State).toBe(1); expect(on[0].ProfileId).toBe(night);
+    const start = scopeUtc(on[0].Start); const finish = scopeUtc(on[0].Finish);
+    expect(start).toBeGreaterThan(Date.now()); expect(finish - start).toBe(72_000);
+    await queueScripted(page, fixture, fixture.channels[0], 'continue', undefined, 80);
+    expect(fixture.scriptedIntervals(fixture.channels[0])).toEqual(on);
+    await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[0], `${prefix}.future.before.day.ts`);
+    await restart('before-future-on', start);
+    await page.goto(bases[0]); await ready(page, true); await raster(page, 'day', '200');
+    await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+    await page.screenshot({ path: testInfo.outputPath('future-before-on.png') });
+    await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[0], `${prefix}.future.after.day.ts`);
+    expect(Date.now()).toBeLessThan(start);
+    await expect.poll(() => Date.now() >= start, { timeout: 85_000 }).toBe(true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    const scoped = await prepare(page, fixture, 'Future Lua Night now active', true, true); await publish();
+    await raster(page, 'night', '200');
+    await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[0], `${prefix}.active.night.ts`);
+    await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[1], `${prefix}.isolated.night.ts`);
+    expect(Date.now()).toBeLessThan(finish);
+    await expect.poll(() => Date.now() > finish, { timeout: 85_000 }).toBe(true);
+    await restart('after-on-expiry');
+    await page.goto(scoped); await ready(page, true);
+    await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'unavailable');
+    await page.goto(bases[0]); await ready(page, true); await raster(page, 'day', '200');
+    await page.screenshot({ path: testInfo.outputPath('future-after-on-expiry.png') });
+    await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[0], `${prefix}.expired.day.ts`);
+    await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[1], `${prefix}.expired.night.ts`);
+    expect(fixture.scriptedIntervals(fixture.channels[0])).toEqual(on);
+    expect(fixture.calls()).toEqual(['day', 'night', 'night']);
+    expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
+    writeFileSync(`${prefix}.success.json`, JSON.stringify({ restarts, scopes: { on }, calls: fixture.calls(), browser: browser.version(),
+      scope: 'Headed EN/JS/light genuine futureOn and postOnexpiry host recovery with finite ordinary captures. No implicit future publication, open-client shutdown, complete lifecycle/base/full9A or platform claim.' }, null, 2));
   } finally { try { await context.close(); } finally { fixture.close(); } }
 });

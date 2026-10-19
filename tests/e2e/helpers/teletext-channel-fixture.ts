@@ -315,8 +315,9 @@ export class TeletextChannelFixture {
   }
 
   // Undefined emits no teletext commands: a fresh control-free Lua build.
-  writeScriptedControls(channel: number, profile: number | null | undefined, count: number): void {
-    if (!this.scripted || !this.channels.includes(channel) || !Number.isInteger(count) || count < 1 || count > 80) {
+  writeScriptedControls(channel: number, profile: number | null | undefined, count: number, leading = 0): void {
+    if (!this.scripted || !this.channels.includes(channel) || !Number.isInteger(count) || count < 1
+      || !Number.isInteger(leading) || leading < 0 || count + leading > 80) {
       throw new Error('Scripted controls must stay within the owned bounded fixture.');
     }
     if (profile !== null && profile !== undefined && !this.profiles().some(row => row.Id === profile && !row.IsDeleted)) {
@@ -326,7 +327,7 @@ export class TeletextChannelFixture {
       ? `assert(teletext_enabled('${this.addonId}',false).ok)`
       : `assert(teletext_profile('${this.addonId}',${profile}).ok)\nassert(teletext_enabled('${this.addonId}',true).ok)`;
     writeFileSync(join(this.root, `synthetic-controls-${channel}.lua`),
-      `add_collection('clip','Synthetic Scripted ${this.addonId}')\n${controls}\nadd_count('clip',${count})\n`);
+      `add_collection('clip','Synthetic Scripted ${this.addonId}')\n${leading ? `add_count('clip',${leading})\n` : ''}${controls}\nadd_count('clip',${count})\n`);
   }
 
   scriptedIntervals(channel: number): { Start: string; Finish: string; State: number; ProfileId: number | null }[] {

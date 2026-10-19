@@ -114,3 +114,53 @@ async fn served_level15_scoped_restart_retains_model_and_source_av() {
     }
     fixture.state.pool.close().await;
 }
+
+#[tokio::test]
+#[ignore = "requires actual headed future-On/On-expiry host captures and pinned FFmpeg9/TSDuck"]
+async fn served_level15_future_on_retains_model_and_source_av() {
+    let tools = Tools::load().await;
+    let prefix = client_capture::selected("ERSATZRS_TELETEXT_FUTURE_ON_CAPTURE");
+    let (fixture, _) = installed_profiles_with(&tools, response, 12).await;
+    let source = tokio::fs::read(format!("{prefix}.source.ts"))
+        .await
+        .unwrap();
+    let accepted = [
+        accept_base(&fixture, 1).await,
+        accept_base(&fixture, 2).await,
+    ];
+    for candidate in &accepted {
+        assert_base(candidate.service());
+    }
+    for (suffix, index) in [
+        ("future.before.day", 0),
+        ("future.after.day", 0),
+        ("active.night", 1),
+        ("isolated.night", 1),
+        ("expired.day", 0),
+        ("expired.night", 1),
+    ] {
+        let bytes = tokio::fs::read(format!("{prefix}.{suffix}.ts"))
+            .await
+            .unwrap();
+        super::super::super::editorial_imports::live_updates::live_tcp::assert_uninterrupted_source_clock(&bytes);
+        client_capture::verify_transport_with_qualified_authored_pts_gaps(
+            &tools.tsanalyze,
+            &tools.ffprobe,
+            &bytes,
+            0,
+            Some(&PathBuf::from(format!("{prefix}.{suffix}.analyze.json"))),
+            false,
+        )
+        .await;
+        client_capture::verify_av(&tools.ffmpeg, &source, &bytes).await;
+        assert_emitted_model(&bytes, accepted[index].service());
+        export_units(&prefix, suffix, &bytes).await;
+    }
+    assert_eq!(
+        tokio::fs::read(fixture.root.path().join("ordinary-calls"))
+            .await
+            .unwrap(),
+        b"day\nnight\n"
+    );
+    fixture.state.pool.close().await;
+}

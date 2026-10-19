@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: native Greek G0 Unicode verified; base receiver remains open'
+current_focus = 'P9A-04 standalone Level 1/1.5: future-On/On-expiry host evidence verified; open-client shutdown remains'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -175,8 +175,21 @@ negative: X26mode0F/G2 is unsupported in the pinned renderer. The existing rawZ 
 G2£ fixture would retainZ; this is source inference, not a failed runtime trial.
 Stop before build; no external repair. Canonical base_client_qualification/
 vdr_osdteletext owns hashes and closure conditions. No unchanged candidate retry.
-Next independent L15-C gap: qualify future-On and On-expiry recovery using the
-existing scoped host test, retaining selected publication and original interval.
+L15-C future_on_host_restart now proves genuine futureOn and postOnexpiry:
+headedChromium151 EN/JS/light, real Lua Reset plus fresh control-freeContinue,
+unchanged exact72sOn interval, before-future and after-expiry host replacement,
+selected base beforeOn, explicit effectiveNight publication insideOn and base
+recovery afterOn. Three host generations close gracefully. Six ordinary finite
+responses pass native e610bff6 exact model/sourceAV/clock/TSDuck;54 stock0.2.42
+cache/glyph/fallback/literalIndex checks pass. No product change or implicit
+future publication. Existing frozen matched4a5b22f3 server/site is reused only for
+unchanged lifecycle/Latin fixtures; current native verifier checks exact emitted
+models. Intervening Greek correction has byteidentical Latin requests. No new
+Greek stream/current package/platform or complete base/full9A claim. Targeted
+native verifier Clippy passes; original all-target product lint remains valid.
+Next L15-C safety gap: isolate the retained open-admin-client graceful-shutdown
+stall using the existing host/browser fixture and route evidence before choosing
+a bounded correction. Finite-client graceful closure does not close this gap.
 Actual base receiver, complete repertoire/editor/shared lifecycle and native
 platform evidence remain required. Full2.5 X1 stays deferred; X3 waits upstream
 QTM native banks/over208 context. Neither base nor full9A is accepted.
