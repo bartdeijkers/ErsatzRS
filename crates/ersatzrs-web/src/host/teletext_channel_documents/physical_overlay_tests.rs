@@ -724,6 +724,100 @@ fn restored_compilers_refuse_unapplied_resource_intent_in_both_envelope_roles() 
 }
 
 #[test]
+fn restored_compilers_refuse_unapplied_new_banks_even_with_matching_older_intents() {
+    use crate::host::teletext_stored_designs::EditorialResourceIntents;
+    use ersatzrs_app::teletext_design_documents::{
+        TeletextSavedObjectResourceAddition, TeletextSavedResourceTransmission,
+        TeletextSavedResourceUpdate,
+    };
+    let resource = TeletextResourceIdentity::new(
+        TeletextResourceKind::Pop,
+        TeletextRawDataPageNumber::new(2, 0xc7).unwrap(),
+        TeletextResourceSubpageIndex::new(15).unwrap(),
+    )
+    .unwrap();
+    let new = TeletextSavedObjectResourceAddition::new(
+        0,
+        TeletextObjectResourceAddition::new(resource, vec![], storage_budget().validation.service)
+            .unwrap(),
+        TeletextSavedResourceTransmission {
+            resource,
+            counter: TeletextResourceUpdateCounter::new(0).unwrap(),
+            update: TeletextSavedResourceUpdate::Changed,
+            last_subpage: true,
+        },
+    )
+    .unwrap();
+    for effective in [false, true] {
+        for with_prior in [false, true] {
+            let prior = saved_overlay(true, vec![]);
+            let saved = if with_prior {
+                prior
+                    .with_object_resource_additions(vec![new.clone()])
+                    .unwrap()
+            } else {
+                TeletextSavedEditorialOverlay::new_with_object_resource_additions(
+                    prior.provenance().clone(),
+                    vec![new.clone()],
+                )
+                .unwrap()
+            };
+            for authenticated in [false, true] {
+                let document = stored_original(effective);
+                let stored = stored_revision(effective, document.clone());
+                let intents = EditorialResourceIntents {
+                    operands: saved.resource_object_operands(),
+                    programs: saved.resource_object_program_overlays(),
+                    additions: saved.resource_object_definition_additions(),
+                };
+                let result = if effective {
+                    let mut parts =
+                        decode_teletext_effective_design_documents(&document, storage_budget())
+                            .unwrap()
+                            .into_parts();
+                    parts.editorial_overlay = Some(saved.clone());
+                    if authenticated {
+                        crate::host::teletext_effective_designs::compile_effective_restored_parts_with_resource_intents(stored, parts, bounds(1).0, deadline(), vec![], intents).map(|_| ())
+                    } else {
+                        compile_effective_restored_parts(
+                            stored,
+                            parts,
+                            bounds(1).0,
+                            deadline(),
+                            vec![],
+                        )
+                        .map(|_| ())
+                    }
+                } else {
+                    let mut parts = decode_teletext_design_documents(&document, storage_budget())
+                        .unwrap()
+                        .into_parts();
+                    parts.editorial_overlay = Some(saved.clone());
+                    if authenticated {
+                        crate::host::teletext_designs::compile_restored_parts_with_resource_intents(
+                            stored,
+                            parts,
+                            bounds(1).0,
+                            deadline(),
+                            vec![],
+                            intents,
+                        )
+                        .map(|_| ())
+                    } else {
+                        compile_restored_parts(stored, parts, bounds(1).0, deadline(), vec![])
+                            .map(|_| ())
+                    }
+                };
+                assert!(matches!(
+                    result,
+                    Err(NativeTeletextDesignError::EditorialValidationUnavailable)
+                ));
+            }
+        }
+    }
+}
+
+#[test]
 fn restored_compilers_apply_saved_operands_and_replay_v1_rows_exactly() {
     // Real decoding for both envelope roles, without import permission,
     // scripted selection, durable storage or publication claims.

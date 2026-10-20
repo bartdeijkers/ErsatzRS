@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 native new-bank sets verified; next immutable concept/receipt/CAS/lifecycle integration; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 V25 storage/refusal boundary verified; next authorized bank replay/receipt/CAS/lifecycle/effects; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -117,9 +117,13 @@ artifacts, native ARM/macOS and applicable platform/adoption gates; no remote
 dispatch/push. F1 resource_set_creation_followup now adds a separate atomic native
 POP/GPOP bank-set intent; original content/MOT/fallback/overlays/spellings and
 complete dependency checks remain. Thirteen focused native cases pass, including
-seven new set/owner/graph/budget cases and six retained Add guards. Only the native
-component is implemented: versioned immutable concept replay, retained receipt/
-head-CAS, lifecycle/effects and localized editor/publication wiring remain open.
+seven new set/owner/graph/budget cases and six retained Add guards. Its
+storage_followup adds private V25 structural storage with explicit source ordinal,
+complete banks/lifecycle and retained V1–24 role semantics. Final192 codec cases
+pass (six new,186 prior), including229-command storage without Local208. Five
+host controls and strict app/web Clippy/architecture pass; native replay still
+refuses unsupported bank intent. Authorized application, retained receipt/head-CAS, combined lifecycle/
+effects and localized editor/publication wiring remain open.
 Next bundle those existing boundaries for this exact intent, without widening
 Add/Copy/import authority. X3 full-bank editor capacity still waits upstream.
 Unused removal stays deferred; keep F6 closed without a relevant regression.

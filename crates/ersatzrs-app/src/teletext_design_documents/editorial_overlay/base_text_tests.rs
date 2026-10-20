@@ -3,7 +3,7 @@ use super::*;
 use ersatzrs_domain::{TeletextBaseTextEdit, TeletextEnhancementPosition};
 use serde_json::{json, Value};
 
-fn original(v3: bool) -> Vec<u8> {
+pub(super) fn original(v3: bool) -> Vec<u8> {
     let mut root = original_value(v3);
     let mut response: Value =
         serde_json::from_str(root["documents"][0]["response"].as_str().unwrap()).unwrap();
@@ -20,7 +20,7 @@ fn original(v3: bool) -> Vec<u8> {
     root["documents"][0]["response"] = json!(serde_json::to_string_pretty(&response).unwrap());
     bytes(&root)
 }
-fn edit() -> TeletextBaseTextEdit {
+pub(super) fn edit() -> TeletextBaseTextEdit {
     TeletextBaseTextEdit::new(
         address(16),
         TeletextEnhancementPosition::new(1, 4).unwrap(),
@@ -131,7 +131,7 @@ fn v23_base_text_storage_refuses_forged_originals_targets_shapes_and_oversized_v
     ));
 }
 
-fn native_edit() -> TeletextBaseTextEdit {
+pub(super) fn native_edit() -> TeletextBaseTextEdit {
     use ersatzrs_domain::{
         TeletextBaseTextSpelling, TeletextColumnOperation, TeletextEnhancementCharsetDesignation,
         TeletextGlyphCode,

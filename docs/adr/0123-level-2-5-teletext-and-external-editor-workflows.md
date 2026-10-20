@@ -17,10 +17,16 @@ Partial — a separate typed native new-object-resource intent now admits comple
 POP/GPOP bank sets, including empty logical owners, without widening retained-bank
 Add/Copy or TTI authority. Semantic and declared reconstruction preserve original
 content, MOTs/defaults/fallback, overlays and spellings; aggregate bounds precede
-cloning and the complete dependency graph remains mandatory. This is not yet a
-saved-concept action: receipt/CAS authorization, versioned immutable storage,
-explicit lifecycle/effect authority and editor/admin/publication wiring remain.
-P9A-04 owns the native component proof and unchanged full F1/X3 requirements.
+cloning and the complete dependency graph remains mandatory. Private concept
+version25 now retains complete new banks, explicit original-document ordinals and
+exact transmission descriptors beside the immutable original. It encloses the
+unchanged prior V1–24 role interpretation; old formats cannot acquire bank
+authority by carrying new fields. Generic and previously authenticated native
+replay must refuse V25 until explicit bank replay is implemented, never silently
+encode only the old model. This is not yet a saved-concept action: retained
+receipt/head-CAS, combined native lifecycle/effect qualification and localized
+editor/admin/publication wiring remain. P9A-04 owns the component proof and
+unchanged full F1/X3 requirements.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

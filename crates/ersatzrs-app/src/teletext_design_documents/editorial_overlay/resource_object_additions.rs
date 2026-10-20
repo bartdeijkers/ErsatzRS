@@ -13,9 +13,9 @@ use std::collections::BTreeSet;
 
 #[derive(Serialize)]
 pub(in super::super) struct StoredDefinitionAddition {
-    identity: StoredResourceObjectIdentity,
-    object_type: TeletextObjectType,
-    program: TeletextEnhancementProgram,
+    pub(super) identity: StoredResourceObjectIdentity,
+    pub(super) object_type: TeletextObjectType,
+    pub(super) program: TeletextEnhancementProgram,
 }
 impl<'de> Deserialize<'de> for StoredDefinitionAddition {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {

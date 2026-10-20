@@ -165,10 +165,11 @@ pub(super) fn check_authenticated_editorial_resource_intents(
 ) -> Result<(), NativeTeletextDesignError> {
     let resource_operands = intents.operands;
     let resource_programs = intents.programs;
-    if overlay.map_or(
-        &[][..],
-        TeletextSavedEditorialOverlay::resource_object_operands,
-    ) != resource_operands
+    if overlay.is_some_and(|overlay| !overlay.object_resource_additions().is_empty())
+        || overlay.map_or(
+            &[][..],
+            TeletextSavedEditorialOverlay::resource_object_operands,
+        ) != resource_operands
         || overlay.map_or(
             &[][..],
             TeletextSavedEditorialOverlay::resource_object_program_overlays,

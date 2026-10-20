@@ -49,6 +49,14 @@ const LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 21;
 const MAIN_LOCAL_INVOCATION_OVERLAY_VERSION: u16 = 22;
 const BASE_TEXT_EDIT_VERSION: u16 = 23;
 const BASE_TEXT_NATIVE_SPELLING_VERSION: u16 = 24;
+const OBJECT_RESOURCE_ADDITION_VERSION: u16 = 25;
+
+#[path = "editorial_overlay/object_resources.rs"]
+pub(super) mod object_resources;
+pub use object_resources::TeletextSavedObjectResourceAddition;
+use object_resources::{
+    BorrowedObjectResources, OptionalPriorVersion, OptionalStoredObjectResources,
+};
 
 #[path = "editorial_overlay/base_text.rs"]
 pub(super) mod base_text;
@@ -123,6 +131,7 @@ pub struct TeletextSavedEditorialOverlay {
     resource_object_operands: Vec<TeletextResourceObjectOperandOverlay>,
     resource_object_program_overlays: Vec<TeletextResourceObjectProgramOverlay>,
     resource_object_definition_additions: Vec<TeletextResourceObjectDefinitionAddition>,
+    object_resource_additions: Vec<TeletextSavedObjectResourceAddition>,
     base_text_edits: Vec<ersatzrs_domain::TeletextBaseTextEdit>,
     schema_version: u16,
 }
@@ -1006,6 +1015,7 @@ impl TeletextSavedEditorialOverlay {
             resource_object_operands: Vec::new(),
             resource_object_program_overlays: Vec::new(),
             resource_object_definition_additions: Vec::new(),
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             schema_version,
         })
@@ -1019,7 +1029,11 @@ impl TeletextSavedEditorialOverlay {
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        self.schema_version
+        if self.object_resource_additions.is_empty() {
+            self.schema_version
+        } else {
+            OBJECT_RESOURCE_ADDITION_VERSION
+        }
     }
     #[must_use]
     pub const fn provenance(&self) -> &TeletextSavedEditorialProvenance {
@@ -1361,6 +1375,10 @@ macro_rules! closed_map {
 }
 closed_map!(StoredOverlay {
     schema_version: u16,
+    #[serde(default, skip_serializing_if = "OptionalPriorVersion::is_absent")]
+    prior_schema_version: OptionalPriorVersion,
+    #[serde(default, skip_serializing_if = "OptionalStoredObjectResources::is_absent")]
+    object_resource_additions: OptionalStoredObjectResources,
     #[serde(default, skip_serializing_if = "OptionalStoredBaseTextEdits::is_absent")]
     base_text_edits: OptionalStoredBaseTextEdits,
     export_receipt_id: EntityId,
@@ -1534,6 +1552,14 @@ impl StoredOverlay {
     }
 
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        object_resources::check_version(self)?;
+        if self.schema_version == OBJECT_RESOURCE_ADDITION_VERSION {
+            return Ok(());
+        }
+        self.check_prior_version()
+    }
+
+    fn check_prior_version(&self) -> Result<(), TeletextDesignDocumentError> {
         base_text::check_version(self)?;
         if matches!(
             self.schema_version,
@@ -1662,6 +1688,9 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
+        if self.schema_version == OBJECT_RESOURCE_ADDITION_VERSION {
+            return object_resources::restore(self, documents, budget);
+        }
         if matches!(
             self.schema_version,
             BASE_TEXT_EDIT_VERSION | BASE_TEXT_NATIVE_SPELLING_VERSION
@@ -1803,6 +1832,7 @@ pub(super) fn validate_association(
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,
 ) -> Result<(), TeletextDesignDocumentError> {
+    object_resources::validate_association(overlay, documents, budget)?;
     limit(
         overlay.pages.len(),
         budget.validation.service.max_records,
@@ -1959,6 +1989,10 @@ fn unique_original_owner(
 #[derive(Serialize)]
 struct BorrowedOverlay<'a> {
     schema_version: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prior_schema_version: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    object_resource_additions: Option<BorrowedObjectResources<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_text_edits: Option<BorrowedBaseTextEdits<'a>>,
     export_receipt_id: EntityId,
@@ -2150,6 +2184,10 @@ fn write_appended(
         &mut *writer,
         &BorrowedOverlay {
             schema_version: overlay.schema_version(),
+            prior_schema_version: (!overlay.object_resource_additions.is_empty())
+                .then_some(overlay.schema_version),
+            object_resource_additions: (!overlay.object_resource_additions.is_empty())
+                .then_some(BorrowedObjectResources(&overlay.object_resource_additions)),
             base_text_edits: (!overlay.base_text_edits.is_empty())
                 .then_some(BorrowedBaseTextEdits(&overlay.base_text_edits)),
             export_receipt_id: value.export_receipt_id,
@@ -2277,3 +2315,7 @@ mod main_local_invocation_program_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/base_text_tests.rs"]
 mod base_text_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/object_resource_storage_tests.rs"]
+mod object_resource_storage_tests;

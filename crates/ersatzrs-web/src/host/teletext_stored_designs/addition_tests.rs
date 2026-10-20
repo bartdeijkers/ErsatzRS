@@ -1,15 +1,18 @@
 //! New catalogue intent cannot borrow an older resource-replay authorization.
 use super::*;
-use ersatzrs_app::teletext_design_documents::TeletextSavedEditorialProvenance;
+use ersatzrs_app::teletext_design_documents::{
+    TeletextSavedEditorialProvenance, TeletextSavedObjectResourceAddition,
+    TeletextSavedResourceTransmission, TeletextSavedResourceUpdate,
+};
 use ersatzrs_domain::{
     TeletextEnhancementObjectDefinition, TeletextEnhancementProgram, TeletextObjectId,
-    TeletextObjectIdentity, TeletextObjectType, TeletextRawDataPageNumber,
-    TeletextResourceIdentity, TeletextResourceKind, TeletextResourceObjectDefinitionAddition,
-    TeletextResourceSubpageIndex,
+    TeletextObjectIdentity, TeletextObjectResourceAddition, TeletextObjectType,
+    TeletextRawDataPageNumber, TeletextResourceIdentity, TeletextResourceKind,
+    TeletextResourceObjectDefinitionAddition, TeletextResourceSubpageIndex,
+    TeletextResourceUpdateCounter, TeletextServiceBudget,
 };
 
-#[test]
-fn unqualified_definition_additions_cannot_use_existing_resource_replay_authority() {
+fn definition_overlay() -> (TeletextServiceBudget, TeletextSavedEditorialOverlay) {
     let budget = super::super::teletext_runtime_policy::parse_native_teletext_runtime_policy(
         include_str!("../../../tests/fixtures/teletext-output-policy-v1.json"),
     )
@@ -43,6 +46,12 @@ fn unqualified_definition_additions_cannot_use_existing_resource_replay_authorit
         vec![addition],
     )
     .unwrap();
+    (budget, overlay)
+}
+
+#[test]
+fn unqualified_definition_additions_cannot_use_existing_resource_replay_authority() {
+    let (_, overlay) = definition_overlay();
     assert_eq!(overlay.schema_version(), 18);
     assert!(overlay.resource_object_operands().is_empty());
     assert!(overlay.resource_object_program_overlays().is_empty());
@@ -58,4 +67,42 @@ fn unqualified_definition_additions_cannot_use_existing_resource_replay_authorit
         ));
     }
     check_authenticated_editorial_resource_replay(None, false, &[], &[]).unwrap();
+}
+
+#[test]
+fn unqualified_new_object_resources_cannot_borrow_matching_prior_intents() {
+    let (budget, overlay) = definition_overlay();
+    let bank = TeletextResourceIdentity::new(
+        TeletextResourceKind::Gpop,
+        TeletextRawDataPageNumber::new(2, 0xc1).unwrap(),
+        TeletextResourceSubpageIndex::new(15).unwrap(),
+    )
+    .unwrap();
+    let new = TeletextSavedObjectResourceAddition::new(
+        0,
+        TeletextObjectResourceAddition::new(bank, vec![], budget).unwrap(),
+        TeletextSavedResourceTransmission {
+            resource: bank,
+            counter: TeletextResourceUpdateCounter::new(0).unwrap(),
+            update: TeletextSavedResourceUpdate::Changed,
+            last_subpage: true,
+        },
+    )
+    .unwrap();
+    let overlay = overlay.with_object_resource_additions(vec![new]).unwrap();
+    // Matching every older intent is still not authorization for a new bank.
+    for has_physical_rows in [false, true] {
+        assert!(matches!(
+            check_authenticated_editorial_resource_intents(
+                Some(&overlay),
+                has_physical_rows,
+                EditorialResourceIntents {
+                    operands: overlay.resource_object_operands(),
+                    programs: overlay.resource_object_program_overlays(),
+                    additions: overlay.resource_object_definition_additions()
+                }
+            ),
+            Err(NativeTeletextDesignError::EditorialValidationUnavailable)
+        ));
+    }
 }

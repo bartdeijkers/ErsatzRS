@@ -42,6 +42,65 @@ pub(super) fn overlay() -> TeletextSavedEditorialOverlay {
     .unwrap()
 }
 
+#[test]
+fn v25_object_resources_effective_storage_keeps_source_ordinal_and_scripted_membership() {
+    use crate::teletext_design_documents::{
+        TeletextSavedObjectResourceAddition, TeletextSavedResourceTransmission,
+        TeletextSavedResourceUpdate,
+    };
+    use ersatzrs_domain::{
+        TeletextObjectResourceAddition, TeletextRawDataPageNumber, TeletextResourceIdentity,
+        TeletextResourceKind, TeletextResourceSubpageIndex, TeletextResourceUpdateCounter,
+    };
+    let fixture = Fixture::mixed();
+    let original = fixture.encode();
+    let before = decode_teletext_effective_design_documents(original.bytes(), budget()).unwrap();
+    let resource = TeletextResourceIdentity::new(
+        TeletextResourceKind::Gpop,
+        TeletextRawDataPageNumber::new(3, 0xa7).unwrap(),
+        TeletextResourceSubpageIndex::new(15).unwrap(),
+    )
+    .unwrap();
+    let addition = TeletextSavedObjectResourceAddition::new(
+        2,
+        TeletextObjectResourceAddition::new(resource, vec![], budget().validation.service).unwrap(),
+        TeletextSavedResourceTransmission {
+            resource,
+            counter: TeletextResourceUpdateCounter::new(6).unwrap(),
+            update: TeletextSavedResourceUpdate::Changed,
+            last_subpage: false,
+        },
+    )
+    .unwrap();
+    let edits = overlay()
+        .with_object_resource_additions(vec![addition.clone()])
+        .unwrap();
+    let saved =
+        append_teletext_effective_design_editorial_overlay(original.bytes(), &edits, budget())
+            .unwrap();
+    let after = decode_teletext_effective_design_documents(saved.bytes(), budget()).unwrap();
+    assert_eq!(after.selection(), before.selection());
+    assert_eq!(after.producer_bindings(), &[0, 2, 3]);
+    assert_eq!(
+        after
+            .editorial_overlay()
+            .unwrap()
+            .object_resource_additions(),
+        [addition]
+    );
+    assert_eq!(after.editorial_overlay(), Some(&edits));
+    assert_eq!(
+        after.resource_transmissions(),
+        before.resource_transmissions()
+    );
+    for (a, b) in after.sources().iter().zip(before.sources()) {
+        assert_eq!(a.bytes(), b.bytes());
+        assert_eq!(a.authoring(), b.authoring());
+    }
+    // Document ordinal2 is producer binding3; it must never be inferred as binding2.
+    assert_eq!(after.producer_bindings()[2], 3);
+}
+
 pub(super) fn assert_preserved_original(original: &[u8]) {
     let before = decode_teletext_effective_design_documents(original, budget()).unwrap();
     assert!(before.editorial_overlay().is_none());

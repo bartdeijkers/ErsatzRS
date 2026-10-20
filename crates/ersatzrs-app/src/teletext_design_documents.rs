@@ -34,7 +34,7 @@ mod editorial_overlay;
 mod source_fence;
 pub use editorial_overlay::{
     append_teletext_design_editorial_overlay, TeletextSavedEditorialOverlay,
-    TeletextSavedEditorialProvenance,
+    TeletextSavedEditorialProvenance, TeletextSavedObjectResourceAddition,
 };
 
 pub(crate) const MAX_BINDINGS: usize = 1024;
@@ -1273,6 +1273,7 @@ enum Path {
     Document,
     Response,
     Transmissions,
+    Transmission,
     GuideInputs,
     GuideRequest,
     GuideSource,
@@ -1298,6 +1299,9 @@ enum Path {
     EditorialMainProgram,
     EditorialDefinitionAdditions,
     EditorialDefinitionAddition,
+    EditorialObjectResources,
+    EditorialObjectResource,
+    EditorialObjectResourceDefinitions,
     EditorialResourcePrograms,
     EditorialResourceProgram,
     EditorialResourceProgramDefinition,
@@ -1319,6 +1323,7 @@ struct Scan {
     effective: bool,
     responses: usize,
     context: usize,
+    resource_transmissions: usize,
     editorial_items: usize,
     editorial_operands: usize,
     editorial_programs: usize,
@@ -1384,6 +1389,11 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::resource_object_additions::StoredDefinitionAddition,
             >(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialObjectResource) {
+            self.inner.scan.check(storage::<
+                editorial_overlay::object_resources::StoredObjectResourceAddition,
+            >(self.count))?;
+        }
         if matches!(self.inner.path, Path::EditorialResourceProgram) {
             self.inner.scan.check(storage::<
                 editorial_overlay::resource_object_programs::StoredResourceProgram,
@@ -1412,6 +1422,22 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 .scan
                 .check(storage::<editorial_overlay::StoredBitmap>(self.count))?;
         }
+        if matches!(
+            self.inner.path,
+            Path::Transmission | Path::EditorialObjectResource
+        ) {
+            self.inner.scan.resource_transmissions = self
+                .inner
+                .scan
+                .resource_transmissions
+                .checked_add(1)
+                .ok_or_else(|| serde::de::Error::custom("saved transmission count overflow"))?;
+            self.inner.scan.check(limit(
+                self.inner.scan.resource_transmissions,
+                self.inner.scan.budget.max_resource_transmissions,
+                "resource transmissions",
+            ))?;
+        }
         self.inner.scan.editorial(self.inner.path)?;
         self.inner.deserialize(deserializer)
     }
@@ -1430,6 +1456,7 @@ impl Scan {
                 | Path::EditorialMainProgram
                 | Path::EditorialResourceProgram
                 | Path::EditorialDefinitionAddition
+                | Path::EditorialObjectResource
                 | Path::EditorialProgramCommand
                 | Path::EditorialResourceProgramCommand
                 | Path::EditorialRetainedCommand
@@ -1617,6 +1644,12 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "resource_object_definition_additions") => {
                     Path::EditorialDefinitionAdditions
                 }
+                (Path::EditorialOverlay, "object_resource_additions") => {
+                    Path::EditorialObjectResources
+                }
+                (Path::EditorialObjectResource, "definitions") => {
+                    Path::EditorialObjectResourceDefinitions
+                }
                 (Path::EditorialOverlay, "resource_object_program_overlays") => {
                     Path::EditorialResourcePrograms
                 }
@@ -1681,7 +1714,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
             Path::Settings => (MAX_TELETEXT_PROFILE_SETTINGS, Path::Other, "settings"),
             Path::Transmissions => (
                 self.scan.budget.max_resource_transmissions,
-                Path::Other,
+                Path::Transmission,
                 "resource transmissions",
             ),
             Path::GuideChannels => (
@@ -1765,7 +1798,15 @@ fn glyph_program_sequence_limits(
             Path::EditorialGlyphProgram,
             "editorial glyph programs",
         ),
-        Path::EditorialDefinitionAdditions => (
+        Path::EditorialObjectResources => (
+            budget
+                .max_resource_transmissions
+                .min(budget.validation.service.max_records)
+                .min(budget.validation.declarations.max_resources),
+            Path::EditorialObjectResource,
+            "editorial object resources",
+        ),
+        Path::EditorialDefinitionAdditions | Path::EditorialObjectResourceDefinitions => (
             budget.validation.service.max_objects,
             Path::EditorialDefinitionAddition,
             "editorial definition additions",
@@ -1820,6 +1861,7 @@ fn preflight_json_for_format(
         effective,
         responses: 0,
         context: 0,
+        resource_transmissions: 0,
         editorial_items: 0,
         editorial_operands: 0,
         editorial_programs: 0,
