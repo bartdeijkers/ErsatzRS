@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: active Lua-profile invalidation/expiry proven; D client acquisition and E1/E2 runtime adoption/platforms remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: candidate.4 Linux/Windows compatibility block proven; D client acquisition and E1/E2 prepared-callback/adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -411,6 +411,19 @@ acquisition/operator capability; independently E1/E2 adoption/compatibility/Heal
 and native platforms. All finite/enhanced gates remain; no unchanged client
 retry or external maintenance. Latest maintainer authority permits this
 checkpoint push only, no publication.
+
+Current audio_language_followup/network_compatibility_followup proves17Linux
+and17nativeWindows existing provider/directHTTP/RTSP/image/repeat/seek/caption/
+audio/clock/EOF/handoff/cleanup cases on exact optimized .4 packages. Canonical
+P9A-04 receipt pins current dirty Linux versus frozen7603285d Windows scope;
+no current packaged-Windows/fullF5/native-sixRID/adoption/base/9A claim. No code,
+test or oracle change; unchanged parent/editor/admin/Lua/isolation/F6 proof is
+reused. Next bounded gap: existing corrected prepared-artifact policy harness
+on .4, preserving Burn/Convert/Off/seek/audio/ownership and original refusals.
+Both macOS artifacts/nativeARM/macOS/Health/adoption and D capability remain.
+The candidate source is now on remote09a682fa; specific macOS workflow approval
+is pending, no dispatch. All finite/enhanced criteria remain; this evidence
+checkpoint stays local, previous push authority fulfilled, no publication.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.
