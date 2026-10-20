@@ -380,3 +380,67 @@ fn v25_object_resources_refuse_existing_banks_foreign_lifecycle_and_base_only_ow
             .is_err()
     );
 }
+
+#[test]
+fn v25_stores_coordinated_graph_without_validating_an_incomplete_prior_role() {
+    let source = original(true);
+    let decoded = decode_teletext_design_documents(&source, budget()).unwrap();
+    let TeletextProfileDocument::Authored(service) = &decoded.documents()[0] else {
+        panic!("authored source")
+    };
+    let banks = additions();
+    let mut definition = super::resource_object_addition_tests::addition(false, 15)
+        .definition()
+        .clone();
+    definition.object_type = TeletextObjectType::Adaptive;
+    definition.program =
+        TeletextEnhancementProgram::new(vec![TeletextEnhancementCommand::InvokeObject {
+            target: banks[1].addition().definitions()[0].identity,
+            object_type: TeletextObjectType::Passive,
+            offset: None,
+        }])
+        .unwrap();
+    let addition =
+        TeletextResourceObjectDefinitionAddition::new(definition, budget().validation.service)
+            .unwrap();
+    assert!(service
+        .as_ref()
+        .clone()
+        .with_resource_object_definition_additions(
+            std::slice::from_ref(&addition),
+            budget().validation.service
+        )
+        .is_err());
+    let complete_banks = banks
+        .iter()
+        .map(|bank| bank.addition().clone())
+        .collect::<Vec<_>>();
+    service
+        .as_ref()
+        .clone()
+        .with_object_resource_and_definition_additions(
+            &complete_banks,
+            std::slice::from_ref(&addition),
+            budget().validation.service,
+            budget().validation.declarations,
+        )
+        .unwrap();
+    let prior = TeletextSavedEditorialOverlay::new_with_resource_object_definition_additions(
+        provenance(),
+        vec![addition],
+    )
+    .unwrap();
+    assert!(
+        append_teletext_design_editorial_overlay(&source, &prior, budget()).is_err(),
+        "legacy standalone role still requires its complete original-bank graph"
+    );
+    let overlay = prior.with_object_resource_additions(banks).unwrap();
+    let encoded = append_teletext_design_editorial_overlay(&source, &overlay, budget()).unwrap();
+    let restored = decode_teletext_design_documents(encoded.bytes(), budget()).unwrap();
+    assert_eq!(restored.editorial_overlay(), Some(&overlay));
+    assert_eq!(restored.sources()[0].bytes(), decoded.sources()[0].bytes());
+    assert_eq!(
+        restored.resource_transmissions(),
+        decoded.resource_transmissions()
+    );
+}

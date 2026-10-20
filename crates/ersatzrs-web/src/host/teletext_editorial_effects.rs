@@ -34,6 +34,7 @@ mod definition_additions;
 mod lineage;
 mod main_programs;
 mod object_operands;
+mod object_resources;
 mod programs;
 mod resource_objects;
 #[cfg(test)]
@@ -113,7 +114,7 @@ pub(super) fn validate_teletext_editorial_effects(
 
 /// Checked semantic changes and physical rows share the original receipt's
 /// permissions. These borrowed intents never grant edit authority themselves.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub(super) struct TeletextEditorialEdits<'a> {
     pub base_text_edits: &'a [ersatzrs_domain::TeletextBaseTextEdit],
     pub rows: &'a [TeletextPhysicalBaseOverlay],
@@ -122,6 +123,8 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub resource_operands: &'a [TeletextResourceObjectOperandOverlay],
     pub resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     pub resource_additions: &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
+    pub object_resource_additions:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
@@ -159,6 +162,7 @@ pub(super) fn validate_teletext_editorial_transition(
         TeletextEditorialEdits {
             base_text_edits: &[],
             resource_additions: &[],
+            object_resource_additions: &[],
             rows: incoming,
             operands: &[],
             object_operands: &[],
@@ -171,6 +175,7 @@ pub(super) fn validate_teletext_editorial_transition(
         TeletextEditorialEdits {
             base_text_edits: &[],
             resource_additions: &[],
+            object_resource_additions: &[],
             rows: cumulative,
             operands: &[],
             object_operands: &[],
@@ -201,23 +206,19 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
 ) -> Result<()> {
     check_deadline(deadline)?;
     check_service(original, edited, incoming, cumulative, budget, deadline)?;
-    let resource_context = if incoming.resource_operands.is_empty()
-        && incoming.resource_programs.is_empty()
-        && incoming.resource_additions.is_empty()
-    {
-        None
-    } else {
-        Some(resource_objects::Context::new(
-            original,
-            edited,
-            incoming.resource_additions,
-            budget,
-            deadline,
-        )?)
-    };
-    for (before, after) in
-        compiler_resources::authored_pages(original).zip(compiler_resources::authored_pages(edited))
-    {
+    let resource_context = resource_objects::checked_context(
+        original, edited, incoming, cumulative, budget, deadline,
+    )?;
+    let mut after_pages = compiler_resources::authored_pages(edited)
+        .filter(|page| !object_resources::is_added_page(page, incoming.object_resource_additions));
+    for before in compiler_resources::authored_pages(original) {
+        let after = after_pages.next().ok_or_else(|| {
+            error(
+                None,
+                None,
+                TeletextEditorialEffectsFailure::ProtectedStructure,
+            )
+        })?;
         check_deadline(deadline)?;
         let (Some((old_page, old)), Some((new_page, new))) = (display(before), display(after))
         else {
@@ -254,7 +255,8 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
                 .iter()
                 .any(|value| value.owner() == owner)
             || !incoming.resource_programs.is_empty()
-            || !incoming.resource_additions.is_empty();
+            || !incoming.resource_additions.is_empty()
+            || !incoming.object_resource_additions.is_empty();
         let operand_change =
             operand_change || structural_change || !incoming.resource_operands.is_empty();
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
@@ -286,6 +288,13 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         // the right and lower-row footprints. The command column is no permit.
         let lineage = lineage::ProtectedLineage::new(old, new, incoming, budget, deadline)?;
         compare_protected(old, new, &allowed, &lineage, budget, deadline)?;
+    }
+    if after_pages.next().is_some() {
+        return Err(error(
+            None,
+            None,
+            TeletextEditorialEffectsFailure::ProtectedStructure,
+        ));
     }
     check_deadline(deadline)
 }
@@ -340,6 +349,12 @@ fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize)
             .iter()
             .map(|addition| addition.definition().program.commands().len()),
     );
+    let counts = counts.chain(edits.object_resource_additions.iter().flat_map(|bank| {
+        bank.addition()
+            .definitions()
+            .iter()
+            .map(|definition| definition.program.commands().len())
+    }));
     for count in counts {
         let Some(next) = remaining.checked_sub(count) else {
             return false;
@@ -349,13 +364,12 @@ fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize)
     true
 }
 
-fn check_service(
+fn check_editorial_budgets(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
     incoming: TeletextEditorialEdits<'_>,
     cumulative: TeletextEditorialEdits<'_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
-    deadline: Instant,
 ) -> Result<()> {
     let overlays = cumulative.rows;
     // Bitmaps replace existing definitions and add no commands. The checked
@@ -378,6 +392,8 @@ fn check_service(
         || overlays.len() > budget.max_pages
         || incoming.resource_additions.len() > budget.normalization.max_resource_objects
         || cumulative.resource_additions.len() > budget.normalization.max_resource_objects
+        || incoming.object_resource_additions.len() > budget.max_pages
+        || cumulative.object_resource_additions.len() > budget.max_pages
         || !bounded_editorial_commands(incoming, budget.max_commands)
         || !bounded_editorial_commands(cumulative, budget.max_commands)
         || incoming.bitmaps.len() > maximum_bitmaps
@@ -385,17 +401,37 @@ fn check_service(
     {
         return Err(error(None, None, TeletextEditorialEffectsFailure::Budget));
     }
+    Ok(())
+}
+
+fn check_service(
+    original: &EncodedTeletextAuthoredService,
+    edited: &EncodedTeletextAuthoredService,
+    incoming: TeletextEditorialEdits<'_>,
+    cumulative: TeletextEditorialEdits<'_>,
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+) -> Result<()> {
+    check_editorial_budgets(original, edited, incoming, cumulative, budget)?;
+    let overlays = cumulative.rows;
     let old = original.declared();
     let new = edited.declared();
     let before = old.semantic();
     let after = new.semantic();
-    compiler_resources::check(original, edited, incoming.rows, deadline)?;
+    compiler_resources::check(
+        original,
+        edited,
+        incoming.rows,
+        incoming.object_resource_additions,
+        deadline,
+    )?;
     if original.magazine_units() != edited.magazine_units()
         || before.magazine_presentations() != after.magazine_presentations()
         || old.mots() != new.mots()
         || old.selections() != new.selections()
         || old.resolutions() != new.resolutions()
-        || old.resource_inventory() != new.resource_inventory()
+        || (incoming.object_resource_additions.is_empty()
+            && old.resource_inventory() != new.resource_inventory())
         || old.defaults() != new.defaults()
     {
         return Err(error(
@@ -411,7 +447,7 @@ fn check_service(
         deadline,
     )?;
     base_text::check_spellings(before, after, incoming.base_text_edits, deadline)?;
-    definition_additions::check_declarations(old, new, incoming.resource_additions, deadline)?;
+    object_resources::check_declarations(old, new, incoming, cumulative, deadline)?;
     object_operands::check(
         before.objects(),
         after.objects(),
@@ -554,7 +590,7 @@ fn check_resource(
     let Some(header) = before.resource_header() else {
         return Err(failure());
     };
-    if !incoming.resource_additions.is_empty()
+    if (!incoming.resource_additions.is_empty() || !incoming.object_resource_additions.is_empty())
         && matches!(before, EncodedTeletextAuthoredPage::Object(_))
     {
         return resource_context

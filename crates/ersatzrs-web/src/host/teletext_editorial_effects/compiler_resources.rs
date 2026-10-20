@@ -151,6 +151,7 @@ pub(super) fn check(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
     rows: &[TeletextPhysicalBaseOverlay],
+    additions: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     deadline: Instant,
 ) -> Result<()> {
     for service in [original, edited] {
@@ -172,15 +173,17 @@ pub(super) fn check(
             changed_generated(original, edited, resource, rows)?;
         }
     }
-    check_authored_inventory(original, edited)
+    check_authored_inventory(original, edited, additions)
 }
 
 fn check_authored_inventory(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
+    additions: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
 ) -> Result<()> {
     let mut before = authored_pages(original);
-    let mut after = authored_pages(edited);
+    let mut after = authored_pages(edited)
+        .filter(|page| !super::object_resources::is_added_page(page, additions));
     loop {
         let equal = match (before.next(), after.next()) {
             (None, None) => return Ok(()),

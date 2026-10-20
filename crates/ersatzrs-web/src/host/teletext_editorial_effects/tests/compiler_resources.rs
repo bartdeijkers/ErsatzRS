@@ -238,7 +238,9 @@ fn no_bank_polish_base_adds_and_removes_only_proven_compiler_resources() {
         deadline()
     )
     .is_err());
-    assert!(super::super::compiler_resources::check(&before, &after, &[], deadline()).is_err());
+    assert!(
+        super::super::compiler_resources::check(&before, &after, &[], &[], deadline()).is_err()
+    );
 }
 
 #[test]
@@ -293,7 +295,9 @@ fn no_bank_turkish_base_preserves_editor_zone_and_compiler_ownership() {
         deadline(),
     )
     .is_err());
-    assert!(super::super::compiler_resources::check(&before, &after, &[], deadline()).is_err());
+    assert!(
+        super::super::compiler_resources::check(&before, &after, &[], &[], deadline()).is_err()
+    );
 }
 
 fn tti_budget() -> TeletextTtiBudget {

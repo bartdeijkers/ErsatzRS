@@ -23,12 +23,16 @@ in one graph; existing-bank Add still cannot acquire a new resource owner. Priva
 version25 now retains complete new banks, explicit original-document ordinals and
 exact transmission descriptors beside the immutable original. It encloses the
 unchanged prior V1–24 role interpretation; old formats cannot acquire bank
-authority by carrying new fields. Generic and previously authenticated native
-replay must refuse V25 until explicit bank replay is implemented, never silently
-encode only the old model. This is not yet a saved-concept action: retained
-receipt/head-CAS, combined native lifecycle/effect qualification and localized
-editor/admin/publication wiring remain. P9A-04 owns the component proof and
-unchanged full F1/X3 requirements.
+authority by carrying new fields. Generic replay and old authenticated entry
+points still refuse bank intent. An explicit native action now uses the existing
+bounded worker, retained receipt and current-head CAS to save an unpublished
+concept; replay admits only the identical stored bank set after complete native
+source, graph, lifecycle and shared-effect qualification. Later qualified TTI
+edits fold into complete retained bank bodies. Shared preview, separate explicit
+publication and cold reconstruction reuse that model and immutable originals.
+Localized creation controls, retained-bank Add/Copy integration and full external
+editor/consumer proof remain required. P9A-04 owns the scoped proof and unchanged
+full F1/X3 requirements; no new package or upload authority follows.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

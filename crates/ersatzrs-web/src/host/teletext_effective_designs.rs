@@ -618,6 +618,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_edits(
         deadline,
         overlays,
         super::teletext_stored_designs::EditorialResourceIntents {
+            object_resource_additions: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -644,19 +645,10 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
         resources,
     )?;
     policy.entry = parts.entry;
-    policy.transmissions = parts
-        .resource_transmissions
-        .iter()
-        .map(|r| TeletextServiceResourceTransmission {
-            resource: r.resource,
-            counter: r.counter,
-            last_subpage: r.last_subpage,
-            update: match r.update {
-                TeletextSavedResourceUpdate::Changed => TeletextResourceFullUpdate::Changed,
-                TeletextSavedResourceUpdate::Unchanged => TeletextResourceFullUpdate::Unchanged,
-            },
-        })
-        .collect();
+    policy.transmissions = super::teletext_stored_designs::resource_transmissions(
+        &parts.resource_transmissions,
+        resources.object_resource_additions,
+    );
     let region = parts.v1_region.map(|r| match r {
         TeletextSavedV1Region::WesternLatin => TeletextEncodingRegion::WesternLatin,
     });
@@ -685,6 +677,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
         entry,
         parts.documents,
         EditorialResourceDocuments {
+            object_resource_additions: resources.object_resource_additions,
             base_text_edits: parts
                 .editorial_overlay
                 .as_ref()

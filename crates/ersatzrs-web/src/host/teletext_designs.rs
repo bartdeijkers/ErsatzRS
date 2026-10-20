@@ -509,6 +509,7 @@ pub(super) fn compile_restored_parts_with_resource_edits(
         deadline,
         overlays,
         super::teletext_stored_designs::EditorialResourceIntents {
+            object_resource_additions: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -535,19 +536,10 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         resources,
     )?;
     policy.entry = parts.entry;
-    policy.transmissions = parts
-        .resource_transmissions
-        .iter()
-        .map(|record| TeletextServiceResourceTransmission {
-            resource: record.resource,
-            counter: record.counter,
-            last_subpage: record.last_subpage,
-            update: match record.update {
-                TeletextSavedResourceUpdate::Changed => TeletextResourceFullUpdate::Changed,
-                TeletextSavedResourceUpdate::Unchanged => TeletextResourceFullUpdate::Unchanged,
-            },
-        })
-        .collect();
+    policy.transmissions = super::teletext_stored_designs::resource_transmissions(
+        &parts.resource_transmissions,
+        resources.object_resource_additions,
+    );
     let region = parts.v1_region.map(|region| match region {
         TeletextSavedV1Region::WesternLatin => TeletextEncodingRegion::WesternLatin,
     });
@@ -577,6 +569,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
     let originals = if resource_operands.is_empty()
         && resource_programs.is_empty()
         && resource_additions.is_empty()
+        && resources.object_resource_additions.is_empty()
         && main_programs.is_empty()
         && base_text_edits.is_empty()
     {
@@ -595,6 +588,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
             parts.entry_addon_id.as_deref(),
             parts.documents,
             EditorialResourceDocuments {
+                object_resource_additions: resources.object_resource_additions,
                 base_text_edits,
                 main_programs,
                 programs: editorial,

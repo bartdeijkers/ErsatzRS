@@ -75,7 +75,11 @@ pub(super) fn check_catalogues(
     deadline: Instant,
 ) -> Result<()> {
     check_deadline(deadline)?;
-    check_incoming(before, after, incoming.resource_additions, deadline)?;
+    if incoming.object_resource_additions.is_empty() {
+        check_incoming(before, after, incoming.resource_additions, deadline)?;
+    } else {
+        super::object_resources::check_catalogue_incoming(before, after, incoming, deadline)?;
+    }
     let mut final_ids = BTreeSet::new();
     for addition in cumulative.resource_additions {
         check_deadline(deadline)?;

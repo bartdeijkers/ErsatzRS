@@ -31,6 +31,8 @@ mod object_operands;
 mod object_programs;
 #[path = "repeat/resource_additions.rs"]
 mod resource_additions;
+#[path = "repeat/resource_banks.rs"]
+mod resource_banks;
 #[path = "repeat/resource_operands.rs"]
 mod resource_operands;
 #[path = "repeat/resource_programs.rs"]
@@ -173,6 +175,7 @@ pub(super) fn qualify_latest(
 /// Borrowed getter restoration preserves the root-relative stored addition role.
 pub(super) fn from_overlay(overlay: &TeletextSavedEditorialOverlay) -> TeletextEditorialChanges {
     TeletextEditorialChanges {
+        object_resource_additions: overlay.object_resource_additions().to_vec(),
         base_text_edits: overlay.base_text_edits().to_vec(),
         resource_additions: overlay.resource_object_definition_additions().to_vec(),
         resource_operands: overlay.resource_object_operands().to_vec(),
@@ -464,6 +467,7 @@ fn check_operand_budget(
     changes: &TeletextEditorialChanges,
     budget: TeletextServiceBudget,
 ) -> Result<()> {
+    resource_banks::check_budget(changes, budget)?;
     let local_work = changes.object_programs.iter().map(|p| {
         [
             p.expected().commands().len(),
@@ -482,6 +486,11 @@ fn check_operand_budget(
         .resource_additions
         .iter()
         .flat_map(|addition| [1, addition.definition().program.commands().len()]);
+    let bank_work = changes
+        .object_resource_additions
+        .iter()
+        .flat_map(|bank| bank.addition().definitions())
+        .flat_map(|definition| [1, definition.program.commands().len()]);
     let program_work = local_work
         .chain(resource_work)
         .chain(changes.main_programs.iter().map(|p| {
@@ -493,6 +502,7 @@ fn check_operand_budget(
         }))
         .flatten()
         .chain(addition_work)
+        .chain(bank_work)
         .try_fold(0usize, usize::checked_add);
     if program_work.is_none_or(|count| count > budget.max_structure_items)
         || changes
@@ -501,6 +511,7 @@ fn check_operand_budget(
             .checked_add(changes.resource_programs.len())
             .and_then(|count| count.checked_add(changes.main_programs.len()))
             .and_then(|count| count.checked_add(changes.resource_additions.len()))
+            .and_then(|count| count.checked_add(changes.object_resource_additions.len()))
             .is_none_or(|n| n > budget.max_records)
         || changes.resource_additions.len() > budget.max_objects
     {
@@ -515,8 +526,15 @@ fn check_operand_budget(
             changes
                 .resource_additions
                 .iter()
-                .try_fold(count, |count, addition| {
-                    count.checked_add(addition.definition().program.commands().len())
+                .map(ersatzrs_domain::TeletextResourceObjectDefinitionAddition::definition)
+                .chain(
+                    changes
+                        .object_resource_additions
+                        .iter()
+                        .flat_map(|bank| bank.addition().definitions()),
+                )
+                .try_fold(count, |count, definition| {
+                    count.checked_add(definition.program.commands().len())
                 })
         })
         .is_none_or(|count| count > budget.max_commands || count > budget.max_structure_items)
@@ -561,6 +579,46 @@ fn merge_object_changes(
     )
 }
 
+fn merge_resource_changes(
+    root: &QualifiedBaseline,
+    previous: &TeletextEditorialChanges,
+    incoming: &TeletextEditorialChanges,
+    budget: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<resource_banks::MergedResources> {
+    let catalog = root
+        .original
+        .view()
+        .encoded()
+        .ok_or(NativeTeletextEditorialImportError::Association)?
+        .declared()
+        .semantic()
+        .objects();
+    if !previous.object_resource_additions.is_empty() {
+        return resource_banks::merge(catalog, previous, incoming, budget, deadline);
+    }
+    let (operands, programs, additions) = if previous.resource_additions.is_empty() {
+        let (operands, programs) =
+            if previous.resource_programs.is_empty() && incoming.resource_programs.is_empty() {
+                (
+                    resource_operands::merge(
+                        &previous.resource_operands,
+                        &incoming.resource_operands,
+                        budget,
+                        deadline,
+                    )?,
+                    Vec::new(),
+                )
+            } else {
+                resource_programs::merge(catalog, previous, incoming, budget, deadline)?
+            };
+        (operands, programs, Vec::new())
+    } else {
+        resource_additions::merge(catalog, previous, incoming, budget, deadline)?
+    };
+    Ok((operands, programs, additions, Vec::new()))
+}
+
 fn merge_changes(
     root: &QualifiedBaseline,
     previous: &TeletextEditorialChanges,
@@ -576,45 +634,11 @@ fn merge_changes(
         deadline,
     )?;
     let budget = policy.document.validation.service;
-    if !incoming.resource_additions.is_empty() {
+    if !incoming.resource_additions.is_empty() || !incoming.object_resource_additions.is_empty() {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let (resource_operands, resource_programs, resource_additions) =
-        if previous.resource_additions.is_empty() {
-            let (operands, programs) =
-                if previous.resource_programs.is_empty() && incoming.resource_programs.is_empty() {
-                    (
-                        resource_operands::merge(
-                            &previous.resource_operands,
-                            &incoming.resource_operands,
-                            budget,
-                            deadline,
-                        )?,
-                        Vec::new(),
-                    )
-                } else {
-                    let catalog = root
-                        .original
-                        .view()
-                        .encoded()
-                        .ok_or(NativeTeletextEditorialImportError::Association)?
-                        .declared()
-                        .semantic()
-                        .objects();
-                    resource_programs::merge(catalog, previous, incoming, budget, deadline)?
-                };
-            (operands, programs, Vec::new())
-        } else {
-            let catalog = root
-                .original
-                .view()
-                .encoded()
-                .ok_or(NativeTeletextEditorialImportError::Association)?
-                .declared()
-                .semantic()
-                .objects();
-            resource_additions::merge(catalog, previous, incoming, budget, deadline)?
-        };
+    let (resource_operands, resource_programs, resource_additions, banks) =
+        merge_resource_changes(root, previous, incoming, budget, deadline)?;
     let (operands, main_programs) =
         if previous.main_programs.is_empty() && incoming.main_programs.is_empty() {
             (
@@ -633,6 +657,7 @@ fn merge_changes(
             main_programs::merge(pages, previous, incoming, budget, deadline)?
         };
     Ok(TeletextEditorialChanges {
+        object_resource_additions: banks,
         base_text_edits: base_text::merge(
             &previous.base_text_edits,
             &incoming.base_text_edits,
@@ -684,6 +709,7 @@ fn prepare(
                 )?,
                 None,
                 TeletextEditorialChanges {
+                    object_resource_additions: Vec::new(),
                     base_text_edits: Vec::new(),
                     resource_additions: Vec::new(),
                     resource_operands: Vec::new(),
@@ -916,6 +942,36 @@ pub(super) fn cumulative_overlay(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
 ) -> Result<TeletextSavedEditorialOverlay> {
+    if changes.object_resource_additions.is_empty() {
+        return prior_overlay(provenance, changes);
+    }
+    let has_prior = !changes.base_text_edits.is_empty()
+        || !changes.rows.is_empty()
+        || !changes.operands.is_empty()
+        || !changes.object_operands.is_empty()
+        || !changes.resource_operands.is_empty()
+        || !changes.resource_programs.is_empty()
+        || !changes.resource_additions.is_empty()
+        || !changes.object_programs.is_empty()
+        || !changes.main_programs.is_empty()
+        || !changes.bitmaps.is_empty();
+    if has_prior {
+        prior_overlay(provenance, changes)?
+            .with_object_resource_additions(changes.object_resource_additions.clone())
+            .map_err(Into::into)
+    } else {
+        TeletextSavedEditorialOverlay::new_with_object_resource_additions(
+            provenance.clone(),
+            changes.object_resource_additions.clone(),
+        )
+        .map_err(Into::into)
+    }
+}
+
+fn prior_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
     if changes.base_text_edits.is_empty() {
         return cumulative_overlay_siblings(provenance, changes);
     }
@@ -1125,6 +1181,7 @@ fn local_invocation_overlay(
     // Resource additions are attached once by cumulative_overlay after this
     // explicit installation, which must preserve the newer role.
     let siblings = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         rows: changes.rows.clone(),
         operands: changes.operands.clone(),
@@ -1146,7 +1203,8 @@ fn local_invocation_overlay(
 }
 
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
-    let document = if prepared.cumulative.base_text_edits.is_empty()
+    let document = if prepared.cumulative.object_resource_additions.is_empty()
+        && prepared.cumulative.base_text_edits.is_empty()
         && prepared.cumulative.rows.is_empty()
         && prepared.cumulative.operands.is_empty()
         && prepared.cumulative.object_operands.is_empty()
@@ -1236,6 +1294,7 @@ fn make_document(
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
         TeletextEditorialEdits {
+            object_resource_additions: &prepared.incoming.object_resource_additions,
             base_text_edits: &prepared.incoming.base_text_edits,
             resource_additions: &prepared.incoming.resource_additions,
             resource_operands: &prepared.incoming.resource_operands,
@@ -1248,6 +1307,7 @@ fn make_document(
             bitmaps: &prepared.incoming.bitmaps,
         },
         TeletextEditorialEdits {
+            object_resource_additions: &prepared.cumulative.object_resource_additions,
             base_text_edits: &prepared.cumulative.base_text_edits,
             resource_additions: &prepared.cumulative.resource_additions,
             resource_operands: &prepared.cumulative.resource_operands,

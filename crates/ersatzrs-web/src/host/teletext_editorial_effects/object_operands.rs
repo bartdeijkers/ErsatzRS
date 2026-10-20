@@ -76,6 +76,8 @@ pub(super) fn check(
         && cumulative.resource_programs.is_empty()
         && incoming.resource_additions.is_empty()
         && cumulative.resource_additions.is_empty()
+        && incoming.object_resource_additions.is_empty()
+        && cumulative.object_resource_additions.is_empty()
     {
         return check_scalar_operands(before, after, incoming, cumulative, deadline);
     }
@@ -124,7 +126,8 @@ pub(super) fn check(
         }
     }
     check_final_operands(after, cumulative, &final_programs, deadline)?;
-    for (old, new) in before.definitions().iter().zip(after.definitions()) {
+    for old in before.definitions() {
+        let new = after.definition(old.identity).ok_or_else(structure)?;
         check_deadline(deadline)?;
         if old.identity != new.identity || old.object_type != new.object_type {
             return Err(structure());
@@ -303,6 +306,7 @@ fn check_operands(
             resource_operands: &[],
             resource_programs: &[],
             resource_additions: &[],
+            object_resource_additions: &[],
             object_programs: &[],
             main_programs: &[],
             bitmaps: &[],

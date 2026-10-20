@@ -85,6 +85,8 @@ fn links(global: bool) -> TeletextX27Level25Links {
     )
     .unwrap()
 }
+#[path = "resource_operands/bank_sets.rs"]
+mod bank_sets;
 #[path = "resource_operands/programs.rs"]
 mod programs;
 
@@ -226,6 +228,7 @@ fn edits(resource_operands: &[TeletextResourceObjectOperandOverlay]) -> Teletext
         resource_operands,
         resource_programs: &[],
         resource_additions: &[],
+        object_resource_additions: &[],
         object_programs: &[],
         main_programs: &[],
         bitmaps: &[],
@@ -405,7 +408,7 @@ fn resource_object_effects_authenticate_complete_packet_and_provenance_against_c
         ..Fixture::default()
     });
     let context =
-        resource_objects::Context::new(&before, &after, &[], &policy().encoding, deadline())
+        resource_objects::Context::new(&before, &after, &[], &[], &policy().encoding, deadline())
             .unwrap();
     context
         .check(

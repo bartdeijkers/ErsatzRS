@@ -187,7 +187,7 @@ pub(super) fn restore(
     let siblings =
         super::local_object_invocation_programs::restore_siblings(stored, documents, budget)?;
     let value = install(siblings, programs)?;
-    super::validate_association(&value, documents, budget)?;
+    super::validate_association_shape(&value, documents, budget)?;
     Ok(value)
 }
 pub(super) fn validate_association(

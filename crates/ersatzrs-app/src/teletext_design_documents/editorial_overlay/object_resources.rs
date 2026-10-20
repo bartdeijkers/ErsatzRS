@@ -283,7 +283,7 @@ pub(super) fn restore(
             vec![],
         )?
     } else {
-        stored.restore(documents, budget)?
+        stored.restore_parts(documents, budget)?
     };
     let overlay = prior.with_object_resource_additions(additions)?;
     validate_association(&overlay, documents, budget)?;

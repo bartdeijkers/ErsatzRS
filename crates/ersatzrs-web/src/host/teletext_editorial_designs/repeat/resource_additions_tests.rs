@@ -66,6 +66,7 @@ fn addition(id: u16, codes: &[u8]) -> Addition {
 }
 fn changes(additions: Vec<Addition>) -> TeletextEditorialChanges {
     TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_additions: additions,
         ..TeletextEditorialChanges::default()
@@ -90,6 +91,7 @@ fn scalar(id: u16, ordinal: usize, before: u8, after: u8) -> Operand {
 fn resource_addition_repeat_folds_scalar_structure_undo_and_repeat_without_root_program_overlay() {
     let previous = changes(vec![addition(21, b"B")]);
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: vec![scalar(21, 0, b'B', b'C'), scalar(20, 0, b'A', b'Q')],
         ..TeletextEditorialChanges::default()
@@ -100,6 +102,7 @@ fn resource_addition_repeat_folds_scalar_structure_undo_and_repeat_without_root_
     assert!(programs.is_empty());
     assert_eq!(additions, [addition(21, b"C")]);
     let previous = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: operands,
         resource_programs: programs,
@@ -115,6 +118,7 @@ fn resource_addition_repeat_folds_scalar_structure_undo_and_repeat_without_root_
     )
     .unwrap();
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![grown],
         ..TeletextEditorialChanges::default()
@@ -125,12 +129,14 @@ fn resource_addition_repeat_folds_scalar_structure_undo_and_repeat_without_root_
     assert!(programs.is_empty());
     assert_eq!(additions, [addition(21, b"CD")]);
     let previous = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: operands,
         resource_additions: additions,
         ..TeletextEditorialChanges::default()
     };
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![Program::new(
             identity(21),
@@ -148,6 +154,7 @@ fn resource_addition_repeat_folds_scalar_structure_undo_and_repeat_without_root_
     assert_eq!(additions, [addition(21, b"C")]);
     let previous = changes(additions);
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: vec![scalar(21, 0, b'C', b'B')],
         ..TeletextEditorialChanges::default()
@@ -161,6 +168,7 @@ fn resource_addition_repeat_folds_scalar_structure_undo_and_repeat_without_root_
         "body undo preserves the explicit addition, never invents an immutable-root definition"
     );
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: vec![scalar(21, 0, b'B', b'C')],
         ..TeletextEditorialChanges::default()
@@ -182,21 +190,25 @@ fn resource_addition_repeat_refuses_untrusted_adds_duplicate_stale_missing_and_s
     for incoming in [
         changes(vec![addition(22, b"C")]),
         TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![scalar(21, 0, b'Z', b'C')],
             ..TeletextEditorialChanges::default()
         },
         TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![scalar(21, 0, b'B', b'C'), scalar(21, 0, b'B', b'D')],
             ..TeletextEditorialChanges::default()
         },
         TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![scalar(22, 0, b'B', b'C')],
             ..TeletextEditorialChanges::default()
         },
         TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![Program::new(
                 identity(21),
@@ -218,6 +230,7 @@ fn resource_addition_repeat_refuses_untrusted_adds_duplicate_stale_missing_and_s
         changes(vec![addition(21, b"B"), addition(21, b"B")]),
         changes(vec![addition(20, b"B")]),
         TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_additions: vec![addition(21, b"B")],
             resource_operands: vec![scalar(21, 0, b'B', b'C')],
@@ -238,6 +251,7 @@ fn resource_addition_repeat_refuses_untrusted_adds_duplicate_stale_missing_and_s
 fn resource_addition_repeat_bounds_aggregate_result_and_keeps_unselected_definitions() {
     let previous = changes(vec![addition(21, b"B"), addition(22, b"C")]);
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: vec![scalar(21, 0, b'B', b'D')],
         ..TeletextEditorialChanges::default()
@@ -255,6 +269,7 @@ fn resource_addition_repeat_bounds_aggregate_result_and_keeps_unselected_definit
         .unwrap()
     };
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![grow(21, b'B'), grow(22, b'C')],
         ..TeletextEditorialChanges::default()
@@ -299,6 +314,7 @@ fn resource_addition_repeat_shared_overlay_dispatch_preserves_addition_only_and_
     assert_eq!(restored.resource_additions, only.resource_additions);
     assert!(restored.resource_operands.is_empty() && restored.resource_programs.is_empty());
     let body = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: vec![scalar(20, 0, b'A', b'Q')],
         ..TeletextEditorialChanges::default()
@@ -310,6 +326,7 @@ fn resource_addition_repeat_shared_overlay_dispatch_preserves_addition_only_and_
         "addition-free private role stays unchanged"
     );
     let mixed = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_additions: only.resource_additions,
         resource_operands: body.resource_operands,

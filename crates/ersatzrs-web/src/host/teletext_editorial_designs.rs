@@ -131,10 +131,13 @@ pub enum NativeTeletextEditorialImportError {
 }
 #[path = "teletext_editorial_designs/definition_additions.rs"]
 mod definition_additions;
+#[path = "teletext_editorial_designs/object_resources.rs"]
+mod object_resources;
 #[path = "teletext_editorial_designs/repeat.rs"]
 mod repeat;
 pub use definition_additions::{
-    add_teletext_editorial_resource_definitions, copy_teletext_editorial_resource_definition,
+    add_teletext_editorial_object_resources, add_teletext_editorial_resource_definitions,
+    copy_teletext_editorial_resource_definition, NativeTeletextObjectResourcesAddRequest,
     NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
 };
 
@@ -326,6 +329,12 @@ fn authorize_resource_intents(
     policy: &TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> Result<()> {
+    object_resources::authorize(
+        baseline,
+        resources.object_resource_additions,
+        policy,
+        deadline,
+    )?;
     let encoding = &policy.encoding;
     let tti = TeletextTtiBudget {
         max_bytes: baseline
@@ -384,6 +393,7 @@ fn qualify_rows(
     let overlay = parts
         .overlay()
         .ok_or(NativeTeletextEditorialImportError::Association)?;
+    let object_resource_additions = overlay.object_resource_additions().to_vec();
     let base_text_edits = overlay.base_text_edits().to_vec();
     let overlays = overlay.pages().to_vec();
     let operands = overlay.local_program_operands().to_vec();
@@ -397,17 +407,21 @@ fn qualify_rows(
     let encoding = policy.encoding;
     let has_existing_resource_edits =
         !resource_operands.is_empty() || !resource_programs.is_empty();
-    let edited = if (resource_additions.is_empty() && !has_existing_resource_edits)
-        || (resource_additions.is_empty()
-            && !matches!(
-                baseline.carrier,
-                TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7 | TeletextEditorCarrier::V8
-            )) {
+    let edited = if object_resource_additions.is_empty()
+        && ((resource_additions.is_empty() && !has_existing_resource_edits)
+            || (resource_additions.is_empty()
+                && !matches!(
+                    baseline.carrier,
+                    TeletextEditorCarrier::V6
+                        | TeletextEditorCarrier::V7
+                        | TeletextEditorCarrier::V8
+                ))) {
         parts.compile(stored, policy, deadline, overlays.clone())
     } else {
         // Only the authenticated original receipt can authorize this separate
         // replay path. Generic stored compilation remains fail closed.
         let resources = super::teletext_stored_designs::EditorialResourceIntents {
+            object_resource_additions: &object_resource_additions,
             operands: &resource_operands,
             programs: &resource_programs,
             additions: &resource_additions,
@@ -428,6 +442,7 @@ fn qualify_rows(
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
         TeletextEditorialEdits {
+            object_resource_additions: &object_resource_additions,
             base_text_edits: &base_text_edits,
             resource_additions: &resource_additions,
             resource_operands: &resource_operands,

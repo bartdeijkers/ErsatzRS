@@ -49,41 +49,7 @@ impl<'a> ProtectedLineage<'a> {
         budget: &TeletextAuthoredServiceEncodingBudget,
         deadline: Instant,
     ) -> Result<Self> {
-        let mut result = Self::default();
-        for program in edits
-            .main_programs
-            .iter()
-            .filter(|program| program.owner() == before.owner())
-        {
-            check_deadline(deadline)?;
-            if result.main_program.replace(program).is_some() {
-                return Err(association());
-            }
-        }
-        for addition in edits.resource_additions {
-            check_deadline(deadline)?;
-            if result
-                .additions
-                .insert(addition.identity(), addition.definition())
-                .is_some()
-            {
-                return Err(association());
-            }
-        }
-        for program in programs::all(edits).filter(|program| match program {
-            Program::Local(value) => value.owner() == before.owner(),
-            Program::Resource(_) => true,
-        }) {
-            check_deadline(deadline)?;
-            if result
-                .programs
-                .insert(program.identity(), program)
-                .is_some()
-                || result.additions.contains_key(&program.identity())
-            {
-                return Err(association());
-            }
-        }
+        let mut result = Self::from_edits(before.owner(), edits, deadline)?;
         if result.programs.is_empty()
             && result.additions.is_empty()
             && result.main_program.is_none()
@@ -146,6 +112,63 @@ impl<'a> ProtectedLineage<'a> {
             );
         }
         result.events = Some(events);
+        Ok(result)
+    }
+
+    fn from_edits(
+        owner: ersatzrs_domain::TeletextPageAddress,
+        edits: TeletextEditorialEdits<'a>,
+        deadline: Instant,
+    ) -> Result<Self> {
+        let mut result = Self::default();
+        for program in edits
+            .main_programs
+            .iter()
+            .filter(|program| program.owner() == owner)
+        {
+            check_deadline(deadline)?;
+            if result.main_program.replace(program).is_some() {
+                return Err(association());
+            }
+        }
+        for addition in edits.resource_additions {
+            check_deadline(deadline)?;
+            if result
+                .additions
+                .insert(addition.identity(), addition.definition())
+                .is_some()
+            {
+                return Err(association());
+            }
+        }
+        for definition in edits
+            .object_resource_additions
+            .iter()
+            .flat_map(|bank| bank.addition().definitions())
+        {
+            check_deadline(deadline)?;
+            if result
+                .additions
+                .insert(definition.identity, definition)
+                .is_some()
+            {
+                return Err(association());
+            }
+        }
+        for program in programs::all(edits).filter(|program| match program {
+            Program::Local(value) => value.owner() == owner,
+            Program::Resource(_) => true,
+        }) {
+            check_deadline(deadline)?;
+            if result
+                .programs
+                .insert(program.identity(), program)
+                .is_some()
+                || result.additions.contains_key(&program.identity())
+            {
+                return Err(association());
+            }
+        }
         Ok(result)
     }
 

@@ -30,8 +30,10 @@ release section when tagging a release.
   definitions in original banks are validated as one complete graph. Private
   versioned concept storage
   now preserves complete new-bank definitions, source ownership and explicit
-  transmission data alongside unchanged originals. Authorized native replay,
-  saved-design controls and the complete editor/publication flow remain pending.
+  transmission data alongside unchanged originals. Explicit receipt-bound native
+  actions now save unpublished bank-set revisions and retain them through later
+  TTI edits, shared preview, explicit publication and cold reload. Localized
+  creation controls and complete external-editor/client acceptance remain open.
 
 - Accept physical teletext Alpha/Mosaic Black and Double Width/Size controls
   in imported designs. Preserve their coded rows, attribute origins, protected

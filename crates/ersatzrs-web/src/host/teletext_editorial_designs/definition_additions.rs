@@ -55,7 +55,32 @@ impl fmt::Debug for NativeTeletextResourceDefinitionCopyRequest {
     }
 }
 
+/// Explicit complete new banks and optional definitions in original banks.
+/// Source ordinal and every lifecycle value are supplied, never derived from TTI.
+pub struct NativeTeletextObjectResourcesAddRequest {
+    pub name: String,
+    pub receipt_id: EntityId,
+    pub receipt_digest: String,
+    pub expected_design_head: i64,
+    pub banks: Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition>,
+    pub definitions: Vec<TeletextEnhancementObjectDefinition>,
+}
+impl fmt::Debug for NativeTeletextObjectResourcesAddRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NativeTeletextObjectResourcesAddRequest")
+            .field("receipt_id", &self.receipt_id)
+            .field("expected_design_head", &self.expected_design_head)
+            .field("banks", &self.banks.len())
+            .field("definitions", &self.definitions.len())
+            .finish_non_exhaustive()
+    }
+}
+
 enum Action {
+    Banks {
+        banks: Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition>,
+        definitions: Vec<TeletextEnhancementObjectDefinition>,
+    },
     Definitions(Vec<TeletextEnhancementObjectDefinition>),
     Copy {
         source: TeletextObjectIdentity,
@@ -84,6 +109,9 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
     }
     let definitions = match &request.action {
         Action::Definitions(definitions) => definitions,
+        Action::Banks { banks, definitions } => {
+            return preflight_banks(banks, definitions, budget, deadline);
+        }
         Action::Copy {
             source,
             new_object_id,
@@ -110,15 +138,56 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
     Ok(())
 }
 
+fn preflight_banks(
+    banks: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+    definitions: &[TeletextEnhancementObjectDefinition],
+    budget: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<()> {
+    if banks.is_empty() {
+        return Err(NativeTeletextEditorialImportError::NoChanges);
+    }
+    if banks.len() > budget.max_records {
+        return Err(NativeTeletextEditorialImportError::Budget);
+    }
+    let mut objects = budget.max_objects;
+    let mut commands = budget.max_commands;
+    for bank in banks {
+        check_deadline(deadline)?;
+        objects = objects
+            .checked_sub(bank.addition().definitions().len())
+            .ok_or(NativeTeletextEditorialImportError::Budget)?;
+        for definition in bank.addition().definitions() {
+            commands = commands
+                .checked_sub(definition.program.commands().len())
+                .ok_or(NativeTeletextEditorialImportError::Budget)?;
+        }
+    }
+    objects = objects
+        .checked_sub(definitions.len())
+        .ok_or(NativeTeletextEditorialImportError::Budget)?;
+    for definition in definitions {
+        commands = commands
+            .checked_sub(definition.program.commands().len())
+            .ok_or(NativeTeletextEditorialImportError::Budget)?;
+    }
+    let _ = (objects, commands);
+    Ok(())
+}
+
 fn resolve(
     action: Action,
     latest: &QualifiedBaseline,
     budget: TeletextServiceBudget,
     deadline: Instant,
-) -> Result<Vec<TeletextEnhancementObjectDefinition>> {
+) -> Result<(
+    Vec<TeletextEnhancementObjectDefinition>,
+    Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition>,
+)> {
     check_deadline(deadline)?;
     let (source, new_object_id) = match action {
-        Action::Definitions(definitions) => return Ok(definitions),
+        Action::Definitions(definitions) => return Ok((definitions, vec![])),
+        Action::Banks { banks, definitions } => return Ok((definitions, banks)),
         Action::Copy {
             source,
             new_object_id,
@@ -149,7 +218,7 @@ fn resolve(
     let mut copied = definition.clone();
     copied.identity = identity;
     check_deadline(deadline)?;
-    Ok(vec![copied])
+    Ok((vec![copied], vec![]))
 }
 
 fn resource_asset(project: &TeletextExportProject, resource: TeletextResourceIdentity) -> bool {
@@ -265,7 +334,9 @@ fn encode(
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
     let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
-    let definitions = resolve(action, latest, policy.document.validation.service, deadline)?;
+    let (definitions, banks) =
+        resolve(action, latest, policy.document.validation.service, deadline)?;
+    super::object_resources::authorize(latest, &banks, &policy.encoding, deadline)?;
     let additions = definitions
         .into_iter()
         .map(|definition| {
@@ -285,7 +356,8 @@ fn encode(
         .collect::<Result<Vec<_>>>()?;
     authorize(
         &latest.body.project,
-        latest
+        baselines
+            .root
             .original
             .view()
             .encoded()
@@ -295,6 +367,7 @@ fn encode(
         deadline,
     )?;
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: banks,
         base_text_edits: Vec::new(),
         resource_additions: additions,
         ..Default::default()
@@ -303,6 +376,10 @@ fn encode(
         .cumulative
         .resource_additions
         .extend_from_slice(&incoming.resource_additions);
+    baselines
+        .cumulative
+        .object_resource_additions
+        .extend_from_slice(&incoming.object_resource_additions);
     let overlay = repeat::cumulative_overlay(&baselines.provenance, &baselines.cumulative)?;
     let document = append_overlay(
         baselines.root.original.view().document_version(),
@@ -345,6 +422,36 @@ fn encode(
     .map_err(|error| NativeTeletextEditorialImportError::Effects(Box::new(error)))?;
     check_deadline(deadline)?;
     Ok((document, document_digest))
+}
+
+/// Add complete banks through the existing retained-receipt worker and head CAS.
+/// No publication or installed producer state changes. All original effects,
+/// explicit lifecycle, complete graph and source-owner checks remain mandatory.
+/// # Errors
+/// Rejects empty/invalid banks, stale receipts/heads, occupied owners, bounds,
+/// protected effects, native encoding failures and deadlines atomically.
+pub async fn add_teletext_editorial_object_resources(
+    application: &ApplicationServices,
+    request: NativeTeletextObjectResourcesAddRequest,
+    policy: NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
+    apply(
+        application,
+        Request {
+            name: request.name,
+            receipt_id: request.receipt_id,
+            receipt_digest: request.receipt_digest,
+            expected_design_head: request.expected_design_head,
+            action: Action::Banks {
+                banks: request.banks,
+                definitions: request.definitions,
+            },
+        },
+        policy,
+        deadline,
+    )
+    .await
 }
 
 /// Add complete definitions as a separate unpublished concept revision.

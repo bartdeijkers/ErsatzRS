@@ -44,12 +44,14 @@ fn originals() -> TeletextEnhancementObjectCatalog {
 fn repeat_then_root_undo_keeps_other_local_scalar_and_exact_call_source() {
     let scalar = scalar(0, 0, g(b'A'), g(b'C'));
     let previous = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(0, 1)],
         object_operands: vec![scalar],
         ..TeletextEditorialChanges::default()
     };
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(1, 2)],
         ..TeletextEditorialChanges::default()
@@ -58,12 +60,14 @@ fn repeat_then_root_undo_keeps_other_local_scalar_and_exact_call_source() {
     assert_eq!(operands, [scalar]);
     assert_eq!(programs, [change(0, 2)]);
     let previous = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: programs,
         object_operands: operands,
         ..TeletextEditorialChanges::default()
     };
     let undo = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(2, 0)],
         ..TeletextEditorialChanges::default()
@@ -76,11 +80,13 @@ fn repeat_then_root_undo_keeps_other_local_scalar_and_exact_call_source() {
 #[test]
 fn changed_call_intent_does_not_bypass_stale_expected_or_aggregate_budget() {
     let previous = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(0, 1)],
         ..TeletextEditorialChanges::default()
     };
     let stale = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(2, 3)],
         ..TeletextEditorialChanges::default()
@@ -134,12 +140,14 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
     let scalar = scalar(0, 0, g(b'A'), g(b'C'));
     let initial = intent(&[0], &[0, 1], vec![Some(0), Some(1), None]);
     let previous = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![initial],
         object_operands: vec![scalar],
         ..TeletextEditorialChanges::default()
     };
     let incoming = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![intent(&[0, 1], &[0, 2], vec![Some(0), Some(1), None])],
         ..TeletextEditorialChanges::default()
@@ -151,12 +159,14 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
         [intent(&[0], &[0, 2], vec![Some(0), Some(1), None])]
     );
     let prior = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: programs,
         object_operands: operands,
         ..TeletextEditorialChanges::default()
     };
     let deleted = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![intent(&[0, 2], &[2], vec![Some(0), Some(2)])],
         ..TeletextEditorialChanges::default()
@@ -165,12 +175,14 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
     assert_eq!(operands, [scalar]);
     assert_eq!(programs, [intent(&[0], &[2], vec![Some(0), None])]);
     let prior = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: programs,
         object_operands: operands,
         ..TeletextEditorialChanges::default()
     };
     let undo = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![intent(&[2], &[0], vec![Some(0), None])],
         ..TeletextEditorialChanges::default()

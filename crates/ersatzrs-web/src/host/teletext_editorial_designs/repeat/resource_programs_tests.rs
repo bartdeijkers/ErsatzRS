@@ -92,11 +92,13 @@ fn growth(global: bool) -> Program {
 fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root() {
     for global in [false, true] {
         let previous = TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![growth(global)],
             ..TeletextEditorialChanges::default()
         };
         let incoming = TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![
                 Operand::new(identity(global), 1, 0, g(b'Q'), g(b'Z')).unwrap(),
@@ -126,12 +128,14 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
         )
         .unwrap();
         let previous = TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: operands,
             resource_programs: programs,
             ..TeletextEditorialChanges::default()
         };
         let incoming = TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![undo],
             ..TeletextEditorialChanges::default()
@@ -144,11 +148,13 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
             vec![Operand::new(identity(global), 1, 1, bg(0), bg(2)).unwrap()]
         );
         let previous = TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: operands,
             ..TeletextEditorialChanges::default()
         };
         let incoming = TeletextEditorialChanges {
+            object_resource_additions: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![Operand::new(identity(global), 1, 1, bg(2), bg(0)).unwrap()],
             ..TeletextEditorialChanges::default()
@@ -162,17 +168,20 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
 fn resource_program_merge_refuses_duplicates_stale_expectations_limits_and_deadline() {
     let original = catalog(false);
     let previous = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![growth(false)],
         ..TeletextEditorialChanges::default()
     };
     let stale = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![growth(false)],
         ..TeletextEditorialChanges::default()
     };
     assert!(merge(&original, &previous, &stale, budget(), end()).is_err());
     let duplicate = TeletextEditorialChanges {
+        object_resource_additions: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![growth(false), growth(false)],
         ..TeletextEditorialChanges::default()

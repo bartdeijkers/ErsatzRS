@@ -17,6 +17,9 @@ mod copy_controls;
 #[path = "definition_additions/first_definition.rs"]
 mod first_definition;
 
+#[path = "definition_additions/object_resources.rs"]
+mod object_resources;
+
 #[derive(Clone, Copy)]
 enum State {
     Dormant,

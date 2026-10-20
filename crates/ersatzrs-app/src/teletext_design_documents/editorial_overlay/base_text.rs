@@ -246,7 +246,7 @@ pub(super) fn restore(
         super::main_local_invocation_programs::restore(stored, documents, budget)?
     };
     let value = siblings.with_base_text_edits(edits)?;
-    super::validate_association(&value, documents, budget)?;
+    super::validate_association_shape(&value, documents, budget)?;
     Ok(value)
 }
 

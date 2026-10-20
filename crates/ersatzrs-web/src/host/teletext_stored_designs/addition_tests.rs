@@ -97,6 +97,7 @@ fn unqualified_new_object_resources_cannot_borrow_matching_prior_intents() {
                 Some(&overlay),
                 has_physical_rows,
                 EditorialResourceIntents {
+                    object_resource_additions: &[],
                     operands: overlay.resource_object_operands(),
                     programs: overlay.resource_object_program_overlays(),
                     additions: overlay.resource_object_definition_additions()

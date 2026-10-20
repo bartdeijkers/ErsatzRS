@@ -236,6 +236,6 @@ fn restore_for_policy(
     } else {
         install(value, calls)?
     };
-    super::validate_association(&value, documents, budget)?;
+    super::validate_association_shape(&value, documents, budget)?;
     Ok(value)
 }

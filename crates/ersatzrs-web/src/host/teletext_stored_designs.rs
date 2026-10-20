@@ -32,6 +32,8 @@ pub(super) enum StoredDesignParts {
 /// Exact stored resource intentions; this value alone grants no edit authority.
 #[derive(Clone, Copy)]
 pub(super) struct EditorialResourceIntents<'a> {
+    pub(super) object_resource_additions:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     pub(super) operands: &'a [TeletextResourceObjectOperandOverlay],
     pub(super) programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     pub(super) additions: &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
@@ -119,7 +121,7 @@ impl StoredDesignParts {
         overlays: Vec<TeletextPhysicalBaseOverlay>,
         resources: EditorialResourceIntents<'_>,
     ) -> Result<RestoredStoredTeletextDesign, NativeTeletextDesignError> {
-        if resources.additions.is_empty() {
+        if resources.additions.is_empty() && resources.object_resource_additions.is_empty() {
             return self.compile_with_resource_edits(
                 stored,
                 policy,
@@ -140,6 +142,38 @@ impl StoredDesignParts {
     }
 }
 
+/// Retain every original lifecycle record, then append only explicit saved banks.
+/// The normal native encoder still validates exact coverage and uniqueness.
+pub(super) fn resource_transmissions(
+    original: &[ersatzrs_app::teletext_design_documents::TeletextSavedResourceTransmission],
+    banks: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+) -> Vec<ersatzrs_ffmpeg::teletext::TeletextServiceResourceTransmission> {
+    use ersatzrs_app::teletext_design_documents::{
+        TeletextSavedObjectResourceAddition, TeletextSavedResourceUpdate,
+    };
+    use ersatzrs_ffmpeg::teletext::{
+        TeletextResourceFullUpdate, TeletextServiceResourceTransmission,
+    };
+    original
+        .iter()
+        .copied()
+        .chain(
+            banks
+                .iter()
+                .map(TeletextSavedObjectResourceAddition::transmission),
+        )
+        .map(|record| TeletextServiceResourceTransmission {
+            resource: record.resource,
+            counter: record.counter,
+            last_subpage: record.last_subpage,
+            update: match record.update {
+                TeletextSavedResourceUpdate::Changed => TeletextResourceFullUpdate::Changed,
+                TeletextSavedResourceUpdate::Unchanged => TeletextResourceFullUpdate::Unchanged,
+            },
+        })
+        .collect()
+}
+
 /// Match all stored resource intent exactly before admitting authenticated replay.
 pub(super) fn check_authenticated_editorial_resource_replay(
     overlay: Option<&TeletextSavedEditorialOverlay>,
@@ -151,6 +185,7 @@ pub(super) fn check_authenticated_editorial_resource_replay(
         overlay,
         has_physical_rows,
         EditorialResourceIntents {
+            object_resource_additions: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -165,7 +200,10 @@ pub(super) fn check_authenticated_editorial_resource_intents(
 ) -> Result<(), NativeTeletextDesignError> {
     let resource_operands = intents.operands;
     let resource_programs = intents.programs;
-    if overlay.is_some_and(|overlay| !overlay.object_resource_additions().is_empty())
+    if overlay.map_or(
+        &[][..],
+        TeletextSavedEditorialOverlay::object_resource_additions,
+    ) != intents.object_resource_additions
         || overlay.map_or(
             &[][..],
             TeletextSavedEditorialOverlay::resource_object_operands,

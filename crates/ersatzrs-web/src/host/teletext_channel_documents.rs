@@ -1,6 +1,6 @@
 //! Native cold channel preparation, without publication or warm-cache authority.
 
-use std::{fmt, mem::size_of, time::Instant};
+use std::{collections::BTreeSet, fmt, mem::size_of, time::Instant};
 
 use ersatzrs_app::{
     teletext_channel_documents::{
@@ -51,8 +51,12 @@ pub(super) struct EditorialResourceDocuments<'a> {
     pub(super) resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     pub(super) resource_additions:
         &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
+    pub(super) object_resource_additions:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
 }
 
+#[cfg(test)]
+mod object_resource_tests;
 #[cfg(test)]
 mod physical_overlay_tests;
 
@@ -506,6 +510,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
             resource_operands: &[],
             resource_programs: &[],
             resource_additions: &[],
+            object_resource_additions: &[],
         },
         deadline,
         region,
@@ -527,6 +532,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
     if editorial.resource_operands.is_empty()
         && editorial.resource_programs.is_empty()
         && editorial.resource_additions.is_empty()
+        && editorial.object_resource_additions.is_empty()
         && editorial.programs.4.is_empty()
         && editorial.main_programs.is_empty()
         && editorial.base_text_edits.is_empty()
@@ -650,6 +656,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
             resource_operands: &[],
             resource_programs: &[],
             resource_additions: &[],
+            object_resource_additions: &[],
         },
         deadline,
         region,
@@ -667,48 +674,8 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
-    let resource_operands = editorial.resource_operands;
-    let resource_programs = editorial.resource_programs;
-    let resource_additions = editorial.resource_additions;
-    let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
-    check_deadline(deadline)?;
-    check_producer_budget(documents.len(), &policy)?;
-    if resource_additions.len() > policy.composition.service.max_objects {
-        return Err(ChannelTeletextDocumentEncodingError::Association);
-    }
-    if !resource_operands.is_empty()
-        || !resource_programs.is_empty()
-        || !resource_additions.is_empty()
-        || !editorial.main_programs.is_empty()
-        || !editorial.base_text_edits.is_empty()
-    {
-        check_editorial_resource_budget(
-            operands
-                .len()
-                .checked_add(editorial.base_text_edits.len())
-                .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
-            object_operands.len(),
-            (programs, editorial.main_programs),
-            resource_operands.len(),
-            resource_programs,
-            resource_additions,
-            policy.composition.service.max_commands,
-        )?;
-    }
+    check_original_editorial_input(documents.len(), &editorial, deadline, &policy)?;
     if documents.is_empty() {
-        if !editorial.programs.0.is_empty()
-            || !operands.is_empty()
-            || !object_operands.is_empty()
-            || !bitmaps.is_empty()
-            || !programs.is_empty()
-            || !editorial.main_programs.is_empty()
-            || !editorial.base_text_edits.is_empty()
-            || !resource_operands.is_empty()
-            || !resource_programs.is_empty()
-            || !resource_additions.is_empty()
-        {
-            return Err(ChannelTeletextDocumentEncodingError::Association);
-        }
         return Ok(empty_editorial_originals());
     }
     let has_v1 = documents
@@ -717,6 +684,12 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     if has_v1 != region.is_some() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
+    let object_resources = preflight_object_resource_additions(
+        &documents,
+        editorial.object_resource_additions,
+        editorial.resource_additions.len(),
+        &policy,
+    )?;
     let producers = prepare_producers(documents, deadline, region, &policy)?;
     let metadata = entry_metadata(entry_producer, &producers, policy.entry)?;
     check_deadline(deadline)?;
@@ -732,7 +705,8 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
     }
     let (producers, provenance, metadata, declared) = composition.into_parts();
-    let declared = apply_editorial_operands(declared, &editorial, policy.composition.service)?;
+    let declared =
+        apply_editorial_operands(declared, &editorial, &object_resources, policy.composition)?;
     check_deadline(deadline)?;
     let encoded = encode_teletext_authored_service_before(
         declared,
@@ -764,6 +738,60 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     })
 }
 
+fn check_original_editorial_input(
+    document_count: usize,
+    editorial: &EditorialResourceDocuments<'_>,
+    deadline: Instant,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    let resource_operands = editorial.resource_operands;
+    let resource_programs = editorial.resource_programs;
+    let resource_additions = editorial.resource_additions;
+    let object_resource_additions = editorial.object_resource_additions;
+    let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
+    check_deadline(deadline)?;
+    check_producer_budget(document_count, policy)?;
+    if resource_additions.len() > policy.composition.service.max_objects {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    if !resource_operands.is_empty()
+        || !resource_programs.is_empty()
+        || !resource_additions.is_empty()
+        || !object_resource_additions.is_empty()
+        || !editorial.main_programs.is_empty()
+        || !editorial.base_text_edits.is_empty()
+    {
+        check_editorial_resource_budget(
+            operands
+                .len()
+                .checked_add(editorial.base_text_edits.len())
+                .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
+            object_operands.len(),
+            (programs, editorial.main_programs),
+            resource_operands.len(),
+            resource_programs,
+            (resource_additions, object_resource_additions),
+            policy.composition.service.max_commands,
+        )?;
+    }
+    if document_count == 0
+        && (!editorial.programs.0.is_empty()
+            || !operands.is_empty()
+            || !object_operands.is_empty()
+            || !bitmaps.is_empty()
+            || !programs.is_empty()
+            || !editorial.main_programs.is_empty()
+            || !editorial.base_text_edits.is_empty()
+            || !resource_operands.is_empty()
+            || !resource_programs.is_empty()
+            || !resource_additions.is_empty()
+            || !object_resource_additions.is_empty())
+    {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    Ok(())
+}
+
 fn empty_editorial_originals() -> EncodedChannelTeletextOriginals {
     EncodedChannelTeletextOriginals {
         v1_region: None,
@@ -776,11 +804,317 @@ fn empty_editorial_originals() -> EncodedChannelTeletextOriginals {
     }
 }
 
+/// Check immutable source positions and raw clone costs before owning new banks.
+/// The complete composed service remains the graph/declaration authority below.
+fn preflight_object_resource_additions(
+    documents: &[TeletextProfileDocument],
+    additions: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+    existing_definition_additions: usize,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+) -> Result<
+    Vec<ersatzrs_domain::TeletextObjectResourceAddition>,
+    ChannelTeletextDocumentEncodingError,
+> {
+    if additions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let composition = policy.composition;
+    let records = additions.len();
+    check_object_resource_count(
+        records,
+        composition
+            .service
+            .max_records
+            .min(composition.declarations.max_resources)
+            .min(policy.encoding.max_pages),
+        "new object resource",
+    )?;
+    check_object_resource_count(
+        policy.transmissions.len(),
+        policy.encoding.max_pages,
+        "resource transmissions",
+    )?;
+    let mut scan =
+        ObjectResourcePreflight::new(records, existing_definition_additions, composition)?;
+    scan.originals(documents, composition)?;
+    let mut new_owners = BTreeSet::new();
+    for saved in additions {
+        check_object_resource_association(
+            documents,
+            saved,
+            &scan.original_owners,
+            &mut new_owners,
+            policy,
+        )?;
+        scan.bank(saved.addition(), composition)?;
+    }
+    Ok(additions
+        .iter()
+        .map(|saved| saved.addition().clone())
+        .collect())
+}
+
+type ObjectResourceOwners = BTreeSet<(
+    ersatzrs_domain::TeletextRawDataPageNumber,
+    ersatzrs_domain::TeletextResourceSubpageIndex,
+)>;
+struct ObjectResourcePreflight {
+    input_items: usize,
+    commands: usize,
+    definitions: usize,
+    clone_bytes: usize,
+    original_owners: ObjectResourceOwners,
+}
+impl ObjectResourcePreflight {
+    fn new(
+        records: usize,
+        existing_definition_additions: usize,
+        composition: TeletextProducerCompositionBudget,
+    ) -> Result<Self, ChannelTeletextDocumentEncodingError> {
+        let input_items = records;
+        let commands = 0_usize;
+        let definitions = existing_definition_additions;
+        let mut clone_bytes = records
+            .checked_mul(size_of::<ersatzrs_domain::TeletextObjectResourceAddition>())
+            .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
+        add_object_resource_count(
+            &mut clone_bytes,
+            records
+                .checked_mul(3 * size_of::<ersatzrs_domain::TeletextResourceIdentity>())
+                .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
+        )?;
+        check_object_resource_count(
+            clone_bytes,
+            composition.max_storage_bytes.min(isize::MAX as usize),
+            "new object storage",
+        )?;
+        Ok(Self {
+            input_items,
+            commands,
+            definitions,
+            clone_bytes,
+            original_owners: BTreeSet::new(),
+        })
+    }
+    fn originals(
+        &mut self,
+        documents: &[TeletextProfileDocument],
+        composition: TeletextProducerCompositionBudget,
+    ) -> Result<(), ChannelTeletextDocumentEncodingError> {
+        for document in documents {
+            match document {
+                TeletextProfileDocument::Base(base) => {
+                    add_object_resource_count(&mut self.input_items, base.pages.len())?;
+                }
+                TeletextProfileDocument::Authored(original) => {
+                    let semantic = original.semantic();
+                    for count in [
+                        semantic.base().pages.len(),
+                        original.resource_inventory().len(),
+                        semantic.objects().definitions().len(),
+                    ] {
+                        add_object_resource_count(&mut self.input_items, count)?;
+                    }
+                    check_object_resource_count(
+                        self.input_items,
+                        composition.max_input_items,
+                        "object resource input items",
+                    )?;
+                    add_object_resource_count(
+                        &mut self.clone_bytes,
+                        original
+                            .resource_inventory()
+                            .len()
+                            .checked_mul(3 * size_of::<ersatzrs_domain::TeletextResourceIdentity>())
+                            .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
+                    )?;
+                    check_object_resource_count(
+                        self.clone_bytes,
+                        composition.max_storage_bytes.min(isize::MAX as usize),
+                        "new object storage",
+                    )?;
+                    for resource in original.resource_inventory() {
+                        self.original_owners
+                            .insert((resource.page(), resource.logical_subpage()));
+                    }
+                    add_object_resource_count(
+                        &mut self.commands,
+                        semantic.base_text_spellings().len(),
+                    )?;
+                    for page in semantic.page_enhancements().values() {
+                        if let Some(program) = &page.local_program {
+                            add_object_resource_count(
+                                &mut self.commands,
+                                program.commands().len(),
+                            )?;
+                        }
+                        add_object_resource_count(
+                            &mut self.commands,
+                            page.resources.defaults.iter().flatten().count(),
+                        )?;
+                    }
+                    for definition in semantic.objects().definitions() {
+                        add_object_resource_count(
+                            &mut self.commands,
+                            definition.program.commands().len(),
+                        )?;
+                    }
+                }
+            }
+            check_object_resource_count(
+                self.input_items,
+                composition.max_input_items,
+                "object resource input items",
+            )?;
+            check_object_resource_count(
+                self.commands,
+                composition.max_input_commands,
+                "object resource input commands",
+            )?;
+        }
+        Ok(())
+    }
+    fn bank(
+        &mut self,
+        bank: &ersatzrs_domain::TeletextObjectResourceAddition,
+        composition: TeletextProducerCompositionBudget,
+    ) -> Result<(), ChannelTeletextDocumentEncodingError> {
+        add_object_resource_count(&mut self.definitions, bank.definitions().len())?;
+        add_object_resource_count(&mut self.input_items, bank.definitions().len())?;
+        add_object_resource_count(
+            &mut self.clone_bytes,
+            bank.definitions()
+                .len()
+                .checked_mul(size_of::<
+                    ersatzrs_domain::TeletextEnhancementObjectDefinition,
+                >())
+                .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
+        )?;
+        for definition in bank.definitions() {
+            let count = definition.program.commands().len();
+            add_object_resource_count(&mut self.commands, count)?;
+            add_object_resource_count(
+                &mut self.clone_bytes,
+                count
+                    .checked_mul(size_of::<ersatzrs_domain::TeletextEnhancementCommand>())
+                    .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
+            )?;
+        }
+        for (count, maximum, dimension) in [
+            (
+                self.definitions,
+                composition
+                    .service
+                    .max_objects
+                    .min(composition.declarations.max_objects),
+                "new object definitions",
+            ),
+            (
+                self.input_items,
+                composition.max_input_items,
+                "object resource input items",
+            ),
+            (
+                self.commands,
+                composition.max_input_commands,
+                "object resource input commands",
+            ),
+            (
+                self.clone_bytes,
+                composition.max_storage_bytes.min(isize::MAX as usize),
+                "new object storage",
+            ),
+        ] {
+            check_object_resource_count(count, maximum, dimension)?;
+        }
+        Ok(())
+    }
+}
+
+fn check_object_resource_association(
+    documents: &[TeletextProfileDocument],
+    saved: &ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition,
+    original_owners: &ObjectResourceOwners,
+    new_owners: &mut ObjectResourceOwners,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    if !matches!(
+        documents.get(saved.document_index()),
+        Some(TeletextProfileDocument::Authored(_))
+    ) {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    let bank = saved.addition();
+    let resource = bank.resource();
+    let owner = (resource.page(), resource.logical_subpage());
+    if original_owners.contains(&owner) || !new_owners.insert(owner) {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    let expected = saved.transmission();
+    let update = match expected.update {
+        ersatzrs_app::teletext_design_documents::TeletextSavedResourceUpdate::Changed => {
+            ersatzrs_ffmpeg::teletext::TeletextResourceFullUpdate::Changed
+        }
+        ersatzrs_app::teletext_design_documents::TeletextSavedResourceUpdate::Unchanged => {
+            ersatzrs_ffmpeg::teletext::TeletextResourceFullUpdate::Unchanged
+        }
+    };
+    let supplied = TeletextServiceResourceTransmission {
+        resource: expected.resource,
+        counter: expected.counter,
+        update,
+        last_subpage: expected.last_subpage,
+    };
+    let mut matches = policy
+        .transmissions
+        .iter()
+        .filter(|transmission| transmission.resource == resource);
+    if matches.next() != Some(&supplied) || matches.next().is_some() {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    Ok(())
+}
+
+fn add_object_resource_count(
+    total: &mut usize,
+    count: usize,
+) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    *total = total
+        .checked_add(count)
+        .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
+    Ok(())
+}
+
+fn check_object_resource_count(
+    count: usize,
+    maximum: usize,
+    category: &'static str,
+) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    if count > maximum {
+        return Err(ChannelTeletextDocumentEncodingError::Composition(Box::new(
+            TeletextProducerCompositionError {
+                producer: None,
+                page: None,
+                display: None,
+                resource: None,
+                reason: TeletextProducerCompositionFailure::Budget {
+                    category,
+                    count,
+                    maximum,
+                },
+            },
+        )));
+    }
+    Ok(())
+}
+
 fn apply_editorial_operands(
     mut declared: ersatzrs_domain::TeletextDeclaredService,
     editorial: &EditorialResourceDocuments<'_>,
-    budget: ersatzrs_domain::TeletextServiceBudget,
+    object_resources: &[ersatzrs_domain::TeletextObjectResourceAddition],
+    composition: TeletextProducerCompositionBudget,
 ) -> Result<ersatzrs_domain::TeletextDeclaredService, ChannelTeletextDocumentEncodingError> {
+    let budget = composition.service;
     let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
     if !editorial.base_text_edits.is_empty() {
         declared = declared
@@ -788,7 +1122,32 @@ fn apply_editorial_operands(
             .map_err(editorial_semantic_error)?;
     }
     let resource_operands = editorial.resource_operands;
-    if !editorial.resource_additions.is_empty() {
+    if !object_resources.is_empty() {
+        declared = declared
+            .with_object_resource_and_definition_additions(
+                object_resources,
+                editorial.resource_additions,
+                budget,
+                composition.declarations,
+            )
+            .map_err(|error| match error {
+                ersatzrs_domain::TeletextObjectResourceAdditionApplyError::Service(reason) => {
+                    editorial_semantic_error(reason)
+                }
+                ersatzrs_domain::TeletextObjectResourceAdditionApplyError::Declaration(reason) => {
+                    ChannelTeletextDocumentEncodingError::Composition(Box::new(
+                        TeletextProducerCompositionError {
+                            producer: None,
+                            page: None,
+                            display: None,
+                            resource: None,
+                            reason: TeletextProducerCompositionFailure::Declarations(reason),
+                        },
+                    ))
+                }
+                _ => ChannelTeletextDocumentEncodingError::Association,
+            })?;
+    } else if !editorial.resource_additions.is_empty() {
         declared = declared
             .with_resource_object_definition_additions(editorial.resource_additions, budget)
             .map_err(|error| match error {
@@ -845,9 +1204,13 @@ fn check_editorial_resource_budget(
     ),
     resource_operands: usize,
     resource_programs: &[ersatzrs_domain::TeletextResourceObjectProgramOverlay],
-    resource_additions: &[ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
+    additions: (
+        &[ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
+        &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+    ),
     maximum: usize,
 ) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    let (resource_additions, object_resources) = additions;
     let mut remaining = maximum;
     let counts = [page_operands, object_operands, resource_operands]
         .into_iter()
@@ -874,7 +1237,14 @@ fn check_editorial_resource_budget(
             resource_additions
                 .iter()
                 .map(|addition| addition.definition().program.commands().len()),
-        );
+        )
+        .chain(object_resources.iter().flat_map(|addition| {
+            addition
+                .addition()
+                .definitions()
+                .iter()
+                .map(|definition| definition.program.commands().len())
+        }));
     for count in counts {
         remaining = remaining.checked_sub(count).ok_or_else(|| {
             editorial_semantic_error(ersatzrs_domain::TeletextServiceError::Budget {

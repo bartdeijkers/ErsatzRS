@@ -16,6 +16,39 @@ fn structure() -> super::TeletextEditorialEffectsError {
     )
 }
 
+pub(super) fn checked_context<'a>(
+    original: &'a EncodedTeletextAuthoredService,
+    edited: &'a EncodedTeletextAuthoredService,
+    incoming: super::TeletextEditorialEdits<'_>,
+    cumulative: super::TeletextEditorialEdits<'_>,
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+) -> Result<Option<Context<'a>>> {
+    let resource_context = if incoming.resource_operands.is_empty()
+        && incoming.resource_programs.is_empty()
+        && incoming.resource_additions.is_empty()
+        && incoming.object_resource_additions.is_empty()
+        && cumulative.object_resource_additions.is_empty()
+    {
+        None
+    } else {
+        Some(Context::new(
+            original,
+            edited,
+            incoming.resource_additions,
+            incoming.object_resource_additions,
+            budget,
+            deadline,
+        )?)
+    };
+    if let Some(context) = resource_context.as_ref() {
+        for addition in cumulative.object_resource_additions {
+            context.check_added(edited, addition, deadline)?;
+        }
+    }
+    Ok(resource_context)
+}
+
 /// One bounded allocation pair serves every changed resource in this comparison.
 /// Complete semantic correspondence is checked before constructing this context.
 pub(super) struct Context<'a> {
@@ -30,6 +63,7 @@ impl<'a> Context<'a> {
         original: &'a EncodedTeletextAuthoredService,
         edited: &'a EncodedTeletextAuthoredService,
         additions: &[TeletextResourceObjectDefinitionAddition],
+        banks: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
         budget: &TeletextAuthoredServiceEncodingBudget,
         deadline: Instant,
     ) -> Result<Self> {
@@ -45,13 +79,15 @@ impl<'a> Context<'a> {
         {
             return Err(error(None, None, TeletextEditorialEffectsFailure::Budget));
         }
-        super::definition_additions::check_incoming(before, after, additions, deadline)?;
-        super::definition_additions::check_declarations(
-            declared,
-            edited.declared(),
-            additions,
-            deadline,
-        )?;
+        if banks.is_empty() {
+            super::definition_additions::check_incoming(before, after, additions, deadline)?;
+            super::definition_additions::check_declarations(
+                declared,
+                edited.declared(),
+                additions,
+                deadline,
+            )?;
+        }
         if declared.defaults() != edited.declared().defaults() {
             return Err(structure());
         }
@@ -75,7 +111,7 @@ impl<'a> Context<'a> {
         let after_allocations = allocate_teletext_resource_objects(after, &defaults, maximum)
             .map_err(|_| structure())?;
         check_deadline(deadline)?;
-        if additions.is_empty() && before_allocations != after_allocations {
+        if additions.is_empty() && banks.is_empty() && before_allocations != after_allocations {
             return Err(structure());
         }
         Ok(Self {
@@ -85,6 +121,48 @@ impl<'a> Context<'a> {
             after_allocations,
             max_commands: budget.max_commands,
         })
+    }
+
+    /// New resources use the explicit intent's entire header and canonical body.
+    pub(super) fn check_added(
+        &self,
+        edited: &EncodedTeletextAuthoredService,
+        addition: &ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition,
+        deadline: Instant,
+    ) -> Result<()> {
+        check_deadline(deadline)?;
+        let lifecycle = addition.transmission();
+        let transmission = TeletextObjectPageTransmission {
+            counter: lifecycle.counter,
+            update: match lifecycle.update {
+                ersatzrs_app::teletext_design_documents::TeletextSavedResourceUpdate::Changed => {
+                    TeletextResourceFullUpdate::Changed
+                }
+                ersatzrs_app::teletext_design_documents::TeletextSavedResourceUpdate::Unchanged => {
+                    TeletextResourceFullUpdate::Unchanged
+                }
+            },
+            mode: ersatzrs_ffmpeg::teletext::TeletextResourceTransmissionMode::Serial,
+            last_subpage: lifecycle.last_subpage,
+        };
+        let expected = encode_teletext_object_page(
+            addition.addition().resource(),
+            self.after,
+            &self.after_allocations,
+            transmission,
+            self.max_commands,
+        )
+        .map_err(|_| structure())?;
+        let mut pages = edited.pages().iter().filter(|page| {
+            page.resource_header()
+                .is_some_and(|header| header.identity() == addition.addition().resource())
+        });
+        if !matches!(pages.next(), Some(EncodedTeletextAuthoredPage::Object(actual)) if actual == &expected)
+            || pages.next().is_some()
+        {
+            return Err(structure());
+        }
+        check_deadline(deadline)
     }
 
     /// Authenticate the immutable original against complete canonical output for

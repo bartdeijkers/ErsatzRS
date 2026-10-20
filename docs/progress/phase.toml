@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 combined new-bank/original-definition graph verified; next authorized replay/receipt/CAS/lifecycle/effects; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 saved new-bank application/replay verified; next localized bank controls and retained-bank authoring; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -121,14 +121,17 @@ seven new set/owner/graph/budget cases and six retained Add guards. Its
 storage_followup adds private V25 structural storage with explicit source ordinal,
 complete banks/lifecycle and retained V1–24 role semantics. Final192 codec cases
 pass (six new,186 prior), including229-command storage without Local208. Five
-host controls and strict app/web Clippy/architecture pass; native replay still
-refuses unsupported bank intent. The combined_graph_followup closes atomic
-new-bank/original-definition forward dependencies and exact companion net bounds;
-657 domain teletext cases and strict domain Clippy pass. Authorized application,
-retained receipt/head-CAS, lifecycle/effects and localized editor/publication
-wiring remain open.
-Next bundle those existing boundaries for this exact intent, without widening
-Add/Copy/import authority. X3 full-bank editor capacity still waits upstream.
+host controls and strict app/web Clippy/architecture retain their scope. The
+combined_graph_followup closes atomic new-bank/original-definition dependencies
+and exact companion net bounds;657 domain cases/domain Clippy remain valid.
+Its native_replay_followup now connects explicit bank actions to the existing
+worker/receipt/head-CAS and exact native lifecycle/effects paths. Final193 codec
+and 141 host/native cases pass, including cumulative old/new-bank TTI edits,
+shared preview, separate publication and cold reopen. Strict app/web Clippy and
+architecture pass; generic imports still cannot create banks. No actual new-bank
+QTM GUI/client or full9A claim. Next connect localized creation controls and
+retained-bank Add/Copy authoring; effective-role/selected-bank-consumer coverage
+and complete set/editor acceptance stay open. X3 still waits upstream.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
 

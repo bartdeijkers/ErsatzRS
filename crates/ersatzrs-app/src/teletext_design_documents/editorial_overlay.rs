@@ -1687,6 +1687,16 @@ impl StoredOverlay {
         documents: &[TeletextProfileDocument],
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+        let value = self.restore_parts(documents, budget)?;
+        validate_association(&value, documents, budget)?;
+        Ok(value)
+    }
+
+    fn restore_parts(
+        self,
+        documents: &[TeletextProfileDocument],
+        budget: TeletextDesignDocumentBudget,
+    ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
         if self.schema_version == OBJECT_RESOURCE_ADDITION_VERSION {
             return object_resources::restore(self, documents, budget);
@@ -1822,12 +1832,21 @@ impl StoredOverlay {
             }
             _ => TeletextSavedEditorialOverlay::new(provenance, pages)?,
         };
-        validate_association(&value, documents, budget)?;
+        validate_association_shape(&value, documents, budget)?;
         Ok(value)
     }
 }
 
 pub(super) fn validate_association(
+    overlay: &TeletextSavedEditorialOverlay,
+    documents: &[TeletextProfileDocument],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<(), TeletextDesignDocumentError> {
+    validate_association_shape(overlay, documents, budget)?;
+    resource_object_additions::validate_graph(overlay, documents, budget)
+}
+
+pub(super) fn validate_association_shape(
     overlay: &TeletextSavedEditorialOverlay,
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,

@@ -260,7 +260,7 @@ pub(super) fn restore_stored(
             .unwrap_or_default(),
         budget,
     )?;
-    super::validate_association(&value, documents, budget)?;
+    super::validate_association_shape(&value, documents, budget)?;
     Ok(value)
 }
 pub(super) fn empty_body(
@@ -321,6 +321,20 @@ pub(super) fn validate_association(
         {
             return Err(invalid());
         }
+    }
+    Ok(())
+}
+
+pub(super) fn validate_graph(
+    overlay: &TeletextSavedEditorialOverlay,
+    documents: &[TeletextProfileDocument],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<(), TeletextDesignDocumentError> {
+    // V25 is explicitly structural: old/new forward dependencies must be
+    // validated together by the authenticated native host, never as an invalid
+    // intermediate original-bank-only graph. No stored value grants replay.
+    if !overlay.object_resource_additions().is_empty() {
+        return Ok(());
     }
     for document in documents {
         let TeletextProfileDocument::Authored(service) = document else {
