@@ -10733,7 +10733,7 @@ Missing mandatory evidence (existing implementation is partial; a failing fixed 
 External capability/environment blockers (block only dependent acceptance):
 | Base ID / existing owner | Blocked user action and exact missing prerequisite | Next action and closure condition |
 | --- | --- | --- |
-| L15-D / V3; base-specific X1 | View/navigate/update the ordinary HTTP stream with applicable X26, page/subpage controls, manual conceal/reveal and real timed flash | Exact ProgDVB Standard7.73.2/executable7.73.2.0 now ingests the documented synthetic M3U provider via identified visible Windows BUTTON/BM_CLICK and renders its channel name. base_client_qualification/progdvb_runtime/input_route_followup owns pins, HTTP requests and inspected screenshot; original file-dialog/control negatives remain. No capture.ts request, actual ordinary stream, AV decode or required teletext interaction is proven. Its custom channel list has no selection pattern/recognized native TreeView; conditional selection is not dispatched. Private copies/processes/HTTP servers are removed, but vendor CommonApplicationData persisted shared source settings and modified older files; absent complete baseline, shared data is preserved, not reset. Earlier private-profile claims exclude this shared storage. Private storage is now qualified on this exact binary via private_storage_followup: native Installation.ini Main/StoreType=path and owned StorePath produce19 private files with all20 known shared vendor files byte/hash/metadata-identical before/after. This does not establish registry/whole-OS isolation. channel_control_followup adds a bounded local custom-list double-click: selected/red row but no capture request, with shared storage preserved. A supported native input/decoder configuration or operator-capable private session must establish actual acquisition, followed by every ordinary HTTP/X26/navigation/update/reveal/timedflash oracle; no decoder defect is established. This is a control/storage qualification limit, not a demonstrated decoder/product defect. No unchanged retry, external maintenance, static-image waiver or scope reduction; qualify concrete private client control, otherwise continue independent C/E1/E2 |
+| L15-D / V3; base-specific X1 | View/navigate/update the ordinary HTTP stream with applicable X26, page/subpage controls, manual conceal/reveal and real timed flash | Canonical base_client_qualification/progdvb_runtime/ordinary_stream_followup now proves actual ordinary-host acquisition and native red-video rendering twice on pinned private ProgDVB Standard7.73.2/exe7.73.2.0, with headed profile/validation/preview/explicit publication, strict prefix transport/offlineAV and all20 shared files/state/normal cleanup exact. Finite no-signal and earlier input/storage/control negatives remain canonical, superseded only for ordinary video acquisition. Native teletext is unproven: documented T messages reach the identified owned visible window, but Windows refuses foreground and no teletext appears; this is not a decoder-incapability finding. Need supported private teletext control/operator session, then fixed ordinary-stream X26/page/subpage/navigation/update/reveal/timedflash and native-AV oracles. No unchanged retry, external maintenance, static-image waiver or scope reduction. Independent E1/E2 work remains available; enhanced X1/X3 stay mandatory |
 | L15-E2 / F5,V6,X2 | Install and use the accepted runtime natively on all six supported RIDs | Unpublished candidate.4 now has four exact Linux/Windows archives, 9 native Windows and 2 Linux selected playback gates, six actual selected-language captures and scoped startup/ABI proof in audio_language_followup/package_followup. ARM results are crossbuilds only. network_compatibility_followup now adds17Linux+17nativeWindows unchanged provider/directHTTP/RTSP/image/repeat/seek/EOF/handoff/cleanup gates on exact .4 packages. Windows remains frozen7603285d, not current packaged-admin proof. prepared_compatibility_followup now adds Linux3+nativeWindows3 exact prepared-callback/managed-guard cases, preserving five original caption/audio/seek policies and rejection/cleanup oracles; the proven portable Windows fixture is restored afterward. Missing both macOS artifacts, native ARM/macOS environments, remaining applicable platform/Health proof and accepted adoption. managed.1 remains accepted; no candidate is adopted. Use existing build/package workflow and obtain native environments or separately authorized remote workflow; no push permission is inferred. Close exact source/license/dependency/build/runtime/Health and applicable playback gates before adoption; crossbuild/startup/interop are separate claims |
 | Enhanced-only X1,X3 / full9A | Edit complete POP/GPOP banks/contexts over208 and view full2.5 objects/enlargement/panels | Full2.5 client qualification remains maintainer-deferred; QTM1.0 native bank/large-context support waits upstream. Neither blocks a genuinely base-only design. Both remain mandatory for full9A, with exact capability-positive pinned editor/client end proof and all enhanced F/V/X conditions; no truncation, silent content removal, package mutation or waiver |
 
@@ -11096,6 +11096,43 @@ obligations remain. macOS workflow permission is pending, not dispatched; D
 private acquisition/operator capability, enhanced X1/X3 and every finite L15
 condition remain mandatory. This checkpoint is local only; prior push permission
 was fulfilled at09a682fa. No release, new push or scope waiver.
+
+L15-D ordinary-stream client checkpoint (partial V3, not suitable-client
+acceptance): canonical base_client_qualification/progdvb_runtime/
+ordinary_stream_followup owns level15-progdvb-ordinary-client/identity.json.
+The opt-in existing headed real-host test now holds its actual ordinary URL for
+an owned receiver, using60s synthetic source while preserving default12s argv
+and every old capture oracle. No product/admin/decoder or package change.
+Two real headed Chromium runs complete profile/binding, validation/concept,
+shared preview, separate Request/Publish and ordinary hls-direct acquisition.
+Pinned private ProgDVB Standard7.73.2/exe7.73.2.0 shows actual red video in both
+inspected owned-window images. The earlier finite positional-URI GET200/no-signal
+is retained in direct_url_followup; it does not describe this live route.
+
+verification-1.json owns the first1MiB prefix only: TSDuck3.44-4676 reports zero
+sync/transport/CC/PCR/PTS/PES errors, correct service/PMT/video256/audio257/
+teletext512; FFmpeg9 decodes exact red and440Hz with eng audio/nld teletext.
+This is offline audio/short-prefix transport proof, not native sound, full-stream
+delivery or interactive teletext acceptance. Matching SSR/WASM ce3d4463 is
+reused with unchanged relevant production code; not current clean-HEAD/fullCI.
+The sandbox-only Chromium launch and optional-analysis negatives are retained;
+no oracle is weakened, no dependency installed. Both hosts/clients close
+normally; no browser errors, worker/config/package state changes, or changes to
+any of20 shared vendor files. Existing editor/isolation/Lua/F6 evidence retains
+its scope and is not replayed.
+
+One supported default T action (official controls manual
+https://progdvb.com/manual2/options_controls.html) is sent only to the verified
+owned visible window. Messages deliver, but Windows refuses foreground; inspected
+output remains video. Neither shortcut processing nor teletext decoding is proven.
+D still needs supported private teletext control/operator access, then actual
+X26/page/subpage/navigation/update/reveal/timedflash proof. The present fixture
+has no conceal/flash; use the existing conformance family when control is usable.
+Do not repeat unchanged messages or begin decoder maintenance. Independent
+E1/E2 managed/Health/platform work remains; macOS workflow approval is pending,
+not dispatched. A1/A2/B2/C/E1/E2 and enhanced X1/X3 stay open. No base/full9A
+acceptance or release. The maintainer authorized this completed checkpoint's
+commit and push to origin/main; exact result belongs to the canonical receipt.
 
 Prepared-artifact candidate compatibility (partialL15-E1/E2,F5,V6): canonical
 audio_language_followup/prepared_compatibility_followup owns

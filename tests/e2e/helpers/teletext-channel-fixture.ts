@@ -134,7 +134,7 @@ export class TeletextChannelFixture {
   private readonly playback: boolean;
   private scripted = false;
 
-  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; playback?: { ffmpeg: string } } = {}) {
+  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; playback?: { ffmpeg: string; durationSeconds?: number } } = {}) {
     this.authoredPages = options.authoredPages === true;
     if (options.editorPages && !this.authoredPages) throw new Error('Synthetic editor requires the authored producer.');
     if (options.editorOperand && !options.editorPages) throw new Error('Synthetic operand editor requires editor pages.');
@@ -145,7 +145,7 @@ export class TeletextChannelFixture {
     // directory; it is disposed only after the host has stopped.
     this.root = mkdtempSync(join(this.playback ? dirname(databasePath) : tmpdir(), 'ersatzrs-e2e-teletext-'));
     if (options.playback) {
-      try { this.generatePlaybackSource(options.playback.ffmpeg); }
+      try { this.generatePlaybackSource(options.playback.ffmpeg, options.playback.durationSeconds); }
       catch (error) { rmSync(this.root, { recursive: true, force: true }); throw error; }
     }
     this.packagePath = this.authoredPages ? join(this.root, 'package') : this.root;
@@ -221,7 +221,10 @@ export class TeletextChannelFixture {
     if (options.playback) this.configurePlayback(profile.Id);
   }
 
-  private generatePlaybackSource(ffmpeg: string): void {
+  private generatePlaybackSource(ffmpeg: string, durationSeconds = 12): void {
+    if (!Number.isSafeInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 60) {
+      throw new Error('Synthetic playback duration must be between 1 and 60 seconds.');
+    }
     const version = execFileSync(ffmpeg, ['-version'], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 });
     if (!/^ffmpeg version (?:n)?9(?:[.\s-])/.test(version.split('\n')[0])) {
       throw new Error('Synthetic playback requires the selected FFmpeg 9 executable.');
@@ -229,12 +232,12 @@ export class TeletextChannelFixture {
     const source = join(this.root, 'synthetic-client-source.ts');
     const bytes = execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin',
       '-f', 'lavfi', '-i', 'color=c=red:size=160x90:rate=25',
-      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '12',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', String(durationSeconds),
       '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'mpeg2video', '-b:v', '1000k',
       '-c:a', 'aac', '-b:a', '128k', '-metadata:s:a:0', 'language=eng',
       '-muxrate', '4953600', '-pcr_period', '20', '-mpegts_start_pid', '256',
       '-mpegts_pmt_start_pid', '4096', '-f', 'mpegts', 'pipe:1'],
-    { timeout: 30_000, maxBuffer: 8 * 1024 * 1024, killSignal: 'SIGKILL' });
+    { timeout: 30_000, maxBuffer: (durationSeconds <= 12 ? 8 : 40) * 1024 * 1024, killSignal: 'SIGKILL' });
     if (!bytes.length || bytes.length % 188 !== 0) throw new Error('Synthetic source is not packet-aligned MPEG-TS.');
     for (let offset = 0; offset < bytes.length; offset += 188) {
       if (bytes[offset] !== 0x47 || (((bytes[offset + 1] & 0x1f) << 8) | bytes[offset + 2]) === 512) {

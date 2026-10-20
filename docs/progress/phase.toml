@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: candidate.4 prepared/provider/image compatibility proven; D client acquisition and E1/E2 Health/adoption/platforms remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: ordinary native video acquired; D teletext controls and E1/E2 Health/adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -437,6 +437,28 @@ X26/page/subpage/update/reveal/timedflash oracles. No unchanged client retry or
 decoder maintenance. Both macOS artifacts/nativeARM/macOS/Health/adoption and all
 finite/enhanced criteria remain. Mac workflow approval pending, no dispatch;
 this checkpoint local only, no push/publication.
+
+Current D checkpoint: canonical ordinary_stream_followup owns
+level15-progdvb-ordinary-client/identity.json. Two existing real-host/headed
+profile/validate/concept/preview/explicit-publication trials now feed the actual
+ordinary hls-direct URL to pinned private ProgDVB7.73.2.0. Both inspected native
+windows show synthetic red video. Default12s fixture argv and old EOF oracles
+are retained; opt-in owned external hold uses60s source, no parallel server or
+production/admin/decoder change. Strict first1MiB TSDuck/offline red/440Hz/
+eng/nld proof passes, not native audio/full delivery/interactive acceptance.
+All20 shared vendor files, package/config/worker state and normal host/client
+cleanup pass. Sandbox launch/analysis negatives and finite no-signal are retained;
+the latter does not describe this real-host video-positive route. Existing
+matching SSR/WASM is reused, not clean-HEAD/fullCI; editor/isolation/Lua/F6
+receipts keep their scopes. The supported T action reaches the owned window,
+but foreground is refused and no teletext appears; no decoder-negative claim.
+Next D needs supported private teletext control/operator access, then fixed
+X26/page/subpage/update/reveal/timedflash oracles using existing conformance
+pages. No unchanged message retry or decoder maintenance. Independent E1/E2
+managed/Health/platform work remains; macOS dispatch approval still pending.
+All finiteL15 and enhanced X1/X3 criteria remain mandatory, base/full9A open.
+No live relevant processes; foreign7 preserved. Latest maintainer permission
+covers this completed checkpoint's local commit/push to origin/main, no release.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

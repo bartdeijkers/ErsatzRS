@@ -20,6 +20,7 @@ function text(module: string): (key: string) => string {
     return JSON.parse(found[1]) as string;
   };
 }
+
 async function ready(page: Page, js: boolean): Promise<void> {
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
   if (js) await waitForHydration(page);
@@ -921,3 +922,53 @@ for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: fal
       } finally { await context.close(); fixture.close(); }
     });
 }
+
+test('standalone Level 1.5 ordinary URL is held for an external client qualification',
+  async ({ browser, isolatedWebHost }, testInfo) => {
+    const external = process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_DIR;
+    test.skip(!external, 'Requires an owned external-client controller; marker completion is not renderer acceptance.');
+    test.skip(process.platform === 'win32' || !process.env.FFMPEG_PATH, 'Requires the existing POSIX synthetic package and FFmpeg9.');
+    test.setTimeout(180_000);
+    const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath,
+      { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 60 } });
+    fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
+    const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage(); const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    try {
+      await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+      const channel = fixture.channels[0];
+      await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+      await bind(page, fixture, await createProfile(page, fixture, 'day', true), true);
+      await prepare(page, fixture, 'External Level 1.5 qualification', true);
+      await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), true);
+      await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), true);
+      await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+      await raster(page, 'day', '200');
+      await page.screenshot({ path: testInfo.outputPath('external-client-publication.png') });
+      const safe = restartSafety(fixture);
+      copyFileSync(join(fixture.root, 'synthetic-client-source.ts'), join(external!, 'source.ts'));
+      fixture.resetSourceStart();
+      const url = `${isolatedWebHost.baseURL}/iptv/hls-direct/${channel}.ts`;
+      const prefix = await captureTeletextChannelTs(url, join(external!, 'ordinary-prefix.ts'),
+        { maximumBytes: Math.floor(1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+      expect(prefix.ended).toBe('byte-limit');
+      let authoredPackets = 0;
+      for (let offset = 0; offset < prefix.bytes.length; offset += 188) {
+        expect(prefix.bytes[offset]).toBe(0x47);
+        if ((((prefix.bytes[offset + 1] & 0x1f) << 8) | prefix.bytes[offset + 2]) === 512) authoredPackets++;
+      }
+      expect(authoredPackets).toBeGreaterThan(0);
+      fixture.resetSourceStart();
+      writeFileSync(join(external!, 'host-ready.json'), JSON.stringify({ probe_version: 1, url, channel,
+        host: isolatedWebHost.processIdentity(), scope: 'Real ordinary standalone base URL; native rendering/navigation acceptance is separate.' }, null, 2));
+      await expect.poll(() => existsSync(join(external!, 'client-complete.json')), { timeout: 75_000 }).toBe(true);
+      const completed = JSON.parse(readFileSync(join(external!, 'client-complete.json'), 'utf8'));
+      expect(completed).toMatchObject({ probe_version: 1, url, owned_client_closed: true });
+      expect(restartSafety(fixture)).toEqual(safe);
+      expect(fixture.calls()).toEqual(['day']); expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
+      writeFileSync(join(external!, 'host-success.json'), JSON.stringify({ url, channel, errors,
+        scope: 'Owned host/profile/publication/ordinary-prefix/state proof only; completion marker does not certify the external renderer.' }, null, 2));
+    } finally { await context.close(); fixture.close(); }
+  });
