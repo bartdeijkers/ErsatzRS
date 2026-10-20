@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5/V6/X2 native Windows Burn/Convert original-wire transport46/46 verified; next qualify existing current-source Windows package/bundle proof; native ARM/macOS/artifacts/adoption and X1/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 Main/Local selection and exact MOT-only root undo closed at e80c8367; current-source Windows package proof deferred by maintainer; scoped Health/playback/wire evidence retained; X1-deferred/X3-upstream and native ARM/macOS/adoption remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -130,9 +130,20 @@ Its wire_transport_followup now adds two actual nativeTSDuck raw HTTP captures,
 Existing20s captures/12s windows now report each1s after warmup, fixing missing
 periodic evidence without changed thresholds. Protected SQL/source/pins stay
 exact, with narrow recorded bootstrap/operational changes; owned graceful hosts
-and complete Jobs exit unforced. Original negatives remain. Next qualify existing
-current-source native Windows package/bundle proof before building. Current full-package/nativeARM/macOS/adoption gates
-and X1-deferred/X3-upstream remain. Original hardware/Vulkan
+and complete Jobs exit unforced. Original negatives remain. The current-source
+Windows package followup at4e3e6fe6 is deferred by the maintainer, not accepted.
+The original full-LTO build was cancelled; the subsequent cold release-CI build
+hit its2400s tool budget, and its unchanged warm continuation was stopped at the
+maintainer's request. All three complete owned Jobs are empty. No current-source
+package, independent ZIP extraction or structural HTTP gate has passed.
+Canonical audio_language_followup/native_host_smoke_followup/
+current_source_package_followup points to windows-current-package/identity.json
+and all three distinct build receipts. Source/cache, frozen matched e80 site,
+negative evidence and prepared output-name build/documentation changes remain
+preserved; those unverified package changes remain uncommitted. No relevant
+owned process remains. A future Windows-package trial must reserve 120 minutes;
+do not resume the deferred trial automatically. Current full-package/nativeARM/
+macOS/adoption gates and X1-deferred/X3-upstream remain. Original hardware/Vulkan
 fallback warnings remain; managed.1 pins stay exact. X2 still needs both macOS
 artifacts, native ARM/macOS and applicable platform/adoption gates; no remote
 dispatch/push. F1 resource_set_creation_followup now adds a separate atomic native
@@ -210,9 +221,10 @@ browsers pass, including nine cultures, JS/noJS/light/dark, readable320/1920 and
 native complete model/publication/cold-recovery verification. Strict final web
 Clippy, matched SSR/WASM, hydration/architecture and formatting pass. That local
 checkpoint is e80c8367. The existing X2 Linux enabled Health subgap is now closed
-above, with native Windows scoped startup proof now recorded too. Next qualify
-the existing ordinary native Windows Next playback gate before execution;
-required source/caption/alternate-audio and cleanup oracles stay unchanged.
+above, with native Windows scoped startup, ordinary playback and original-wire
+proof now recorded too. The current-source package followup above is deferred;
+its next authorized trial reserves 120 minutes. Required source/caption/alternate-
+audio and cleanup oracles stay unchanged.
 No adjacent editor or repertoire variants.
 Full F1 stays open.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
