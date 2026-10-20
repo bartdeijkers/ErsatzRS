@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F2 generic metadata/zone/version and optimized Linux Next Burn/Convert functional components closed; next F5/V6 existing original-wire Burn/Convert transport/delivery proof. Preserve completed F4/F6 scopes; no client search or external maintenance'
+current_focus = 'P9A-04 F2 generic metadata/zone/version and Linux Next Burn/Convert functional/raw-wire components closed; next existing F1 Main/Local context/style family using existing controls. Preserve completed F4/F6 scopes; no client search or external maintenance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -279,9 +279,20 @@ d0a14fc2 includes preserved parallel infra. Original host/source/captures/DB/log
 are retained. Both outer groups drain without supervisor force; existing host
 stop uses Child::kill after worker-idle assertions, not graceful-host evidence.
 Canonical audio_language_followup/linux-ordinary-runtime/identity.json owns
-commands, hashes and scope. No source/pin or package adoption changes. Next F5/V6
-existing original-wire Linux Burn/Convert clock/continuity/delivery proof: these
-smoke captures are remuxed. Use existing URL/TSDuck tools without timing changes.
+commands/hashes/scope; its wire-transport child now closes actual Linux HTTP
+Burn/Convert transport/delivery too. Both raw captures pass23/23 existing TSDuck
+checks at unchanged20s/12s defaults: zero CC/PTS/DTS/PCR leaps,129percent delivery,
+2s startup and8 actual samples/no low intervals. Actual raw880Hz/AAC/nld, Burn35
+white pixels and Convert0 plus real Dutch WebVTT pass unchanged oracles. Full
+source/original DB and protected SQL stay exact except existing allowed bootstrap/
+operational values; SIGTERM hosts exit0 without force or owned survivors (9/8
+observed descendants). First broad source-count fixture failure occurred before
+hoststart; exact programmed identity selection fixes only the adapter, preserving
+all database guards. Canonical wire-transport/identity.json owns final captures,
+tools/source pins and the retained negative. No source/pin/adoption changes.
+Next existing F1 Main/Local context/style family (absent explicit Main/deferred
+AP included): complete the bounded authoring action with existing controls and
+only missing affected proof; no general audit or adjacent variant series.
 Windows-package deferral/future120minutes remains unchanged.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
