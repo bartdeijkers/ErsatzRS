@@ -616,6 +616,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Require finite agent work packages with explicit closure conditions, scoped
+  completion, evidence reuse and separate external blockers, preserving all
+  acceptance requirements.
+
 - Define separate acceptance for standalone Level 1/1.5 teletext before completing
   Level 2.5, including applicable X/26 data and the full editor-to-viewer flow.
   Preserve shared safety gates and full Phase 9A requirements; production guide

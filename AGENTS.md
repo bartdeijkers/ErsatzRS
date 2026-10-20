@@ -39,6 +39,42 @@ ErsatzRS exists to deliver dependable, personally meaningful television. Prefer 
 - If repeated work produces no new evidence, identify the failed hypothesis and change the approach. Do not silently expand the task.
 - Report what is proven, what remains unproven, and the next concrete action. Activity alone is not completion.
 
+### Completion rules
+
+These rules are mandatory for implementation and acceptance work:
+
+- Before each substantial work package, name the existing open requirement or
+  demonstrated defect, the user action it completes, the smallest necessary
+  change or evidence trial, and a testable stopping condition. Supporting
+  foundations must unblock that named outcome.
+- Finish the current coherent package before starting adjacent variants,
+  investigations or audits. Once its stopping condition is met, close it and
+  prepare the authorized checkpoint. Additional work before closure must fix a
+  concrete blocker to that package or an affected safety invariant.
+- Record verified components as completed within their explicit scope. Keep
+  component completion distinct from feature and milestone acceptance. Reopen
+  completed work only for a concrete regression; later missing requirements do
+  not erase delivered results.
+- Evidence-only packages must close a named mandatory proof obligation. Bundle
+  related variants into functional packages. Select verification from the change
+  and affected integration boundaries; reuse valid evidence and retain every
+  required final gate.
+- Maintain one finite completion list in the existing progress records. Separate
+  missing functionality, missing mandatory evidence and external prerequisites.
+  Every package must remove a named item or resolve a concrete blocker to it;
+  do not replace closure with an expanding collection of partial observations.
+- For an external blocker, record the exact missing capability, access,
+  environment or maintainer decision and its closure condition. Respect recorded
+  deferrals and upstream-wait decisions. Continue independent necessary work;
+  when none remains, state that explicitly. Do not invent substitute activity or
+  repeat unchanged negative candidates.
+- Lead checkpoint reports with completed user behavior or newly satisfied proof,
+  the completion items removed, relevant verification and the next bounded step.
+  Mention limitations that constrain that claim or next step. Avoid repeating
+  the entire unfinished milestone after every completed component. Keep all
+  acceptance requirements in their canonical records without silently waiving
+  or narrowing them.
+
 ## Supported Platforms
 
 ErsatzRS targets the same set of platforms as ErsatzTV. All six must build and run correctly:
@@ -410,6 +446,9 @@ Scope change: none / proposed change
 ```
 
 Name the next concrete action under Remaining blocker when work remains.
+Under Delivered, identify completed behavior or mandatory proof and the existing
+completion items closed. Limit Remaining blocker to dependencies relevant to the
+claim or next step; canonical progress records retain the complete requirement set.
 Reference canonical evidence rather than repeating its detailed history.
 Do not create a report file per turn.
 
