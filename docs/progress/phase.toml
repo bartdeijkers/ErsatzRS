@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 MOT engine, ordinary publication and independent cached-page decoding components closed; next remaining M29/page retirement using retained cache evidence and unchanged standards/model; no client search or external maintenance'
+current_focus = 'P9A-04 F4 M29 reset assessment complete; original Header/POP secondary policy needs an explicit decision, no guessed reset. Next independent page-X28/page retirement using existing tools; no client search or external maintenance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -247,11 +247,16 @@ the cached-glyph oracle before any new display is fed. Four bounded helper
 regressions pass; no stream/editor replay or decoder repair. Canonical
 tmp/phase9-mot-retirement/warm-qualification/identity.json owns pins, native
 positive/negative receipts and setup/trace limitations. Actual warm-client
-display/navigation remains required. Next address existing F4 M29/page retirement
-using the retained omission negative and unchanged standards/model. Preserve
-conditional charset/provenance; do not invent a decoder default or silently
-narrow valid authoring. No client search or external maintenance. Windows-package deferral/future
-120minutes and all existing acceptance requirements remain unchanged.
+display/navigation remains required. The bounded M29 reset assessment is complete:
+AnnexD.2.1(2) leaves absent secondary G0 decoder-dependent; Table33 0x7f is an
+explicit no-second declaration. Retained C4/cache negative and model provenance
+rule out an unqualified neutral reset. M29→Header/POP needs an explicit author/
+receiver Code-of-Practice decision or a demonstrated semantics-preserving reset;
+the protective refusal remains. Canonical m29-policy/identity.json under the same
+root owns source pins and the exact decision/closure condition. Next independently
+qualify page-X28/page retirement using existing tools. No client search, decoder
+maintenance, authoring restriction or acceptance waiver. Windows-package deferral/
+future120minutes remains unchanged.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
 pass on optimized.4 with exact cues, copied AV/Dutch AAC, shared cache and natural
