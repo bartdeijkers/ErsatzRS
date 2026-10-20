@@ -469,3 +469,77 @@ async fn managed_next_automatic_identity_rejection_precedes_every_version_probe(
         );
     }
 }
+
+// The supplied manifest is a test-local qualification pin, never the compiled
+// production selection. Exercise real archives without publishing global state.
+#[allow(clippy::disallowed_methods)] // Explicit opt-in candidate package paths, never production configuration.
+#[tokio::test]
+#[ignore = "requires ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST and ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE for the native RID"]
+async fn real_next_candidate_package_acquisition_and_health_validation() {
+    let path = |key| PathBuf::from(std::env::var_os(key).expect("set both package test variables"));
+    let manifest: Manifest = serde_json::from_slice(
+        &bounded_file(&path("ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST"), MAX_ORIGIN).unwrap(),
+    )
+    .unwrap();
+    let archive = bounded_file(&path("ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE"), MAX_ARCHIVE).unwrap();
+    let rid = ersatzrs_ffmpeg::runtime::current_ersatzrs_ffmpeg_rid().unwrap();
+    let asset = manifest.package(rid).unwrap().asset.clone();
+    let root = tempfile::tempdir().unwrap();
+    let cfg = config(root.path());
+    let server = httpmock::MockServer::start_async().await;
+    let request = server
+        .mock_async(|when, then| {
+            when.method(httpmock::Method::GET).path(format!("/{asset}"));
+            then.status(200).body(archive.clone());
+        })
+        .await;
+    let installed = acquire(cfg.clone(), manifest.clone(), &server.base_url())
+        .await
+        .unwrap();
+    assert_eq!(installed.source, NextRuntimeSource::Downloaded);
+    assert!(installed.published_pin_verified);
+    // Same identity-before-execution function used by validate_published/Health.
+    validate_automatic(
+        &installed,
+        manifest.clone(),
+        super::super::version::probe_binary(&installed.binary),
+    )
+    .await
+    .unwrap();
+    request.assert_calls_async(1).await;
+
+    let mut offline = cfg;
+    offline.allow_download = false;
+    let cached = acquire(offline.clone(), manifest.clone(), "http://127.0.0.1:1")
+        .await
+        .unwrap();
+    assert_eq!(cached.source, NextRuntimeSource::Managed);
+    assert_eq!(cached.binary, installed.binary);
+    assert_eq!(cached.version, manifest.distribution_version);
+    validate_automatic(
+        &cached,
+        manifest.clone(),
+        super::super::version::probe_binary(&cached.binary),
+    )
+    .await
+    .unwrap();
+    request.assert_calls_async(1).await;
+    assert!(try_install_lock(&offline.managed_root).unwrap().is_some());
+
+    // A same-length replacement must fail before launching untrusted bytes.
+    let mut replaced = fs::read(&cached.binary).unwrap();
+    replaced[0] ^= 1;
+    fs::write(&cached.binary, replaced).unwrap();
+    assert_eq!(
+        validate_automatic(&cached, manifest.clone(), async {
+            panic!("an identity mismatch must never poll the executable probe")
+        })
+        .await,
+        Err(NextRuntimeError::Identity)
+    );
+    assert!(matches!(
+        acquire(offline.clone(), manifest, "http://127.0.0.1:1").await,
+        Err(NextRuntimeError::Offline)
+    ));
+    assert!(try_install_lock(&offline.managed_root).unwrap().is_some());
+}
