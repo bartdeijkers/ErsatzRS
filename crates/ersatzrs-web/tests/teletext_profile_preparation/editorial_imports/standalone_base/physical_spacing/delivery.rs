@@ -85,9 +85,11 @@ async fn capture_channels(
     flow: &Flow,
     accepted: &[AcceptedTeletextOutputCandidate; 2],
 ) -> Value {
+    let day_prefix = directory.join("channel-1-failed-prefix");
+    let night_prefix = directory.join("channel-2-failed-prefix");
     let (day, night) = tokio::join!(
-        drcs_bitmap_delivery::capture_tcp(origin.url(1)),
-        drcs_bitmap_delivery::capture_tcp(origin.url(2))
+        drcs_bitmap_delivery::capture_tcp_with_failure_prefix(origin.url(1), &day_prefix),
+        drcs_bitmap_delivery::capture_tcp_with_failure_prefix(origin.url(2), &night_prefix)
     );
     let wrong_generation_rejected = std::panic::catch_unwind(AssertUnwindSafe(|| {
         ordinary_stream_flow::assert_emitted_model(&day, flow.accepted[0].service());
@@ -172,6 +174,14 @@ async fn actual_qtm_spacing_publication_serves_exact_two_channel_models_at_defau
     }).catch_unwind().await;
     let closed = origin.close().await;
     let cleaned = live_updates::live_tcp::wait_for_cleanup().await;
+    polish_delivery::write_json(
+        &directory,
+        "cleanup-attempt.json",
+        &json!({
+            "origin_closed":closed.is_ok(),"output_capacity_released":cleaned.is_ok(),
+            "capture_and_validation_passed":outcome.is_ok()
+        }),
+    );
     if let Err(panic) = outcome {
         fixture.state.pool.close().await;
         std::panic::resume_unwind(panic);

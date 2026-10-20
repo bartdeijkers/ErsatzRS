@@ -131,6 +131,47 @@ async fn published_case(
 }
 
 pub(super) async fn capture_tcp(url: String) -> Vec<u8> {
+    capture_tcp_inner(url, None).await
+}
+
+pub(super) async fn capture_tcp_with_failure_prefix(url: String, prefix: &Path) -> Vec<u8> {
+    capture_tcp_inner(url, Some(prefix)).await
+}
+
+fn retain_failed_prefix(prefix: Option<&Path>, bytes: &[u8], reason: &str) {
+    let Some(prefix) = prefix else { return };
+    assert!(bytes.len() <= CAPTURE_MAXIMUM);
+    live_client::write_new(&prefix.with_extension("ts"), bytes).unwrap();
+    let marker = json!({"reason":reason,"bytes":bytes.len(),"maximum_bytes":CAPTURE_MAXIMUM,
+        "sha256":live_client::hash(bytes),"complete_capture":false,
+        "scope":"Exact received prefix before a failed Body read; no alignment, repair or padding"});
+    live_client::write_new(
+        &prefix.with_extension("json"),
+        &serde_json::to_vec(&marker).unwrap(),
+    )
+    .unwrap();
+}
+
+async fn capture_chunks<E: std::fmt::Debug>(
+    mut stream: impl futures_util::Stream<Item = Result<axum::body::Bytes, E>> + Unpin,
+    failure_prefix: Option<&Path>,
+) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    while bytes.len() < CAPTURE_TARGET {
+        let chunk = stream.next().await;
+        match &chunk {
+            Some(Err(_)) => retain_failed_prefix(failure_prefix, &bytes, "body_error"),
+            None => retain_failed_prefix(failure_prefix, &bytes, "early_eof"),
+            Some(Ok(_)) => {}
+        }
+        let chunk = chunk.expect("ordinary TCP stream ended early").unwrap();
+        assert!(bytes.len().checked_add(chunk.len()).unwrap() <= CAPTURE_MAXIMUM);
+        bytes.extend_from_slice(&chunk);
+    }
+    bytes
+}
+
+async fn capture_tcp_inner(url: String, failure_prefix: Option<&Path>) -> Vec<u8> {
     tokio::time::timeout(Duration::from_secs(35), async {
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
@@ -138,18 +179,7 @@ pub(super) async fn capture_tcp(url: String) -> Vec<u8> {
             .unwrap();
         let response = client.get(url).send().await.unwrap();
         assert_eq!(response.status(), reqwest::StatusCode::OK);
-        let mut stream = response.bytes_stream();
-        let mut bytes = Vec::new();
-        while bytes.len() < CAPTURE_TARGET {
-            let chunk = stream
-                .next()
-                .await
-                .expect("ordinary TCP stream ended early")
-                .unwrap();
-            assert!(bytes.len().checked_add(chunk.len()).unwrap() <= CAPTURE_MAXIMUM);
-            bytes.extend_from_slice(&chunk);
-        }
-        drop(stream);
+        let mut bytes = capture_chunks(response.bytes_stream(), failure_prefix).await;
         // Retain an exact response prefix ending at its last complete authored
         // PES. No packet is rewritten, synthesized, reordered or appended.
         let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
@@ -169,6 +199,9 @@ pub(super) async fn capture_tcp(url: String) -> Vec<u8> {
     .await
     .expect("ordinary TCP capture exceeded its deadline")
 }
+
+#[path = "drcs_bitmap_delivery/failure_capture_tests.rs"]
+mod failure_capture_tests;
 
 pub(super) fn captured_units(bytes: &[u8]) -> Vec<Vec<u8>> {
     let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();

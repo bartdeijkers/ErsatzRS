@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 scoped editor-to-ordinary delivery proven; one startup Body EOF unclassified, V3/V6 safety and X1/X2/X3 remain open; no DVBViewer/device trial'
+current_focus = 'P9A-04 failed-prefix tool gap qualified; initial EOF unresolved, stop unchanged retries; next F5 startup/Health boundary, X1/X2/X3 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -100,10 +100,15 @@ fresh-receipt concept/publication/reopen and two ordinary TCP outputs at capacit
 complete own models, rejected old Day generation, source AV/TSDuck and cleanup.
 No editor replay. Initial Body EOF remains unclassified; same source/editor bytes
 pass with the existing bounded WARN trace. No product fix or fullV3/9A claim.
-Next retain bounded raw partial responses on Body errors in the existing capture
-helper, then one same-source qualification; diagnose only a reproduced failure.
-Keep F6 closed without a relevant handoff regression. No per-variant full-chain
-replay, client hunt, decoder maintenance, physical-device or DVBViewer work.
+delivery/failure_prefix now qualifies literal bounded failed-prefix retention on
+Body Err/early EOF: deterministic191-byte unaligned fixtures still fail, and one
+same-source ordinary qualification passes with complete cleanup. No warning or
+failed prefix occurs; initial EOF remains unclassified. Stop unchanged retries.
+Next independent F5/E2 step: confirm existing explicit candidate.4 tool-path config
+for a throwaway actual startup/Health proof. Primitive managed qualification at
+30aac731 is not full Health/adoption. Keep managed.1 and all six-RID/macOS gates;
+no remote dispatch/push. Keep F6 closed without a relevant handoff regression.
+No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
 list, separated into missing product, mandatory proof and external prerequisites.
