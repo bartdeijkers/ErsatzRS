@@ -2,7 +2,8 @@
 use super::project::{native_body, Body, Limits};
 use super::{invalid, EncodedTeletextAuthoredService, Instant, Mapping, Result};
 use ersatzrs_domain::{
-    TeletextResourceObjectDefinitionAddition, TeletextResourceObjectProgramOverlay,
+    TeletextEnhancementProgram, TeletextResourceObjectDefinitionAddition,
+    TeletextResourceObjectProgramOverlay,
 };
 
 #[derive(Clone, Copy, Default)]
@@ -26,6 +27,9 @@ impl PositionScope<'_> {
         limits: Limits,
         deadline: Instant,
     ) -> Result<Option<TeletextResourceObjectProgramOverlay>> {
+        if let Some(cleared) = self.clear_added_body(mapped, body, limits, deadline)? {
+            return Ok(Some(cleared));
+        }
         let Some(root) = self.root else {
             return Ok(None);
         };
@@ -86,5 +90,42 @@ impl PositionScope<'_> {
         )
         .map(Some)
         .map_err(|_| invalid())
+    }
+
+    fn clear_added_body(
+        &self,
+        mapped: &Mapping<'_>,
+        body: &Body,
+        limits: Limits,
+        deadline: Instant,
+    ) -> Result<Option<TeletextResourceObjectProgramOverlay>> {
+        mapped.location.check_deadline(deadline)?;
+        if !body.after.is_empty() {
+            return Ok(None);
+        }
+        let mut additions = self
+            .additions
+            .iter()
+            .filter(|addition| addition.identity() == mapped.identity);
+        let Some(addition) = additions.next() else {
+            return Ok(None);
+        };
+        let root = self.root.ok_or_else(invalid)?;
+        if additions.next().is_some()
+            || addition.definition() != mapped.definition
+            || root
+                .declared()
+                .semantic()
+                .objects()
+                .definition(mapped.identity)
+                .is_some()
+            || body.before != native_body(mapped, limits, deadline)?
+        {
+            return Err(invalid());
+        }
+        let empty = TeletextEnhancementProgram::new(Vec::new()).map_err(|_| invalid())?;
+        TeletextResourceObjectProgramOverlay::clear_added_body(addition, empty, limits.2)
+            .map(Some)
+            .map_err(|_| invalid())
     }
 }

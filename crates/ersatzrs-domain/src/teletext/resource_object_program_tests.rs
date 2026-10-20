@@ -4,6 +4,9 @@ use super::*;
 #[path = "resource_object_invocation_program_tests.rs"]
 mod invocations;
 
+#[path = "resource_object_added_body_clear_tests.rs"]
+mod added_body_clear;
+
 fn change_program(global: bool, extra: usize) -> TeletextResourceObjectProgramOverlay {
     let source = input();
     let expected = source.objects[usize::from(global)].program.clone();

@@ -252,42 +252,59 @@ fn position_restoration_never_enters_saved_program_roles_even_without_inserted_a
         budget().validation.service,
     )
     .unwrap();
-    assert!(restoration.is_position_restoration());
-    assert!(!restoration.has_inserted_positions());
-    assert!(super::resource_object_programs::distinct_targets(
-        std::slice::from_ref(&restoration),
-        &[]
+    let addition = ersatzrs_domain::TeletextResourceObjectDefinitionAddition::new(
+        ersatzrs_domain::TeletextEnhancementObjectDefinition {
+            identity: prior.identity(),
+            object_type: ersatzrs_domain::TeletextObjectType::Passive,
+            program: prior.replacement().clone(),
+        },
+        budget().validation.service,
     )
-    .is_err());
-    for constructor in [
-        TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays,
-        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays,
-        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays,
-        TeletextSavedEditorialOverlay::new_with_resource_object_position_overlays,
-    ] {
-        assert!(constructor(
-            provenance(),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            (vec![], vec![restoration.clone()])
+    .unwrap();
+    let cleared = TeletextResourceObjectProgramOverlay::clear_added_body(
+        &addition,
+        TeletextEnhancementProgram::new(vec![]).unwrap(),
+        budget().validation.service,
+    )
+    .unwrap();
+    for restoration in [restoration, cleared] {
+        assert!(restoration.is_position_restoration());
+        assert!(!restoration.has_inserted_positions());
+        assert!(super::resource_object_programs::distinct_targets(
+            std::slice::from_ref(&restoration),
+            &[]
         )
         .is_err());
+        for constructor in [
+            TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays,
+            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays,
+            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays,
+            TeletextSavedEditorialOverlay::new_with_resource_object_position_overlays,
+        ] {
+            assert!(constructor(
+                provenance(),
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                (vec![], vec![restoration.clone()])
+            )
+            .is_err());
+        }
+        assert!(
+            TeletextSavedEditorialOverlay::new_with_resource_object_position_overlays(
+                provenance(),
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                (vec![], vec![change(true, 15, false), restoration]),
+            )
+            .is_err()
+        );
     }
-    assert!(
-        TeletextSavedEditorialOverlay::new_with_resource_object_position_overlays(
-            provenance(),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            (vec![], vec![change(true, 15, false), restoration]),
-        )
-        .is_err()
-    );
 }
 
 #[test]

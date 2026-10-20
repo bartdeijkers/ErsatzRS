@@ -9,6 +9,9 @@ mod extent;
 #[path = "structure/positions.rs"]
 mod positions;
 
+#[path = "structure/added_body_clear.rs"]
+mod added_body_clear;
+
 fn bounds() -> (TeletextTtiBudget, usize, TeletextServiceBudget) {
     (
         limits().0,

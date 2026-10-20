@@ -238,3 +238,6 @@ mod support;
 
 #[path = "original_positions/actual_editor_reuse.rs"]
 mod actual_editor_reuse;
+
+#[path = "original_positions/coordinated_additions.rs"]
+mod coordinated_additions;

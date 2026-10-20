@@ -6,7 +6,8 @@ use super::{
     },
     TeletextEnhancementCommand, TeletextEnhancementProgram,
     TeletextLocalObjectGlyphProgramOverlayError, TeletextObjectIdentity,
-    TeletextResourceObjectOperandOverlay, TeletextServiceBudget,
+    TeletextResourceObjectDefinitionAddition, TeletextResourceObjectOperandOverlay,
+    TeletextServiceBudget,
 };
 
 /// Invalid resource structure without retaining authored contents in errors.
@@ -24,6 +25,8 @@ pub enum TeletextResourceObjectProgramOverlayError {
     MissingInsertedPosition,
     #[error("teletext position restoration requires checked original-position intent")]
     OriginalPositionIntent,
+    #[error("teletext added resource body clearing requires an empty replacement")]
+    NonemptyAddedBody,
     #[error("teletext resource program exceeds the trusted command or structure budget")]
     Budget,
     #[error(transparent)]
@@ -192,6 +195,46 @@ impl TeletextResourceObjectProgramOverlay {
             budget,
             InvocationPolicy::OriginalPositions,
         )
+    }
+
+    /// Clear a checked added definition's nonempty body as ephemeral intent.
+    ///
+    /// The definition and its identity remain present; only its complete body
+    /// becomes empty. This grants no original-position ancestry or generic
+    /// permission to delete position/context anchors. Before applying, the host
+    /// must authenticate the saved addition, its absence from the immutable root,
+    /// the exact current native body and every protected consumer. The host must
+    /// fold the result into the complete addition before persistence; no saved
+    /// program-overlay format accepts this restoration intent.
+    /// # Errors
+    /// Rejects a nonempty replacement, an already empty body and exhausted fresh
+    /// object, structure or command budgets before cloning the expected body.
+    pub fn clear_added_body(
+        addition: &TeletextResourceObjectDefinitionAddition,
+        replacement: TeletextEnhancementProgram,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        use TeletextResourceObjectProgramOverlayError as Error;
+        let expected = &addition.definition().program;
+        if budget.max_objects == 0
+            || budget.max_structure_items == 0
+            || expected.commands().len() > budget.max_commands
+        {
+            return Err(Error::Budget);
+        }
+        if !replacement.commands().is_empty() {
+            return Err(Error::NonemptyAddedBody);
+        }
+        if expected.commands().is_empty() {
+            return Err(Error::Unchanged);
+        }
+        Ok(Self {
+            identity: addition.identity(),
+            expected: expected.clone(),
+            replacement,
+            retained_commands: Vec::new(),
+            position_intent: PositionIntent::Restoration,
+        })
     }
 
     /// Reverse one checked original-position edit as ephemeral root restoration.

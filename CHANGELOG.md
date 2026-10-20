@@ -927,6 +927,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Restore original and newly added teletext object bodies together from a fresh
+  export. Undo retains deliberately added empty definitions, exact original
+  anchors and protected consumers; publication remains an explicit action.
 - Retire teletext MOT banks on the same output source. Previously delivered
   populated banks receive complete neutral updates before the successor starts;
   preserve exact subpage counters and require sink acknowledgement of the clearing
