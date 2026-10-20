@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: held-mosaic spacing checkpoint; pinned-editor spacing proof, D controls and E2 adoption/platforms remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: held-mosaic editor boundary proven; C effective-scope admin, D controls and E2 adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -477,12 +477,15 @@ Current Base charset/spacing boundary: P9A-04's finite L15-A1/A2/B2 rows and
 standalone_level15_followup/held_mosaics_followup own the new bounded hold/release
 register, original control/glyph/reset provenance, shared raster/carrier and
 protected-zone/caption-box checks. Exact final outcomes and pins belong to
-level15-held-mosaics/identity.json. This closes the physical1E/1F refusal, not
-complete inventory/editor/client acceptance. The unchanged five stock header/
-secondary mismatches remain in base_g0_context_followup (75dba6fd); no decoder
-maintenance or weaker normative oracle. Next prove the supported base spacing
-family through the existing pinnedQTM edit/save/import/shared-preview boundary;
-reuse unchanged publication/ordinary transport, profiles/Lua/isolation/admin/F6.
+level15-held-mosaics/identity.json. The editor child receipt now proves actual
+pinnedQTM1.0 Hold/Release menus, SaveAs and unchanged-byte concept import/shared
+preview/re-export/reopen, retaining metadata/page125/Night and both accepted
+generations. This closes the named B2 hold/release boundary, not complete editor/
+inventory/client acceptance. The unchanged five stock header/secondary failures
+remain in base_g0_context_followup (75dba6fd); no weaker oracle or maintenance.
+Next C: prove existing active-Lua versus Base selection and the intended admin
+preview/publication target with headed browser evidence; reuse unchanged durable/
+scoped runtime, publication/transport, profiles/isolation/admin/F6 receipts.
 D private native teletext control/operator access, E2 nativeARM/macOS/Health/
 adoption and enhanced X1-deferred/X3-upstream remain mandatory and separate.
 75dba6fd plus30aac731 were authorized/pushed with skipCI; this new follow-up is

@@ -19,6 +19,16 @@ still selects its actual bank from authored X26. It does not alter any file or
 QTM decoding. `single-page-save` opens/loads/checks/saves without adding Q.
 Six captures per page retain before/after load, optional edit and actual Save As.
 
+The no-bank `single-page-base-spacing` trial selects Level1.5 and drives the
+visible Insert/Mosaics hold menus: Hold at row1/column9, Release at column14.
+Its fixed native fixture has contiguous/separated mosaics and blank edit cells;
+no editor model or saved bytes are assigned by the widget driver. Use the same
+create-new ready/completion protocol with `ERSATZRS_TELETEXT_HELD_EDITOR_DIR`
+and native selector `actual_qtm_hold_release_menus_import_preview_reexport_reopen`.
+The native oracle checks all records, the four affected preview cells, metadata,
+unchanged accepted channels, re-export and reopen. This static editor trial does
+not qualify ordinary-stream decoding, navigation, reveal or timed flash.
+
 Ignored native selectors in `ersatzrs-web` are
 `test(pinned_external_editor_drcs_companion)` (singleton),
 `test(pinned_external_editor_indexed_drcs)` (real S1=0+1), and

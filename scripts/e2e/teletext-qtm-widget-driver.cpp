@@ -11,6 +11,8 @@
 #include <QDockWidget>
 #include <QTableView>
 #include <QMainWindow>
+#include <QMenuBar>
+#include <QSignalSpy>
 #include <QMenu>
 #include <QRadioButton>
 #include <QSpinBox>
@@ -28,6 +30,7 @@
 #include <cstdio>
 #include <array>
 #include <vector>
+#include <utility>
 
 static QWidget *editor() {
     for (QWidget *widget : QApplication::allWidgets())
@@ -102,6 +105,7 @@ struct DriverContext {
     bool editMainG2 = false;
     bool editNativeG0 = false;
     int nativeUnicode = 0;
+    bool editBaseSpacing = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -167,6 +171,7 @@ static DriverContext driverContext() {
     const bool generatedBaseG2 = mode == "single-page-base-g2";
     const bool mainG2 = mode == "single-page-main-g2" || generatedBaseG2;
     const bool nativeG0 = mode == "single-page-native-g0";
+    const bool baseSpacing = mode == "single-page-base-spacing";
     if (nativeG0 != qEnvironmentVariableIsSet("ERSATZRS_QTM_NATIVE_G0_UNICODE"))
         qFatal("Native G0 input requires exactly the fixed native trial");
     const int nativeUnicode = nativeG0 ? boundedDecimal("ERSATZRS_QTM_NATIVE_G0_UNICODE", 0xffff) : 0;
@@ -275,7 +280,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !nativeG0 && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !nativeG0 && !baseSpacing && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -308,14 +313,14 @@ static DriverContext driverContext() {
         || (generatedBaseG2 ? (triplet != 1 || column != 8 || (toGlyph != 36 && toGlyph != 37))
             : (triplet != 206 || column != 0 || toGlyph != 66))))
         qFatal("Fixed standalone Main/Base G2 requires its exact word/data, zero panels and no banks");
-    if (nativeG0 && (left != 0 || right != 0 || !drcs.isEmpty() || !globalDrcs.isEmpty()))
+    if ((nativeG0 || baseSpacing) && (left != 0 || right != 0 || !drcs.isEmpty() || !globalDrcs.isEmpty()))
         qFatal("Fixed native G0 trial requires zero panels and no banks");
     if (resourceTrial && (left != 0 || right != 0
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1529,6 +1534,59 @@ static void interiorDefinitionMenuSelect(QMenu *menu, QAction *target) {
     if (!menu->isVisible() || menu->activeAction() != target)
         qFatal("Actual interior-definition menu did not select the exact named action");
 }
+// Pinned mainwindow.cpp873..880: ordinary Insert/Mosaics hold menu actions.
+// Drive visible menus; neither QAction nor a document/model setter is invoked.
+static void editBaseSpacing(QMainWindow *main, const DriverContext &context) {
+    auto view = editor();
+    if (!view || main->isWindowModified()
+        || !view->grab().save(QString("/work/") + context.captureName("base-spacing-before-widget")))
+        qFatal("Fixed Base spacing edit requires a pristine visible page");
+    auto named = [](const QList<QAction *> &actions, const QString &name) {
+        QAction *found = nullptr;
+        for (auto action : actions) {
+            QString text = action->text(); text.remove('&');
+            if (text != name || !action->isVisible() || !action->isEnabled()) continue;
+            if (found) qFatal("Duplicate fixed Base menu action");
+            found = action;
+        }
+        if (!found) qFatal("Fixed Base menu action absent");
+        return found;
+    };
+    auto insertAction = named(main->menuBar()->actions(), "Insert");
+    auto insert = insertAction->menu();
+    if (!insert) qFatal("Fixed Insert menu absent");
+    auto holdMenuAction = named(insert->actions(), "Mosaics hold");
+    auto holdMenu = holdMenuAction->menu();
+    if (!insert || !holdMenu) qFatal("Fixed Base spacing menu chain absent");
+    for (const auto &edit : std::array<std::pair<int, const char *>, 2>{{
+        {9, "Hold mosaics"}, {14, "Release mosaics"}
+    }}) {
+        auto action = named(holdMenu->actions(), edit.second);
+        QSignalSpy triggered(action, &QAction::triggered);
+        if (!triggered.isValid()) qFatal("Fixed Base QAction signal unavailable");
+        QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, QPoint(edit.first * 12 + 6, 15));
+        QTest::mouseClick(main->menuBar(), Qt::LeftButton, Qt::NoModifier,
+            main->menuBar()->actionGeometry(insertAction).center());
+        if (!QTest::qWaitFor([insert] { return insert->isVisible(); }, 3000))
+            qFatal("Actual Insert menu did not expose");
+        interiorDefinitionMenuSelect(insert, holdMenuAction);
+        QTest::keyClick(insert, Qt::Key_Right);
+        if (!QTest::qWaitFor([holdMenu] { return holdMenu->isVisible(); }, 3000))
+            qFatal("Actual Mosaics hold submenu did not expose");
+        interiorDefinitionMenuSelect(holdMenu, action);
+        const char *stage = edit.first == 9 ? "base-spacing-hold-menu" : "base-spacing-release-menu";
+        if (!holdMenu->grab().save(QString("/work/") + context.captureName(stage)))
+            qFatal("Actual Base attribute menu capture failed");
+        QTest::keyClick(holdMenu, Qt::Key_Return);
+        if (!QTest::qWaitFor([&triggered, main] {
+            return triggered.count() == 1 && main->isWindowModified();
+        }, 3000)) qFatal("Actual Base attribute menu did not trigger exactly once");
+    }
+    if (!view->grab().save(QString("/work/") + context.captureName("base-spacing-edited-widget")))
+        qFatal("Fixed Base spacing edited widget capture failed");
+    std::puts("QTM actual Base spacing: Insert/Mosaics hold menus, Hold row1col9 and Release row1col14");
+}
+
 // Pinned x26menus.h names and x26dockwidget.cpp insertion defaults. Both
 // additions go through the real Insert before menu; no tuple/model is assigned.
 static void insertFirstDefinitionWord(QDockWidget *dock, const DriverContext &context, bool glyph) {
@@ -2579,7 +2637,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editNativeG0 || context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow), context.inputName.constData(), context.outputName.constData());
+                (context.editBaseSpacing || context.editNativeG0 || context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -2604,7 +2662,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
         if (destination.exists() || destination.isSymLink())
             qFatal("Audit destination must not exist or be a symlink");
         bool selected = false;
-        const bool level15 = context.editMainG2 || context.editNativeG0;
+        const bool level15 = context.editMainG2 || context.editNativeG0 || context.editBaseSpacing;
         const QString level = level15 ? "1.5" : "2.5";
         for (QRadioButton *radio : main->findChildren<QRadioButton *>())
             if (radio->text() == level) { radio->click(); selected = radio->isChecked(); }
@@ -2634,6 +2692,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.insertFragmentCall || context.deleteFragmentCall) editNativeFragmentCalls(main,context);
             if (context.addFirstDefinitionPosition) editFirstDefinitionPosition(main, context);
             if (context.addInteriorDefinitionRow) editInteriorDefinitionRow(main, context);
+            if (context.editBaseSpacing) editBaseSpacing(main, context);
             if (context.editNativeG0) {
                 if (main->isWindowModified()
                     || !view->grab().save(QString("/work/") + context.captureName("native-g0-before-widget")))

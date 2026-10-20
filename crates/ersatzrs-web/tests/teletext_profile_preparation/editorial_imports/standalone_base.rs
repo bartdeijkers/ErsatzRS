@@ -11,6 +11,9 @@ mod national_editor;
 #[path = "standalone_base/native_editor.rs"]
 mod native_editor;
 
+#[path = "standalone_base/held_mosaics.rs"]
+mod held_mosaics;
+
 fn commands() -> Value {
     let mut commands = Vec::new();
     for row in 1..=5 {
