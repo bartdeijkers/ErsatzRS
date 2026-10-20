@@ -895,6 +895,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Reject authored teletext references to subpages outside the effective MOT
+  announcement, including later concept edits. Preserve applicable X27 selection,
+  original default provenance and the running publication on refusal. Complete
+  coordinated bank-selection editing remains open.
+
 - Allow Add/Copy in explicitly created teletext banks, preserving complete
   definitions and lifecycle through drafts, preview, separate publication and
   restart. Stale, occupied and invalid targets still leave existing output intact.

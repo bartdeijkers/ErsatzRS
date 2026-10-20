@@ -21,6 +21,9 @@ use ersatzrs_web::host::{
 #[path = "object_resources/retained_definitions.rs"]
 mod retained_definitions;
 
+#[path = "object_resources/selected_consumers.rs"]
+mod selected_consumers;
+
 fn bank_resources() -> [TeletextResourceIdentity; 4] {
     [
         (TeletextResourceKind::Gpop, 0xe1, 0),
@@ -161,10 +164,41 @@ async fn qualify_response(response: Value, second: bool) -> BankExpected {
         complete_encoding()
     };
     let candidate = Box::pin(prepare_with_policy(&fixture, 1, encoding)).await;
-    let service = candidate.encoded().unwrap();
+    let resources = bank_resources();
+    let expected = bank_expected(
+        candidate.encoded().unwrap(),
+        &resources[..if second { 4 } else { 3 }],
+    );
+    // No new bank is implicitly selected by a pre-existing display or default.
+    assert!(expected
+        .declared
+        .semantic()
+        .base()
+        .pages
+        .iter()
+        .all(|page| {
+            !expected
+                .declared
+                .semantic()
+                .effective_program(page.address)
+                .unwrap()
+                .1
+                .commands()
+                .iter()
+                .any(|command| {
+                    matches!(command, TeletextEnhancementCommand::InvokeObject {target,..}
+                if [new_target(0),new_target(1),seed::target(26)].contains(target))
+                })
+        }));
+    fixture.state.pool.close().await;
+    expected
+}
+fn bank_expected(
+    service: &EncodedTeletextAuthoredService,
+    resources: &[TeletextResourceIdentity],
+) -> BankExpected {
     let semantic = service.declared().semantic();
-    let count = if second { 4 } else { 3 };
-    let banks = bank_resources()[..count]
+    let banks = resources
         .iter()
         .map(|resource| {
             let definitions = semantic
@@ -194,7 +228,7 @@ async fn qualify_response(response: Value, second: bool) -> BankExpected {
             .unwrap()
         })
         .collect();
-    let expected = BankExpected {
+    BankExpected {
         declared: service.declared().clone(),
         magazine: service.magazine_units().to_vec(),
         units: service
@@ -214,30 +248,7 @@ async fn qualify_response(response: Value, second: bool) -> BankExpected {
             .definition(seed::target(26))
             .unwrap()
             .clone(),
-    };
-    // No new bank is implicitly selected by a pre-existing display or default.
-    assert!(expected
-        .declared
-        .semantic()
-        .base()
-        .pages
-        .iter()
-        .all(|page| {
-            !expected
-                .declared
-                .semantic()
-                .effective_program(page.address)
-                .unwrap()
-                .1
-                .commands()
-                .iter()
-                .any(|command| {
-                    matches!(command, TeletextEnhancementCommand::InvokeObject {target,..}
-                if [new_target(0),new_target(1),seed::target(26)].contains(target))
-                })
-        }));
-    fixture.state.pool.close().await;
-    expected
+    }
 }
 fn bank_request(
     receipt: &TeletextDesignExportReceipt,

@@ -1045,3 +1045,6 @@ fn local_object_overlay_preserves_declared_mot_inventory_defaults_and_original_s
     assert_eq!(changed.defaults(), original.defaults());
     assert_ne!(changed.semantic(), original.semantic());
 }
+
+#[path = "declared_service_usage_tests.rs"]
+mod usage_tests;

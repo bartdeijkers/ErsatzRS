@@ -90,7 +90,9 @@ async fn copy_retained(
     saved
 }
 
-async fn setup_retained(first: &BankExpected) -> (Fixture, Flow, SavedEditorialTeletextDesign) {
+pub(super) async fn setup_retained(
+    first: &BankExpected,
+) -> (Fixture, Flow, SavedEditorialTeletextDesign) {
     Box::pin(setup_retained_on(first, Fixture::new_persistent().await)).await
 }
 async fn setup_retained_on(

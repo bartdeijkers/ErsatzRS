@@ -333,7 +333,7 @@ pub enum TeletextServiceError {
         subpage: TeletextResourceSubpageIndex,
     },
     #[error(
-        "teletext display {display:?}, source {source_location:?}, X27 {role:?} does not announce used resource {page}/{subpage:?}"
+        "teletext display {display:?}, source {source_location:?}, resource declaration {role:?} does not announce used resource {page}/{subpage:?}"
     )]
     CompositionalUsage {
         display: TeletextPageAddress,

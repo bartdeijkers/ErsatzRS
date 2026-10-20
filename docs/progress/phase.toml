@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 retained-bank Add/Copy native and headed verified; next localized bank creation and selected-consumer/effective-role integration; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 implicit-MOT used-S1 correctness checkpoint; next explicit bank selection/dependency metadata and localized creation; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -135,8 +135,15 @@ normalized complete V25 bodies and exact lifecycle/effects.148 unique focused
 cases, strict web Clippy and two headed browsers pass; the owned native proof
 checks four browser-created definitions, re-export, separate publication and
 cold reopen. Earlier9-culture/static UI and unchanged stream proofs retain scope.
-Next localized bank creation and selected-consumer/effective-role integration;
-full-capacity/editor acceptance still needs X3 upstream capability and adoption.
+Selected-consumer qualification now exposes a concrete announcement defect:
+a fresh retained POP2C0/S1=15 call saved under implicit MOT extent0. The native
+preview/publication positive is not normative acquisition proof. The current
+selected_consumer_followup proves a bounded actual-use guard:661 domain and24
+distinct native cases plus strict domain/web Clippy pass. Explicit X27 authority
+and original default-root provenance remain exact. Positive acquisition
+still needs explicit coordinated bank selection/dependency metadata; existing
+TTI imports correctly protect MOT/X27. Next that functional workflow and localized
+bank creation. Full-capacity/editor acceptance still needs X3 upstream capability.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
 

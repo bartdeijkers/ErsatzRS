@@ -38,6 +38,13 @@ remain mandatory. Existing localized forms are qualified for fitting contexts;
 localized bank creation and complete native-capacity/editor/consumer proof remain
 required. P9A-04 owns unchanged full F1/X3 requirements. No package, generic upload
 or absent-bank creation authority is acquired by Add/Copy.
+Actual use of a retained bank must also fit its effective resource announcement.
+A fresh editor alias and a successful native preview cannot authorize an S1
+outside the selected implicit MOT extent. Original construction and mutations
+which change collected references enforce that correspondence while preserving
+original foreign default-root provenance and applicable X27 authority. Explicit
+coordinated selection/dependency edits remain a separate open F1 mechanism;
+ordinary TTI imports still cannot change protected MOT/X27 metadata.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

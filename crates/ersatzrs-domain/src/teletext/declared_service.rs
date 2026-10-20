@@ -82,6 +82,9 @@ pub enum TeletextDeclaredServiceFailure {
     SelectedRole {
         role: TeletextX27LinkRole,
     },
+    ResourceUsage {
+        role: TeletextX27LinkRole,
+    },
     DefaultSelection {
         slot: u8,
     },
@@ -197,7 +200,16 @@ impl TeletextDeclaredService {
         collect_defaults(&semantic, &mots, &mut defaults)?;
         let mut resolutions = Vec::with_capacity(selections.len());
         for selection in &selections {
-            resolutions.push(resolve_display(&semantic, *selection, &mot_index)?);
+            let resolution = resolve_display(&semantic, *selection, &mot_index)?;
+            if let Some((role, resource, _)) = unannounced_resource_usage(&semantic, &resolution) {
+                return Err(TeletextDeclaredServiceError {
+                    display: Some(resolution.display),
+                    mot: resolution.mot.map(|mot| mot.selected_mot()),
+                    resource: Some(resource),
+                    ..failure(TeletextDeclaredServiceFailure::ResourceUsage { role })
+                });
+            }
+            resolutions.push(resolution);
         }
         apply_fallbacks(&mut semantic, &resolutions)?;
         Ok(Self {
@@ -240,6 +252,7 @@ impl TeletextDeclaredService {
         self.semantic = self
             .semantic
             .with_local_program_operand_overlays(overlays, budget)?;
+        self.validate_resource_usage()?;
         Ok(self)
     }
     /// Replace exact explicit Main call structure without changing declarations.
@@ -253,6 +266,7 @@ impl TeletextDeclaredService {
         self.semantic = self
             .semantic
             .with_main_local_invocation_program_overlays(overlays, budget)?;
+        self.validate_resource_usage()?;
         Ok(self)
     }
     /// Replace checked glyph/colour/attribute operands in existing local definitions.
@@ -268,6 +282,7 @@ impl TeletextDeclaredService {
         self.semantic = self
             .semantic
             .with_local_object_operand_overlays(overlays, budget)?;
+        self.validate_resource_usage()?;
         Ok(self)
     }
     /// Replace exact existing POP/GPOP scalars without rebinding resource owners.
@@ -286,6 +301,7 @@ impl TeletextDeclaredService {
         self.semantic = self
             .semantic
             .with_resource_object_operand_overlays(overlays, budget)?;
+        self.validate_resource_usage()?;
         Ok(self)
     }
 
@@ -303,6 +319,7 @@ impl TeletextDeclaredService {
         self.semantic = self
             .semantic
             .with_resource_object_program_overlays(overlays, budget)?;
+        self.validate_resource_usage()?;
         Ok(self)
     }
 
@@ -328,6 +345,7 @@ impl TeletextDeclaredService {
                 .iter()
                 .any(|addition| addition.identity().resource() == Some(*resource))
         });
+        self.validate_resource_usage()?;
         Ok(self)
     }
 
@@ -441,6 +459,7 @@ impl TeletextDeclaredService {
         self.semantic = self
             .semantic
             .with_local_object_glyph_program_overlays(overlays, budget)?;
+        self.validate_resource_usage()?;
         Ok(self)
     }
     /// Replace exact existing DRCS bitmaps while preserving authenticated MOT,
@@ -480,6 +499,22 @@ impl TeletextDeclaredService {
     ) -> Result<Self, super::TeletextServiceError> {
         self.semantic = self.semantic.with_base_text_spellings(spellings, budget)?;
         Ok(self)
+    }
+    fn validate_resource_usage(&self) -> Result<(), super::TeletextServiceError> {
+        for resolution in &self.resolutions {
+            if let Some((role, resource, source_location)) =
+                unannounced_resource_usage(&self.semantic, resolution)
+            {
+                return Err(super::TeletextServiceError::CompositionalUsage {
+                    display: resolution.display,
+                    role,
+                    page: resource.page(),
+                    subpage: resource.logical_subpage(),
+                    source_location,
+                });
+            }
+        }
+        Ok(())
     }
     #[must_use]
     pub fn mots(&self) -> &[TeletextMotLevel25Declaration] {
@@ -1061,6 +1096,68 @@ fn compare_selection(
         }
     }
     Ok(())
+}
+
+/// EN 300 706 10.5.1.4, 10.5.2.2 and Tables 21/23: absent an
+/// applicable X27 override, the selected MOT extent must announce each used S1.
+/// Dormant extra banks are not consumers. Original synthesized default roots
+/// retain their own MOT provenance; their original declaration already checks
+/// their extent, even when the effective role is superseded by another owner.
+fn unannounced_resource_usage(
+    service: &TeletextSemanticService,
+    resolution: &TeletextDeclaredDisplayResolution,
+) -> Option<(
+    TeletextX27LinkRole,
+    TeletextResourceIdentity,
+    super::TeletextEnhancementSource,
+)> {
+    let (program_source, references) = service.collected(resolution.display)?;
+    let check = |role, resource: TeletextResourceIdentity, source| {
+        if let TeletextMotRoleResolution::Selected {
+            target,
+            requirements: super::TeletextMotResolutionRequirements::MotExtent(extent),
+            ..
+        } = resolution.role(role)
+        {
+            if *target == resource.page() && !extent.requires(resource.logical_subpage()) {
+                return Some((role, resource, source));
+            }
+        }
+        None
+    };
+    for invocation in references.object_references() {
+        if matches!(
+            program_source,
+            super::TeletextEffectiveProgramSource::Defaults { .. }
+        ) && invocation.source_location.object.is_none()
+        {
+            continue;
+        }
+        if let Some(resource) = invocation.target.resource() {
+            let role = match resource.kind() {
+                TeletextResourceKind::Pop => TeletextX27LinkRole::Pop,
+                TeletextResourceKind::Gpop => TeletextX27LinkRole::Gpop,
+                _ => continue,
+            };
+            if let Some(failure) = check(role, resource, invocation.source_location) {
+                return Some(failure);
+            }
+        }
+    }
+    let page = service.page_enhancements().get(&resolution.display)?;
+    for (reference, source) in references.references().iter().zip(references.sources()) {
+        let target = page.resources.drcs.page(reference.table)?;
+        let role = match reference.table {
+            super::TeletextDrcsTableScope::Normal => TeletextX27LinkRole::Drcs,
+            super::TeletextDrcsTableScope::Global => TeletextX27LinkRole::Gdrcs,
+        };
+        let resource =
+            TeletextResourceIdentity::new(role.kind(), target, reference.subtable.into()).ok()?;
+        if let Some(failure) = check(role, resource, *source) {
+            return Some(failure);
+        }
+    }
+    None
 }
 
 fn apply_fallbacks(
