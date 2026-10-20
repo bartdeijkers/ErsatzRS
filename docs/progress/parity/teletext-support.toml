@@ -4,8 +4,8 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: standalone Level1/1.5 then full authored2.5 with protected fallback;
-Neither accepted. P9A-04 owns L15/F/V/X; no9B.
+ADR0123:1/1.5 then full2.5, neither accepted. P9A-04 owns L15/F/V/X.
+F2 generic metadata/zones/version authority closed; canonical receipts in P9A-04.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay
