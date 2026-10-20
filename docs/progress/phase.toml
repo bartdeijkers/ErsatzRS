@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 failed-prefix tool gap qualified; initial EOF unresolved, stop unchanged retries; next F5 startup/Health boundary, X1/X2/X3 remain open'
+current_focus = 'P9A-04 F5 Linux override startup/persisted Health proven; managed adoption and X1/X2/X3 remain open; no DVBViewer or device trials'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -104,10 +104,19 @@ delivery/failure_prefix now qualifies literal bounded failed-prefix retention on
 Body Err/early EOF: deterministic191-byte unaligned fixtures still fail, and one
 same-source ordinary qualification passes with complete cleanup. No warning or
 failed prefix occurs; initial EOF remains unclassified. Stop unchanged retries.
-Next independent F5/E2 step: confirm existing explicit candidate.4 tool-path config
-for a throwaway actual startup/Health proof. Primitive managed qualification at
-30aac731 is not full Health/adoption. Keep managed.1 and all six-RID/macOS gates;
-no remote dispatch/push. Keep F6 closed without a relevant handoff regression.
+F5/E2 managed_qualification_followup/startup_health now proves actual supported
+ETV_NEXT_FOLDER startup and cold restart with exact optimized candidate.4 on a
+disposable Linux database. The retained matched server/site is reused; nine
+startup/Health files remain byte-identical to c44cec71. Both real Health SSR reads
+persist50 complete results and matching zero-warning/error summaries, including
+Next Pass; both owned process groups exit normally. Empty-database availability
+is proven, not enabled-channel profile/overlay checks, current full-source build,
+headed UI, production adoption or six-RID acceptance. Original hardware/Vulkan
+fallback warnings remain; managed.1 pins stay exact. X2 still needs both macOS
+artifacts, native ARM/macOS and applicable platform/adoption gates; no remote
+dispatch/push. Next independent product package is the existing F1 resource-set/
+dependency creation gap, excluding deferred unused-object removal; qualify its
+native boundary before changes. Keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
