@@ -919,6 +919,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Check realtime and rolling stream delivery in the disposable TSDuck playback
+  gate as well as its live-URL mode, so transport validity alone cannot hide starvation.
 - Make the default TSDuck playback capture include periodic delivery samples
   after its measurement window warms up, while retaining the same capture
   duration, measurement window and transport failure thresholds.

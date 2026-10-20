@@ -451,6 +451,11 @@ mode_gate() {
     printf '\n=== pipeline: MPEG-TS (%s, ?mode=%s) ===\n' "$desc" "$mode"
     if capture_stream http "$BASE_URL/iptv/channel/$channel.ts?mode=$mode" "$CAPTURE_SECONDS" "$cap"; then
       validate_ts "$cap" "ts-$mode"
+      check_delivery_timing \
+        "$LAST_TS_MEDIA_MS" "$CAPTURE_SECONDS" "$CAPTURE_TOTAL_SECONDS" "ts-$mode"
+      local capture_average_bitrate
+      capture_average_bitrate=$((LAST_TS_PACKETS * 188 * 8 / CAPTURE_SECONDS))
+      check_delivery_monitor "$CAPTURE_MONITOR_LOG" "$capture_average_bitrate" "ts-$mode"
       [ "$mode" = "ts-legacy" ] && grab_frames "$cap" "$WORKDIR/frame_tslegacy"
     else
       fail "ts-$mode · capture" "failed, empty, or incomplete capture from ?mode=$mode"

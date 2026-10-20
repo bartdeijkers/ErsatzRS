@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 Main/Local selection and exact MOT-only root undo closed at e80c8367; current-source Windows package proof deferred by maintainer; scoped Health/playback/wire evidence retained; X1-deferred/X3-upstream and native ARM/macOS/adoption remain open'
+current_focus = 'P9A-04 Linux candidate.4 copy-output transport closed:86/86 including realtime/rolling delivery; Main/Local selection closed; Windows-package deferred (future trial120minutes); remaining output/native ARM/macOS/adoption and X1/X3 gates remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -225,7 +225,17 @@ above, with native Windows scoped startup, ordinary playback and original-wire
 proof now recorded too. The current-source package followup above is deferred;
 its next authorized trial reserves 120 minutes. Required source/caption/alternate-
 audio and cleanup oracles stay unchanged.
-No adjacent editor or repertoire variants.
+The separate linux_copy_transport_followup now closes the optimized Linux-x64
+candidate.4 copy-output boundary: ordinary Next HTTP and HLS programme seams,
+86 existing gate checks, seven real rolling samples without low intervals and
+complete unforced process-group cleanup. Gate mode now invokes the same existing
+realtime/rolling checks as URL mode; initial83 transport passes retain their scope.
+P9A-04/F5 owns canonical artifacts and exact limits. This named proof is closed;
+remaining provider/output/native-platform/adoption conditions are separate work.
+The Windows-package trial remains deferred, with120minutes reserved for a future
+authorized trial. Before another expensive Cargo build, the now62GiB configured
+target requires its documented cleanup; preserve retained artifacts/evidence and
+check parallel workloads first. No new client/editor/repertoire variants.
 Full F1 stays open.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
