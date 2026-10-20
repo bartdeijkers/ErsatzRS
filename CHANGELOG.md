@@ -876,6 +876,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve row-local primary/secondary G0 selection and original ESC controls in
+  authored teletext, without changing supplementary G2 or X26 context. Protect
+  zone boundaries even when a charset change leaves a cell visually blank, and
+  keep header glyphs separate from body national-option substitution. Complete
+  independent receiver qualification remains open.
+
 - Render the assigned Arabic teletext G0 character at position 7/E in the
   validated preview instead of reporting it as undefined. Preserve its original
   charset and coded identity without substituting a Latin glyph.

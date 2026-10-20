@@ -559,26 +559,34 @@ fn glyph_recipe(
             .ok_or(Failure::Correspondence);
     }
     let selection = intent.context().selection();
-    let charset = selection
-        .map(|selection| match selection.value() {
-            Some(TeletextCharsetSelection::Enhancement(value)) => Ok(value),
-            Some(TeletextCharsetSelection::PagePrimary(value)) => {
-                TeletextEnhancementCharsetDesignation::new(value.get())
-                    .map_err(|_| Failure::Charset)
-            }
-            None => {
-                let pair = intent.selected_pair().ok_or(Failure::Charset)?;
-                // A derived carrier needs a physical pair designation, not
-                // a winner among the original aliases. Preserve the raw
-                // pending selection and emit the first assigned Table 34
-                // code for this independently established exact pair.
-                (0..=0x7f)
-                    .filter_map(|code| TeletextEnhancementCharsetDesignation::new(code).ok())
-                    .find(|designation| designation.pair() == pair)
-                    .ok_or(Failure::Charset)
-            }
-        })
-        .transpose()?;
+    let charset = if let Some(base_g0) = intent.context().base_g0() {
+        // This is a derived physical G0 carrier, not an original G2 selection.
+        Some(
+            TeletextEnhancementCharsetDesignation::new(base_g0.designation().get())
+                .map_err(|_| Failure::Charset)?,
+        )
+    } else {
+        selection
+            .map(|selection| match selection.value() {
+                Some(TeletextCharsetSelection::Enhancement(value)) => Ok(value),
+                Some(TeletextCharsetSelection::PagePrimary(value)) => {
+                    TeletextEnhancementCharsetDesignation::new(value.get())
+                        .map_err(|_| Failure::Charset)
+                }
+                None => {
+                    let pair = intent.selected_pair().ok_or(Failure::Charset)?;
+                    // A derived carrier needs a physical pair designation, not
+                    // a winner among the original aliases. Preserve the raw
+                    // pending selection and emit the first assigned Table 34
+                    // code for this independently established exact pair.
+                    (0..=0x7f)
+                        .filter_map(|code| TeletextEnhancementCharsetDesignation::new(code).ok())
+                        .find(|designation| designation.pair() == pair)
+                        .ok_or(Failure::Charset)
+                }
+            })
+            .transpose()?
+    };
     let operation = if let Some(operation) = candidate.operation() {
         operation
     } else {

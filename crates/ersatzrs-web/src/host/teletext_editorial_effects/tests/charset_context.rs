@@ -154,6 +154,110 @@ fn check(
         deadline(),
     )
 }
+
+#[test]
+fn base_escape_in_a_zone_cannot_change_protected_literal_space_context() {
+    let policy = policy();
+    let lifted = ersatzrs_ffmpeg::teletext::lift_teletext_v1_page_set(
+        draft("  "),
+        TeletextEncodingRegion::WesternLatin,
+        policy.validation.service,
+    )
+    .unwrap();
+    let pages = lifted
+        .page_enhancements()
+        .values()
+        .cloned()
+        .map(|mut page| {
+            page.presentation.as_mut().unwrap().secondary =
+                Some(TeletextPageCharsetDesignation::new(0x37).unwrap());
+            page
+        })
+        .collect();
+    let original = TeletextDeclaredService::new(
+        TeletextSemanticService::new(
+            TeletextResolvedServiceDraft {
+                base: lifted.base().clone(),
+                pages,
+                magazines: vec![],
+                objects: vec![],
+                drcs: vec![],
+            },
+            policy.validation.service,
+        )
+        .unwrap(),
+        vec![],
+        [123, 124]
+            .map(|page| TeletextDisplayMotSelection {
+                display: address(page),
+                mot: None,
+            })
+            .into(),
+        vec![],
+        policy.validation.declarations,
+    )
+    .unwrap();
+    let mut cells = [b' '; 40];
+    cells[8] = 0x1b;
+    let overlay = TeletextPhysicalBaseOverlay::new(
+        address(123),
+        vec![TeletextPhysicalBaseRow::new(1, cells).unwrap()],
+    )
+    .unwrap();
+    let changed = original
+        .clone()
+        .with_physical_base_overlays(vec![overlay.clone()], policy.validation.service)
+        .unwrap();
+    let encode = |declared| {
+        ersatzrs_ffmpeg::teletext::encode_teletext_authored_service_before(
+            declared,
+            &[],
+            &policy.encoding,
+            deadline(),
+        )
+        .unwrap()
+    };
+    let (old, new) = (encode(original), encode(changed));
+    let (a, b) = (composition(&old), composition(&new));
+    let (before, after) = (
+        a.display_resolution().cell(1, 9).unwrap(),
+        b.display_resolution().cell(1, 9).unwrap(),
+    );
+    assert_eq!(
+        project_teletext_comparison_glyph(a, before).unwrap(),
+        project_teletext_comparison_glyph(b, after).unwrap()
+    );
+    assert!(!super::super::charset_context::same_cell(
+        a,
+        b,
+        before,
+        after,
+        &lineage::ProtectedLineage::default(),
+        deadline()
+    )
+    .unwrap());
+    let edits = [overlay];
+    assert!(validate_teletext_editorial_effects_with_operands(
+        &old,
+        &new,
+        &project("zone", 1, 8, 1, 1),
+        TeletextEditorialEdits {
+            base_text_edits: &[],
+            rows: &edits,
+            operands: &[],
+            object_operands: &[],
+            resource_operands: &[],
+            resource_programs: &[],
+            resource_additions: &[],
+            object_programs: &[],
+            main_programs: &[],
+            bitmaps: &[],
+        },
+        &policy.encoding,
+        deadline(),
+    )
+    .is_err());
+}
 #[test]
 fn protected_raw_charset_alias_cannot_hide_behind_identical_glyph_pixels() {
     let old = encoded(0, b'A');

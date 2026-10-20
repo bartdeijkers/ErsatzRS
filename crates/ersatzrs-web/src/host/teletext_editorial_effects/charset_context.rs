@@ -34,6 +34,9 @@ pub(super) fn same_cell(
     // Physical Base overlays remove authored text annotation even on unchanged
     // spaces. Preserve compare_base's existing Glyph/Blank equivalence only for
     // that literal Base pair, after exact charset/provenance comparison.
+    if before.context().base_g0() != after.context().base_g0() {
+        return Ok(false);
+    }
     if equivalent_base_space(before, after) {
         return Ok(true);
     }

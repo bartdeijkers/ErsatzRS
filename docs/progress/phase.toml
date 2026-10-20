@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: ordinary native video acquired; D teletext controls and E1/E2 Health/adoption/platforms remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: Base ESC/context checkpoint; held mosaics next, D controls and E2 platforms/adoption remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -78,8 +78,8 @@ pinnedQTM1.0 saves in four native contexts, concept/shared preview/reexport/cold
 reopen and separate explicit publication, plus48 fixed independent native-unit
 decodes at1/1.5/2.5. Original sources/metadata, other page and Night stay retained.
 Canonical generated_g2_editor/implementation owns the exact proof and failures;
-protected/receipt/CAS/repeat/undo guards pass. B2 retains the demonstrated
-noncanonical G2-to-G0 Text conversion refusal, not a scope waiver. The finite
+protected/receipt/CAS/repeat/undo guards pass. The native-spelling checkpoint below closes the demonstrated noncanonical
+G2-to-G0 Text conversion refusal; broader B2 proof remains. The finite
 base remainder isA1/A2/B2/C/D/E1/E2,
 not an unbounded list of further character variants. FullF/V/X remains intact.
 L15-C shared_profile_lifecycle_followup now proves shared-profile change/delete
@@ -472,6 +472,24 @@ D control and macOS workflow approval stay external. Next independent base
 package is the recorded L15-A1/A2 row-zero/secondary-character-context gap using
 existing inventory/fixtures, not another isolated glyph/editor variant. No new
 push/publication permission follows from af4a247f's completed authorized push.
+
+Current Base charset boundary: canonical standalone_level15_followup/
+base_g0_context_followup owns level15-base-g0-context/identity.json. Original
+row-local ESC/source/reset/secondary NOS and separate G2/X26 pass factory and
+domain regressions; Header/POP absence refuses instead of becoming explicit7F.
+Header NOS and protected blank-zone context are corrected. Fourteen web cases
+pass; exact native/lint/fmt/progress outcomes and retained negatives are canonical.
+Independent stock decoder passes33/38 actual-unit observations; three header and
+two secondary-NOS fixed failures remain open, without decoder maintenance.
+No new QTM ESC/complete fallback/receiver claim. The finite L15 list now identifies
+remaining1E/1F hold/release mosaics as a concrete base product gap;00/10 black and
+0E/0F width/size stay enhanced-only with required fallback, not new base scope.
+Next implement the bounded held-mosaic spacing bundle using existing factory/
+preview/encoder tools; close exact glyph, set-at/after, row-reset and zone effects.
+D supported private teletext control/operator access, E2 nativeARM/macOS/Health/
+adoption and full9A X1-deferred/X3-upstream remain separate mandatory blockers.
+Latest permission covers this coherent local checkpoint and push to origin/main
+without CI; no release, acceptance or general future push permission is inferred.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

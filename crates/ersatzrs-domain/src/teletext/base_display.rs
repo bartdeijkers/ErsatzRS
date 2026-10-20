@@ -17,7 +17,7 @@ pub enum TeletextSpacingTiming {
     SetAfter,
 }
 
-/// Only controls emitted by the existing authored fallback layout.
+/// Checked controls in authored fallback layouts and exact physical Base rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextBaseSpacingControl {
     AlphaColour { colour: TeletextColour },
@@ -31,6 +31,7 @@ pub enum TeletextBaseSpacingControl {
     Conceal,
     ContiguousMosaics,
     SeparatedMosaics,
+    Escape,
     BlackBackground,
     NewBackground,
 }
@@ -50,6 +51,7 @@ impl TeletextBaseSpacingControl {
             Self::Conceal => 0x18,
             Self::ContiguousMosaics => 0x19,
             Self::SeparatedMosaics => 0x1a,
+            Self::Escape => 0x1b,
             Self::BlackBackground => 0x1c,
             Self::NewBackground => 0x1d,
         }
@@ -62,6 +64,7 @@ impl TeletextBaseSpacingControl {
             | Self::Flash
             | Self::EndBox
             | Self::StartBox
+            | Self::Escape
             | Self::DoubleHeight => TeletextSpacingTiming::SetAfter,
             _ => TeletextSpacingTiming::SetAt,
         }

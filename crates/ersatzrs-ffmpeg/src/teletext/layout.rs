@@ -34,7 +34,21 @@ enum TextCharset {
 }
 
 impl Layout {
-    pub(super) fn encode_character(&self, character: char) -> Option<charset::Character> {
+    pub(super) fn encode_character(&self, row: u8, character: char) -> Option<charset::Character> {
+        if row == 0 && matches!(self.text_charset, TextCharset::Latin(_)) {
+            // Table25 excludes the header from national substitution. Table35
+            // differs from ASCII at currency/vertical-bar positions.
+            if character.is_ascii() {
+                let code = u8::try_from(u32::from(character)).ok()?;
+                if (0x20..=0x7e).contains(&code) && !matches!(code, 0x24 | 0x7c) {
+                    return Some(charset::Character {
+                        fallback: code,
+                        enhancement: None,
+                    });
+                }
+            }
+            return charset::encode_without_national_subset(character);
+        }
         match self.text_charset {
             TextCharset::Latin(Some(national)) => charset::encode(character, national),
             TextCharset::Latin(None) => charset::encode_without_national_subset(character),

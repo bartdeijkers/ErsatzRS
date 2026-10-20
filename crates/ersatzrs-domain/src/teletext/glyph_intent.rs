@@ -50,9 +50,9 @@ pub enum TeletextGlyphIntentFailure {
 /// Pending charset indexes reuse the supplied execution's registry, without a
 /// registry clone or per-cell contender vector. The authoritative factory must
 /// retain that same execution alongside this output; owner equality is not a
-/// generation certificate. Extension primary selects Level 2.5 Base NOS; original
-/// header bits and secondary G0 remain separate in the original context/metadata.
-/// No ESC or national substitution for enhancement G0 is inferred.
+/// generation certificate. Row-local Base G0 retains primary/secondary identity
+/// and ESC provenance; header cells never apply body national substitution.
+/// No secondary G2 or national substitution for enhancement G0 is inferred.
 /// # Errors
 /// Rejects an exceeded trusted count/storage bound or inconsistent private input
 /// record. Assignment/composability uncertainty remains typed per-record pending;
@@ -180,15 +180,29 @@ fn resolve_record(
                     })?;
                     TeletextGlyphIdentity::G1Mosaic { mosaic }
                 } else {
-                    record.selected_pair = Some(charset.primary().pair());
-                    let (g0, _) = repertoires(charset.primary().pair());
+                    let base_g0 = context.base_g0().ok_or_else(|| {
+                        lookup_error(
+                            charset,
+                            Some(&context),
+                            TeletextGlyphIntentFailure::InconsistentContext,
+                        )
+                    })?;
+                    let designation = base_g0.designation();
+                    // A second G0 does not designate its nominal companion G2.
+                    if !matches!(
+                        base_g0.origin(),
+                        super::TeletextBaseG0Origin::EscapeSecondary { .. }
+                    ) {
+                        record.selected_pair = Some(designation.pair());
+                    }
+                    let (g0, _) = repertoires(designation.pair());
                     let glyph = TeletextG0Glyph {
                         repertoire: g0,
                         code: cell.code(),
                         national_subset: if context.national_substitution()
                             && is_national_code(cell.code())
                         {
-                            national_subset(charset.primary().get())
+                            national_subset(designation.get())
                         } else {
                             None
                         },

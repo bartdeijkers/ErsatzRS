@@ -2,9 +2,9 @@
 
 use super::{
     TeletextBaseDisplayCellKind, TeletextCharsetPair, TeletextDiacriticIndex,
-    TeletextEnhancementCharsetDesignation, TeletextEnhancementSource, TeletextGlyphCandidate,
-    TeletextNationalOption, TeletextPageAddress, TeletextPageCharsetDesignation,
-    TeletextSpatialInvocationId, TeletextSpatialRootSource,
+    TeletextEnhancementCharsetDesignation, TeletextEnhancementPosition, TeletextEnhancementSource,
+    TeletextGlyphCandidate, TeletextNationalOption, TeletextPageAddress,
+    TeletextPageCharsetDesignation, TeletextSpatialInvocationId, TeletextSpatialRootSource,
 };
 
 /// Preserve a raw assigned page or enhancement designation, including aliases.
@@ -96,12 +96,47 @@ impl TeletextGlyphCharsetUsage {
     }
 }
 
+/// Original source of a row-local Base G0 selection; never a G2 designation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeletextBaseG0Origin {
+    RowPrimary {
+        row: u8,
+    },
+    EscapePrimary {
+        position: TeletextEnhancementPosition,
+    },
+    EscapeSecondary {
+        position: TeletextEnhancementPosition,
+    },
+}
+
+/// Sealed Base-only G0 context, retaining the raw alias and last original ESC.
+/// The primary G2 and all X26/object charset state remain independent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextBaseG0Selection {
+    pub(super) designation: TeletextPageCharsetDesignation,
+    pub(super) origin: TeletextBaseG0Origin,
+}
+impl TeletextBaseG0Selection {
+    /// Original Table32/33 G0 designation, including its national-option alias.
+    #[must_use]
+    pub const fn designation(self) -> TeletextPageCharsetDesignation {
+        self.designation
+    }
+    /// Row default or the original set-after ESC that established this context.
+    #[must_use]
+    pub const fn origin(self) -> TeletextBaseG0Origin {
+        self.origin
+    }
+}
+
 /// One immutable record per original glyph-layer candidate, including losers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextExecutedGlyphCharset {
     pub(super) candidate: TeletextGlyphCandidate,
     pub(super) usage: TeletextGlyphCharsetUsage,
     pub(super) selection: Option<TeletextExecutedCharsetSelection>,
+    pub(super) base_g0: Option<TeletextBaseG0Selection>,
 }
 impl TeletextExecutedGlyphCharset {
     /// Original code, operation, authored intent and source; no generated glyphs.
@@ -118,14 +153,20 @@ impl TeletextExecutedGlyphCharset {
     pub const fn selection(&self) -> Option<TeletextExecutedCharsetSelection> {
         self.selection
     }
-    /// National substitution is applicable only to actual coded Base G0 glyphs.
+    /// Row-local Base G0, never an inferred enhancement G0/G2 pair.
+    #[must_use]
+    pub const fn base_g0(&self) -> Option<TeletextBaseG0Selection> {
+        self.base_g0
+    }
+    /// National substitution applies only to actual coded body Base G0 glyphs.
     /// Graphics-mode alphabetic codes 0x40–0x5f still use G0; mosaic, control
     /// and blank roles do not. This is metadata, not glyph decoding.
     #[must_use]
     pub const fn national_substitution(&self) -> bool {
         match self.candidate.base() {
             Some(cell) => {
-                matches!(cell.kind(), TeletextBaseDisplayCellKind::Glyph)
+                cell.position().row() != 0
+                    && matches!(cell.kind(), TeletextBaseDisplayCellKind::Glyph)
                     && !(cell.attributes().graphics()
                         && matches!(cell.code(), 0x20..=0x3f | 0x60..=0x7f))
             }

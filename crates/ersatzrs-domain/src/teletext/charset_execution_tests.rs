@@ -274,6 +274,222 @@ fn selection(record: &TeletextExecutedGlyphCharset) -> TeletextCharsetSelection 
     record.selection().unwrap().value().unwrap()
 }
 
+fn replace_base_codes(
+    fixture: &mut Fixture,
+    presentation: Option<TeletextLevel25PresentationDefaults>,
+    replacements: &[(u8, u8, u8)],
+) {
+    let mut rows = fixture.base.cells().to_vec();
+    for &(row, column, code) in replacements {
+        let original = rows[usize::from(row)][usize::from(column)];
+        let kind = if code == 0x1b {
+            TeletextBaseDisplayCellKind::SpacingControl {
+                control: TeletextBaseSpacingControl::Escape,
+                timing: TeletextSpacingTiming::SetAfter,
+            }
+        } else {
+            TeletextBaseDisplayCellKind::Glyph
+        };
+        rows[usize::from(row)][usize::from(column)] = TeletextBaseDisplayCell::new(
+            original.position(),
+            code,
+            kind,
+            None,
+            original.attributes(),
+        )
+        .unwrap();
+    }
+    fixture.base = TeletextBaseDisplay::new(
+        owner(),
+        fixture.base.primary(),
+        fixture.base.national_option(),
+        presentation,
+        rows.into_boxed_slice().try_into().unwrap(),
+    )
+    .unwrap();
+    fixture.layers = build_teletext_glyph_layers(&fixture.base, &fixture.spatial, 128).unwrap();
+}
+
+fn base_record(
+    execution: &TeletextCharsetExecution,
+    position: (u16, u16),
+) -> &TeletextExecutedGlyphCharset {
+    execution
+        .records()
+        .iter()
+        .find(|record| {
+            record.candidate().base().is_some() && record.candidate().position() == position
+        })
+        .unwrap()
+}
+
+#[test]
+fn base_escape_keeps_set_after_sources_and_resets_each_row() {
+    let mut fixture = fixture(vec![], vec![], 0x40, Some(0x37), false);
+    let presentation = fixture.base.presentation();
+    replace_base_codes(
+        &mut fixture,
+        presentation,
+        &[(0, 8, 0x23), (1, 7, 0x1b), (1, 10, 0x1b), (1, 39, 0x1b)],
+    );
+    let execution = execute(&fixture, 128);
+    for (position, designation, origin) in [
+        ((1, 7), 0x40, TeletextBaseG0Origin::RowPrimary { row: 1 }),
+        (
+            (1, 8),
+            0x37,
+            TeletextBaseG0Origin::EscapeSecondary {
+                position: TeletextEnhancementPosition::new(1, 7).unwrap(),
+            },
+        ),
+        (
+            (1, 10),
+            0x37,
+            TeletextBaseG0Origin::EscapeSecondary {
+                position: TeletextEnhancementPosition::new(1, 7).unwrap(),
+            },
+        ),
+        (
+            (1, 11),
+            0x40,
+            TeletextBaseG0Origin::EscapePrimary {
+                position: TeletextEnhancementPosition::new(1, 10).unwrap(),
+            },
+        ),
+        (
+            (1, 39),
+            0x40,
+            TeletextBaseG0Origin::EscapePrimary {
+                position: TeletextEnhancementPosition::new(1, 10).unwrap(),
+            },
+        ),
+        ((2, 0), 0x40, TeletextBaseG0Origin::RowPrimary { row: 2 }),
+    ] {
+        let record = base_record(&execution, position);
+        let selected = record.base_g0().unwrap();
+        assert_eq!(selected.designation().get(), designation);
+        assert_eq!(selected.origin(), origin);
+        assert_eq!(
+            selection(record),
+            TeletextCharsetSelection::PagePrimary(execution.primary())
+        );
+    }
+    let escape = base_record(&execution, (1, 7)).candidate().base().unwrap();
+    assert_eq!(escape.code(), 0x1b);
+    assert_eq!(
+        escape.kind(),
+        TeletextBaseDisplayCellKind::SpacingControl {
+            control: TeletextBaseSpacingControl::Escape,
+            timing: TeletextSpacingTiming::SetAfter,
+        }
+    );
+    assert!(!base_record(&execution, (0, 8)).national_substitution());
+    assert!(base_record(&execution, (1, 8)).national_substitution());
+}
+
+#[test]
+fn base_escape_explicit_absence_is_noop_but_missing_presentation_rejects() {
+    for (row, column) in [(0, 8), (1, 7)] {
+        let mut fixture = fixture(vec![], vec![], 0, None, false);
+        let presentation = fixture.base.presentation();
+        replace_base_codes(&mut fixture, presentation, &[(row, column, 0x1b)]);
+        let execution = execute(&fixture, 128);
+        for current in [column, column + 1] {
+            let selected = base_record(&execution, (u16::from(row), u16::from(current)))
+                .base_g0()
+                .unwrap();
+            assert_eq!(selected.designation(), execution.primary());
+            assert_eq!(selected.origin(), TeletextBaseG0Origin::RowPrimary { row });
+        }
+        replace_base_codes(&mut fixture, None, &[]);
+        let before = (
+            fixture.base.clone(),
+            fixture.spatial.clone(),
+            fixture.layers.clone(),
+        );
+        let error = resolve_teletext_charset_execution(
+            &fixture.base,
+            &fixture.spatial,
+            &fixture.layers,
+            128,
+        )
+        .unwrap_err();
+        assert_eq!(error.owner, owner());
+        assert_eq!(
+            error.reason,
+            TeletextCharsetExecutionFailure::DecoderDependentBaseG0 { row, column }
+        );
+        assert_eq!(error.location, None);
+        assert_eq!(error.root_source, None);
+        assert_eq!(error.invocation, None);
+        assert_eq!(before, (fixture.base, fixture.spatial, fixture.layers));
+    }
+}
+
+#[test]
+fn base_escape_preserves_enhancement_g2_sources_and_pending_order() {
+    let target = local(0xffff);
+    let mut fixture = fixture(
+        vec![
+            set(1, 0),
+            g2(1, 0x23),
+            designate(5, 0x40),
+            set(1, 5),
+            invoke(target, TeletextObjectType::Active, None),
+            g2(10, 0x23),
+        ],
+        vec![definition(
+            target,
+            TeletextObjectType::Active,
+            vec![designate(0, 0x37)],
+        )],
+        0x40,
+        Some(0x37),
+        false,
+    );
+    let original = execute(&fixture, 128);
+    let spatial = fixture.spatial.clone();
+    let presentation = fixture.base.presentation();
+    replace_base_codes(&mut fixture, presentation, &[(1, 0, 0x1b)]);
+    let execution = execute(&fixture, 128);
+    assert_eq!(fixture.spatial, spatial);
+    assert_eq!(execution.declarations(), original.declarations());
+    assert_eq!(execution.pending(), original.pending());
+    assert!(!execution.pending().is_empty());
+    for index in 0..execution.pending().len() {
+        assert_eq!(
+            execution.pending_contenders(index).collect::<Vec<_>>(),
+            original.pending_contenders(index).collect::<Vec<_>>()
+        );
+    }
+    let enhanced = |execution: &TeletextCharsetExecution| {
+        execution
+            .records()
+            .iter()
+            .filter(|record| record.candidate().source().is_some())
+            .copied()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(enhanced(&execution), enhanced(&original));
+    let known = record(&execution, None, 1, None);
+    assert_eq!(known.usage(), TeletextGlyphCharsetUsage::G2);
+    assert_eq!(selection(known).pair(), TeletextCharsetPair::LatinArabic);
+    assert_eq!(known.base_g0(), None);
+    let unresolved = record(&execution, None, 5, None);
+    assert_eq!(unresolved.usage(), TeletextGlyphCharsetUsage::G2);
+    assert_eq!(unresolved.selection().unwrap().value(), None);
+    assert!(unresolved.selection().unwrap().pending().is_some());
+    assert_eq!(unresolved.base_g0(), None);
+    assert_eq!(
+        base_record(&execution, (1, 1))
+            .base_g0()
+            .unwrap()
+            .designation()
+            .get(),
+        0x37
+    );
+}
+
 #[test]
 fn shared_absolute_row_designations_follow_spatial_order_not_recursive_event_preorder() {
     let target = local(0xffff);

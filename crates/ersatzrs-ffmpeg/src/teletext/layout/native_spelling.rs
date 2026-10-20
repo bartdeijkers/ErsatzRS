@@ -62,6 +62,6 @@ impl Layout {
         if let Some((expected, encoding)) = self.native_text_encodings.get(&position) {
             return (*expected == character).then_some(*encoding);
         }
-        self.encode_character(character)
+        self.encode_character(row, character)
     }
 }

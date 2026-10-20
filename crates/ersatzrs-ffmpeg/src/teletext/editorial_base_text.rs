@@ -107,7 +107,7 @@ fn resolve(
         .find(|page| page.address == owner)?;
     let layout =
         layout::compile_for_service_composition(service.declared().semantic(), draft).ok()?;
-    let canonical = layout.encode_character(character);
+    let canonical = layout.encode_character(cell.row(), character);
     let exact_word = canonical
         .is_some_and(|value| value.enhancement == Some((new_mode, replacement_character_code)));
     if !exact_word && !allow_native {

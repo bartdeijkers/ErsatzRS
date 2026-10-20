@@ -12,7 +12,8 @@ use std::mem::size_of;
 
 use super::charset_execution_values::PendingFilter;
 use super::{
-    TeletextBaseDisplay, TeletextBaseDisplayCellKind, TeletextCharsetDeclaration,
+    TeletextBaseDisplay, TeletextBaseDisplayCellKind, TeletextBaseG0Origin,
+    TeletextBaseG0Selection, TeletextBaseSpacingControl, TeletextCharsetDeclaration,
     TeletextCharsetExecution, TeletextCharsetSelection, TeletextColumnOperation,
     TeletextEnhancementCommand, TeletextEnhancementSource, TeletextExecutedCharsetSelection,
     TeletextExecutedGlyphCharset, TeletextGlyphCandidate, TeletextGlyphCharsetUsage,
@@ -44,6 +45,8 @@ pub enum TeletextCharsetExecutionFailure {
     EventMismatch { event: usize },
     #[error("charset execution allocation size exceeds storage range")]
     AllocationSize,
+    #[error("Base ESC at row {row}, column {column} requires an explicit second-G0 declaration; receiver-dependent context is not inferred")]
+    DecoderDependentBaseG0 { row: u8, column: u8 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,7 +65,7 @@ struct DeclarationGroup {
 /// pending spans have no per-cell contender vector. Matching identities and
 /// candidate/event correspondence do not establish immutable generation identity:
 /// the authoritative caller must supply the same service's original inputs.
-/// Secondary G0 is metadata only; no ESC is inferred and it never designates G2.
+/// Original Base ESC toggles only its row-local G0; secondary never designates G2.
 /// Shared context spans the absolute row, without inventing a panel-area reset.
 /// # Errors
 /// Rejects differing owners, exceeded command/allocation limits, and inconsistent
@@ -120,6 +123,7 @@ pub fn resolve_teletext_charset_execution(
     let declarations = collect_declarations(original, &mut execution);
     let groups = group_shared_declarations(&mut execution, page);
     let states = resolve_event_contexts(original, &declarations, &groups, &mut execution, page);
+    let base_g0 = base_g0_selections(base)?;
     let mut seen = vec![false; original.events().len()];
     for (index, &candidate) in glyph_layers.candidates().iter().enumerate() {
         validate_candidate(base, original, candidate, index, &mut seen)?;
@@ -137,9 +141,72 @@ pub fn resolve_teletext_charset_execution(
             candidate,
             usage,
             selection,
+            base_g0: candidate.base().map(|cell| {
+                base_g0[usize::from(cell.position().row())][usize::from(cell.position().column())]
+            }),
         });
     }
     Ok(execution)
+}
+
+fn base_g0_selections(
+    base: &TeletextBaseDisplay,
+) -> Result<
+    [[TeletextBaseG0Selection; TELETEXT_COLUMNS]; TELETEXT_ROWS],
+    TeletextCharsetExecutionError,
+> {
+    let mut rows = [[TeletextBaseG0Selection {
+        designation: base.primary(),
+        origin: TeletextBaseG0Origin::RowPrimary { row: 0 },
+    }; TELETEXT_COLUMNS]; TELETEXT_ROWS];
+    for row in 0_u8..25 {
+        let mut active = TeletextBaseG0Selection {
+            designation: base.primary(),
+            origin: TeletextBaseG0Origin::RowPrimary { row },
+        };
+        for column in 0_u8..40 {
+            rows[usize::from(row)][usize::from(column)] = active;
+            if let Some(cell) = base.cell(row, column) {
+                if matches!(
+                    cell.kind(),
+                    TeletextBaseDisplayCellKind::SpacingControl {
+                        control: TeletextBaseSpacingControl::Escape,
+                        ..
+                    }
+                ) {
+                    if base.presentation().is_none() {
+                        return Err(plain_error(
+                            base.owner(),
+                            TeletextCharsetExecutionFailure::DecoderDependentBaseG0 { row, column },
+                        ));
+                    }
+                    // Table33's absent-secondary sentinel disables the toggle;
+                    // the original ESC cell still remains in the Base trace.
+                    if let Some(secondary) = base.presentation().and_then(|value| value.secondary) {
+                        active = if matches!(
+                            active.origin,
+                            TeletextBaseG0Origin::EscapeSecondary { .. }
+                        ) {
+                            TeletextBaseG0Selection {
+                                designation: base.primary(),
+                                origin: TeletextBaseG0Origin::EscapePrimary {
+                                    position: cell.position(),
+                                },
+                            }
+                        } else {
+                            TeletextBaseG0Selection {
+                                designation: secondary,
+                                origin: TeletextBaseG0Origin::EscapeSecondary {
+                                    position: cell.position(),
+                                },
+                            }
+                        };
+                    }
+                }
+            }
+        }
+    }
+    Ok(rows)
 }
 
 fn preflight_inputs(

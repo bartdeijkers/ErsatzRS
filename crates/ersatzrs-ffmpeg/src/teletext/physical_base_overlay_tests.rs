@@ -258,7 +258,8 @@ fn changed_generated_fallback_is_rejected_with_exact_location() {
 
 #[test]
 fn unsupported_spacing_fails_both_packet_encoders_and_preview_at_same_cell() {
-    for code in [0x00, 0x0e, 0x0f, 0x10, 0x1b, 0x1e, 0x1f] {
+    // ESC is now checked by the standalone Base-G0 toggle/reset regressions.
+    for code in [0x00, 0x0e, 0x0f, 0x10, 0x1e, 0x1f] {
         let original = service("ASCII");
         let mut cells = original_row(&original, 1);
         cells[7] = code;

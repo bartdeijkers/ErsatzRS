@@ -1098,9 +1098,14 @@ spatial, glyph and attribute projections. Local/Active declarations share spatia
 absolute-row state; Adaptive/Passive instances keep fresh private state across
 rows. Every contender retains its own context, original writer provenance and
 pending equal-position source order. Primary/secondary/header national metadata,
-Base Unicode intent and actual coded role remain separate. This does not implement
-ESC authoring, resolve full geometry or prove physical receiver equivalence;
-the interchange reference defines the boundary. Full acceptance remains open.
+Base Unicode intent and actual coded role remain separate. Original Base ESC
+cells use a separate sealed row-local G0 context with set-after source provenance;
+they never designate G2 or change X26/object context. Only an explicit page or
+magazine declaration settles secondary G0: its no-second sentinel disables ESC,
+while absent Header/POP context remains receiver-dependent and is not guessed.
+Body national substitution does not apply to row zero. These rules do not prove
+physical receiver equivalence; P9A-04 owns the scoped evidence and open failures.
+Full acceptance remains open.
 The same immutable composition now retains finite glyph identities from the
 original charset execution. All seven G0 tables, all four G2 tables, G1 mosaics
 and alphabetic positions, G3 and raw DRCS references remain distinct. Table 32

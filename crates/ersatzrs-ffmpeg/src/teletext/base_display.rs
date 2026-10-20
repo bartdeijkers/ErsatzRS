@@ -24,6 +24,8 @@ pub enum TeletextBaseDisplayFailure {
     HeaderNational,
     #[error("fallback layout has unsupported spacing code {code:02X}")]
     UnsupportedControl { code: u8 },
+    #[error("Base ESC requires an explicit second-G0 declaration; receiver-dependent Header/POP context is not inferred")]
+    DecoderDependentSecondary,
     #[error("authored glyph expects fallback {expected:02X}, found {actual:02X}")]
     FallbackMismatch { expected: u8, actual: u8 },
     #[error("bounded base display array has an inconsistent shape")]
@@ -81,6 +83,22 @@ pub(super) fn trace_teletext_base_display(
     let primary = presentation
         .primary_designation()
         .map_err(|reason| error(owner, None, reason.into()))?;
+    if !matches!(
+        presentation,
+        TeletextEffectivePresentation::Extension { .. }
+    ) {
+        for row in 0_u8..25 {
+            for column in (if row == 0 { 8 } else { 0 })..40 {
+                if layout.rows[usize::from(row)][usize::from(column)] == 0x1b {
+                    return Err(error(
+                        owner,
+                        TeletextEnhancementPosition::new(row, column).ok(),
+                        TeletextBaseDisplayFailure::DecoderDependentSecondary,
+                    ));
+                }
+            }
+        }
+    }
     let declaration = match presentation {
         TeletextEffectivePresentation::Extension { defaults, .. }
         | TeletextEffectivePresentation::MotFallback { defaults, .. } => Some(*defaults),
@@ -408,6 +426,7 @@ fn control(code: u8) -> Option<TeletextBaseSpacingControl> {
         0x18 => C::Conceal,
         0x19 => C::ContiguousMosaics,
         0x1a => C::SeparatedMosaics,
+        0x1b => C::Escape,
         0x1c => C::BlackBackground,
         0x1d => C::NewBackground,
         _ => return None,
@@ -503,6 +522,8 @@ impl RowState {
     fn apply(&mut self, control: TeletextBaseSpacingControl, source: TeletextBaseAttributeSource) {
         use TeletextBaseSpacingControl as C;
         match control {
+            // The separate charset execution retains the row-local G0 toggle.
+            C::Escape => {}
             C::AlphaColour { .. } | C::MosaicColour { .. } => {
                 self.raw_foreground = control.code() & 7;
                 self.graphics = matches!(control, C::MosaicColour { .. });

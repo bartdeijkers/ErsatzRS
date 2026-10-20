@@ -3,6 +3,9 @@
 #[path = "standalone_national/non_latin.rs"]
 mod non_latin;
 
+#[path = "standalone_national/base_charset.rs"]
+mod base_charset;
+
 use super::*;
 use serde_json::{json, Value};
 
