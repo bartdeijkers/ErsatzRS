@@ -621,6 +621,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_edits(
             object_resource_additions: &[],
             object_subpage_announcements: &[],
             object_page_selections: &[],
+            main_resource_invocations: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -682,6 +683,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
             object_resource_additions: resources.object_resource_additions,
             object_subpage_announcements: resources.object_subpage_announcements,
             object_page_selections: resources.object_page_selections,
+            main_resource_invocations: resources.main_resource_invocations,
             base_text_edits: parts
                 .editorial_overlay
                 .as_ref()

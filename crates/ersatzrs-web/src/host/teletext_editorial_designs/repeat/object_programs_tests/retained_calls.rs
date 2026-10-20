@@ -47,6 +47,7 @@ fn repeat_then_root_undo_keeps_other_local_scalar_and_exact_call_source() {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(0, 1)],
         object_operands: vec![scalar],
@@ -56,6 +57,7 @@ fn repeat_then_root_undo_keeps_other_local_scalar_and_exact_call_source() {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(1, 2)],
         ..TeletextEditorialChanges::default()
@@ -67,6 +69,7 @@ fn repeat_then_root_undo_keeps_other_local_scalar_and_exact_call_source() {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: programs,
         object_operands: operands,
@@ -76,6 +79,7 @@ fn repeat_then_root_undo_keeps_other_local_scalar_and_exact_call_source() {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(2, 0)],
         ..TeletextEditorialChanges::default()
@@ -91,6 +95,7 @@ fn changed_call_intent_does_not_bypass_stale_expected_or_aggregate_budget() {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(0, 1)],
         ..TeletextEditorialChanges::default()
@@ -99,6 +104,7 @@ fn changed_call_intent_does_not_bypass_stale_expected_or_aggregate_budget() {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![change(2, 3)],
         ..TeletextEditorialChanges::default()
@@ -155,6 +161,7 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![initial],
         object_operands: vec![scalar],
@@ -164,6 +171,7 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![intent(&[0, 1], &[0, 2], vec![Some(0), Some(1), None])],
         ..TeletextEditorialChanges::default()
@@ -178,6 +186,7 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: programs,
         object_operands: operands,
@@ -187,6 +196,7 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![intent(&[0, 2], &[2], vec![Some(0), Some(2)])],
         ..TeletextEditorialChanges::default()
@@ -198,6 +208,7 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: programs,
         object_operands: operands,
@@ -207,6 +218,7 @@ fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() 
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         object_programs: vec![intent(&[2], &[0], vec![Some(0), None])],
         ..TeletextEditorialChanges::default()

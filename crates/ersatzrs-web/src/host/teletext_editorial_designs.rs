@@ -137,12 +137,14 @@ mod object_resources;
 mod repeat;
 pub use definition_additions::{
     add_teletext_editorial_object_resources, add_teletext_editorial_resource_definitions,
-    announce_teletext_editorial_object_subpages, choose_teletext_editorial_object_pages,
-    copy_teletext_editorial_resource_definition, select_teletext_editorial_object_pages,
+    announce_teletext_editorial_object_subpages, choose_teletext_editorial_object_consumers,
+    choose_teletext_editorial_object_pages, copy_teletext_editorial_resource_definition,
+    select_teletext_editorial_object_consumers, select_teletext_editorial_object_pages,
+    NativeTeletextObjectConsumersChooseRequest, NativeTeletextObjectConsumersSelectRequest,
     NativeTeletextObjectPagesChooseRequest, NativeTeletextObjectPagesSelectRequest,
     NativeTeletextObjectResourcesAddRequest, NativeTeletextObjectSubpagesAnnounceRequest,
     NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
-    TeletextObjectCallChoice, TeletextObjectPageChoice,
+    TeletextMainCallChoice, TeletextObjectCallChoice, TeletextObjectPageChoice,
 };
 
 type Result<T> = std::result::Result<T, NativeTeletextEditorialImportError>;
@@ -400,6 +402,7 @@ fn qualify_rows(
     let object_resource_additions = overlay.object_resource_additions().to_vec();
     let object_subpage_announcements = overlay.object_subpage_announcements().to_vec();
     let object_page_selections = overlay.object_page_selections().to_vec();
+    let main_resource_invocations = overlay.main_resource_invocations().to_vec();
     let base_text_edits = overlay.base_text_edits().to_vec();
     let overlays = overlay.pages().to_vec();
     let operands = overlay.local_program_operands().to_vec();
@@ -416,6 +419,7 @@ fn qualify_rows(
     let edited = if object_resource_additions.is_empty()
         && object_subpage_announcements.is_empty()
         && object_page_selections.is_empty()
+        && main_resource_invocations.is_empty()
         && ((resource_additions.is_empty() && !has_existing_resource_edits)
             || (resource_additions.is_empty()
                 && !matches!(
@@ -432,6 +436,7 @@ fn qualify_rows(
             object_resource_additions: &object_resource_additions,
             object_subpage_announcements: &object_subpage_announcements,
             object_page_selections: &object_page_selections,
+            main_resource_invocations: &main_resource_invocations,
             operands: &resource_operands,
             programs: &resource_programs,
             additions: &resource_additions,
@@ -455,6 +460,7 @@ fn qualify_rows(
             object_resource_additions: &object_resource_additions,
             object_subpage_announcements: &object_subpage_announcements,
             object_page_selections: &object_page_selections,
+            main_resource_invocations: &main_resource_invocations,
             base_text_edits: &base_text_edits,
             resource_additions: &resource_additions,
             resource_operands: &resource_operands,

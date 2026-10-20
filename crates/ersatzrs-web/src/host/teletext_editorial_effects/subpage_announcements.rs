@@ -33,7 +33,7 @@ pub(super) fn check_resolutions(
     incoming: TeletextEditorialEdits<'_>,
     cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
-) -> Result<BTreeMap<TeletextPageAddress, TeletextX27Level25Links>> {
+) -> Result<BTreeMap<TeletextPageAddress, Option<TeletextX27Level25Links>>> {
     check_cumulative(after, cumulative, deadline)?;
     let expected = expected_links(before, after, incoming, cumulative, deadline)?;
     let expected = super::object_page_selections::apply(
@@ -182,7 +182,7 @@ fn expected_links(
 fn compare_resolutions(
     before: &TeletextDeclaredService,
     after: &TeletextDeclaredService,
-    expected: &BTreeMap<TeletextPageAddress, TeletextX27Level25Links>,
+    expected: &BTreeMap<TeletextPageAddress, Option<TeletextX27Level25Links>>,
     deadline: Instant,
 ) -> Result<()> {
     if before.resolutions().len() != after.resolutions().len() {
@@ -210,7 +210,7 @@ fn compare_resolutions(
                 .iter()
                 .find(|value| value.identity() == mot.selected_mot())
                 .ok_or_else(|| failure(owner))?;
-            let resolved = TeletextMotLevel25Resolution::resolve(declaration, owner, Some(links))
+            let resolved = TeletextMotLevel25Resolution::resolve(declaration, owner, links)
                 .map_err(|_| failure(owner))?;
             if new.mot() != Some(&resolved)
                 || TeletextX27LinkRole::ALL
@@ -224,24 +224,28 @@ fn compare_resolutions(
                 return Err(failure(owner));
             }
             for role in TeletextX27LinkRole::ALL {
-                let link = links.link(role);
-                let expected_role = match link.target() {
-                    TeletextX27LinkTarget::Page { page }
-                        if link.validity().applies_at_level25() =>
-                    {
-                        TeletextMotRoleResolution::Selected {
-                            target: page,
-                            requirements: TeletextMotResolutionRequirements::X27Mask(
-                                link.required_subpages(),
-                            ),
-                            provenance: TeletextMotLinkProvenance::X27 {
-                                display: owner,
-                                role,
-                            },
-                            original_mot: None,
-                        }
-                    }
-                    _ => TeletextMotRoleResolution::Unselected,
+                let selected =
+                    links
+                        .map(|links| links.link(role))
+                        .and_then(|link| match link.target() {
+                            TeletextX27LinkTarget::Page { page }
+                                if link.validity().applies_at_level25() =>
+                            {
+                                Some((page, link.required_subpages()))
+                            }
+                            _ => None,
+                        });
+                let expected_role = match selected {
+                    Some((page, mask)) => TeletextMotRoleResolution::Selected {
+                        target: page,
+                        requirements: TeletextMotResolutionRequirements::X27Mask(mask),
+                        provenance: TeletextMotLinkProvenance::X27 {
+                            display: owner,
+                            role,
+                        },
+                        original_mot: None,
+                    },
+                    None => TeletextMotRoleResolution::Unselected,
                 };
                 if new.role(role) != &expected_role {
                     return Err(failure(owner));

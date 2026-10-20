@@ -36,6 +36,8 @@ pub(super) struct EditorialResourceIntents<'a> {
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     pub(super) object_subpage_announcements:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
+    pub(super) main_resource_invocations:
+        &'a [ersatzrs_domain::TeletextMainResourceInvocationOverlay],
     pub(super) object_page_selections:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange],
     pub(super) operands: &'a [TeletextResourceObjectOperandOverlay],
@@ -129,6 +131,7 @@ impl StoredDesignParts {
             && resources.object_resource_additions.is_empty()
             && resources.object_subpage_announcements.is_empty()
             && resources.object_page_selections.is_empty()
+            && resources.main_resource_invocations.is_empty()
         {
             return self.compile_with_resource_edits(
                 stored,
@@ -196,6 +199,7 @@ pub(super) fn check_authenticated_editorial_resource_replay(
             object_resource_additions: &[],
             object_subpage_announcements: &[],
             object_page_selections: &[],
+            main_resource_invocations: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -209,6 +213,13 @@ pub(super) fn check_authenticated_editorial_resource_intents(
     intents: EditorialResourceIntents<'_>,
 ) -> Result<(), NativeTeletextDesignError> {
     let resource_operands = intents.operands;
+    if overlay.map_or(
+        &[][..],
+        TeletextSavedEditorialOverlay::main_resource_invocations,
+    ) != intents.main_resource_invocations
+    {
+        return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
+    }
     let resource_programs = intents.programs;
     if overlay.map_or(
         &[][..],

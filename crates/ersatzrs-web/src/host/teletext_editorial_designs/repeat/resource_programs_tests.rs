@@ -95,6 +95,7 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![growth(global)],
             ..TeletextEditorialChanges::default()
@@ -103,6 +104,7 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![
                 Operand::new(identity(global), 1, 0, g(b'Q'), g(b'Z')).unwrap(),
@@ -135,6 +137,7 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: operands,
             resource_programs: programs,
@@ -144,6 +147,7 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![undo],
             ..TeletextEditorialChanges::default()
@@ -159,6 +163,7 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: operands,
             ..TeletextEditorialChanges::default()
@@ -167,6 +172,7 @@ fn resource_program_repeat_translates_inserted_glyph_and_style_scalars_to_root()
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![Operand::new(identity(global), 1, 1, bg(2), bg(0)).unwrap()],
             ..TeletextEditorialChanges::default()
@@ -183,6 +189,7 @@ fn resource_program_merge_refuses_duplicates_stale_expectations_limits_and_deadl
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![growth(false)],
         ..TeletextEditorialChanges::default()
@@ -191,6 +198,7 @@ fn resource_program_merge_refuses_duplicates_stale_expectations_limits_and_deadl
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![growth(false)],
         ..TeletextEditorialChanges::default()
@@ -200,6 +208,7 @@ fn resource_program_merge_refuses_duplicates_stale_expectations_limits_and_deadl
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         resource_programs: vec![growth(false), growth(false)],
         ..TeletextEditorialChanges::default()

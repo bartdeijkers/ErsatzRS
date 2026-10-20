@@ -330,12 +330,13 @@ pub(super) fn validate_graph(
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,
 ) -> Result<(), TeletextDesignDocumentError> {
-    // V25–27 are explicitly structural: banks, dependency declarations and
-    // definitions must be validated together by the authenticated native host,
+    // V25–28 are explicitly structural: banks, dependency declarations,
+    // definitions and call consumers require one authenticated native result,
     // never as an incomplete intermediate graph. No stored value grants replay.
     if !overlay.object_resource_additions().is_empty()
         || !overlay.object_subpage_announcements().is_empty()
         || !overlay.object_page_selections().is_empty()
+        || !overlay.main_resource_invocations().is_empty()
     {
         return Ok(());
     }

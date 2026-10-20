@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct TeletextObjectChoicesObservation {
     pub pages: Vec<TeletextObjectPageChoiceObservation>,
     pub calls: Vec<TeletextObjectCallChoiceObservation>,
+    pub main_calls: Vec<TeletextMainCallChoiceObservation>,
     pub definitions: Vec<TeletextObjectDefinitionChoiceObservation>,
 }
 
@@ -22,10 +23,20 @@ pub struct TeletextObjectPageChoiceObservation {
     pub required_subpages: ersatzrs_domain::TeletextSubpageRequirementMask,
 }
 
-/// Actual resource-body calls, with their original ordinal, type and offset.
+/// Actual object-body resource calls, with their current ordinal, type and offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextObjectCallChoiceObservation {
     pub caller: ersatzrs_domain::TeletextObjectIdentity,
+    pub command_index: usize,
+    pub target: ersatzrs_domain::TeletextObjectIdentity,
+    pub object_type: ersatzrs_domain::TeletextObjectType,
+    pub offset: Option<ersatzrs_domain::TeletextObjectOffset>,
+}
+
+/// Actual explicit Main resource calls; observations confer no edit authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextMainCallChoiceObservation {
+    pub owner: TeletextPageAddress,
     pub command_index: usize,
     pub target: ersatzrs_domain::TeletextObjectIdentity,
     pub object_type: ersatzrs_domain::TeletextObjectType,

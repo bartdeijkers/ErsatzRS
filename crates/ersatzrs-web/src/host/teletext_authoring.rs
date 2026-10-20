@@ -61,8 +61,9 @@ mod effective;
 mod metadata;
 mod object_choices;
 pub use crate::admin::server_fns::teletext_drafts::{
-    TeletextObjectCallChoiceObservation, TeletextObjectChoicesObservation,
-    TeletextObjectDefinitionChoiceObservation, TeletextObjectPageChoiceObservation,
+    TeletextMainCallChoiceObservation, TeletextObjectCallChoiceObservation,
+    TeletextObjectChoicesObservation, TeletextObjectDefinitionChoiceObservation,
+    TeletextObjectPageChoiceObservation,
 };
 mod scope;
 pub use metadata::TeletextAuthoringPageMetadata;

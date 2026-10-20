@@ -39,14 +39,19 @@ pub(super) fn check<'a>(
     let mut seen = std::collections::BTreeSet::new();
     for program in cumulative.main_programs {
         check_deadline(deadline)?;
-        if !seen.insert(program.owner())
-            || after
-                .get(&program.owner())
-                .and_then(|page| page.local_program.as_ref())
-                != Some(program.replacement())
-        {
+        let actual = after
+            .get(&program.owner())
+            .and_then(|page| page.local_program.as_ref())
+            .ok_or_else(|| fail(program.owner()))?;
+        if !seen.insert(program.owner()) {
             return Err(fail(program.owner()));
         }
+        super::main_resource_invocations::check_program_result(
+            actual,
+            program,
+            cumulative.main_resource_invocations,
+            deadline,
+        )?;
     }
     Ok(result)
 }
@@ -78,11 +83,11 @@ pub(super) fn check_transition(
     after: &TeletextEnhancementProgram,
     operands: &BTreeMap<(TeletextPageAddress, usize), &TeletextLocalProgramOperandOverlay>,
     program: &TeletextMainLocalInvocationProgramOverlay,
+    calls: &[ersatzrs_domain::TeletextMainResourceInvocationOverlay],
     deadline: Instant,
 ) -> Result<()> {
-    if after != program.replacement()
-        || before.commands().len() != program.expected().commands().len()
-    {
+    super::main_resource_invocations::check_program_result(after, program, calls, deadline)?;
+    if before.commands().len() != program.expected().commands().len() {
         return Err(fail(owner));
     }
     for (ordinal, (old, expected)) in before

@@ -70,6 +70,7 @@ fn edits(changes: &[TeletextResourceObjectProgramOverlay]) -> TeletextEditorialE
         object_page_selections: &[],
         object_programs: &[],
         main_programs: &[],
+        main_resource_invocations: &[],
         bitmaps: &[],
     }
 }

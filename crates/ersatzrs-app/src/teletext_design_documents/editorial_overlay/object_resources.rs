@@ -212,6 +212,7 @@ pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignD
         super::OBJECT_RESOURCE_ADDITION_VERSION
             | super::OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
             | super::OBJECT_PAGE_SELECTION_VERSION
+            | super::MAIN_RESOURCE_INVOCATION_VERSION
     ) {
         if !matches!(value.prior_schema_version.0, Some(1..=24))
             || (value.schema_version == super::OBJECT_RESOURCE_ADDITION_VERSION
@@ -254,6 +255,13 @@ pub(super) fn restore(
     )?;
     let selections = super::object_page_selections::restore(
         stored.object_page_selections.0.take().unwrap_or_default(),
+    )?;
+    let invocations = super::main_resource_invocations::restore(
+        stored
+            .main_resource_invocations
+            .0
+            .take()
+            .unwrap_or_default(),
     )?;
     stored.schema_version = stored.prior_schema_version.0.take().ok_or_else(invalid)?;
     let additions = additions
@@ -320,6 +328,11 @@ pub(super) fn restore(
         overlay
     } else {
         overlay.with_object_page_selections(selections)?
+    };
+    let overlay = if invocations.is_empty() {
+        overlay
+    } else {
+        overlay.with_main_resource_invocations(invocations)?
     };
     validate_association(&overlay, documents, budget)?;
     Ok(overlay)

@@ -1298,6 +1298,8 @@ enum Path {
     EditorialGlyphProgram,
     EditorialMainPrograms,
     EditorialMainProgram,
+    EditorialMainResourceInvocations,
+    EditorialMainResourceInvocation,
     EditorialDefinitionAdditions,
     EditorialDefinitionAddition,
     EditorialObjectPageSelections,
@@ -1396,7 +1398,7 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::resource_object_additions::StoredDefinitionAddition,
             >(self.count))?;
         }
-        check_announcement_storage(self.inner.scan, self.inner.path, self.count)?;
+        check_editorial_role_storage(self.inner.scan, self.inner.path, self.count)?;
         if matches!(self.inner.path, Path::EditorialObjectResource) {
             self.inner.scan.check(storage::<
                 editorial_overlay::object_resources::StoredObjectResourceAddition,
@@ -1450,11 +1452,16 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
         self.inner.deserialize(deserializer)
     }
 }
-fn check_announcement_storage<E: serde::de::Error>(
+fn check_editorial_role_storage<E: serde::de::Error>(
     scan: &mut Scan,
     path: Path,
     count: usize,
 ) -> Result<(), E> {
+    if matches!(path, Path::EditorialMainResourceInvocation) {
+        scan.check(storage::<
+            editorial_overlay::main_resource_invocations::StoredMainResourceInvocation,
+        >(count))?;
+    }
     if matches!(path, Path::EditorialObjectPageSelection) {
         scan.check(storage::<
             editorial_overlay::object_page_selections::StoredSelection,
@@ -1479,6 +1486,7 @@ impl Scan {
                 | Path::EditorialResourceOperand
                 | Path::EditorialGlyphProgram
                 | Path::EditorialMainProgram
+                | Path::EditorialMainResourceInvocation
                 | Path::EditorialResourceProgram
                 | Path::EditorialDefinitionAddition
                 | Path::EditorialObjectResource
@@ -1495,6 +1503,7 @@ impl Scan {
         if matches!(
             path,
             Path::EditorialOperand
+                | Path::EditorialMainResourceInvocation
                 | Path::EditorialBaseText
                 | Path::EditorialObjectOperand
                 | Path::EditorialResourceOperand
@@ -1671,9 +1680,6 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "resource_object_definition_additions") => {
                     Path::EditorialDefinitionAdditions
                 }
-                (Path::EditorialOverlay, "object_page_selections") => {
-                    Path::EditorialObjectPageSelections
-                }
                 (Path::EditorialObjectPageSelection, "expected_links") => {
                     Path::EditorialSelectionExpectedLinks
                 }
@@ -1682,12 +1688,6 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 }
                 (Path::EditorialObjectPageSelection, "original_mot") => {
                     Path::EditorialSelectionOriginalMot
-                }
-                (Path::EditorialOverlay, "object_subpage_announcements") => {
-                    Path::EditorialObjectSubpageAnnouncements
-                }
-                (Path::EditorialOverlay, "object_resource_additions") => {
-                    Path::EditorialObjectResources
                 }
                 (Path::EditorialObjectResource, "definitions") => {
                     Path::EditorialObjectResourceDefinitions
@@ -1721,7 +1721,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Selection, "bindings") => Path::Bindings,
                 (Path::Binding, "effective_settings") => Path::Settings,
                 (Path::Document, "response") => Path::Response,
-                _ => Path::Other,
+                _ => editorial_role_path(self.path, key.as_str()),
             };
             map.next_value_seed(ScanSeed {
                 scan: self.scan,
@@ -1778,6 +1778,11 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
             Path::EditorialOperands => (
                 self.scan.budget.validation.service.max_commands,
                 Path::EditorialOperand,
+                "editorial operands",
+            ),
+            Path::EditorialMainResourceInvocations => (
+                self.scan.budget.validation.service.max_commands,
+                Path::EditorialMainResourceInvocation,
                 "editorial operands",
             ),
             Path::EditorialObjectOperands => (
@@ -1892,6 +1897,20 @@ fn glyph_program_sequence_limits(
             "editorial retained commands",
         ),
         _ => (MAX_BINDINGS, Path::Other, "sequence"),
+    }
+}
+
+fn editorial_role_path(path: Path, key: &str) -> Path {
+    match (path, key) {
+        (Path::EditorialOverlay, "main_resource_invocations") => {
+            Path::EditorialMainResourceInvocations
+        }
+        (Path::EditorialOverlay, "object_page_selections") => Path::EditorialObjectPageSelections,
+        (Path::EditorialOverlay, "object_subpage_announcements") => {
+            Path::EditorialObjectSubpageAnnouncements
+        }
+        (Path::EditorialOverlay, "object_resource_additions") => Path::EditorialObjectResources,
+        _ => Path::Other,
     }
 }
 

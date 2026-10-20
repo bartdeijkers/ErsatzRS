@@ -60,6 +60,7 @@ fn original_position_merge_retains_root_anchors_and_inserted_scalar_lineage() {
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![intent.clone()],
             ..TeletextEditorialChanges::default()
@@ -78,6 +79,7 @@ fn original_position_merge_retains_root_anchors_and_inserted_scalar_lineage() {
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: programs,
             ..TeletextEditorialChanges::default()
@@ -86,6 +88,7 @@ fn original_position_merge_retains_root_anchors_and_inserted_scalar_lineage() {
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_operands: vec![Operand::new(identity(global), 3, 6, g(b'R'), g(b'S')).unwrap()],
             ..TeletextEditorialChanges::default()
@@ -132,6 +135,7 @@ fn original_position_merge_refuses_transient_add_intent_in_either_generation() {
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![transient],
             ..TeletextEditorialChanges::default()
@@ -168,6 +172,7 @@ fn original_position_restoration_folds_exact_history_without_saving_inverse_auth
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![previous],
             ..TeletextEditorialChanges::default()
@@ -176,6 +181,7 @@ fn original_position_restoration_folds_exact_history_without_saving_inverse_auth
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             base_text_edits: Vec::new(),
             resource_programs: vec![inverse],
             ..TeletextEditorialChanges::default()

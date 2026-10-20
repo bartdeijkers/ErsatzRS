@@ -1,5 +1,7 @@
 //! Explicit raw-page and existing resource-call choices save only a concept.
-use ersatzrs_domain::{TeletextObjectIdentity, TeletextObjectType, TeletextResourceKind};
+use ersatzrs_domain::{
+    TeletextObjectIdentity, TeletextObjectOffset, TeletextObjectType, TeletextResourceKind,
+};
 use leptos::prelude::*;
 
 use super::{
@@ -105,11 +107,92 @@ fn target_catalogue(data: &TeletextDraftPreviewData) -> AnyView {
     .into_any()
 }
 
+fn call_metadata(
+    command_index: usize,
+    target: TeletextObjectIdentity,
+    object_type: TeletextObjectType,
+    offset: Option<TeletextObjectOffset>,
+) -> AnyView {
+    let offset = offset.map_or_else(
+        || tr(TextKey::TeletextObjectSelectionNoOffset).to_owned(),
+        |offset| format!("{}, {}", offset.row(), offset.column()),
+    );
+    view! {
+        <dt>{tr(TextKey::TeletextObjectSelectionCommand)}</dt><dd>{command_index}</dd>
+        <dt>{tr(TextKey::TeletextObjectSelectionCurrentTarget)}</dt><dd>{object_label(target)}</dd>
+        <dt>{tr(TextKey::TeletextObjectAddType)}</dt><dd>{object_type_label(object_type)}</dd>
+        <dt>{tr(TextKey::TeletextObjectSelectionOffset)}</dt><dd>{offset}</dd>
+    }
+    .into_any()
+}
+fn call_target(
+    prefix: &str,
+    index: usize,
+    target: TeletextObjectIdentity,
+    object_type: TeletextObjectType,
+) -> AnyView {
+    let id = format!("teletext-object-{prefix}-{index}-target");
+    view! {
+        <label for=id.clone()>{tr(TextKey::TeletextObjectSelectionCallTarget)}</label>
+        <input id=id name=format!("{prefix}_{index}_target") required
+            value=object_label(target) list=target_list_id(object_type) maxlength="64"/>
+    }
+    .into_any()
+}
+fn object_calls(data: &TeletextDraftPreviewData) -> AnyView {
+    data.object_choices.calls.iter().enumerate().map(|(index,call)| {
+        let caller = serde_json::to_string(&call.caller).unwrap_or_default();
+        view! {
+            <fieldset style:min-width="0">
+                <legend>{tr(TextKey::TeletextObjectSelectionCalls)}" "{index+1}</legend>
+                {hidden(&format!("call_{index}_caller"),caller)}
+                {hidden(&format!("call_{index}_command"),call.command_index.to_string())}
+                <dl class=style::location>
+                    <dt>{tr(TextKey::TeletextObjectSelectionCaller)}</dt><dd>{object_label(call.caller)}</dd>
+                    {call_metadata(call.command_index,call.target,call.object_type,call.offset)}
+                </dl>
+                {call_target("call",index,call.target,call.object_type)}
+            </fieldset>
+        }
+    }).collect_view().into_any()
+}
+fn main_calls(data: &TeletextDraftPreviewData) -> AnyView {
+    data.object_choices
+        .main_calls
+        .iter()
+        .enumerate()
+        .map(|(index, call)| {
+            let owner = serde_json::to_string(&call.owner).unwrap_or_default();
+            let label = format!(
+                "{} / {:04X}",
+                call.owner.page.get(),
+                call.owner.subcode.get()
+            );
+            view! {
+                <fieldset style:min-width="0">
+                    <legend>{tr(TextKey::TeletextObjectSelectionMainCalls)}" "{index+1}</legend>
+                    {hidden(&format!("main_{index}_owner"),owner)}
+                    {hidden(&format!("main_{index}_command"),call.command_index.to_string())}
+                    <dl class=style::location>
+                        <dt>{tr(TextKey::TeletextResourceDisplay)}</dt><dd>{label}</dd>
+                        {call_metadata(call.command_index,call.target,call.object_type,call.offset)}
+                    </dl>
+                    {call_target("main",index,call.target,call.object_type)}
+                </fieldset>
+            }
+        })
+        .collect_view()
+        .into_any()
+}
+
 pub(super) fn form(
     data: &TeletextDraftPreviewData,
     observation: &TeletextDraftPublicationObservation,
 ) -> AnyView {
-    if data.object_choices.pages.is_empty() && data.object_choices.calls.is_empty() {
+    if data.object_choices.pages.is_empty()
+        && data.object_choices.calls.is_empty()
+        && data.object_choices.main_calls.is_empty()
+    {
         return ().into_any();
     }
     let current = data.revision == observation.current_design_head;
@@ -138,29 +221,8 @@ pub(super) fn form(
         }
     }).collect_view();
     let target_lists = target_catalogue(data);
-    let calls = data.object_choices.calls.iter().enumerate().map(|(index,call)| {
-        let target_id = format!("teletext-object-call-{index}-target");
-        let caller = serde_json::to_string(&call.caller).unwrap_or_default();
-        let offset = call.offset.map_or_else(|| tr(TextKey::TeletextObjectSelectionNoOffset).to_owned(),|offset| format!("{}, {}",offset.row(),offset.column()));
-        view! {
-            <fieldset style:min-width="0">
-                <legend>{tr(TextKey::TeletextObjectSelectionCalls)}" "{index+1}</legend>
-                {hidden(&format!("call_{index}_caller"),caller)}
-                {hidden(&format!("call_{index}_command"),call.command_index.to_string())}
-                <dl class=style::location>
-                    <dt>{tr(TextKey::TeletextObjectSelectionCaller)}</dt><dd>{object_label(call.caller)}</dd>
-                    <dt>{tr(TextKey::TeletextObjectSelectionCommand)}</dt><dd>{call.command_index}</dd>
-                    <dt>{tr(TextKey::TeletextObjectSelectionCurrentTarget)}</dt><dd>{object_label(call.target)}</dd>
-                    <dt>{tr(TextKey::TeletextObjectAddType)}</dt><dd>{object_type_label(call.object_type)}</dd>
-                    <dt>{tr(TextKey::TeletextObjectSelectionOffset)}</dt><dd>{offset}</dd>
-                </dl>
-                <label for=target_id.clone()>{tr(TextKey::TeletextObjectSelectionCallTarget)}</label>
-                <input id=target_id name=format!("call_{index}_target") required
-                    value=object_label(call.target) list=target_list_id(call.object_type)
-                    maxlength="64"/>
-            </fieldset>
-        }
-    }).collect_view();
+    let calls = object_calls(data);
+    let main_calls = main_calls(data);
     view! {
         <form method="post" action="/admin-api/teletext/design/choose-object-pages"
             class=style::preview_form data-testid="teletext-object-pages-choose-form"
@@ -176,6 +238,7 @@ pub(super) fn form(
                 {pages}
                 {target_lists}
                 {calls}
+                {main_calls}
                 <button type="submit" class=btn_class(ButtonVariant::Primary)>{tr(TextKey::TeletextObjectSelectionAction)}</button>
             </fieldset>
             <p style:display=if current { "none" } else { "" }>{tr(TextKey::TeletextResourceEditCurrentHelp)}</p>

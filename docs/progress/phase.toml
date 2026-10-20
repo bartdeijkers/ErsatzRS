@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 atomic Main/Local consumer transaction foundation; next explicit storage/native replay/effects; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 saved Main/Local/resource selections verified; next existing platform/runtime-adoption proof; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -179,9 +179,17 @@ asset-sync correction. No new editor/stream/client claim follows.
 consumer_selection_followup now closes the domain intermediate-graph deadlock
 for checked Main/Local/resource consumers:72 affected regressions and strict
 domain Clippy pass, including complete independent targets and old authority/
-budget guards. Native persistence still lacks distinct versioned Main intent
-and atomic replay/effect integration; that is the next concrete product step,
-not a reason to repeat editor/browser/stream proofs. Full F1 stays open.
+budget guards. Its native_followup now adds distinct V28 Main intent and atomic
+native/effect replay through the existing receipt/worker/head-CAS. App208 and90
+affected effects/native cases pass, including TTI retention, full preview/models/
+units/rasters, exact root undo/reselection, separate publication/cold recovery and
+atomic malformed/protected refusals. Root undo restores absent X27 and original
+MOT provenance; original guards and formats stay closed. Both actual headed
+browsers pass, including nine cultures, JS/noJS/light/dark, readable320/1920 and
+native complete model/publication/cold-recovery verification. Strict final web
+Clippy, matched SSR/WASM, hydration/architecture and formatting pass. Select an
+existing independently executable platform/runtime-adoption requirement; no new
+adjacent editor or repertoire variants. Full F1 stays open.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.

@@ -119,6 +119,15 @@ pub(super) fn check_version(stored: &StoredOverlay) -> Result<(), TeletextDesign
         {
             return Err(invalid());
         }
+    } else if stored.schema_version == super::MAIN_RESOURCE_INVOCATION_VERSION {
+        if stored
+            .object_page_selections
+            .0
+            .as_ref()
+            .is_some_and(Vec::is_empty)
+        {
+            return Err(invalid());
+        }
     } else if !stored.object_page_selections.is_absent() {
         return Err(invalid());
     }

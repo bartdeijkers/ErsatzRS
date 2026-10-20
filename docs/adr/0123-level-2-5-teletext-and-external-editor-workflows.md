@@ -72,16 +72,25 @@ forms expose the admitted role selections and typed existing resource calls.
 Submitted identities and command ordinals are resolved from a fresh qualified
 service inside the same held worker; no submitted program or source ordinal
 grants authority. Unchanged rows are ignored and call-only edits remain explicit.
-Historical forms are disabled and saving never publishes. Remaining coordinated
-Main/Local consumers, complete editor/client proof and full 9A acceptance remain
-open; no package authority is added. The domain transaction now accepts checked
-Main, Local and resource consumers together. A distinct exact-original Main
+Historical forms are disabled and saving never publishes. Complete editor/client
+proof and full 9A acceptance remain open; no package authority is added.
+The domain transaction now accepts checked Main, Local and resource consumers
+together. A distinct exact-original Main
 resource-call intent only retargets retained Public/Global calls, preserving type,
 offset, command order and other commands. Combined raw and final budgets precede
 cloning and one complete semantic/declared reconstruction. Existing Main Local
 insertion/deletion authority and the old resources-only API stay unchanged.
-This domain capability does not yet authorize saved Main intent; explicit
-versioned storage and native replay/effect qualification remain required.
+Private V28 now retains distinct root-relative Main resource-call intent beside
+unchanged earlier roles. Additive native actions and small localized form choices
+reuse the admitted worker, current receipt and exact-head CAS. Original source,
+complete final graph and both root/current effects remain mandatory. TTI retains
+that authority but cannot author it. Main structural correspondence maps current
+ordinals to immutable roots without widening V22. Exact root undo distinguishes
+original X27 absence from explicit links, requiring the complete original MOT
+materialization and no retained selector/announcement before restoring absence.
+Complete native concept, TTI, shared-preview, explicit-publication and cold-reopen
+proof and both localized headed form paths are scoped to the synthetic consumers.
+Full F1/interchange/client/platform and independent engine acceptance remain open.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

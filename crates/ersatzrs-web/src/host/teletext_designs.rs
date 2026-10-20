@@ -512,6 +512,7 @@ pub(super) fn compile_restored_parts_with_resource_edits(
             object_resource_additions: &[],
             object_subpage_announcements: &[],
             object_page_selections: &[],
+            main_resource_invocations: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -573,6 +574,8 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         && resource_additions.is_empty()
         && resources.object_resource_additions.is_empty()
         && resources.object_subpage_announcements.is_empty()
+        && resources.object_page_selections.is_empty()
+        && resources.main_resource_invocations.is_empty()
         && main_programs.is_empty()
         && base_text_edits.is_empty()
     {
@@ -594,6 +597,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
                 object_resource_additions: resources.object_resource_additions,
                 object_subpage_announcements: resources.object_subpage_announcements,
                 object_page_selections: resources.object_page_selections,
+                main_resource_invocations: resources.main_resource_invocations,
                 base_text_edits,
                 main_programs,
                 programs: editorial,

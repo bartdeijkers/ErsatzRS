@@ -17,6 +17,7 @@ type Ready = {
   design_id: number; revision: number; digest: string; original_page: RawPage;
   selected_page: RawPage; caller: ObjectIdentity; original_target: ObjectIdentity;
   selected_target: ObjectIdentity; marker_file: string; timeout_seconds: number;
+  main_original_target?: ObjectIdentity; main_selected_target?: ObjectIdentity;
 };
 function normalized(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalized);
@@ -50,11 +51,14 @@ async function labels(page: Page, module: string): Promise<void> {
   }
   await expect(form.locator('dd').filter({ hasText: translation(module, 'TeletextObjectTypePassive') }).first()).toBeVisible();
   await expect(form.locator('dd').filter({ hasText: /^0, 0$/ }).first()).toBeVisible();
+  if (await form.locator('input[name^="main_"][name$="_owner"]').count()) {
+    await expect(form.locator('legend').filter({ hasText: `${translation(module, 'TeletextObjectSelectionMainCalls')} 1` })).toBeVisible();
+  }
 }
 async function cultureAndLayout(page: Page, ready: Ready, output: (name: string) => string): Promise<void> {
   for (const [language, module] of cultures) {
     await settings(page, language, false);
-    await visit(page, preview(ready, 4)); await waitForHydration(page);
+    await visit(page, preview(ready, ready.revision)); await waitForHydration(page);
     await expect(page.locator('html')).toHaveAttribute('lang', language);
     await labels(page, module);
   }
@@ -90,6 +94,9 @@ async function fill(form: Locator, ready: Ready, selected: boolean): Promise<voi
   await form.locator('[name="name"]').fill(selected ? 'Explicit GPOP selection and Passive call' : 'Exact original GPOP and Passive call');
   const beforeCalls = await form.locator('input[name^="call_"][name$="_target"]').evaluateAll(elements => elements.map(
     element => ({ name: (element as HTMLInputElement).name, value: (element as HTMLInputElement).value })));
+  const mainMode = ready.case === 'teletext-main-local-object-selection';
+  const beforeMain = await form.locator('input[name^="main_"][name$="_target"]').evaluateAll(elements => elements.map(
+    element => ({ name: (element as HTMLInputElement).name, value: (element as HTMLInputElement).value })));
   const beforePop: { prefix: string; target: string; mask: string }[] = [];
   let changedPages = 0;
   for (const input of await form.locator('input[name^="page_"][name$="_role"]').all()) {
@@ -111,11 +118,18 @@ async function fill(form: Locator, ready: Ready, selected: boolean): Promise<voi
   // Page selection must not silently retarget any call. The separate explicit
   // selection below is the user's only resource-body change.
   for (const before of beforeCalls) expect(await form.locator(`[name="${before.name}"]`).inputValue()).toBe(before.value);
-  let changedCalls = 0;
+  for (const before of beforeMain) expect(await form.locator(`[name="${before.name}"]`).inputValue()).toBe(before.value);
+  let changedCalls = 0, changedLocal = 0;
   for (const input of await form.locator('input[name^="call_"][name$="_caller"]').all()) {
     const prefix = (await input.getAttribute('name'))!.slice(0, -7);
-    if (key(JSON.parse(await input.inputValue())) !== key(ready.caller)
-      || await field(form, `${prefix}_command`) !== '4') continue;
+    const caller = JSON.parse(await input.inputValue());
+    const local = mainMode && caller.scope === 'local' && caller.object_id === 65000;
+    if (key(caller) !== key(ready.caller) && !local) continue;
+    expect(await field(form, `${prefix}_command`)).toBe(local ? '1' : '4');
+    if (local) {
+      expect([124, 125, 126]).toContain(caller.owner.page); expect(caller.owner.subcode).toBe(32);
+      changedLocal += 1;
+    }
     const target = form.locator(`[name="${prefix}_target"]`);
     expect(await target.inputValue()).toBe(objectLabel(selected ? ready.original_target : ready.selected_target));
     await expect(target).toHaveAttribute('list', 'teletext-object-targets-passive');
@@ -124,17 +138,36 @@ async function fill(form: Locator, ready: Ready, selected: boolean): Promise<voi
     await target.fill(label);
     changedCalls += 1;
   }
-  expect(changedCalls).toBe(1);
+  expect(changedCalls).toBe(mainMode ? 4 : 1);
+  expect(changedLocal).toBe(mainMode ? 3 : 0);
   let changed = 0;
   for (const before of beforeCalls) {
     const after = await form.locator(`[name="${before.name}"]`).inputValue();
     if (after !== before.value) changed += 1;
   }
-  expect(changed).toBe(1);
+  expect(changed).toBe(mainMode ? 4 : 1);
+  await fillMain(form, ready, selected, mainMode);
   for (const before of beforePop) {
     expect(await field(form, `${before.prefix}_target`)).toBe(before.target);
     expect(await field(form, `${before.prefix}_mask`)).toBe(before.mask);
-    expect(before.mask).toBe('8001');
+    expect(before.mask).toBe(mainMode ? '0001' : '8001');
+  }
+}
+
+async function fillMain(form: Locator, ready: Ready, selected: boolean, mainMode: boolean): Promise<void> {
+  const owners = await form.locator('input[name^="main_"][name$="_owner"]').all();
+  expect(owners).toHaveLength(mainMode ? 3 : 0);
+  for (const input of owners) {
+    const owner = JSON.parse(await input.inputValue());
+    expect([124, 125, 126]).toContain(owner.page); expect(owner.subcode).toBe(32);
+    const prefix = (await input.getAttribute('name'))!.slice(0, -6);
+    expect(await field(form, `${prefix}_command`)).toBe('0');
+    const target = form.locator(`[name="${prefix}_target"]`);
+    await expect(target).toHaveAttribute('list', 'teletext-object-targets-active');
+    expect(await target.inputValue()).toBe(objectLabel(selected ? ready.main_original_target! : ready.main_selected_target!));
+    const label = objectLabel(selected ? ready.main_selected_target! : ready.main_original_target!);
+    expect(await form.locator('#teletext-object-targets-active option').evaluateAll(elements => elements.map(element => (element as HTMLOptionElement).value))).toContain(label);
+    await target.fill(label);
   }
 }
 
@@ -143,24 +176,26 @@ test('coordinate selected object pages and existing calls through localized curr
   test.setTimeout(240_000);
   const directory = dirname(resolve(readyPath!));
   const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as Ready;
-  expect(ready.probe_version).toBe(1); expect(ready.case).toBe('teletext-explicit-object-selection');
+  expect(ready.probe_version).toBe(1); expect(['teletext-explicit-object-selection', 'teletext-main-local-object-selection']).toContain(ready.case);
   expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-  expect(ready.channel_id).toBe(1); expect(ready.revision).toBe(4);
+  const mainMode = ready.case === 'teletext-main-local-object-selection';
+  expect(ready.channel_id).toBe(1); expect(ready.revision).toBe(mainMode ? 1 : 4);
   expect(ready.digest).toMatch(/^[a-f0-9]{64}$/);
   expect(ready.original_page).toEqual({ magazine: 2, page: 0xd0 });
   expect(ready.selected_page).toEqual({ magazine: 2, page: 0xe1 });
-  expect(ready.caller.object_id).toBe(20); expect(ready.original_target.object_id).toBe(21); expect(ready.selected_target.object_id).toBe(32);
+  expect(ready.caller.object_id).toBe(mainMode ? 33 : 20); expect(ready.original_target.object_id).toBe(mainMode ? 34 : 21); expect(ready.selected_target.object_id).toBe(32);
+  if (mainMode) { expect(ready.main_original_target?.object_id).toBe(20); expect(ready.main_selected_target?.object_id).toBe(33); }
   expect(resolve(ready.marker_file)).toBe(join(directory, 'browser-complete.json'));
   expect(ready.timeout_seconds).toBe(600);
   expect(['chromium', 'firefox']).toContain(testInfo.project.name);
   const js = testInfo.project.name === 'chromium', language = js ? 'nl' : 'en-us', module = js ? 'nl' : 'en_us';
   expect(existsSync(ready.marker_file)).toBe(false);
   expect(existsSync(join(directory, `${testInfo.project.name}-object-selection.json`))).toBe(false);
-  let revision = js ? 4 : 5, digest = ready.digest;
+  let revision = ready.revision + (js ? 0 : 1), digest = ready.digest;
   if (!js) {
     const previous = JSON.parse(bounded(join(directory, 'chromium-object-selection.json')).toString('utf8'));
     expect(previous.probe_version).toBe(1); expect(previous.case).toBe(ready.case); expect(previous.design_id).toBe(ready.design_id);
-    expect(previous.revision).toBe(5); expect(previous.errors).toEqual([]); expect(previous.digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(previous.revision).toBe(ready.revision + 1); expect(previous.errors).toEqual([]); expect(previous.digest).toMatch(/^[a-f0-9]{64}$/);
     digest = previous.digest;
   }
   testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
@@ -203,7 +238,7 @@ test('coordinate selected object pages and existing calls through localized curr
     await expect(page.getByTestId(formId).locator('fieldset').first()).toHaveAttribute('disabled', '');
     expect(errors).toEqual([]);
   } finally { await settings(page, 'en-us', false); await context.close(); }
-  expect(revision).toBe(js ? 5 : 7);
+  expect(revision).toBe(ready.revision + (js ? 1 : 3));
   marker(directory, `${testInfo.project.name}-object-selection.json`, {
     probe_version: 1, case: ready.case, design_id: ready.design_id, revision, digest,
     language, dark: !js, javascript: js, browser: browser.version(), hashes, errors,

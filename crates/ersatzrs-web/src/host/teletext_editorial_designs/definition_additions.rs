@@ -93,11 +93,24 @@ pub use page_selections::{
 #[path = "definition_additions/choice_resolver.rs"]
 mod choice_resolver;
 pub use choice_resolver::{
-    choose_teletext_editorial_object_pages, NativeTeletextObjectPagesChooseRequest,
-    TeletextObjectCallChoice, TeletextObjectPageChoice,
+    choose_teletext_editorial_object_consumers, choose_teletext_editorial_object_pages,
+    NativeTeletextObjectConsumersChooseRequest, NativeTeletextObjectPagesChooseRequest,
+    TeletextMainCallChoice, TeletextObjectCallChoice, TeletextObjectPageChoice,
+};
+
+#[path = "definition_additions/consumer_selections.rs"]
+mod consumer_selections;
+pub use consumer_selections::{
+    select_teletext_editorial_object_consumers, NativeTeletextObjectConsumersSelectRequest,
 };
 
 enum Action {
+    Consumers(Box<TeletextEditorialChanges>),
+    ConsumerChoices {
+        selections: Vec<TeletextObjectPageChoice>,
+        calls: Vec<TeletextObjectCallChoice>,
+        main_calls: Vec<TeletextMainCallChoice>,
+    },
     Choices {
         selections: Vec<TeletextObjectPageChoice>,
         calls: Vec<TeletextObjectCallChoice>,
@@ -141,6 +154,18 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
         return Err(NativeTeletextEditorialImportError::Budget);
     }
     let definitions = match &request.action {
+        Action::Consumers(changes) => {
+            return consumer_selections::preflight(changes, budget, deadline)
+        }
+        Action::ConsumerChoices {
+            selections,
+            calls,
+            main_calls,
+        } => {
+            return choice_resolver::preflight_consumers(
+                selections, calls, main_calls, budget, deadline,
+            )
+        }
         Action::Choices { selections, calls } => {
             return choice_resolver::preflight(selections, calls, budget, deadline);
         }
@@ -236,7 +261,10 @@ fn resolve(
 )> {
     check_deadline(deadline)?;
     let (source, new_object_id) = match action {
-        Action::Selections { .. } | Action::Choices { .. } => {
+        Action::Selections { .. }
+        | Action::Choices { .. }
+        | Action::Consumers(_)
+        | Action::ConsumerChoices { .. } => {
             return Err(NativeTeletextEditorialImportError::Association);
         }
         Action::Announcements(values) => return Ok((vec![], vec![], values)),
@@ -379,6 +407,20 @@ fn qualify(
     })
 }
 
+fn definition_addition(
+    definition: TeletextEnhancementObjectDefinition,
+    budget: TeletextServiceBudget,
+) -> Result<TeletextResourceObjectDefinitionAddition> {
+    TeletextResourceObjectDefinitionAddition::new(definition, budget).map_err(|error| match error {
+        ersatzrs_domain::TeletextResourceObjectDefinitionAdditionError::Budget { .. } => {
+            NativeTeletextEditorialImportError::Budget
+        }
+        ersatzrs_domain::TeletextResourceObjectDefinitionAdditionError::Scope => {
+            NativeTeletextEditorialImportError::Association
+        }
+    })
+}
+
 fn encode(
     mut baselines: Baselines,
     action: Action,
@@ -387,6 +429,26 @@ fn encode(
     deadline: Instant,
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
+    if let Action::Consumers(changes) = action {
+        return consumer_selections::encode(baselines, &changes, revision, policy, deadline);
+    }
+    if let Action::ConsumerChoices {
+        selections,
+        calls,
+        main_calls,
+    } = action
+    {
+        let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
+        let incoming = choice_resolver::resolve_consumers(
+            latest,
+            &selections,
+            &calls,
+            &main_calls,
+            policy.document.validation.service,
+            deadline,
+        )?;
+        return consumer_selections::encode(baselines, &incoming, revision, policy, deadline);
+    }
     if let Action::Choices { selections, calls } = action {
         let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
         let (selections, programs) = choice_resolver::resolve(
@@ -415,20 +477,7 @@ fn encode(
     super::object_resources::authorize(latest, &banks, &policy.encoding, deadline)?;
     let additions = definitions
         .into_iter()
-        .map(|definition| {
-            TeletextResourceObjectDefinitionAddition::new(
-                definition,
-                policy.document.validation.service,
-            )
-            .map_err(|error| match error {
-                ersatzrs_domain::TeletextResourceObjectDefinitionAdditionError::Budget {
-                    ..
-                } => NativeTeletextEditorialImportError::Budget,
-                ersatzrs_domain::TeletextResourceObjectDefinitionAdditionError::Scope => {
-                    NativeTeletextEditorialImportError::Association
-                }
-            })
-        })
+        .map(|definition| definition_addition(definition, policy.document.validation.service))
         .collect::<Result<Vec<_>>>()?;
     authorize(
         &latest.body.project,
@@ -449,6 +498,7 @@ fn encode(
         object_resource_additions: banks,
         object_subpage_announcements: announcements,
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         resource_additions: additions,
         ..Default::default()

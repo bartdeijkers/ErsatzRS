@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, BTreeSet};
 mod base_text;
 #[path = "repeat/main_programs.rs"]
 mod main_programs;
+#[path = "repeat/main_resource_invocations.rs"]
+mod main_resource_invocations;
 #[path = "repeat/object_operands.rs"]
 mod object_operands;
 #[path = "repeat/object_programs.rs"]
@@ -178,6 +180,7 @@ pub(super) fn from_overlay(overlay: &TeletextSavedEditorialOverlay) -> TeletextE
         object_resource_additions: overlay.object_resource_additions().to_vec(),
         object_subpage_announcements: overlay.object_subpage_announcements().to_vec(),
         object_page_selections: overlay.object_page_selections().to_vec(),
+        main_resource_invocations: overlay.main_resource_invocations().to_vec(),
         base_text_edits: overlay.base_text_edits().to_vec(),
         resource_additions: overlay.resource_object_definition_additions().to_vec(),
         resource_operands: overlay.resource_object_operands().to_vec(),
@@ -430,6 +433,7 @@ fn extend_root_export(
         .chain(cumulative.object_operands.iter().map(|operand| operand.owner()))
         .chain(cumulative.object_programs.iter().map(ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::owner))
         .chain(cumulative.main_programs.iter().map(ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay::owner))
+        .chain(cumulative.main_resource_invocations.iter().map(|value| value.owner()))
         // Preserve every actual resource consumer without exporting unrelated
         // pages or widening the incoming receipt's editable surface.
         .chain(cumulative.object_page_selections.iter().map(|saved| saved.change().display()))
@@ -507,6 +511,7 @@ pub(super) fn check_operand_budget(
         .chain(addition_work)
         .chain(bank_work)
         .chain(changes.object_subpage_announcements.iter().map(|_| 1))
+        .chain(changes.main_resource_invocations.iter().map(|_| 2))
         .chain(changes.object_page_selections.iter().map(|_| 1))
         .try_fold(0usize, usize::checked_add);
     if program_work.is_none_or(|count| count > budget.max_structure_items)
@@ -515,6 +520,7 @@ pub(super) fn check_operand_budget(
             .len()
             .checked_add(changes.resource_programs.len())
             .and_then(|count| count.checked_add(changes.main_programs.len()))
+            .and_then(|count| count.checked_add(changes.main_resource_invocations.len()))
             .and_then(|count| count.checked_add(changes.resource_additions.len()))
             .and_then(|count| count.checked_add(changes.object_resource_additions.len()))
             .and_then(|count| count.checked_add(changes.object_subpage_announcements.len()))
@@ -635,7 +641,10 @@ pub(super) fn merge_explicit_resource_changes(
 ) -> Result<TeletextEditorialChanges> {
     let mut ordinary = incoming.clone();
     ordinary.object_page_selections.clear();
-    merge_changes(root, previous, &ordinary, policy, deadline)
+    ordinary.main_resource_invocations.clear();
+    let mut cumulative = merge_changes(root, previous, &ordinary, policy, deadline)?;
+    main_resource_invocations::fold(root, previous, incoming, &mut cumulative, deadline)?;
+    Ok(cumulative)
 }
 
 fn merge_changes(
@@ -657,11 +666,15 @@ fn merge_changes(
         || !incoming.object_resource_additions.is_empty()
         || !incoming.object_subpage_announcements.is_empty()
         || !incoming.object_page_selections.is_empty()
+        || !incoming.main_resource_invocations.is_empty()
     {
         return Err(NativeTeletextEditorialImportError::Association);
     }
     let (resource_operands, resource_programs, resource_additions, banks) =
         merge_resource_changes(root, previous, incoming, budget, deadline)?;
+    let normalized =
+        main_resource_invocations::normalize_main_programs(previous, incoming, deadline)?;
+    let incoming_main = normalized.as_ref().unwrap_or(incoming);
     let (operands, main_programs) =
         if previous.main_programs.is_empty() && incoming.main_programs.is_empty() {
             (
@@ -677,12 +690,13 @@ fn merge_changes(
                 .declared()
                 .semantic()
                 .page_enhancements();
-            main_programs::merge(pages, previous, incoming, budget, deadline)?
+            main_programs::merge(pages, previous, incoming_main, budget, deadline)?
         };
     Ok(TeletextEditorialChanges {
         object_resource_additions: banks,
         object_subpage_announcements: previous.object_subpage_announcements.clone(),
         object_page_selections: previous.object_page_selections.clone(),
+        main_resource_invocations: previous.main_resource_invocations.clone(),
         base_text_edits: base_text::merge(
             &previous.base_text_edits,
             &incoming.base_text_edits,
@@ -952,6 +966,28 @@ fn resource_program_overlay(
 }
 
 pub(super) fn cumulative_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    if changes.main_resource_invocations.is_empty() {
+        return selected_cumulative_overlay(provenance, changes);
+    }
+    let mut siblings = changes.clone();
+    siblings.main_resource_invocations.clear();
+    if siblings.is_empty() {
+        TeletextSavedEditorialOverlay::new_with_main_resource_invocations(
+            provenance.clone(),
+            changes.main_resource_invocations.clone(),
+        )
+        .map_err(Into::into)
+    } else {
+        selected_cumulative_overlay(provenance, &siblings)?
+            .with_main_resource_invocations(changes.main_resource_invocations.clone())
+            .map_err(Into::into)
+    }
+}
+
+fn selected_cumulative_overlay(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
 ) -> Result<TeletextSavedEditorialOverlay> {
@@ -1249,6 +1285,7 @@ fn local_invocation_overlay(
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         base_text_edits: Vec::new(),
         rows: changes.rows.clone(),
         operands: changes.operands.clone(),
@@ -1363,6 +1400,7 @@ fn make_document(
             object_resource_additions: &prepared.incoming.object_resource_additions,
             object_subpage_announcements: &prepared.incoming.object_subpage_announcements,
             object_page_selections: &prepared.incoming.object_page_selections,
+            main_resource_invocations: &prepared.incoming.main_resource_invocations,
             base_text_edits: &prepared.incoming.base_text_edits,
             resource_additions: &prepared.incoming.resource_additions,
             resource_operands: &prepared.incoming.resource_operands,
@@ -1378,6 +1416,7 @@ fn make_document(
             object_resource_additions: &prepared.cumulative.object_resource_additions,
             object_subpage_announcements: &prepared.cumulative.object_subpage_announcements,
             object_page_selections: &prepared.cumulative.object_page_selections,
+            main_resource_invocations: &prepared.cumulative.main_resource_invocations,
             base_text_edits: &prepared.cumulative.base_text_edits,
             resource_additions: &prepared.cumulative.resource_additions,
             resource_operands: &prepared.cumulative.resource_operands,

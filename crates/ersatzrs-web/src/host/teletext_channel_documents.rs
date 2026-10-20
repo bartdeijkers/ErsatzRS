@@ -55,6 +55,8 @@ pub(super) struct EditorialResourceDocuments<'a> {
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     pub(super) object_subpage_announcements:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
+    pub(super) main_resource_invocations:
+        &'a [ersatzrs_domain::TeletextMainResourceInvocationOverlay],
     pub(super) object_page_selections:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange],
 }
@@ -521,6 +523,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
             object_resource_additions: &[],
             object_subpage_announcements: &[],
             object_page_selections: &[],
+            main_resource_invocations: &[],
         },
         deadline,
         region,
@@ -545,6 +548,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
         && editorial.object_resource_additions.is_empty()
         && editorial.object_subpage_announcements.is_empty()
         && editorial.object_page_selections.is_empty()
+        && editorial.main_resource_invocations.is_empty()
         && editorial.programs.4.is_empty()
         && editorial.main_programs.is_empty()
         && editorial.base_text_edits.is_empty()
@@ -671,6 +675,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
             object_resource_additions: &[],
             object_subpage_announcements: &[],
             object_page_selections: &[],
+            main_resource_invocations: &[],
         },
         deadline,
         region,
@@ -776,6 +781,7 @@ fn check_original_editorial_input(
         || !object_resource_additions.is_empty()
         || !editorial.object_subpage_announcements.is_empty()
         || !editorial.object_page_selections.is_empty()
+        || !editorial.main_resource_invocations.is_empty()
         || !editorial.main_programs.is_empty()
         || !editorial.base_text_edits.is_empty()
     {
@@ -783,6 +789,13 @@ fn check_original_editorial_input(
             operands
                 .len()
                 .checked_add(editorial.base_text_edits.len())
+                .and_then(|count| {
+                    editorial
+                        .main_resource_invocations
+                        .len()
+                        .checked_mul(2)
+                        .and_then(|main| count.checked_add(main))
+                })
                 .ok_or(ChannelTeletextDocumentEncodingError::Association)?,
             object_operands.len(),
             (programs, editorial.main_programs),
@@ -805,7 +818,8 @@ fn check_original_editorial_input(
             || !resource_additions.is_empty()
             || !object_resource_additions.is_empty()
             || !editorial.object_subpage_announcements.is_empty()
-            || !editorial.object_page_selections.is_empty())
+            || !editorial.object_page_selections.is_empty()
+            || !editorial.main_resource_invocations.is_empty())
     {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
@@ -1246,7 +1260,9 @@ fn apply_editorial_operands(
             .with_main_local_invocation_program_overlays(editorial.main_programs, budget)
             .map_err(editorial_semantic_error)?;
     }
-    if !programs.is_empty() {
+    let combined_consumers = !editorial.object_page_selections.is_empty()
+        || !editorial.main_resource_invocations.is_empty();
+    if !programs.is_empty() && !combined_consumers {
         declared = declared
             .with_local_object_glyph_program_overlays(programs, budget)
             .map_err(editorial_semantic_error)?;
@@ -1256,7 +1272,7 @@ fn apply_editorial_operands(
             .with_resource_object_operand_overlays(resource_operands, budget)
             .map_err(editorial_semantic_error)?;
     }
-    if !editorial.object_page_selections.is_empty() {
+    if combined_consumers {
         declared = object_page_selections::apply(declared, editorial, composition)?;
     } else if !editorial.resource_programs.is_empty() {
         declared = declared

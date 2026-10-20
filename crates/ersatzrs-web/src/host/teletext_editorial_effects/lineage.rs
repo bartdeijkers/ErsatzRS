@@ -37,6 +37,7 @@ type EventKey = (
 pub(super) struct ProtectedLineage<'a> {
     main_program: Option<&'a ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay>,
     programs: BTreeMap<TeletextObjectIdentity, Program<'a>>,
+    main_calls: BTreeMap<usize, &'a ersatzrs_domain::TeletextMainResourceInvocationOverlay>,
     additions: BTreeMap<TeletextObjectIdentity, &'a TeletextEnhancementObjectDefinition>,
     events: Option<Vec<Option<usize>>>,
     calls: calls::Calls,
@@ -53,6 +54,7 @@ impl<'a> ProtectedLineage<'a> {
         if result.programs.is_empty()
             && result.additions.is_empty()
             && result.main_program.is_none()
+            && result.main_calls.is_empty()
         {
             return Ok(result);
         }
@@ -128,6 +130,16 @@ impl<'a> ProtectedLineage<'a> {
         {
             check_deadline(deadline)?;
             if result.main_program.replace(program).is_some() {
+                return Err(association());
+            }
+        }
+        for change in edits
+            .main_resource_invocations
+            .iter()
+            .filter(|change| change.owner() == owner)
+        {
+            check_deadline(deadline)?;
+            if result.main_calls.insert(change.command(), change).is_some() {
                 return Err(association());
             }
         }

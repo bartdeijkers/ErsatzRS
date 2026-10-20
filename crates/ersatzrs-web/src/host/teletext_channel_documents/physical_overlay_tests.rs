@@ -769,6 +769,7 @@ fn restored_compilers_refuse_unapplied_new_banks_even_with_matching_older_intent
                     object_resource_additions: &[],
                     object_subpage_announcements: &[],
                     object_page_selections: &[],
+                    main_resource_invocations: &[],
                     operands: saved.resource_object_operands(),
                     programs: saved.resource_object_program_overlays(),
                     additions: saved.resource_object_definition_additions(),

@@ -232,24 +232,39 @@ fn fold(
     Ok(())
 }
 pub(super) fn encode(
-    mut baselines: Baselines,
+    baselines: Baselines,
     selections: Vec<TeletextSavedObjectPageSelectionChange>,
     programs: Vec<TeletextResourceObjectProgramOverlay>,
     revision: i64,
     policy: &NativeTeletextExportPolicy,
     deadline: Instant,
 ) -> Result<(super::EncodedStoredDesign, String)> {
+    encode_changes(
+        baselines,
+        &TeletextEditorialChanges {
+            object_page_selections: selections,
+            resource_programs: programs,
+            ..Default::default()
+        },
+        revision,
+        policy,
+        deadline,
+    )
+}
+
+pub(super) fn encode_changes(
+    mut baselines: Baselines,
+    incoming: &TeletextEditorialChanges,
+    revision: i64,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<(super::EncodedStoredDesign, String)> {
     let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
-    authenticate(latest, &selections, deadline)?;
-    let incoming = TeletextEditorialChanges {
-        object_page_selections: selections,
-        resource_programs: programs,
-        ..Default::default()
-    };
+    authenticate(latest, &incoming.object_page_selections, deadline)?;
     let mut cumulative = repeat::merge_explicit_resource_changes(
         &baselines.root,
         &baselines.cumulative,
-        &incoming,
+        incoming,
         policy,
         deadline,
     )?;
@@ -262,7 +277,7 @@ pub(super) fn encode(
     )?;
     repeat::check_operand_budget(&cumulative, policy.document.validation.service)?;
     baselines.cumulative = cumulative;
-    finish_encode(&baselines, &incoming, revision, policy, deadline)
+    finish_encode(&baselines, incoming, revision, policy, deadline)
 }
 
 /// A later announcement on the newly selected page belongs to that final role's

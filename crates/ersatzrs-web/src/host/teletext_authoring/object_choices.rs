@@ -1,8 +1,8 @@
 //! Complete read-only choices from an already admitted service and original deadline.
 use super::{
-    check_deadline, TeletextAuthoringError, TeletextObjectCallChoiceObservation,
-    TeletextObjectChoicesObservation, TeletextObjectDefinitionChoiceObservation,
-    TeletextObjectPageChoiceObservation,
+    check_deadline, TeletextAuthoringError, TeletextMainCallChoiceObservation,
+    TeletextObjectCallChoiceObservation, TeletextObjectChoicesObservation,
+    TeletextObjectDefinitionChoiceObservation, TeletextObjectPageChoiceObservation,
 };
 use ersatzrs_domain::{
     TeletextEnhancementCommand, TeletextEnhancementObjectDefinition,
@@ -34,6 +34,12 @@ pub(super) fn observe(
     }
     for definition in service.declared().semantic().objects().definitions() {
         append_definition(&mut observed, definition, deadline)?;
+    }
+    for (owner, page) in service.declared().semantic().page_enhancements() {
+        check_deadline(deadline)?;
+        if let Some(program) = &page.local_program {
+            append_main(&mut observed, *owner, program, deadline)?;
+        }
     }
     check_deadline(deadline)?;
     Ok(observed)
@@ -75,17 +81,45 @@ fn append_definition(
             identity: definition.identity,
             object_type: definition.object_type,
         });
-    if definition.identity.resource().is_some() {
-        for (command_index, command) in definition.program.commands().iter().enumerate() {
-            check_deadline(deadline)?;
-            if let TeletextEnhancementCommand::InvokeObject {
-                target,
-                object_type,
-                offset,
-            } = command
-            {
+    for (command_index, command) in definition.program.commands().iter().enumerate() {
+        check_deadline(deadline)?;
+        if let TeletextEnhancementCommand::InvokeObject {
+            target,
+            object_type,
+            offset,
+        } = command
+        {
+            if target.resource().is_some() {
                 observed.calls.push(TeletextObjectCallChoiceObservation {
                     caller: definition.identity,
+                    command_index,
+                    target: *target,
+                    object_type: *object_type,
+                    offset: *offset,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn append_main(
+    observed: &mut TeletextObjectChoicesObservation,
+    owner: TeletextPageAddress,
+    program: &ersatzrs_domain::TeletextEnhancementProgram,
+    deadline: Instant,
+) -> Result<(), TeletextAuthoringError> {
+    for (command_index, command) in program.commands().iter().enumerate() {
+        check_deadline(deadline)?;
+        if let TeletextEnhancementCommand::InvokeObject {
+            target,
+            object_type,
+            offset,
+        } = command
+        {
+            if target.resource().is_some() {
+                observed.main_calls.push(TeletextMainCallChoiceObservation {
+                    owner,
                     command_index,
                     target: *target,
                     object_type: *object_type,
@@ -229,13 +263,22 @@ mod tests {
         }
         assert_eq!(
             observed.calls,
-            vec![TeletextObjectCallChoiceObservation {
-                caller,
-                command_index: 1,
-                target,
-                object_type: TeletextObjectType::Passive,
-                offset
-            }]
+            vec![
+                TeletextObjectCallChoiceObservation {
+                    caller,
+                    command_index: 1,
+                    target,
+                    object_type: TeletextObjectType::Passive,
+                    offset
+                },
+                TeletextObjectCallChoiceObservation {
+                    caller: definitions[2].identity,
+                    command_index: 0,
+                    target,
+                    object_type: TeletextObjectType::Passive,
+                    offset
+                },
+            ]
         );
         assert_eq!(
             observed.definitions,
@@ -256,5 +299,59 @@ mod tests {
         );
         assert_eq!(observed, snapshot);
         assert!(observed.pages.is_empty());
+    }
+
+    #[test]
+    fn main_resource_observation_preserves_actual_ordinals_and_never_exposes_local_targets() {
+        let target = TeletextObjectIdentity::global(
+            resource(TeletextResourceKind::Gpop, 0xaf),
+            TeletextObjectId::new(2),
+        )
+        .unwrap();
+        let offset = Some(TeletextObjectOffset::new(3, 7).unwrap());
+        let program = TeletextEnhancementProgram::new(vec![
+            TeletextEnhancementCommand::SetPosition {
+                position: TeletextEnhancementPosition::new(1, 8).unwrap(),
+            },
+            TeletextEnhancementCommand::InvokeObject {
+                target: TeletextObjectIdentity::local(owner(), TeletextObjectId::new(3)),
+                object_type: TeletextObjectType::Adaptive,
+                offset: None,
+            },
+            TeletextEnhancementCommand::InvokeObject {
+                target,
+                object_type: TeletextObjectType::Passive,
+                offset,
+            },
+        ])
+        .unwrap();
+        let mut observed = TeletextObjectChoicesObservation::default();
+        append_main(
+            &mut observed,
+            owner(),
+            &program,
+            Instant::now() + Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(
+            observed.main_calls,
+            vec![TeletextMainCallChoiceObservation {
+                owner: owner(),
+                command_index: 2,
+                target,
+                object_type: TeletextObjectType::Passive,
+                offset
+            }]
+        );
+        assert!(observed.calls.is_empty());
+        assert!(observed.definitions.is_empty());
+        let before = observed.clone();
+        assert_eq!(
+            append_main(&mut observed, owner(), &program, Instant::now())
+                .unwrap_err()
+                .status,
+            super::super::TeletextAuthoringStatus::TimedOut
+        );
+        assert_eq!(observed, before);
     }
 }

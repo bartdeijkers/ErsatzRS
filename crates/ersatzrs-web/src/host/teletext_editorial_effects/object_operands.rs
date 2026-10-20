@@ -311,6 +311,7 @@ fn check_operands(
             object_page_selections: &[],
             object_programs: &[],
             main_programs: &[],
+            main_resource_invocations: &[],
             bitmaps: &[],
         }
     }

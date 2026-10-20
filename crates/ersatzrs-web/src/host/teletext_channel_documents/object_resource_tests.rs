@@ -322,6 +322,7 @@ fn edits<'a>(
         object_resource_additions: banks,
         object_subpage_announcements: &[],
         object_page_selections: &[],
+        main_resource_invocations: &[],
     }
 }
 fn replay(

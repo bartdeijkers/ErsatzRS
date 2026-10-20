@@ -1687,7 +1687,33 @@ mod tests {
                 object_type: TeletextObjectType::Passive,
             },
         ];
+        add_resource_selection_direct_consumers(&mut data);
         data
+    }
+
+    fn add_resource_selection_direct_consumers(data: &mut TeletextDraftPreviewData) {
+        use crate::admin::server_fns::teletext_drafts::{
+            TeletextMainCallChoiceObservation, TeletextObjectCallChoiceObservation,
+        };
+        use ersatzrs_domain::{TeletextObjectOffset, TeletextObjectType};
+        let local = data.object_choices.definitions[3].identity;
+        let passive = data.object_choices.calls[0].target;
+        data.object_choices
+            .calls
+            .push(TeletextObjectCallChoiceObservation {
+                caller: local,
+                command_index: 7,
+                target: passive,
+                object_type: TeletextObjectType::Passive,
+                offset: Some(TeletextObjectOffset::new(1, 2).unwrap()),
+            });
+        data.object_choices.main_calls = vec![TeletextMainCallChoiceObservation {
+            owner: owner(200, 0x10),
+            command_index: 3,
+            target: passive,
+            object_type: TeletextObjectType::Passive,
+            offset: None,
+        }];
     }
 
     fn assert_resource_selection_fields(html: &str) {
@@ -1709,6 +1735,12 @@ mod tests {
             "name=\"call_0_command\" value=\"4\"",
             "name=\"call_0_target\" required",
             "name=\"call_1_command\" value=\"6\"",
+            "name=\"call_2_command\" value=\"7\"",
+            "LOCAL 200 / 0010 #99",
+            "name=\"main_0_owner\"",
+            "name=\"main_0_command\" value=\"3\"",
+            "name=\"main_0_target\" required",
+            "id=\"teletext-object-main-0-target\"",
             "200 / 0010",
             "201 / 0020",
             "0, 1",
@@ -1725,6 +1757,10 @@ mod tests {
         ] {
             assert!(!html.contains(forbidden), "unexpected {forbidden}");
         }
+        let value = serde_json::to_string(&owner(200, 0x10))
+            .unwrap()
+            .replace('"', "&quot;");
+        assert!(html.contains(&format!("name=\"main_0_owner\" value=\"{value}\"")));
     }
 
     fn assert_resource_selection_labels(html: &str) {
@@ -1735,6 +1771,7 @@ mod tests {
             TextKey::TeletextObjectSelectionMask,
             TextKey::TeletextObjectSelectionMaskHelp,
             TextKey::TeletextObjectSelectionCalls,
+            TextKey::TeletextObjectSelectionMainCalls,
             TextKey::TeletextObjectSelectionCaller,
             TextKey::TeletextObjectSelectionCommand,
             TextKey::TeletextObjectSelectionCurrentTarget,
@@ -1783,10 +1820,6 @@ mod tests {
             !html.contains("<select id=\"teletext-object-page-"),
             "role inputs reuse shared raw page lists"
         );
-        assert!(
-            !html.contains("#99"),
-            "Local targets are outside resource-only control"
-        );
         assert_eq!(html.matches("<datalist ").count(), 5);
         let list = |kind: &str| {
             let id = format!("<datalist id=\"teletext-object-targets-{kind}\">");
@@ -1797,6 +1830,12 @@ mod tests {
                 .unwrap()
                 .0
         };
+        for kind in ["active", "adaptive", "passive"] {
+            assert!(
+                !list(kind).contains("#99"),
+                "Local identities are callers, never resource targets"
+            );
+        }
         assert!(list("active").contains("value=\"GPOP 2D0 S1=0 #20\""));
         assert!(
             !list("passive").contains("#20"),
@@ -1833,6 +1872,11 @@ mod tests {
         assert!(call_only.contains("teletext-object-pages-choose-form"));
         assert!(call_only.contains("name=\"call_0_target\""));
         assert!(!call_only.contains("name=\"page_0_target\""));
+        data.object_choices.calls.clear();
+        let main_only = resource_selection::form(&data, observation).to_html();
+        assert!(main_only.contains("teletext-object-pages-choose-form"));
+        assert!(main_only.contains("name=\"main_0_target\""));
+        assert!(!main_only.contains("name=\"call_0_target\""));
         data.revision -= 1;
         let historical = resource_selection::form(&data, observation).to_html();
         assert!(historical.contains("<fieldset disabled"));

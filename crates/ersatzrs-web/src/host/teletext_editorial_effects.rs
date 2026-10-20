@@ -33,6 +33,7 @@ mod compiler_resources;
 mod definition_additions;
 mod lineage;
 mod main_programs;
+mod main_resource_invocations;
 mod object_operands;
 mod object_page_selections;
 mod object_resources;
@@ -133,6 +134,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
+    pub main_resource_invocations: &'a [ersatzrs_domain::TeletextMainResourceInvocationOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
 
@@ -178,6 +180,7 @@ pub(super) fn validate_teletext_editorial_transition(
             resource_programs: &[],
             object_programs: &[],
             main_programs: &[],
+            main_resource_invocations: &[],
             bitmaps: &[],
         },
         TeletextEditorialEdits {
@@ -193,6 +196,7 @@ pub(super) fn validate_teletext_editorial_transition(
             resource_programs: &[],
             object_programs: &[],
             main_programs: &[],
+            main_resource_invocations: &[],
             bitmaps: &[],
         },
         budget,
@@ -262,6 +266,10 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             .any(|value| value.owner() == owner)
             || incoming
                 .main_programs
+                .iter()
+                .any(|value| value.owner() == owner)
+            || incoming
+                .main_resource_invocations
                 .iter()
                 .any(|value| value.owner() == owner)
             || !incoming.resource_programs.is_empty()
@@ -334,6 +342,7 @@ fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize)
         edits.operands.len(),
         edits.object_operands.len(),
         edits.resource_operands.len(),
+        edits.main_resource_invocations.len(),
     ]
     .into_iter()
     .chain(edits.object_programs.iter().flat_map(|program| {
@@ -689,12 +698,14 @@ fn check_resource(
 fn check_enhancements(
     before: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
     after: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
-    links: &BTreeMap<TeletextPageAddress, ersatzrs_domain::TeletextX27Level25Links>,
+    links: &BTreeMap<TeletextPageAddress, Option<ersatzrs_domain::TeletextX27Level25Links>>,
     incoming: TeletextEditorialEdits<'_>,
     cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
 ) -> Result<()> {
     let mut changes = BTreeMap::new();
+    let main_calls =
+        main_resource_invocations::check(before, after, incoming, cumulative, deadline)?;
     let main = main_programs::check(before, after, incoming, cumulative, deadline)?;
     for change in incoming.operands {
         check_deadline(deadline)?;
@@ -751,13 +762,22 @@ fn check_enhancements(
         if old.address != new.address
             || old.presentation != new.presentation
             || !object_page_selections::same_resources(old, new, incoming)
-            || new.compositional_links != links.get(owner).copied().or(old.compositional_links)
+            || new.compositional_links
+                != links.get(owner).copied().unwrap_or(old.compositional_links)
         {
             return Err(failure());
         }
         match (&old.local_program, &new.local_program) {
             (Some(old), Some(new)) if main.contains_key(owner) => {
-                main_programs::check_transition(*owner, old, new, &changes, main[owner], deadline)?;
+                main_programs::check_transition(
+                    *owner,
+                    old,
+                    new,
+                    &changes,
+                    main[owner],
+                    incoming.main_resource_invocations,
+                    deadline,
+                )?;
             }
             (None, None) => {}
             (Some(old), Some(new)) if old.commands().len() == new.commands().len() => {
@@ -769,6 +789,9 @@ fn check_enhancements(
                             operation: change.replacement(),
                         }
                     });
+                    let expected = main_calls
+                        .get(&(*owner, ordinal))
+                        .map_or(expected, |change| change.replacement());
                     if *new != expected {
                         return Err(failure());
                     }

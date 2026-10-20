@@ -389,7 +389,10 @@ pub(super) fn reserve_budgets(
         budget.validation.service.max_objects,
         "editorial object programs",
     )?;
-    let mut commands = overlay.resource_object_operands.len();
+    let mut commands = add(
+        overlay.resource_object_operands.len(),
+        overlay.main_resource_invocations().len(),
+    )?;
     limit(
         overlay.main_local_invocation_program_overlays.len(),
         budget.validation.service.max_records,

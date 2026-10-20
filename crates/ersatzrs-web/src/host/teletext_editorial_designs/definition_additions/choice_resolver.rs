@@ -7,6 +7,7 @@ use super::{
 use ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange;
 use ersatzrs_domain::{
     TeletextEnhancementCommand, TeletextEnhancementObjectCatalog, TeletextEnhancementProgram,
+    TeletextLocalObjectGlyphProgramOverlay, TeletextMainResourceInvocationOverlay,
     TeletextObjectIdentity, TeletextObjectPageSelectionChange, TeletextPageAddress,
     TeletextRawDataPageNumber, TeletextResourceObjectProgramOverlay,
     TeletextSubpageRequirementMask, TeletextX27LinkDeclaration, TeletextX27LinkRole,
@@ -119,8 +120,7 @@ pub(super) fn preflight(
     let mut callers = BTreeSet::new();
     for choice in calls {
         check_deadline(deadline)?;
-        if choice.caller.resource().is_none()
-            || choice.target.resource().is_none()
+        if choice.target.resource().is_none()
             || !commands.insert((choice.caller, choice.command_index))
         {
             return Err(invalid());
@@ -144,6 +144,23 @@ pub(super) fn resolve(
     Vec<TeletextResourceObjectProgramOverlay>,
 )> {
     preflight(choices, calls, budget, deadline)?;
+    let selections = resolve_pages(latest, choices, deadline)?;
+    let service = latest
+        .original
+        .view()
+        .encoded()
+        .ok_or_else(invalid)?
+        .declared();
+    let programs = resolve_calls(service.semantic().objects(), calls, budget, deadline)?;
+    page_selections::preflight(&selections, &programs, budget, deadline)?;
+    Ok((selections, programs))
+}
+
+fn resolve_pages(
+    latest: &QualifiedBaseline,
+    choices: &[TeletextObjectPageChoice],
+    deadline: Instant,
+) -> Result<Vec<TeletextSavedObjectPageSelectionChange>> {
     let service = latest
         .original
         .view()
@@ -213,9 +230,7 @@ pub(super) fn resolve(
             change,
         )?);
     }
-    let programs = resolve_calls(service.semantic().objects(), calls, budget, deadline)?;
-    page_selections::preflight(&selections, &programs, budget, deadline)?;
-    Ok((selections, programs))
+    Ok(selections)
 }
 
 fn resolve_calls(
@@ -224,6 +239,22 @@ fn resolve_calls(
     budget: TeletextServiceBudget,
     deadline: Instant,
 ) -> Result<Vec<TeletextResourceObjectProgramOverlay>> {
+    let (local, resources) = resolve_object_calls(catalog, calls, budget, deadline)?;
+    if !local.is_empty() {
+        return Err(invalid());
+    }
+    Ok(resources)
+}
+
+fn resolve_object_calls(
+    catalog: &TeletextEnhancementObjectCatalog,
+    calls: &[TeletextObjectCallChoice],
+    budget: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<(
+    Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    Vec<TeletextResourceObjectProgramOverlay>,
+)> {
     let mut changed = BTreeSet::new();
     // Authenticate and charge every complete body and correspondence before cloning any.
     let mut commands = budget.max_commands;
@@ -257,6 +288,7 @@ fn resolve_calls(
         }
     }
     let mut programs = Vec::with_capacity(changed.len());
+    let mut local = Vec::new();
     for caller in changed {
         check_deadline(deadline)?;
         let original = &catalog.definition(caller).ok_or_else(invalid)?.program;
@@ -270,20 +302,42 @@ fn resolve_calls(
             };
             *target = choice.target;
         }
-        programs.push(
-            TeletextResourceObjectProgramOverlay::new_with_invocation_changes(
-                caller,
-                original.clone(),
-                TeletextEnhancementProgram::new(replacement).map_err(|_| invalid())?,
-                (0..original.commands().len()).map(Some).collect(),
-                budget,
-            )
-            .map_err(|_| invalid())?,
-        );
+        let replacement = TeletextEnhancementProgram::new(replacement).map_err(|_| invalid())?;
+        let correspondence = (0..original.commands().len()).map(Some).collect();
+        if caller.resource().is_some() {
+            programs.push(
+                TeletextResourceObjectProgramOverlay::new_with_invocation_changes(
+                    caller,
+                    original.clone(),
+                    replacement,
+                    correspondence,
+                    budget,
+                )
+                .map_err(|_| invalid())?,
+            );
+        } else {
+            local.push(
+                TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes(
+                    caller,
+                    original.clone(),
+                    replacement,
+                    correspondence,
+                )
+                .map_err(|_| invalid())?,
+            );
+        }
     }
     check_deadline(deadline)?;
-    Ok(programs)
+    Ok((local, programs))
 }
+
+#[path = "consumer_choices.rs"]
+mod consumer_choices;
+pub use consumer_choices::{
+    choose_teletext_editorial_object_consumers, NativeTeletextObjectConsumersChooseRequest,
+    TeletextMainCallChoice,
+};
+pub(super) use consumer_choices::{preflight_consumers, resolve_consumers};
 
 #[cfg(test)]
 #[path = "choice_resolver_tests.rs"]

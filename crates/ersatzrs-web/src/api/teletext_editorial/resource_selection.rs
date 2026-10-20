@@ -4,8 +4,8 @@ use super::{
     TeletextDesignMutation, MAX_PARTS,
 };
 use crate::host::teletext_editorial_designs::{
-    choose_teletext_editorial_object_pages, NativeTeletextObjectPagesChooseRequest,
-    TeletextObjectCallChoice, TeletextObjectPageChoice,
+    choose_teletext_editorial_object_consumers, NativeTeletextObjectConsumersChooseRequest,
+    TeletextMainCallChoice, TeletextObjectCallChoice, TeletextObjectPageChoice,
 };
 use ersatzrs_domain::{
     TeletextObjectId, TeletextObjectIdentity, TeletextRawDataPageNumber, TeletextResourceIdentity,
@@ -16,7 +16,11 @@ use serde::de::DeserializeOwned;
 
 const INVALID: &str = "object-selection-invalid";
 type Rows = BTreeMap<usize, BTreeMap<String, String>>;
-type Choices = (Vec<TeletextObjectPageChoice>, Vec<TeletextObjectCallChoice>);
+type Choices = (
+    Vec<TeletextObjectPageChoice>,
+    Vec<TeletextObjectCallChoice>,
+    Vec<TeletextMainCallChoice>,
+);
 
 pub async fn choose_object_pages(
     State(state): State<AppState>,
@@ -162,6 +166,23 @@ fn call_choices(rows: Rows) -> Result<Vec<TeletextObjectCallChoice>> {
         })
         .collect()
 }
+fn main_choices(rows: Rows) -> Result<Vec<TeletextMainCallChoice>> {
+    rows.into_iter()
+        .enumerate()
+        .map(|(expected, (index, mut values))| {
+            if expected != index || values.len() != 3 {
+                return Err(invalid());
+            }
+            Ok(TeletextMainCallChoice {
+                owner: json(&take(&mut values, "owner")?)?,
+                command_index: take(&mut values, "command")?
+                    .parse()
+                    .map_err(|_| invalid())?,
+                target: object_target(&take(&mut values, "target")?)?,
+            })
+        })
+        .collect()
+}
 fn input(pairs: Vec<(String, String)>) -> Result<(BTreeMap<String, String>, Choices)> {
     if pairs.len() > MAX_PARTS {
         return Err(Failure::new("editorial-limit"));
@@ -169,6 +190,7 @@ fn input(pairs: Vec<(String, String)>) -> Result<(BTreeMap<String, String>, Choi
     let mut common = Vec::new();
     let mut pages = Rows::new();
     let mut calls = Rows::new();
+    let mut main = Rows::new();
     for (key, value) in pairs {
         if key.len() > 64 || value.len() > 512 || value.contains('\0') {
             return Err(invalid());
@@ -183,11 +205,16 @@ fn input(pairs: Vec<(String, String)>) -> Result<(BTreeMap<String, String>, Choi
                 return Err(invalid());
             }
             insert(&mut calls, index, field, value)?;
+        } else if let Some((index, field)) = row(&key, "main_")? {
+            if !["owner", "command", "target"].contains(&field) {
+                return Err(invalid());
+            }
+            insert(&mut main, index, field, value)?;
         } else {
             common.push((key, value));
         }
     }
-    if pages.is_empty() && calls.is_empty() {
+    if pages.is_empty() && calls.is_empty() && main.is_empty() {
         return Err(invalid());
     }
     let common = fields(
@@ -201,21 +228,29 @@ fn input(pairs: Vec<(String, String)>) -> Result<(BTreeMap<String, String>, Choi
             "name",
         ],
     )?;
-    Ok((common, (page_choices(pages)?, call_choices(calls)?)))
+    Ok((
+        common,
+        (
+            page_choices(pages)?,
+            call_choices(calls)?,
+            main_choices(main)?,
+        ),
+    ))
 }
 async fn perform(state: &AppState, pairs: Vec<(String, String)>) -> Result<Response> {
     let end = super::deadline()?;
-    let (values, (selections, calls)) = input(pairs)?;
+    let (values, (selections, calls, main_calls)) = input(pairs)?;
     let context = resource_controls::prepare(&state.application, &values, end).await?;
-    let saved = match choose_teletext_editorial_object_pages(
+    let saved = match choose_teletext_editorial_object_consumers(
         &state.application,
-        NativeTeletextObjectPagesChooseRequest {
+        NativeTeletextObjectConsumersChooseRequest {
             name: context.name,
             receipt_id: context.exported.metadata().id,
             receipt_digest: context.exported.metadata().digest.clone(),
             expected_design_head: context.head,
             selections,
             calls,
+            main_calls,
         },
         context.policy,
         context.end,
@@ -313,7 +348,7 @@ mod tests {
     }
     #[test]
     fn exact_page_and_call_choices_preserve_raw_identity_mask_and_ordinal() {
-        let (common, (pages, calls)) =
+        let (common, (pages, calls, main)) =
             input(pairs()).unwrap_or_else(|_| panic!("valid explicit chooser form"));
         assert_eq!(common["name"], "Explicit selection");
         assert_eq!(pages.len(), 1);
@@ -322,6 +357,7 @@ mod tests {
         assert_eq!(pages[0].required_subpages.get(), 0x8001);
         assert_eq!(pages[0].role, TeletextX27LinkRole::Gpop);
         assert_eq!(calls.len(), 1);
+        assert!(main.is_empty());
         assert_eq!(calls[0].command_index, 4);
         assert_eq!(calls[0].caller, calls[0].target);
     }
@@ -340,7 +376,7 @@ mod tests {
             .find(|(key, _)| key == "page_0_target")
             .unwrap()
             .1 = "2E1".into();
-        let (_, (pages, _)) = input(values).unwrap_or_else(|_| panic!("native raw page form"));
+        let (_, (pages, _, _)) = input(values).unwrap_or_else(|_| panic!("native raw page form"));
         assert_eq!(pages[0].target.page(), 0xe1);
     }
     #[test]
@@ -435,5 +471,77 @@ mod tests {
         assert!(input(vec![]).is_err());
         assert!(input(vec![("name".into(), "x".repeat(513))]).is_err());
         assert!(input(vec![("name".into(), "x".into()); MAX_PARTS + 1]).is_err());
+    }
+
+    #[test]
+    fn explicit_main_and_local_choices_preserve_owners_and_keep_main_only_forms_bounded() {
+        let owner = TeletextPageAddress {
+            page: TeletextPageNumber::new(124).unwrap(),
+            subcode: TeletextSubcode::new(32).unwrap(),
+        };
+        let mut values = pairs();
+        values
+            .iter_mut()
+            .find(|(key, _)| key == "call_0_caller")
+            .unwrap()
+            .1 = serde_json::to_string(&TeletextObjectIdentity::local(
+            owner,
+            TeletextObjectId::new(65000),
+        ))
+        .unwrap();
+        values.extend([
+            (
+                "main_0_owner".into(),
+                serde_json::to_string(&owner).unwrap(),
+            ),
+            ("main_0_command".into(), "7".into()),
+            ("main_0_target".into(), "GPOP 2E1 S1=15 #32".into()),
+        ]);
+        let (_, (_, calls, main)) =
+            input(values.clone()).unwrap_or_else(|_| panic!("explicit coordinated consumer form"));
+        assert_eq!(calls[0].caller.owner(), Some(owner));
+        assert_eq!(main.len(), 1);
+        assert_eq!(main[0].owner, owner);
+        assert_eq!(main[0].command_index, 7);
+        assert_eq!(
+            main[0].target.resource().unwrap().logical_subpage().get(),
+            15
+        );
+        let main_only = values
+            .iter()
+            .filter(|(key, _)| !key.starts_with("call_") && !key.starts_with("page_"))
+            .cloned()
+            .collect();
+        let (_, (pages, calls, main)) =
+            input(main_only).unwrap_or_else(|_| panic!("Main consumer-only form"));
+        assert!(pages.is_empty());
+        assert!(calls.is_empty());
+        assert_eq!(main.len(), 1);
+        for key in [
+            "main_0_expected",
+            "main_0_offset",
+            "main_0_type",
+            "main_01_target",
+            "main_2_target",
+            "main_0_command",
+        ] {
+            let mut bad = values.clone();
+            bad.push((key.into(), "0".into()));
+            assert!(input(bad).is_err(), "{key}");
+        }
+        for key in ["main_0_owner", "main_0_command", "main_0_target"] {
+            let mut bad = values.clone();
+            bad.retain(|(field, _)| field != key);
+            assert!(input(bad).is_err(), "{key}");
+        }
+        for (key, value) in [
+            ("main_0_owner", "null"),
+            ("main_0_command", "-1"),
+            ("main_0_target", "LOCAL 2E1 S1=0 #32"),
+        ] {
+            let mut bad = values.clone();
+            bad.iter_mut().find(|(field, _)| field == key).unwrap().1 = value.into();
+            assert!(input(bad).is_err(), "{key}");
+        }
     }
 }

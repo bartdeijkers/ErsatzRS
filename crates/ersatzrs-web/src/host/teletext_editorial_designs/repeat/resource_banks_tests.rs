@@ -120,6 +120,7 @@ fn previous() -> TeletextEditorialChanges {
         object_resource_additions: vec![bank(1, 8), bank(2, 1)],
         object_subpage_announcements: Vec::new(),
         object_page_selections: Vec::new(),
+        main_resource_invocations: Vec::new(),
         resource_additions: vec![Addition::new(definition(0, 21, b'C'), budget()).unwrap()],
         resource_operands: vec![scalar(0, 20, 0, glyph(b'A'), glyph(b'Q'))],
         ..Default::default()
@@ -297,6 +298,7 @@ fn retained_bank_repeat_rejects_creation_stale_missing_targets_duplicates_limits
             object_resource_additions: vec![bank(2, 1)],
             object_subpage_announcements: Vec::new(),
             object_page_selections: Vec::new(),
+            main_resource_invocations: Vec::new(),
             ..Default::default()
         },
         TeletextEditorialChanges {

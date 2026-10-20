@@ -157,7 +157,7 @@ pub(super) async fn all() -> [BankExpected; 4] {
     [before, announced, selected, edited]
 }
 
-fn selected_original_call(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn selected_original_call(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = selected(theme, page, subcode);
     let active = value["service"]["objects"]
         .as_array_mut()

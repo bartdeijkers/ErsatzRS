@@ -20,7 +20,7 @@ pub(super) fn apply(
     cumulative: TeletextEditorialEdits<'_>,
     mut links: BTreeMap<TeletextPageAddress, TeletextX27Level25Links>,
     deadline: Instant,
-) -> Result<BTreeMap<TeletextPageAddress, TeletextX27Level25Links>> {
+) -> Result<BTreeMap<TeletextPageAddress, Option<TeletextX27Level25Links>>> {
     cumulative::check(after, cumulative, deadline)?;
     // Every selector compares against the same pre-selection declarations, even
     // when two roles of one owner are changed in this atomic batch.
@@ -72,7 +72,50 @@ pub(super) fn apply(
             }
         }
     }
-    Ok(links)
+    restored_links(after, incoming, cumulative, links, deadline)
+}
+
+fn restored_links(
+    after: &TeletextDeclaredService,
+    incoming: TeletextEditorialEdits<'_>,
+    cumulative: TeletextEditorialEdits<'_>,
+    links: BTreeMap<TeletextPageAddress, TeletextX27Level25Links>,
+    deadline: Instant,
+) -> Result<BTreeMap<TeletextPageAddress, Option<TeletextX27Level25Links>>> {
+    let mut expected = BTreeMap::new();
+    for (owner, links) in links {
+        check_deadline(deadline)?;
+        let absent = after
+            .semantic()
+            .page_enhancements()
+            .get(&owner)
+            .is_some_and(|page| page.compositional_links.is_none());
+        if absent {
+            // An exact cumulative root undo may remove the materialized X27,
+            // restoring original MOT provenance rather than an explicit alias.
+            // The independent immutable-root qualification remains mandatory.
+            if !incoming
+                .object_page_selections
+                .iter()
+                .any(|value| value.change().display() == owner)
+                || cumulative
+                    .object_page_selections
+                    .iter()
+                    .any(|value| value.change().display() == owner)
+                || cumulative
+                    .object_subpage_announcements
+                    .iter()
+                    .any(|value| value.announcement().display() == owner)
+                || links != materialized(after, owner, None)?
+            {
+                return Err(failure(owner));
+            }
+            expected.insert(owner, None);
+        } else {
+            expected.insert(owner, Some(links));
+        }
+    }
+    Ok(expected)
 }
 
 pub(super) fn materialized(

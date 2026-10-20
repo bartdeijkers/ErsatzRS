@@ -14,6 +14,8 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 };
 #[path = "page_selection/admin.rs"]
 mod admin;
+#[path = "page_selection/consumer_selection.rs"]
+mod consumer_selection;
 #[path = "page_selection/oracle.rs"]
 mod oracle;
 

@@ -194,16 +194,28 @@ impl Calls {
             if command(*original) == command(*call) {
                 continue;
             }
-            let program = source
-                .object
-                .and_then(|object| lineage.programs.get(&object))
-                .ok_or_else(association)?;
-            if !program.has_invocation_changes()
-                || program.expected().commands().get(source.command) != Some(&command(*original))
-                || program.replacement().commands().get(call.source().command)
-                    != Some(&command(*call))
-            {
-                return Err(association());
+            if source.object.is_none() {
+                let change = lineage
+                    .main_calls
+                    .get(&source.command)
+                    .ok_or_else(association)?;
+                if change.expected() != command(*original) || change.replacement() != command(*call)
+                {
+                    return Err(association());
+                }
+            } else {
+                let program = source
+                    .object
+                    .and_then(|object| lineage.programs.get(&object))
+                    .ok_or_else(association)?;
+                if !program.has_invocation_changes()
+                    || program.expected().commands().get(source.command)
+                        != Some(&command(*original))
+                    || program.replacement().commands().get(call.source().command)
+                        != Some(&command(*call))
+                {
+                    return Err(association());
+                }
             }
             // A moved or retargeted callee and every descendant lose old writer
             // authority even if they happen to paint the same glyph or colour.

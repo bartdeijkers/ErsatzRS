@@ -248,6 +248,7 @@ fn changed_resource_call_charset_writer_cannot_alias_original_through_equal_payl
             object_page_selections: &[],
             object_programs: &[],
             main_programs: &[],
+            main_resource_invocations: &[],
             bitmaps: &[],
         };
         let (a, b) = (composition(&old), composition(&new));

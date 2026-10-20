@@ -39,8 +39,11 @@ release section when tagging a release.
   editor/client acceptance remains open; ordinary TTI permissions stay intact.
   Native-model validation can also coordinate checked Main, Local and resource
   consumers with bank selection in one complete transaction. Its explicit Main
-  retarget intent preserves existing edit permissions; persisted admin integration
-  for these combined consumers remains open.
+  retarget intent preserves existing edit permissions. Receipt-bound saved concepts
+  now retain these coordinated consumers through TTI edits, preview, exact root
+  undo, separate publication and restart. Root undo also restores originally absent
+  X27 declarations and their exact MOT provenance. Full engine/editor/client
+  acceptance remains open.
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous

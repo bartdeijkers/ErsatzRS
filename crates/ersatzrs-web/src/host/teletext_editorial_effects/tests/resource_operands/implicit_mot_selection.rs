@@ -202,10 +202,13 @@ fn check_selected_mot(
         );
     }
 }
-#[test]
-fn selected_page_effects_recover_original_implicit_mot_roles_on_repeat() {
-    let (before, original_candidate) = fixture();
-    let selectors = selectors(&before);
+fn selected(
+    before: &EncodedTeletextAuthoredService,
+) -> (
+    EncodedTeletextAuthoredService,
+    [TeletextSavedObjectPageSelectionChange; 2],
+) {
+    let selectors = selectors(before);
     let after = object_page_selections::encode(
         before
             .declared()
@@ -221,6 +224,12 @@ fn selected_page_effects_recover_original_implicit_mot_roles_on_repeat() {
             )
             .unwrap(),
     );
+    (after, selectors)
+}
+#[test]
+fn selected_page_effects_recover_original_implicit_mot_roles_on_repeat() {
+    let (before, original_candidate) = fixture();
+    let (after, selectors) = selected(&before);
     check_selected_mot(&after, original_candidate);
     let mut changed = edits(&[]);
     changed.object_page_selections = &selectors;
@@ -236,4 +245,96 @@ fn selected_page_effects_recover_original_implicit_mot_roles_on_repeat() {
         )
         .unwrap();
     }
+}
+
+fn inverse(
+    after: &EncodedTeletextAuthoredService,
+    mask: u16,
+) -> [TeletextSavedObjectPageSelectionChange; 2] {
+    [123, 124].map(|page| {
+        let owner = address(page);
+        TeletextSavedObjectPageSelectionChange::new(
+            0,
+            TeletextObjectPageSelectionChange::new(
+                owner,
+                TeletextX27LinkRole::Gpop,
+                after.declared().semantic().page_enhancements()[&owner].compositional_links,
+                *after
+                    .declared()
+                    .resolutions()
+                    .iter()
+                    .find(|value| value.display() == owner)
+                    .unwrap()
+                    .role(TeletextX27LinkRole::Gpop),
+                TeletextX27LinkDeclaration::new(
+                    TeletextX27LinkTarget::Page {
+                        page: bank(0xa0).page(),
+                    },
+                    TeletextX27LinkValidity::Level25Only,
+                    TeletextSubpageRequirementMask::new(mask),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    })
+}
+fn qualify_undo(
+    before: &EncodedTeletextAuthoredService,
+    after: &EncodedTeletextAuthoredService,
+    incoming: &[TeletextSavedObjectPageSelectionChange],
+    cumulative: &[TeletextSavedObjectPageSelectionChange],
+) -> Result<()> {
+    validate_teletext_editorial_transition_with_operands(
+        before,
+        after,
+        &permissions(true),
+        TeletextEditorialEdits {
+            object_page_selections: incoming,
+            ..edits(&[])
+        },
+        TeletextEditorialEdits {
+            object_page_selections: cumulative,
+            ..edits(&[])
+        },
+        &policy().encoding,
+        deadline(),
+    )
+}
+#[test]
+fn implicit_mot_exact_root_undo_restores_absent_x27_and_original_roles_without_mask_authority() {
+    let (root, original_candidate) = fixture();
+    let (selected, retained) = selected(&root);
+    let undo = inverse(&selected, 1);
+    qualify_undo(&selected, &root, &undo, &[]).unwrap();
+    for page in [123, 124] {
+        let owner = address(page);
+        assert!(root.declared().semantic().page_enhancements()[&owner]
+            .compositional_links
+            .is_none());
+        assert_eq!(
+            *root
+                .declared()
+                .resolutions()
+                .iter()
+                .find(|value| value.display() == owner)
+                .unwrap()
+                .role(TeletextX27LinkRole::Gpop),
+            TeletextMotRoleResolution::Selected {
+                target: bank(0xa0).page(),
+                requirements: TeletextMotResolutionRequirements::MotExtent(
+                    original_candidate.extent
+                ),
+                provenance: original_candidate.provenance,
+                original_mot: Some(original_candidate),
+            }
+        );
+    }
+    for invalid in [inverse(&selected, 0), inverse(&selected, 3), retained] {
+        assert!(qualify_undo(&selected, &root, &invalid, &[]).is_err());
+    }
+    assert!(qualify_undo(&selected, &root, &[], &[]).is_err());
+    assert!(qualify_undo(&selected, &root, &undo[..1], &[]).is_err());
+    assert!(qualify_undo(&selected, &root, &undo, &retained).is_err());
 }
