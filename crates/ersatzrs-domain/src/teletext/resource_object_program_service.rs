@@ -59,7 +59,7 @@ impl TeletextSemanticService {
         .with_base_text_spellings(self.base_text_spellings.into_values().collect(), budget)
     }
 
-    fn check_resource_program_inputs(
+    pub(in crate::teletext) fn check_resource_program_inputs(
         &self,
         overlays: &[TeletextResourceObjectProgramOverlay],
         budget: TeletextServiceBudget,
@@ -87,7 +87,7 @@ impl TeletextSemanticService {
         self.check_existing_service_budgets(budget)
     }
 
-    fn index_resource_programs<'a>(
+    pub(in crate::teletext) fn index_resource_programs<'a>(
         &self,
         overlays: &'a [TeletextResourceObjectProgramOverlay],
     ) -> Result<
@@ -116,12 +116,18 @@ impl TeletextSemanticService {
         Ok(indexed)
     }
 
-    fn check_resource_program_result(
+    pub(in crate::teletext) fn check_resource_program_result(
         &self,
         overlays: &BTreeMap<TeletextObjectIdentity, &TeletextResourceObjectProgramOverlay>,
         budget: TeletextServiceBudget,
     ) -> Result<(), TeletextServiceError> {
         let mut commands = budget.max_commands;
+        charge(
+            &mut commands,
+            self.base_text_spellings.len(),
+            "authored command",
+            budget.max_commands,
+        )?;
         for page in self.pages.values() {
             charge(
                 &mut commands,

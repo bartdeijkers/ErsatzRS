@@ -29,8 +29,10 @@ release section when tagging a release.
   banks and announcing retained subpages on already selected pages. Explicit
   lifecycle values and current-draft checks protect each edit; multiple display
   pages can be announced together. Versioned concepts retain these changes through
-  preview, replay and separate publication. Ordinary TTI permissions stay intact;
-  complete editor/client acceptance remains open.
+  preview, replay and separate publication. The engine can also change selected
+  bank pages and checked resource calls atomically while preserving MOT defaults;
+  that operation still needs saved-draft integration. Ordinary TTI permissions
+  stay intact; complete editor/client acceptance remains open.
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous

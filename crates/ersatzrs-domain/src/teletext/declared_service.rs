@@ -12,6 +12,10 @@ use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 mod object_subpage_announcement;
 pub use object_subpage_announcement::*;
 
+#[path = "object_page_selection.rs"]
+mod object_page_selection;
+pub use object_page_selection::*;
+
 use super::{
     TeletextDefaultObjectSelection, TeletextMotConditionalPopFallback, TeletextMotDefaultObject,
     TeletextMotLevel25Declaration, TeletextMotLevel25Resolution, TeletextMotLinkProvenance,

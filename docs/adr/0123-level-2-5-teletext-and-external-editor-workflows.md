@@ -57,9 +57,14 @@ values and batch announcements for one resource across selected display pages.
 The server resolves original producer ordinals from a fresh export's page map;
 optional authoring metadata and submitted ordinals grant no authority. Historical
 forms are disabled, all other form fields remain unique and publication stays
-separate. This is partial F1 implementation; selection of another raw page,
-atomic coordinated consumer changes, complete editor/client proof and full 9A
-acceptance remain required.
+separate. A checked domain transaction now changes raw POP/GPOP role targets and
+resource-program invocations together, preserving exact old-link/provenance
+checks, applicability, original MOT defaults and full shared-consumer validation.
+Native factory evidence covers unchanged Base rows and both native-default and
+compatibility-X26 routes. This primitive grants no host edit or upload authority:
+versioned saved-intent replay, protected-effects and admin integration remain
+required before the coordinated selection is available to users. Complete
+editor/client proof and full 9A acceptance remain open.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

@@ -696,3 +696,6 @@ mod standalone_base;
 
 #[path = "authored_service_tests/standalone_national.rs"]
 mod standalone_national;
+
+#[path = "authored_service_tests/object_page_selection.rs"]
+mod object_page_selection;

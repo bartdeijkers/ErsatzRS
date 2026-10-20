@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 localized bank/dependency controls verified; next coordinated different-page/consumer selection; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 atomic role/resource-call domain and native factory verified; next saved-intent replay/effects integration; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -156,7 +156,13 @@ labels and320/1920 overflow checks. The native owner proves all six complete
 models/units/rasters, exact source/metadata/config/Night/package preservation,
 separate publication and cold reopen. Its initial UI-preference snapshot failure
 is retained; only fixture seeding order changed, no assertions or product code.
-TTI remains closed to MOT/X27. Next coordinated different-page/consumer selection.
+object_page_selection_followup now closes the atomic reconstruction-order gap
+at the domain/native-factory boundary:37 grouped cases and both native-default/
+compatibility-X26 factory paths pass with exact defaults, provenance, Base and
+untouched resources. Initial wrong rejection-stage/cell-oracle attempts stay
+canonical; sources and complete target models were not relaxed. No persisted
+selection or host edit authority is granted. Next receipt/head-CAS saved intent,
+replay and protected-effects integration. TTI remains closed to MOT/X27.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.

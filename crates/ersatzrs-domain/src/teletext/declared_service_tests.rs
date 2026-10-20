@@ -1,6 +1,9 @@
 //! Actual declaration correspondence, not encoding or client acceptance.
 use super::*;
 
+#[path = "object_page_selection_tests.rs"]
+mod object_page_selection_tests;
+
 #[path = "object_resource_addition_declared_tests.rs"]
 mod object_resource_addition_declared_tests;
 

@@ -52,6 +52,9 @@ mod object_resource_additions;
 #[path = "object_subpage_announcement_service.rs"]
 mod object_subpage_announcements;
 
+#[path = "object_page_selection_service.rs"]
+mod object_page_selections;
+
 #[path = "main_local_invocation_program_service.rs"]
 mod main_local_invocation_programs;
 
