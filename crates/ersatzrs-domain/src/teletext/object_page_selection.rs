@@ -8,7 +8,9 @@ use crate::teletext::{
     TeletextServiceError, TeletextX27Level25Links, TeletextX27LinkDeclaration,
     TeletextX27LinkError, TeletextX27LinkRole, TeletextX27LinkTarget,
 };
-use std::collections::BTreeMap;
+#[path = "object_page_selection_consumers.rs"]
+mod consumers;
+pub use consumers::TeletextObjectPageSelectionConsumers;
 
 /// Exact-original role/link intent; never host edit or publication authority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +27,8 @@ pub struct TeletextObjectPageSelectionChange {
 pub enum TeletextObjectPageSelectionError {
     #[error("object page selection requires at least one role change")]
     Empty,
+    #[error("object page selection requires a role or consumer change")]
+    EmptyConsumers,
     #[error("object page selection requires POP/GPOP and a changed Level 2.5 page target")]
     InvalidChange,
     #[error("object page selection repeats {display:?}, {role:?}")]
@@ -135,44 +139,20 @@ impl TeletextDeclaredService {
         service_budget: TeletextServiceBudget,
         declaration_budget: TeletextDeclaredServiceBudget,
     ) -> Result<Self, TeletextObjectPageSelectionError> {
-        use TeletextObjectPageSelectionError as Error;
         if changes.is_empty() {
-            return Err(Error::Empty);
+            return Err(TeletextObjectPageSelectionError::Empty);
         }
-        self.check_object_page_selection_budgets(
+        self.with_object_page_selections_and_consumers(
             changes,
-            overlays,
+            TeletextObjectPageSelectionConsumers {
+                resources: overlays,
+                ..Default::default()
+            },
             service_budget,
             declaration_budget,
-        )?;
-        let indexed = self.semantic.index_resource_programs(overlays)?;
-        self.semantic
-            .check_resource_program_result(&indexed, service_budget)?;
-        let mut updates = BTreeMap::new();
-        for (ordinal, change) in changes.iter().enumerate() {
-            let display = change.display;
-            let role = change.role;
-            if changes[..ordinal]
-                .iter()
-                .any(|other| other.display == display && other.role == role)
-            {
-                return Err(Error::Duplicate { display, role });
-            }
-            let update =
-                self.object_page_selection_update(*change, updates.get(&display).copied())?;
-            updates.insert(display, update);
-        }
-        let semantic =
-            self.semantic
-                .with_object_page_selection_draft(updates, &indexed, service_budget)?;
-        Ok(Self::new(
-            semantic,
-            self.mots,
-            self.selections,
-            self.empty_object_pages,
-            declaration_budget,
-        )?)
+        )
     }
+
     fn object_page_selection_update(
         &self,
         change: TeletextObjectPageSelectionChange,

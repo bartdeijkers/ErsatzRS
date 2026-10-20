@@ -1,6 +1,9 @@
 //! One final complete draft closes the sequential raw-owner/consumer deadlock.
 use super::*;
 
+#[path = "object_page_selection_consumers_tests.rs"]
+mod consumers;
+
 fn limits() -> TeletextServiceBudget {
     TeletextServiceBudget {
         max_records: 64,

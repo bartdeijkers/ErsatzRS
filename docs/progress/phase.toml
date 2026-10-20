@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 localized atomic page/call selection controls; next remaining coordinated Main/Local consumers; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 atomic Main/Local consumer transaction foundation; next explicit storage/native replay/effects; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -175,8 +175,13 @@ Thirty distinct focused cases and both headed browsers pass, including all
 nine cultures and corrected readable320/1920 layout. Native owner confirms
 complete models, separate publication, cold recovery and exact unchanged state.
 Canonical evidence retains the initial stale staged-CSS negative and scoped
-asset-sync correction. No new editor/stream/client claim follows. Remaining coordinated Main/Local consumers
-and complete editor capacity remain open; full F1 stays open.
+asset-sync correction. No new editor/stream/client claim follows.
+consumer_selection_followup now closes the domain intermediate-graph deadlock
+for checked Main/Local/resource consumers:72 affected regressions and strict
+domain Clippy pass, including complete independent targets and old authority/
+budget guards. Native persistence still lacks distinct versioned Main intent
+and atomic replay/effect integration; that is the next concrete product step,
+not a reason to repeat editor/browser/stream proofs. Full F1 stays open.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.

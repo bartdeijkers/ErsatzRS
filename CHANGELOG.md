@@ -37,6 +37,10 @@ release section when tagging a release.
   select raw bank pages and explicitly retarget existing resource calls together,
   including call-only edits, without changing a running publication. Complete
   editor/client acceptance remains open; ordinary TTI permissions stay intact.
+  Native-model validation can also coordinate checked Main, Local and resource
+  consumers with bank selection in one complete transaction. Its explicit Main
+  retarget intent preserves existing edit permissions; persisted admin integration
+  for these combined consumers remains open.
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous

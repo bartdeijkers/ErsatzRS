@@ -74,7 +74,14 @@ service inside the same held worker; no submitted program or source ordinal
 grants authority. Unchanged rows are ignored and call-only edits remain explicit.
 Historical forms are disabled and saving never publishes. Remaining coordinated
 Main/Local consumers, complete editor/client proof and full 9A acceptance remain
-open; no package authority is added.
+open; no package authority is added. The domain transaction now accepts checked
+Main, Local and resource consumers together. A distinct exact-original Main
+resource-call intent only retargets retained Public/Global calls, preserving type,
+offset, command order and other commands. Combined raw and final budgets precede
+cloning and one complete semantic/declared reconstruction. Existing Main Local
+insertion/deletion authority and the old resources-only API stay unchanged.
+This domain capability does not yet authorize saved Main intent; explicit
+versioned storage and native replay/effect qualification remain required.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

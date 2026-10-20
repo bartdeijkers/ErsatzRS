@@ -55,6 +55,9 @@ mod object_subpage_announcements;
 #[path = "object_page_selection_service.rs"]
 mod object_page_selections;
 
+#[path = "main_resource_invocation_service.rs"]
+mod main_resource_invocations;
+
 #[path = "main_local_invocation_program_service.rs"]
 mod main_local_invocation_programs;
 
@@ -251,6 +254,12 @@ pub enum TeletextServiceError {
     MainLocalInvocationProgramOverlay {
         owner: TeletextPageAddress,
         reason: super::TeletextMainLocalInvocationProgramFailure,
+    },
+    #[error("teletext Main resource invocation {owner:?}, command {command}: {reason}")]
+    MainResourceInvocationOverlay {
+        owner: TeletextPageAddress,
+        command: usize,
+        reason: super::TeletextMainResourceInvocationFailure,
     },
     #[error("teletext local operand {address:?}, command {command}: {reason}")]
     LocalProgramOperandOverlay {

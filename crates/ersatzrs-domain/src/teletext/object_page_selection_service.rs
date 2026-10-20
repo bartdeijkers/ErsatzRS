@@ -4,7 +4,11 @@ use super::{
     TeletextResolvedObjectPageLinks, TeletextResolvedServiceDraft, TeletextSemanticService,
     TeletextServiceBudget, TeletextServiceError, TeletextX27Level25Links,
 };
-use crate::teletext::TeletextResourceObjectProgramOverlay;
+use crate::teletext::{
+    TeletextEnhancementProgram, TeletextLocalObjectGlyphProgramOverlay,
+    TeletextMainResourceInvocationFailure, TeletextMainResourceInvocationOverlay,
+    TeletextResourceObjectProgramOverlay,
+};
 
 impl TeletextSemanticService {
     pub(in crate::teletext) fn with_object_page_selection_draft(
@@ -13,7 +17,9 @@ impl TeletextSemanticService {
             TeletextPageAddress,
             (TeletextX27Level25Links, TeletextResolvedObjectPageLinks),
         >,
-        overlays: &BTreeMap<TeletextObjectIdentity, &TeletextResourceObjectProgramOverlay>,
+        main: &BTreeMap<(TeletextPageAddress, usize), &TeletextMainResourceInvocationOverlay>,
+        local: &BTreeMap<TeletextObjectIdentity, &TeletextLocalObjectGlyphProgramOverlay>,
+        resources: &BTreeMap<TeletextObjectIdentity, &TeletextResourceObjectProgramOverlay>,
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextServiceError> {
         // The declared entry point preflights old/final budgets and exact bodies
@@ -26,9 +32,38 @@ impl TeletextSemanticService {
             page.compositional_links = Some(links);
             page.resources.objects = objects;
         }
+        for page in pages.values_mut() {
+            let mut changes = main
+                .range((page.address, 0)..=(page.address, usize::MAX))
+                .peekable();
+            if changes.peek().is_none() {
+                continue;
+            }
+            let failure = |command, reason| TeletextServiceError::MainResourceInvocationOverlay {
+                owner: page.address,
+                command,
+                reason,
+            };
+            let program = page
+                .local_program
+                .as_ref()
+                .ok_or_else(|| failure(0, TeletextMainResourceInvocationFailure::MissingProgram))?;
+            let mut commands = program.commands().to_vec();
+            for ((_, ordinal), overlay) in changes {
+                *commands.get_mut(*ordinal).ok_or_else(|| {
+                    failure(
+                        *ordinal,
+                        TeletextMainResourceInvocationFailure::MissingCommand,
+                    )
+                })? = overlay.replacement();
+            }
+            page.local_program = Some(TeletextEnhancementProgram::new(commands)?);
+        }
         let mut objects = self.objects.definitions().to_vec();
         for object in &mut objects {
-            if let Some(overlay) = overlays.get(&object.identity) {
+            if let Some(overlay) = resources.get(&object.identity) {
+                object.program = overlay.replacement().clone();
+            } else if let Some(overlay) = local.get(&object.identity) {
                 object.program = overlay.replacement().clone();
             }
         }
@@ -56,5 +91,52 @@ impl TeletextSemanticService {
         )?
         .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)?
         .with_base_text_spellings(self.base_text_spellings.into_values().collect(), budget)
+    }
+    pub(in crate::teletext) fn check_object_page_selection_consumer_result(
+        &self,
+        local: &BTreeMap<TeletextObjectIdentity, &TeletextLocalObjectGlyphProgramOverlay>,
+        resources: &BTreeMap<TeletextObjectIdentity, &TeletextResourceObjectProgramOverlay>,
+        budget: TeletextServiceBudget,
+    ) -> Result<(), TeletextServiceError> {
+        let mut commands = budget.max_commands;
+        super::charge(
+            &mut commands,
+            self.base_text_spellings.len(),
+            "authored command",
+            budget.max_commands,
+        )?;
+        for page in self.pages.values() {
+            // Main retargets cannot change command count or default suppression.
+            super::charge(
+                &mut commands,
+                page.local_program
+                    .as_ref()
+                    .map_or(0, |program| program.commands().len()),
+                "authored command",
+                budget.max_commands,
+            )?;
+            super::charge(
+                &mut commands,
+                page.resources.defaults.iter().flatten().count(),
+                "authored command",
+                budget.max_commands,
+            )?;
+        }
+        for object in self.objects.definitions() {
+            let program = if let Some(overlay) = resources.get(&object.identity) {
+                overlay.replacement()
+            } else if let Some(overlay) = local.get(&object.identity) {
+                overlay.replacement()
+            } else {
+                &object.program
+            };
+            super::charge(
+                &mut commands,
+                program.commands().len(),
+                "authored command",
+                budget.max_commands,
+            )?;
+        }
+        Ok(())
     }
 }

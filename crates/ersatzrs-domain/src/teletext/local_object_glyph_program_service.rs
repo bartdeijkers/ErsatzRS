@@ -93,7 +93,7 @@ impl TeletextSemanticService {
         self.check_existing_service_budgets(budget)
     }
 
-    fn validate_local_object_glyph_program_overlays<'a>(
+    pub(in crate::teletext) fn validate_local_object_glyph_program_overlays<'a>(
         &self,
         overlays: &'a [TeletextLocalObjectGlyphProgramOverlay],
     ) -> Result<
