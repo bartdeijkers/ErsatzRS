@@ -4,81 +4,58 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: standalone1/1.5 then full authored2.5 with protected fallback; neither
-accepted. P9A-04 owns unchanged L15/F/V/X; no9B.
+ADR0123: standalone Level1/1.5 then full authored2.5 with protected fallback;
+neither accepted. P9A-04 owns the unchanged finite L15/F/V/X list; no9B.
 
-Typed services/resources, ownership, X26/X27/X28/M29, execution and raster
-remain partial. Original identities/bytes/roots/effects/spans, fallback, defaults,
-bounds and uncertainty stay protected. A7/A8/C3, foreign-X26, repertoires/fonts,
-objects/DRCS/panels and receivers remain mandatory; wrappers are derived. P9A-04 owns F1/F3 receipts and supplied-bank/stock-negative limits.
+Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
+Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay
+protected. A7/A8/C3, foreign-X26, repertoires/fonts, objects/DRCS/panels and
+receivers remain mandatory; wrappers are derived. F1/F3 receipts own limits.
 
-Base ESC/reset/secondary provenance and Header/POP refusal remain exact.
-base_g0_context_followup retains Header NOS/stock33of38 proof; five disagreements
-remain open, without invented7F.
-Held mosaics now preserve original controls and held-glyph/reset provenance in
-shared preview/carrier, protected zones and caption visibility. P9A-04 owns
-held_mosaics_followup, scoped proof and retained atlas-margin differences.
-PinnedQTM Hold/Release proof retains scope in its editor receipt. A1/A2/B2
-remain open. The physical
-black/width/size factory now preserves original rows, both size origins, C.3,
-held state, zones and raw0F lower-row basic content. physical_spacing_followup
-owns partial checks: stocklibzvbi passes10 enhanced fixtures/4 raster oracles
-but fails22 basic no-response observations; unchanged norm/oracles remain.
-PinnedQTM four-menu/save/concept/publication proof passes in its editor child.
-Delivery proves two-channel TCP/AV/transport at default2; failure_prefix
-proves literal failed-prefix retention and one same-source pass. Initial EOF stays
-unclassified; stop unchanged retries. Full client/fallback/interchange/runtime/
-platform acceptance remains open.
+base_g0_context_followup retains ESC/reset/secondary/Header/POP provenance and
+stock33/38; five disagreements remain open without invented7F. Held mosaics
+preserve controls/reset/held glyphs in shared preview/carrier/zones/captions;
+held_mosaics_followup owns proof, pinnedQTM and atlas differences. A1/A2/B2 stay open.
+physical_spacing_followup preserves both size origins/C.3/held state/zones/raw0F
+basic content. Stocklibzvbi passes10 enhanced fixtures/4 rasters but fails22
+basic no-response observations; no relaxed fallback claim. Its pinned four-menu
+editor/publication and default2 two-channel TCP/AV/transport proofs retain scope.
+failure_prefix proves literal failed-prefix retention; initial EOF stays
+unclassified, with no unchanged retries. Full client/interchange/runtime stays open.
 
-P9A-04 owns V25/V26 bank/S1 and V27 atomic role/resource-call proof, receipt/CAS,
-root/current effects, TTI retention, preview/undo/publication/reopen. Its
-announcement_admin_followup and selection_admin_followup connect localized
-bank/S1 and explicit raw-page/call-only controls in both headed browsers and
-nine cultures, using the same fresh qualification and held worker.
-consumer_selection_followup/native_followup now adds distinct V28 Main authority
-and coordinated Main/Local/resource replay; app208 and90 affected effects/native
-cases pass. TTI/preview/root undo/publication/cold recovery preserve complete
-models and original source. Exact undo restores absent X27/MOT provenance;
-malformed/protected consumers still refuse. Both localized headed browsers pass,
-with all9cultures/JS/noJS/light/dark/320/1920 and native publication/cold recovery.
-Strict affected lint and matched bundle pass. Full F1/editor/client/platform
-remain open; V1–27 semantics stay closed and Base intent stays distinct from Local.
+P9A-04 owns V25–28 bank/call/role/Main authority and closed legacy semantics;
+Base and Local remain distinct. consumer_selection_followup/native_followup
+proves coordinated Main/Local saves, effects/TTI/preview, exact absent-X27/MOT
+undo, protected refusal, separate publication and cold recovery. App208/native90,
+strict lint/matched bundle and both headed browsers/nine cultures pass; fullF1 stays open.
 
 Profile/theme/mirror/Lua proof retains scope. actual_output_status_followup owns
-requested/applied Linux63, Windows63 at40ad0608, V1/V2 headed/owner/restart proof.
-Its X2 startup_health/enabled_channels_followup now proves actual Linux active
-Next profile/overlay Health failure/correction, persisted full summaries and
-cold restart with three unforced owned shutdowns. The matched workspace includes
-preserved parallel infra sources; no clean-HEAD package, overlay playback,
-managed adoption or six-RID claim. native_windows_followup now proves the same
-six actual Health outcomes/cold restart on a separately built exact40ad nativeMSVC
-host, with twelve current scoped sources and lock/Cargo files identical. Three
-hosts exit0 via owned Ctrl+C, no force/children; archive sources stay exact.
-Next qualify existing ordinary native Windows Next playback gates; native
-ARM/macOS environments and macOS artifacts remain prerequisites.
-Lua/recovery/client/platform stay open; producer/model/deadline,
-quota/persistence/cancellation fences remain. F6 Copy/DVB at default2 is verified
-in c07af3a1; tmp/phase9-f6-native-carriage/work.json owns smoke/TSDuck87/87.
+Linux/Windows63, headed owner/restart and conditional Kodi proof. X2 startup_health
+proves scoped Linux/nativeWindows active-profile/overlay Health/error/recovery/
+cold restart. Linux includes parallel infra; Windows is exact archived40ad.
+native_host_smoke_followup adds default ordinary Windows Burn/Convert at40ad/host7d2d:
+Dutch audio/captions, cached routes/reconnect/preview/config/idle, natural Job drain
+and eight AAC/nld outputs. P9A-04 owns exact artifacts and retained tool negatives.
+Remuxed outputs leave original-wire transport mandatory; qualify existing tooling
+next. Current full-package/overlay-playback/sixRID/adoption remain unproved;
+ARM/macOS artifacts/environments are missing. Lifecycle/quota/cancellation fences
+and open Lua/recovery/client requirements remain. F6 default2 Copy/DVB is verified
+in c07af3a1; tmp/phase9-f6-native-carriage/work.json owns87/87 TSDuck.
 
-P9A-03 owns acquisition/leases: NotAcquired, descriptors and PTS are not readiness.
-Local888 native/Hybrid and finite-Local Next889 retain exact captions/seeks,
-Dutch audio/Copy, source-clock/cache/replacement/EOF/absence and bounded cleanup
-proof. Unpublished candidate.4 fixes selected-language loss with scoped four-
-package compatibility/prepared/manager proof. startup_health adds two Linux
-override starts/persisted50-row Health runs on emptyDB with retained matchedhost.
-managed.1 still loses language; enabled-channel checks, fullF5/adoption,
-nativeARM/macOS and compatibility remain open.
-Crossbuild/native/adoption differ.
+P9A-03 owns acquisition/leases; descriptors/PTS/NotAcquired are not readiness.
+Local888/finiteLocal889 retain caption/seek/audio/clock/cache/EOF/absence/cleanup
+scope. Unpublished candidate.4 fixes language loss with four-package compatibility,
+prepared/manager and scoped startup/Health proof; managed.1 remains defective and
+accepted. FullF5/platform/adoption stay open; crossbuild/native/adoption differ.
 
 Base stream/X26/navigation/update/reveal/timedflash remains unqualified.
-No DVBViewer. Kodi21.2 shares retained
-21.3 decoder hashes and Local/DRCS/panel blockers; no full2.5 success expectation
-or physical GoogleTV trial. P9A-04 owns one gated joint end-trial. No unchanged
-negative retries/decoder maintenance. X1 remains deferred; X3 waits upstream QTM
-complete POP/GPOP/context>208; no waiver. Neither excuses a base capability
-gap. All six-RID, P9A-02 Health/licensing, playback/HLS/caption/audio/localized
-management gates remain mandatory. Production guide starts only after full
-independent9A; Phase10 waits forP9B-02.
+No DVBViewer. Kodi21.2 shares retained21.3 decoder hashes and Local/DRCS/panel
+blockers; no full2.5 success expectation or physical GoogleTV trial. P9A-04 owns
+one gated joint end-trial. No unchanged negative retries/decoder maintenance.
+X1 remains deferred; X3 waits upstream QTM complete POP/GPOP/context>208; no waiver.
+Neither excuses base capability gaps. All six-RID, P9A-02 Health/licensing,
+playback/HLS/caption/audio/localized-management gates remain mandatory. Production
+guide starts only after full independent9A; Phase10 waits forP9B-02.
 '''
 
 [[debt]]

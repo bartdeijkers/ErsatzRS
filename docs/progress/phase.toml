@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 X2 Linux/native Windows startup Health verified; next ordinary native Windows Next playback gate qualification; native ARM/macOS/artifacts/adoption and X1/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F5/V6/X2 ordinary native Windows Next Burn/Convert and selected-language proof verified; next existing original-wire native transport qualification; current package/native ARM/macOS/adoption and X1/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -120,7 +120,14 @@ The same six forced Health outcomes and cold restart pass; three native hosts
 exit0 using the launcher's owned-console Ctrl+C sequence, without force or children.
 All archive sources remain exact. These are separate scoped Linux/Windows claims,
 not a current clean-HEAD package, overlay playback, headed UI, production adoption
-or six-RID acceptance. Original hardware/Vulkan
+or six-RID acceptance. Separate native_host_smoke_followup now proves unchanged
+ordinary native Windows Burn/Convert gates at40ad, selected Dutch audio/captions,
+cached TS/reconnect/HLS/preview/config/idle and natural complete Job cleanup.
+All eight output captures retain AAC/nld; actual rebuilt host7d2d stays distinct
+from21ea Health proof. Private setup/supervisor negatives remain canonical.
+Remuxed captures leave original-wire transport mandatory; next qualify that
+existing native proof path. Current full-package/nativeARM/macOS/adoption gates
+and X1-deferred/X3-upstream remain. Original hardware/Vulkan
 fallback warnings remain; managed.1 pins stay exact. X2 still needs both macOS
 artifacts, native ARM/macOS and applicable platform/adoption gates; no remote
 dispatch/push. F1 resource_set_creation_followup now adds a separate atomic native
