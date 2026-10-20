@@ -32,6 +32,8 @@ pub enum TeletextBaseSpacingControl {
     ContiguousMosaics,
     SeparatedMosaics,
     Escape,
+    HoldMosaics,
+    ReleaseMosaics,
     BlackBackground,
     NewBackground,
 }
@@ -52,6 +54,8 @@ impl TeletextBaseSpacingControl {
             Self::ContiguousMosaics => 0x19,
             Self::SeparatedMosaics => 0x1a,
             Self::Escape => 0x1b,
+            Self::HoldMosaics => 0x1e,
+            Self::ReleaseMosaics => 0x1f,
             Self::BlackBackground => 0x1c,
             Self::NewBackground => 0x1d,
         }
@@ -65,6 +69,7 @@ impl TeletextBaseSpacingControl {
             | Self::EndBox
             | Self::StartBox
             | Self::Escape
+            | Self::ReleaseMosaics
             | Self::DoubleHeight => TeletextSpacingTiming::SetAfter,
             _ => TeletextSpacingTiming::SetAt,
         }

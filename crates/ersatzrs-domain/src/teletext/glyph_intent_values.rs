@@ -145,8 +145,14 @@ pub struct TeletextExecutedGlyphIntent {
     pub(super) glyph: Option<TeletextGlyphIdentity>,
     pub(super) reason: Option<TeletextGlyphIntentReason>,
     pub(super) selected_pair: Option<TeletextCharsetPair>,
+    pub(super) held_mosaic: Option<super::TeletextHeldMosaic>,
 }
 impl TeletextExecutedGlyphIntent {
+    /// Derived Base-only shape; original spacing control/context stays unchanged.
+    #[must_use]
+    pub const fn held_mosaic(&self) -> Option<super::TeletextHeldMosaic> {
+        self.held_mosaic
+    }
     /// Unchanged original candidate/context, including opaque pending-order index.
     #[must_use]
     pub const fn context(&self) -> &TeletextExecutedGlyphCharset {

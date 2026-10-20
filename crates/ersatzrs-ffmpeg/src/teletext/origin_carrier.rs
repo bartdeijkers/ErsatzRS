@@ -322,12 +322,11 @@ fn derive_recipe(
     } else if candidate.base().is_some()
         && matches!(intent.glyph(), Some(TeletextGlyphIdentity::G1Mosaic { .. }))
     {
-        d5 || attrs
-            .spacing_separated()
-            .value()
-            .ok_or(Failure::Attribute {
+        d5 || super::raster::base_mosaic_spacing(intent, attrs.spacing_separated()).map_err(
+            |_| Failure::Attribute {
                 field: "spacing separation",
-            })?
+            },
+        )?
     } else {
         d5
     };

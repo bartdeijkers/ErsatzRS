@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: Base ESC/context checkpoint; held mosaics next, D controls and E2 platforms/adoption remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: held-mosaic spacing checkpoint; pinned-editor spacing proof, D controls and E2 adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -473,23 +473,20 @@ package is the recorded L15-A1/A2 row-zero/secondary-character-context gap using
 existing inventory/fixtures, not another isolated glyph/editor variant. No new
 push/publication permission follows from af4a247f's completed authorized push.
 
-Current Base charset boundary: canonical standalone_level15_followup/
-base_g0_context_followup owns level15-base-g0-context/identity.json. Original
-row-local ESC/source/reset/secondary NOS and separate G2/X26 pass factory and
-domain regressions; Header/POP absence refuses instead of becoming explicit7F.
-Header NOS and protected blank-zone context are corrected. Fourteen web cases
-pass; exact native/lint/fmt/progress outcomes and retained negatives are canonical.
-Independent stock decoder passes33/38 actual-unit observations; three header and
-two secondary-NOS fixed failures remain open, without decoder maintenance.
-No new QTM ESC/complete fallback/receiver claim. The finite L15 list now identifies
-remaining1E/1F hold/release mosaics as a concrete base product gap;00/10 black and
-0E/0F width/size stay enhanced-only with required fallback, not new base scope.
-Next implement the bounded held-mosaic spacing bundle using existing factory/
-preview/encoder tools; close exact glyph, set-at/after, row-reset and zone effects.
-D supported private teletext control/operator access, E2 nativeARM/macOS/Health/
-adoption and full9A X1-deferred/X3-upstream remain separate mandatory blockers.
-Latest permission covers this coherent local checkpoint and push to origin/main
-without CI; no release, acceptance or general future push permission is inferred.
+Current Base charset/spacing boundary: P9A-04's finite L15-A1/A2/B2 rows and
+standalone_level15_followup/held_mosaics_followup own the new bounded hold/release
+register, original control/glyph/reset provenance, shared raster/carrier and
+protected-zone/caption-box checks. Exact final outcomes and pins belong to
+level15-held-mosaics/identity.json. This closes the physical1E/1F refusal, not
+complete inventory/editor/client acceptance. The unchanged five stock header/
+secondary mismatches remain in base_g0_context_followup (75dba6fd); no decoder
+maintenance or weaker normative oracle. Next prove the supported base spacing
+family through the existing pinnedQTM edit/save/import/shared-preview boundary;
+reuse unchanged publication/ordinary transport, profiles/Lua/isolation/admin/F6.
+D private native teletext control/operator access, E2 nativeARM/macOS/Health/
+adoption and enhanced X1-deferred/X3-upstream remain mandatory and separate.
+75dba6fd plus30aac731 were authorized/pushed with skipCI; this new follow-up is
+local only, with no additional push/publication or acceptance claim.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

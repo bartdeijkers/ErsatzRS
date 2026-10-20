@@ -352,12 +352,7 @@ fn selected_mask(
     let identity = intent
         .glyph()
         .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
-    let (separated, underlined) = mask_effects(
-        identity,
-        intent.context().candidate().base().is_some(),
-        d5_value,
-        cell,
-    )?;
+    let (separated, underlined) = mask_effects(identity, intent, d5_value, cell)?;
     let drcs = inputs
         .drcs
         .records()
@@ -380,20 +375,14 @@ fn selected_mask(
 
 fn mask_effects(
     identity: TeletextGlyphIdentity,
-    base: bool,
+    intent: &ersatzrs_domain::TeletextExecutedGlyphIntent,
     d5: bool,
     cell: ersatzrs_domain::TeletextDisplayCell<'_>,
 ) -> Result<(bool, bool), TeletextRasterCellFailure> {
-    let spacing = cell.attributes().spacing_separated();
+    let base = intent.context().candidate().base().is_some();
     // Table 26 notes 11/12: enhanced G1 uses D5 only; Base also uses spacing.
     let separated = matches!(identity, TeletextGlyphIdentity::G1Mosaic { .. })
-        && (d5
-            || (base
-                && spacing
-                    .value()
-                    .ok_or(TeletextRasterCellFailure::GlyphAttribute {
-                        pending: spacing.pending().copied().map(Box::new),
-                    })?));
+        && (d5 || (base && base_mosaic_spacing(intent, cell.attributes().spacing_separated())?));
     let underlined = d5
         && matches!(
             identity,
@@ -405,6 +394,29 @@ fn mask_effects(
                 | TeletextGlyphIdentity::SpacingControl { .. }
         );
     Ok((separated, underlined))
+}
+
+/// A held Base glyph keeps its original spacing form. Explicit enhancement
+/// writers still supersede the Base effect under the existing D5 precedence.
+pub(super) fn base_mosaic_spacing(
+    intent: &ersatzrs_domain::TeletextExecutedGlyphIntent,
+    spacing: ersatzrs_domain::TeletextDisplayAttribute<'_, bool>,
+) -> Result<bool, TeletextRasterCellFailure> {
+    let value = spacing
+        .value()
+        .ok_or(TeletextRasterCellFailure::GlyphAttribute {
+            pending: spacing.pending().copied().map(Box::new),
+        })?;
+    let enhanced = spacing.writer().is_some_and(|writer| {
+        matches!(
+            writer.source(),
+            ersatzrs_domain::TeletextAttributeSource::Enhancement { .. }
+        )
+    });
+    Ok(intent
+        .held_mosaic()
+        .filter(|_| !enhanced)
+        .map_or(value, ersatzrs_domain::TeletextHeldMosaic::separated))
 }
 
 /// Read-only glyph semantics from the existing comparison path. A mask and
@@ -509,12 +521,7 @@ fn comparison_glyph(
         let identity = intent
             .glyph()
             .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
-        let (separated, underlined) = mask_effects(
-            identity,
-            intent.context().candidate().base().is_some(),
-            d5,
-            cell,
-        )?;
+        let (separated, underlined) = mask_effects(identity, intent, d5, cell)?;
         match identity {
             TeletextGlyphIdentity::G1Mosaic { .. } => ComparisonGlyphEffects::Mosaic { separated },
             TeletextGlyphIdentity::G3 { .. } | TeletextGlyphIdentity::Drcs { .. } => {

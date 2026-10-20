@@ -1415,8 +1415,10 @@ fn spacing_values(
     let mut values = [None; FIELDS];
     let row = cell.position().row();
     match control {
-        // ESC changes Base G0 only, not any presentation attribute writer.
-        TeletextBaseSpacingControl::Escape => {}
+        // Base glyph selection is separate from presentation attribute writers.
+        TeletextBaseSpacingControl::Escape
+        | TeletextBaseSpacingControl::HoldMosaics
+        | TeletextBaseSpacingControl::ReleaseMosaics => {}
         TeletextBaseSpacingControl::AlphaColour { .. }
         | TeletextBaseSpacingControl::MosaicColour { .. } => {
             let clut = input

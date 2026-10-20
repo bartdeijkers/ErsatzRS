@@ -876,6 +876,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Support authored hold/release mosaics while retaining original control bytes,
+  glyph sources and mosaic spacing. Keep caption-box visibility and protected
+  zone boundaries enforced when a held glyph depends on an earlier cell.
+
 - Preserve row-local primary/secondary G0 selection and original ESC controls in
   authored teletext, without changing supplementary G2 or X26 context. Protect
   zone boundaries even when a charset change leaves a cell visually blank, and

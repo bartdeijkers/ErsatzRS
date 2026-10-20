@@ -8,10 +8,11 @@ use ersatzrs_domain::{
     TeletextBaseAttributeSource, TeletextBaseAttributeSources, TeletextBaseAttributeValues,
     TeletextBaseAuthoredContent, TeletextBaseAuthoredGlyph, TeletextBaseDisplay,
     TeletextBaseDisplayAttributes, TeletextBaseDisplayCell, TeletextBaseDisplayCellKind,
-    TeletextBaseDisplayValueError, TeletextBaseSpacingControl, TeletextCharsetValueError,
-    TeletextColour, TeletextColourReference, TeletextEffectivePresentation,
-    TeletextEnhancementPosition, TeletextPageAddress, TeletextPageDraft, TeletextPageKind,
-    TeletextRunContent, TeletextSpacingTiming, TELETEXT_COLUMNS, TELETEXT_ROWS,
+    TeletextBaseDisplayValueError, TeletextBaseMosaicState, TeletextBaseSpacingControl,
+    TeletextCharsetValueError, TeletextColour, TeletextColourReference,
+    TeletextEffectivePresentation, TeletextEnhancementPosition, TeletextPageAddress,
+    TeletextPageDraft, TeletextPageKind, TeletextRunContent, TeletextSpacingTiming,
+    TELETEXT_COLUMNS, TELETEXT_ROWS,
 };
 
 use super::{layout::Layout, TeletextColourContext, TeletextEncodingError};
@@ -350,50 +351,35 @@ pub(super) fn validate_physical_base_row(
 ) -> Result<(), TeletextEncodingError> {
     let start = if row == 0 { 8_u8 } else { 0 };
     let mut state = RowState::new(row, (0, 0), false, TeletextColourReference::BLACK);
+    let mut mosaics = TeletextBaseMosaicState::default();
     for column in start..40 {
         let code = cells[usize::from(column)];
-        let spacing = if code < 0x20 {
-            let spacing = control(code).ok_or(TeletextEncodingError::PhysicalBaseControl {
-                address: page.address,
-                row,
-                column,
-                code,
-            })?;
-            let position = TeletextEnhancementPosition::new(row, column).map_err(|_| {
-                TeletextEncodingError::PhysicalBaseControl {
-                    address: page.address,
-                    row,
-                    column,
-                    code,
-                }
-            })?;
-            Some((
-                spacing,
-                TeletextBaseAttributeSource::Spacing {
-                    position,
-                    control: spacing,
-                    timing: spacing.timing(),
-                },
-            ))
-        } else {
-            None
+        let invalid = || TeletextEncodingError::PhysicalBaseControl {
+            address: page.address,
+            row,
+            column,
+            code,
         };
-        apply_before(&mut state, spacing);
-        if row == 0
-            && spacing.is_some_and(|(value, _)| value == TeletextBaseSpacingControl::DoubleHeight)
-        {
+        let position = TeletextEnhancementPosition::new(row, column).map_err(|_| invalid())?;
+        let cell = trace_cell(page.address, position, code, None, cells, &mut state)
+            .map_err(|_| invalid())?;
+        if row == 0 && code == TeletextBaseSpacingControl::DoubleHeight.code() {
             return Err(TeletextEncodingError::HeaderHeight {
                 address: page.address,
             });
         }
-        if code > b' ' && page.kind != TeletextPageKind::FullPage && (row == 0 || !state.boxed) {
+        let held = mosaics.advance(cell).map_err(|_| invalid())?;
+        let content = code > b' ' || held.is_some_and(|held| held.mosaic().blocks() != 0);
+        if content
+            && page.kind != TeletextPageKind::FullPage
+            && (row == 0 || !cell.attributes().boxed())
+        {
             return Err(TeletextEncodingError::HiddenContent {
                 address: page.address,
                 row,
                 column,
             });
         }
-        apply_after(&mut state, spacing, cells, column);
     }
     Ok(())
 }
@@ -429,6 +415,8 @@ fn control(code: u8) -> Option<TeletextBaseSpacingControl> {
         0x1b => C::Escape,
         0x1c => C::BlackBackground,
         0x1d => C::NewBackground,
+        0x1e => C::HoldMosaics,
+        0x1f => C::ReleaseMosaics,
         _ => return None,
     })
 }
@@ -523,7 +511,7 @@ impl RowState {
         use TeletextBaseSpacingControl as C;
         match control {
             // The separate charset execution retains the row-local G0 toggle.
-            C::Escape => {}
+            C::Escape | C::HoldMosaics | C::ReleaseMosaics => {}
             C::AlphaColour { .. } | C::MosaicColour { .. } => {
                 self.raw_foreground = control.code() & 7;
                 self.graphics = matches!(control, C::MosaicColour { .. });

@@ -4,75 +4,62 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: base first, full2.5/protected fallback later; neither accepted.
-P9A-04 owns finite L15 product/proof/external gaps.
-Prior shared/multibinding/refusal/mirror captures remain valid.
-Retained HTTP pairs prove shared edit/pending/publication, Lua Off/error/Base
-expiry and mirror-owned On/Base/Off; clock/AV/TSDuck/cold/cleanup pass.
-Broader Lua/wholehost/platform/client gates stay open. Next final mux
-recovery now has scoped model/AV/independent/TSDuck and active cleanup proof.
-Selected-audio metadata has a reproduced unpublished Next candidate.4
-correction and scoped Linux proof; accepted.1 still loses language. Required
-compatibility/native/package/adoption remainsF5/X2 debt.
-Base-G2 import has scoped pinned-editor/concept/publication proof; repertoire/
-editor remains open. ProgDVB private ordinary stream video now passes; native
-teletext control/render/navigation remains unqualified. Actual candidate package
-manager/Health identity primitive passes Linux/Windows; production adoption and
-complete Health/nativeARM/macOS remain open. Arabic G2 editor flow passes. Full2.5 X1-deferred/X3-upstream/platform gates remain.
+ADR0123: standalone Level1/1.5 first, then full authored2.5 with protected
+fallback; neither accepted. P9A-04 owns the finite L15-A..E/F/V/X completion
+list and canonical evidence. No acceptance, scope waiver or production guide.
 
-Original Base ESC now has separate row-local G0/secondary-NOS provenance, with
-G2/X26 independent and protected blank-zone context. Header NOS is corrected;
-absent Header/POP remains a located refusal, not inferred7F. Stock33/38 actual
-unit observations pass; five fixed header/secondary disagreements remain open.
-Physical hold/release mosaics still block complete base authoring; black/width/
-size remain enhanced-only requirements with fallback. P9A-04 owns the finite
-list and canonical base_g0_context_followup, not new engine acceptance.
+Typed services/resources, physical ownership, X26/X27/X28/M29, glyph/charset
+execution, replay and raster are partial. Original bytes/identities, ancestry,
+fallback, absent/default context, bounds and uncertainty remain protected.
+Remaining A7/A8/C3, foreign-X26, repertoire/aliases/fonts, object/resource/panel
+and independent receiver coverage stay mandatory. Physical wrappers are derived,
+not authored sources. F3 header/suffix/foreign MOT and F1 child imports retain
+original roots/effects/spans; supplied banks and stock negatives stay distinct.
 
-Typed services/provenance/resources, physical ownership, X26/X27/X28/M29,
-replay/raster and glyph/charset normalization are partial. Original bytes, fallback, ancestry, absent/defaults and charset uncertainty stay protected. Remaining A7/A8/C3, row-zero/foreign-
-X26, repertoire/aliases, resource/object/panel and independent client coverage
-remain required.
+Base ESC retains row-local G0/raw aliases and source/reset provenance; secondary
+never selects G2/X26. Header NOS is corrected; absent Header/POP is a located
+refusal, not inferred7F. Stock33/38 actual-unit observations pass; five fixed
+header/secondary disagreements remain open in base_g0_context_followup.
+Held mosaics now preserve original controls and held-glyph/reset provenance in
+shared preview/carrier, protected zones and caption visibility. P9A-04 owns
+held_mosaics_followup, scoped proof and retained atlas-margin differences.
+Pinned-editor spacing proof and complete A1/A2/B2 remain open. Black/width/size
+are enhanced-only required functions with correct base fallback.
 
-ConceptsV1–24 retain metadata, DRCS/Flash/charset, Base/Local/resource glyph,
-style/position/call/topology and Add/Copy edits with original identity, lineage,
-protected consumers and fresh-receipt root undo. V23 has separate factory-bound
-Base Text intent and exact forward words, never fabricated Local provenance.
-V24 retains checked native spelling through concept/edit/repeat/undo and
-publication; old formats/authority stay closed. Broader L15-B2 stays open.
-r1→r2 creates resources in new originals; same-design creation stays open.
-Complete style/position/context/link/set and oversized QTM interchange, font/
-repertoire/client coverage remain mandatory. P9A-04 owns detailed format pins
-and native/editor/headed evidence; no truncation or engine acceptance follows.
+ConceptsV1–24 retain metadata/templates/zones, original Base/Local/resource
+roles, DRCS/Flash/charset, style/position/call topology and Add/Copy edits with
+lineage, protected consumers and fresh-receipt root undo. V23 binds Base Text
+intent without fabricated Local provenance; V24 keeps meaning-checked native
+spelling through concept/edit/repeat/undo/publication. Old formats/authority
+remain closed. Pinned supplementary/native/Arabic editor and bank/panel/headed
+receipts retain scope. Complete context/link/set/large-bank interchange,
+same-design resource creation and broader editor/font coverage remain required.
 
-F3 header/suffix/foreign MOT retain source/roots/fallback/effects/bounds;
-physical wrappers are not authored sources. F1 child imports protect spans.
-National/bank/panel receipts, nine-culture headed SSR and two-theme navigation
-retain scope. Explicit supplied banks/defaults, stock failures and sparse/G1
-candidates stay distinct; enlarged clients, hydration, Hebrew/acquisition remain.
+Channel profiles/themes, shared invalidation/pending/separate publication,
+mirror isolation, Lua Off/error/On/Base expiry and scoped cold/active recovery
+have canonical evidence with sourceAV/clock/TSDuck/cleanup. Broader Lua,
+whole-host restart, effective-scope admin and platform/client gates stay open.
+Producer selection/model/deadline fences, quotas, persistence and cancellation
+ownership remain. F6 default2 Copy/DVB handoff is verified in c07af3a1;
+tmp/phase9-f6-native-carriage/work.json owns scoped smoke/TSDuck87/87 evidence.
 
-Producer contracts retain selection/model/deadline fences, aggregate quotas,
-persistence and cancellation ownership. Two-channel themes, Lua Continue and
-Refresh/Reset timing/rollback have durable proof; full restart stays open.
-Off/Base and resource updates retain scope. MAIN On→Base passes;
-Off→Base emission passes but VLC needs reselection.
-Broader error/restart/client, work bounds, resource retirement,
-Header/POP uncertainty and open-client shutdown remain open. F6 default2 Copy/DVB handoff passes;
- tmp/phase9-f6-native-carriage/work.json owns runtime/admin/ownership,
-lint and smoke/TSDuck87/87 proof.
+P9A-03 owns acquisition/leases: NotAcquired, descriptors and PTS are not readiness.
+Local888 native/Hybrid and finite-Local Next889 retain exact captions/seeks,
+Dutch audio/Copy, source-clock/cache/replacement/EOF/absence and bounded cleanup
+proof. The unpublished Next candidate.4 corrects selected-audio metadata and
+has scoped four-package Linux/Windows compatibility/prepared/manager/Health-
+primitive evidence; accepted managed.1 still loses language. FullF5/Health,
+accepted adoption, nativeARM/macOS and remaining compatibility stay open.
+Crossbuild, native execution and production adoption remain separate claims.
 
-P9A-03 owns acquisition/leases: NotAcquired, descriptors and PTS grant no
-readiness. Local888 native/Hybrid and finite-Local Next889 retain scope for
-Copy/Dutch audio, exact cues/seeks/cache/cleanup,20MB/late headers and qualified
-source/PSI absence. Candidate.3 has four packages and scoped Linux/Windows
-SRT/caption/provider/RTSP/image/refusal proof; all predecessor negatives remain.
-Actual callback replacement/rescan rejects stale work with503 before fresh host
-FINAL FRESH AV/audio/cues. EOF retains the last cue to proven video end/earlier
-cuts. Full F5/charset/platform/compatibility/adoption remain open. Enhanced X1 is
-maintainer-deferred; X3 awaits upstream editor support, without waiver.
-
-Native six-RID/interop gates remain. P9A-02 owns decoder Health/licensing;
-playback, HLS, caption and localized management gates stay mandatory.
-Production guide waits for full P9A-04; Phase10 for P9B-02.
+ProgDVB private ordinary-host video acquisition passes; supported teletext
+control/operator access and actual X26/page/subpage/navigation/update/reveal/
+timedflash remain unqualified under baseD/V3. No unchanged negative retries or
+decoder maintenance. Enhanced X1 is maintainer-deferred; X3 waits upstream QTM
+complete POP/GPOP/context>208, without waiver. Neither excuses a base capability
+gap. All six-RID, P9A-02 Health/licensing, playback/HLS/caption/audio/localized
+management gates remain mandatory. Production guide starts only after full
+independent9A; Phase10 waits forP9B-02.
 '''
 
 [[debt]]

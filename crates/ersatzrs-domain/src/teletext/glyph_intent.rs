@@ -96,8 +96,22 @@ pub fn resolve_teletext_glyph_intent(
     }
     let pairs = pending_pairs(charset)?;
     let mut records = Vec::with_capacity(count);
+    let mut held = super::TeletextBaseMosaicState::default();
     for &context in charset.records() {
-        records.push(resolve_record(charset, context, &pairs)?);
+        let held_mosaic = context
+            .candidate()
+            .base()
+            .map(|cell| held.advance(cell))
+            .transpose()
+            .map_err(|_| {
+                lookup_error(
+                    charset,
+                    Some(&context),
+                    TeletextGlyphIntentFailure::InconsistentContext,
+                )
+            })?
+            .flatten();
+        records.push(resolve_record(charset, context, &pairs, held_mosaic)?);
     }
     Ok(TeletextGlyphIntent {
         owner: charset.owner(),
@@ -146,6 +160,7 @@ fn resolve_record(
     charset: &TeletextCharsetExecution,
     context: TeletextExecutedGlyphCharset,
     pairs: &[Option<TeletextCharsetPair>],
+    held_mosaic: Option<super::TeletextHeldMosaic>,
 ) -> Result<TeletextExecutedGlyphIntent, TeletextGlyphIntentError> {
     let mut record = TeletextExecutedGlyphIntent {
         context,
@@ -153,13 +168,22 @@ fn resolve_record(
         glyph: None,
         reason: None,
         selected_pair: None,
+        held_mosaic,
     };
     if let Some(cell) = context.candidate().base() {
         record.glyph = Some(match cell.kind() {
-            TeletextBaseDisplayCellKind::Blank => TeletextGlyphIdentity::Blank,
-            TeletextBaseDisplayCellKind::SpacingControl { .. } => {
-                TeletextGlyphIdentity::SpacingControl { code: cell.code() }
+            TeletextBaseDisplayCellKind::Blank if cell.attributes().graphics() => {
+                TeletextGlyphIdentity::G1Mosaic {
+                    mosaic: TeletextMosaic::default(),
+                }
             }
+            TeletextBaseDisplayCellKind::Blank => TeletextGlyphIdentity::Blank,
+            TeletextBaseDisplayCellKind::SpacingControl { .. } => held_mosaic.map_or(
+                TeletextGlyphIdentity::SpacingControl { code: cell.code() },
+                |held| TeletextGlyphIdentity::G1Mosaic {
+                    mosaic: held.mosaic(),
+                },
+            ),
             TeletextBaseDisplayCellKind::HeaderOwned => {
                 return Err(lookup_error(
                     charset,

@@ -10719,7 +10719,7 @@ this list. No full-chain replay is required for unchanged boundaries.
 Missing product functionality (fix demonstrated defects; qualify unknowns first):
 | Base ID / existing owner | Blocked user action | Smallest remaining work and testable closure |
 | --- | --- | --- |
-| L15-A1 / F3,V1 | Author every agreed base repertoire/enhancement without losing context or essential fallback | Group remaining supplementary/composite Unicode and unqualified alias conversion with the admitted national/G2/diacritic/G3 repertoire contract. Close demonstrated conversion defects and qualify the complete applicable standard inventory, including retained row-zero/secondary decoder uncertainty. Original Base ESC selection/provenance is now implemented without optional banks; canonical base_g0_context_followup owns the partial proof. Physical hold/release mosaics (1E/1F) still reject and block complete base authoring. Close that functional spacing bundle with exact held glyph, timing, row reset and protected effects. Alpha/mosaic black and double width/size (00/10/0E/0F) remain enhanced-only required implementation with correct1/1.5 no-response fallback; they are not extra base-level requirements. Preserve originals, bounds, located refusal and intended1/1.5 fallback. Raw-coded success does not prove logical Unicode conversion. No new isolated variant without a named inventory gap |
+| L15-A1 / F3,V1 | Author every agreed base repertoire/enhancement without losing context or essential fallback | Group remaining supplementary/composite Unicode and unqualified alias conversion with the admitted national/G2/diacritic/G3 repertoire contract. Close demonstrated conversion defects and qualify the complete applicable standard inventory, including retained row-zero/secondary decoder uncertainty. Original Base ESC selection/provenance is now implemented without optional banks; canonical base_g0_context_followup owns the partial proof. Physical hold/release mosaics (1E/1F) are implemented in canonical held_mosaics_followup: original controls and held-glyph/reset provenance stay separate; exact AnnexG3.3, timing, original form, mode/size/row reset, enhanced independence and caption guards have scoped native proof. Final affected checks/independent observations belong to that receipt. Actual pinned-editor base spacing interoperability remains mandatory underB2, not another product-refusal row. Alpha/mosaic black and double width/size (00/10/0E/0F) remain enhanced-only required implementation with correct1/1.5 no-response fallback; they are not extra base-level requirements. Preserve originals, bounds, located refusal and intended1/1.5 fallback. Raw-coded success does not prove logical Unicode conversion. No new isolated variant without a named inventory gap |
 | L15-E1 / F5,V6 | Preserve actual selected-audio metadata, source captions/AV/timeline and bounded ordinary engine/provider/output lifetimes | Accepted managed.1 still has confirmed selected-audio language loss. Canonical audio_language_followup isolates global suppression/complex-filter behavior and qualifies unpublished candidate.4 mapping from the actual selected input/absolute stream index, without guessed preferences. Reproduced source/lock/four patches and scoped pipeline, headed ordinary Next metadata/cleanup, strict captured model/AV/TSDuck and required Next smoke proof pass. Remaining managed adoption/compatibility/platform acceptance belongs toL15-E2; this candidate is not production repair or fullF5 acceptance. Generated Next carriage and scoped Linux Local/Scripted active cleanup now have canonical active_next_shutdown proof; full F5 remains open. Native/Hybrid/F6 and F5 source/replacement/EOF proofs retain their scopes. Close the audio defect and all remaining applicable F5 source/output/provider/live compatibility and worker/lease/cleanup cells; preserve exact AV/selected-audio/caption/clock/error oracles. Platform/adoption isL15-E2, not waived by these local cases |
 
 Missing mandatory evidence (existing implementation is partial; a failing fixed oracle identifies any required correction):
@@ -11183,33 +11183,40 @@ secondary-character-context gap, using the retained standard inventory and
 fixtures; no unmotivated editor variants, decoder maintenance or scope waiver.
 This new checkpoint is local only; the authorized af4a247f push is complete.
 
-Authored Base charset checkpoint (partialL15-A1/A2/F3,V1; not acceptance):
-canonical standalone_level15_followup/base_g0_context_followup owns
-level15-base-g0-context/identity.json, exact sources/fixture pins and all failures.
-Original ESC now selects only row-local G0, SetAfter with row reset, preserving
-raw primary/secondary aliases and writer provenance. Secondary retains its own
-national options and never designates G2 or changes X26/object context. Explicit
-no-second declaration is a no-op; absent Header/POP remains receiver-dependent
-and rejects with a cell position. Header glyphs do not use body NOS. Original
-physical Base rows re-encode exactly; immutable originals and resource bounds
-remain. Protected zone context compares charset/provenance before visually
-blank equivalence. Five factory and three domain regressions, the retained
-unsupported-control refusal, and14 web context/lineage cases pass. The original
-1670-case run remains failed1669/1 on the superseded ESC-refusal expectation;
-that expectation alone was corrected. The135/136 targeted run retains the
-invalid three-pair test fixture failure; only its local designation was corrected,
-without changing product pair guards or expected effects. Exact final check
-outcomes are canonical, not wholeCI or a new ordinary-stream/client proof.
-Stocklibzvbi0.2.42 independently observes actual encoded units:33/38 pass. Three
-physical-header and two German-secondary observations disagree with unchanged
-normative expectations; no decoder patch or defect attribution. Private G1-space
-alias is accepted only after its actual raster is entirely black. Prior editor,
-publication, isolation, localized headed admin, runtime/transport/F6 and platform
-proof is reused only within unchanged boundaries. No new QTM ESC-interchange or
-complete fallback/client proof is claimed. A1/A2/B2/D/E1/E2 and all other finite
-base/enhanced closure conditions remain. Next product work is the named held-
-mosaic spacing bundle, not isolated character/editor variants or decoder repair.
-The authorized checkpoint push does not imply acceptance or publication.
+Current authored Base charset/spacing boundary (partialL15-A1/A2/F3,V1):
+canonical standalone_level15_followup/base_g0_context_followup retains75dba6fd's
+original ESC/header/secondary-G0 corrections, source pins and all failures.
+Its stock33/38 qualification remains partial: three physical-header and two
+German-secondary observations disagree with unchanged normative expectations.
+No decoder patch, defect attribution, client or complete fallback claim follows.
+
+Canonical standalone_level15_followup/held_mosaics_followup owns
+level15-held-mosaics/identity.json and the new held-spacing implementation/proof.
+A bounded register retains original mosaic/reset and Hold provenance alongside
+unchanged control cells; glyph intent, shared raster/comparison and derived
+carrier use it. Hold is SetAt, Release SetAfter; original separation survives
+later spacing controls. Literal SPACE and actual mode/size/row changes reset the
+register; reinforcement, G1 alphabetics and X26 glyphs do not replace it. Explicit
+nonspacing D5 precedence remains unchanged. Both native/compiled rows retain
+exact originals, other subpage and base design. Caption visibility reuses the
+same register and rejects held content beyond its box, without rejecting empty
+registers or proper release. Protected zones retain held provenance even when
+pixels stay equal. All177 targeted domain/native and15 web regressions pass. Stocklibzvbi0.2.42
+passes21 fixed six-block/form/space observations and9 held/source equalities
+at1/1.5/2.5. Exact product-atlas matching is18/21: three separated-margin
+differences remain recorded, not a full font-equivalence claim or a changed
+product pixel oracle. The initial RED, failed fixture-export syntax/lints and
+strict final Clippy/fmt/progress/tool/source/fixture outcomes are canonical.
+This removes the demonstrated hold/release authoring refusal, not A1/A2/B2 or
+base/full9A acceptance. Actual pinnedQTM base-spacing interchange still needs
+its supported-family edit/save/import/shared-preview proof. Reuse unaffected
+publication, localized headed admin, profiles/isolation/Lua/restart, ordinary
+transport/AV/F6 and platform evidence only within their existing scopes.
+D native teletext control/operator access, E2 nativeARM/macOS/Health/adoption and
+full9A X1-deferred/X3-upstream remain independent mandatory blockers. Next join
+this spacing family to the existing pinned-editor import/preview workflow;
+repeat only changed boundaries, without new decoder maintenance or scope waiver.
+No new push/publication is authorized by this local follow-up checkpoint.
 
 Scoped L15-E1 Next final-wrapper checkpoint (partial F5/V6): canonical
 standalone_level15_followup/active_next_shutdown owns sources and all outcomes.

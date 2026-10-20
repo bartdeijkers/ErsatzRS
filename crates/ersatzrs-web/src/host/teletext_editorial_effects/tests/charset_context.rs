@@ -357,3 +357,90 @@ fn unchanged_pending_consensus_is_preserved_but_changed_raw_contender_is_protect
         TeletextEditorialEffectsFailure::TimedOut
     );
 }
+
+#[test]
+fn held_mosaic_provenance_cannot_change_outside_zone_even_when_pixels_stay_equal() {
+    let policy = policy();
+    let original = declared(0, b'A', false);
+    let mut cells = [b' '; 40];
+    cells[7..12].copy_from_slice(&[0x17, 0x7f, 0x7f, 0x1e, 0x1f]);
+    let row = |cells| {
+        TeletextPhysicalBaseOverlay::new(
+            address(123),
+            vec![TeletextPhysicalBaseRow::new(1, cells).unwrap()],
+        )
+        .unwrap()
+    };
+    let before = row(cells);
+    cells[9] = 0x41; // G1 alphabetic: does not replace the hold register.
+    let after = row(cells);
+    let encode = |overlay| {
+        ersatzrs_ffmpeg::teletext::encode_teletext_authored_service_before(
+            original
+                .clone()
+                .with_physical_base_overlays(vec![overlay], policy.validation.service)
+                .unwrap(),
+            &[],
+            &policy.encoding,
+            deadline(),
+        )
+        .unwrap()
+    };
+    let (old, new) = (encode(before), encode(after.clone()));
+    let (a, b) = (composition(&old), composition(&new));
+    let (old_cell, new_cell) = (
+        a.display_resolution().cell(1, 10).unwrap(),
+        b.display_resolution().cell(1, 10).unwrap(),
+    );
+    assert!(same_attributes(
+        old_cell,
+        new_cell,
+        &lineage::ProtectedLineage::default()
+    ));
+    assert_eq!(
+        origin_signature(a, old_cell, None),
+        origin_signature(b, new_cell, None)
+    );
+    assert_eq!(
+        project_teletext_comparison_glyph(a, old_cell).unwrap(),
+        project_teletext_comparison_glyph(b, new_cell).unwrap()
+    );
+    assert!(!super::super::charset_context::same_cell(
+        a,
+        b,
+        old_cell,
+        new_cell,
+        &lineage::ProtectedLineage::default(),
+        deadline()
+    )
+    .unwrap());
+    let changes = [after];
+    let check = |width| {
+        validate_teletext_editorial_effects_with_operands(
+            &old,
+            &new,
+            &project("zone", 1, 9, width, 1),
+            TeletextEditorialEdits {
+                base_text_edits: &[],
+                rows: &changes,
+                operands: &[],
+                object_operands: &[],
+                resource_operands: &[],
+                resource_programs: &[],
+                resource_additions: &[],
+                object_programs: &[],
+                main_programs: &[],
+                bitmaps: &[],
+            },
+            &policy.encoding,
+            deadline(),
+        )
+    };
+    let failure = check(1).unwrap_err();
+    assert_eq!(
+        failure.reason,
+        TeletextEditorialEffectsFailure::ProtectedDisplay
+    );
+    assert_eq!(failure.position, Some((1, 10)));
+    check(3).unwrap();
+}
