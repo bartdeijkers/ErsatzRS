@@ -9,6 +9,9 @@ mod cyrillic_hebrew;
 #[path = "non_latin/native_g2.rs"]
 mod native_g2;
 
+#[path = "non_latin/arabic_unicode.rs"]
+mod arabic_unicode;
+
 use super::*;
 
 fn coded(primary: u8) -> TeletextDeclaredService {

@@ -25,6 +25,10 @@ release section when tagging a release.
 
 ### Added
 
+- Encode explicitly authored Arabic teletext glyph forms and supplementary text
+  in their original declared charset, preserving cell order and Level 1 fallback
+  without requiring optional resource banks.
+
 - Encode qualified supplementary Unicode symbols and letters in authored
   Cyrillic and Greek teletext without optional object banks. Use their actual
   G2 repertoires while preserving Level 1 fallback and Local charset changes.

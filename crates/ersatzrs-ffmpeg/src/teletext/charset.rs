@@ -2,6 +2,8 @@
 
 use unicode_normalization::char::{compose, decompose_canonical};
 
+mod arabic;
+
 use ersatzrs_domain::{TeletextCharsetPair, TeletextPageCharsetDesignation};
 
 const NATIONAL_CODES: [u8; 13] = [
@@ -210,9 +212,17 @@ pub(super) fn encode_cyrillic_hebrew_g0(
     })
 }
 
-/// Qualified standalone Table41/43 symbols and letters, not column4 combining
+/// Explicit Table44 contextual forms retain the supplied scalar/cell order.
+pub(super) fn encode_arabic_g0(character: char) -> Option<Character> {
+    arabic::encode_g0(character)
+}
+
+/// Qualified standalone Table41/43/45 symbols and letters, not column4 combining
 /// marks, prohibited positions, rectangle aliases or a borrowed Latin table.
 pub(super) fn encode_native_g2(character: char, pair: TeletextCharsetPair) -> Option<Character> {
+    if pair == TeletextCharsetPair::ArabicArabic {
+        return arabic::encode_g2(character);
+    }
     let groups = native_g2_groups(pair)?;
     for (start, symbols) in groups {
         if let Some(index) = symbols
@@ -258,6 +268,9 @@ pub(super) fn decode_generated_replacement(
     pair: TeletextCharsetPair,
 ) -> Option<char> {
     if mode == 0x0f {
+        if pair == TeletextCharsetPair::ArabicArabic {
+            return arabic::decode_g2(code);
+        }
         let native;
         let groups = if pair == TeletextCharsetPair::LatinLatin {
             &LATIN_G2[..]
@@ -273,6 +286,9 @@ pub(super) fn decode_generated_replacement(
             }
         }
         return None;
+    }
+    if pair == TeletextCharsetPair::ArabicArabic && mode == 0x10 && code == 0x2a {
+        return Some('@');
     }
     if pair != TeletextCharsetPair::LatinLatin || !(0x10..=0x1f).contains(&mode) {
         return None;
@@ -309,6 +325,9 @@ pub(super) fn decode_base_text_spelling(
     code: u8,
     pair: TeletextCharsetPair,
 ) -> Option<char> {
+    if mode == 0x10 && pair == TeletextCharsetPair::ArabicArabic {
+        return arabic::decode_g0_replacement(code);
+    }
     if mode == 0x10 && pair == TeletextCharsetPair::LatinLatin {
         return Some(match code {
             0x24 => '¤',

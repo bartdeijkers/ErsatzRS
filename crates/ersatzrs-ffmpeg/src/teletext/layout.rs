@@ -29,6 +29,7 @@ pub(super) struct Layout {
 enum TextCharset {
     Latin(Option<u8>),
     Greek,
+    Arabic(u8),
     CyrillicHebrew(TeletextCharsetPair),
 }
 
@@ -39,6 +40,9 @@ impl Layout {
             TextCharset::Latin(None) => charset::encode_without_national_subset(character),
             TextCharset::Greek => charset::encode_greek_g0(character)
                 .or_else(|| charset::encode_native_g2(character, TeletextCharsetPair::GreekGreek)),
+            TextCharset::Arabic(_) => charset::encode_arabic_g0(character).or_else(|| {
+                charset::encode_native_g2(character, TeletextCharsetPair::ArabicArabic)
+            }),
             TextCharset::CyrillicHebrew(pair) => {
                 charset::encode_cyrillic_hebrew_g0(character, pair)
                     .or_else(|| charset::encode_native_g2(character, pair))
@@ -87,6 +91,7 @@ impl PositionedBaseGlyph {
         let designation = match charset {
             TextCharset::Latin(_) => 0,
             TextCharset::Greek => 0x37,
+            TextCharset::Arabic(primary) => primary,
             TextCharset::CyrillicHebrew(TeletextCharsetPair::Cyrillic1Cyrillic) => 0x20,
             TextCharset::CyrillicHebrew(TeletextCharsetPair::Cyrillic2Cyrillic) => 0x24,
             TextCharset::CyrillicHebrew(TeletextCharsetPair::Cyrillic3Cyrillic) => 0x25,
@@ -351,18 +356,13 @@ pub(super) fn compile_for_service_composition(
         // Matching Greek context admits its actual native Unicode scalars.
         // Unsupported/cross-script input stays a located character error.
         compile_with_text_charset(page, TextCharset::Greek, Some(service))?
-    } else if page.national_option.get() == 7
-        && primary.is_some_and(|primary| primary.get() & 7 == 7)
-        && page.rows.iter().all(|row| {
-            row.runs
-                .iter()
-                .all(|run| matches!(run.content, TeletextRunContent::Mosaics { .. }))
-        })
-    {
-        // Exact coded rows and G1 mosaics require no Latin Unicode conversion.
-        // Assigned Arabic header7 is not reserved region-zero7. Keep
-        // unqualified logical text on the original explicit rejection path.
-        compile_with_text_charset(page, TextCharset::Latin(None), Some(service))?
+    } else if let Some(primary) = primary.filter(|primary| {
+        primary.pair() == TeletextCharsetPair::ArabicArabic
+            && primary.get() & 7 == page.national_option.get()
+    }) {
+        // Arabic Text names explicit glyph forms in authored cell order.
+        // Preserve the actual47/57 designation; do not infer joining or bidi.
+        compile_with_text_charset(page, TextCharset::Arabic(primary.get()), Some(service))?
     } else {
         if page.national_option.get() >= 7 {
             return Err(TeletextEncodingError::NationalOption {

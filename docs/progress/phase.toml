@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: correct Arabic G0 assignment verified; logical Text, receiver control and remaining finite/end gates stay open'
+current_focus = 'P9A-04 standalone Level 1/1.5: explicit Arabic G0/G2 Text conversion verified; connect existing pinned editor flow, receiver/control and remaining end gates stay open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -343,19 +343,21 @@ change or suitable client/fullC/base/9A acceptance follows; broader Lua/wholehos
 browser matching, A1/A2/B2 and runtime/native/adoption requirements remain.
 D's bounded documented-provider/BM_CLICK branch now proves playlist input only;
 custom channel control and shared storage still block full receiver proof.
-A1/A2 Arabic G0 assignment checkpoint corrects the false Table44/7E pending
-classification and mask refusal; all96 coded slots in47/57 keep exact identities,
-no-bank encoding and shared raster. Literal existing7E mask and host panel pixels
-replace the disproven unmarked assumption. Canonical arabic_g0_assignment retains
-REDs, source pin, checks and12 stockdecoder code-position/nonblank-raster cases
-at1/1.5/2.5 with/withoutX28. Private tokens do not prove normative Unicode/font.
-Logical Arabic Text remains rejected; derived contextual-form aliases are research
-only. No complete A1/A2/base/9A acceptance. Reuse unchanged editor/publication/
-Lua/isolation/transport/F6 proof; D needs private storage and reliable control,
-E1/E2 native/adoption and enhanced X1-deferred/X3-upstream remain mandatory.
-Next: grouped Arabic Text conversion with exact authored cell order/context/
-fallback using existing tools; no isolated glyph loop, client retry or maintenance.
-Checkpoint push is specifically authorized; no milestone is marked complete.
+A1 explicit Arabic Text package now encodes95 qualified G0/94 G2 glyph-form
+scalars in both47/57, preserving original text/cell order/actual designation,
+Level1 fallback and no-bank native output/shared raster. HEAD9ae0088f RED,
+983 teletext regressions,11 final affected cases and strict FFmpeg Clippy pass.
+Canonical arabic_unicode/identity.json retains all inputs/pins and24 independent
+decodes:1244 scalar/fallback checks versus1024 private-slot-only observations;
+private tokens do not prove full Arabic glyph conformity. Original G0/7E
+assignment/host-panel proof remains valid under arabic_g0_assignment.
+QTM1.0's direct ArabicG0 keyboard map is empty; alternate glyph/X26 controls are
+not thereby disqualified. Next connect the grouped Arabic context through the
+existing actual X26 editor/concept/preview/reexport/reopen/publication path.
+No editor repair/unchanged keyboard retry, automatic shaping/bidi/fullalias claim
+or A1/A2/B2/base/9A acceptance. Reuse unchanged stream/Lua/isolation/F6 scopes;
+D native storage/control, E2 native/adoption and full2.5 X1/X3 remain mandatory.
+Local checkpoint only; the prior specific push is fulfilled, no new push.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

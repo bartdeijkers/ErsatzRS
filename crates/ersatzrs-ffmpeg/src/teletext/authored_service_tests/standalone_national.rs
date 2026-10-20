@@ -114,6 +114,13 @@ fn reserved_header_or_unqualified_unicode_stays_rejected() {
             ));
             continue;
         }
+        if matches!(primary, Some(0x47 | 0x57)) {
+            // Assigned Arabic now supports Latin letters through its actual G2;
+            // use genuinely unsupported input to retain this rejection guard.
+            draft.base.pages[0].rows[0].runs[0].content = TeletextRunContent::Text {
+                text: "🙂".into(),
+            };
+        }
         let service = declare(draft);
         let page = &service.semantic().base().pages[0];
         let error = layout::compile_for_service_composition(service.semantic(), page)
@@ -125,6 +132,10 @@ fn reserved_header_or_unqualified_unicode_stays_rejected() {
                 matches!(error,TeletextEncodingError::Character {address,row:3,column:1,codepoint}
                 if address==owner(0) && codepoint==u32::from('B'))
             );
+        } else if matches!(primary, Some(0x47 | 0x57)) {
+            assert!(matches!(error,
+                TeletextEncodingError::Character {address,row:3,column:1,codepoint}
+                if address==owner(0) && codepoint==u32::from('🙂')));
         } else {
             assert!(
                 matches!(error,TeletextEncodingError::NationalOption {address} if address==owner(0))

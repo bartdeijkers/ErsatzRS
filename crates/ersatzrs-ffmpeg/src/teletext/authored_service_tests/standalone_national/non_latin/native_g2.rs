@@ -48,6 +48,8 @@ fn generated_base_text_edits_bind_exact_original_cells_and_recompile_supported_c
         (0x24, '£', '¥', 0x25),
         (0x25, '£', '¥', 0x25),
         (0x37, '£', 'e', 0x24),
+        (0x47, 'A', 'B', 0x42),
+        (0x57, 'A', 'B', 0x42),
         (0x01, '£', '¥', 0x25),
         (0x00, 'é', 'Á', 0x41),
     ] {
