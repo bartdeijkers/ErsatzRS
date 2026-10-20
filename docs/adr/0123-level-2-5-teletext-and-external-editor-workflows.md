@@ -921,8 +921,15 @@ preceding exact display owner remains present and every replacement consumer in
 that magazine has a complete explicit page-X28 declaration. Retain the remembered
 magazine presence for subsequent generations; neither omission nor page C4 clears
 a receiver cache. Header/POP uncertainty is not an explicit declaration. Missing
-MOT banks still require reconciliation without mutating old output. These fences
-are not full warm reconciliation or an accepted authoring restriction.
+Nonempty MOT banks still require reconciliation without mutating old output.
+A completely delivered canonical empty MOT may be omitted: all associations,
+links, fallback/default slots and advertised counts must be inactive. A bounded
+per-wire-magazine S1 mask retains every completed nonempty owner, including
+owners omitted from later generations. Only completion of the exact same S1's
+neutral bank clears its bit; pending output, a different S1 and descriptor
+withdrawal do not. Empty-bank output-guard regression evidence does not establish
+ordinary HTTP delivery or independent warm-client rendering. These fences are
+not full warm reconciliation or an accepted authoring restriction.
 P9A-04 owns implementation status and the transport/control receipt;
 full bank/page retirement and independent warm-client proof remain required.
 The additive original libzvbi0.2.42 warm-cache diagnostic now checks representative

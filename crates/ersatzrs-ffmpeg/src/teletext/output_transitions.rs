@@ -201,13 +201,50 @@ impl TeletextOutputGate {
                     .iter()
                     .filter(|page| page.address.page.magazine() == magazine)
                     .any(|page| !explicit_page(page.address))
-        }) || old.mots().iter().any(|mot| {
-            !new.mots()
-                .iter()
-                .any(|other| mot.identity().page().magazine() == other.identity().page().magazine())
+        }) || (1_u8..=8).any(|magazine| {
+            self.acknowledged_nonempty_mots[usize::from(magazine & 7)] != 0
+                && !new
+                    .mots()
+                    .iter()
+                    .any(|mot| mot.identity().page().magazine() == magazine)
         }) {
             return Err(TeletextOutputError::CacheReconciliationRequired);
         }
         Ok(())
     }
+}
+
+pub(super) fn empty_mot(mot: &ersatzrs_domain::TeletextMotLevel25Declaration) -> bool {
+    use ersatzrs_domain::{
+        TeletextMotDefaultObject, TeletextMotPublicLinkIndex, TeletextX27LinkTarget,
+    };
+
+    // Only a completely delivered bank reaches warm_service. Clause 10.6's
+    // zero associations and unused links cannot activate cached enhancement
+    // pages. Keep nonempty/uncertain banks fenced; omission does not erase them.
+    let links = mot.links();
+    let counts = links.counts();
+    counts.magazine_mask() == 0
+        && counts.object_pages() == 0
+        && counts.drcs_pages() == 0
+        && mot.associations().iter().all(|association| {
+            [association.objects(), association.drcs()]
+                .iter()
+                .all(|selection| !selection.global() && selection.public().is_none())
+        })
+        && std::iter::once(None)
+            .chain(TeletextMotPublicLinkIndex::ALL.map(Some))
+            .all(|index| {
+                let object = links.object_link(index);
+                matches!(object.target(), TeletextX27LinkTarget::Unspecified { .. })
+                    && object.raw_fallback().get() == 0
+                    && object
+                        .defaults()
+                        .iter()
+                        .all(|value| matches!(value, TeletextMotDefaultObject::NoObject { .. }))
+                    && matches!(
+                        links.drcs_link(index).target(),
+                        TeletextX27LinkTarget::Unspecified { .. }
+                    )
+            })
 }

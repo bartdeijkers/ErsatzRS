@@ -290,6 +290,9 @@ pub struct TeletextOutputGate {
     // One bit per wire magazine (zero denotes magazine eight). Omission and
     // withdrawal cannot prove that an attached decoder forgot earlier M29.
     acknowledged_m29_magazines: u8,
+    // One bit per checked logical S1 in each wire magazine. Only a completed
+    // neutral bank with that exact owner clears previously delivered MOT state.
+    acknowledged_nonempty_mots: [u16; 8],
 }
 
 impl TeletextOutputGate {
@@ -482,6 +485,7 @@ impl TeletextOutputGate {
             last_ack: None,
             warm_service: None,
             acknowledged_m29_magazines: 0,
+            acknowledged_nonempty_mots: [0; 8],
         })
     }
 
@@ -1043,6 +1047,15 @@ impl TeletextOutputGate {
             self.payload.signalling_ready = true;
         }
         if let Some(service) = &pending.completed_authored {
+            for mot in service.declared().mots() {
+                let magazine = usize::from(mot.identity().page().magazine() & 7);
+                let owner = 1_u16 << mot.identity().logical_subpage().get();
+                if transitions::empty_mot(mot) {
+                    self.acknowledged_nonempty_mots[magazine] &= !owner;
+                } else {
+                    self.acknowledged_nonempty_mots[magazine] |= owner;
+                }
+            }
             self.warm_service = Some(Arc::clone(service));
         }
         self.last_ack = Some(stamp);

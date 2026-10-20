@@ -919,6 +919,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Allow a fully delivered empty teletext MOT bank to retire without resetting
+  the output source. Preserve nonempty subpage history until that exact bank is cleared.
 - Check realtime and rolling stream delivery in the disposable TSDuck playback
   gate as well as its live-URL mode, so transport validity alone cannot hide starvation.
 - Make the default TSDuck playback capture include periodic delivery samples

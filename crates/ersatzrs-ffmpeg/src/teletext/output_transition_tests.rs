@@ -10,6 +10,9 @@ use crate::teletext::{
 use ersatzrs_domain::*;
 use mpeg2ts_reader::mpegts_crc;
 
+#[path = "output_transition_tests/mot_retirement.rs"]
+mod mot_retirement;
+
 pub(in crate::teletext) fn simple(
     language: &str,
     magazine: Option<u8>,
