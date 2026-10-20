@@ -895,6 +895,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Allow Add/Copy in explicitly created teletext banks, preserving complete
+  definitions and lifecycle through drafts, preview, separate publication and
+  restart. Stale, occupied and invalid targets still leave existing output intact.
+
 - Support authored hold/release mosaics while retaining original control bytes,
   glyph sources and mosaic spacing. Keep caption-box visibility and protected
   zone boundaries enforced when a held glyph depends on an earlier cell.

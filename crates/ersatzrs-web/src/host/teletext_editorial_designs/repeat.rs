@@ -463,7 +463,7 @@ fn extend_root_export(
     Ok(exported)
 }
 
-fn check_operand_budget(
+pub(super) fn check_operand_budget(
     changes: &TeletextEditorialChanges,
     budget: TeletextServiceBudget,
 ) -> Result<()> {

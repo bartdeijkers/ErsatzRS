@@ -16,6 +16,9 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 
+#[path = "definition_additions/retained_banks.rs"]
+mod retained_banks;
+
 /// Explicit authoring request; uploaded TTI or sidecar data never grants this action.
 pub struct NativeTeletextResourceDefinitionAddRequest {
     pub name: String,
@@ -356,12 +359,15 @@ fn encode(
         .collect::<Result<Vec<_>>>()?;
     authorize(
         &latest.body.project,
-        baselines
-            .root
-            .original
-            .view()
-            .encoded()
-            .ok_or(NativeTeletextEditorialImportError::Association)?,
+        if banks.is_empty() {
+            latest
+        } else {
+            &baselines.root
+        }
+        .original
+        .view()
+        .encoded()
+        .ok_or(NativeTeletextEditorialImportError::Association)?,
         &additions,
         policy.encoding.composition.service,
         deadline,
@@ -372,14 +378,12 @@ fn encode(
         resource_additions: additions,
         ..Default::default()
     };
-    baselines
-        .cumulative
-        .resource_additions
-        .extend_from_slice(&incoming.resource_additions);
-    baselines
-        .cumulative
-        .object_resource_additions
-        .extend_from_slice(&incoming.object_resource_additions);
+    retained_banks::append(
+        &mut baselines.cumulative,
+        &incoming,
+        policy.document.validation.service,
+        deadline,
+    )?;
     let overlay = repeat::cumulative_overlay(&baselines.provenance, &baselines.cumulative)?;
     let document = append_overlay(
         baselines.root.original.view().document_version(),

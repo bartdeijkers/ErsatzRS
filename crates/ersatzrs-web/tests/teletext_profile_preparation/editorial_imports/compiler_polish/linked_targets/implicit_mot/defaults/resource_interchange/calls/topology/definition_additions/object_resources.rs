@@ -18,6 +18,9 @@ use ersatzrs_web::host::{
     },
 };
 
+#[path = "object_resources/retained_definitions.rs"]
+mod retained_definitions;
+
 fn bank_resources() -> [TeletextResourceIdentity; 4] {
     [
         (TeletextResourceKind::Gpop, 0xe1, 0),
@@ -137,15 +140,18 @@ struct BankExpected {
     definition26: TeletextEnhancementObjectDefinition,
 }
 async fn qualify_banks(second: bool, edited: bool) -> BankExpected {
-    // A complete original V3 producer, independently of the new-bank action,
-    // enters the pre-existing native factory and physical encoder directly.
-    let fixture = Fixture::new_persistent().await;
-    authoring_metadata::install(&fixture).await;
     let response = match (second, edited) {
         (_, true) => edited_response("day", 124, 32),
         (true, false) => second_response("day", 124, 32),
         (false, false) => complete_response("day", 124, 32),
     };
+    Box::pin(qualify_response(response, second)).await
+}
+async fn qualify_response(response: Value, second: bool) -> BankExpected {
+    // A complete original V3 producer, independently of the new-bank action,
+    // enters the pre-existing native factory and physical encoder directly.
+    let fixture = Fixture::new_persistent().await;
+    authoring_metadata::install(&fixture).await;
     authoring_metadata::write_compact(&fixture, "day", &response);
     let profile = fixture.profile("day", "day", "good").await;
     fixture.bind(1, &profile, None).await;
@@ -290,12 +296,30 @@ async fn assert_bank_concept(
     expected: &BankExpected,
 ) {
     let stored = drcs_bitmap::stored(fixture, concept).await;
+    Box::pin(assert_bank_revision(fixture, flow, &stored, expected)).await;
+}
+async fn assert_bank_revision(
+    fixture: &Fixture,
+    flow: &Flow,
+    stored: &TeletextDesignRevision,
+    expected: &BankExpected,
+) {
     let saved = decode_teletext_design_documents(&stored.document, designs::budget()).unwrap();
     let overlay = saved.editorial_overlay().unwrap();
     assert_eq!(overlay.schema_version(), 25);
     assert_eq!(overlay.object_resource_additions(), expected.banks);
     assert_eq!(overlay.resource_object_definition_additions().len(), 2);
-    let restored = drcs_bitmap::restored(fixture, concept).await;
+    let restored = reload_original_teletext_design_revision(
+        &fixture.state.application,
+        stored.design_id,
+        stored.revision,
+        designs::budget(),
+        channel_documents::policy(),
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
     let original = flow.saved[0].candidate();
     assert_eq!(restored.selection(), original.selection());
     assert_eq!(restored.metadata(), original.metadata());

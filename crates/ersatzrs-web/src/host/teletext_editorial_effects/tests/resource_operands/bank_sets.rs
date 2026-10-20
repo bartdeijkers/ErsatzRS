@@ -313,3 +313,233 @@ fn object_bank_effects_bound_raw_commands_and_reject_original_bank_add_into_new_
     )
     .is_err());
 }
+
+fn bank_definition(
+    bank: &TeletextSavedObjectResourceAddition,
+    id: u16,
+    code: u8,
+) -> TeletextResourceObjectDefinitionAddition {
+    let resource = bank.addition().resource();
+    let identity = if resource.kind() == TeletextResourceKind::Gpop {
+        TeletextObjectIdentity::global(resource, TeletextObjectId::new(id))
+    } else {
+        TeletextObjectIdentity::public(resource, TeletextObjectId::new(id))
+    }
+    .unwrap();
+    TeletextResourceObjectDefinitionAddition::new(
+        TeletextEnhancementObjectDefinition {
+            identity,
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![at(0, glyph(code))]).unwrap(),
+        },
+        policy().validation.service,
+    )
+    .unwrap()
+}
+fn extend_bank(
+    bank: &TeletextSavedObjectResourceAddition,
+    additions: &[TeletextResourceObjectDefinitionAddition],
+) -> TeletextSavedObjectResourceAddition {
+    let definitions = bank
+        .addition()
+        .definitions()
+        .iter()
+        .cloned()
+        .chain(
+            additions
+                .iter()
+                .map(|addition| addition.definition().clone()),
+        )
+        .collect();
+    TeletextSavedObjectResourceAddition::new(
+        bank.document_index(),
+        TeletextObjectResourceAddition::new(
+            bank.addition().resource(),
+            definitions,
+            policy().validation.service,
+        )
+        .unwrap(),
+        bank.transmission(),
+    )
+    .unwrap()
+}
+fn ordinary_second() -> TeletextResourceObjectDefinitionAddition {
+    let mut value = definition().definition().clone();
+    value.identity = target(false, 65523);
+    TeletextResourceObjectDefinitionAddition::new(value, policy().validation.service).unwrap()
+}
+
+#[test]
+fn retained_bank_definition_effects_append_empty_and_populated_banks_before_old_original_additions()
+{
+    let root = compile(Fixture::default());
+    let banks = [bank(false, true), bank(true, false)];
+    let old_additions = [definition()];
+    let before = compile_added(&root, &banks, &old_additions);
+    let deltas = [
+        bank_definition(&banks[0], 65531, b'D'),
+        bank_definition(&banks[1], 65531, b'E'),
+        ordinary_second(),
+    ];
+    let complete = [
+        extend_bank(&banks[0], &deltas[..1]),
+        extend_bank(&banks[1], &deltas[1..2]),
+    ];
+    let ordinary = [old_additions[0].clone(), deltas[2].clone()];
+    let after = compile_added(&root, &complete, &ordinary);
+    qualifies(
+        &before,
+        &after,
+        bank_edits(&[], &deltas),
+        bank_edits(&complete, &ordinary),
+    )
+    .unwrap();
+    qualifies(
+        &root,
+        &after,
+        bank_edits(&complete, &ordinary),
+        bank_edits(&complete, &ordinary),
+    )
+    .unwrap();
+    qualifies(
+        &after,
+        &after,
+        bank_edits(&[], &[]),
+        bank_edits(&complete, &ordinary),
+    )
+    .unwrap();
+    for (old, new) in banks.iter().zip(&complete) {
+        assert_eq!(old.document_index(), new.document_index());
+        assert_eq!(old.transmission(), new.transmission());
+    }
+    let reordered_ordinary = [ordinary[1].clone(), ordinary[0].clone()];
+    let reordered_service = compile_added(&root, &complete, &reordered_ordinary);
+    assert!(
+        qualifies(
+            &before,
+            &reordered_service,
+            bank_edits(&[], &deltas),
+            bank_edits(&complete, &reordered_ordinary),
+        )
+        .is_err(),
+        "bank insertions do not allow moving an ordinary addition ahead of an older identity"
+    );
+}
+
+#[test]
+fn retained_bank_definition_effects_reject_unaccounted_reordered_stale_or_occupied_deltas() {
+    let root = compile(Fixture::default());
+    let banks = [bank(false, true), bank(true, false)];
+    let ordinary = [definition()];
+    let before = compile_added(&root, &banks, &ordinary);
+    let delta = [bank_definition(&banks[1], 65531, b'D')];
+    let complete = [banks[0].clone(), extend_bank(&banks[1], &delta)];
+    let after = compile_added(&root, &complete, &ordinary);
+    let duplicate = [delta[0].clone(), delta[0].clone()];
+    let wrong = [bank_definition(&banks[1], 65531, b'E')];
+    let occupied = [bank_definition(&banks[1], 65530, b'B')];
+    for (incoming, cumulative) in [
+        (bank_edits(&[], &[]), bank_edits(&complete, &ordinary)),
+        (
+            bank_edits(&[], &duplicate),
+            bank_edits(&complete, &ordinary),
+        ),
+        (bank_edits(&[], &wrong), bank_edits(&complete, &ordinary)),
+        (bank_edits(&[], &occupied), bank_edits(&complete, &ordinary)),
+        (bank_edits(&[], &delta), bank_edits(&banks, &ordinary)),
+    ] {
+        assert!(qualifies(&before, &after, incoming, cumulative).is_err());
+    }
+    let mut reversed = complete[1].addition().definitions().to_vec();
+    reversed.reverse();
+    let reordered = [
+        complete[0].clone(),
+        TeletextSavedObjectResourceAddition::new(
+            complete[1].document_index(),
+            TeletextObjectResourceAddition::new(
+                complete[1].addition().resource(),
+                reversed,
+                policy().validation.service,
+            )
+            .unwrap(),
+            complete[1].transmission(),
+        )
+        .unwrap(),
+    ];
+    let after_reordered = compile_added(&root, &reordered, &ordinary);
+    assert!(qualifies(
+        &before,
+        &after_reordered,
+        bank_edits(&[], &delta),
+        bank_edits(&reordered, &ordinary)
+    )
+    .is_err());
+    let mut lifecycle = complete[1].transmission();
+    lifecycle.last_subpage = !lifecycle.last_subpage;
+    let changed_lifecycle = [
+        complete[0].clone(),
+        TeletextSavedObjectResourceAddition::new(
+            complete[1].document_index(),
+            complete[1].addition().clone(),
+            lifecycle,
+        )
+        .unwrap(),
+    ];
+    let after_lifecycle = compile_added(&root, &changed_lifecycle, &ordinary);
+    assert!(qualifies(
+        &before,
+        &after_lifecycle,
+        bank_edits(&[], &delta),
+        bank_edits(&changed_lifecycle, &ordinary)
+    )
+    .is_err());
+}
+
+#[test]
+fn retained_bank_definition_effects_reject_double_authority_in_cumulative_complete_bank() {
+    let root = compile(Fixture::default());
+    let banks = [bank(false, true)];
+    let before = compile_added(&root, &banks, &[]);
+    let delta = [bank_definition(&banks[0], 65531, b'D')];
+    let complete = [extend_bank(&banks[0], &delta)];
+    let after = compile_added(&root, &complete, &[]);
+    let incoming = bank_edits(&[], &delta);
+    let canonical = bank_edits(&complete, &[]);
+    qualifies(&before, &after, incoming, canonical).unwrap();
+    // These bodies match the final value but invent original-root ancestry for
+    // an identity owned solely by the complete retained bank. Native replay
+    // rejects this independently; the effects seam must retain that role split.
+    let operand = [TeletextResourceObjectOperandOverlay::new(
+        delta[0].identity(),
+        0,
+        0,
+        glyph(b'X'),
+        glyph(b'D'),
+    )
+    .unwrap()];
+    let program = [TeletextResourceObjectProgramOverlay::new(
+        delta[0].identity(),
+        TeletextEnhancementProgram::new(vec![at(0, glyph(b'X'))]).unwrap(),
+        delta[0].definition().program.clone(),
+        vec![Some(0)],
+        policy().validation.service,
+    )
+    .unwrap()];
+    for conflicting in [
+        TeletextEditorialEdits {
+            resource_operands: &operand,
+            ..canonical
+        },
+        TeletextEditorialEdits {
+            resource_programs: &program,
+            ..canonical
+        },
+    ] {
+        assert_eq!(
+            qualifies(&before, &after, incoming, conflicting)
+                .unwrap_err()
+                .reason,
+            TeletextEditorialEffectsFailure::Association
+        );
+    }
+}

@@ -37,6 +37,7 @@ pub(super) fn checked_context<'a>(
             edited,
             incoming.resource_additions,
             incoming.object_resource_additions,
+            cumulative.object_resource_additions,
             budget,
             deadline,
         )?)
@@ -64,6 +65,7 @@ impl<'a> Context<'a> {
         edited: &'a EncodedTeletextAuthoredService,
         additions: &[TeletextResourceObjectDefinitionAddition],
         banks: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+        retained_banks: &[ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
         budget: &TeletextAuthoredServiceEncodingBudget,
         deadline: Instant,
     ) -> Result<Self> {
@@ -80,7 +82,13 @@ impl<'a> Context<'a> {
             return Err(error(None, None, TeletextEditorialEffectsFailure::Budget));
         }
         if banks.is_empty() {
-            super::definition_additions::check_incoming(before, after, additions, deadline)?;
+            super::definition_additions::check_retained_incoming(
+                before,
+                after,
+                additions,
+                retained_banks,
+                deadline,
+            )?;
             super::definition_additions::check_declarations(
                 declared,
                 edited.declared(),

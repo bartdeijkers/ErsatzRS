@@ -30,9 +30,14 @@ concept; replay admits only the identical stored bank set after complete native
 source, graph, lifecycle and shared-effect qualification. Later qualified TTI
 edits fold into complete retained bank bodies. Shared preview, separate explicit
 publication and cold reconstruction reuse that model and immutable originals.
-Localized creation controls, retained-bank Add/Copy integration and full external
-editor/consumer proof remain required. P9A-04 owns the scoped proof and unchanged
-full F1/X3 requirements; no new package or upload authority follows.
+Existing Add/Copy now authenticates exact retained bank presence against the
+latest current-receipt snapshot and folds added definitions into the complete
+V25 bank body. Original-bank additions keep their old distinct role; per-bank
+append order, original catalogue order, lifecycle and single normalized intent
+remain mandatory. Existing localized forms are qualified for fitting contexts;
+localized bank creation and complete native-capacity/editor/consumer proof remain
+required. P9A-04 owns unchanged full F1/X3 requirements. No package, generic upload
+or absent-bank creation authority is acquired by Add/Copy.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

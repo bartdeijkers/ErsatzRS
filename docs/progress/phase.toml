@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 saved new-bank application/replay verified; next localized bank controls and retained-bank authoring; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 retained-bank Add/Copy native and headed verified; next localized bank creation and selected-consumer/effective-role integration; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -129,9 +129,14 @@ worker/receipt/head-CAS and exact native lifecycle/effects paths. Final193 codec
 and 141 host/native cases pass, including cumulative old/new-bank TTI edits,
 shared preview, separate publication and cold reopen. Strict app/web Clippy and
 architecture pass; generic imports still cannot create banks. No actual new-bank
-QTM GUI/client or full9A claim. Next connect localized creation controls and
-retained-bank Add/Copy authoring; effective-role/selected-bank-consumer coverage
-and complete set/editor acceptance stay open. X3 still waits upstream.
+QTM GUI/client or full9A claim. Its retained_definition_followup now proves
+fitting-context Add/Copy in retained banks through existing localized forms,
+normalized complete V25 bodies and exact lifecycle/effects.148 unique focused
+cases, strict web Clippy and two headed browsers pass; the owned native proof
+checks four browser-created definitions, re-export, separate publication and
+cold reopen. Earlier9-culture/static UI and unchanged stream proofs retain scope.
+Next localized bank creation and selected-consumer/effective-role integration;
+full-capacity/editor acceptance still needs X3 upstream capability and adoption.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
 

@@ -407,9 +407,16 @@ fn resource_object_effects_authenticate_complete_packet_and_provenance_against_c
         code: b'B',
         ..Fixture::default()
     });
-    let context =
-        resource_objects::Context::new(&before, &after, &[], &[], &policy().encoding, deadline())
-            .unwrap();
+    let context = resource_objects::Context::new(
+        &before,
+        &after,
+        &[],
+        &[],
+        &[],
+        &policy().encoding,
+        deadline(),
+    )
+    .unwrap();
     context
         .check(
             object_page(&before, false),
