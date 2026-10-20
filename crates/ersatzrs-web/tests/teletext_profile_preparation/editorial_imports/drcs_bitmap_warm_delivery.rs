@@ -74,6 +74,20 @@ pub(super) async fn source_fixture_with_response_and_writer(
     encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
     write: fn(&Fixture, &str, &Value) -> Vec<u8>,
 ) -> (Fixture, Flow, Vec<u8>) {
+    Box::pin(source_fixture_with_capacity(
+        tools, directory, response, encoding, write, 3,
+    ))
+    .await
+}
+
+async fn source_fixture_with_capacity(
+    tools: &Tools,
+    directory: &Path,
+    response: fn(&str, u16, u16) -> Value,
+    encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+    write: fn(&Fixture, &str, &Value) -> Vec<u8>,
+    capacity: u8,
+) -> (Fixture, Flow, Vec<u8>) {
     let fixture = Fixture::new_persistent().await;
     let source =
         client_capture::generate_source_with_duration(&tools.ffmpeg, fixture.root.path(), 60).await;
@@ -93,7 +107,7 @@ pub(super) async fn source_fixture_with_response_and_writer(
         ),
         (
             ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
-            "3".to_owned(),
+            capacity.to_string(),
         ),
         (
             ersatzrs_web::host::teletext_work::MAX_CONCURRENT_SETTING,

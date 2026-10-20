@@ -927,8 +927,11 @@ links, fallback/default slots and advertised counts must be inactive. A bounded
 per-wire-magazine S1 mask retains every completed nonempty owner, including
 owners omitted from later generations. Only completion of the exact same S1's
 neutral bank clears its bit; pending output, a different S1 and descriptor
-withdrawal do not. Empty-bank output-guard regression evidence does not establish
-ordinary HTTP delivery or independent warm-client rendering. These fences are
+withdrawal do not. The empty-bank output guard and a qualified ordinary same-response publication
+flow now retain exact source clock/AV, TSDuck, channel isolation, explicit
+publication and durable DB recovery at default capacity two. This component
+proof does not establish independent warm-client rendering or automatic
+reconciliation of populated banks. These fences are
 not full warm reconciliation or an accepted authoring restriction.
 P9A-04 owns implementation status and the transport/control receipt;
 full bank/page retirement and independent warm-client proof remain required.

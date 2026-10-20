@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 canonical empty-MOT guard component verified121; next ordinary TCP publication/AV/TSDuck proof; populated-bank/M29/client/platform gates remain; Windows-package deferred, X1 deferred/X3 upstream'
+current_focus = 'P9A-04 F4 neutral-MOT same-response publication/AV/TSDuck component closed at default2; next automatic populated-MOT retirement; M29/independent warm-client/platform remain, Windows-package deferred/X1 deferred/X3 upstream'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -225,15 +225,19 @@ above, with native Windows scoped startup, ordinary playback and original-wire
 proof now recorded too. The current-source package followup above is deferred;
 its next authorized trial reserves 120 minutes. Required source/caption/alternate-
 audio and cleanup oracles stay unchanged.
-F4 canonical empty-MOT guard repair is verified as an engine component. Fully
-acknowledged neutral banks may retire; bounded per-magazine/S1 history prevents
-another subpage, pending generation or descriptor withdrawal clearing an earlier
-nonempty bank. Three grouped regressions and121 affected output/carousel/lifecycle
-cases pass; original and incomplete-candidate negatives remain. Canonical
-tmp/phase9-mot-retirement/identity.json owns exact scopes. Next connect this
-transition to the existing ordinary TCP/publication fixture with unchanged
-AV/TSDuck/cleanup oracles. Actual HTTP/independent receiver proof and automatic
-populated-bank/M29 reconciliation remain open; no client search or extra variant.
+F4 neutral-MOT engine and ordinary-publication component is closed. Reuse the
+121-case exact-owner history/guard proof at8b5e2f77. Its ordinary_tcp_followup
+now proves separately prepared/saved/pending/explicitly published bankless Day on
+one original HTTP response, with Night on its own unchanged original response,
+at actual capacity2. Complete cycle bytes and the full captured tail, source
+clock, source AV, TSDuck and durable DB recovery pass. Package/profile/binding/
+configuration/history isolation and exactly one explicit new producer preparation
+remain checked; owned cleanup and required ordinary MPEG-TS/HLS smoke pass.
+Canonical tmp/phase9-mot-retirement/ordinary-tcp/identity.json owns the final
+proof and retained setup/lint negatives. Next implement automatic retirement of
+previously populated MOT state on the continuing response; no manual reconnect,
+capacity increase or silent omission. M29 reconciliation, independent warm-client
+and full F4/platform acceptance remain separate open requirements.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
 pass on optimized.4 with exact cues, copied AV/Dutch AAC, shared cache and natural

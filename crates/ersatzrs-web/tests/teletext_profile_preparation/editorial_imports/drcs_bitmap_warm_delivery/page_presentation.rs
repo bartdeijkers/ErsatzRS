@@ -16,6 +16,9 @@ use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 #[path = "page_presentation/headed.rs"]
 mod headed;
 
+#[path = "page_presentation/mot_retirement.rs"]
+mod mot_retirement;
+
 const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_M29_BANK_WARM_DELIVERY_DIR";
 const ORIGINAL_HASH: &str = "d1e9a9d49a28be14adb1e727c11ab0cfe908bbd0df83ca49c48ef4e170a0a870";
 const EDITED_HASH: &str = "6b4ac2e70bab6d73b6bdbb52bf9590887c7094582c14bbbca87433225aaebda6";
