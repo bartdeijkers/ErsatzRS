@@ -28,7 +28,7 @@ fn object(resource: TeletextResourceIdentity, id: u16) -> TeletextObjectIdentity
     }
     .unwrap()
 }
-fn additions() -> Vec<TeletextSavedObjectResourceAddition> {
+pub(super) fn additions() -> Vec<TeletextSavedObjectResourceAddition> {
     let public = resource(false, 0xa2, 0);
     let global = resource(true, 0xa3, 15);
     let definition = |bank, id, object_type, commands| TeletextEnhancementObjectDefinition {

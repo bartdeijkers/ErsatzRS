@@ -137,7 +137,8 @@ mod object_resources;
 mod repeat;
 pub use definition_additions::{
     add_teletext_editorial_object_resources, add_teletext_editorial_resource_definitions,
-    copy_teletext_editorial_resource_definition, NativeTeletextObjectResourcesAddRequest,
+    announce_teletext_editorial_object_subpages, copy_teletext_editorial_resource_definition,
+    NativeTeletextObjectResourcesAddRequest, NativeTeletextObjectSubpagesAnnounceRequest,
     NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
 };
 
@@ -394,6 +395,7 @@ fn qualify_rows(
         .overlay()
         .ok_or(NativeTeletextEditorialImportError::Association)?;
     let object_resource_additions = overlay.object_resource_additions().to_vec();
+    let object_subpage_announcements = overlay.object_subpage_announcements().to_vec();
     let base_text_edits = overlay.base_text_edits().to_vec();
     let overlays = overlay.pages().to_vec();
     let operands = overlay.local_program_operands().to_vec();
@@ -408,6 +410,7 @@ fn qualify_rows(
     let has_existing_resource_edits =
         !resource_operands.is_empty() || !resource_programs.is_empty();
     let edited = if object_resource_additions.is_empty()
+        && object_subpage_announcements.is_empty()
         && ((resource_additions.is_empty() && !has_existing_resource_edits)
             || (resource_additions.is_empty()
                 && !matches!(
@@ -422,6 +425,7 @@ fn qualify_rows(
         // replay path. Generic stored compilation remains fail closed.
         let resources = super::teletext_stored_designs::EditorialResourceIntents {
             object_resource_additions: &object_resource_additions,
+            object_subpage_announcements: &object_subpage_announcements,
             operands: &resource_operands,
             programs: &resource_programs,
             additions: &resource_additions,
@@ -443,6 +447,7 @@ fn qualify_rows(
         &baseline.body.project,
         TeletextEditorialEdits {
             object_resource_additions: &object_resource_additions,
+            object_subpage_announcements: &object_subpage_announcements,
             base_text_edits: &base_text_edits,
             resource_additions: &resource_additions,
             resource_operands: &resource_operands,

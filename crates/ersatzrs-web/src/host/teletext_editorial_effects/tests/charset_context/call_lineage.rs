@@ -244,6 +244,7 @@ fn changed_resource_call_charset_writer_cannot_alias_original_through_equal_payl
             resource_programs: &changes,
             resource_additions: &[],
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
             object_programs: &[],
             main_programs: &[],
             bitmaps: &[],

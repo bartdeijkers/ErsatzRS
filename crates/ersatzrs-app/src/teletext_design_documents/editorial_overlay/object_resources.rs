@@ -207,13 +207,22 @@ impl Serialize for BorrowedBankDefinitions<'_> {
 }
 
 pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignDocumentError> {
-    if value.schema_version == super::OBJECT_RESOURCE_ADDITION_VERSION {
+    if matches!(
+        value.schema_version,
+        super::OBJECT_RESOURCE_ADDITION_VERSION | super::OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+    ) {
         if !matches!(value.prior_schema_version.0, Some(1..=24))
+            || (value.schema_version == super::OBJECT_RESOURCE_ADDITION_VERSION
+                && value
+                    .object_resource_additions
+                    .0
+                    .as_ref()
+                    .is_none_or(Vec::is_empty))
             || value
                 .object_resource_additions
                 .0
                 .as_ref()
-                .is_none_or(Vec::is_empty)
+                .is_some_and(Vec::is_empty)
         {
             return Err(invalid());
         }
@@ -233,7 +242,14 @@ pub(super) fn restore(
         .object_resource_additions
         .0
         .take()
-        .ok_or_else(invalid)?;
+        .unwrap_or_default();
+    let announcements = super::object_subpage_announcements::restore(
+        stored
+            .object_subpage_announcements
+            .0
+            .take()
+            .unwrap_or_default(),
+    )?;
     stored.schema_version = stored.prior_schema_version.0.take().ok_or_else(invalid)?;
     let additions = additions
         .into_iter()
@@ -285,7 +301,16 @@ pub(super) fn restore(
     } else {
         stored.restore_parts(documents, budget)?
     };
-    let overlay = prior.with_object_resource_additions(additions)?;
+    let overlay = if additions.is_empty() {
+        prior
+    } else {
+        prior.with_object_resource_additions(additions)?
+    };
+    let overlay = if announcements.is_empty() {
+        overlay
+    } else {
+        overlay.with_object_subpage_announcements(announcements)?
+    };
     validate_association(&overlay, documents, budget)?;
     Ok(overlay)
 }

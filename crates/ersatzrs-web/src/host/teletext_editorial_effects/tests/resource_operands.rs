@@ -89,6 +89,8 @@ fn links(global: bool) -> TeletextX27Level25Links {
 mod bank_sets;
 #[path = "resource_operands/programs.rs"]
 mod programs;
+#[path = "resource_operands/subpage_announcements.rs"]
+mod subpage_announcements;
 
 fn compile(fixture: Fixture) -> EncodedTeletextAuthoredService {
     compile_with_program(fixture, None, false)
@@ -229,6 +231,7 @@ fn edits(resource_operands: &[TeletextResourceObjectOperandOverlay]) -> Teletext
         resource_programs: &[],
         resource_additions: &[],
         object_resource_additions: &[],
+        object_subpage_announcements: &[],
         object_programs: &[],
         main_programs: &[],
         bitmaps: &[],

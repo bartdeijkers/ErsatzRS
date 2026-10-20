@@ -282,21 +282,13 @@ fn check_links(service: &EncodedTeletextAuthoredService, owner: TeletextPageAddr
     Ok(())
 }
 
-/// Both services have already independently matched their descriptor's exact
-/// generated X27/4 body. Incoming uploads still match the old receipt strictly.
+/// Both services independently match their exact authored or compiler-owned
+/// X27/4 body before a changed packet can leave the immutable comparison. Incoming uploads still match the old receipt strictly.
 pub(super) fn links_changed(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
     owner: TeletextPageAddress,
 ) -> Result<bool> {
-    if ![original, edited].into_iter().any(|service| {
-        service
-            .compiler_drcs_resources()
-            .iter()
-            .any(|resource| resource.consumers().contains(&owner))
-    }) {
-        return Ok(false);
-    }
     check_links(original, owner)?;
     check_links(edited, owner)?;
     let old = links(original, owner)?;

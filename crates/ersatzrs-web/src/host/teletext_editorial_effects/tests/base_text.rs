@@ -32,6 +32,7 @@ fn generated_base_text_respects_free_zone_generated_and_undeclared_boundaries() 
                 resource_programs: &[],
                 resource_additions: &[],
                 object_resource_additions: &[],
+                object_subpage_announcements: &[],
                 object_programs: &[],
                 main_programs: &[],
                 bitmaps: &[],

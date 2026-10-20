@@ -619,6 +619,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_edits(
         overlays,
         super::teletext_stored_designs::EditorialResourceIntents {
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -678,6 +679,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
         parts.documents,
         EditorialResourceDocuments {
             object_resource_additions: resources.object_resource_additions,
+            object_subpage_announcements: resources.object_subpage_announcements,
             base_text_edits: parts
                 .editorial_overlay
                 .as_ref()

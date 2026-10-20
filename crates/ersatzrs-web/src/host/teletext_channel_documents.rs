@@ -53,6 +53,8 @@ pub(super) struct EditorialResourceDocuments<'a> {
         &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
     pub(super) object_resource_additions:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+    pub(super) object_subpage_announcements:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
 }
 
 #[cfg(test)]
@@ -209,6 +211,8 @@ pub enum ChannelTeletextDocumentEncodingError {
         binding: usize,
         entry: TeletextPageAddress,
     },
+    #[error("teletext object subpage announcement: {0}")]
+    ObjectAnnouncement(Box<ersatzrs_domain::TeletextObjectSubpageAnnouncementError>),
     #[error("cold teletext channel composition: {0}")]
     Composition(Box<TeletextProducerCompositionError>),
     #[error("native teletext channel encoding: {0}")]
@@ -511,6 +515,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
             resource_programs: &[],
             resource_additions: &[],
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
         },
         deadline,
         region,
@@ -533,6 +538,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
         && editorial.resource_programs.is_empty()
         && editorial.resource_additions.is_empty()
         && editorial.object_resource_additions.is_empty()
+        && editorial.object_subpage_announcements.is_empty()
         && editorial.programs.4.is_empty()
         && editorial.main_programs.is_empty()
         && editorial.base_text_edits.is_empty()
@@ -657,6 +663,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
             resource_programs: &[],
             resource_additions: &[],
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
         },
         deadline,
         region,
@@ -684,6 +691,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     if has_v1 != region.is_some() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
+    check_object_subpage_source(&documents, &editorial, &policy)?;
     let object_resources = preflight_object_resource_additions(
         &documents,
         editorial.object_resource_additions,
@@ -758,6 +766,7 @@ fn check_original_editorial_input(
         || !resource_programs.is_empty()
         || !resource_additions.is_empty()
         || !object_resource_additions.is_empty()
+        || !editorial.object_subpage_announcements.is_empty()
         || !editorial.main_programs.is_empty()
         || !editorial.base_text_edits.is_empty()
     {
@@ -785,7 +794,8 @@ fn check_original_editorial_input(
             || !resource_operands.is_empty()
             || !resource_programs.is_empty()
             || !resource_additions.is_empty()
-            || !object_resource_additions.is_empty())
+            || !object_resource_additions.is_empty()
+            || !editorial.object_subpage_announcements.is_empty())
     {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
@@ -1108,6 +1118,48 @@ fn check_object_resource_count(
     Ok(())
 }
 
+fn check_object_subpage_source(
+    documents: &[TeletextProfileDocument],
+    editorial: &EditorialResourceDocuments<'_>,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    let announcements = editorial.object_subpage_announcements;
+    if announcements.len()
+        > policy
+            .composition
+            .service
+            .max_records
+            .min(policy.composition.service.max_structure_items)
+    {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    let mut owners = std::collections::BTreeSet::new();
+    for value in announcements {
+        let announcement = value.announcement();
+        let resource = announcement.resource();
+        let Some(TeletextProfileDocument::Authored(source)) = documents.get(value.document_index())
+        else {
+            return Err(ChannelTeletextDocumentEncodingError::Association);
+        };
+        if !owners.insert((announcement.display(), resource))
+            || !source
+                .semantic()
+                .base()
+                .pages
+                .iter()
+                .any(|page| page.address == announcement.display())
+            || (!source.resource_inventory().contains(&resource)
+                && !editorial.object_resource_additions.iter().any(|bank| {
+                    bank.document_index() == value.document_index()
+                        && bank.addition().resource() == resource
+                }))
+        {
+            return Err(ChannelTeletextDocumentEncodingError::Association);
+        }
+    }
+    Ok(())
+}
+
 fn apply_editorial_operands(
     mut declared: ersatzrs_domain::TeletextDeclaredService,
     editorial: &EditorialResourceDocuments<'_>,
@@ -1155,6 +1207,18 @@ fn apply_editorial_operands(
                     reason,
                 ) => editorial_semantic_error(reason),
                 _ => ChannelTeletextDocumentEncodingError::Association,
+            })?;
+    }
+    if !editorial.object_subpage_announcements.is_empty() {
+        let announcements = editorial
+            .object_subpage_announcements
+            .iter()
+            .map(ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement::announcement)
+            .collect::<Vec<_>>();
+        declared = declared
+            .with_object_subpage_announcements(&announcements, budget, composition.declarations)
+            .map_err(|error| {
+                ChannelTeletextDocumentEncodingError::ObjectAnnouncement(Box::new(error))
             })?;
     }
     if !operands.is_empty() {

@@ -224,6 +224,7 @@ fn partial_or_duplicate_propagated_intents_cannot_authorize_a_complete_upload() 
     };
     let expected = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         operands: vec![change(0), change(1)],

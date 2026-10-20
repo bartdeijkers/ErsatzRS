@@ -49,6 +49,9 @@ mod resource_object_definition_additions;
 #[path = "object_resource_addition_service.rs"]
 mod object_resource_additions;
 
+#[path = "object_subpage_announcement_service.rs"]
+mod object_subpage_announcements;
+
 #[path = "main_local_invocation_program_service.rs"]
 mod main_local_invocation_programs;
 
@@ -1308,7 +1311,7 @@ fn validate_object_target(
     Ok(())
 }
 
-fn charge(
+pub(super) fn charge(
     remaining: &mut usize,
     amount: usize,
     dimension: &'static str,

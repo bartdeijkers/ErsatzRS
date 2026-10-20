@@ -22,6 +22,7 @@ mod charset_execution;
 mod charset_execution_values;
 mod charset_values;
 mod compositional_links;
+mod declared_links;
 mod declared_service;
 mod design_exports;
 mod designs;

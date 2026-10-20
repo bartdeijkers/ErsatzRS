@@ -19,6 +19,12 @@ use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 #[path = "definition_additions/retained_banks.rs"]
 mod retained_banks;
 
+#[path = "definition_additions/announcements.rs"]
+mod announcements;
+pub use announcements::{
+    announce_teletext_editorial_object_subpages, NativeTeletextObjectSubpagesAnnounceRequest,
+};
+
 /// Explicit authoring request; uploaded TTI or sidecar data never grants this action.
 pub struct NativeTeletextResourceDefinitionAddRequest {
     pub name: String,
@@ -80,6 +86,9 @@ impl fmt::Debug for NativeTeletextObjectResourcesAddRequest {
 }
 
 enum Action {
+    Announcements(
+        Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement>,
+    ),
     Banks {
         banks: Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition>,
         definitions: Vec<TeletextEnhancementObjectDefinition>,
@@ -111,6 +120,15 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
         return Err(NativeTeletextEditorialImportError::Budget);
     }
     let definitions = match &request.action {
+        Action::Announcements(values) => {
+            if values.is_empty() {
+                return Err(NativeTeletextEditorialImportError::NoChanges);
+            }
+            if values.len() > budget.max_records.min(budget.max_structure_items) {
+                return Err(NativeTeletextEditorialImportError::Budget);
+            }
+            return Ok(());
+        }
         Action::Definitions(definitions) => definitions,
         Action::Banks { banks, definitions } => {
             return preflight_banks(banks, definitions, budget, deadline);
@@ -186,11 +204,13 @@ fn resolve(
 ) -> Result<(
     Vec<TeletextEnhancementObjectDefinition>,
     Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition>,
+    Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement>,
 )> {
     check_deadline(deadline)?;
     let (source, new_object_id) = match action {
-        Action::Definitions(definitions) => return Ok((definitions, vec![])),
-        Action::Banks { banks, definitions } => return Ok((definitions, banks)),
+        Action::Announcements(values) => return Ok((vec![], vec![], values)),
+        Action::Definitions(definitions) => return Ok((definitions, vec![], vec![])),
+        Action::Banks { banks, definitions } => return Ok((definitions, banks, vec![])),
         Action::Copy {
             source,
             new_object_id,
@@ -221,7 +241,7 @@ fn resolve(
     let mut copied = definition.clone();
     copied.identity = identity;
     check_deadline(deadline)?;
-    Ok((vec![copied], vec![]))
+    Ok((vec![copied], vec![], vec![]))
 }
 
 fn resource_asset(project: &TeletextExportProject, resource: TeletextResourceIdentity) -> bool {
@@ -337,7 +357,7 @@ fn encode(
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
     let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
-    let (definitions, banks) =
+    let (definitions, banks, announcements) =
         resolve(action, latest, policy.document.validation.service, deadline)?;
     super::object_resources::authorize(latest, &banks, &policy.encoding, deadline)?;
     let additions = definitions
@@ -374,10 +394,17 @@ fn encode(
     )?;
     let incoming = TeletextEditorialChanges {
         object_resource_additions: banks,
+        object_subpage_announcements: announcements,
         base_text_edits: Vec::new(),
         resource_additions: additions,
         ..Default::default()
     };
+    announcements::append(
+        &mut baselines.cumulative,
+        &incoming,
+        policy.document.validation.service,
+        deadline,
+    )?;
     retained_banks::append(
         &mut baselines.cumulative,
         &incoming,

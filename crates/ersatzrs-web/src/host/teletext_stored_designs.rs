@@ -34,6 +34,8 @@ pub(super) enum StoredDesignParts {
 pub(super) struct EditorialResourceIntents<'a> {
     pub(super) object_resource_additions:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+    pub(super) object_subpage_announcements:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
     pub(super) operands: &'a [TeletextResourceObjectOperandOverlay],
     pub(super) programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     pub(super) additions: &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
@@ -121,7 +123,10 @@ impl StoredDesignParts {
         overlays: Vec<TeletextPhysicalBaseOverlay>,
         resources: EditorialResourceIntents<'_>,
     ) -> Result<RestoredStoredTeletextDesign, NativeTeletextDesignError> {
-        if resources.additions.is_empty() && resources.object_resource_additions.is_empty() {
+        if resources.additions.is_empty()
+            && resources.object_resource_additions.is_empty()
+            && resources.object_subpage_announcements.is_empty()
+        {
             return self.compile_with_resource_edits(
                 stored,
                 policy,
@@ -186,6 +191,7 @@ pub(super) fn check_authenticated_editorial_resource_replay(
         has_physical_rows,
         EditorialResourceIntents {
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -202,8 +208,12 @@ pub(super) fn check_authenticated_editorial_resource_intents(
     let resource_programs = intents.programs;
     if overlay.map_or(
         &[][..],
-        TeletextSavedEditorialOverlay::object_resource_additions,
-    ) != intents.object_resource_additions
+        TeletextSavedEditorialOverlay::object_subpage_announcements,
+    ) != intents.object_subpage_announcements
+        || overlay.map_or(
+            &[][..],
+            TeletextSavedEditorialOverlay::object_resource_additions,
+        ) != intents.object_resource_additions
         || overlay.map_or(
             &[][..],
             TeletextSavedEditorialOverlay::resource_object_operands,

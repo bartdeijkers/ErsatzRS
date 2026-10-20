@@ -320,6 +320,7 @@ fn edits<'a>(
         resource_programs: &[],
         resource_additions: definitions,
         object_resource_additions: banks,
+        object_subpage_announcements: &[],
     }
 }
 fn replay(

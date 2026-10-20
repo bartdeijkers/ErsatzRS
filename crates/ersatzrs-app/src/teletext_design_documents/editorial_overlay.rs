@@ -50,6 +50,12 @@ const MAIN_LOCAL_INVOCATION_OVERLAY_VERSION: u16 = 22;
 const BASE_TEXT_EDIT_VERSION: u16 = 23;
 const BASE_TEXT_NATIVE_SPELLING_VERSION: u16 = 24;
 const OBJECT_RESOURCE_ADDITION_VERSION: u16 = 25;
+const OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION: u16 = 26;
+
+#[path = "editorial_overlay/object_subpage_announcements.rs"]
+pub(super) mod object_subpage_announcements;
+pub use object_subpage_announcements::TeletextSavedObjectSubpageAnnouncement;
+use object_subpage_announcements::{BorrowedAnnouncements, OptionalStoredAnnouncements};
 
 #[path = "editorial_overlay/object_resources.rs"]
 pub(super) mod object_resources;
@@ -132,6 +138,7 @@ pub struct TeletextSavedEditorialOverlay {
     resource_object_program_overlays: Vec<TeletextResourceObjectProgramOverlay>,
     resource_object_definition_additions: Vec<TeletextResourceObjectDefinitionAddition>,
     object_resource_additions: Vec<TeletextSavedObjectResourceAddition>,
+    object_subpage_announcements: Vec<TeletextSavedObjectSubpageAnnouncement>,
     base_text_edits: Vec<ersatzrs_domain::TeletextBaseTextEdit>,
     schema_version: u16,
 }
@@ -1016,6 +1023,7 @@ impl TeletextSavedEditorialOverlay {
             resource_object_program_overlays: Vec::new(),
             resource_object_definition_additions: Vec::new(),
             object_resource_additions: Vec::new(),
+            object_subpage_announcements: Vec::new(),
             base_text_edits: Vec::new(),
             schema_version,
         })
@@ -1029,7 +1037,9 @@ impl TeletextSavedEditorialOverlay {
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        if self.object_resource_additions.is_empty() {
+        if !self.object_subpage_announcements.is_empty() {
+            OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+        } else if self.object_resource_additions.is_empty() {
             self.schema_version
         } else {
             OBJECT_RESOURCE_ADDITION_VERSION
@@ -1379,6 +1389,8 @@ closed_map!(StoredOverlay {
     prior_schema_version: OptionalPriorVersion,
     #[serde(default, skip_serializing_if = "OptionalStoredObjectResources::is_absent")]
     object_resource_additions: OptionalStoredObjectResources,
+    #[serde(default, skip_serializing_if = "OptionalStoredAnnouncements::is_absent")]
+    object_subpage_announcements: OptionalStoredAnnouncements,
     #[serde(default, skip_serializing_if = "OptionalStoredBaseTextEdits::is_absent")]
     base_text_edits: OptionalStoredBaseTextEdits,
     export_receipt_id: EntityId,
@@ -1552,8 +1564,12 @@ impl StoredOverlay {
     }
 
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        object_subpage_announcements::check_version(self)?;
         object_resources::check_version(self)?;
-        if self.schema_version == OBJECT_RESOURCE_ADDITION_VERSION {
+        if matches!(
+            self.schema_version,
+            OBJECT_RESOURCE_ADDITION_VERSION | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+        ) {
             return Ok(());
         }
         self.check_prior_version()
@@ -1698,7 +1714,10 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
-        if self.schema_version == OBJECT_RESOURCE_ADDITION_VERSION {
+        if matches!(
+            self.schema_version,
+            OBJECT_RESOURCE_ADDITION_VERSION | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+        ) {
             return object_resources::restore(self, documents, budget);
         }
         if matches!(
@@ -1852,13 +1871,14 @@ pub(super) fn validate_association_shape(
     budget: TeletextDesignDocumentBudget,
 ) -> Result<(), TeletextDesignDocumentError> {
     object_resources::validate_association(overlay, documents, budget)?;
+    object_subpage_announcements::validate_association(overlay, documents, budget)?;
     limit(
         overlay.pages.len(),
         budget.validation.service.max_records,
         "editorial pages",
     )?;
     base_text::validate_association(overlay, documents, budget)?;
-    let mut items = overlay.pages.len();
+    let mut items = object_subpage_announcements::structure_items(overlay)?;
     let mut bytes = base_text::content_bytes(overlay, budget)?;
     for page in &overlay.pages {
         items = items
@@ -2012,6 +2032,8 @@ struct BorrowedOverlay<'a> {
     prior_schema_version: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     object_resource_additions: Option<BorrowedObjectResources<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    object_subpage_announcements: Option<BorrowedAnnouncements<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_text_edits: Option<BorrowedBaseTextEdits<'a>>,
     export_receipt_id: EntityId,
@@ -2203,10 +2225,13 @@ fn write_appended(
         &mut *writer,
         &BorrowedOverlay {
             schema_version: overlay.schema_version(),
-            prior_schema_version: (!overlay.object_resource_additions.is_empty())
-                .then_some(overlay.schema_version),
+            prior_schema_version: (!overlay.object_resource_additions.is_empty()
+                || !overlay.object_subpage_announcements.is_empty())
+            .then_some(overlay.schema_version),
             object_resource_additions: (!overlay.object_resource_additions.is_empty())
                 .then_some(BorrowedObjectResources(&overlay.object_resource_additions)),
+            object_subpage_announcements: (!overlay.object_subpage_announcements.is_empty())
+                .then_some(BorrowedAnnouncements(&overlay.object_subpage_announcements)),
             base_text_edits: (!overlay.base_text_edits.is_empty())
                 .then_some(BorrowedBaseTextEdits(&overlay.base_text_edits)),
             export_receipt_id: value.export_receipt_id,
@@ -2338,3 +2363,7 @@ mod base_text_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/object_resource_storage_tests.rs"]
 mod object_resource_storage_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/object_subpage_announcement_tests.rs"]
+mod object_subpage_announcement_tests;

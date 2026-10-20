@@ -59,6 +59,7 @@ fn preflight(
         .and_then(|count| count.checked_add(previous.main_programs.len()))
         .and_then(|count| count.checked_add(previous.resource_additions.len()))
         .and_then(|count| count.checked_add(previous.object_resource_additions.len()))
+        .and_then(|count| count.checked_add(previous.object_subpage_announcements.len()))
         .and_then(|count| count.checked_add(incoming.object_resource_additions.len()))
         .and_then(|count| count.checked_add(original_additions));
     if records.is_none_or(|count| count > budget.max_records) {

@@ -4,14 +4,9 @@ use super::{
     bounded, Result, TeletextDrcsExtensionBudget, TeletextDrcsExtensionError,
     TeletextDrcsPageExtension, TeletextDrcsSubtable, TeletextResolvedObjectPageLinks,
     TeletextResolvedPageEnhancementDraft, TeletextResolvedPageResourceSelection,
-    TeletextSemanticService, TeletextSubpageRequirementMask, TeletextX27Level25Links,
-    TeletextX27LinkDeclaration, TeletextX27LinkRole, TeletextX27LinkTarget,
-    TeletextX27LinkValidity, TeletextX27Magazine,
+    TeletextSemanticService,
 };
-use crate::teletext::{
-    TeletextDeclaredDisplayResolution, TeletextDeclaredService, TeletextDrcsPageLinks,
-    TeletextMotResolutionRequirements, TeletextMotRoleResolution,
-};
+use crate::teletext::{TeletextDeclaredService, TeletextDrcsPageLinks};
 
 impl TeletextDeclaredService {
     /// Derive physical DRCS supplements using the authenticated MOT/X27 owners.
@@ -76,7 +71,8 @@ impl TeletextDeclaredService {
             {
                 continue;
             }
-            links.push((resolution, materialize(resolution)?));
+            let materialized = resolution.materialized_level25_links()?;
+            links.push((resolution, materialized));
         }
         if links.is_empty() {
             return original.derive_with_drcs_subpages(resources, pages, budget);
@@ -110,36 +106,6 @@ impl TeletextDeclaredService {
         }
         effective.derive_with_drcs_subpages(resources, pages, budget)
     }
-}
-
-fn materialize(resolution: &TeletextDeclaredDisplayResolution) -> Result<TeletextX27Level25Links> {
-    let display = resolution.display();
-    let unused = TeletextX27LinkDeclaration::new(
-        TeletextX27LinkTarget::Unspecified {
-            magazine: TeletextX27Magazine::new(display.page.magazine())?,
-        },
-        TeletextX27LinkValidity::Level25Only,
-        TeletextSubpageRequirementMask::new(u16::MAX),
-    )?;
-    let mut links = [unused; 4];
-    for role in TeletextX27LinkRole::ALL {
-        links[usize::from(role.wire_code())] = match *resolution.role(role) {
-            TeletextMotRoleResolution::Unselected => unused,
-            TeletextMotRoleResolution::Selected {
-                target,
-                requirements: TeletextMotResolutionRequirements::MotExtent(extent),
-                ..
-            } => TeletextX27LinkDeclaration::new(
-                TeletextX27LinkTarget::Page { page: target },
-                TeletextX27LinkValidity::Level25Only,
-                extent.required_mask(),
-            )?,
-            _ => return Err(TeletextDrcsExtensionError::UnprovenOtherRoles { display }),
-        };
-    }
-    Ok(TeletextX27Level25Links::new(
-        links[0], links[1], links[2], links[3],
-    )?)
 }
 
 #[cfg(test)]

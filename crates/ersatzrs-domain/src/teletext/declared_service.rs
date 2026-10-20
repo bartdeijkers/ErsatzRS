@@ -8,6 +8,10 @@
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
+#[path = "object_subpage_announcement.rs"]
+mod object_subpage_announcement;
+pub use object_subpage_announcement::*;
+
 use super::{
     TeletextDefaultObjectSelection, TeletextMotConditionalPopFallback, TeletextMotDefaultObject,
     TeletextMotLevel25Declaration, TeletextMotLevel25Resolution, TeletextMotLinkProvenance,

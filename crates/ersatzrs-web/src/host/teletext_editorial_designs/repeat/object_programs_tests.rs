@@ -84,6 +84,7 @@ fn scalar(
 fn inserted_glyph_edits_stay_inside_the_root_relative_program() {
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![growth()],
@@ -91,6 +92,7 @@ fn inserted_glyph_edits_stay_inside_the_root_relative_program() {
     };
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_operands: vec![scalar(1, 0, g(b'Q'), g(b'Z'))],
@@ -109,6 +111,7 @@ fn inserted_glyph_edits_stay_inside_the_root_relative_program() {
 fn nonglyph_scalar_ordinals_translate_to_root_and_patch_both_skeletons() {
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![growth()],
@@ -116,6 +119,7 @@ fn nonglyph_scalar_ordinals_translate_to_root_and_patch_both_skeletons() {
     };
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_operands: vec![scalar(2, 1, bg(0), bg(2))],
@@ -131,6 +135,7 @@ fn structural_undo_removes_intent_and_prior_glyph_scalars_fold_when_structure_st
     let growth = growth();
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![growth.clone()],
@@ -145,6 +150,7 @@ fn structural_undo_removes_intent_and_prior_glyph_scalars_fold_when_structure_st
     .unwrap();
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![undo],
@@ -154,6 +160,7 @@ fn structural_undo_removes_intent_and_prior_glyph_scalars_fold_when_structure_st
     assert!(operands.is_empty() && programs.is_empty());
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_operands: vec![scalar(0, 0, g(b'A'), g(b'C'))],
@@ -172,6 +179,7 @@ fn structural_undo_removes_intent_and_prior_glyph_scalars_fold_when_structure_st
     .unwrap();
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![program],
@@ -186,6 +194,7 @@ fn structural_undo_removes_intent_and_prior_glyph_scalars_fold_when_structure_st
 fn stale_duplicate_deadline_and_caller_budgets_remain_closed() {
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![growth()],
@@ -193,6 +202,7 @@ fn stale_duplicate_deadline_and_caller_budgets_remain_closed() {
     };
     let stale = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_operands: vec![scalar(1, 0, g(b'A'), g(b'Z'))],
@@ -201,6 +211,7 @@ fn stale_duplicate_deadline_and_caller_budgets_remain_closed() {
     assert!(merge(&catalog(), &previous, &stale, budget(), end()).is_err());
     let duplicate = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![growth(), growth()],
@@ -253,6 +264,7 @@ fn wide_inserted_glyph_edits_fold_into_v12_and_undo_downgrades_to_v11() {
     assert!(!wide.is_legacy_compatible());
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![wide.clone()],
@@ -260,6 +272,7 @@ fn wide_inserted_glyph_edits_fold_into_v12_and_undo_downgrades_to_v11() {
     };
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_operands: vec![scalar(2, 0, g2(0x23), g2(0x27))],
@@ -278,6 +291,7 @@ fn wide_inserted_glyph_edits_fold_into_v12_and_undo_downgrades_to_v11() {
     .unwrap();
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![revert],
@@ -329,6 +343,7 @@ fn style_structure_composes_inserted_and_original_scalars_then_downgrades_on_del
     .unwrap();
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![program],
@@ -336,6 +351,7 @@ fn style_structure_composes_inserted_and_original_scalars_then_downgrades_on_del
     };
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_operands: vec![
@@ -357,6 +373,7 @@ fn style_structure_composes_inserted_and_original_scalars_then_downgrades_on_del
     reverted[1] = at(1, bg(1));
     let incoming = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_programs: vec![
@@ -372,6 +389,7 @@ fn style_structure_composes_inserted_and_original_scalars_then_downgrades_on_del
     };
     let previous = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: Vec::new(),
         object_operands: operands.clone(),

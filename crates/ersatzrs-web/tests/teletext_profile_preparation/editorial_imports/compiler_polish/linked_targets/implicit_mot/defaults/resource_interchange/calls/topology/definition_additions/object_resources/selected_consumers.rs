@@ -1,5 +1,7 @@
 //! A real editor alias cannot authorize an unannounced selected-bank S1.
 use super::*;
+#[path = "selected_consumers/announcements.rs"]
+mod announcements;
 use ersatzrs_domain::{
     TeletextEnhancementSource, TeletextProducerCompositionFailure, TeletextServiceError,
     TeletextX27LinkRole,
@@ -61,8 +63,9 @@ async fn qualify_dormant() -> BankExpected {
 fn unannounced_call(
     exported: &ExportedOriginalTeletextDesign,
     receipt: &TeletextDesignExportReceipt,
+    head: i64,
 ) -> NativeTeletextEditorialImportRequest {
-    let mut request = drcs_bitmap::from_receipt(receipt, 3);
+    let mut request = drcs_bitmap::from_receipt(receipt, head);
     let originals = request.files.clone();
     let name = companion(exported);
     let file = request
@@ -126,12 +129,28 @@ async fn selected_new_bank_unannounced_s1_refuses_without_revision_publication_o
     let current = receipt(&fixture, &exported).await;
     let result = import_teletext_editorial_design(
         &fixture.state.application,
-        unannounced_call(&exported, &current),
+        unannounced_call(&exported, &current, 3),
         policy(),
         designs::deadline(),
     )
     .await;
-    let NativeTeletextEditorialImportError::Design(error) = result.unwrap_err() else {
+    assert_unannounced_error(result.unwrap_err(), 124);
+    assert_head_only(&fixture, &concept).await;
+    assert_original_pointers(&fixture, &flow).await;
+    assert_eq!(
+        qtm_carrier::stored_receipt(&fixture, current.metadata.id).await,
+        current
+    );
+    fixture = fixture.reopen().await;
+    Box::pin(assert_bank_concept(&fixture, &flow, &concept, &before)).await;
+    assert_original_pointers(&fixture, &flow).await;
+    retained.assert_unchanged(&fixture, &flow).await;
+    assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+}
+
+fn assert_unannounced_error(error: NativeTeletextEditorialImportError, display: u16) {
+    let NativeTeletextEditorialImportError::Design(error) = error else {
         panic!("a valid sealed editor alias must reach native declaration validation")
     };
     let NativeTeletextDesignError::Encoding(error) = *error else {
@@ -146,7 +165,7 @@ async fn selected_new_bank_unannounced_s1_refuses_without_revision_publication_o
     assert_eq!(
         *error,
         TeletextServiceError::CompositionalUsage {
-            display: channel_documents::address(124, 32),
+            display: channel_documents::address(display, 32),
             role: TeletextX27LinkRole::Pop,
             page: resources()[1].page(),
             subpage: resources()[1].logical_subpage(),
@@ -156,16 +175,4 @@ async fn selected_new_bank_unannounced_s1_refuses_without_revision_publication_o
             },
         }
     );
-    assert_head_only(&fixture, &concept).await;
-    assert_original_pointers(&fixture, &flow).await;
-    assert_eq!(
-        qtm_carrier::stored_receipt(&fixture, current.metadata.id).await,
-        current
-    );
-    fixture = fixture.reopen().await;
-    Box::pin(assert_bank_concept(&fixture, &flow, &concept, &before)).await;
-    assert_original_pointers(&fixture, &flow).await;
-    retained.assert_unchanged(&fixture, &flow).await;
-    assert!(fixture.playout.try_recv().is_err());
-    fixture.state.pool.close().await;
 }

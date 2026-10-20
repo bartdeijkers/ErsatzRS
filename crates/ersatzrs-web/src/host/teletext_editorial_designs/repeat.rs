@@ -176,6 +176,7 @@ pub(super) fn qualify_latest(
 pub(super) fn from_overlay(overlay: &TeletextSavedEditorialOverlay) -> TeletextEditorialChanges {
     TeletextEditorialChanges {
         object_resource_additions: overlay.object_resource_additions().to_vec(),
+        object_subpage_announcements: overlay.object_subpage_announcements().to_vec(),
         base_text_edits: overlay.base_text_edits().to_vec(),
         resource_additions: overlay.resource_object_definition_additions().to_vec(),
         resource_operands: overlay.resource_object_operands().to_vec(),
@@ -503,6 +504,7 @@ pub(super) fn check_operand_budget(
         .flatten()
         .chain(addition_work)
         .chain(bank_work)
+        .chain(changes.object_subpage_announcements.iter().map(|_| 1))
         .try_fold(0usize, usize::checked_add);
     if program_work.is_none_or(|count| count > budget.max_structure_items)
         || changes
@@ -512,6 +514,7 @@ pub(super) fn check_operand_budget(
             .and_then(|count| count.checked_add(changes.main_programs.len()))
             .and_then(|count| count.checked_add(changes.resource_additions.len()))
             .and_then(|count| count.checked_add(changes.object_resource_additions.len()))
+            .and_then(|count| count.checked_add(changes.object_subpage_announcements.len()))
             .is_none_or(|n| n > budget.max_records)
         || changes.resource_additions.len() > budget.max_objects
     {
@@ -634,7 +637,10 @@ fn merge_changes(
         deadline,
     )?;
     let budget = policy.document.validation.service;
-    if !incoming.resource_additions.is_empty() || !incoming.object_resource_additions.is_empty() {
+    if !incoming.resource_additions.is_empty()
+        || !incoming.object_resource_additions.is_empty()
+        || !incoming.object_subpage_announcements.is_empty()
+    {
         return Err(NativeTeletextEditorialImportError::Association);
     }
     let (resource_operands, resource_programs, resource_additions, banks) =
@@ -658,6 +664,7 @@ fn merge_changes(
         };
     Ok(TeletextEditorialChanges {
         object_resource_additions: banks,
+        object_subpage_announcements: previous.object_subpage_announcements.clone(),
         base_text_edits: base_text::merge(
             &previous.base_text_edits,
             &incoming.base_text_edits,
@@ -710,6 +717,7 @@ fn prepare(
                 None,
                 TeletextEditorialChanges {
                     object_resource_additions: Vec::new(),
+                    object_subpage_announcements: Vec::new(),
                     base_text_edits: Vec::new(),
                     resource_additions: Vec::new(),
                     resource_operands: Vec::new(),
@@ -939,6 +947,36 @@ fn resource_program_overlay(
 }
 
 pub(super) fn cumulative_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    let has_prior = !changes.object_resource_additions.is_empty()
+        || !changes.base_text_edits.is_empty()
+        || !changes.rows.is_empty()
+        || !changes.operands.is_empty()
+        || !changes.object_operands.is_empty()
+        || !changes.resource_operands.is_empty()
+        || !changes.resource_programs.is_empty()
+        || !changes.resource_additions.is_empty()
+        || !changes.object_programs.is_empty()
+        || !changes.main_programs.is_empty()
+        || !changes.bitmaps.is_empty();
+    if !changes.object_subpage_announcements.is_empty() {
+        return if has_prior {
+            bank_overlay(provenance, changes)?
+                .with_object_subpage_announcements(changes.object_subpage_announcements.clone())
+                .map_err(Into::into)
+        } else {
+            TeletextSavedEditorialOverlay::new_with_object_subpage_announcements(
+                provenance.clone(),
+                changes.object_subpage_announcements.clone(),
+            )
+            .map_err(Into::into)
+        };
+    }
+    bank_overlay(provenance, changes)
+}
+fn bank_overlay(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
 ) -> Result<TeletextSavedEditorialOverlay> {
@@ -1182,6 +1220,7 @@ fn local_invocation_overlay(
     // explicit installation, which must preserve the newer role.
     let siblings = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
+        object_subpage_announcements: Vec::new(),
         base_text_edits: Vec::new(),
         rows: changes.rows.clone(),
         operands: changes.operands.clone(),
@@ -1204,6 +1243,7 @@ fn local_invocation_overlay(
 
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
     let document = if prepared.cumulative.object_resource_additions.is_empty()
+        && prepared.cumulative.object_subpage_announcements.is_empty()
         && prepared.cumulative.base_text_edits.is_empty()
         && prepared.cumulative.rows.is_empty()
         && prepared.cumulative.operands.is_empty()
@@ -1295,6 +1335,7 @@ fn make_document(
         &baseline.body.project,
         TeletextEditorialEdits {
             object_resource_additions: &prepared.incoming.object_resource_additions,
+            object_subpage_announcements: &prepared.incoming.object_subpage_announcements,
             base_text_edits: &prepared.incoming.base_text_edits,
             resource_additions: &prepared.incoming.resource_additions,
             resource_operands: &prepared.incoming.resource_operands,
@@ -1308,6 +1349,7 @@ fn make_document(
         },
         TeletextEditorialEdits {
             object_resource_additions: &prepared.cumulative.object_resource_additions,
+            object_subpage_announcements: &prepared.cumulative.object_subpage_announcements,
             base_text_edits: &prepared.cumulative.base_text_edits,
             resource_additions: &prepared.cumulative.resource_additions,
             resource_operands: &prepared.cumulative.resource_operands,

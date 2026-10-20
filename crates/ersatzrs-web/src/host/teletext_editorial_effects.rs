@@ -37,6 +37,7 @@ mod object_operands;
 mod object_resources;
 mod programs;
 mod resource_objects;
+mod subpage_announcements;
 #[cfg(test)]
 mod tests;
 
@@ -125,6 +126,8 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub resource_additions: &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
     pub object_resource_additions:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
+    pub object_subpage_announcements:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
@@ -163,6 +166,7 @@ pub(super) fn validate_teletext_editorial_transition(
             base_text_edits: &[],
             resource_additions: &[],
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
             rows: incoming,
             operands: &[],
             object_operands: &[],
@@ -176,6 +180,7 @@ pub(super) fn validate_teletext_editorial_transition(
             base_text_edits: &[],
             resource_additions: &[],
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
             rows: cumulative,
             operands: &[],
             object_operands: &[],
@@ -396,6 +401,8 @@ fn check_editorial_budgets(
         || cumulative.object_resource_additions.len() > budget.max_pages
         || !bounded_editorial_commands(incoming, budget.max_commands)
         || !bounded_editorial_commands(cumulative, budget.max_commands)
+        || incoming.object_subpage_announcements.len() > budget.max_pages.saturating_mul(32)
+        || cumulative.object_subpage_announcements.len() > budget.max_pages.saturating_mul(32)
         || incoming.bitmaps.len() > maximum_bitmaps
         || cumulative.bitmaps.len() > maximum_bitmaps
     {
@@ -429,7 +436,6 @@ fn check_service(
         || before.magazine_presentations() != after.magazine_presentations()
         || old.mots() != new.mots()
         || old.selections() != new.selections()
-        || old.resolutions() != new.resolutions()
         || (incoming.object_resource_additions.is_empty()
             && old.resource_inventory() != new.resource_inventory())
         || old.defaults() != new.defaults()
@@ -440,6 +446,8 @@ fn check_service(
             TeletextEditorialEffectsFailure::ProtectedStructure,
         ));
     }
+    let announced_links =
+        subpage_announcements::check_resolutions(old, new, incoming, cumulative, deadline)?;
     base_text::check(
         before.base(),
         after.base(),
@@ -465,6 +473,7 @@ fn check_service(
     check_enhancements(
         before.page_enhancements(),
         after.page_enhancements(),
+        &announced_links,
         incoming,
         cumulative,
         deadline,
@@ -669,6 +678,7 @@ fn check_resource(
 fn check_enhancements(
     before: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
     after: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
+    links: &BTreeMap<TeletextPageAddress, ersatzrs_domain::TeletextX27Level25Links>,
     incoming: TeletextEditorialEdits<'_>,
     cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
@@ -729,8 +739,8 @@ fn check_enhancements(
         let new = after.get(owner).ok_or_else(failure)?;
         if old.address != new.address
             || old.presentation != new.presentation
-            || old.compositional_links != new.compositional_links
             || old.resources != new.resources
+            || new.compositional_links != links.get(owner).copied().or(old.compositional_links)
         {
             return Err(failure());
         }
@@ -903,8 +913,8 @@ fn check_packets(
     // structure was authenticated separately. Compare all other completed packets
     // exactly; protected cells are checked below.
     // An uploaded X26 edit still needs the original TTI/operand reconciliation.
-    // Generated X27/4 changes have separately matched exact private compiler
-    // link descriptors; uploaded X27 stays immutable against its old receipt.
+    // Changed X27/4 bodies have separately matched exact authored links or
+    // compiler descriptors; uploaded X27 stays immutable against its old receipt.
     let protected = |record: &&TeletextEncodedDisplayRecord| {
         protected_packet(record, x26_repacking, compiler_links)
     };

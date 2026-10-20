@@ -118,6 +118,7 @@ fn scalar(
 fn previous() -> TeletextEditorialChanges {
     TeletextEditorialChanges {
         object_resource_additions: vec![bank(1, 8), bank(2, 1)],
+        object_subpage_announcements: Vec::new(),
         resource_additions: vec![Addition::new(definition(0, 21, b'C'), budget()).unwrap()],
         resource_operands: vec![scalar(0, 20, 0, glyph(b'A'), glyph(b'Q'))],
         ..Default::default()
@@ -293,6 +294,7 @@ fn retained_bank_repeat_rejects_creation_stale_missing_targets_duplicates_limits
     let cases = [
         TeletextEditorialChanges {
             object_resource_additions: vec![bank(2, 1)],
+            object_subpage_announcements: Vec::new(),
             ..Default::default()
         },
         TeletextEditorialChanges {

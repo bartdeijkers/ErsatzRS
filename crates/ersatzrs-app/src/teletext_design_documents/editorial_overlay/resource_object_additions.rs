@@ -330,10 +330,12 @@ pub(super) fn validate_graph(
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,
 ) -> Result<(), TeletextDesignDocumentError> {
-    // V25 is explicitly structural: old/new forward dependencies must be
-    // validated together by the authenticated native host, never as an invalid
-    // intermediate original-bank-only graph. No stored value grants replay.
-    if !overlay.object_resource_additions().is_empty() {
+    // V25/V26 are explicitly structural: banks, dependency declarations and
+    // definitions must be validated together by the authenticated native host,
+    // never as an incomplete intermediate graph. No stored value grants replay.
+    if !overlay.object_resource_additions().is_empty()
+        || !overlay.object_subpage_announcements().is_empty()
+    {
         return Ok(());
     }
     for document in documents {

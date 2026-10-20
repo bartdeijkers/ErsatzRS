@@ -30,6 +30,8 @@ mod structural;
 pub(super) struct TeletextEditorialChanges {
     pub object_resource_additions:
         Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition>,
+    pub object_subpage_announcements:
+        Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement>,
     pub base_text_edits: Vec<ersatzrs_domain::TeletextBaseTextEdit>,
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
@@ -46,6 +48,7 @@ impl TeletextEditorialChanges {
     pub(super) fn edits(&self) -> super::teletext_editorial_effects::TeletextEditorialEdits<'_> {
         super::teletext_editorial_effects::TeletextEditorialEdits {
             object_resource_additions: &self.object_resource_additions,
+            object_subpage_announcements: &self.object_subpage_announcements,
             base_text_edits: &self.base_text_edits,
             rows: &self.rows,
             operands: &self.operands,

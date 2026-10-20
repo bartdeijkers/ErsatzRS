@@ -307,6 +307,7 @@ fn check_operands(
             resource_programs: &[],
             resource_additions: &[],
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
             object_programs: &[],
             main_programs: &[],
             bitmaps: &[],

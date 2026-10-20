@@ -315,9 +315,21 @@ async fn assert_bank_revision(
     stored: &TeletextDesignRevision,
     expected: &BankExpected,
 ) {
+    Box::pin(assert_bank_revision_with_schema(
+        fixture, flow, stored, expected, 25,
+    ))
+    .await;
+}
+async fn assert_bank_revision_with_schema(
+    fixture: &Fixture,
+    flow: &Flow,
+    stored: &TeletextDesignRevision,
+    expected: &BankExpected,
+    schema: u16,
+) {
     let saved = decode_teletext_design_documents(&stored.document, designs::budget()).unwrap();
     let overlay = saved.editorial_overlay().unwrap();
-    assert_eq!(overlay.schema_version(), 25);
+    assert_eq!(overlay.schema_version(), schema);
     assert_eq!(overlay.object_resource_additions(), expected.banks);
     assert_eq!(overlay.resource_object_definition_additions().len(), 2);
     let restored = reload_original_teletext_design_revision(

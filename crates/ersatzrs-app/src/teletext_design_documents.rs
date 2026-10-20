@@ -35,6 +35,7 @@ mod source_fence;
 pub use editorial_overlay::{
     append_teletext_design_editorial_overlay, TeletextSavedEditorialOverlay,
     TeletextSavedEditorialProvenance, TeletextSavedObjectResourceAddition,
+    TeletextSavedObjectSubpageAnnouncement,
 };
 
 pub(crate) const MAX_BINDINGS: usize = 1024;
@@ -1299,6 +1300,8 @@ enum Path {
     EditorialMainProgram,
     EditorialDefinitionAdditions,
     EditorialDefinitionAddition,
+    EditorialObjectSubpageAnnouncements,
+    EditorialObjectSubpageAnnouncement,
     EditorialObjectResources,
     EditorialObjectResource,
     EditorialObjectResourceDefinitions,
@@ -1389,6 +1392,7 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::resource_object_additions::StoredDefinitionAddition,
             >(self.count))?;
         }
+        check_announcement_storage(self.inner.scan, self.inner.path, self.count)?;
         if matches!(self.inner.path, Path::EditorialObjectResource) {
             self.inner.scan.check(storage::<
                 editorial_overlay::object_resources::StoredObjectResourceAddition,
@@ -1442,6 +1446,18 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
         self.inner.deserialize(deserializer)
     }
 }
+fn check_announcement_storage<E: serde::de::Error>(
+    scan: &mut Scan,
+    path: Path,
+    count: usize,
+) -> Result<(), E> {
+    if matches!(path, Path::EditorialObjectSubpageAnnouncement) {
+        scan.check(storage::<
+            editorial_overlay::object_subpage_announcements::StoredAnnouncement,
+        >(count))?;
+    }
+    Ok(())
+}
 impl Scan {
     fn editorial<E: serde::de::Error>(&mut self, path: Path) -> Result<(), E> {
         if !matches!(
@@ -1457,6 +1473,7 @@ impl Scan {
                 | Path::EditorialResourceProgram
                 | Path::EditorialDefinitionAddition
                 | Path::EditorialObjectResource
+                | Path::EditorialObjectSubpageAnnouncement
                 | Path::EditorialProgramCommand
                 | Path::EditorialResourceProgramCommand
                 | Path::EditorialRetainedCommand
@@ -1644,6 +1661,9 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "resource_object_definition_additions") => {
                     Path::EditorialDefinitionAdditions
                 }
+                (Path::EditorialOverlay, "object_subpage_announcements") => {
+                    Path::EditorialObjectSubpageAnnouncements
+                }
                 (Path::EditorialOverlay, "object_resource_additions") => {
                     Path::EditorialObjectResources
                 }
@@ -1797,6 +1817,11 @@ fn glyph_program_sequence_limits(
             budget.validation.service.max_objects,
             Path::EditorialGlyphProgram,
             "editorial glyph programs",
+        ),
+        Path::EditorialObjectSubpageAnnouncements => (
+            budget.validation.service.max_structure_items,
+            Path::EditorialObjectSubpageAnnouncement,
+            "editorial object subpage announcements",
         ),
         Path::EditorialObjectResources => (
             budget

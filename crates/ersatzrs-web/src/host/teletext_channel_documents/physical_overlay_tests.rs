@@ -767,6 +767,7 @@ fn restored_compilers_refuse_unapplied_new_banks_even_with_matching_older_intent
                 let stored = stored_revision(effective, document.clone());
                 let intents = EditorialResourceIntents {
                     object_resource_additions: &[],
+                    object_subpage_announcements: &[],
                     operands: saved.resource_object_operands(),
                     programs: saved.resource_object_program_overlays(),
                     additions: saved.resource_object_definition_additions(),

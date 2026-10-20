@@ -25,6 +25,12 @@ release section when tagging a release.
 
 ### Added
 
+- Add explicit native teletext subpage announcements for retained POP/GPOP banks
+  on their already selected pages. Versioned concepts preserve the exact intent
+  through preview, replay and separate publication, while ordinary TTI imports
+  retain their existing permissions. Admin controls and complete editor/client
+  acceptance remain open.
+
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous
   definitions in original banks are validated as one complete graph. Private

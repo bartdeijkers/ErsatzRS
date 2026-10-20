@@ -510,6 +510,7 @@ pub(super) fn compile_restored_parts_with_resource_edits(
         overlays,
         super::teletext_stored_designs::EditorialResourceIntents {
             object_resource_additions: &[],
+            object_subpage_announcements: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -570,6 +571,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         && resource_programs.is_empty()
         && resource_additions.is_empty()
         && resources.object_resource_additions.is_empty()
+        && resources.object_subpage_announcements.is_empty()
         && main_programs.is_empty()
         && base_text_edits.is_empty()
     {
@@ -589,6 +591,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
             parts.documents,
             EditorialResourceDocuments {
                 object_resource_additions: resources.object_resource_additions,
+                object_subpage_announcements: resources.object_subpage_announcements,
                 base_text_edits,
                 main_programs,
                 programs: editorial,

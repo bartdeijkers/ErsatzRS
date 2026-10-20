@@ -4,6 +4,9 @@ use super::*;
 #[path = "object_resource_addition_declared_tests.rs"]
 mod object_resource_addition_declared_tests;
 
+#[path = "object_subpage_announcement_tests.rs"]
+mod object_subpage_announcement_tests;
+
 #[test]
 fn drcs_bitmap_overlay_preserves_authenticated_mot_selections_defaults_and_inventory() {
     let resource = identity(TeletextResourceKind::Drcs, 0xc0, 1);

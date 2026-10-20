@@ -43,8 +43,17 @@ A fresh editor alias and a successful native preview cannot authorize an S1
 outside the selected implicit MOT extent. Original construction and mutations
 which change collected references enforce that correspondence while preserving
 original foreign default-root provenance and applicable X27 authority. Explicit
-coordinated selection/dependency edits remain a separate open F1 mechanism;
-ordinary TTI imports still cannot change protected MOT/X27 metadata.
+selection of another raw page and atomic coordinated consumer edits remain open
+F1 mechanisms; ordinary TTI imports still cannot change protected MOT/X27 metadata.
+A separate native dependency-announcement intent now adds a missing S1 bit on an
+already selected POP/GPOP page. It preserves required bits and role applicability;
+missing X27 derives all four roles from the checked original MOT. The explicit
+intent retains exact source-document/display/resource ownership in private V26
+storage, enclosing unchanged prior roles and optional V25 banks. Native
+receipt/head-CAS replay checks exact recorded intent, complete declarations,
+encoded X27 and protected effects. It grants no uploaded TTI selection authority.
+This is partial F1 implementation; other-page/atomic consumer selection, localized
+controls, complete editor/client proof and full 9A acceptance remain required.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.
