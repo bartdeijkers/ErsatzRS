@@ -246,7 +246,7 @@ fn generated_omitted_and_outside_regions_do_not_grant_byte_edits() {
 #[test]
 fn spacing_control_cannot_escape_zone_to_protected_right_cells() {
     let original = encode(draft("ASCII"), vec![]);
-    for code in [0x01, 0x08, 0x18, 0x0b] {
+    for code in [0x01, 0x08, 0x18, 0x0b, 0x00, 0x10, 0x0e, 0x0f] {
         let mut cells = row(&original);
         cells[7] = code;
         if code == 0x0b {
@@ -289,16 +289,37 @@ fn free_row_insertion_is_allowed_when_protected_rows_remain_exact() {
 #[test]
 fn double_height_cannot_change_protected_lower_row_footprints() {
     let original = encode(draft("ASCII"), vec![]);
-    let mut cells = row(&original);
-    cells[7] = 0x0d;
-    let overlays = vec![overlay(1, cells)];
-    let edited = encode(draft("ASCII"), overlays.clone());
-    let error = validate(&original, &edited, &project("zone", 1, 0, 40, 1), &overlays).unwrap_err();
-    assert_eq!(
-        error.reason,
-        TeletextEditorialEffectsFailure::ProtectedFootprint
-    );
-    assert_eq!(error.position.unwrap().0, 2);
+    for code in [0x0d, 0x0f] {
+        let mut cells = row(&original);
+        cells[7] = code;
+        let overlays = vec![overlay(1, cells)];
+        let edited = encode(draft("ASCII"), overlays.clone());
+        let error =
+            validate(&original, &edited, &project("zone", 1, 0, 40, 1), &overlays).unwrap_err();
+        assert_eq!(
+            error.reason,
+            TeletextEditorialEffectsFailure::ProtectedFootprint
+        );
+        assert_eq!(error.position.unwrap().0, 2);
+    }
+}
+
+#[test]
+fn enhanced_physical_spacing_is_editable_only_with_all_affected_cells_in_scope() {
+    let original = encode(draft("ASCII"), vec![]);
+    for (code, height) in [(0x00, 1), (0x10, 1), (0x0e, 1), (0x0f, 2)] {
+        let mut cells = row(&original);
+        cells[7] = code;
+        let overlays = vec![overlay(1, cells)];
+        let edited = encode(draft("ASCII"), overlays.clone());
+        validate(
+            &original,
+            &edited,
+            &project("free", 1, 0, 40, height),
+            &overlays,
+        )
+        .unwrap();
+    }
 }
 #[test]
 fn whole_free_row_can_change_spacing_when_every_effect_stays_within_it() {

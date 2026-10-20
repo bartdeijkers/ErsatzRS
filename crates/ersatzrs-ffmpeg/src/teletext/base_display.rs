@@ -52,7 +52,9 @@ pub struct TeletextBaseDisplayError {
 /// defaults reset raw spacing state and materialize mapped colours separately.
 /// New Background uses the current raw foreground index in the background CLUT;
 /// implicit/Black Background substitution uses original resolved row colour.
-/// The fixed trace labels double-height origins but does not suppress lower rows.
+/// This is the coded plane interpreted under the effective enhanced presentation,
+/// not a selected Level 1/1.5 renderer. Original bytes remain the fallback input.
+/// The fixed trace labels size origins but does not suppress lower rows.
 pub(super) fn trace_teletext_base_display(
     page: &TeletextPageDraft,
     layout: &Layout,
@@ -363,7 +365,7 @@ pub(super) fn validate_physical_base_row(
         let position = TeletextEnhancementPosition::new(row, column).map_err(|_| invalid())?;
         let cell = trace_cell(page.address, position, code, None, cells, &mut state)
             .map_err(|_| invalid())?;
-        if row == 0 && code == TeletextBaseSpacingControl::DoubleHeight.code() {
+        if row == 0 && matches!(code, 0x0d | 0x0f) {
             return Err(TeletextEncodingError::HeaderHeight {
                 address: page.address,
             });
@@ -387,6 +389,7 @@ pub(super) fn validate_physical_base_row(
 fn control(code: u8) -> Option<TeletextBaseSpacingControl> {
     use TeletextBaseSpacingControl as C;
     let colour = |index| match index {
+        0 => Some(TeletextColour::Black),
         1 => Some(TeletextColour::Red),
         2 => Some(TeletextColour::Green),
         3 => Some(TeletextColour::Yellow),
@@ -397,10 +400,10 @@ fn control(code: u8) -> Option<TeletextBaseSpacingControl> {
         _ => None,
     };
     Some(match code {
-        1..=7 => C::AlphaColour {
+        0..=7 => C::AlphaColour {
             colour: colour(code)?,
         },
-        0x11..=0x17 => C::MosaicColour {
+        0x10..=0x17 => C::MosaicColour {
             colour: colour(code & 7)?,
         },
         0x08 => C::Flash,
@@ -409,6 +412,8 @@ fn control(code: u8) -> Option<TeletextBaseSpacingControl> {
         0x0b => C::StartBox,
         0x0c => C::NormalHeight,
         0x0d => C::DoubleHeight,
+        0x0e => C::DoubleWidth,
+        0x0f => C::DoubleSize,
         0x18 => C::Conceal,
         0x19 => C::ContiguousMosaics,
         0x1a => C::SeparatedMosaics,
@@ -431,6 +436,7 @@ struct RowState {
     graphics: bool,
     separated: bool,
     double_height: bool,
+    double_width: bool,
     boxed: bool,
     flash: bool,
     conceal: bool,
@@ -456,6 +462,7 @@ impl RowState {
             graphics: false,
             separated: false,
             double_height: false,
+            double_width: false,
             boxed: false,
             flash: false,
             conceal: false,
@@ -465,6 +472,7 @@ impl RowState {
                 graphics: default,
                 separated: default,
                 height: default,
+                width: default,
                 boxed: default,
                 flash: default,
                 conceal: default,
@@ -500,6 +508,7 @@ impl RowState {
                 graphics: self.graphics,
                 separated: self.separated,
                 double_height: self.double_height,
+                double_width: self.double_width,
                 boxed: self.boxed,
                 flash: self.flash,
                 conceal: self.conceal,
@@ -536,9 +545,11 @@ impl RowState {
                 self.boxed = control == C::StartBox;
                 self.sources.boxed = source;
             }
-            C::NormalHeight | C::DoubleHeight => {
-                self.double_height = control == C::DoubleHeight;
+            C::NormalHeight | C::DoubleHeight | C::DoubleWidth | C::DoubleSize => {
+                self.double_height = matches!(control, C::DoubleHeight | C::DoubleSize);
+                self.double_width = matches!(control, C::DoubleWidth | C::DoubleSize);
                 self.sources.height = source;
+                self.sources.width = source;
             }
             C::Conceal => {
                 self.conceal = true;

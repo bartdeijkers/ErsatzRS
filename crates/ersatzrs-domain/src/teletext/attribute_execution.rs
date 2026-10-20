@@ -412,7 +412,7 @@ fn base_attributes(cell: TeletextBaseDisplayCell) -> TeletextExecutedAttributes 
             values.double_height,
             source(origins.height),
         ),
-        double_width: TeletextExecutedAttribute::known(false, source(origins.height)),
+        double_width: TeletextExecutedAttribute::known(values.double_width, source(origins.width)),
         boxed: TeletextExecutedAttribute::known(values.boxed, source(origins.boxed)),
         conceal: TeletextExecutedAttribute::known(values.conceal, source(origins.conceal)),
         invert: TeletextExecutedAttribute::known(false, default),

@@ -25,6 +25,11 @@ release section when tagging a release.
 
 ### Added
 
+- Accept physical teletext Alpha/Mosaic Black and Double Width/Size controls
+  in imported designs. Preserve their coded rows, attribute origins, protected
+  zones and basic fallback content while using the shared enhanced preview
+  and encoder. Complete fallback/client and editor acceptance remains open.
+
 - Show per-output teletext delivery observations separately from publication
   selection, including waiting, acknowledged delivery, rejection and historical
   last delivery. Observations expire with their output and do not survive a

@@ -257,58 +257,21 @@ fn changed_generated_fallback_is_rejected_with_exact_location() {
 }
 
 #[test]
-fn unsupported_spacing_fails_both_packet_encoders_and_preview_at_same_cell() {
-    // ESC and hold/release have positive context/shape regressions.
-    for code in [0x00, 0x0e, 0x0f, 0x10] {
+fn raw_header_double_height_does_not_bypass_safety() {
+    for code in [0x0d, 0x0f] {
         let original = service("ASCII");
-        let mut cells = original_row(&original, 1);
-        cells[7] = code;
-        let edited = overlay(original, address(0x1234), 1, cells);
-        let expected = TeletextEncodingError::PhysicalBaseControl {
-            address: address(0x1234),
-            row: 1,
-            column: 7,
-            code,
-        };
+        let mut header = [b' '; 40];
+        header[8] = code;
+        let edited = overlay(original, address(0x1234), 0, header);
         assert_eq!(
             super::layout::compile_for_service_composition(&edited, &edited.base().pages[0])
                 .err()
                 .unwrap(),
-            expected
-        );
-        assert!(encode_teletext_native_default_page(
-            &edited,
-            address(0x1234),
-            TeletextEncodingRegion::WesternLatin
-        )
-        .is_err());
-        assert!(encode_teletext_normalized_display_page(
-            &edited,
-            address(0x1234),
-            TeletextEncodingRegion::WesternLatin,
-            limits()
-        )
-        .is_err());
-        assert!(
-            compose_teletext_main_program(&edited, address(0x1234), limits().composition).is_err()
+            TeletextEncodingError::HeaderHeight {
+                address: address(0x1234)
+            }
         );
     }
-}
-
-#[test]
-fn raw_header_double_height_does_not_bypass_safety() {
-    let original = service("ASCII");
-    let mut header = [b' '; 40];
-    header[8] = 0x0d;
-    let edited = overlay(original, address(0x1234), 0, header);
-    assert_eq!(
-        super::layout::compile_for_service_composition(&edited, &edited.base().pages[0])
-            .err()
-            .unwrap(),
-        TeletextEncodingError::HeaderHeight {
-            address: address(0x1234)
-        }
-    );
 }
 
 #[test]
@@ -417,12 +380,14 @@ fn with_lower_content(original: &TeletextSemanticService) -> TeletextSemanticSer
 
 #[test]
 fn physical_double_height_last_rows_reject_in_every_consumer() {
-    for row in [23, 24] {
-        let mut cells = [b' '; 40];
-        cells[7] = 0x0d;
-        cells[8] = b'A';
-        let edited = overlay(service("ASCII"), address(0x1234), row, cells);
-        assert_height_rejected(&edited, row);
+    for code in [0x0d, 0x0f] {
+        for row in [23, 24] {
+            let mut cells = [b' '; 40];
+            cells[7] = code;
+            cells[8] = b'A';
+            let edited = overlay(service("ASCII"), address(0x1234), row, cells);
+            assert_height_rejected(&edited, row);
+        }
     }
 }
 
@@ -560,3 +525,4 @@ fn limits() -> TeletextNormalizedMainProgramBudget {
 }
 
 mod held_mosaics;
+mod spacing_enhancements;

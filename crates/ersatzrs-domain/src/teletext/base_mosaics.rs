@@ -2,7 +2,8 @@
 
 use super::{
     TeletextBaseAttributeSource, TeletextBaseDisplayCell, TeletextBaseDisplayCellKind,
-    TeletextBaseSpacingControl, TeletextEnhancementPosition, TeletextMosaic, TeletextValueError,
+    TeletextBaseSpacingControl, TeletextDisplaySize, TeletextEnhancementPosition, TeletextMosaic,
+    TeletextValueError,
 };
 
 /// Original Base source of the held shape, including a standard-defined reset.
@@ -59,7 +60,7 @@ pub struct TeletextBaseMosaicState {
     separated: bool,
     source: TeletextHeldMosaicSource,
     graphics: bool,
-    high: bool,
+    size: TeletextDisplaySize,
 }
 impl Default for TeletextBaseMosaicState {
     fn default() -> Self {
@@ -70,7 +71,7 @@ impl Default for TeletextBaseMosaicState {
             separated: false,
             source: TeletextHeldMosaicSource::RowDefault { row: 0 },
             graphics: false,
-            high: false,
+            size: TeletextDisplaySize::Normal,
         }
     }
 }
@@ -91,12 +92,20 @@ impl TeletextBaseMosaicState {
             };
         }
         let attrs = cell.attributes();
+        let size = match (attrs.double_width(), attrs.double_height()) {
+            (false, false) => TeletextDisplaySize::Normal,
+            (true, false) => TeletextDisplaySize::DoubleWidth,
+            (false, true) => TeletextDisplaySize::DoubleHeight,
+            (true, true) => TeletextDisplaySize::DoubleSize,
+        };
         // Checked cell attributes already incorporate the correct SetAt/After
         // boundary. A reinforcement with the same mode/size is not a reset.
         let reset = if self.graphics != attrs.graphics() {
             Some(attrs.sources().graphics)
-        } else if self.high != attrs.double_height() {
+        } else if self.size.dimensions().1 != size.dimensions().1 {
             Some(attrs.sources().height)
+        } else if self.size.dimensions().0 != size.dimensions().0 {
+            Some(attrs.sources().width)
         } else {
             None
         };
@@ -106,7 +115,7 @@ impl TeletextBaseMosaicState {
             self.source = TeletextHeldMosaicSource::SpacingReset { source };
         }
         self.graphics = attrs.graphics();
-        self.high = attrs.double_height();
+        self.size = size;
         let control = match cell.kind() {
             TeletextBaseDisplayCellKind::SpacingControl { control, .. } => Some(control),
             _ => None,

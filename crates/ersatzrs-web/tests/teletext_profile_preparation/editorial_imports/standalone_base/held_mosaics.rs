@@ -3,7 +3,7 @@
 
 use super::*;
 
-fn response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = super::response(theme, page, subcode);
     for enhancement in value["service"]["page_enhancements"]
         .as_array_mut()

@@ -4,29 +4,29 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: standalone Level1/1.5 first, then full authored2.5 with protected
-fallback; neither accepted. P9A-04 owns the finite L15-A..E/F/V/X completion
-list and canonical evidence. No acceptance, scope waiver or production guide.
+ADR0123: standalone1/1.5 then full authored2.5 with protected fallback; neither
+accepted. P9A-04 owns L15/F/V/X and canonical evidence. No scope waiver or9B.
 
-Typed services/resources, physical ownership, X26/X27/X28/M29, glyph/charset
-execution, replay and raster are partial. Original bytes/identities, ancestry,
-fallback, absent/default context, bounds and uncertainty remain protected.
-Remaining A7/A8/C3, foreign-X26, repertoire/aliases/fonts, object/resource/panel
-and independent receiver coverage stay mandatory. Physical wrappers are derived,
-not authored sources. F3 header/suffix/foreign MOT and F1 child imports retain
-original roots/effects/spans; supplied banks and stock negatives stay distinct.
+Typed services/resources, ownership, X26/X27/X28/M29, execution and raster
+remain partial. Original identities/bytes/roots/effects/spans, fallback, defaults,
+bounds and uncertainty stay protected. A7/A8/C3, foreign-X26, repertoires/fonts,
+objects/DRCS/panels and independent receivers remain mandatory; physical wrappers
+are derived. P9A-04 owns F1/F3 receipts and supplied-bank/stock-negative limits.
 
-Base ESC retains row-local G0/raw aliases and source/reset provenance; secondary
-never selects G2/X26. Header NOS is corrected; absent Header/POP is a located
-refusal, not inferred7F. Stock33/38 actual-unit observations pass; five fixed
-header/secondary disagreements remain open in base_g0_context_followup.
+Base ESC preserves G0/reset provenance; secondary never selects G2/X26.
+Absent Header/POP refuses without invented7F. base_g0_context_followup retains
+Header NOS correction and stock33/38 proof, with five fixed disagreements open.
 Held mosaics now preserve original controls and held-glyph/reset provenance in
 shared preview/carrier, protected zones and caption visibility. P9A-04 owns
 held_mosaics_followup, scoped proof and retained atlas-margin differences.
 The pinnedQTM Hold/Release menu/save/import/preview/reexport/reopen boundary
 now passes with original metadata and accepted channels unchanged; its editor
-child receipt owns proof. Complete A1/A2/B2 stays open. Black/width/size remain
-enhanced-only required functions with correct base fallback.
+child receipt owns proof. Complete A1/A2/B2 stays open. The grouped physical
+black/width/size factory now preserves original rows, both size origins, C.3,
+held state, zones and raw0F lower-row basic content. physical_spacing_followup
+owns partial checks: stocklibzvbi passes10 enhanced fixtures/4 raster oracles
+but fails22 basic no-response observations; unchanged norm/oracles remain.
+Genuine grouped editor, publication/stream and suitable fallback proof stay due.
 
 ConceptsV1–24 retain metadata/templates/zones, original Base/Local/resource
 roles, DRCS/Flash/charset, style/position/call topology and Add/Copy edits with
@@ -37,9 +37,9 @@ remain closed. Pinned supplementary/native/Arabic editor and bank/panel/headed
 receipts retain scope. Complete context/link/set/large-bank interchange,
 same-design resource creation and broader editor/font coverage remain required.
 
-Profile/theme/mirror/Lua recovery proof retains scope. actual_output_status_followup
-closes scoped requested/applied reporting: Linux63, nativeWindows63 at40ad0608,
-V1/V2 headed and owner/restart. Broader Lua/recovery/client/platform proof remains.
+Profile/theme/mirror/Lua proof retains scope. actual_output_status_followup owns
+requested/applied Linux63, Windows63 at40ad0608, V1/V2 headed/owner/restart proof.
+Broader Lua/recovery/client/platform acceptance remains open.
 Producer/model/deadline,
 quota/persistence/cancellation fences remain. F6 Copy/DVB at default2 is verified
 in c07af3a1; tmp/phase9-f6-native-carriage/work.json owns smoke/TSDuck87/87.

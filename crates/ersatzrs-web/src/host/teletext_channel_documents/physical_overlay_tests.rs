@@ -296,17 +296,34 @@ fn synthetic_profiles_share_packet_preview_and_preserve_original_associations() 
 }
 
 #[test]
-fn unsupported_physical_control_returns_no_compiled_candidate() {
+fn enhanced_physical_spacing_keeps_originals_and_shared_preview_compilation() {
     let selection = snapshot(1, 1);
     let source = draft(TeletextColour::Red, "ASCII");
     let before = original(&selection, source.clone());
-    let mut cells = row(&before);
-    cells[7] = 0x0e;
-    assert!(matches!(
-        compile_overlay(&selection, source, cells),
-        Err(ChannelTeletextDocumentEncodingError::Encoding(_))
-    ));
-    assert_ne!(row(&before)[7], 0x0e);
+    let original_row = row(&before);
+    let other_page = packet(&before, address(124)).clone();
+    for code in [0x00, 0x10, 0x0e, 0x0f] {
+        let mut cells = original_row;
+        cells[7] = code;
+        let after = compile_overlay(&selection, source.clone(), cells).unwrap();
+        assert_eq!(row(&after), cells);
+        assert_eq!(packet(&after, address(124)), &other_page);
+        assert_eq!(after.metadata, before.metadata);
+        assert_eq!(after.provenance, before.provenance);
+        assert_eq!(after.transmissions, before.transmissions);
+        let preview = project_teletext_preview(
+            after.encoded.as_ref().unwrap(),
+            address(123),
+            TeletextColourPixelOptions {
+                reveal_concealed: false,
+                flash_phase: TeletextFlashPhase::Original,
+            },
+            bounds(selection.channel_id).1,
+        )
+        .unwrap();
+        assert!(preview.raster().diagnostics().is_empty());
+    }
+    assert_eq!(row(&before), original_row);
 }
 
 #[test]

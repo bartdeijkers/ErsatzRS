@@ -234,3 +234,6 @@ mod display_resolution_tests;
 
 #[cfg(test)]
 mod mot_presentation_tests;
+
+#[cfg(test)]
+mod physical_spacing_tests;

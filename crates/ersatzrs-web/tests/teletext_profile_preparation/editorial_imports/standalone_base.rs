@@ -14,6 +14,9 @@ mod native_editor;
 #[path = "standalone_base/held_mosaics.rs"]
 mod held_mosaics;
 
+#[path = "standalone_base/physical_spacing.rs"]
+mod physical_spacing;
+
 fn commands() -> Value {
     let mut commands = Vec::new();
     for row in 1..=5 {

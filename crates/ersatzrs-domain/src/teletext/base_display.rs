@@ -1,4 +1,6 @@
-//! Immutable base-row trace before enhanced/object display realization.
+//! Immutable coded-plane trace under the effective presentation, before object
+//! display realization. Mapped colours and enhanced spacing responses are not a
+//! selected Level 1/1.5 rendering; the original coded rows remain its input.
 //!
 //! This bounded value retains coded spacing cells, their decoded attributes and
 //! separate authored intent. It is not a generic teletext renderer, visible-row
@@ -28,6 +30,8 @@ pub enum TeletextBaseSpacingControl {
     StartBox,
     NormalHeight,
     DoubleHeight,
+    DoubleWidth,
+    DoubleSize,
     Conceal,
     ContiguousMosaics,
     SeparatedMosaics,
@@ -50,6 +54,8 @@ impl TeletextBaseSpacingControl {
             Self::StartBox => 0x0b,
             Self::NormalHeight => 0x0c,
             Self::DoubleHeight => 0x0d,
+            Self::DoubleWidth => 0x0e,
+            Self::DoubleSize => 0x0f,
             Self::Conceal => 0x18,
             Self::ContiguousMosaics => 0x19,
             Self::SeparatedMosaics => 0x1a,
@@ -70,19 +76,11 @@ impl TeletextBaseSpacingControl {
             | Self::StartBox
             | Self::Escape
             | Self::ReleaseMosaics
-            | Self::DoubleHeight => TeletextSpacingTiming::SetAfter,
+            | Self::DoubleHeight
+            | Self::DoubleWidth
+            | Self::DoubleSize => TeletextSpacingTiming::SetAfter,
             _ => TeletextSpacingTiming::SetAt,
         }
-    }
-    fn is_supported(self) -> bool {
-        !matches!(
-            self,
-            Self::AlphaColour {
-                colour: TeletextColour::Black
-            } | Self::MosaicColour {
-                colour: TeletextColour::Black
-            }
-        )
     }
 }
 
@@ -139,7 +137,6 @@ impl TeletextBaseAttributeSource {
                 timing,
             } => {
                 origin.row() == position.row()
-                    && control.is_supported()
                     && control.timing() == timing
                     && origin.column() >= if origin.row() == 0 { 8 } else { 0 }
                     && self.effective_start_column() <= position.column()
@@ -162,6 +159,7 @@ pub struct TeletextBaseAttributeValues {
     pub graphics: bool,
     pub separated: bool,
     pub double_height: bool,
+    pub double_width: bool,
     pub boxed: bool,
     pub flash: bool,
     pub conceal: bool,
@@ -173,18 +171,20 @@ pub struct TeletextBaseAttributeSources {
     pub graphics: TeletextBaseAttributeSource,
     pub separated: TeletextBaseAttributeSource,
     pub height: TeletextBaseAttributeSource,
+    pub width: TeletextBaseAttributeSource,
     pub boxed: TeletextBaseAttributeSource,
     pub flash: TeletextBaseAttributeSource,
     pub conceal: TeletextBaseAttributeSource,
 }
 impl TeletextBaseAttributeSources {
-    fn all(self) -> [TeletextBaseAttributeSource; 8] {
+    fn all(self) -> [TeletextBaseAttributeSource; 9] {
         [
             self.foreground,
             self.background,
             self.graphics,
             self.separated,
             self.height,
+            self.width,
             self.boxed,
             self.flash,
             self.conceal,
@@ -197,6 +197,7 @@ impl TeletextBaseAttributeSources {
             self.graphics,
             self.separated,
             self.height,
+            self.width,
             self.boxed,
             self.flash,
             self.conceal,
@@ -259,6 +260,10 @@ impl TeletextBaseDisplayAttributes {
     #[must_use]
     pub const fn double_height(self) -> bool {
         self.values.double_height
+    }
+    #[must_use]
+    pub const fn double_width(self) -> bool {
+        self.values.double_width
     }
     #[must_use]
     pub const fn boxed(self) -> bool {
@@ -377,8 +382,7 @@ impl TeletextBaseDisplayCell {
             }
             match kind {
                 TeletextBaseDisplayCellKind::SpacingControl { control, timing }
-                    if control.is_supported()
-                        && control.code() == code
+                    if control.code() == code
                         && control.timing() == timing
                         && authored.is_none() => {}
                 TeletextBaseDisplayCellKind::Blank if code == b' ' && authored.is_none() => {}
@@ -492,6 +496,7 @@ impl TeletextBaseDisplay {
                     return Err(TeletextBaseDisplayValueError::CellPosition);
                 }
                 if !matches!(cell.kind, TeletextBaseDisplayCellKind::HeaderOwned) {
+                    validate_size_sources(cell.attributes)?;
                     for source in cell.attributes.sources.all() {
                         validate_coded_source(trace_cells, source)?;
                     }
@@ -556,6 +561,33 @@ fn validate_coded_source(
             cell.code == 0x0b
                 && cell.kind == (TeletextBaseDisplayCellKind::SpacingControl { control, timing })
         }) {
+            return Err(TeletextBaseDisplayValueError::AttributeOrigin);
+        }
+    }
+    Ok(())
+}
+
+// Size controls reset both axes. Validate each independent field against its
+// real control, so a valid coded origin cannot authenticate a forged size value.
+fn validate_size_sources(
+    attributes: TeletextBaseDisplayAttributes,
+) -> Result<(), TeletextBaseDisplayValueError> {
+    let sources = attributes.sources();
+    for (value, source, vertical) in [
+        (attributes.double_height(), sources.height, true),
+        (attributes.double_width(), sources.width, false),
+    ] {
+        let expected = match source {
+            TeletextBaseAttributeSource::RowDefault { .. } => false,
+            TeletextBaseAttributeSource::Spacing { control, .. } => match control {
+                TeletextBaseSpacingControl::NormalHeight => false,
+                TeletextBaseSpacingControl::DoubleHeight => vertical,
+                TeletextBaseSpacingControl::DoubleWidth => !vertical,
+                TeletextBaseSpacingControl::DoubleSize => true,
+                _ => return Err(TeletextBaseDisplayValueError::AttributeOrigin),
+            },
+        };
+        if value != expected {
             return Err(TeletextBaseDisplayValueError::AttributeOrigin);
         }
     }

@@ -2237,3 +2237,119 @@ fn hidden_d5_zero_cancellation_defers_with_original_placement_and_keeps_enlarged
         if location.command == 3)
     );
 }
+
+#[test]
+fn physical_size_controls_obscured_by_width_are_deferred_with_both_axes_and_original_provenance() {
+    use super::base_footprints_tests::size_segment;
+    for superseded in [false, true] {
+        let mut rows = empty_rows(7, 0);
+        size_segment(&mut rows, 1, 7, TeletextBaseSpacingControl::DoubleWidth);
+        size_segment(&mut rows, 1, 9, TeletextBaseSpacingControl::DoubleHeight);
+        if superseded {
+            size_segment(&mut rows, 1, 10, TeletextBaseSpacingControl::NormalHeight);
+        } else {
+            let attrs = rows[1][10].attributes();
+            put(&mut rows, 1, 10, b'B', None, attrs);
+        }
+        let attrs = rows[1][8].attributes();
+        put(&mut rows, 1, 8, b'A', None, attrs);
+        let fixture = Fixture::new(finish(rows, None), &service(vec![], vec![]));
+        let result = resolve(&fixture);
+        assert_eq!(
+            origin_at(&result, 1, 8).effective_size(),
+            Some(TeletextDisplaySize::DoubleWidth)
+        );
+        assert_eq!(
+            result.cell(1, 8).unwrap().origin(),
+            result.cell(1, 9).unwrap().origin()
+        );
+        let attr = result.cell(1, 10).unwrap().attributes();
+        assert_eq!(attr.double_height().value(), Some(!superseded));
+        assert_eq!(attr.double_width().value(), Some(false));
+        for field in [attr.double_height(), attr.double_width()] {
+            let writer = field.writer().unwrap();
+            assert_eq!(
+                writer.placed_position(),
+                (1, if superseded { 10 } else { 9 })
+            );
+            assert_eq!(writer.effective_start(), (1, 10));
+        }
+        assert_eq!(fixture.base.cell(1, 9).unwrap().code(), 0x0d);
+        assert_eq!(
+            fixture.base_footprints.row(2).unwrap().suppressed_by(),
+            Some(TeletextEnhancementPosition::new(1, 9).unwrap())
+        );
+        assert!(result.pending().is_empty());
+    }
+}
+
+#[test]
+fn physical_black_colour_in_an_obscured_cell_resets_conceal_when_it_becomes_visible() {
+    use super::base_footprints_tests::size_segment;
+    for black in [
+        TeletextBaseSpacingControl::AlphaColour {
+            colour: TeletextColour::Black,
+        },
+        TeletextBaseSpacingControl::MosaicColour {
+            colour: TeletextColour::Black,
+        },
+    ] {
+        let mut rows = empty_rows(7, 0);
+        let conceal = TeletextBaseSpacingControl::Conceal;
+        for column in 2..40 {
+            let old = rows[1][usize::from(column)];
+            let mut values = old.attributes().values();
+            let mut sources = old.attributes().sources();
+            values.conceal = column < 10;
+            sources.conceal = source(
+                1,
+                if column < 10 { 2 } else { 9 },
+                if column < 10 { conceal } else { black },
+            );
+            if column >= 10 {
+                values.raw_foreground = 0;
+                values.foreground = TeletextColourReference::BLACK;
+                sources.foreground = source(1, 9, black);
+                values.graphics = matches!(black, TeletextBaseSpacingControl::MosaicColour { .. });
+                sources.graphics = source(1, 9, black);
+            }
+            let control = match column {
+                2 => Some(conceal),
+                9 => Some(black),
+                _ => None,
+            };
+            put(
+                &mut rows,
+                1,
+                column,
+                control.map_or(b'A', TeletextBaseSpacingControl::code),
+                control,
+                TeletextBaseDisplayAttributes::new(values, sources).unwrap(),
+            );
+        }
+        size_segment(&mut rows, 1, 7, TeletextBaseSpacingControl::DoubleWidth);
+        let fixture = Fixture::new(finish(rows, None), &service(vec![], vec![]));
+        let result = resolve(&fixture);
+        assert_eq!(
+            result.cell(1, 8).unwrap().origin(),
+            result.cell(1, 9).unwrap().origin()
+        );
+        assert_eq!(colour(&result, 1, 8), Some(7));
+        assert_eq!(
+            result.cell(1, 8).unwrap().attributes().conceal().value(),
+            Some(true)
+        );
+        assert_eq!(colour(&result, 1, 10), Some(0));
+        let visible = result.cell(1, 10).unwrap().attributes();
+        assert_eq!(visible.conceal().value(), Some(false));
+        for writer in [
+            visible.foreground().writer().unwrap(),
+            visible.conceal().writer().unwrap(),
+        ] {
+            assert_eq!(writer.placed_position(), (1, 9));
+            assert_eq!(writer.effective_start(), (1, 10));
+        }
+        assert_eq!(fixture.base.cell(1, 9).unwrap().code(), black.code());
+        assert!(result.pending().is_empty());
+    }
+}

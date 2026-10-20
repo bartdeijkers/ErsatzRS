@@ -45,6 +45,7 @@ pub(super) fn attributes(row: u8, foreground: u8, background: u8) -> TeletextBas
             graphics: false,
             separated: false,
             double_height: false,
+            double_width: false,
             boxed: false,
             flash: false,
             conceal: false,
@@ -55,6 +56,7 @@ pub(super) fn attributes(row: u8, foreground: u8, background: u8) -> TeletextBas
             graphics: source,
             separated: source,
             height: source,
+            width: source,
             boxed: source,
             flash: source,
             conceal: source,
@@ -144,6 +146,7 @@ pub(super) fn height_segment(
         } else {
             source(row, control_column, dh)
         };
+        sources.width = sources.height;
         let attributes = TeletextBaseDisplayAttributes::new(values, sources).unwrap();
         let control = match original.kind() {
             TeletextBaseDisplayCellKind::SpacingControl { control, .. } => Some(control),
@@ -631,4 +634,135 @@ fn baseline_uses_original_remapping_and_row_colour_when_no_coded_default_backgro
         footprints.row(2).unwrap().baseline().background(),
         TeletextColourReference::BLACK
     );
+}
+
+/// Apply one literal Table26 size control, including both independent origins.
+pub(super) fn size_segment(
+    rows: &mut Rows,
+    row: u8,
+    column: u8,
+    control: TeletextBaseSpacingControl,
+) {
+    let (height, width) = match control {
+        TeletextBaseSpacingControl::NormalHeight => (false, false),
+        TeletextBaseSpacingControl::DoubleHeight => (true, false),
+        TeletextBaseSpacingControl::DoubleWidth => (false, true),
+        TeletextBaseSpacingControl::DoubleSize => (true, true),
+        _ => panic!("expected a size control"),
+    };
+    let original = rows[usize::from(row)][usize::from(column)];
+    put(
+        rows,
+        row,
+        column,
+        control.code(),
+        Some(control),
+        original.attributes(),
+    );
+    let start = column + u8::from(control.timing() == TeletextSpacingTiming::SetAfter);
+    for current in start..40 {
+        let old = rows[usize::from(row)][usize::from(current)];
+        let mut values = old.attributes().values();
+        let mut sources = old.attributes().sources();
+        values.double_height = height;
+        values.double_width = width;
+        sources.height = source(row, column, control);
+        sources.width = source(row, column, control);
+        let kind = match old.kind() {
+            TeletextBaseDisplayCellKind::SpacingControl { control, .. } => Some(control),
+            _ => None,
+        };
+        put(
+            rows,
+            row,
+            current,
+            old.code(),
+            kind,
+            TeletextBaseDisplayAttributes::new(values, sources).unwrap(),
+        );
+    }
+}
+
+#[test]
+fn physical_double_size_and_width_keep_size_boundary_and_whole_lower_row_suppression() {
+    let mut rows = empty_rows(7, 0);
+    size_segment(&mut rows, 1, 3, TeletextBaseSpacingControl::DoubleSize);
+    size_segment(&mut rows, 1, 8, TeletextBaseSpacingControl::DoubleWidth);
+    // An ignored lower raw size control must never cascade into the third row.
+    size_segment(&mut rows, 2, 5, TeletextBaseSpacingControl::DoubleSize);
+    let base = finish(rows, None);
+    let footprint =
+        resolve_teletext_base_footprints(&base, &[TeletextColourReference::BLACK; 25]).unwrap();
+    assert_eq!(
+        footprint.row(2).unwrap().suppressed_by(),
+        Some(position(1, 3))
+    );
+    assert_eq!(
+        footprint.cell(1, 3).unwrap().kind(),
+        TeletextBaseFragmentKind::Normal
+    );
+    for column in 4..=8 {
+        assert_eq!(
+            footprint.cell(1, column).unwrap().kind(),
+            TeletextBaseFragmentKind::DoubleHeightTop
+        );
+        assert_eq!(
+            footprint.cell(2, column).unwrap().kind(),
+            TeletextBaseFragmentKind::DoubleHeightBottom
+        );
+    }
+    for column in [0, 3, 9, 39] {
+        assert_eq!(
+            footprint.cell(2, column).unwrap().kind(),
+            TeletextBaseFragmentKind::BackgroundOnly
+        );
+    }
+    assert!(base.cell(1, 8).unwrap().attributes().double_height());
+    assert!(!base.cell(1, 9).unwrap().attributes().double_height());
+    assert!(base.cell(1, 9).unwrap().attributes().double_width());
+    assert_eq!(base.cell(2, 5).unwrap().code(), 0x0f);
+    assert_eq!(footprint.row(3).unwrap().suppressed_by(), None);
+    assert_eq!(
+        footprint.cell(3, 5).unwrap().kind(),
+        TeletextBaseFragmentKind::Normal
+    );
+}
+
+#[test]
+fn physical_double_size_edges_keep_the_existing_height_pending_rules() {
+    for row in [0, 23, 24] {
+        let mut rows = empty_rows(7, 0);
+        size_segment(&mut rows, row, 12, TeletextBaseSpacingControl::DoubleSize);
+        let base = finish(rows, None);
+        let footprint =
+            resolve_teletext_base_footprints(&base, &[TeletextColourReference::BLACK; 25]).unwrap();
+        assert_eq!(
+            footprint.row(row).unwrap().pending().unwrap().cause(),
+            position(row, 12)
+        );
+        assert_eq!(
+            footprint.cell(row, 12).unwrap().kind(),
+            TeletextBaseFragmentKind::PendingHeightBoundary
+        );
+    }
+    for control in [
+        TeletextBaseSpacingControl::DoubleHeight,
+        TeletextBaseSpacingControl::DoubleSize,
+    ] {
+        let mut rows = empty_rows(7, 0);
+        size_segment(&mut rows, 1, 39, control);
+        let base = finish(rows, None);
+        let footprint =
+            resolve_teletext_base_footprints(&base, &[TeletextColourReference::BLACK; 25]).unwrap();
+        assert_eq!(
+            footprint.row(2).unwrap().suppressed_by(),
+            Some(position(1, 39))
+        );
+    }
+    let mut rows = empty_rows(7, 0);
+    size_segment(&mut rows, 1, 4, TeletextBaseSpacingControl::DoubleWidth);
+    let base = finish(rows, None);
+    let footprint =
+        resolve_teletext_base_footprints(&base, &[TeletextColourReference::BLACK; 25]).unwrap();
+    assert_eq!(footprint.row(2).unwrap().suppressed_by(), None);
 }

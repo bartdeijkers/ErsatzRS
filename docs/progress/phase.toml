@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 full engine acceptance: lifecycle slice verified; bounded Kodi21.2 qualification and remaining F/V/X, no DVBViewer or device trial'
+current_focus = 'P9A-04 F3 physical black/size partial implementation; next F1/V2 grouped editor/publication boundary, X1/X2/X3 open, no DVBViewer or device trial'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -83,11 +83,17 @@ V3 section owns one conditional joint end-trial and the precise source limits.
 Full9A cannot close independently while X1 suitable-client qualification is
 deferred/source-negative, X3 complete QTM banks/large context awaits upstream,
 and X2 native six-RID/artifact/Health/adoption prerequisites are missing. These
-are not waived or substituted by more base variants. Next independent product
-package: qualify the existing F3 physical black/width/size spacing gap against
-standard semantics, then correct the demonstrated factory limitation as one
-bundle while preserving original bytes and intended1/1.5 fallback. No client
-hunt, decoder maintenance, physical-device test or DVBViewer work follows.
+are not waived or substituted by more base variants. The grouped F3 physical
+black/width/size implementation now retains exact bytes, both size origins, C.3,
+held state, protected effects and raw0F lower-row basic content. Canonical
+physical_spacing_followup owns its affected checks and fixed independent result:
+all10 enhanced fixtures/14 cells/4 rasters pass; stocklibzvbi still responds to
+these codes at selected1/1.5 (22 unchanged-oracle failures). No complete fallback
+claim follows. The grouped native concept import/preview/reexport/reopen and231
+affected regressions pass; identity.json owns final checks and negatives. Next
+prove the existing F1/V2 grouped native-editor menus/save and affected publication/
+ordinary-route boundary. These mandatory proofs remain open. No client hunt,
+decoder maintenance, physical-device test or DVBViewer work follows.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
 list, separated into missing product, mandatory proof and external prerequisites.

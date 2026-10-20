@@ -414,9 +414,10 @@ pub(super) fn compile_for_service_composition(
     Ok(layout)
 }
 
-/// Keep the logical no-hidden-row invariant after every physical row has been
-/// applied. Unchanged authored rows retain their content identity, including
-/// explicit blank glyphs; a physical all-space row explicitly clears content.
+/// Keep the existing logical no-hidden-row invariant below Double Height.
+/// Double Size has no response at Levels 1/1.5, so its following coded row is
+/// legitimate basic fallback even though the enhanced display suppresses it.
+/// Neither interpretation may discard the original lower-row bytes.
 fn validate_merged_height(
     page: &TeletextPageDraft,
     layout: &Layout,
@@ -431,12 +432,14 @@ fn validate_merged_height(
         }
     });
     for row in 0_u8..25 {
-        if !layout.rows[usize::from(row)].contains(&0x0d) {
+        let cells = &layout.rows[usize::from(row)];
+        let double_height = cells.contains(&0x0d);
+        if !double_height && !cells.contains(&0x0f) {
             continue;
         }
         let invalid_row = if row >= 23 {
             Some(row)
-        } else if content[usize::from(row) + 1] {
+        } else if double_height && content[usize::from(row) + 1] {
             Some(row + 1)
         } else {
             None

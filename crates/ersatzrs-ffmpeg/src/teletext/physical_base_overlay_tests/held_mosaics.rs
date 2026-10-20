@@ -211,7 +211,7 @@ fn hold_register_obeys_real_mode_size_and_row_changes_not_reinforcement_or_alpha
     assert_eq!(base_row(compiled(&edited, address(0x1234)).page(), 3), next);
 }
 
-fn with_main(
+pub(super) fn with_main(
     original: &TeletextSemanticService,
     commands: Vec<TeletextEnhancementCommand>,
 ) -> TeletextSemanticService {

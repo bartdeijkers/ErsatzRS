@@ -96,13 +96,13 @@ impl TeletextBaseRowFootprint {
     pub const fn baseline(self) -> TeletextBaseDisplayAttributes {
         self.baseline
     }
-    /// Raw first 0D is retained even in an ignored row. Its presence there does
+    /// Raw first 0D/0F is retained even in an ignored row. Its presence there does
     /// not cause suppression or cascading into another row.
     #[must_use]
     pub const fn first_double_height_control(self) -> Option<TeletextEnhancementPosition> {
         self.first_double_height_control
     }
-    /// Proven whole-lower-main-row suppression by an earlier original 0D.
+    /// Proven whole-lower-main-row suppression by an earlier original 0D/0F.
     #[must_use]
     pub const fn suppressed_by(self) -> Option<TeletextEnhancementPosition> {
         self.suppressed_by
@@ -165,12 +165,13 @@ pub enum TeletextBaseFootprintFailure {
 
 /// Resolve only the emitted spacing subset's coded-Base occupied fragments.
 ///
-/// Raw 0D anywhere in a processed legal row suppresses the entire next main row,
-/// including 0D at column 39 or immediately followed by Normal Height. Ignored
-/// lower-row controls do not cascade. Height itself follows Double Height
-/// `SetAfter` and Normal Height `SetAt`, independently of enhanced observations.
+/// Raw 0D/0F anywhere in a processed legal row suppresses the entire next main row,
+/// including either at column 39 or immediately followed by Normal Height. Ignored
+/// lower-row controls do not cascade. Height itself follows Double Height/Size
+/// `SetAfter`, Double Width `SetAfter` and Normal Size `SetAt`, independently
+/// of enhanced observations.
 /// Illegal height-row uncertainty is retained in the affected height boundary
-/// and next row; an uncertain lower row's own 0D propagates uncertainty rather
+/// and next row; an uncertain lower row's own 0D/0F propagates uncertainty rather
 /// than falsely establishing whether that control was processed or ignored.
 ///
 /// The authoritative caller retains the matching original `BaseDisplay` and full
@@ -194,7 +195,8 @@ pub fn resolve_teletext_base_footprints(
             matches!(
                 cell.kind(),
                 TeletextBaseDisplayCellKind::SpacingControl {
-                    control: TeletextBaseSpacingControl::DoubleHeight,
+                    control: TeletextBaseSpacingControl::DoubleHeight
+                        | TeletextBaseSpacingControl::DoubleSize,
                     ..
                 }
             )
@@ -284,17 +286,15 @@ fn append_row(
             kind,
             pending,
         });
-        if suppressed_by.is_none()
-            && pending.is_none()
-            && matches!(
-                cell.kind(),
-                TeletextBaseDisplayCellKind::SpacingControl {
-                    control: TeletextBaseSpacingControl::DoubleHeight,
-                    ..
+        if suppressed_by.is_none() && pending.is_none() {
+            if let TeletextBaseDisplayCellKind::SpacingControl { control, .. } = cell.kind() {
+                match control {
+                    TeletextBaseSpacingControl::DoubleHeight
+                    | TeletextBaseSpacingControl::DoubleSize => double_height = true,
+                    TeletextBaseSpacingControl::DoubleWidth => double_height = false,
+                    _ => {}
                 }
-            )
-        {
-            double_height = true;
+            }
         }
     }
 }
@@ -334,6 +334,7 @@ fn row_baseline(
             graphics: false,
             separated: false,
             double_height: false,
+            double_width: false,
             boxed: false,
             flash: false,
             conceal: false,
@@ -344,6 +345,7 @@ fn row_baseline(
             graphics: source,
             separated: source,
             height: source,
+            width: source,
             boxed: source,
             flash: source,
             conceal: source,

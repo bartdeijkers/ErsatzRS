@@ -248,7 +248,9 @@ impl TeletextMainComposition {
     pub const fn colour_context(&self) -> &TeletextColourContext {
         &self.colour_context
     }
-    /// Coded fallback and original base intent for subsequent display resolution.
+    /// Original coded rows and base intent under the effective presentation for
+    /// subsequent enhanced display resolution. This is not a selected basic-level
+    /// decoder; the same original bytes remain the Level 1/1.5 fallback input.
     /// This trace does not resolve object overlap or grant rendering readiness.
     #[must_use]
     pub const fn base_display(&self) -> &TeletextBaseDisplay {

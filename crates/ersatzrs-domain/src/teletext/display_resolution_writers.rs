@@ -1443,11 +1443,18 @@ fn spacing_values(
         TeletextBaseSpacingControl::StartBox | TeletextBaseSpacingControl::EndBox => {
             values[BOXED] = Some(Value::Flag(control == TeletextBaseSpacingControl::StartBox));
         }
-        TeletextBaseSpacingControl::NormalHeight | TeletextBaseSpacingControl::DoubleHeight => {
-            values[DH] = Some(Value::Flag(
-                control == TeletextBaseSpacingControl::DoubleHeight,
-            ));
-            values[DW] = Some(Value::Flag(false));
+        TeletextBaseSpacingControl::NormalHeight
+        | TeletextBaseSpacingControl::DoubleHeight
+        | TeletextBaseSpacingControl::DoubleWidth
+        | TeletextBaseSpacingControl::DoubleSize => {
+            values[DH] = Some(Value::Flag(matches!(
+                control,
+                TeletextBaseSpacingControl::DoubleHeight | TeletextBaseSpacingControl::DoubleSize
+            )));
+            values[DW] = Some(Value::Flag(matches!(
+                control,
+                TeletextBaseSpacingControl::DoubleWidth | TeletextBaseSpacingControl::DoubleSize
+            )));
         }
         TeletextBaseSpacingControl::Conceal => values[CONCEAL] = Some(Value::Flag(true)),
         TeletextBaseSpacingControl::ContiguousMosaics
