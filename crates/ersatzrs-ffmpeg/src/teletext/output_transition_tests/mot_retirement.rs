@@ -3,6 +3,9 @@
 use super::*;
 use crate::teletext::TeletextServiceResourceTransmission;
 
+#[path = "automatic_mot_retirement.rs"]
+mod automatic;
+
 fn neutral_mot() -> TeletextMotLevel25Declaration {
     let target = TeletextX27LinkTarget::Unspecified {
         magazine: TeletextX27Magazine::new(2).unwrap(),
@@ -37,6 +40,13 @@ fn neutral_mot() -> TeletextMotLevel25Declaration {
 }
 
 fn with_mot(mot: TeletextMotLevel25Declaration) -> Arc<EncodedTeletextAuthoredService> {
+    with_mot_counter(mot, 1)
+}
+
+fn with_mot_counter(
+    mot: TeletextMotLevel25Declaration,
+    counter: u8,
+) -> Arc<EncodedTeletextAuthoredService> {
     let base = simple("nld", None);
     let semantic = base.declared().semantic().clone();
     let display = semantic.base().pages[0].address;
@@ -54,7 +64,7 @@ fn with_mot(mot: TeletextMotLevel25Declaration) -> Arc<EncodedTeletextAuthoredSe
     .unwrap();
     let transmission = TeletextServiceResourceTransmission {
         resource,
-        counter: TeletextResourceUpdateCounter::new(1).unwrap(),
+        counter: TeletextResourceUpdateCounter::new(counter).unwrap(),
         update: TeletextResourceFullUpdate::Changed,
         last_subpage: true,
     };
@@ -70,77 +80,59 @@ fn with_mot(mot: TeletextMotLevel25Declaration) -> Arc<EncodedTeletextAuthoredSe
     )
 }
 
-#[test]
-fn neutral_other_s1_cannot_erase_an_earlier_nonempty_mot_owner() {
+fn populated() -> Arc<EncodedTeletextAuthoredService> {
     let mut input = authored::input();
     input.magazines.clear();
     let declared = authored::declared(input);
     let transmissions = authored::transmissions(&declared);
-    let old = Arc::new(
+    Arc::new(
         super::super::super::encode_teletext_authored_service(
             declared,
             &transmissions,
             &authored::limits(),
         )
         .unwrap(),
-    );
+    )
+}
+
+#[test]
+fn different_neutral_s1_and_withdrawal_do_not_clear_history_before_exact_retirement_ack() {
+    let old = populated();
     let cleared_other = with_mot(neutral_mot());
     let bankless = simple("nld", None);
-    let (mut gate, source) = gate(old, 400);
+    let (mut gate, source) = gate(Arc::clone(&old), 400);
     let (receipt, _, now) = cycle(&mut gate);
-    gate.replace_authored_at_acknowledged_boundary(&receipt, &cleared_other, now)
-        .unwrap();
-    let (receipt, _, now) = cycle(&mut gate);
-    let first = usize::try_from(gate.source_start).unwrap();
-    assert_eq!(
-        gate.replace_authored_at_acknowledged_boundary(&receipt, &bankless, now),
-        Err(TeletextOutputError::CacheReconciliationRequired),
-        "a completed empty S1=0 does not erase the old populated S1=9"
-    );
-    let (receipt, output, now) = cycle(&mut gate);
-    assert_source_positions(&output, &source, first);
-    assert!(Arc::ptr_eq(
-        gate.warm_service.as_ref().unwrap(),
-        &cleared_other
-    ));
     gate.withdraw_at_acknowledged_boundary(&receipt, now)
         .unwrap();
     let (receipt, _, now) = deliver(&mut gate, 1);
     assert_eq!(gate.acknowledged_nonempty_mots[2], 1 << 9);
-    assert_eq!(
-        gate.replace_authored_at_acknowledged_boundary(&receipt, &bankless, now),
-        Err(TeletextOutputError::CacheReconciliationRequired),
-        "withdrawing the descriptor does not erase receiver state"
-    );
-    let empty = neutral_mot();
-    let exact_owner = TeletextMotLevel25Declaration::new(
-        TeletextResourceIdentity::new(
-            TeletextResourceKind::Mot,
-            empty.identity().page(),
-            TeletextResourceSubpageIndex::new(9).unwrap(),
-        )
-        .unwrap(),
-        empty.associations().to_vec(),
-        empty.links(),
-    )
-    .unwrap();
-    gate.replace_authored_at_acknowledged_boundary(&receipt, &with_mot(exact_owner), now)
+    gate.replace_authored_at_acknowledged_boundary(&receipt, &cleared_other, now)
         .unwrap();
     assert_eq!(gate.acknowledged_nonempty_mots[2], 1 << 9);
+    let retirement = gate.mot_retirement.as_ref().unwrap();
+    assert_eq!(retirement.pages.len(), 1);
+    assert_eq!(
+        retirement.pages[0].header().identity(),
+        old.declared().mots()[0].identity()
+    );
     assert_eq!(
         gate.replace_authored_at_acknowledged_boundary(&receipt, &bankless, now),
-        Err(TeletextOutputError::Acknowledgement),
-        "a proposed neutral bank has not been delivered yet"
+        Err(TeletextOutputError::Acknowledgement)
     );
-    let (receipt, _, now) = cycle(&mut gate);
-    assert_eq!(gate.acknowledged_nonempty_mots, [0; 8]);
     let first = usize::try_from(gate.source_start).unwrap();
+    let (receipt, output, now) = cycle(&mut gate);
+    assert_source_positions(&output, &source, first);
+    assert_eq!(gate.acknowledged_nonempty_mots, [0; 8]);
+    assert!(gate.mot_retirement.is_none());
+    assert!(Arc::ptr_eq(
+        gate.warm_service.as_ref().unwrap(),
+        &cleared_other
+    ));
     gate.replace_authored_at_acknowledged_boundary(&receipt, &bankless, now)
         .unwrap();
-    let (_, output, _) = cycle(&mut gate);
-    assert_source_positions(&output, &source, first);
+    assert!(gate.mot_retirement.is_none());
+    cycle(&mut gate);
     assert!(Arc::ptr_eq(gate.warm_service.as_ref().unwrap(), &bankless));
-    assert!(gate.failure.is_none());
 }
 
 #[test]

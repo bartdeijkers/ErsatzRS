@@ -36,6 +36,9 @@ mod absent_tests;
 #[path = "output_transitions.rs"]
 mod transitions;
 
+#[path = "output_mot_retirement.rs"]
+mod mot_retirement;
+
 #[cfg(test)]
 #[path = "output_transition_tests.rs"]
 pub(in crate::teletext) mod transition_tests;
@@ -242,6 +245,7 @@ struct PendingOutput {
     exposed: bool,
     cycle: PendingCycleEvidence,
     completed_authored: Option<Arc<EncodedTeletextAuthoredService>>,
+    completed_mot_retirement: bool,
 }
 
 /// Compose bounded retention, source PSI/PID, PCR/CBR and atomic page insertion.
@@ -293,6 +297,7 @@ pub struct TeletextOutputGate {
     // One bit per checked logical S1 in each wire magazine. Only a completed
     // neutral bank with that exact owner clears previously delivered MOT state.
     acknowledged_nonempty_mots: [u16; 8],
+    mot_retirement: Option<mot_retirement::MotRetirement>,
 }
 
 impl TeletextOutputGate {
@@ -486,6 +491,7 @@ impl TeletextOutputGate {
             warm_service: None,
             acknowledged_m29_magazines: 0,
             acknowledged_nonempty_mots: [0; 8],
+            mot_retirement: None,
         })
     }
 
@@ -924,20 +930,8 @@ impl TeletextOutputGate {
                         .ok_or(TeletextOutputError::Boundary)?,
                 )
                 .map_err(|_| TeletextOutputError::Arithmetic)?;
-            let batch = if self.payload.active && self.payload.signalling_ready {
-                let batch = self
-                    .carousel
-                    .as_mut()
-                    .ok_or(TeletextOutputError::Configuration)?
-                    .next_batch()?;
-                completes_cycle |= batch.kind() == super::TeletextCarouselBatchKind::Terminator;
-                Some(batch)
-            } else {
-                if let Some(carousel) = self.carousel.as_mut() {
-                    carousel.advance_empty_at_boundary(STEP_TICKS)?;
-                }
-                None
-            };
+            let (batch, completes) = self.next_payload_batch()?;
+            completes_cycle |= completes;
             let next = self
                 .batch_ticks
                 .checked_add(STEP_TICKS)
@@ -974,16 +968,42 @@ impl TeletextOutputGate {
             exposed: false,
             cycle: PendingCycleEvidence {
                 completes_cycle,
-                cycle_boundary: self
-                    .carousel
-                    .as_ref()
-                    .is_none_or(TeletextCarousel::is_cycle_boundary),
+                cycle_boundary: self.mot_retirement.is_none()
+                    && self
+                        .carousel
+                        .as_ref()
+                        .is_none_or(TeletextCarousel::is_cycle_boundary),
                 signalling_announced: installation.announced,
             },
             completed_authored,
+            completed_mot_retirement: self
+                .mot_retirement
+                .as_ref()
+                .is_some_and(mot_retirement::MotRetirement::complete),
         });
         self.source_start = end;
         Ok(true)
+    }
+
+    fn next_payload_batch(
+        &mut self,
+    ) -> Result<(Option<super::TeletextCarouselBatch>, bool), TeletextOutputError> {
+        let carousel = self.carousel.as_mut();
+        if !self.payload.active || !self.payload.signalling_ready {
+            if let Some(carousel) = carousel {
+                carousel.advance_empty_at_boundary(STEP_TICKS)?;
+            }
+            return Ok((None, false));
+        }
+        let carousel = carousel.ok_or(TeletextOutputError::Configuration)?;
+        if let Some(retirement) = self.mot_retirement.as_mut() {
+            let batch = retirement.next_batch(self.batch_ticks);
+            carousel.advance_empty_at_boundary(STEP_TICKS)?;
+            return Ok((batch, false));
+        }
+        let batch = carousel.next_batch()?;
+        let complete = batch.kind() == super::TeletextCarouselBatchKind::Terminator;
+        Ok((Some(batch), complete))
     }
 
     fn acknowledge_inner(
@@ -1057,6 +1077,21 @@ impl TeletextOutputGate {
                 }
             }
             self.warm_service = Some(Arc::clone(service));
+        }
+        if pending.completed_mot_retirement {
+            let retirement = self
+                .mot_retirement
+                .take()
+                .ok_or(TeletextOutputError::Configuration)?;
+            for page in &retirement.pages {
+                let owner = page.header().identity();
+                self.acknowledged_nonempty_mots[usize::from(owner.page().magazine() & 7)] &=
+                    !(1 << owner.logical_subpage().get());
+            }
+            self.carousel
+                .as_mut()
+                .ok_or(TeletextOutputError::Configuration)?
+                .record_mot_retirement(retirement.pages);
         }
         self.last_ack = Some(stamp);
         self.pending = None;

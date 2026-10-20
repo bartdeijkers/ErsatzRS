@@ -370,10 +370,10 @@ fn invalid_resource_lifecycle_preserves_current_content_signalling_and_next_outp
 }
 
 #[test]
-fn retired_m29_and_mot_banks_require_reconciliation_without_damaging_existing_output() {
+fn retired_m29_requires_reconciliation_without_damaging_existing_output() {
     for (old, next) in [
         (simple("nld", Some(1)), simple("nld", None)),
-        (Arc::new(authored::candidate()), simple("nld", Some(1))),
+        (Arc::new(authored::candidate()), simple("nld", None)),
     ] {
         let (mut gate, _) = gate(Arc::clone(&old), 100);
         let (receipt, _, now) = cycle(&mut gate);

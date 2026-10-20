@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 neutral-MOT same-response publication/AV/TSDuck component closed at default2; next automatic populated-MOT retirement; M29/independent warm-client/platform remain, Windows-package deferred/X1 deferred/X3 upstream'
+current_focus = 'P9A-04 F4 automatic populated-MOT engine/mux component closed; next ordinary same-response publication proof for populated retirement; M29/independent warm-client/platform remain, Windows-package deferred/future120minutes, X1 deferred/X3 upstream'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -234,10 +234,18 @@ clock, source AV, TSDuck and durable DB recovery pass. Package/profile/binding/
 configuration/history isolation and exactly one explicit new producer preparation
 remain checked; owned cleanup and required ordinary MPEG-TS/HLS smoke pass.
 Canonical tmp/phase9-mot-retirement/ordinary-tcp/identity.json owns the final
-proof and retained setup/lint negatives. Next implement automatic retirement of
-previously populated MOT state on the continuing response; no manual reconnect,
-capacity increase or silent omission. M29 reconciliation, independent warm-client
-and full F4/platform acceptance remain separate open requirements.
+proof and retained setup/lint negatives. The automatic populated-MOT engine/mux
+component is now closed: output-owned full neutral banks use actual completed
+S2/C4/C8 history and retain the source clock. Only the complete prefix's sink ACK
+retires exact owners; it never counts as successor delivery. All124 affected cases,
+final7 MOT regressions (four new) and the real AV/TSDuck gate pass, with the
+existing damaged-counter negative detected. Strict FFmpeg lint
+passes. Canonical tmp/phase9-mot-retirement/automatic/identity.json owns the
+source/tool/capture pins and exact trial limitations. Reuse unchanged editor,
+publication/isolation and F6 evidence. Next prove populated-bank retirement on
+the original ordinary HTTP responses through explicit publication; keep default2,
+tracks, clock and cleanup. M29 reconciliation, independent warm-client and full
+F4/platform acceptance remain separate open requirements.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
 pass on optimized.4 with exact cues, copied AV/Dutch AAC, shared cache and natural

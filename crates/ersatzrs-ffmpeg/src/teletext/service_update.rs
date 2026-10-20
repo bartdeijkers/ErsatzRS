@@ -47,6 +47,27 @@ pub(super) struct ResourceUpdateHistory {
 }
 
 impl ResourceUpdateHistory {
+    pub(super) fn completed_counter(
+        &self,
+        identity: TeletextResourceIdentity,
+    ) -> Option<TeletextResourceUpdateCounter> {
+        self.resources
+            .get(&owner(identity))
+            .map(|previous| previous.counter)
+    }
+
+    /// A sink-acknowledged neutral prefix changes only its exact resource owners.
+    pub(super) fn record_completed_resource(&mut self, page: EncodedTeletextAuthoredPage) {
+        if let Some(header) = page.resource_header() {
+            self.resources.insert(
+                owner(header.identity()),
+                CompletedResource {
+                    counter: header.update_counter(),
+                    page: Some(page),
+                },
+            );
+        }
+    }
     /// Validate without moving bodies or advancing any historical counter.
     /// A supplied completed generation supersedes older retained live snapshots.
     pub(super) fn validate(

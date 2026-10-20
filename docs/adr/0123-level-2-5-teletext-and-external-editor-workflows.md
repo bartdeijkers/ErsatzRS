@@ -920,8 +920,17 @@ presence must survive withdrawal. M29 omission may proceed only when every
 preceding exact display owner remains present and every replacement consumer in
 that magazine has a complete explicit page-X28 declaration. Retain the remembered
 magazine presence for subsequent generations; neither omission nor page C4 clears
-a receiver cache. Header/POP uncertainty is not an explicit declaration. Missing
-Nonempty MOT banks still require reconciliation without mutating old output.
+a receiver cache. Header/POP uncertainty is not an explicit declaration.
+
+Previously delivered nonempty MOT owners omitted by a successor now receive
+output-owned full neutral updates before the successor's acquisition. Use the
+existing typed encoder and actual completed per-response counters; preflight the
+prefix plus acquisition against the existing timing bound before changing output.
+Keep header/body erase intervals and the original source clock/null-slot path.
+Only a complete prefix's sink acknowledgement retires its exact owners and
+records the new counters; a prefix is never proof of successor delivery. It does
+not alter the immutable original declaration or compiled display model. Pending,
+failed, cancelled or EOF-truncated prefixes grant no completed history.
 A completely delivered canonical empty MOT may be omitted: all associations,
 links, fallback/default slots and advertised counts must be inactive. A bounded
 per-wire-magazine S1 mask retains every completed nonempty owner, including
@@ -930,8 +939,9 @@ neutral bank clears its bit; pending output, a different S1 and descriptor
 withdrawal do not. The empty-bank output guard and a qualified ordinary same-response publication
 flow now retain exact source clock/AV, TSDuck, channel isolation, explicit
 publication and durable DB recovery at default capacity two. This component
-proof does not establish independent warm-client rendering or automatic
-reconciliation of populated banks. These fences are
+proof does not establish independent warm-client rendering. Automatic populated
+MOT retirement also has scoped engine/mux proof; ordinary same-response
+publication and independent warm-client proof remain required. These fences are
 not full warm reconciliation or an accepted authoring restriction.
 P9A-04 owns implementation status and the transport/control receipt;
 full bank/page retirement and independent warm-client proof remain required.

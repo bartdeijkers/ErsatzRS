@@ -386,6 +386,108 @@ async fn real_runtime_gate_replaces_withdraws_and_reenables_without_changing_av(
 }
 
 #[tokio::test]
+#[ignore = "requires exact FFmpeg 9 and TSDuck; simulated sink, not HTTP or warm-client acceptance"]
+async fn real_runtime_populated_mot_retires_before_successor_without_changing_av() {
+    use crate::teletext::authored_service_tests as authored;
+    use crate::teletext::source_header::{observe_dvb_teletext_header, TeletextHeaderObservation};
+
+    let ffmpeg = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_FFMPEG"])
+        .expect("set the exact FFmpeg executable");
+    let tsanalyze = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_TSANALYZE"])
+        .expect("set the TSDuck tsanalyze executable");
+    let source = crate::teletext_probe::run_probe(&ffmpeg, SOURCE_ARGS, &[], 4 * 1024 * 1024)
+        .await
+        .unwrap();
+    let input: Vec<[u8; 188]> = source
+        .chunks_exact(188)
+        .map(|chunk| chunk.try_into().unwrap())
+        .collect();
+    assert_eq!(input.len() * 188, source.len());
+    let mut declaration = authored::input();
+    declaration.magazines.clear();
+    let declaration = authored::declared(declaration);
+    let transmissions = authored::transmissions(&declaration);
+    let old = Arc::new(
+        encode_teletext_authored_service(declaration, &transmissions, &authored::limits()).unwrap(),
+    );
+    let next = simple_with_text("fra", None, "BRAVO");
+    let mut output = Forwarding::new(&input, old);
+    let receipt = output.cycle();
+    output
+        .gate
+        .replace_authored_at_acknowledged_boundary(&receipt, &next, output.now)
+        .unwrap();
+    output.announcement();
+    let start = output.output.len();
+    for _ in 0..3 {
+        let receipt = output.next().unwrap();
+        assert!(
+            !receipt.contains_complete_cycle(),
+            "retirement does not deliver the successor"
+        );
+        assert!(!receipt.is_cycle_boundary());
+    }
+    let retirement = warm_phase_units(&output.output[start..]);
+    assert_eq!(retirement.len(), 20);
+    assert!(
+        matches!(observe_dvb_teletext_header(&retirement[0]).unwrap(),
+        TeletextHeaderObservation::Header(header) if header.wire_page == 0xfe && header.subcode & 15 == 9)
+    );
+    assert!(matches!(
+        observe_dvb_teletext_header(&retirement[19]).unwrap(),
+        TeletextHeaderObservation::Terminator(_)
+    ));
+    let end = output.output.len();
+    output.cycle();
+    let output = output.finish();
+    assert_no_mot_in_tail(&output[end..]);
+    assert_eq!(
+        verify_fixture_clock(&output, 256).unwrap(),
+        verify_fixture_clock(&input, 256).unwrap()
+    );
+    for (before, after) in input.iter().zip(&output) {
+        if ![8191, 4096].contains(&u16::from(Packet::new(before).pid())) {
+            assert_eq!(before, after);
+        }
+    }
+    let bytes: Vec<u8> = output.iter().flatten().copied().collect();
+    let (before, after) = tokio::join!(
+        crate::teletext_probe::run_probe(&ffmpeg, AV_DIGEST_ARGS, &source, 256 * 1024),
+        crate::teletext_probe::run_probe(&ffmpeg, AV_DIGEST_ARGS, &bytes, 256 * 1024)
+    );
+    assert_eq!(
+        before.unwrap(),
+        after.unwrap(),
+        "decoded AV frames/timestamps differ"
+    );
+    verify_transport(&tsanalyze, &bytes).await;
+    verify_counter_negative(&tsanalyze, &bytes).await;
+    if let Some(path) =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_OUTPUT_TRANSITION_TS"])
+    {
+        std::fs::write(path, bytes).unwrap();
+    }
+}
+
+fn assert_no_mot_in_tail(packets: &[[u8; 188]]) {
+    use crate::teletext::source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyEvent};
+    use crate::teletext::source_header::{observe_dvb_teletext_header, TeletextHeaderObservation};
+
+    // Stream the entire tail through the existing per-PES bound. The short
+    // phase collector's unit cap must not be raised for an ongoing response.
+    let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
+    for packet in packets {
+        if let TeletextAssemblyEvent::Complete(pes) = assembler.push(packet).unwrap() {
+            for unit in pes.units().filter_map(|unit| unit.teletext_unit()) {
+                assert!(!matches!(observe_dvb_teletext_header(unit).unwrap(),
+                    TeletextHeaderObservation::Header(header) if header.wire_page == 0xfe));
+            }
+        }
+    }
+    assembler.finish().unwrap();
+}
+
+#[tokio::test]
 #[ignore = "requires exact FFmpeg 9/libzvbi and TSDuck; initially-Off real AV epoch, not live-client acceptance"]
 async fn real_runtime_initial_absence_activates_without_rewriting_source_or_resetting_clock() {
     let ffmpeg = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_FFMPEG"])

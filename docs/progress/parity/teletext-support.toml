@@ -5,7 +5,7 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: standalone Level1/1.5 then full authored2.5 with protected fallback;
-neither accepted. P9A-04 owns the unchanged finite L15/F/V/X list; no9B.
+Neither accepted. P9A-04 owns L15/F/V/X; no9B.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay
@@ -39,8 +39,8 @@ and eight AAC/nld outputs. P9A-04 owns exact artifacts and retained tool negativ
 wire_transport_followup owns native Windows HTTP Burn/Convert46/46 transport/
 delivery, actual samples and protected state/cleanup; default20s/12s limits remain.
 Linux.4 copy HTTP/HLS:86 checks, seven rolling samples, full unforced cleanup.
-F5 owns delivery receipts. F4 neutral-MOT ordinary publication/AV/TS proof is
-closed; independent warm-client/full F4 remain open. Windows-package deferred;
+F5 owns delivery receipts. F4 neutral-MOT HTTP and populated-MOT engine/mux
+are closed; populated HTTP/warm-client/full F4 remain open. Windows-package deferred;
 future trial120minutes. Full-package/overlay/sixRID/adoption remain open;
 ARM/macOS artifacts/environments are missing. Lifecycle/quota/cancellation fences
 and open Lua/recovery/client requirements remain. F6 default2 Copy/DVB is verified

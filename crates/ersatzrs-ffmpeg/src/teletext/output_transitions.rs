@@ -45,6 +45,9 @@ impl TeletextOutputGate {
     /// Replace only at this exact acknowledged end-of-cycle boundary.
     /// Complete native content/resource lifecycle and continuing source ownership
     /// are retained. Changed PSI is announced and acknowledged before new PES.
+    /// Missing previously delivered MOT owners receive bounded full neutral
+    /// updates, sink-acknowledged before the successor's first acquisition.
+    /// That prefix never counts as delivery of the successor itself.
     /// Neither the receipt nor this method grants durable generation authority.
     /// # Errors
     /// Invalid proposals preserve the current generation/PSI/counters. Actual
@@ -57,6 +60,7 @@ impl TeletextOutputGate {
     ) -> Result<(), TeletextOutputError> {
         self.check_transition(receipt, now)?;
         self.check_warm_metadata(service)?;
+        let retirement = super::mot_retirement::MotRetirement::prepare(self, service)?;
         let first = if self.carousel.is_none() {
             let mut carousel = TeletextCarousel::new_authored_shared(Arc::clone(service))?;
             carousel.advance_empty_at_boundary(self.batch_ticks)?;
@@ -92,6 +96,7 @@ impl TeletextOutputGate {
         self.payload.active = true;
         self.payload.signalling_ready = !changed;
         self.completed_cycle = false;
+        self.mot_retirement = retirement;
         self.last_ack = None;
         Ok(())
     }
@@ -145,6 +150,7 @@ impl TeletextOutputGate {
             return Err(TeletextOutputError::Acknowledgement);
         }
         if !receipt.cycle_boundary
+            || self.mot_retirement.is_some()
             || !self
                 .carousel
                 .as_ref()
@@ -201,12 +207,6 @@ impl TeletextOutputGate {
                     .iter()
                     .filter(|page| page.address.page.magazine() == magazine)
                     .any(|page| !explicit_page(page.address))
-        }) || (1_u8..=8).any(|magazine| {
-            self.acknowledged_nonempty_mots[usize::from(magazine & 7)] != 0
-                && !new
-                    .mots()
-                    .iter()
-                    .any(|mot| mot.identity().page().magazine() == magazine)
         }) {
             return Err(TeletextOutputError::CacheReconciliationRequired);
         }

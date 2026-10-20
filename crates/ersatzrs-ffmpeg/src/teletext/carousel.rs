@@ -43,6 +43,13 @@ pub struct TeletextCarouselBatch {
 }
 
 impl TeletextCarouselBatch {
+    pub(super) fn retirement(
+        ticks: u64,
+        kind: TeletextCarouselBatchKind,
+        units: Vec<[u8; 46]>,
+    ) -> Self {
+        Self { ticks, kind, units }
+    }
     /// Presentation offset in 90 kHz ticks from the carousel's programme anchor.
     #[must_use]
     pub const fn presentation_ticks(&self) -> u64 {
@@ -117,6 +124,13 @@ impl CarouselContent {
     fn validate_authored(
         service: &EncodedTeletextAuthoredService,
     ) -> Result<(), TeletextTransportError> {
+        Self::validate_authored_with_prefix(service, 0)
+    }
+
+    fn validate_authored_with_prefix(
+        service: &EncodedTeletextAuthoredService,
+        prefix_batches: usize,
+    ) -> Result<(), TeletextTransportError> {
         let magazine_batch = usize::from(!service.magazine_units().is_empty());
         let displays = service.declared().semantic().base().pages.len();
         let resources = &service.pages()[displays..];
@@ -132,8 +146,9 @@ impl CarouselContent {
         let batches = resource_batches
             .checked_add(largest_display)
             .and_then(|sum| sum.checked_add(1 + RESOURCE_WINDOW_MARGIN))
+            .and_then(|sum| sum.checked_add(prefix_batches))
             .ok_or(TeletextTransportError::ClockOverflow)?;
-        if resource_batches != 0 && batches > MAX_RESOURCE_CYCLE_BATCHES {
+        if (resource_batches != 0 || prefix_batches != 0) && batches > MAX_RESOURCE_CYCLE_BATCHES {
             return Err(TeletextTransportError::CycleTiming {
                 batches,
                 maximum: MAX_RESOURCE_CYCLE_BATCHES,
@@ -263,6 +278,12 @@ fn page_batches(units: &[[u8; 46]]) -> usize {
 }
 
 impl TeletextCarousel {
+    pub(super) fn validate_retirement_prefix(
+        service: &EncodedTeletextAuthoredService,
+        batches: usize,
+    ) -> Result<(), TeletextTransportError> {
+        CarouselContent::validate_authored_with_prefix(service, batches)
+    }
     pub(super) fn authored_service_shared(&self) -> Option<&Arc<EncodedTeletextAuthoredService>> {
         match &self.content {
             CarouselContent::Authored { service, .. } => Some(service),
@@ -441,6 +462,48 @@ impl TeletextCarousel {
                     .validate(service, completed.map(|completed| completed.service))?;
             }
             Ok(BTreeMap::default())
+        }
+    }
+
+    pub(super) fn mot_retirement_counter(
+        &self,
+        identity: ersatzrs_domain::TeletextResourceIdentity,
+    ) -> Option<ersatzrs_domain::TeletextResourceUpdateCounter> {
+        if let CarouselContent::Authored {
+            service,
+            selected_headers,
+            ..
+        } = &self.content
+        {
+            if !self.first_cycle {
+                if let Some((index, header)) =
+                    service
+                        .pages()
+                        .iter()
+                        .enumerate()
+                        .find_map(|(index, page)| {
+                            page.resource_header()
+                                .filter(|header| header.identity() == identity)
+                                .map(|header| (index, header))
+                        })
+                {
+                    return Some(
+                        selected_headers
+                            .get(&index)
+                            .map_or(header.update_counter(), |selected| {
+                                selected.metadata.update_counter()
+                            }),
+                    );
+                }
+            }
+        }
+        self.resource_history.completed_counter(identity)
+    }
+
+    pub(super) fn record_mot_retirement(&mut self, pages: Vec<super::EncodedTeletextResourcePage>) {
+        for page in pages {
+            self.resource_history
+                .record_completed_resource(super::EncodedTeletextAuthoredPage::Resource(page));
         }
     }
 
