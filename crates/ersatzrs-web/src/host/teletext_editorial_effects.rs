@@ -34,6 +34,7 @@ mod definition_additions;
 mod lineage;
 mod main_programs;
 mod object_operands;
+mod object_page_selections;
 mod object_resources;
 mod programs;
 mod resource_objects;
@@ -128,6 +129,8 @@ pub(super) struct TeletextEditorialEdits<'a> {
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     pub object_subpage_announcements:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
+    pub object_page_selections:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
@@ -167,6 +170,7 @@ pub(super) fn validate_teletext_editorial_transition(
             resource_additions: &[],
             object_resource_additions: &[],
             object_subpage_announcements: &[],
+            object_page_selections: &[],
             rows: incoming,
             operands: &[],
             object_operands: &[],
@@ -181,6 +185,7 @@ pub(super) fn validate_teletext_editorial_transition(
             resource_additions: &[],
             object_resource_additions: &[],
             object_subpage_announcements: &[],
+            object_page_selections: &[],
             rows: cumulative,
             operands: &[],
             object_operands: &[],
@@ -261,7 +266,11 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
                 .any(|value| value.owner() == owner)
             || !incoming.resource_programs.is_empty()
             || !incoming.resource_additions.is_empty()
-            || !incoming.object_resource_additions.is_empty();
+            || !incoming.object_resource_additions.is_empty()
+            || incoming
+                .object_page_selections
+                .iter()
+                .any(|value| value.change().display() == owner);
         let operand_change =
             operand_change || structural_change || !incoming.resource_operands.is_empty();
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
@@ -403,6 +412,8 @@ fn check_editorial_budgets(
         || !bounded_editorial_commands(cumulative, budget.max_commands)
         || incoming.object_subpage_announcements.len() > budget.max_pages.saturating_mul(32)
         || cumulative.object_subpage_announcements.len() > budget.max_pages.saturating_mul(32)
+        || incoming.object_page_selections.len() > budget.max_pages.saturating_mul(2)
+        || cumulative.object_page_selections.len() > budget.max_pages.saturating_mul(2)
         || incoming.bitmaps.len() > maximum_bitmaps
         || cumulative.bitmaps.len() > maximum_bitmaps
     {
@@ -739,7 +750,7 @@ fn check_enhancements(
         let new = after.get(owner).ok_or_else(failure)?;
         if old.address != new.address
             || old.presentation != new.presentation
-            || old.resources != new.resources
+            || !object_page_selections::same_resources(old, new, incoming)
             || new.compositional_links != links.get(owner).copied().or(old.compositional_links)
         {
             return Err(failure());

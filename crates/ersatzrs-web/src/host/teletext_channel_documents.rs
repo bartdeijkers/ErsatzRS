@@ -55,6 +55,8 @@ pub(super) struct EditorialResourceDocuments<'a> {
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     pub(super) object_subpage_announcements:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
+    pub(super) object_page_selections:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange],
 }
 
 #[cfg(test)]
@@ -213,6 +215,8 @@ pub enum ChannelTeletextDocumentEncodingError {
     },
     #[error("teletext object subpage announcement: {0}")]
     ObjectAnnouncement(Box<ersatzrs_domain::TeletextObjectSubpageAnnouncementError>),
+    #[error("object page selection failed: {0}")]
+    ObjectPageSelection(Box<ersatzrs_domain::TeletextObjectPageSelectionError>),
     #[error("cold teletext channel composition: {0}")]
     Composition(Box<TeletextProducerCompositionError>),
     #[error("native teletext channel encoding: {0}")]
@@ -516,6 +520,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
             resource_additions: &[],
             object_resource_additions: &[],
             object_subpage_announcements: &[],
+            object_page_selections: &[],
         },
         deadline,
         region,
@@ -539,6 +544,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
         && editorial.resource_additions.is_empty()
         && editorial.object_resource_additions.is_empty()
         && editorial.object_subpage_announcements.is_empty()
+        && editorial.object_page_selections.is_empty()
         && editorial.programs.4.is_empty()
         && editorial.main_programs.is_empty()
         && editorial.base_text_edits.is_empty()
@@ -664,6 +670,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
             resource_additions: &[],
             object_resource_additions: &[],
             object_subpage_announcements: &[],
+            object_page_selections: &[],
         },
         deadline,
         region,
@@ -692,6 +699,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
     check_object_subpage_source(&documents, &editorial, &policy)?;
+    object_page_selections::check_source(&documents, &editorial, &policy)?;
     let object_resources = preflight_object_resource_additions(
         &documents,
         editorial.object_resource_additions,
@@ -767,6 +775,7 @@ fn check_original_editorial_input(
         || !resource_additions.is_empty()
         || !object_resource_additions.is_empty()
         || !editorial.object_subpage_announcements.is_empty()
+        || !editorial.object_page_selections.is_empty()
         || !editorial.main_programs.is_empty()
         || !editorial.base_text_edits.is_empty()
     {
@@ -795,7 +804,8 @@ fn check_original_editorial_input(
             || !resource_programs.is_empty()
             || !resource_additions.is_empty()
             || !object_resource_additions.is_empty()
-            || !editorial.object_subpage_announcements.is_empty())
+            || !editorial.object_subpage_announcements.is_empty()
+            || !editorial.object_page_selections.is_empty())
     {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
@@ -1246,7 +1256,9 @@ fn apply_editorial_operands(
             .with_resource_object_operand_overlays(resource_operands, budget)
             .map_err(editorial_semantic_error)?;
     }
-    if !editorial.resource_programs.is_empty() {
+    if !editorial.object_page_selections.is_empty() {
+        declared = object_page_selections::apply(declared, editorial, composition)?;
+    } else if !editorial.resource_programs.is_empty() {
         declared = declared
             .with_resource_object_program_overlays(editorial.resource_programs, budget)
             .map_err(editorial_semantic_error)?;
@@ -1463,3 +1475,6 @@ fn check_deadline(deadline: Instant) -> Result<(), ChannelTeletextDocumentEncodi
         Ok(())
     }
 }
+
+#[path = "teletext_channel_documents/object_page_selections.rs"]
+mod object_page_selections;

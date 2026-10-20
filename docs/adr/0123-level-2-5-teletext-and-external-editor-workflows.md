@@ -34,17 +34,16 @@ Existing Add/Copy now authenticates exact retained bank presence against the
 latest current-receipt snapshot and folds added definitions into the complete
 V25 bank body. Original-bank additions keep their old distinct role; per-bank
 append order, original catalogue order, lifecycle and single normalized intent
-remain mandatory. Existing localized forms are qualified for fitting contexts;
-localized bank creation and complete native-capacity/editor/consumer proof remain
-required. P9A-04 owns unchanged full F1/X3 requirements. No package, generic upload
+remain mandatory. Existing localized forms cover fitting contexts and bank
+creation; complete native-capacity/editor/consumer proof remains required. P9A-04 owns unchanged full F1/X3 requirements. No package, generic upload
 or absent-bank creation authority is acquired by Add/Copy.
 Actual use of a retained bank must also fit its effective resource announcement.
 A fresh editor alias and a successful native preview cannot authorize an S1
 outside the selected implicit MOT extent. Original construction and mutations
 which change collected references enforce that correspondence while preserving
 original foreign default-root provenance and applicable X27 authority. Explicit
-selection of another raw page and atomic coordinated consumer edits remain open
-F1 mechanisms; ordinary TTI imports still cannot change protected MOT/X27 metadata.
+selection and coordinated consumer edits use the separate explicit native
+transaction below; ordinary TTI cannot change protected MOT/X27 metadata.
 A separate native dependency-announcement intent now adds a missing S1 bit on an
 already selected POP/GPOP page. It preserves required bits and role applicability;
 missing X27 derives all four roles from the checked original MOT. The explicit
@@ -61,10 +60,16 @@ separate. A checked domain transaction now changes raw POP/GPOP role targets and
 resource-program invocations together, preserving exact old-link/provenance
 checks, applicability, original MOT defaults and full shared-consumer validation.
 Native factory evidence covers unchanged Base rows and both native-default and
-compatibility-X26 routes. This primitive grants no host edit or upload authority:
-versioned saved-intent replay, protected-effects and admin integration remain
-required before the coordinated selection is available to users. Complete
-editor/client proof and full 9A acceptance remain open.
+compatibility-X26 routes. Private V27 now stores exact original role/link and
+MOT provenance alongside unchanged prior roles. An explicit native action reuses
+the held worker, current receipt and head CAS to save coordinated resource-program
+consumer changes. Replay reconstructs original banks and announcement history
+before one atomic role/program transaction; current and immutable-root effects
+both remain mandatory. Ordinary TTI reimport retains saved selection but cannot
+authorize selection changes. Shared preview, exact root undo, separate publication
+and cold reopen are qualified on the complete native fixture. Localized selection
+controls, remaining coordinated Main/Local consumers, complete editor/client proof
+and full 9A acceptance remain open; no package authority is added.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

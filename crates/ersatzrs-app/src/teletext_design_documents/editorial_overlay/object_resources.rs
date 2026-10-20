@@ -209,7 +209,9 @@ impl Serialize for BorrowedBankDefinitions<'_> {
 pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignDocumentError> {
     if matches!(
         value.schema_version,
-        super::OBJECT_RESOURCE_ADDITION_VERSION | super::OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+        super::OBJECT_RESOURCE_ADDITION_VERSION
+            | super::OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+            | super::OBJECT_PAGE_SELECTION_VERSION
     ) {
         if !matches!(value.prior_schema_version.0, Some(1..=24))
             || (value.schema_version == super::OBJECT_RESOURCE_ADDITION_VERSION
@@ -249,6 +251,9 @@ pub(super) fn restore(
             .0
             .take()
             .unwrap_or_default(),
+    )?;
+    let selections = super::object_page_selections::restore(
+        stored.object_page_selections.0.take().unwrap_or_default(),
     )?;
     stored.schema_version = stored.prior_schema_version.0.take().ok_or_else(invalid)?;
     let additions = additions
@@ -310,6 +315,11 @@ pub(super) fn restore(
         overlay
     } else {
         overlay.with_object_subpage_announcements(announcements)?
+    };
+    let overlay = if selections.is_empty() {
+        overlay
+    } else {
+        overlay.with_object_page_selections(selections)?
     };
     validate_association(&overlay, documents, budget)?;
     Ok(overlay)

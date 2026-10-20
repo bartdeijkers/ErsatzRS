@@ -34,8 +34,8 @@ mod editorial_overlay;
 mod source_fence;
 pub use editorial_overlay::{
     append_teletext_design_editorial_overlay, TeletextSavedEditorialOverlay,
-    TeletextSavedEditorialProvenance, TeletextSavedObjectResourceAddition,
-    TeletextSavedObjectSubpageAnnouncement,
+    TeletextSavedEditorialProvenance, TeletextSavedObjectPageSelectionChange,
+    TeletextSavedObjectResourceAddition, TeletextSavedObjectSubpageAnnouncement,
 };
 
 pub(crate) const MAX_BINDINGS: usize = 1024;
@@ -1300,6 +1300,10 @@ enum Path {
     EditorialMainProgram,
     EditorialDefinitionAdditions,
     EditorialDefinitionAddition,
+    EditorialObjectPageSelections,
+    EditorialObjectPageSelection,
+    EditorialSelectionExpectedLinks,
+    EditorialSelectionOriginalMot,
     EditorialObjectSubpageAnnouncements,
     EditorialObjectSubpageAnnouncement,
     EditorialObjectResources,
@@ -1451,6 +1455,11 @@ fn check_announcement_storage<E: serde::de::Error>(
     path: Path,
     count: usize,
 ) -> Result<(), E> {
+    if matches!(path, Path::EditorialObjectPageSelection) {
+        scan.check(storage::<
+            editorial_overlay::object_page_selections::StoredSelection,
+        >(count))?;
+    }
     if matches!(path, Path::EditorialObjectSubpageAnnouncement) {
         scan.check(storage::<
             editorial_overlay::object_subpage_announcements::StoredAnnouncement,
@@ -1474,6 +1483,7 @@ impl Scan {
                 | Path::EditorialDefinitionAddition
                 | Path::EditorialObjectResource
                 | Path::EditorialObjectSubpageAnnouncement
+                | Path::EditorialObjectPageSelection
                 | Path::EditorialProgramCommand
                 | Path::EditorialResourceProgramCommand
                 | Path::EditorialRetainedCommand
@@ -1661,6 +1671,18 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "resource_object_definition_additions") => {
                     Path::EditorialDefinitionAdditions
                 }
+                (Path::EditorialOverlay, "object_page_selections") => {
+                    Path::EditorialObjectPageSelections
+                }
+                (Path::EditorialObjectPageSelection, "expected_links") => {
+                    Path::EditorialSelectionExpectedLinks
+                }
+                (Path::EditorialObjectPageSelection, "expected_role") => {
+                    Path::EditorialObjectPageSelection
+                }
+                (Path::EditorialObjectPageSelection, "original_mot") => {
+                    Path::EditorialSelectionOriginalMot
+                }
                 (Path::EditorialOverlay, "object_subpage_announcements") => {
                     Path::EditorialObjectSubpageAnnouncements
                 }
@@ -1817,6 +1839,14 @@ fn glyph_program_sequence_limits(
             budget.validation.service.max_objects,
             Path::EditorialGlyphProgram,
             "editorial glyph programs",
+        ),
+        Path::EditorialSelectionExpectedLinks | Path::EditorialSelectionOriginalMot => {
+            (1, Path::Other, "editorial selection optional records")
+        }
+        Path::EditorialObjectPageSelections => (
+            budget.validation.service.max_structure_items,
+            Path::EditorialObjectPageSelection,
+            "editorial object page selections",
         ),
         Path::EditorialObjectSubpageAnnouncements => (
             budget.validation.service.max_structure_items,

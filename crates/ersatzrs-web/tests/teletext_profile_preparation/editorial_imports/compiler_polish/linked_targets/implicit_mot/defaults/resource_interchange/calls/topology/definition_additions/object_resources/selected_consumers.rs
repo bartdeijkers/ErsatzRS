@@ -4,6 +4,8 @@ use super::*;
 mod admin;
 #[path = "selected_consumers/announcements.rs"]
 mod announcements;
+#[path = "selected_consumers/page_selection.rs"]
+mod page_selection;
 use ersatzrs_domain::{
     TeletextEnhancementSource, TeletextProducerCompositionFailure, TeletextServiceError,
     TeletextX27LinkRole,

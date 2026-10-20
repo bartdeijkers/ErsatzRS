@@ -511,6 +511,7 @@ pub(super) fn compile_restored_parts_with_resource_edits(
         super::teletext_stored_designs::EditorialResourceIntents {
             object_resource_additions: &[],
             object_subpage_announcements: &[],
+            object_page_selections: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -592,6 +593,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
             EditorialResourceDocuments {
                 object_resource_additions: resources.object_resource_additions,
                 object_subpage_announcements: resources.object_subpage_announcements,
+                object_page_selections: resources.object_page_selections,
                 base_text_edits,
                 main_programs,
                 programs: editorial,

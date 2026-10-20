@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 atomic role/resource-call domain and native factory verified; next saved-intent replay/effects integration; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 saved atomic selection/replay/effects verified; next localized selection controls and remaining coordinated consumers; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -160,9 +160,16 @@ object_page_selection_followup now closes the atomic reconstruction-order gap
 at the domain/native-factory boundary:37 grouped cases and both native-default/
 compatibility-X26 factory paths pass with exact defaults, provenance, Base and
 untouched resources. Initial wrong rejection-stage/cell-oracle attempts stay
-canonical; sources and complete target models were not relaxed. No persisted
-selection or host edit authority is granted. Next receipt/head-CAS saved intent,
-replay and protected-effects integration. TTI remains closed to MOT/X27.
+canonical; sources and complete target models were not relaxed.
+selection_native_followup now connects private V27 and the existing held-worker/
+receipt/head-CAS to exact role/resource-program replay.202 codec and144 distinct
+host cases plus two native flows prove historical announcements, fresh TTI edits,
+shared preview, exact undo/reselection, separate publication and cold reopen.
+Seven malformed controls and a separate Generated shared consumer refuse without
+writes; failed fixture-permission/coordinate attempts remain canonical. Ordinary
+TTI retains selection but cannot authorize it. No new editor GUI/browser/stream,
+receiver or platform proof is claimed. Next localized selection controls and
+remaining coordinated Main/Local consumers; full F1 stays open.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.

@@ -10,14 +10,14 @@ use ersatzrs_domain::{
     TeletextX27LinkDeclaration, TeletextX27LinkRole, TeletextX27LinkTarget,
 };
 
-fn failure(owner: TeletextPageAddress) -> TeletextEditorialEffectsError {
+pub(super) fn failure(owner: TeletextPageAddress) -> TeletextEditorialEffectsError {
     error(
         Some(owner),
         None,
         TeletextEditorialEffectsFailure::ProtectedStructure,
     )
 }
-fn role(resource: TeletextResourceIdentity) -> Option<TeletextX27LinkRole> {
+pub(super) fn role(resource: TeletextResourceIdentity) -> Option<TeletextX27LinkRole> {
     match resource.kind() {
         TeletextResourceKind::Pop => Some(TeletextX27LinkRole::Pop),
         TeletextResourceKind::Gpop => Some(TeletextX27LinkRole::Gpop),
@@ -36,6 +36,9 @@ pub(super) fn check_resolutions(
 ) -> Result<BTreeMap<TeletextPageAddress, TeletextX27Level25Links>> {
     check_cumulative(after, cumulative, deadline)?;
     let expected = expected_links(before, after, incoming, cumulative, deadline)?;
+    let expected = super::object_page_selections::apply(
+        before, after, incoming, cumulative, expected, deadline,
+    )?;
     compare_resolutions(before, after, &expected, deadline)?;
     Ok(expected)
 }
@@ -55,13 +58,30 @@ fn check_cumulative(
         if !known.insert((owner, resource)) || !after.resource_inventory().contains(&resource) {
             return Err(failure(owner));
         }
-        let link = after
+        let final_link = after
             .semantic()
             .page_enhancements()
             .get(&owner)
             .and_then(|page| page.compositional_links)
             .map(|links| links.link(role))
             .ok_or_else(|| failure(owner))?;
+        let link = if final_link.target()
+            == (TeletextX27LinkTarget::Page {
+                page: resource.page(),
+            }) {
+            final_link
+        } else {
+            cumulative
+                .object_page_selections
+                .iter()
+                .find_map(|saved| {
+                    let change = saved.change();
+                    (change.display() == owner && change.role() == role)
+                        .then(|| change.expected_links().map(|links| links.link(role)))
+                        .flatten()
+                })
+                .ok_or_else(|| failure(owner))?
+        };
         if !link.validity().applies_at_level25()
             || link.target()
                 != (TeletextX27LinkTarget::Page {
@@ -91,7 +111,15 @@ fn expected_links(
         let resource = intent.resource();
         let role = role(resource).ok_or_else(|| failure(owner))?;
         if !seen.insert((owner, resource))
-            || !cumulative.object_subpage_announcements.contains(saved)
+            || !(cumulative.object_subpage_announcements.contains(saved)
+                || cumulative.object_page_selections.iter().any(|selection| {
+                    let change = selection.change();
+                    let link = change.replacement();
+                    selection.document_index() == saved.document_index()
+                        && change.display() == owner && change.role() == role
+                        && link.target() == (TeletextX27LinkTarget::Page { page: resource.page() })
+                        && link.required_subpages().get() & (1_u16 << resource.logical_subpage().get()) != 0
+                }))
             || !after.resource_inventory().contains(&resource)
             // New bank inventories are authenticated separately against the
             // exact incoming complete bank records, never an unknown resource.

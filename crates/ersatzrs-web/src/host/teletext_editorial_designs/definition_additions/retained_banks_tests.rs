@@ -70,6 +70,7 @@ fn retained_bank_growth_charges_two_definitions_as_one_record_and_refuses_combin
     let mut cumulative = TeletextEditorialChanges {
         object_resource_additions: vec![original.clone()],
         object_subpage_announcements: Vec::new(),
+        object_page_selections: Vec::new(),
         ..Default::default()
     };
     let deadline = Instant::now() + std::time::Duration::from_secs(5);

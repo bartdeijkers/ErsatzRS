@@ -32,6 +32,8 @@ pub(super) struct TeletextEditorialChanges {
         Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition>,
     pub object_subpage_announcements:
         Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement>,
+    pub object_page_selections:
+        Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange>,
     pub base_text_edits: Vec<ersatzrs_domain::TeletextBaseTextEdit>,
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
@@ -45,10 +47,30 @@ pub(super) struct TeletextEditorialChanges {
 }
 
 impl TeletextEditorialChanges {
+    pub(super) fn is_empty(&self) -> bool {
+        [
+            self.object_resource_additions.len(),
+            self.object_subpage_announcements.len(),
+            self.object_page_selections.len(),
+            self.base_text_edits.len(),
+            self.rows.len(),
+            self.operands.len(),
+            self.object_operands.len(),
+            self.resource_operands.len(),
+            self.object_programs.len(),
+            self.main_programs.len(),
+            self.resource_programs.len(),
+            self.resource_additions.len(),
+            self.bitmaps.len(),
+        ]
+        .into_iter()
+        .all(|count| count == 0)
+    }
     pub(super) fn edits(&self) -> super::teletext_editorial_effects::TeletextEditorialEdits<'_> {
         super::teletext_editorial_effects::TeletextEditorialEdits {
             object_resource_additions: &self.object_resource_additions,
             object_subpage_announcements: &self.object_subpage_announcements,
+            object_page_selections: &self.object_page_selections,
             base_text_edits: &self.base_text_edits,
             rows: &self.rows,
             operands: &self.operands,

@@ -138,6 +138,7 @@ mod repeat;
 pub use definition_additions::{
     add_teletext_editorial_object_resources, add_teletext_editorial_resource_definitions,
     announce_teletext_editorial_object_subpages, copy_teletext_editorial_resource_definition,
+    select_teletext_editorial_object_pages, NativeTeletextObjectPagesSelectRequest,
     NativeTeletextObjectResourcesAddRequest, NativeTeletextObjectSubpagesAnnounceRequest,
     NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
 };
@@ -396,6 +397,7 @@ fn qualify_rows(
         .ok_or(NativeTeletextEditorialImportError::Association)?;
     let object_resource_additions = overlay.object_resource_additions().to_vec();
     let object_subpage_announcements = overlay.object_subpage_announcements().to_vec();
+    let object_page_selections = overlay.object_page_selections().to_vec();
     let base_text_edits = overlay.base_text_edits().to_vec();
     let overlays = overlay.pages().to_vec();
     let operands = overlay.local_program_operands().to_vec();
@@ -411,6 +413,7 @@ fn qualify_rows(
         !resource_operands.is_empty() || !resource_programs.is_empty();
     let edited = if object_resource_additions.is_empty()
         && object_subpage_announcements.is_empty()
+        && object_page_selections.is_empty()
         && ((resource_additions.is_empty() && !has_existing_resource_edits)
             || (resource_additions.is_empty()
                 && !matches!(
@@ -426,6 +429,7 @@ fn qualify_rows(
         let resources = super::teletext_stored_designs::EditorialResourceIntents {
             object_resource_additions: &object_resource_additions,
             object_subpage_announcements: &object_subpage_announcements,
+            object_page_selections: &object_page_selections,
             operands: &resource_operands,
             programs: &resource_programs,
             additions: &resource_additions,
@@ -448,6 +452,7 @@ fn qualify_rows(
         TeletextEditorialEdits {
             object_resource_additions: &object_resource_additions,
             object_subpage_announcements: &object_subpage_announcements,
+            object_page_selections: &object_page_selections,
             base_text_edits: &base_text_edits,
             resource_additions: &resource_additions,
             resource_operands: &resource_operands,

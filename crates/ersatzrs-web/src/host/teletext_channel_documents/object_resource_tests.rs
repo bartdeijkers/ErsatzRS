@@ -321,6 +321,7 @@ fn edits<'a>(
         resource_additions: definitions,
         object_resource_additions: banks,
         object_subpage_announcements: &[],
+        object_page_selections: &[],
     }
 }
 fn replay(

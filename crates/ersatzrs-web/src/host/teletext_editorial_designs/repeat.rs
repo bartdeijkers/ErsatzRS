@@ -177,6 +177,7 @@ pub(super) fn from_overlay(overlay: &TeletextSavedEditorialOverlay) -> TeletextE
     TeletextEditorialChanges {
         object_resource_additions: overlay.object_resource_additions().to_vec(),
         object_subpage_announcements: overlay.object_subpage_announcements().to_vec(),
+        object_page_selections: overlay.object_page_selections().to_vec(),
         base_text_edits: overlay.base_text_edits().to_vec(),
         resource_additions: overlay.resource_object_definition_additions().to_vec(),
         resource_operands: overlay.resource_object_operands().to_vec(),
@@ -431,6 +432,7 @@ fn extend_root_export(
         .chain(cumulative.main_programs.iter().map(ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay::owner))
         // Preserve every actual resource consumer without exporting unrelated
         // pages or widening the incoming receipt's editable surface.
+        .chain(cumulative.object_page_selections.iter().map(|saved| saved.change().display()))
         .chain(resource_owners)
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -505,6 +507,7 @@ pub(super) fn check_operand_budget(
         .chain(addition_work)
         .chain(bank_work)
         .chain(changes.object_subpage_announcements.iter().map(|_| 1))
+        .chain(changes.object_page_selections.iter().map(|_| 1))
         .try_fold(0usize, usize::checked_add);
     if program_work.is_none_or(|count| count > budget.max_structure_items)
         || changes
@@ -515,6 +518,7 @@ pub(super) fn check_operand_budget(
             .and_then(|count| count.checked_add(changes.resource_additions.len()))
             .and_then(|count| count.checked_add(changes.object_resource_additions.len()))
             .and_then(|count| count.checked_add(changes.object_subpage_announcements.len()))
+            .and_then(|count| count.checked_add(changes.object_page_selections.len()))
             .is_none_or(|n| n > budget.max_records)
         || changes.resource_additions.len() > budget.max_objects
     {
@@ -622,6 +626,18 @@ fn merge_resource_changes(
     Ok((operands, programs, additions, Vec::new()))
 }
 
+pub(super) fn merge_explicit_resource_changes(
+    root: &QualifiedBaseline,
+    previous: &TeletextEditorialChanges,
+    incoming: &TeletextEditorialChanges,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<TeletextEditorialChanges> {
+    let mut ordinary = incoming.clone();
+    ordinary.object_page_selections.clear();
+    merge_changes(root, previous, &ordinary, policy, deadline)
+}
+
 fn merge_changes(
     root: &QualifiedBaseline,
     previous: &TeletextEditorialChanges,
@@ -640,6 +656,7 @@ fn merge_changes(
     if !incoming.resource_additions.is_empty()
         || !incoming.object_resource_additions.is_empty()
         || !incoming.object_subpage_announcements.is_empty()
+        || !incoming.object_page_selections.is_empty()
     {
         return Err(NativeTeletextEditorialImportError::Association);
     }
@@ -665,6 +682,7 @@ fn merge_changes(
     Ok(TeletextEditorialChanges {
         object_resource_additions: banks,
         object_subpage_announcements: previous.object_subpage_announcements.clone(),
+        object_page_selections: previous.object_page_selections.clone(),
         base_text_edits: base_text::merge(
             &previous.base_text_edits,
             &incoming.base_text_edits,
@@ -715,20 +733,7 @@ fn prepare(
                     deadline,
                 )?,
                 None,
-                TeletextEditorialChanges {
-                    object_resource_additions: Vec::new(),
-                    object_subpage_announcements: Vec::new(),
-                    base_text_edits: Vec::new(),
-                    resource_additions: Vec::new(),
-                    resource_operands: Vec::new(),
-                    resource_programs: Vec::new(),
-                    rows: Vec::new(),
-                    operands: Vec::new(),
-                    object_operands: Vec::new(),
-                    object_programs: Vec::new(),
-                    main_programs: Vec::new(),
-                    bitmaps: Vec::new(),
-                },
+                TeletextEditorialChanges::default(),
                 provenance,
             )
         }
@@ -947,6 +952,28 @@ fn resource_program_overlay(
 }
 
 pub(super) fn cumulative_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    if changes.object_page_selections.is_empty() {
+        return older_cumulative_overlay(provenance, changes);
+    }
+    let mut prior = changes.clone();
+    prior.object_page_selections.clear();
+    if prior.is_empty() {
+        TeletextSavedEditorialOverlay::new_with_object_page_selections(
+            provenance.clone(),
+            changes.object_page_selections.clone(),
+        )
+        .map_err(Into::into)
+    } else {
+        older_cumulative_overlay(provenance, changes)?
+            .with_object_page_selections(changes.object_page_selections.clone())
+            .map_err(Into::into)
+    }
+}
+
+fn older_cumulative_overlay(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
 ) -> Result<TeletextSavedEditorialOverlay> {
@@ -1221,6 +1248,7 @@ fn local_invocation_overlay(
     let siblings = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
+        object_page_selections: Vec::new(),
         base_text_edits: Vec::new(),
         rows: changes.rows.clone(),
         operands: changes.operands.clone(),
@@ -1242,47 +1270,45 @@ fn local_invocation_overlay(
 }
 
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
-    let document = if prepared.cumulative.object_resource_additions.is_empty()
-        && prepared.cumulative.object_subpage_announcements.is_empty()
-        && prepared.cumulative.base_text_edits.is_empty()
-        && prepared.cumulative.rows.is_empty()
-        && prepared.cumulative.operands.is_empty()
-        && prepared.cumulative.object_operands.is_empty()
-        && prepared.cumulative.resource_operands.is_empty()
-        && prepared.cumulative.resource_programs.is_empty()
-        && prepared.cumulative.resource_additions.is_empty()
-        && prepared.cumulative.object_programs.is_empty()
-        && prepared.cumulative.main_programs.is_empty()
-        && prepared.cumulative.bitmaps.is_empty()
-    {
+    encode_cumulative_document(
+        &prepared.root,
+        &prepared.cumulative,
+        &prepared.provenance,
+        prepared.policy.document,
+    )
+}
+
+pub(super) fn encode_cumulative_document(
+    root: &QualifiedBaseline,
+    changes: &TeletextEditorialChanges,
+    provenance: &TeletextSavedEditorialProvenance,
+    budget: ersatzrs_app::teletext_design_documents::TeletextDesignDocumentBudget,
+) -> Result<EncodedStoredDesign> {
+    let document = if changes.is_empty() {
         // An explicit edit back to the immutable root is still a new concept
         // revision. Preserve the authenticated original bytes without inventing
         // a no-op operand or an empty overlay schema.
-        let bytes = prepared.root.original_document.clone();
-        match prepared.root.original.view().document_version() {
-            ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION => {
-                EncodedStoredDesign::Base(super::EncodedTeletextDesignDocuments::from_saved_bytes(
-                    bytes,
-                    prepared.policy.document,
-                )?)
-            }
+        let bytes = root.original_document.clone();
+        match root.original.view().document_version() {
+            ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION => EncodedStoredDesign::Base(
+                super::EncodedTeletextDesignDocuments::from_saved_bytes(bytes, budget)?,
+            ),
             ersatzrs_domain::TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION => {
                 EncodedStoredDesign::Effective(
                     super::EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(
-                        bytes,
-                        prepared.policy.document,
+                        bytes, budget,
                     )?,
                 )
             }
             _ => return Err(NativeTeletextEditorialImportError::Association),
         }
     } else {
-        let overlay = cumulative_overlay(&prepared.provenance, &prepared.cumulative)?;
+        let overlay = cumulative_overlay(provenance, changes)?;
         append_overlay(
-            prepared.root.original.view().document_version(),
-            &prepared.root.original_document,
+            root.original.view().document_version(),
+            &root.original_document,
             &overlay,
-            prepared.policy.document,
+            budget,
         )?
     };
     Ok(document)
@@ -1336,6 +1362,7 @@ fn make_document(
         TeletextEditorialEdits {
             object_resource_additions: &prepared.incoming.object_resource_additions,
             object_subpage_announcements: &prepared.incoming.object_subpage_announcements,
+            object_page_selections: &prepared.incoming.object_page_selections,
             base_text_edits: &prepared.incoming.base_text_edits,
             resource_additions: &prepared.incoming.resource_additions,
             resource_operands: &prepared.incoming.resource_operands,
@@ -1350,6 +1377,7 @@ fn make_document(
         TeletextEditorialEdits {
             object_resource_additions: &prepared.cumulative.object_resource_additions,
             object_subpage_announcements: &prepared.cumulative.object_subpage_announcements,
+            object_page_selections: &prepared.cumulative.object_page_selections,
             base_text_edits: &prepared.cumulative.base_text_edits,
             resource_additions: &prepared.cumulative.resource_additions,
             resource_operands: &prepared.cumulative.resource_operands,

@@ -30,9 +30,12 @@ release section when tagging a release.
   lifecycle values and current-draft checks protect each edit; multiple display
   pages can be announced together. Versioned concepts retain these changes through
   preview, replay and separate publication. The engine can also change selected
-  bank pages and checked resource calls atomically while preserving MOT defaults;
-  that operation still needs saved-draft integration. Ordinary TTI permissions
-  stay intact; complete editor/client acceptance remains open.
+  bank pages and checked resource calls atomically while preserving MOT defaults.
+  Receipt-bound native actions now save that selection as a versioned concept,
+  retaining it through later TTI edits, preview, explicit publication and restart.
+  Protected generated consumers remain immutable. Selection controls in the admin
+  and complete editor/client acceptance remain open; ordinary TTI permissions
+  stay intact.
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous
@@ -41,8 +44,8 @@ release section when tagging a release.
   now preserves complete new-bank definitions, source ownership and explicit
   transmission data alongside unchanged originals. Explicit receipt-bound native
   actions now save unpublished bank-set revisions and retain them through later
-  TTI edits, shared preview, explicit publication and cold reload. Localized
-  creation controls and complete external-editor/client acceptance remain open.
+  TTI edits, shared preview, explicit publication and cold reload. Complete
+  external-editor/client acceptance remains open.
 
 - Accept physical teletext Alpha/Mosaic Black and Double Width/Size controls
   in imported designs. Preserve their coded rows, attribute origins, protected

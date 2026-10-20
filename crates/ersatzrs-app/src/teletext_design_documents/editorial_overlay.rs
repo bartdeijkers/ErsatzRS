@@ -51,6 +51,12 @@ const BASE_TEXT_EDIT_VERSION: u16 = 23;
 const BASE_TEXT_NATIVE_SPELLING_VERSION: u16 = 24;
 const OBJECT_RESOURCE_ADDITION_VERSION: u16 = 25;
 const OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION: u16 = 26;
+const OBJECT_PAGE_SELECTION_VERSION: u16 = 27;
+
+#[path = "editorial_overlay/object_page_selections.rs"]
+pub(super) mod object_page_selections;
+pub use object_page_selections::TeletextSavedObjectPageSelectionChange;
+use object_page_selections::{BorrowedSelections, OptionalStoredSelections};
 
 #[path = "editorial_overlay/object_subpage_announcements.rs"]
 pub(super) mod object_subpage_announcements;
@@ -139,6 +145,7 @@ pub struct TeletextSavedEditorialOverlay {
     resource_object_definition_additions: Vec<TeletextResourceObjectDefinitionAddition>,
     object_resource_additions: Vec<TeletextSavedObjectResourceAddition>,
     object_subpage_announcements: Vec<TeletextSavedObjectSubpageAnnouncement>,
+    object_page_selections: Vec<TeletextSavedObjectPageSelectionChange>,
     base_text_edits: Vec<ersatzrs_domain::TeletextBaseTextEdit>,
     schema_version: u16,
 }
@@ -1024,6 +1031,7 @@ impl TeletextSavedEditorialOverlay {
             resource_object_definition_additions: Vec::new(),
             object_resource_additions: Vec::new(),
             object_subpage_announcements: Vec::new(),
+            object_page_selections: Vec::new(),
             base_text_edits: Vec::new(),
             schema_version,
         })
@@ -1037,7 +1045,9 @@ impl TeletextSavedEditorialOverlay {
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        if !self.object_subpage_announcements.is_empty() {
+        if !self.object_page_selections.is_empty() {
+            OBJECT_PAGE_SELECTION_VERSION
+        } else if !self.object_subpage_announcements.is_empty() {
             OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
         } else if self.object_resource_additions.is_empty() {
             self.schema_version
@@ -1391,6 +1401,8 @@ closed_map!(StoredOverlay {
     object_resource_additions: OptionalStoredObjectResources,
     #[serde(default, skip_serializing_if = "OptionalStoredAnnouncements::is_absent")]
     object_subpage_announcements: OptionalStoredAnnouncements,
+    #[serde(default, skip_serializing_if = "OptionalStoredSelections::is_absent")]
+    object_page_selections: OptionalStoredSelections,
     #[serde(default, skip_serializing_if = "OptionalStoredBaseTextEdits::is_absent")]
     base_text_edits: OptionalStoredBaseTextEdits,
     export_receipt_id: EntityId,
@@ -1564,11 +1576,14 @@ impl StoredOverlay {
     }
 
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        object_page_selections::check_version(self)?;
         object_subpage_announcements::check_version(self)?;
         object_resources::check_version(self)?;
         if matches!(
             self.schema_version,
-            OBJECT_RESOURCE_ADDITION_VERSION | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+            OBJECT_RESOURCE_ADDITION_VERSION
+                | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+                | OBJECT_PAGE_SELECTION_VERSION
         ) {
             return Ok(());
         }
@@ -1716,7 +1731,9 @@ impl StoredOverlay {
         self.check_version()?;
         if matches!(
             self.schema_version,
-            OBJECT_RESOURCE_ADDITION_VERSION | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+            OBJECT_RESOURCE_ADDITION_VERSION
+                | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
+                | OBJECT_PAGE_SELECTION_VERSION
         ) {
             return object_resources::restore(self, documents, budget);
         }
@@ -1872,13 +1889,14 @@ pub(super) fn validate_association_shape(
 ) -> Result<(), TeletextDesignDocumentError> {
     object_resources::validate_association(overlay, documents, budget)?;
     object_subpage_announcements::validate_association(overlay, documents, budget)?;
+    object_page_selections::validate_association(overlay, documents, budget)?;
     limit(
         overlay.pages.len(),
         budget.validation.service.max_records,
         "editorial pages",
     )?;
     base_text::validate_association(overlay, documents, budget)?;
-    let mut items = object_subpage_announcements::structure_items(overlay)?;
+    let mut items = object_page_selections::structure_items(overlay)?;
     let mut bytes = base_text::content_bytes(overlay, budget)?;
     for page in &overlay.pages {
         items = items
@@ -2034,6 +2052,8 @@ struct BorrowedOverlay<'a> {
     object_resource_additions: Option<BorrowedObjectResources<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     object_subpage_announcements: Option<BorrowedAnnouncements<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    object_page_selections: Option<BorrowedSelections<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_text_edits: Option<BorrowedBaseTextEdits<'a>>,
     export_receipt_id: EntityId,
@@ -2226,10 +2246,13 @@ fn write_appended(
         &BorrowedOverlay {
             schema_version: overlay.schema_version(),
             prior_schema_version: (!overlay.object_resource_additions.is_empty()
-                || !overlay.object_subpage_announcements.is_empty())
+                || !overlay.object_subpage_announcements.is_empty()
+                || !overlay.object_page_selections.is_empty())
             .then_some(overlay.schema_version),
             object_resource_additions: (!overlay.object_resource_additions.is_empty())
                 .then_some(BorrowedObjectResources(&overlay.object_resource_additions)),
+            object_page_selections: (!overlay.object_page_selections.is_empty())
+                .then_some(BorrowedSelections(&overlay.object_page_selections)),
             object_subpage_announcements: (!overlay.object_subpage_announcements.is_empty())
                 .then_some(BorrowedAnnouncements(&overlay.object_subpage_announcements)),
             base_text_edits: (!overlay.base_text_edits.is_empty())
@@ -2367,3 +2390,7 @@ mod object_resource_storage_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/object_subpage_announcement_tests.rs"]
 mod object_subpage_announcement_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/object_page_selection_tests.rs"]
+mod object_page_selection_tests;

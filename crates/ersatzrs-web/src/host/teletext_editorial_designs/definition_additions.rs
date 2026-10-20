@@ -1,6 +1,6 @@
 //! Explicit host additions reuse retained originals and the existing concept CAS.
 use super::{
-    append_overlay, check_deadline, digest, fmt, import_limits, qualify_baseline, qualify_rows,
+    check_deadline, digest, fmt, import_limits, qualify_baseline, qualify_rows,
     read_editorial_baseline, repeat, save_editorial_concept, ApplicationServices,
     EditorialBaseline, EncodedStoredDesign, EntityId, Instant, NativeTeletextEditorialImportError,
     NativeTeletextExportPolicy, QualifiedBaseline, Result, SavedEditorialTeletextDesign,
@@ -85,7 +85,18 @@ impl fmt::Debug for NativeTeletextObjectResourcesAddRequest {
     }
 }
 
+#[path = "definition_additions/page_selections.rs"]
+mod page_selections;
+pub use page_selections::{
+    select_teletext_editorial_object_pages, NativeTeletextObjectPagesSelectRequest,
+};
+
 enum Action {
+    Selections {
+        selections:
+            Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange>,
+        programs: Vec<ersatzrs_domain::TeletextResourceObjectProgramOverlay>,
+    },
     Announcements(
         Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement>,
     ),
@@ -120,6 +131,10 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
         return Err(NativeTeletextEditorialImportError::Budget);
     }
     let definitions = match &request.action {
+        Action::Selections {
+            selections,
+            programs,
+        } => return page_selections::preflight(selections, programs, budget, deadline),
         Action::Announcements(values) => {
             if values.is_empty() {
                 return Err(NativeTeletextEditorialImportError::NoChanges);
@@ -208,6 +223,7 @@ fn resolve(
 )> {
     check_deadline(deadline)?;
     let (source, new_object_id) = match action {
+        Action::Selections { .. } => return Err(NativeTeletextEditorialImportError::Association),
         Action::Announcements(values) => return Ok((vec![], vec![], values)),
         Action::Definitions(definitions) => return Ok((definitions, vec![], vec![])),
         Action::Banks { banks, definitions } => return Ok((definitions, banks, vec![])),
@@ -356,6 +372,15 @@ fn encode(
     deadline: Instant,
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
+    if let Action::Selections {
+        selections,
+        programs,
+    } = action
+    {
+        return page_selections::encode(
+            baselines, selections, programs, revision, policy, deadline,
+        );
+    }
     let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
     let (definitions, banks, announcements) =
         resolve(action, latest, policy.document.validation.service, deadline)?;
@@ -395,6 +420,7 @@ fn encode(
     let incoming = TeletextEditorialChanges {
         object_resource_additions: banks,
         object_subpage_announcements: announcements,
+        object_page_selections: Vec::new(),
         base_text_edits: Vec::new(),
         resource_additions: additions,
         ..Default::default()
@@ -411,11 +437,21 @@ fn encode(
         policy.document.validation.service,
         deadline,
     )?;
-    let overlay = repeat::cumulative_overlay(&baselines.provenance, &baselines.cumulative)?;
-    let document = append_overlay(
-        baselines.root.original.view().document_version(),
-        &baselines.root.original_document,
-        &overlay,
+    finish_encode(&baselines, &incoming, revision, policy, deadline)
+}
+
+fn finish_encode(
+    baselines: &Baselines,
+    incoming: &TeletextEditorialChanges,
+    revision: i64,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<(EncodedStoredDesign, String)> {
+    let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
+    let document = repeat::encode_cumulative_document(
+        &baselines.root,
+        &baselines.cumulative,
+        &baselines.provenance,
         policy.document,
     )?;
     let document_digest = digest(document.bytes());
@@ -427,13 +463,19 @@ fn encode(
         document: document.bytes().to_vec(),
     };
     let parts = StoredDesignParts::decode(&stored, policy.document)?;
-    let edited = qualify_rows(
-        stored,
-        parts,
-        &baselines.root,
-        policy.encoding.clone(),
-        deadline,
-    )?;
+    let edited = if parts.overlay().is_some() {
+        qualify_rows(
+            stored,
+            parts,
+            &baselines.root,
+            policy.encoding.clone(),
+            deadline,
+        )?
+    } else {
+        parts
+            .compile(stored, policy.encoding.clone(), deadline, Vec::new())
+            .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?
+    };
     super::super::teletext_editorial_effects::validate_teletext_editorial_transition_with_operands(
         latest
             .original

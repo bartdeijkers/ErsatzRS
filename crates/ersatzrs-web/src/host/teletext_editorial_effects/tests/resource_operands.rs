@@ -87,6 +87,10 @@ fn links(global: bool) -> TeletextX27Level25Links {
 }
 #[path = "resource_operands/bank_sets.rs"]
 mod bank_sets;
+#[path = "resource_operands/implicit_mot_selection.rs"]
+mod implicit_mot_selection;
+#[path = "resource_operands/object_page_selections.rs"]
+mod object_page_selections;
 #[path = "resource_operands/programs.rs"]
 mod programs;
 #[path = "resource_operands/subpage_announcements.rs"]
@@ -232,6 +236,7 @@ fn edits(resource_operands: &[TeletextResourceObjectOperandOverlay]) -> Teletext
         resource_additions: &[],
         object_resource_additions: &[],
         object_subpage_announcements: &[],
+        object_page_selections: &[],
         object_programs: &[],
         main_programs: &[],
         bitmaps: &[],

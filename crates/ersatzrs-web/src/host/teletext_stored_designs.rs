@@ -36,6 +36,8 @@ pub(super) struct EditorialResourceIntents<'a> {
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectResourceAddition],
     pub(super) object_subpage_announcements:
         &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectSubpageAnnouncement],
+    pub(super) object_page_selections:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange],
     pub(super) operands: &'a [TeletextResourceObjectOperandOverlay],
     pub(super) programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     pub(super) additions: &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
@@ -126,6 +128,7 @@ impl StoredDesignParts {
         if resources.additions.is_empty()
             && resources.object_resource_additions.is_empty()
             && resources.object_subpage_announcements.is_empty()
+            && resources.object_page_selections.is_empty()
         {
             return self.compile_with_resource_edits(
                 stored,
@@ -192,6 +195,7 @@ pub(super) fn check_authenticated_editorial_resource_replay(
         EditorialResourceIntents {
             object_resource_additions: &[],
             object_subpage_announcements: &[],
+            object_page_selections: &[],
             operands: resource_operands,
             programs: resource_programs,
             additions: &[],
@@ -208,8 +212,12 @@ pub(super) fn check_authenticated_editorial_resource_intents(
     let resource_programs = intents.programs;
     if overlay.map_or(
         &[][..],
-        TeletextSavedEditorialOverlay::object_subpage_announcements,
-    ) != intents.object_subpage_announcements
+        TeletextSavedEditorialOverlay::object_page_selections,
+    ) != intents.object_page_selections
+        || overlay.map_or(
+            &[][..],
+            TeletextSavedEditorialOverlay::object_subpage_announcements,
+        ) != intents.object_subpage_announcements
         || overlay.map_or(
             &[][..],
             TeletextSavedEditorialOverlay::object_resource_additions,

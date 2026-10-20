@@ -62,6 +62,7 @@ pub(super) fn merge(
     let ordinary = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
+        object_page_selections: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: incoming
             .resource_operands
@@ -95,6 +96,7 @@ pub(super) fn merge(
     let combined = TeletextEditorialChanges {
         object_resource_additions: Vec::new(),
         object_subpage_announcements: Vec::new(),
+        object_page_selections: Vec::new(),
         base_text_edits: Vec::new(),
         resource_operands: operands,
         resource_programs: programs,

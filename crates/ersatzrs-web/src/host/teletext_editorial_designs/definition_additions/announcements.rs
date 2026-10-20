@@ -53,9 +53,12 @@ pub(super) fn append(
             return Err(NativeTeletextEditorialImportError::Association);
         }
     }
-    cumulative
-        .object_subpage_announcements
-        .extend_from_slice(&incoming.object_subpage_announcements);
+    for saved in &incoming.object_subpage_announcements {
+        check_deadline(deadline)?;
+        if !super::page_selections::fold_announcement(cumulative, *saved)? {
+            cumulative.object_subpage_announcements.push(*saved);
+        }
+    }
     repeat::check_operand_budget(cumulative, budget)?;
     check_deadline(deadline)
 }
