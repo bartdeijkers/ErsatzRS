@@ -940,8 +940,10 @@ withdrawal do not. The empty-bank output guard and a qualified ordinary same-res
 flow now retain exact source clock/AV, TSDuck, channel isolation, explicit
 publication and durable DB recovery at default capacity two. This component
 proof does not establish independent warm-client rendering. Automatic populated
-MOT retirement also has scoped engine/mux proof; ordinary same-response
-publication and independent warm-client proof remain required. These fences are
+MOT retirement also has scoped engine/mux and ordinary same-response publication
+proof, including complete clearing before the successor, source AV/clock and
+channel isolation at default capacity two. Independent warm-client proof remains
+required. These fences are
 not full warm reconciliation or an accepted authoring restriction.
 P9A-04 owns implementation status and the transport/control receipt;
 full bank/page retirement and independent warm-client proof remain required.

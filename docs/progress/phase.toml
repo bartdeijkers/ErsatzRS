@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 automatic populated-MOT engine/mux component closed; next ordinary same-response publication proof for populated retirement; M29/independent warm-client/platform remain, Windows-package deferred/future120minutes, X1 deferred/X3 upstream'
+current_focus = 'P9A-04 F4 MOT engine/mux and ordinary neutral/populated publication components closed; next bounded independent warm-MOT decoding proof from retained captures; M29/resource and platform requirements retain scope'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -225,27 +225,25 @@ above, with native Windows scoped startup, ordinary playback and original-wire
 proof now recorded too. The current-source package followup above is deferred;
 its next authorized trial reserves 120 minutes. Required source/caption/alternate-
 audio and cleanup oracles stay unchanged.
-F4 neutral-MOT engine and ordinary-publication component is closed. Reuse the
-121-case exact-owner history/guard proof at8b5e2f77. Its ordinary_tcp_followup
-now proves separately prepared/saved/pending/explicitly published bankless Day on
-one original HTTP response, with Night on its own unchanged original response,
-at actual capacity2. Complete cycle bytes and the full captured tail, source
-clock, source AV, TSDuck and durable DB recovery pass. Package/profile/binding/
-configuration/history isolation and exactly one explicit new producer preparation
-remain checked; owned cleanup and required ordinary MPEG-TS/HLS smoke pass.
-Canonical tmp/phase9-mot-retirement/ordinary-tcp/identity.json owns the final
-proof and retained setup/lint negatives. The automatic populated-MOT engine/mux
-component is now closed: output-owned full neutral banks use actual completed
-S2/C4/C8 history and retain the source clock. Only the complete prefix's sink ACK
-retires exact owners; it never counts as successor delivery. All124 affected cases,
-final7 MOT regressions (four new) and the real AV/TSDuck gate pass, with the
-existing damaged-counter negative detected. Strict FFmpeg lint
-passes. Canonical tmp/phase9-mot-retirement/automatic/identity.json owns the
-source/tool/capture pins and exact trial limitations. Reuse unchanged editor,
-publication/isolation and F6 evidence. Next prove populated-bank retirement on
-the original ordinary HTTP responses through explicit publication; keep default2,
-tracks, clock and cleanup. M29 reconciliation, independent warm-client and full
-F4/platform acceptance remain separate open requirements.
+F4 MOT engine/mux and ordinary neutral/populated publication components are closed.
+Reuse the exact-owner guard at8b5e2f77, neutral HTTP at021b2821 and automatic
+full-neutral prefix engine/mux at6f593240. The populated-http followup now closes
+actual explicit publication on the original Day/Night HTTP responses at capacity2.
+The old populated MOT/DRCS service continues through save and pending intent;
+explicit acceptance emits one exact complete neutral MOT (S2=2/C4/C8) before the
+bankless successor. Both original base pages/subcodes/navigation and M29 remain;
+the intended DRCS enrichment is removed. Full old/new/repeated cycles and the
+entire captured tail, source clock/decoded AV, TSDuck and durable recovery pass.
+Night/package/profiles/bindings/config/history/receipts remain exact, with only
+one explicit new Day preparation. Both grouped cases pass; owned streams/capacity
+and the outer process group drain without force. Canonical
+tmp/phase9-mot-retirement/populated-http/identity.json owns the actual tools,
+source/captures and checks. No editor replay or runtime-code change.
+Next qualify independent warm-MOT decoding with an effective negative control,
+using retained captures and existing tools; do not start a client search or
+external maintenance. M29/full resource reconciliation and suitable-client
+requirements remain in the finite F4/V/X list. Windows-package deferral/future
+120minutes and all existing acceptance requirements remain unchanged.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
 pass on optimized.4 with exact cues, copied AV/Dutch AAC, shared cache and natural

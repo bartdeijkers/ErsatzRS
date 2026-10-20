@@ -10,6 +10,10 @@ use ersatzrs_ffmpeg::teletext::{
     source_header::{observe_dvb_teletext_header, TeletextHeaderObservation},
     TeletextResourceFullUpdate, TeletextServiceResourceTransmission,
 };
+use ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy;
+
+#[path = "mot_retirement/populated.rs"]
+mod populated;
 
 const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_MOT_RETIREMENT_DIR";
 
@@ -64,6 +68,7 @@ async fn transition(
     flow: &Flow,
     origin: &live_tcp::Origin,
     directory: &Path,
+    populated: bool,
 ) -> (AcceptedTeletextOutputCandidate, usize) {
     let old = pattern(&flow.accepted[0], 1);
     let night = pattern(&flow.accepted[1], 1);
@@ -75,11 +80,12 @@ async fn transition(
             cycle,
         );
     }
-    authoring_metadata::write(
-        fixture,
-        "day",
-        &authoring_metadata::response("day", 124, 32),
-    );
+    let successor = if populated {
+        external_editor_probe::editor_response("day", 124, 32)
+    } else {
+        authoring_metadata::response("day", 124, 32)
+    };
+    authoring_metadata::write(fixture, "day", &successor);
     let candidate = prepare_with_policy(fixture, 1, channel_documents::policy()).await;
     assert_eq!(candidate.selection(), flow.accepted[0].selection());
     let saved = designs::save(fixture, candidate, None).await;
@@ -108,6 +114,9 @@ async fn transition(
     assert_ne!(accepted.generation().id, flow.accepted[0].generation().id);
     let next = pattern(&accepted, 0);
     let changed = pair(origin, offsets, &next, &night).await;
+    if populated {
+        populated::assert_prefix(&origin.captures()[0], offsets[0], &next, directory);
+    }
     let repeated = pair(
         origin,
         changed.each_ref().map(|value| value.end),
@@ -135,7 +144,7 @@ async fn transition(
     // The existing literal audio oracle requires at least one second of source
     // tone; keep both already-open responses running beyond the wire handover.
     tokio::time::sleep(Duration::from_secs(2)).await;
-    (accepted, repeated[0].end)
+    (accepted, changed[0].end)
 }
 
 fn is_mot_header(unit: &[u8; 46]) -> bool {
@@ -200,10 +209,29 @@ async fn verify_captures(
 #[tokio::test]
 #[ignore = "requires FFmpeg9/TSDuck and a create-new neutral-MOT ordinary publication directory"]
 async fn ordinary_two_channel_publication_retires_neutral_mot_on_original_responses() {
-    let directory = PathBuf::from(client_capture::selected(DIRECTORY_ENV));
+    run_case(false).await;
+}
+
+async fn run_case(populated: bool) {
+    let directory_env = if populated {
+        populated::DIRECTORY_ENV
+    } else {
+        DIRECTORY_ENV
+    };
+    let directory = PathBuf::from(client_capture::selected(directory_env));
     std::fs::create_dir(&directory).unwrap();
     live_tcp::terminal_trace(&directory).unwrap();
     let tools = Tools::load().await;
+    let response: fn(&str, u16, u16) -> Value = if populated {
+        drcs_companion::response
+    } else {
+        response
+    };
+    let encoding: fn() -> TeletextChannelDocumentEncodingPolicy = if populated {
+        drcs_companion::encoding_policy
+    } else {
+        encoding
+    };
     let (mut fixture, flow, source) = Box::pin(super::super::source_fixture_with_capacity(
         &tools,
         &directory,
@@ -226,22 +254,8 @@ async fn ordinary_two_channel_publication_retires_neutral_mot_on_original_respon
         live_tcp::Observer::start_for(&origin, 2, "night"),
     ];
     let outcome = AssertUnwindSafe(async {
-        tokio::time::timeout(Duration::from_secs(15), async {
-            while origin.requests_seen() != [true, false, true]
-                || [0, 2]
-                    .iter()
-                    .any(|&index| origin.captures()[index].position() < 200 * 188)
-            {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await
-        .expect("the two original ordinary responses must attach at capacity2");
-        assert_eq!(
-            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(2).active,
-            2
-        );
-        Box::pin(transition(&fixture, &flow, &origin, &directory)).await
+        await_two_channels(&origin).await;
+        Box::pin(transition(&fixture, &flow, &origin, &directory, populated)).await
     })
     .catch_unwind()
     .await;
@@ -273,18 +287,11 @@ async fn ordinary_two_channel_publication_retires_neutral_mot_on_original_respon
         flow.accepted[0].service().magazine_units(),
         accepted.service().magazine_units()
     );
-    let displays = |service: &EncodedTeletextAuthoredService| {
-        service
-            .pages()
-            .iter()
-            .filter(|page| page.resource_header().is_none())
-            .map(|page| page.data_units().to_vec())
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(
-        displays(flow.accepted[0].service()),
-        displays(accepted.service())
-    );
+    if populated {
+        populated::assert_models(flow.accepted[0].service(), accepted.service());
+    } else {
+        assert_identical_displays(flow.accepted[0].service(), accepted.service());
+    }
     retained.assert_unchanged(&fixture, &flow).await;
     generations::assert_same_output(&recover(&fixture, 1).await, &accepted);
     fixture = fixture.reopen().await;
@@ -293,10 +300,48 @@ async fn ordinary_two_channel_publication_retires_neutral_mot_on_original_respon
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
     let receipts = verify_captures(&directory, &tools, &source, &origin).await;
-    live_tcp::write_new(&directory.join("neutral-mot-retirement.json"), &serde_json::to_vec_pretty(&json!({
+    let name = if populated {
+        "populated-mot-retirement.json"
+    } else {
+        "neutral-mot-retirement.json"
+    };
+    live_tcp::write_new(&directory.join(name), &serde_json::to_vec_pretty(&json!({
         "schema_version":1,"capacity":2,"requests_per_channel":1,"source_resets_after_start":0,
         "source_sha256":live_tcp::hash(&source),"channels":receipts,"channel2_unchanged":true,"explicit_publication":true,
-        "pending_keeps_old_output":true,"old_mot_fully_delivered":true,"new_mot_absent":true,"entire_captured_tail_checked":true,"durable_reopen":true,"owned_cleanup":true,
-        "limitations":"Neutral-MOT same-response publication/AV/transport only; not populated-bank/M29 reconciliation, independent warm-client rendering, editor, platform or full9A acceptance."
+        "pending_keeps_old_output":true,"old_mot_fully_delivered":true,"old_mot_populated":populated,"new_mot_absent":true,"entire_captured_tail_checked":true,"durable_reopen":true,"owned_cleanup":true,
+        "limitations":"Same-response MOT publication/AV/transport only; not independent warm-client rendering, M29/full resource reconciliation, editor, platform or complete engine acceptance."
     })).unwrap()).unwrap();
+}
+
+async fn await_two_channels(origin: &live_tcp::Origin) {
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while origin.requests_seen() != [true, false, true]
+            || [0, 2]
+                .iter()
+                .any(|&index| origin.captures()[index].position() < 200 * 188)
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the two original ordinary responses must attach at capacity2");
+    assert_eq!(
+        ersatzrs_infra::transcode_capacity::active_transcode_snapshot(2).active,
+        2
+    );
+}
+
+fn assert_identical_displays(
+    old: &EncodedTeletextAuthoredService,
+    next: &EncodedTeletextAuthoredService,
+) {
+    let displays = |service: &EncodedTeletextAuthoredService| {
+        service
+            .pages()
+            .iter()
+            .filter(|page| page.resource_header().is_none())
+            .map(|page| page.data_units().to_vec())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(displays(old), displays(next));
 }
