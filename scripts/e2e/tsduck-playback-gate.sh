@@ -117,15 +117,17 @@ capture_stream() {
   CAPTURE_MONITOR_LOG="${out}.delivery.log"
   started=$(date +%s)
   info "capturing ${secs}s from $safe_url"
+  # Bitrate reporting starts after the complete measurement window warms up.
+  # Report each second so the default 20s capture includes periodic samples.
   case "$kind" in
     http) tsp -I http "$url" \
       -P bitrate_monitor --time-interval "$DELIVERY_MONITOR_INTERVAL_SECONDS" \
-        --periodic-bitrate "$DELIVERY_MONITOR_INTERVAL_SECONDS" --summary \
+        --periodic-bitrate 1 --summary \
         --json-line=ERSATZRS_DELIVERY \
       -P until --seconds "$secs" -O file "$out" > /dev/null 2>"$CAPTURE_MONITOR_LOG" ;;
     hls)  tsp -I hls  "$url" \
       -P bitrate_monitor --time-interval "$DELIVERY_MONITOR_INTERVAL_SECONDS" \
-        --periodic-bitrate "$DELIVERY_MONITOR_INTERVAL_SECONDS" --summary \
+        --periodic-bitrate 1 --summary \
         --json-line=ERSATZRS_DELIVERY \
       -P until --seconds "$secs" -O file "$out" > /dev/null 2>"$CAPTURE_MONITOR_LOG" ;;
     *) die "unknown capture kind $kind" ;;

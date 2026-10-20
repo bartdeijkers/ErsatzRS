@@ -915,6 +915,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Make the default TSDuck playback capture include periodic delivery samples
+  after its measurement window warms up, while retaining the same capture
+  duration, measurement window and transport failure thresholds.
 - Reject authored teletext references to subpages outside the effective MOT
   announcement, including later concept edits. Preserve applicable X27 selection,
   original default provenance and the running publication on refusal. Complete
