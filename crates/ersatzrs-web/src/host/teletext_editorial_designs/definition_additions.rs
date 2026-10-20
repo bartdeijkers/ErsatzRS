@@ -90,8 +90,18 @@ mod page_selections;
 pub use page_selections::{
     select_teletext_editorial_object_pages, NativeTeletextObjectPagesSelectRequest,
 };
+#[path = "definition_additions/choice_resolver.rs"]
+mod choice_resolver;
+pub use choice_resolver::{
+    choose_teletext_editorial_object_pages, NativeTeletextObjectPagesChooseRequest,
+    TeletextObjectCallChoice, TeletextObjectPageChoice,
+};
 
 enum Action {
+    Choices {
+        selections: Vec<TeletextObjectPageChoice>,
+        calls: Vec<TeletextObjectCallChoice>,
+    },
     Selections {
         selections:
             Vec<ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange>,
@@ -131,6 +141,9 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
         return Err(NativeTeletextEditorialImportError::Budget);
     }
     let definitions = match &request.action {
+        Action::Choices { selections, calls } => {
+            return choice_resolver::preflight(selections, calls, budget, deadline);
+        }
         Action::Selections {
             selections,
             programs,
@@ -223,7 +236,9 @@ fn resolve(
 )> {
     check_deadline(deadline)?;
     let (source, new_object_id) = match action {
-        Action::Selections { .. } => return Err(NativeTeletextEditorialImportError::Association),
+        Action::Selections { .. } | Action::Choices { .. } => {
+            return Err(NativeTeletextEditorialImportError::Association);
+        }
         Action::Announcements(values) => return Ok((vec![], vec![], values)),
         Action::Definitions(definitions) => return Ok((definitions, vec![], vec![])),
         Action::Banks { banks, definitions } => return Ok((definitions, banks, vec![])),
@@ -372,6 +387,19 @@ fn encode(
     deadline: Instant,
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
+    if let Action::Choices { selections, calls } = action {
+        let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
+        let (selections, programs) = choice_resolver::resolve(
+            latest,
+            &selections,
+            &calls,
+            policy.document.validation.service,
+            deadline,
+        )?;
+        return page_selections::encode(
+            baselines, selections, programs, revision, policy, deadline,
+        );
+    }
     if let Action::Selections {
         selections,
         programs,

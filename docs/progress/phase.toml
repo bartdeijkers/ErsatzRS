@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 saved atomic selection/replay/effects verified; next localized selection controls and remaining coordinated consumers; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 localized atomic page/call selection controls; next remaining coordinated Main/Local consumers; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -168,8 +168,15 @@ shared preview, exact undo/reselection, separate publication and cold reopen.
 Seven malformed controls and a separate Generated shared consumer refuse without
 writes; failed fixture-permission/coordinate attempts remain canonical. Ordinary
 TTI retains selection but cannot authorize it. No new editor GUI/browser/stream,
-receiver or platform proof is claimed. Next localized selection controls and
-remaining coordinated Main/Local consumers; full F1 stays open.
+receiver or platform proof is claimed. The selection_admin_followup now connects
+localized explicit raw-page/mask and existing typed-call controls, including
+call-only edits, through fresh admitted observations and the same held worker.
+Thirty distinct focused cases and both headed browsers pass, including all
+nine cultures and corrected readable320/1920 layout. Native owner confirms
+complete models, separate publication, cold recovery and exact unchanged state.
+Canonical evidence retains the initial stale staged-CSS negative and scoped
+asset-sync correction. No new editor/stream/client claim follows. Remaining coordinated Main/Local consumers
+and complete editor capacity remain open; full F1 stays open.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.

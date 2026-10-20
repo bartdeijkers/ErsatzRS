@@ -156,3 +156,22 @@ pub(super) async fn all() -> [BankExpected; 4] {
     );
     [before, announced, selected, edited]
 }
+
+fn selected_original_call(theme: &str, page: u16, subcode: u16) -> Value {
+    let mut value = selected(theme, page, subcode);
+    let active = value["service"]["objects"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|object| object["identity"] == wire_target(seed::target(20)))
+        .unwrap();
+    assert_eq!(
+        active["program"]["commands"][4]["target"],
+        wire_target(target())
+    );
+    active["program"]["commands"][4]["target"] = wire_target(seed::target(21));
+    value
+}
+pub(super) async fn qualify_selected_original_call() -> BankExpected {
+    qualify(selected_original_call).await
+}

@@ -106,7 +106,7 @@ async fn current(fixture: &Fixture, id: i64, revision: i64) -> TeletextDesignRev
         .unwrap()
         .unwrap()
 }
-async fn publish(
+pub(super) async fn publish(
     fixture: &Fixture,
     flow: &Flow,
     stored: &TeletextDesignRevision,

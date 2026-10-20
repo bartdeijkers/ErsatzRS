@@ -50,6 +50,12 @@
 .location dt { font-weight: 500; }
 .location dd { margin: 0; overflow-wrap: anywhere; }
 
+@media (max-width: 40rem) {
+    .preview_form[action="/admin-api/teletext/design/choose-object-pages"] .location {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .editorial { margin-block: 1.5rem; min-width: 0; overflow-wrap: anywhere; }
 .editorial_table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-block: 1rem; }
 .editorial_table caption { text-align: start; font-weight: 600; margin-block-end: 0.5rem; }

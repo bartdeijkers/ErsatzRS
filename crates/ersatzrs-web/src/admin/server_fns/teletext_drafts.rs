@@ -4,6 +4,41 @@ use ersatzrs_domain::{TeletextNavigationLink, TeletextPageAddress};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+/// Read-only choices from the complete admitted native service; never edit authority.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextObjectChoicesObservation {
+    pub pages: Vec<TeletextObjectPageChoiceObservation>,
+    pub calls: Vec<TeletextObjectCallChoiceObservation>,
+    pub definitions: Vec<TeletextObjectDefinitionChoiceObservation>,
+}
+
+/// Selected POP/GPOP roles; defaults and original resolution provenance are unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextObjectPageChoiceObservation {
+    pub display: TeletextPageAddress,
+    /// Only POP/GPOP occur in native observations; submitted kinds are untrusted.
+    pub role: ersatzrs_domain::TeletextResourceKind,
+    pub target: ersatzrs_domain::TeletextRawDataPageNumber,
+    pub required_subpages: ersatzrs_domain::TeletextSubpageRequirementMask,
+}
+
+/// Actual resource-body calls, with their original ordinal, type and offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextObjectCallChoiceObservation {
+    pub caller: ersatzrs_domain::TeletextObjectIdentity,
+    pub command_index: usize,
+    pub target: ersatzrs_domain::TeletextObjectIdentity,
+    pub object_type: ersatzrs_domain::TeletextObjectType,
+    pub offset: Option<ersatzrs_domain::TeletextObjectOffset>,
+}
+
+/// Existing definitions retain identity and exact declared type, without permission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextObjectDefinitionChoiceObservation {
+    pub identity: ersatzrs_domain::TeletextObjectIdentity,
+    pub object_type: ersatzrs_domain::TeletextObjectType,
+}
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextDraftPreviewData {
     pub channel_id: i64,
@@ -16,6 +51,7 @@ pub struct TeletextDraftPreviewData {
     pub pages: Vec<TeletextPageAddress>,
     pub resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
     pub object_resources: Vec<ersatzrs_domain::TeletextResourceIdentity>,
+    pub object_choices: TeletextObjectChoicesObservation,
     pub navigation: Vec<TeletextNavigationLink>,
     pub diagnostics: Vec<TeletextDraftDiagnosticData>,
     pub authoring: Vec<TeletextDraftAuthoringData>,
@@ -195,6 +231,7 @@ fn project_preview(
         pages: preview.pages().to_vec(),
         resource_objects: preview.resource_objects().to_vec(),
         object_resources: preview.object_resources().to_vec(),
+        object_choices: preview.object_choices().clone(),
         navigation: preview.navigation().to_vec(),
         diagnostics,
         authoring: preview.authoring().iter().map(project_authoring).collect(),

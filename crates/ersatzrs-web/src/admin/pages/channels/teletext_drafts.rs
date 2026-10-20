@@ -17,6 +17,7 @@ mod output_status;
 mod resource_add;
 mod resource_announcements;
 mod resource_banks;
+mod resource_selection;
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
 
@@ -32,6 +33,7 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "object-add-invalid" => TextKey::TeletextObjectAddInvalid,
         "resource-bank-invalid" => TextKey::TeletextResourceBankInvalid,
         "subpage-announcement-invalid" => TextKey::TeletextSubpageAnnouncementInvalid,
+        "object-selection-invalid" => TextKey::TeletextObjectSelectionInvalid,
         "editorial-protected" => TextKey::TeletextEditorProtected,
         "editorial-no-changes" => TextKey::TeletextEditorNoChanges,
         "editorial-no-pages" => TextKey::TeletextPreviewAbsent,
@@ -424,6 +426,7 @@ fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
             </div>
             {resource_banks::form(data, observation)}
             {resource_announcements::form(data, observation)}
+            {resource_selection::form(data, observation)}
             {resource_add::form(data, observation)}
             {object_copy_form(data, observation)}
             {editorial_import_form(data.channel_id, observation.current_design_head)}
@@ -847,6 +850,9 @@ mod tests {
             diagnostics: Vec::new(),
             resource_objects: Vec::new(),
             object_resources: Vec::new(),
+            object_choices:
+                crate::admin::server_fns::teletext_drafts::TeletextObjectChoicesObservation::default(
+                ),
             authoring: Vec::new(),
             publication: None,
             outputs: None,
@@ -1598,6 +1604,265 @@ mod tests {
                     draft_status_text("subpage-announcement-invalid"),
                     tr(TextKey::TeletextSubpageAnnouncementInvalid)
                 );
+            });
+        }
+    }
+    fn resource_selection_fixture() -> TeletextDraftPreviewData {
+        use crate::admin::server_fns::teletext_drafts::{
+            TeletextObjectCallChoiceObservation, TeletextObjectDefinitionChoiceObservation,
+            TeletextObjectPageChoiceObservation,
+        };
+        use ersatzrs_domain::{
+            TeletextObjectId, TeletextObjectIdentity, TeletextObjectOffset, TeletextObjectType,
+            TeletextRawDataPageNumber, TeletextResourceIdentity, TeletextResourceKind,
+            TeletextResourceSubpageIndex, TeletextSubpageRequirementMask,
+        };
+        let resource = |kind, raw, subpage| {
+            TeletextResourceIdentity::new(
+                kind,
+                TeletextRawDataPageNumber::new(2, raw).unwrap(),
+                TeletextResourceSubpageIndex::new(subpage).unwrap(),
+            )
+            .unwrap()
+        };
+        let pop = resource(TeletextResourceKind::Pop, 0xc0, 0);
+        let gpop = resource(TeletextResourceKind::Gpop, 0xd0, 0);
+        let alternate = resource(TeletextResourceKind::Gpop, 0xe1, 0);
+        let caller = TeletextObjectIdentity::global(gpop, TeletextObjectId::new(20)).unwrap();
+        let passive = TeletextObjectIdentity::public(pop, TeletextObjectId::new(21)).unwrap();
+        let other = TeletextObjectIdentity::global(alternate, TeletextObjectId::new(32)).unwrap();
+        let local = TeletextObjectIdentity::local(owner(200, 0x10), TeletextObjectId::new(99));
+        let mut data = preview();
+        data.object_resources = vec![
+            pop,
+            resource(TeletextResourceKind::Pop, 0xc0, 15),
+            gpop,
+            alternate,
+        ];
+        data.object_choices.pages = vec![
+            TeletextObjectPageChoiceObservation {
+                display: owner(200, 0x10),
+                role: TeletextResourceKind::Pop,
+                target: pop.page(),
+                required_subpages: TeletextSubpageRequirementMask::new(0x8001),
+            },
+            TeletextObjectPageChoiceObservation {
+                display: owner(201, 0x20),
+                role: TeletextResourceKind::Gpop,
+                target: gpop.page(),
+                required_subpages: TeletextSubpageRequirementMask::new(1),
+            },
+        ];
+        data.object_choices.calls = vec![
+            TeletextObjectCallChoiceObservation {
+                caller,
+                command_index: 4,
+                target: passive,
+                object_type: TeletextObjectType::Passive,
+                offset: Some(TeletextObjectOffset::new(0, 1).unwrap()),
+            },
+            TeletextObjectCallChoiceObservation {
+                caller,
+                command_index: 6,
+                target: other,
+                object_type: TeletextObjectType::Passive,
+                offset: None,
+            },
+        ];
+        data.object_choices.definitions = vec![
+            TeletextObjectDefinitionChoiceObservation {
+                identity: passive,
+                object_type: TeletextObjectType::Passive,
+            },
+            TeletextObjectDefinitionChoiceObservation {
+                identity: other,
+                object_type: TeletextObjectType::Passive,
+            },
+            TeletextObjectDefinitionChoiceObservation {
+                identity: caller,
+                object_type: TeletextObjectType::Active,
+            },
+            TeletextObjectDefinitionChoiceObservation {
+                identity: local,
+                object_type: TeletextObjectType::Passive,
+            },
+        ];
+        data
+    }
+
+    fn assert_resource_selection_fields(html: &str) {
+        for expected in [
+            "teletext-object-pages-choose-form",
+            "/admin-api/teletext/design/choose-object-pages",
+            "method=\"post\"",
+            "name=\"channel_id\" value=\"44\"",
+            "name=\"expected_design_head\" value=\"3\"",
+            "name=\"page_0_display\"",
+            "name=\"page_0_role\" value=\"pop\"",
+            "name=\"page_0_target\" required",
+            "name=\"page_0_mask\" required",
+            "value=\"8001\"",
+            "value=\"0001\"",
+            "pattern=\"[0-9A-Fa-f]{1,4}\"",
+            "name=\"page_1_role\" value=\"gpop\"",
+            "name=\"call_0_caller\"",
+            "name=\"call_0_command\" value=\"4\"",
+            "name=\"call_0_target\" required",
+            "name=\"call_1_command\" value=\"6\"",
+            "200 / 0010",
+            "201 / 0020",
+            "0, 1",
+        ] {
+            assert!(html.contains(expected), "missing {expected}: {html}");
+        }
+        for forbidden in [
+            "name=\"document_index\"",
+            "name=\"program\"",
+            "name=\"authoring\"",
+            "name=\"sidecar\"",
+            "<textarea",
+            "<script",
+        ] {
+            assert!(!html.contains(forbidden), "unexpected {forbidden}");
+        }
+    }
+
+    fn assert_resource_selection_labels(html: &str) {
+        for key in [
+            TextKey::TeletextObjectSelectionTitle,
+            TextKey::TeletextObjectSelectionHelp,
+            TextKey::TeletextObjectSelectionPageTarget,
+            TextKey::TeletextObjectSelectionMask,
+            TextKey::TeletextObjectSelectionMaskHelp,
+            TextKey::TeletextObjectSelectionCalls,
+            TextKey::TeletextObjectSelectionCaller,
+            TextKey::TeletextObjectSelectionCommand,
+            TextKey::TeletextObjectSelectionCurrentTarget,
+            TextKey::TeletextObjectSelectionOffset,
+            TextKey::TeletextObjectSelectionNoOffset,
+            TextKey::TeletextObjectSelectionCallTarget,
+            TextKey::TeletextObjectSelectionAction,
+            TextKey::TeletextObjectTypePassive,
+        ] {
+            assert!(html.contains(tr(key)), "missing localized {key:?}: {html}");
+        }
+    }
+
+    fn assert_resource_selection_catalogue(html: &str) {
+        let page_lists: [(&str, &[&str]); 2] = [("pop", &["2C0"]), ("gpop", &["2D0", "2E1"])];
+        for (kind, values) in page_lists {
+            let id = format!("<datalist id=\"teletext-object-pages-{kind}\">");
+            assert_eq!(html.matches(&id).count(), 1);
+            let list = html
+                .split_once(&id)
+                .unwrap()
+                .1
+                .split_once("</datalist>")
+                .unwrap()
+                .0;
+            assert_eq!(list.matches("<option ").count(), values.len());
+            for value in values {
+                let option = format!("<option value=\"{value}\"");
+                assert_eq!(
+                    html.matches(&option).count(),
+                    1,
+                    "raw page catalogue deduplicates S1 owners"
+                );
+                assert!(list.contains(&option));
+            }
+        }
+        for (page, kind) in [("2C0", "pop"), ("2D0", "gpop")] {
+            assert!(
+                html.contains(&format!(
+                    "value=\"{page}\" list=\"teletext-object-pages-{kind}\""
+                )),
+                "current page retains its matching shared list"
+            );
+        }
+        assert!(
+            !html.contains("<select id=\"teletext-object-page-"),
+            "role inputs reuse shared raw page lists"
+        );
+        assert!(
+            !html.contains("#99"),
+            "Local targets are outside resource-only control"
+        );
+        assert_eq!(html.matches("<datalist ").count(), 5);
+        let list = |kind: &str| {
+            let id = format!("<datalist id=\"teletext-object-targets-{kind}\">");
+            html.split_once(&id)
+                .unwrap()
+                .1
+                .split_once("</datalist>")
+                .unwrap()
+                .0
+        };
+        assert!(list("active").contains("value=\"GPOP 2D0 S1=0 #20\""));
+        assert!(
+            !list("passive").contains("#20"),
+            "Active is not a Passive target"
+        );
+        assert!(!list("adaptive").contains("<option"));
+        for label in ["POP 2C0 S1=0 #21", "GPOP 2E1 S1=0 #32"] {
+            let value = format!("<option value=\"{label}\"");
+            assert_eq!(
+                html.matches(&value).count(),
+                1,
+                "shared catalogue contains each target once"
+            );
+            assert!(list("passive").contains(&value));
+            assert!(
+                html.contains(&format!(
+                    "value=\"{label}\" list=\"teletext-object-targets-passive\""
+                )),
+                "current input retains human target and matching list"
+            );
+        }
+        assert!(
+            !html.contains("<select id=\"teletext-object-call-"),
+            "call inputs reuse shared lists"
+        );
+    }
+
+    fn assert_resource_selection_history(
+        mut data: TeletextDraftPreviewData,
+        observation: &TeletextDraftPublicationObservation,
+    ) {
+        data.object_choices.pages.clear();
+        let call_only = resource_selection::form(&data, observation).to_html();
+        assert!(call_only.contains("teletext-object-pages-choose-form"));
+        assert!(call_only.contains("name=\"call_0_target\""));
+        assert!(!call_only.contains("name=\"page_0_target\""));
+        data.revision -= 1;
+        let historical = resource_selection::form(&data, observation).to_html();
+        assert!(historical.contains("<fieldset disabled"));
+        assert!(historical.contains(tr(TextKey::TeletextResourceEditCurrentHelp)));
+        assert_eq!(
+            draft_status_text("object-selection-invalid"),
+            tr(TextKey::TeletextObjectSelectionInvalid)
+        );
+    }
+
+    #[test]
+    fn resource_selection_form_localizes_exact_pages_masks_and_explicit_typed_calls() {
+        for language in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let context = Owner::new();
+            context.with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let data = preview();
+                let observation = resource_edit_observation(&data);
+                assert!(!resource_selection::form(&data, &observation)
+                    .to_html()
+                    .contains("<form"));
+                let data = resource_selection_fixture();
+                let html = resource_selection::form(&data, &observation).to_html();
+                assert_resource_selection_fields(&html);
+                assert_resource_selection_labels(&html);
+                assert_resource_selection_catalogue(&html);
+                assert!(!html.contains("<fieldset disabled"));
+                assert_resource_selection_history(data, &observation);
             });
         }
     }

@@ -137,10 +137,12 @@ mod object_resources;
 mod repeat;
 pub use definition_additions::{
     add_teletext_editorial_object_resources, add_teletext_editorial_resource_definitions,
-    announce_teletext_editorial_object_subpages, copy_teletext_editorial_resource_definition,
-    select_teletext_editorial_object_pages, NativeTeletextObjectPagesSelectRequest,
+    announce_teletext_editorial_object_subpages, choose_teletext_editorial_object_pages,
+    copy_teletext_editorial_resource_definition, select_teletext_editorial_object_pages,
+    NativeTeletextObjectPagesChooseRequest, NativeTeletextObjectPagesSelectRequest,
     NativeTeletextObjectResourcesAddRequest, NativeTeletextObjectSubpagesAnnounceRequest,
     NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
+    TeletextObjectCallChoice, TeletextObjectPageChoice,
 };
 
 type Result<T> = std::result::Result<T, NativeTeletextEditorialImportError>;

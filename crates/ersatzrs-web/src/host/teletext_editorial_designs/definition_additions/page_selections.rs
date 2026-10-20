@@ -67,7 +67,7 @@ pub(super) fn preflight(
     deadline: Instant,
 ) -> Result<()> {
     check_deadline(deadline)?;
-    if selections.is_empty() {
+    if selections.is_empty() && programs.is_empty() {
         return Err(NativeTeletextEditorialImportError::NoChanges);
     }
     if selections.len() > budget.max_records.min(budget.max_structure_items)

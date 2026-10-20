@@ -59,6 +59,11 @@ use super::teletext_work::{self, TeletextWorkError};
 
 mod effective;
 mod metadata;
+mod object_choices;
+pub use crate::admin::server_fns::teletext_drafts::{
+    TeletextObjectCallChoiceObservation, TeletextObjectChoicesObservation,
+    TeletextObjectDefinitionChoiceObservation, TeletextObjectPageChoiceObservation,
+};
 mod scope;
 pub use metadata::TeletextAuthoringPageMetadata;
 pub use scope::{
@@ -191,6 +196,7 @@ pub struct TeletextAuthoringPreview {
     pages: Vec<TeletextPageAddress>,
     resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
     object_resources: Vec<TeletextResourceIdentity>,
+    object_choices: TeletextObjectChoicesObservation,
     authoring: Vec<TeletextAuthoringPageMetadata>,
     hold: TeletextWorkHold,
     deadline: Instant,
@@ -241,6 +247,12 @@ impl TeletextAuthoringPreview {
     #[must_use]
     pub fn object_resources(&self) -> &[TeletextResourceIdentity] {
         &self.object_resources
+    }
+    /// Complete native selected-role, resource-call and definition observations.
+    /// These values are descriptive; mutations independently authenticate fresh receipts.
+    #[must_use]
+    pub const fn object_choices(&self) -> &TeletextObjectChoicesObservation {
+        &self.object_choices
     }
     /// Selected-owner declarations from the immutable original producer, never
     /// current package/profile state or imported permission authority.
@@ -948,6 +960,7 @@ fn render_original(
         pages,
         resource_objects: resource_objects(service),
         object_resources: object_resources(service),
+        object_choices: object_choices::observe(service, deadline)?,
         authoring: metadata::base(restored, owner, deadline)?,
         hold,
         deadline,

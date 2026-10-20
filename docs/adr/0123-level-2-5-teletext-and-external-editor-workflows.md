@@ -67,9 +67,14 @@ consumer changes. Replay reconstructs original banks and announcement history
 before one atomic role/program transaction; current and immutable-root effects
 both remain mandatory. Ordinary TTI reimport retains saved selection but cannot
 authorize selection changes. Shared preview, exact root undo, separate publication
-and cold reopen are qualified on the complete native fixture. Localized selection
-controls, remaining coordinated Main/Local consumers, complete editor/client proof
-and full 9A acceptance remain open; no package authority is added.
+and cold reopen are qualified on the complete native fixture. Localized native
+forms expose the admitted role selections and typed existing resource calls.
+Submitted identities and command ordinals are resolved from a fresh qualified
+service inside the same held worker; no submitted program or source ordinal
+grants authority. Unchanged rows are ignored and call-only edits remain explicit.
+Historical forms are disabled and saving never publishes. Remaining coordinated
+Main/Local consumers, complete editor/client proof and full 9A acceptance remain
+open; no package authority is added.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

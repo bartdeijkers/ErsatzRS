@@ -12,6 +12,8 @@ use ersatzrs_web::host::teletext_editorial_designs::{
     announce_teletext_editorial_object_subpages, select_teletext_editorial_object_pages,
     NativeTeletextObjectPagesSelectRequest, NativeTeletextObjectSubpagesAnnounceRequest,
 };
+#[path = "page_selection/admin.rs"]
+mod admin;
 #[path = "page_selection/oracle.rs"]
 mod oracle;
 
@@ -19,7 +21,13 @@ async fn setup(
     first: &BankExpected,
     original: fn(&str, u16, u16) -> Value,
 ) -> (Fixture, Flow, SavedEditorialTeletextDesign) {
-    let fixture = Fixture::new_persistent().await;
+    Box::pin(setup_on(first, original, Fixture::new_persistent().await)).await
+}
+async fn setup_on(
+    first: &BankExpected,
+    original: fn(&str, u16, u16) -> Value,
+    fixture: Fixture,
+) -> (Fixture, Flow, SavedEditorialTeletextDesign) {
     http_routes::configure_authoring_policy(&fixture).await;
     let (fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
         original,

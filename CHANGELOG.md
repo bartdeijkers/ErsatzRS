@@ -33,9 +33,10 @@ release section when tagging a release.
   bank pages and checked resource calls atomically while preserving MOT defaults.
   Receipt-bound native actions now save that selection as a versioned concept,
   retaining it through later TTI edits, preview, explicit publication and restart.
-  Protected generated consumers remain immutable. Selection controls in the admin
-  and complete editor/client acceptance remain open; ordinary TTI permissions
-  stay intact.
+  Protected generated consumers remain immutable. Localized admin controls now
+  select raw bank pages and explicitly retarget existing resource calls together,
+  including call-only edits, without changing a running publication. Complete
+  editor/client acceptance remains open; ordinary TTI permissions stay intact.
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous
