@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 MOT engine/mux and ordinary neutral/populated publication components closed; next bounded independent warm-MOT decoding proof from retained captures; M29/resource and platform requirements retain scope'
+current_focus = 'P9A-04 F4 MOT engine, ordinary publication and independent cached-page decoding components closed; next remaining M29/page retirement using retained cache evidence and unchanged standards/model; no client search or external maintenance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -239,10 +239,18 @@ one explicit new Day preparation. Both grouped cases pass; owned streams/capacit
 and the outer process group drain without force. Canonical
 tmp/phase9-mot-retirement/populated-http/identity.json owns the actual tools,
 source/captures and checks. No editor replay or runtime-code change.
-Next qualify independent warm-MOT decoding with an effective negative control,
-using retained captures and existing tools; do not start a client search or
-external maintenance. M29/full resource reconciliation and suitable-client
-requirements remain in the finite F4/V/X list. Windows-package deferral/future
+Independent cached-page MOT decoding is now closed for those exact retained
+captures: original pinned libzvbi0.2.42, one receiver/clock, old DRCS pixels,
+unchanged cached pages reverting to literal basic Z after the neutral prefix,
+then literal A pixels after successor/repeat. Omitting only the prefix fails at
+the cached-glyph oracle before any new display is fed. Four bounded helper
+regressions pass; no stream/editor replay or decoder repair. Canonical
+tmp/phase9-mot-retirement/warm-qualification/identity.json owns pins, native
+positive/negative receipts and setup/trace limitations. Actual warm-client
+display/navigation remains required. Next address existing F4 M29/page retirement
+using the retained omission negative and unchanged standards/model. Preserve
+conditional charset/provenance; do not invent a decoder default or silently
+narrow valid authoring. No client search or external maintenance. Windows-package deferral/future
 120minutes and all existing acceptance requirements remain unchanged.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
