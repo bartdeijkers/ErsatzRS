@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 Linux candidate.4 copy-output transport closed:86/86 including realtime/rolling delivery; Main/Local selection closed; Windows-package deferred (future trial120minutes); remaining output/native ARM/macOS/adoption and X1/X3 gates remain open'
+current_focus = 'P9A-04 native Windows finite-Local889 EOF component proof closed; Linux copy86/86 and Main/Local selection remain closed; Windows-package deferred (future120minutes); remaining output/native ARM/macOS/adoption and X1/X3 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -225,6 +225,12 @@ above, with native Windows scoped startup, ordinary playback and original-wire
 proof now recorded too. The current-source package followup above is deferred;
 its next authorized trial reserves 120 minutes. Required source/caption/alternate-
 audio and cleanup oracles stay unchanged.
+F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
+closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
+pass on optimized.4 with exact cues, copied AV/Dutch AAC, shared cache and natural
+complete runtime Job cleanup. All388 scoped inputs and the whole40ad archive
+remain exact. Build/list forced cleanup and the private parser negative remain
+separate from runtime success; reuse the original Linux EOF proof.
 The separate linux_copy_transport_followup now closes the optimized Linux-x64
 candidate.4 copy-output boundary: ordinary Next HTTP and HLS programme seams,
 86 existing gate checks, seven real rolling samples without low intervals and
@@ -492,7 +498,8 @@ F3 ad28cd81 complete-factory foreign defaults and f91ab796 original-secondary
 absence remain scoped verified; tmp/phase9-header-c2/identity.json owns oracles,
 provenance and negative history. F5 85f5b9b1 finite Local889 EOF follows approved
 selected-video-end/earlier-cut policy;19 unique native controls retain exact
-clocks/AV/audio/cache/cleanup. eof_unclosed_followup owns it; earlier20MB/late889,
+clocks/AV/audio/cache/cleanup. Its native Windows component counterpart is now
+closed above; eof_unclosed_followup owns both scoped proofs. Earlier20MB/late889,
 source absence/replacement and27Windows results retain their own scopes. Broader
 provider/output/native/adoption remains; four candidate.3 packages are not
 managed adoption and accepted managed.1 is unchanged.
