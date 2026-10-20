@@ -5,7 +5,7 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: standalone1/1.5 then full authored2.5 with protected fallback; neither
-accepted. P9A-04 owns L15/F/V/X and canonical evidence. No scope waiver or9B.
+accepted. P9A-04 owns unchanged L15/F/V/X; no9B.
 
 Typed services/resources, ownership, X26/X27/X28/M29, execution and raster
 remain partial. Original identities/bytes/roots/effects/spans, fallback, defaults,
@@ -13,9 +13,9 @@ bounds and uncertainty stay protected. A7/A8/C3, foreign-X26, repertoires/fonts,
 objects/DRCS/panels and independent receivers remain mandatory; physical wrappers
 are derived. P9A-04 owns F1/F3 receipts and supplied-bank/stock-negative limits.
 
-Base ESC preserves G0/reset provenance; secondary never selects G2/X26.
-Absent Header/POP refuses without invented7F. base_g0_context_followup retains
-Header NOS correction and stock33/38 proof, with five fixed disagreements open.
+Base ESC/reset/secondary provenance and Header/POP refusal remain exact.
+base_g0_context_followup retains Header NOS/stock33of38 proof; five disagreements
+remain open, without invented7F.
 Held mosaics now preserve original controls and held-glyph/reset provenance in
 shared preview/carrier, protected zones and caption visibility. P9A-04 owns
 held_mosaics_followup, scoped proof and retained atlas-margin differences.
@@ -31,6 +31,7 @@ proves literal failed-prefix retention and one same-source pass. Initial EOF sta
 unclassified; stop unchanged retries. Full client/fallback/interchange/runtime/
 platform acceptance remains open.
 
+Atomic native bank sets; saved-concept wiring remains open.
 ConceptsV1–24 preserve metadata/templates/zones, Base/Local/resource roles,
 DRCS/Flash/charset/style/positions/calls, Add/Copy lineage, protected consumers and
 fresh root undo. V23/V24 retain Base Text intent/native spelling without fabricated

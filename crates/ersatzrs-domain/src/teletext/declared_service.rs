@@ -331,6 +331,67 @@ impl TeletextDeclaredService {
         Ok(self)
     }
 
+    /// Add new complete native object banks without changing MOTs or selections.
+    ///
+    /// Reconstructs the complete declaration/inventory boundary; semantic success
+    /// alone never substitutes for resource, default or MOT validation. Hosts
+    /// still need explicit intent/effect/lifecycle checks and native encoding.
+    /// # Errors
+    /// Rejects occupied/repeated banks, aggregate limits and complete semantic
+    /// or declaration validation failures. No partial declaration escapes.
+    pub fn with_object_resource_additions(
+        self,
+        additions: &[super::TeletextObjectResourceAddition],
+        service_budget: super::TeletextServiceBudget,
+        declaration_budget: TeletextDeclaredServiceBudget,
+    ) -> Result<Self, super::TeletextObjectResourceAdditionApplyError> {
+        // Charge the complete old/new declaration set before semantic cloning,
+        // including caller limits smaller than those used for the old service.
+        preflight(
+            &self.semantic,
+            &self.mots,
+            &self.selections,
+            &self.empty_object_pages,
+            declaration_budget,
+        )?;
+        let resources = self
+            .resource_inventory
+            .len()
+            .checked_add(additions.len())
+            .ok_or_else(|| failure(TeletextDeclaredServiceFailure::Size))?;
+        fence("resource", resources, declaration_budget.max_resources)?;
+        let mut objects = self.semantic.objects().definitions().len();
+        for addition in additions {
+            objects = objects
+                .checked_add(addition.definitions().len())
+                .ok_or_else(|| failure(TeletextDeclaredServiceFailure::Size))?;
+            fence("object", objects, declaration_budget.max_objects)?;
+        }
+        let mut owners: BTreeSet<_> = self
+            .resource_inventory
+            .iter()
+            .map(|resource| (resource.page(), resource.logical_subpage()))
+            .collect();
+        for addition in additions {
+            let resource = addition.resource();
+            if !owners.insert((resource.page(), resource.logical_subpage())) {
+                return Err(super::TeletextObjectResourceAdditionApplyError::Occupied { resource });
+            }
+        }
+        let semantic = self
+            .semantic
+            .with_object_resource_additions(additions, service_budget)?;
+        let empty = semantic.object_companions().to_vec();
+        Self::new(
+            semantic,
+            self.mots,
+            self.selections,
+            empty,
+            declaration_budget,
+        )
+        .map_err(super::TeletextObjectResourceAdditionApplyError::from)
+    }
+
     /// Replace checked Local glyph programs while retaining all authenticated
     /// declarations, selections, identities, defaults and resource inventory.
     /// Hosts must qualify compiler correspondence and every shared consumer;

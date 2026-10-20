@@ -13,6 +13,15 @@ delivery and acceptance order, not the full Phase 9A scope or Phase 9B entry gat
 
 ## Implementation
 
+Partial — a separate typed native new-object-resource intent now admits complete
+POP/GPOP bank sets, including empty logical owners, without widening retained-bank
+Add/Copy or TTI authority. Semantic and declared reconstruction preserve original
+content, MOTs/defaults/fallback, overlays and spellings; aggregate bounds precede
+cloning and the complete dependency graph remains mandatory. This is not yet a
+saved-concept action: receipt/CAS authorization, versioned immutable storage,
+explicit lifecycle/effect authority and editor/admin/publication wiring remain.
+P9A-04 owns the native component proof and unchanged full F1/X3 requirements.
+
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.
 Independent old/new resource allocations and complete native packet comparisons

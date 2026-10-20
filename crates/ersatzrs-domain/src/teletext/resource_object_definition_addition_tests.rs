@@ -1,6 +1,9 @@
 //! Existing resource catalogue additions, not import or publication authority.
 use super::*;
 
+#[path = "object_resource_addition_tests.rs"]
+mod object_resource_addition_tests;
+
 fn identity(global: bool, page: u8, s1: u8, id: u16) -> TeletextObjectIdentity {
     let resource = resource(
         if global {

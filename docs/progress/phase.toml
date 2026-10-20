@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 Linux override startup/persisted Health proven; managed adoption and X1/X2/X3 remain open; no DVBViewer or device trials'
+current_focus = 'P9A-04 F1 native new-bank sets verified; next immutable concept/receipt/CAS/lifecycle integration; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -114,9 +114,15 @@ is proven, not enabled-channel profile/overlay checks, current full-source build
 headed UI, production adoption or six-RID acceptance. Original hardware/Vulkan
 fallback warnings remain; managed.1 pins stay exact. X2 still needs both macOS
 artifacts, native ARM/macOS and applicable platform/adoption gates; no remote
-dispatch/push. Next independent product package is the existing F1 resource-set/
-dependency creation gap, excluding deferred unused-object removal; qualify its
-native boundary before changes. Keep F6 closed without a relevant regression.
+dispatch/push. F1 resource_set_creation_followup now adds a separate atomic native
+POP/GPOP bank-set intent; original content/MOT/fallback/overlays/spellings and
+complete dependency checks remain. Thirteen focused native cases pass, including
+seven new set/owner/graph/budget cases and six retained Add guards. Only the native
+component is implemented: versioned immutable concept replay, retained receipt/
+head-CAS, lifecycle/effects and localized editor/publication wiring remain open.
+Next bundle those existing boundaries for this exact intent, without widening
+Add/Copy/import authority. X3 full-bank editor capacity still waits upstream.
+Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion

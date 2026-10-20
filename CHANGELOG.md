@@ -25,6 +25,10 @@ release section when tagging a release.
 
 ### Added
 
+- Add atomic native validation for new POP/GPOP resource sets, preserving existing
+  pages, defaults, fallback and dependencies. Saved-design controls, concept
+  storage and the complete editor/publication flow remain separate pending work.
+
 - Accept physical teletext Alpha/Mosaic Black and Double Width/Size controls
   in imported designs. Preserve their coded rows, attribute origins, protected
   zones and basic fallback content while using the shared enhanced preview

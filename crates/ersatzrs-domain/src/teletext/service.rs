@@ -46,6 +46,9 @@ mod resource_object_programs;
 #[path = "resource_object_definition_addition_service.rs"]
 mod resource_object_definition_additions;
 
+#[path = "object_resource_addition_service.rs"]
+mod object_resource_additions;
+
 #[path = "main_local_invocation_program_service.rs"]
 mod main_local_invocation_programs;
 
