@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: active Lua On/admin BaseOff precedence proven; next active scoped-profile invalidation, D/E1/E2/end gates stay open'
+current_focus = 'P9A-04 standalone Level 1/1.5: active Lua-profile invalidation/expiry proven; D client acquisition and E1/E2 runtime adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -396,9 +396,21 @@ Current lua_base_precedence_followup proves active Lua On survives admin
 BaseOff until original12s finish, then current Off; source Day/AV stays unchanged.
 Both original/new native cases, full wire/clock/AV/TSDuck/cold-state/capacity0,
 independent review and strict Clippy/fmt pass. P9A-04 canonical receipt owns
-scope/reuse; no production or full C/base/9A acceptance claim. Next C: active
-scoped-only profile edits without Base substitution, implicit replay/publication
-or expiry extension. D/E1E2/X1X3 and all finite/end gates remain. No push.
+scope/reuse; no production or full C/base/9A acceptance claim. Active scoped-
+profile invalidation is now proven below. D/E1E2/X1X3 and all end gates remain.
+
+Current lua_profile_edit_followup proves isolated active Lua-profile revision
+withdrawal, no implicit Base in the held-Off interval, original12s expiry and
+exact own-Base recovery on the same two HTTP responses/default2. All3 affected
+native cases pass with original wire/clock/TSDuck/AV/state/cleanup guards, typed
+stale/expired refusal and exact cold-reopened interval rows. Wrong test
+expectations and sandbox listener negative remain canonical; no product fix or
+full C/base/9A acceptance. Strict web Clippy/fmt and bounded review pass. P9A-04
+owns evidence/reuse/limits. Next determining prerequisite: D private stream
+acquisition/operator capability; independently E1/E2 adoption/compatibility/Health
+and native platforms. All finite/enhanced gates remain; no unchanged client
+retry or external maintenance. Latest maintainer authority permits this
+checkpoint push only, no publication.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

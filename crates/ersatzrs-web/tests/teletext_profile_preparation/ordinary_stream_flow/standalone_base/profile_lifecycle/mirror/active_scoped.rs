@@ -21,6 +21,16 @@ use ersatzrs_web::host::{
 use futures_util::FutureExt as _;
 use std::panic::AssertUnwindSafe;
 
+#[path = "active_scoped/profile_edits.rs"]
+mod profile_edits;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Scenario {
+    RestoreBase,
+    DisableBase,
+    EditProfile,
+}
+
 struct Trial {
     fixture: Fixture,
     source: Vec<u8>,
@@ -437,7 +447,12 @@ async fn verify_wire(
     }
 }
 
-async fn verify_state(mut trial: Trial, outcome: &Outcome) -> Vec<u8> {
+async fn verify_state(
+    mut trial: Trial,
+    outcome: &Outcome,
+    scenario: Scenario,
+    root: &Path,
+) -> Vec<u8> {
     let fixture = &mut trial.fixture;
     assert_eq!(designs::config(fixture).await, trial.configuration);
     assert_eq!(
@@ -497,13 +512,17 @@ async fn verify_state(mut trial: Trial, outcome: &Outcome) -> Vec<u8> {
     assert_eq!(bindings[0].binding.profile_id, trial.mirror.profile_id);
     assert_eq!(bindings[0].binding.revision, trial.mirror.revision + 1);
     let repository = SqlitePlayoutRepository(fixture.state.pool.clone());
-    assert_eq!(
-        repository
-            .published_teletext_intervals_at(3, outcome.interval.start)
-            .await
-            .unwrap(),
-        std::slice::from_ref(&outcome.interval)
-    );
+    if scenario == Scenario::EditProfile {
+        profile_edits::verify_interval(fixture, outcome, root).await;
+    } else {
+        assert_eq!(
+            repository
+                .published_teletext_intervals_at(3, outcome.interval.start)
+                .await
+                .unwrap(),
+            std::slice::from_ref(&outcome.interval)
+        );
+    }
     assert!(repository
         .published_teletext_intervals_at(3, outcome.interval.finish)
         .await
@@ -513,12 +532,15 @@ async fn verify_state(mut trial: Trial, outcome: &Outcome) -> Vec<u8> {
     trial.source
 }
 
-async fn run_trial(root_setting: &str, disable_during_scope: bool) {
+async fn run_trial(root_setting: &str, scenario: Scenario) {
     let root = PathBuf::from(client_capture::selected(root_setting));
     tokio::fs::create_dir(&root).await.unwrap();
     live_tcp::terminal_trace(&root).unwrap();
     let tools = Tools::load().await;
-    let trial = setup(&tools).await;
+    let mut trial = setup(&tools).await;
+    if scenario == Scenario::EditProfile {
+        trial.target = trial.fixture.profile("Scoped only", "day", "good").await;
+    }
     write_new(&root, "source.ts", &trial.source).await;
     reset_source_start(&trial.fixture).await;
     let mut origin = live_tcp::Origin::start(&trial.fixture, &root)
@@ -529,10 +551,13 @@ async fn run_trial(root_setting: &str, disable_during_scope: bool) {
         live_tcp::Observer::start_for(&origin, 3, "night"),
     ];
     let outcome = AssertUnwindSafe(async {
-        tokio::time::timeout(
-            Duration::from_secs(30),
-            transition(&trial, &root, &origin, disable_during_scope),
-        )
+        tokio::time::timeout(Duration::from_secs(30), async {
+            if scenario == Scenario::EditProfile {
+                profile_edits::transition(&trial, &root, &origin).await
+            } else {
+                transition(&trial, &root, &origin, scenario == Scenario::DisableBase).await
+            }
+        })
         .await
         .expect("bounded mirror scoped On/expiry/Off trial")
     })
@@ -560,15 +585,22 @@ async fn run_trial(root_setting: &str, disable_during_scope: bool) {
             std::panic::resume_unwind(panic);
         }
     };
-    let source = verify_state(trial, &outcome).await;
+    let source = verify_state(trial, &outcome, scenario, &root).await;
     verify_wire(&tools, &root, &source, &origin, &outcome).await;
+    if scenario == Scenario::EditProfile {
+        let absent = tokio::fs::read(root.join("invalidated-plain.ts"))
+            .await
+            .unwrap();
+        verify_plain(&tools, &source, &absent).await;
+    }
     write_new(&root, "success.json", &serde_json::to_vec_pretty(&json!({
         "scope":"Actual source1/mirror3 retained HTTP responses/default2; own Lua scope/pending/publication/Base expiry/Off, no GUI client or full C/platform/L15/9A acceptance",
         "requests":[1,0,1], "capacity":2, "explicit_scoped_publication":true,
         "no_source_teletext_inheritance":true, "full_model_clock_av_tsduck_cleanup":true,
-        "automatic_own_base_recovery":!disable_during_scope,
-        "base_disabled_during_scope":disable_during_scope,
-        "expiry_to_current_base_off":disable_during_scope,
+        "automatic_own_base_recovery":scenario != Scenario::DisableBase,
+        "base_disabled_during_scope":scenario == Scenario::DisableBase,
+        "expiry_to_current_base_off":scenario == Scenario::DisableBase,
+        "active_profile_edited":scenario == Scenario::EditProfile,
         "no_implicit_producer_replay":true
     })).unwrap()).await;
 }
@@ -576,11 +608,21 @@ async fn run_trial(root_setting: &str, disable_during_scope: bool) {
 #[tokio::test]
 #[ignore = "requires pinned FFmpeg9/TSDuck and fresh ERSATZRS_TELETEXT_MIRROR_LUA_DIR; no suitable GUI client claim"]
 async fn retained_mirror_owns_scoped_profile_base_expiry_and_off_without_source_inheritance() {
-    run_trial("ERSATZRS_TELETEXT_MIRROR_LUA_DIR", false).await;
+    run_trial("ERSATZRS_TELETEXT_MIRROR_LUA_DIR", Scenario::RestoreBase).await;
 }
 
 #[tokio::test]
 #[ignore = "requires pinned FFmpeg9/TSDuck and fresh ERSATZRS_TELETEXT_LUA_BASE_OFF_DIR; no suitable GUI client claim"]
 async fn retained_lua_on_overrides_admin_base_off_until_original_expiry() {
-    run_trial("ERSATZRS_TELETEXT_LUA_BASE_OFF_DIR", true).await;
+    run_trial("ERSATZRS_TELETEXT_LUA_BASE_OFF_DIR", Scenario::DisableBase).await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned FFmpeg9/TSDuck and fresh ERSATZRS_TELETEXT_LUA_PROFILE_EDIT_DIR; no suitable GUI client claim"]
+async fn retained_lua_profile_edit_withdraws_without_base_substitution_or_expiry_extension() {
+    run_trial(
+        "ERSATZRS_TELETEXT_LUA_PROFILE_EDIT_DIR",
+        Scenario::EditProfile,
+    )
+    .await;
 }
