@@ -2,6 +2,9 @@
 //! Genuine editor and ordinary-output requirements remain separately scoped.
 use super::*;
 
+#[path = "supplementary/arabic.rs"]
+mod arabic;
+
 #[path = "supplementary/generated_edit.rs"]
 mod generated_edit;
 #[path = "supplementary/generated_lifecycle.rs"]

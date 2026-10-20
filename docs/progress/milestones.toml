@@ -10726,7 +10726,7 @@ Missing mandatory evidence (existing implementation is partial; a failing fixed 
 | Base ID / existing owner | User action not yet fully proven | Reuse and closure condition |
 | --- | --- | --- |
 | L15-A2 / F3,V1 | Read correct national characters, mosaics, spacing/height, conceal, flash and applicable X26 at the intended level | Reuse base_conformance, national_base_context, regional_unicode_context, non_latin_coded_context, greek_native_unicode, native_cyrillic_hebrew and native_g2_text. Complete fixed expected glyph/font/attribute/position coverage at1/1.5 and intended fallback; independent decoding must distinguish the retained Greek/Cyrillic/Hebrew namespace/alias failures from product defects. Stock near-matches do not close the failed matrix. Interactive timing/reveal belongs toL15-D |
-| L15-B2 / F1,F2,V2,V4 | Complete the supported base page/subpage/set and attribute/repertoire edit workflow while retaining template/theme/zone/dynamic information | Reuse native_main_capacity, repertoire_editor_interop, native_editor_interop, native_spelling_followup/integration and existing populated-sidecar/template-version/geometry receipts. Bundle remaining supported base editor cases; exact pinnedQTM edits and full retained identity/navigation/attributes/sidecar/Free-Zone-Generated checks, concept preview/reopen and separate explicit publication must cover each outstanding functional boundary. Reuse unchanged publication/stream and localized headed UI proof; test only newly changed admin paths. No general visual theme/template editor or production guide requirement |
+| L15-B2 / F1,F2,V2,V4 | Complete the supported base page/subpage/set and attribute/repertoire edit workflow while retaining template/theme/zone/dynamic information | Reuse native_main_capacity, repertoire_editor_interop, native_editor_interop, native_spelling_followup/integration, arabic_editor and existing populated-sidecar/template-version/geometry receipts. Bundle remaining supported base editor cases; exact pinnedQTM edits and full retained identity/navigation/attributes/sidecar/Free-Zone-Generated checks, concept preview/reopen and separate explicit publication must cover each outstanding functional boundary. Reuse unchanged publication/stream and localized headed UI proof; test only newly changed admin paths. No general visual theme/template editor or production guide requirement |
 | L15-C / F4,V5 | Reliably control all agreed channel bindings/profile/theme/Lua/error/restart cases without disturbing another channel or ordinary playback | Reuse shared_profile_lifecycle_followup for shared settings/deletion, multibinding, rejected/unavailable controls and fresh mirror unbound/Night/Off with cold recovery. active_shared_profile_followup proves shared invalidation/pending/independent republication on retained responses; active_lua_expiry_followup proves real Lua Off/error/automatic Base return; active_mirror_scope_followup now proves live mirror-owned pending/explicit scoped-On, own Base expiry and Off while source1 remains Day. Full model/clock/AV/TSDuck and cleanup retain exact scope. Scoped/future whole-host, durable Lua Continue/Refresh/Reset/errors, atomic_enrichments and headed admin receipts stay valid. Complete remaining broader Lua/precedence/error/inside-after-scope whole-host and browser/stream generation matching, package inactivity and isolation requirements. Suitable client/native platforms remain separate; these scoped proofs do not accept all C/base/9A |
 
 
@@ -10889,26 +10889,39 @@ arabic_g0_assignment retains the Table44/p115 pin, false7/E REDs, exact existing
 font/panel pixels, original G2/G3/composite guards,15 final origin/factory and8
 host cases. New explicit Text conversion below supersedes its old Text rejection.
 
-Current explicit Arabic Text package (partialL15-A1/F3): canonical
-standalone_level15_followup/arabic_unicode owns level15-arabic-unicode/identity.json.
-A real HEAD9ae0088f RED is corrected for all95 qualified G0 and94 G2 glyph-form
-scalars in both47/57 contexts. Original scalar/cell order, actual designation,
-complete native/coded raster equivalence, no-bank output and Level1 fallback
-remain exact. MixedG0/G2/@, inverse generated-Base edits and located unknown/
-wrong-context/unmarked/diacritic/spelling refusals pass; explicit authored raw
-fallback is retained under its existing contract, not forced to canonicalSPACE.
-983 teletext regressions and11 final affected cases pass, with strict FFmpeg
-all-target Clippy. Stock0.2.42 has24 cases:1244 fixed scalar/fallback checks and
-1024 private-slot-only checks, explicitly not normative Arabic glyph conformity.
-Initial wrong fallback/private5F oracle assumptions and style failures remain.
-The pinned QTM1.0 source has no direct ArabicG0 keyboard map; this is not proof
-that its glyph/X26 UI cannot edit Arabic. Actual pinned Arabic edit/concept/
-preview/reexport/reopen/publication remains mandatory. Use the existing X26
-controller next, retaining ArabicG0 sentinels; no editor repair or unchanged
-keyboard retry. Automatic base-letter shaping/bidi/extra aliases are not proven
-by explicit contextual forms; complete A1/A2/B2 and all other finite/end gates
-remain open. Reuse unchanged editor/ordinary stream/Lua/isolation/F6 only in scope.
-No standaloneL15/full9A acceptance, scope waiver, new client trial or push.
+Explicit Arabic Text checkpoint1adae4d4 remains valid (partialL15-A1/F3):
+canonical arabic_unicode owns the HEAD9ae0088f RED,95 G0/94 G2 qualified scalars
+in47/57, exact original text/order/context/fallback/no-bank/raster,983 teletext/
+11 final cases and strict Clippy. Stock24 cases separate1244 fixed scalar/fallback
+checks from1024 private-slot-only checks. Automatic shaping/bidi/extra aliases
+and complete glyph/repertoire acceptance do not follow. Earlier false raw-fallback
+and decoder-private5F expectations remain retained, with unchanged contracts.
+
+Current Arabic editor flow (partialL15-B2/F1,F3,V2): canonical
+standalone_level15_followup/arabic_editor owns level15-arabic-editor/identity.json.
+Both47/57 actually open/edit/save in pinned headed QTM1.0/cac2167, using the
+unchanged existing X26 driver:FE83/G2-23 ->FE85/G2-24 at124/0020,row3/8.
+Concept2, exact shared preview/reexport, SQLite reopen, separate publication3
+and accepted recovery retain original sources/authoring/metadata/selection,
+actual47/57, Base provenance/noLocal/no banks, native ArabicG0 sentinels,
+all pixels outside the cell, page125 and Night/configuration/history. Two
+app tests cover original4+new2 contexts; final non-text escalation rejection
+and the actual2-save gate pass, plus strict web all-target Clippy. Independent
+stock0.2.42 has48 fixed stage/page/subcode/level/X28 observations, distinguishing
+native digits/Level1SPACE from Arabic private slots. This is not full glyph
+conformity, new ordinary HTTP/TSDuck/suitable-client or platform evidence.
+Two controller preflight failures and controlled stop remain: stale source
+operand, then unsupported34->35 driver guard. The supported35->36 tuple closes
+the same edit boundary without changing driver/editor/oracles. Both completed
+containers exit/remove; original failed artifacts remain. Source-only empty
+Arabic keyboard mapping does not disqualify alternative glyph/X26 controls;
+direct G0 glyph edit and other complete editor-family evidence remain required.
+Reuse unmodified localized headed admin, ordinary stream/Lua/isolation/F6 scopes.
+All finite/end gates stay open. Next D: qualify a documented fully private
+ProgDVB configuration/control route before any runtime retry; preserve shared
+settings, no unchanged candidate retry/decoder maintenance. If unavailable,
+retain exact external prerequisite and continue independent C/E1/E2 closure.
+No standaloneL15/full9A acceptance, scope waiver, new push or publication.
 
 The finite base remainder is exactlyA1,A2,B2,C,D,E1,E2 above, plus any actual
 regression against their existing F/V conditions. No character/editor variant is

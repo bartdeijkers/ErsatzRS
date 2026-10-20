@@ -4,6 +4,19 @@ use ersatzrs_web::host::teletext_editorial_designs::{
     NativeTeletextEditorialImportError, NativeTeletextEditorialTtiFailure,
 };
 
+// Fixed semantic operands for the existing generated-Base editor workflow.
+fn glyph_change(context: Context, native: bool) -> (u8, u8, char, char) {
+    if matches!(context.primary, 0x47 | 0x57) {
+        (0x23, 0x24, '\u{fe83}', '\u{fe85}')
+    } else if native {
+        (0x23, 0x24, '£', '$')
+    } else if context.primary == 0x37 {
+        (0x23, 0x24, '£', 'e')
+    } else {
+        (0x23, 0x25, '£', '¥')
+    }
+}
+
 fn request(flow: &Flow, context: Context) -> NativeTeletextEditorialImportRequest {
     request_for(flow, context, false)
 }
@@ -23,6 +36,7 @@ fn request_for(
         .unwrap()
         .records()
         .to_vec();
+    let (before, after, _, _) = glyph_change(context, native);
     let mut targets = Vec::new();
     for record in &mut records {
         if let TeletextTtiRecord::Packet {
@@ -32,14 +46,9 @@ fn request_for(
         } = record
         {
             for (slot, word) in words.iter_mut().enumerate() {
-                if (*word >> 6) & 31 == 15 && *word >> 11 == 0x23 {
+                if (*word >> 6) & 31 == 15 && *word >> 11 == u32::from(before) {
                     targets.push((usize::from(*designation) * 13 + slot, *word));
-                    *word = (*word & 0x7ff)
-                        | (if native || context.primary == 0x37 {
-                            0x24
-                        } else {
-                            0x25
-                        } << 11);
+                    *word = (*word & 0x7ff) | (u32::from(after) << 11);
                 }
             }
         }
@@ -47,7 +56,7 @@ fn request_for(
     assert_eq!(
         targets.len(),
         1,
-        "exact original generated £ word: {targets:?}"
+        "exact original generated Base word: {targets:?}"
     );
     println!(
         "native generated G2 context{:02x} physical target {targets:?}",
@@ -90,13 +99,12 @@ fn non_text_request(flow: &Flow, context: Context) -> NativeTeletextEditorialImp
         .unwrap()
         .records()
         .to_vec();
+    let (_, after, _, _) = glyph_change(context, false);
     let mut count = 0;
     for record in &mut records {
         if let TeletextTtiRecord::Packet { row: 26, words, .. } = record {
             for word in words {
-                if (*word >> 6) & 31 == 15
-                    && *word >> 11 == if context.primary == 0x37 { 0x24 } else { 0x25 }
-                {
+                if (*word >> 6) & 31 == 15 && *word >> 11 == u32::from(after) {
                     // A Base text glyph must not become an authored colour writer.
                     *word = (*word & 63) | (1 << 11);
                     count += 1;
@@ -116,7 +124,7 @@ fn non_text_request(flow: &Flow, context: Context) -> NativeTeletextEditorialImp
 // Explicit Base text intent does not authorize invented Local attribute writes.
 #[tokio::test]
 async fn generated_native_g2_non_text_edit_rejects_without_concept_or_channel_damage() {
-    for context in CONTEXTS_G2 {
+    for context in CONTEXTS_G2.into_iter().chain(arabic::CONTEXTS_ARABIC) {
         let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
             context.response,
             Fixture::new_persistent().await,
@@ -155,6 +163,7 @@ async fn editor_request(
     native: bool,
 ) -> NativeTeletextEditorialImportRequest {
     if let Some(directory) = editor {
+        let (before, after, _, _) = glyph_change(context, native);
         qtm::inputs_for_layout(
             directory,
             "standalone-generated-base-g2",
@@ -163,7 +172,7 @@ async fn editor_request(
             || {
                 json!({
                     "kind":"base_text_g2","primary":context.primary,"row":3,"column":8,
-                    "mode":15,"from":35,"to":if native || context.primary == 0x37 {36} else {37},
+                    "mode":15,"from":before,"to":after,
                     "semantic_word":1,"designation":0,"triplet_slot":1,
                     "consumer_visual_columns":[8],"no_optional_resource_banks":true
                 })
@@ -213,15 +222,17 @@ fn assert_base_provenance(
     let TeletextRunContent::Text { text } = &row.runs[0].content else {
         panic!("retain Base Text role")
     };
+    assert_eq!(text.chars().next(), Some(glyph_change(context, native).3));
     assert_eq!(
-        text.chars().next(),
-        Some(if native {
-            '$'
-        } else if context.primary == 0x37 {
-            'e'
-        } else {
-            '¥'
-        })
+        encoded
+            .declared()
+            .semantic()
+            .effective_presentation(page.address)
+            .unwrap()
+            .primary_designation()
+            .unwrap()
+            .get(),
+        context.primary,
     );
 }
 
@@ -277,6 +288,7 @@ async fn run(context: Context, editor: Option<&Path>, native: bool) {
     generations::assert_same_output_width(&recover(&fixture, 2).await, &flow.accepted[1], 480);
     assert_retained_storage(&fixture, &flow).await;
     if let Some(directory) = editor {
+        let (_, _, expected, replacement) = glyph_change(context, native);
         for (name, service) in [
             ("before", flow.accepted[0].service()),
             ("after", accepted.service()),
@@ -297,7 +309,7 @@ async fn run(context: Context, editor: Option<&Path>, native: bool) {
             &json!({
                 "scope":"Actual pinned headed QTM save, explicit Base-text concept/shared preview/reexport/reopen, separate publication and accepted recovery/isolation; no ordinary stream/client/fullL15 acceptance",
                 "primary":context.primary,"row":3,"column":8,"word":1,"schema":if native {24} else {23},
-                "expected":'£',"replacement":if native {'$'} else if context.primary==0x37 {'e'} else {'¥'},
+                "expected":expected,"replacement":replacement,
                 "no_optional_resource_banks":true,"original_sources_metadata_receipts_other_page_and_night_unchanged":true,
                 "concept_revision":concept.head().revision,"published_generation":accepted.generation().id
             }),
@@ -308,7 +320,7 @@ async fn run(context: Context, editor: Option<&Path>, native: bool) {
 
 #[tokio::test]
 async fn generated_native_g2_text_edit_import_preview_reexport_reopen_keeps_base_provenance() {
-    for context in CONTEXTS_G2 {
+    for context in CONTEXTS_G2.into_iter().chain(arabic::CONTEXTS_ARABIC) {
         Box::pin(run(context, None, false)).await;
     }
 }
@@ -345,4 +357,17 @@ async fn actual_qtm_lossless_g2_spelling_import_preview_publish_reopen() {
         true,
     ))
     .await;
+}
+
+#[tokio::test]
+#[ignore = "requires two pinned headed QTM1.0 saves in fresh ERSATZRS_TELETEXT_ARABIC_G2_EDITOR_DIR"]
+async fn actual_qtm_arabic_g2_edit_import_preview_publish_reopen() {
+    let root =
+        std::path::PathBuf::from(super::super::super::super::super::client_capture::selected(
+            "ERSATZRS_TELETEXT_ARABIC_G2_EDITOR_DIR",
+        ));
+    std::fs::create_dir(&root).expect("Arabic editor destination must be new");
+    for context in arabic::CONTEXTS_ARABIC {
+        Box::pin(run(context, Some(&root.join(context.name)), false)).await;
+    }
 }
