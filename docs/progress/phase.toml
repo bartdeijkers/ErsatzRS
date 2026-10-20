@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 grouped F3 spacing and F1/V2 editor/publication verified in scope; next V3 ordinary delivery identity, X1/X2/X3 open, no DVBViewer/device trial'
+current_focus = 'P9A-04 scoped editor-to-ordinary delivery proven; one startup Body EOF unclassified, V3/V6 safety and X1/X2/X3 remain open; no DVBViewer/device trial'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -95,10 +95,15 @@ SaveAs, exact whole-TTI/sidecar preservation, concept/preview/reexport/reopen an
 separate explicit publication/cold recovery with Night unchanged. Initial native2
 pass; only the affected actual-editor case repeats after corrected2.5 selection,
 with identical saved bytes. Inspected captures and both tool versions are retained.
-Next connect existing V3 ordinary edited-generation proof to accepted-byte identity;
-reuse valid AV/transport and add only a missing boundary observation, without a
-per-variant full-chain replay. Suitable-client/end-flow proof remains mandatory.
-No client hunt, decoder maintenance, physical-device or DVBViewer work follows.
+physical_spacing_followup/delivery now proves retained genuine editor bytes to
+fresh-receipt concept/publication/reopen and two ordinary TCP outputs at capacity2:
+complete own models, rejected old Day generation, source AV/TSDuck and cleanup.
+No editor replay. Initial Body EOF remains unclassified; same source/editor bytes
+pass with the existing bounded WARN trace. No product fix or fullV3/9A claim.
+Next retain bounded raw partial responses on Body errors in the existing capture
+helper, then one same-source qualification; diagnose only a reproduced failure.
+Keep F6 closed without a relevant handoff regression. No per-variant full-chain
+replay, client hunt, decoder maintenance, physical-device or DVBViewer work.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
 list, separated into missing product, mandatory proof and external prerequisites.

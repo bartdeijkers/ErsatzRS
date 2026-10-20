@@ -3,6 +3,9 @@
 
 use super::*;
 
+#[path = "physical_spacing/delivery.rs"]
+mod delivery;
+
 #[tokio::test]
 async fn enhanced_spacing_bundle_import_preview_reexport_reopen_preserves_publication() {
     Box::pin(run(None)).await;
