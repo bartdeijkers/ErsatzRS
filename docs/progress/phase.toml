@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: C shared-base browser/stream generation boundary proven; remaining Lua/scope cases and D/E1/E2/end gates stay open'
+current_focus = 'P9A-04 standalone Level 1/1.5: active Lua On/admin BaseOff precedence proven; next active scoped-profile invalidation, D/E1/E2/end gates stay open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -388,10 +388,17 @@ no browser replay or product change. Strict web Clippy/fmt pass; canonical
 P9A-04/level15-shared-profile-browser/identity.json owns artifacts/limits.
 Reuse existing matched SSR/WASM and unchanged broader editor/admin/retained-reader/
 Lua/AV/F6 proofs in scope, not exact clean-HEAD/fullCI/platform acceptance.
-Next C: close remaining agreed Lua/precedence/error/inside-after-scope conditions
-from existing durable/scoped-host receipts; implement/prove only an uncovered
-boundary. D native input/operator setup, E1/E2 native/adoption and all remaining
+Lua_base_precedence_followup below now proves the concrete admin BaseOff/active
+On boundary; other agreed conditions still require complete scoped evidence. D native input/operator setup, E1/E2 native/adoption and all remaining
 finite/base/full9A/enhanced X1/X3 requirements stay mandatory. No push/publication.
+
+Current lua_base_precedence_followup proves active Lua On survives admin
+BaseOff until original12s finish, then current Off; source Day/AV stays unchanged.
+Both original/new native cases, full wire/clock/AV/TSDuck/cold-state/capacity0,
+independent review and strict Clippy/fmt pass. P9A-04 canonical receipt owns
+scope/reuse; no production or full C/base/9A acceptance claim. Next C: active
+scoped-only profile edits without Base substitution, implicit replay/publication
+or expiry extension. D/E1E2/X1X3 and all finite/end gates remain. No push.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

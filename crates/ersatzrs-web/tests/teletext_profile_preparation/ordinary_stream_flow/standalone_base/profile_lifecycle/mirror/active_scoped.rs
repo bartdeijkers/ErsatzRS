@@ -299,7 +299,26 @@ async fn hold_off(
     (start, updates::positions(origin)[1])
 }
 
-async fn transition(trial: &Trial, root: &Path, origin: &live_tcp::Origin) -> Outcome {
+async fn disable_base(trial: &Trial) {
+    let disabled = trial
+        .fixture
+        .state
+        .application
+        .disable_channel_teletext_binding(3, ADDON, trial.mirror.revision)
+        .await
+        .unwrap();
+    let disabled = saved(disabled);
+    assert_eq!(disabled.channel_id, 3);
+    assert!(!disabled.enabled);
+    assert_eq!(disabled.revision, trial.mirror.revision + 1);
+}
+
+async fn transition(
+    trial: &Trial,
+    root: &Path,
+    origin: &live_tcp::Origin,
+    disable_during_scope: bool,
+) -> Outcome {
     let initial = updates::wait_pair(origin, [0; 2], &trial.base[0], &trial.base[1]).await;
     updates::write_stage(root, "initial", &initial);
     let interval = publish_lua(trial).await;
@@ -309,6 +328,11 @@ async fn transition(trial: &Trial, root: &Path, origin: &live_tcp::Origin) -> Ou
     let scoped = accept_scope(trial, request).await;
     let first = pair_on(origin, after, trial, &scoped).await;
     updates::write_stage(root, "scoped", &first);
+    if disable_during_scope {
+        disable_base(trial).await;
+        let retained = pair_on(origin, updates::positions(origin), trial, &scoped).await;
+        updates::write_stage(root, "admin-off-scoped-on", &retained);
+    }
     let start = updates::positions(origin)[1];
     let remaining = (interval.finish - chrono::Duration::milliseconds(700))
         .signed_duration_since(Utc::now())
@@ -330,27 +354,20 @@ async fn transition(trial: &Trial, root: &Path, origin: &live_tcp::Origin) -> Ou
             .unwrap(),
     )
     .await;
-    let restored = updates::wait_pair(
-        origin,
-        updates::positions(origin),
-        &trial.base[0],
-        &trial.base[1],
-    )
-    .await;
-    let repeated_after = updates::write_stage(root, "restored-own-base", &restored);
-    let repeated = updates::wait_pair(origin, repeated_after, &trial.base[0], &trial.base[1]).await;
-    updates::write_stage(root, "repeated-own-base", &repeated);
-    let disabled = trial
-        .fixture
-        .state
-        .application
-        .disable_channel_teletext_binding(3, ADDON, trial.mirror.revision)
-        .await
-        .unwrap();
-    let disabled = saved(disabled);
-    assert_eq!(disabled.channel_id, 3);
-    assert!(!disabled.enabled);
-    assert_eq!(disabled.revision, trial.mirror.revision + 1);
+    if !disable_during_scope {
+        let restored = updates::wait_pair(
+            origin,
+            updates::positions(origin),
+            &trial.base[0],
+            &trial.base[1],
+        )
+        .await;
+        let repeated_after = updates::write_stage(root, "restored-own-base", &restored);
+        let repeated =
+            updates::wait_pair(origin, repeated_after, &trial.base[0], &trial.base[1]).await;
+        updates::write_stage(root, "repeated-own-base", &repeated);
+        disable_base(trial).await;
+    }
     let off = hold_off(origin, &trial.base[0]).await;
     write_new(
         root,
@@ -359,6 +376,7 @@ async fn transition(trial: &Trial, root: &Path, origin: &live_tcp::Origin) -> Ou
         "interval": {"start":interval.start,"finish":interval.finish,"playout_id":95,
             "channel_id":3,"profile_id":trial.target.id,"profile_revision":trial.target.revision},
         "pending_window": pending, "on_window": on, "off_window": off,
+        "base_disabled_during_scope": disable_during_scope,
             "source_channel":1, "mirror_output":3, "requests":[1,0,1], "capacity":2
         }))
         .unwrap(),
@@ -495,10 +513,8 @@ async fn verify_state(mut trial: Trial, outcome: &Outcome) -> Vec<u8> {
     trial.source
 }
 
-#[tokio::test]
-#[ignore = "requires pinned FFmpeg9/TSDuck and fresh ERSATZRS_TELETEXT_MIRROR_LUA_DIR; no suitable GUI client claim"]
-async fn retained_mirror_owns_scoped_profile_base_expiry_and_off_without_source_inheritance() {
-    let root = PathBuf::from(client_capture::selected("ERSATZRS_TELETEXT_MIRROR_LUA_DIR"));
+async fn run_trial(root_setting: &str, disable_during_scope: bool) {
+    let root = PathBuf::from(client_capture::selected(root_setting));
     tokio::fs::create_dir(&root).await.unwrap();
     live_tcp::terminal_trace(&root).unwrap();
     let tools = Tools::load().await;
@@ -513,9 +529,12 @@ async fn retained_mirror_owns_scoped_profile_base_expiry_and_off_without_source_
         live_tcp::Observer::start_for(&origin, 3, "night"),
     ];
     let outcome = AssertUnwindSafe(async {
-        tokio::time::timeout(Duration::from_secs(30), transition(&trial, &root, &origin))
-            .await
-            .expect("bounded mirror scoped On/expiry/Off trial")
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            transition(&trial, &root, &origin, disable_during_scope),
+        )
+        .await
+        .expect("bounded mirror scoped On/expiry/Off trial")
     })
     .catch_unwind()
     .await;
@@ -547,6 +566,21 @@ async fn retained_mirror_owns_scoped_profile_base_expiry_and_off_without_source_
         "scope":"Actual source1/mirror3 retained HTTP responses/default2; own Lua scope/pending/publication/Base expiry/Off, no GUI client or full C/platform/L15/9A acceptance",
         "requests":[1,0,1], "capacity":2, "explicit_scoped_publication":true,
         "no_source_teletext_inheritance":true, "full_model_clock_av_tsduck_cleanup":true,
-        "automatic_own_base_recovery":true, "no_implicit_producer_replay":true
+        "automatic_own_base_recovery":!disable_during_scope,
+        "base_disabled_during_scope":disable_during_scope,
+        "expiry_to_current_base_off":disable_during_scope,
+        "no_implicit_producer_replay":true
     })).unwrap()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned FFmpeg9/TSDuck and fresh ERSATZRS_TELETEXT_MIRROR_LUA_DIR; no suitable GUI client claim"]
+async fn retained_mirror_owns_scoped_profile_base_expiry_and_off_without_source_inheritance() {
+    run_trial("ERSATZRS_TELETEXT_MIRROR_LUA_DIR", false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned FFmpeg9/TSDuck and fresh ERSATZRS_TELETEXT_LUA_BASE_OFF_DIR; no suitable GUI client claim"]
+async fn retained_lua_on_overrides_admin_base_off_until_original_expiry() {
+    run_trial("ERSATZRS_TELETEXT_LUA_BASE_OFF_DIR", true).await;
 }
