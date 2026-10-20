@@ -171,7 +171,8 @@ static DriverContext driverContext() {
     const bool generatedBaseG2 = mode == "single-page-base-g2";
     const bool mainG2 = mode == "single-page-main-g2" || generatedBaseG2;
     const bool nativeG0 = mode == "single-page-native-g0";
-    const bool baseSpacing = mode == "single-page-base-spacing";
+    const bool baseSpacing = mode == "single-page-base-spacing"
+        || mode == "single-page-enhanced-spacing";
     if (nativeG0 != qEnvironmentVariableIsSet("ERSATZRS_QTM_NATIVE_G0_UNICODE"))
         qFatal("Native G0 input requires exactly the fixed native trial");
     const int nativeUnicode = nativeG0 ? boundedDecimal("ERSATZRS_QTM_NATIVE_G0_UNICODE", 0xffff) : 0;
@@ -1555,6 +1556,51 @@ static void editBaseSpacing(QMainWindow *main, const DriverContext &context) {
     auto insertAction = named(main->menuBar()->actions(), "Insert");
     auto insert = insertAction->menu();
     if (!insert) qFatal("Fixed Insert menu absent");
+    if (qgetenv("ERSATZRS_QTM_DRIVER_MODE") == "single-page-enhanced-spacing") {
+        // Populate ordinary text first. The unchanged editor then inserts all
+        // four enhanced controls and their resets through its visible menus.
+        QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, QPoint(6, 45));
+        QTest::keyClicks(view, " A  f  B   C    Z", Qt::NoModifier, 20);
+        struct Edit { int column; const char *group; const char *action; };
+        for (const auto &edit : std::array<Edit, 9>{{
+            {0, "Alphanumeric colour", "Black"}, {2, "Alphanumeric colour", "White"},
+            {3, "Mosaic colour", "Black"}, {5, "Alphanumeric colour", "White"},
+            {6, "Text size", "Double width"}, {9, "Text size", "Normal size"},
+            {10, "Text size", "Double size"}, {13, "Text size", "Normal size"},
+            {14, "Alphanumeric colour", "White"}
+        }}) {
+            auto groupAction = named(insert->actions(), edit.group);
+            auto group = groupAction->menu();
+            if (!group) qFatal("Fixed enhanced spacing submenu absent");
+            auto action = named(group->actions(), edit.action);
+            QSignalSpy triggered(action, &QAction::triggered);
+            if (!triggered.isValid()) qFatal("Fixed enhanced spacing signal unavailable");
+            QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
+                QPoint(edit.column * 12 + 6, 45));
+            QTest::mouseClick(main->menuBar(), Qt::LeftButton, Qt::NoModifier,
+                main->menuBar()->actionGeometry(insertAction).center());
+            if (!QTest::qWaitFor([insert] { return insert->isVisible(); }, 3000))
+                qFatal("Actual enhanced spacing Insert menu did not expose");
+            interiorDefinitionMenuSelect(insert, groupAction);
+            QTest::keyClick(insert, Qt::Key_Right);
+            if (!QTest::qWaitFor([group] { return group->isVisible(); }, 3000))
+                qFatal("Actual enhanced spacing submenu did not expose");
+            interiorDefinitionMenuSelect(group, action);
+            const QString stage = QString("enhanced-spacing-menu-%1").arg(edit.column);
+            if (!group->grab().save(QString("/work/")
+                + context.captureName(stage.toUtf8().constData())))
+                qFatal("Actual enhanced spacing menu capture failed");
+            QTest::keyClick(group, Qt::Key_Return);
+            if (!QTest::qWaitFor([&triggered, main] {
+                return triggered.count() == 1 && main->isWindowModified();
+            }, 3000)) qFatal("Actual enhanced spacing action did not trigger exactly once");
+        }
+        if (!view->grab().save(QString("/work/")
+            + context.captureName("enhanced-spacing-edited-widget")))
+            qFatal("Actual enhanced spacing widget capture failed");
+        std::puts("QTM actual enhanced spacing: row4 AlphaBlack0 MosaicBlack3 DoubleWidth6 DoubleSize10 and exact resets via native menus");
+        return;
+    }
     auto holdMenuAction = named(insert->actions(), "Mosaics hold");
     auto holdMenu = holdMenuAction->menu();
     if (!insert || !holdMenu) qFatal("Fixed Base spacing menu chain absent");
@@ -2662,7 +2708,9 @@ extern "C" int _ZN16QCoreApplication4execEv() {
         if (destination.exists() || destination.isSymLink())
             qFatal("Audit destination must not exist or be a symlink");
         bool selected = false;
-        const bool level15 = context.editMainG2 || context.editNativeG0 || context.editBaseSpacing;
+        const bool level15 = context.editMainG2 || context.editNativeG0
+            || (context.editBaseSpacing
+                && qgetenv("ERSATZRS_QTM_DRIVER_MODE") == "single-page-base-spacing");
         const QString level = level15 ? "1.5" : "2.5";
         for (QRadioButton *radio : main->findChildren<QRadioButton *>())
             if (radio->text() == level) { radio->click(); selected = radio->isChecked(); }

@@ -5,13 +5,19 @@ use super::*;
 
 #[tokio::test]
 async fn enhanced_spacing_bundle_import_preview_reexport_reopen_preserves_publication() {
-    let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
-        held_mosaics::response,
-        Fixture::new_persistent().await,
-        channel_documents::policy,
-        authoring_metadata::write_compact,
-    ))
-    .await;
+    Box::pin(run(None)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned headed QTM save in fresh ERSATZRS_TELETEXT_SPACING_EDITOR_DIR"]
+async fn actual_qtm_enhanced_spacing_menus_import_preview_publish_reopen() {
+    let root = std::path::PathBuf::from(super::super::super::client_capture::selected(
+        "ERSATZRS_TELETEXT_SPACING_EDITOR_DIR",
+    ));
+    Box::pin(run(Some(&root))).await;
+}
+
+fn expected_request(flow: &Flow) -> NativeTeletextEditorialImportRequest {
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
     let file = request
         .files
@@ -40,7 +46,42 @@ async fn enhanced_spacing_bundle_import_preview_reexport_reopen_preserves_public
         policy().tti,
     )
     .unwrap();
-    let expected_files = request.files.clone();
+    request
+}
+
+async fn genuine_edit(directory: &Path, flow: &Flow) -> NativeTeletextEditorialImportRequest {
+    qtm::inputs_for_layout(
+        directory,
+        "enhanced-physical-spacing",
+        flow,
+        [0, 0, 0],
+        || {
+            json!({"kind":"enhanced_spacing","editor_level":"2.5","row":4,"consumer_visual_columns":[0,3,6,10],
+            "codes":[0,16,14,15],"columns":[0,3,6,10],"no_optional_resource_banks":true})
+        },
+    );
+    qtm::completion(directory).await;
+    let bytes =
+        live_client::read_bounded(&directory.join("edited.tti"), policy().tti.max_bytes).unwrap();
+    qtm::actual_request(directory, flow, &bytes)
+}
+
+async fn run(editor: Option<&Path>) {
+    let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
+        held_mosaics::response,
+        Fixture::new_persistent().await,
+        channel_documents::policy,
+        authoring_metadata::write_compact,
+    ))
+    .await;
+    let expected = expected_request(&flow);
+    let request = if let Some(directory) = editor {
+        genuine_edit(directory, &flow).await
+    } else {
+        expected_request(&flow)
+    };
+    national_editor::assert_files(&request.files, &expected.files);
+    assert_eq!(request.sidecar, expected.sidecar);
     let concept = import(&fixture, request).await;
     let restored = drcs_bitmap::restored(&fixture, &concept).await;
     let original = flow.saved[0].candidate();
@@ -63,7 +104,7 @@ async fn enhanced_spacing_bundle_import_preview_reexport_reopen_preserves_public
         external_editor_probe::preview_page(flow.accepted[0].service(), 125)
     );
     let reexport = drcs_bitmap::reexport(&fixture, &concept).await;
-    national_editor::assert_files(reexport.files(), &expected_files);
+    national_editor::assert_files(reexport.files(), &expected.files);
     assert_original_pointers_with_width(&fixture, &flow, 480).await;
     fixture = fixture.reopen().await;
     let reopened = drcs_bitmap::restored(&fixture, &concept).await;
@@ -79,5 +120,31 @@ async fn enhanced_spacing_bundle_import_preview_reexport_reopen_preserves_public
     );
     assert_original_pointers_with_width(&fixture, &flow, 480).await;
     assert!(fixture.playout.try_recv().is_err());
+    if let Some(directory) = editor {
+        let accepted = publish_and_accept(&fixture, &flow, &concept).await;
+        assert_ne!(
+            designs::units(accepted.service()),
+            designs::units(flow.accepted[0].service())
+        );
+        assert_eq!(
+            external_editor_probe::preview_page(accepted.service(), 124),
+            preview
+        );
+        fixture = fixture.reopen().await;
+        generations::assert_same_output_width(&recover(&fixture, 1).await, &accepted, 480);
+        generations::assert_same_output_width(&recover(&fixture, 2).await, &flow.accepted[1], 480);
+        assert_retained_storage(&fixture, &flow).await;
+        qtm::json_new(
+            directory,
+            "success.json",
+            &json!({
+                "scope":"Genuine pinned headed native menus/SaveAs -> concept/shared preview/reexport/reopen -> explicit publication/cold recovery. No ordinary HTTP/client/full9A claim.",
+                "codes":[0,16,14,15],"row":4,"columns":[0,3,6,10],
+                "design_id":concept.head().id,"revision":concept.head().revision,
+                "generation_id":accepted.generation().id,"night_unchanged":true,
+                "originals_metadata_receipts_preserved":true,"resource_assets":0
+            }),
+        );
+    }
     fixture.state.pool.close().await;
 }
