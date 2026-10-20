@@ -807,3 +807,117 @@ for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: fal
       } finally { db.close(); await context.close(); }
     });
 }
+
+
+for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: false },
+  { module: 'nl', language: 'nl', js: false, dark: true }] as const) {
+  test(`shared profile generations match browser and ordinary streams (${variant.language}/${variant.js ? 'JS' : 'no-JS'})`,
+    async ({ browser, isolatedWebHost }, testInfo) => {
+      test.skip(process.platform === 'win32', 'Intentional POSIX synthetic package; native Windows remains separate.');
+      test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+      test.setTimeout(300_000);
+      const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath,
+        { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+      fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
+      const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL,
+        javaScriptEnabled: variant.js, viewport: { width: 1280, height: 900 } });
+      const pages = [await context.newPage(), await context.newPage()];
+      const errors: string[] = [];
+      for (const page of pages) {
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      }
+      const prefix = testInfo.outputPath('shared');
+      copyFileSync(join(fixture.root, 'synthetic-client-source.ts'), `${prefix}-source.ts`);
+      const current = () => fixture.channels.map(channel => fixture.database.prepare(
+        'SELECT g.* FROM "TeletextAcceptedGenerationCurrent" c JOIN "TeletextAcceptedGeneration" g ON g."Id"=c."GenerationId" AND g."ChannelId"=c."ChannelId" WHERE c."ChannelId"=?')
+        .get(channel) as { Id: number; RequestId: number; ArtifactDigest: string } | undefined);
+      const captures = async (stage: string, emitted: readonly [boolean, boolean]) => {
+        fixture.resetSourceStart();
+        await Promise.all(fixture.channels.map((channel, index) => capture(isolatedWebHost.baseURL,
+          channel, `${prefix}-${stage}-${index}.ts`, emitted[index])));
+      };
+      const observe = async (urls: string[], states: readonly string[], theme: 'day' | 'night', stage: string) => {
+        const generations = current();
+        for (const [index, page] of pages.entries()) {
+          await page.goto(urls[index]); await ready(page, variant.js);
+          await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', states[index]);
+          await expect(page.getByTestId('teletext-publication-status')).toHaveText(text(variant.module)(
+            { selected: 'TeletextPublicationSelected', pending: 'TeletextPublicationPending', unavailable: 'TeletextPublicationUnavailable' }[states[index]]!));
+          await expect(page.getByTestId('teletext-publication-publish-form').locator('[name="expected_generation_id"]'))
+            .toHaveValue(String(generations[index]!.Id));
+          await raster(page, theme, '200');
+          await page.getByTestId('teletext-publication').scrollIntoViewIfNeeded();
+          await page.screenshot({ path: testInfo.outputPath(`${stage}-${index}.png`) });
+        }
+        writeFileSync(`${prefix}-${stage}.generations.json`, JSON.stringify({ generations, states }, null, 2));
+      };
+      try {
+        await pages[0].request.post('/admin-api/settings/ui/save',
+          { form: { language: 'en-us', is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], variant.js);
+        const shared = await createProfile(pages[0], fixture, 'day', variant.js);
+        const urls: string[] = [];
+        for (const [index, page] of pages.entries()) {
+          await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, variant.js);
+          await bind(page, fixture, shared, variant.js);
+          urls.push(await prepare(page, fixture, `Shared initial ${index}`, variant.js));
+          await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), variant.js);
+          await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), variant.js);
+        }
+        expect(fixture.calls()).toEqual(['day', 'day']);
+        const before = current(); expect(before.every(Boolean)).toBe(true);
+        const safe = restartSafety(fixture);
+        await pages[0].request.post('/admin-api/settings/ui/save',
+          { form: { language: variant.language, is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+        await observe(urls, ['selected', 'selected'], 'day', 'initial');
+        await captures('initial', [true, true]);
+        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], variant.js);
+        const form = pages[0].locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id="${shared}"]`);
+        const details = form.locator('..');
+        if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
+        await form.locator('[data-setting-key="THEME"] [name$=".value"]').selectOption('night');
+        await submit(pages[0], form, text(variant.module)('TeletextProfileSave'), variant.js);
+        expect(fixture.theme(shared)).toBe('night');
+        expect(current()).toEqual(before); expect(fixture.calls()).toEqual(['day', 'day']);
+        await observe(urls, ['unavailable', 'unavailable'], 'day', 'invalidated');
+        await captures('invalidated', [false, false]);
+        for (const [index, page] of pages.entries()) {
+          await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, variant.js);
+          // The existing prepare helper uses EN labels; input language alone is
+          // switched for preparation, then both publication views return to NL/EN.
+          await page.request.post('/admin-api/settings/ui/save',
+            { form: { language: 'en-us', is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+          await page.reload(); await ready(page, variant.js);
+          urls[index] = await prepare(page, fixture, `Shared changed ${index}`, variant.js);
+          await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), variant.js);
+        }
+        await pages[0].request.post('/admin-api/settings/ui/save',
+          { form: { language: variant.language, is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+        expect(current()).toEqual(before); expect(fixture.calls()).toEqual(['day', 'day', 'night', 'night']);
+        await observe(urls, ['pending', 'pending'], 'night', 'pending');
+        await captures('pending', [false, false]);
+        await submit(pages[0], pages[0].getByTestId('teletext-publication-publish-form'), text(variant.module)('TeletextPublicationPublish'), variant.js);
+        const first = current(); expect(first[0]!.Id).not.toBe(before[0]!.Id); expect(first[1]).toEqual(before[1]);
+        await observe(urls, ['selected', 'pending'], 'night', 'first');
+        await captures('first', [true, false]);
+        expect(current()).toEqual(first);
+        await submit(pages[1], pages[1].getByTestId('teletext-publication-publish-form'), text(variant.module)('TeletextPublicationPublish'), variant.js);
+        const final = current(); expect(final[0]).toEqual(first[0]); expect(final[1]!.Id).not.toBe(before[1]!.Id);
+        await observe(urls, ['selected', 'selected'], 'night', 'final');
+        await captures('final', [true, true]);
+        expect(current()).toEqual(final); expect(fixture.calls()).toEqual(['day', 'day', 'night', 'night']);
+        // Publication intentionally changes history; every other snapshot field
+        // must stay exact, including package activation and worker identity.
+        const after = restartSafety(fixture);
+        const withoutPublication = (value: unknown) => { const { publication, ...rest } = value as Record<string, unknown>; return rest; };
+        expect(withoutPublication(after.snapshot)).toEqual(withoutPublication(safe.snapshot));
+        expect(after.workerEpoch).toBe(safe.workerEpoch);
+        expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
+        writeFileSync(testInfo.outputPath('shared-profile-success.json'), JSON.stringify({ before, first, final,
+          channels: fixture.channels, sharedProfile: shared, browser: browser.version(), language: variant.language,
+          javascript: variant.js, dark: variant.dark, errors,
+          scope: 'Fresh ordinary response generation/browser agreement; retained-reader invalidation, other admin cultures and native/platform/client proofs reused separately.' }, null, 2));
+      } finally { await context.close(); fixture.close(); }
+    });
+}

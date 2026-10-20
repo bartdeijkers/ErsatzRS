@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: C shared-profile browser/stream generation matching next; D native media acquisition/configuration prerequisite remains external, all end gates stay open'
+current_focus = 'P9A-04 standalone Level 1/1.5: C shared-base browser/stream generation boundary proven; remaining Lua/scope cases and D/E1/E2/end gates stay open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -371,12 +371,27 @@ GET or AV/teletext decode; shared files and normal process/temp/HTTP cleanup pas
 This is a current client-configuration/control limit, not an ErsatzRS/decoder
 defect. Need supported private input/decoder setup or usable native operator
 session, then every ordinary HTTP/X26/page/subpage/update/reveal/flash oracle.
-Stop unchanged retries or client maintenance. Next independent C: browser/stream
-generation matching after shared-profile invalidation and separate explicit
-republication using existing host/native/browser fixtures; reuse unchanged
-editor/admin/Lua/isolation/AV/F6. P9A-04/canonical channel_control_followup owns
-pins, negatives and closure. All finite/base/full9A gates remain. Prior specific
+Stop unchanged retries or client maintenance. P9A-04/canonical
+channel_control_followup owns pins, negatives and closure. The independent C
+shared-base browser/stream boundary below is now proven. Prior specific
 push47101154 is fulfilled; local checkpoints only, no new push/publication.
+
+Current shared_profile_browser_followup closes the shared-base L15-C joined
+browser/ordinary-stream boundary: actual headed EN/JS/light and NL/noJS/dark,
+five states/two channels, old unavailable and new pending absence, isolated first
+then separate second publication; exact IDs/preview and20 captures agree.
+Both native full-model/source-clock/AV/TSDuck verifications and30 independent
+Level1.5 observations pass. Both hosts exit normally; configuration/package/
+worker and producer-call guards hold. New verifier's Off/authored-PTS applicability
+failure is retained and corrected using unchanged strict plain/On helpers only;
+no browser replay or product change. Strict web Clippy/fmt pass; canonical
+P9A-04/level15-shared-profile-browser/identity.json owns artifacts/limits.
+Reuse existing matched SSR/WASM and unchanged broader editor/admin/retained-reader/
+Lua/AV/F6 proofs in scope, not exact clean-HEAD/fullCI/platform acceptance.
+Next C: close remaining agreed Lua/precedence/error/inside-after-scope conditions
+from existing durable/scoped-host receipts; implement/prove only an uncovered
+boundary. D native input/operator setup, E1/E2 native/adoption and all remaining
+finite/base/full9A/enhanced X1/X3 requirements stay mandatory. No push/publication.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

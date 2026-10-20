@@ -10727,7 +10727,7 @@ Missing mandatory evidence (existing implementation is partial; a failing fixed 
 | --- | --- | --- |
 | L15-A2 / F3,V1 | Read correct national characters, mosaics, spacing/height, conceal, flash and applicable X26 at the intended level | Reuse base_conformance, national_base_context, regional_unicode_context, non_latin_coded_context, greek_native_unicode, native_cyrillic_hebrew and native_g2_text. Complete fixed expected glyph/font/attribute/position coverage at1/1.5 and intended fallback; independent decoding must distinguish the retained Greek/Cyrillic/Hebrew namespace/alias failures from product defects. Stock near-matches do not close the failed matrix. Interactive timing/reveal belongs toL15-D |
 | L15-B2 / F1,F2,V2,V4 | Complete the supported base page/subpage/set and attribute/repertoire edit workflow while retaining template/theme/zone/dynamic information | Reuse native_main_capacity, repertoire_editor_interop, native_editor_interop, native_spelling_followup/integration, arabic_editor and existing populated-sidecar/template-version/geometry receipts. Bundle remaining supported base editor cases; exact pinnedQTM edits and full retained identity/navigation/attributes/sidecar/Free-Zone-Generated checks, concept preview/reopen and separate explicit publication must cover each outstanding functional boundary. Reuse unchanged publication/stream and localized headed UI proof; test only newly changed admin paths. No general visual theme/template editor or production guide requirement |
-| L15-C / F4,V5 | Reliably control all agreed channel bindings/profile/theme/Lua/error/restart cases without disturbing another channel or ordinary playback | Reuse shared_profile_lifecycle_followup for shared settings/deletion, multibinding, rejected/unavailable controls and fresh mirror unbound/Night/Off with cold recovery. active_shared_profile_followup proves shared invalidation/pending/independent republication on retained responses; active_lua_expiry_followup proves real Lua Off/error/automatic Base return; active_mirror_scope_followup now proves live mirror-owned pending/explicit scoped-On, own Base expiry and Off while source1 remains Day. Full model/clock/AV/TSDuck and cleanup retain exact scope. Scoped/future whole-host, durable Lua Continue/Refresh/Reset/errors, atomic_enrichments and headed admin receipts stay valid. Complete remaining broader Lua/precedence/error/inside-after-scope whole-host and browser/stream generation matching, package inactivity and isolation requirements. Suitable client/native platforms remain separate; these scoped proofs do not accept all C/base/9A |
+| L15-C / F4,V5 | Reliably control all agreed channel bindings/profile/theme/Lua/error/restart cases without disturbing another channel or ordinary playback | Reuse shared_profile_lifecycle_followup for shared settings/deletion, multibinding, rejected/unavailable controls and fresh mirror unbound/Night/Off with cold recovery. active_shared_profile_followup proves shared invalidation/pending/independent republication on retained responses; active_lua_expiry_followup proves real Lua Off/error/automatic Base return; active_mirror_scope_followup now proves live mirror-owned pending/explicit scoped-On, own Base expiry and Off while source1 remains Day. shared_profile_browser_followup now joins actual headed EN/JS/light and NL/noJS/dark profile invalidation and separate two-channel republication to exact browser generation IDs, preview and20 ordinary HTTP captures; full model/clock/AV/TSDuck and30 independent Level1.5 observations pass. Full model/clock/AV/TSDuck and cleanup retain exact scope. Scoped/future whole-host, durable Lua Continue/Refresh/Reset/errors, atomic_enrichments and broader admin receipts stay valid. Complete the remaining Lua/precedence/error/inside-after-scope and effective-scope browser/stream generation conditions, package inactivity and isolation using valid existing receipts; the shared-base joined boundary is closed, not all C. Suitable client/native platforms remain separate; these scoped proofs do not accept all C/base/9A |
 
 
 External capability/environment blockers (block only dependent acceptance):
@@ -10907,10 +10907,41 @@ operator session that actually acquires media, then ordinary ErsatzRS HTTP and
 all fixed X26/page/subpage/update/reveal/timedflash oracles. Environment access/
 authorization is the maintainer decision if needed; no inferred installer/global
 reset/purchase/maintenance, unchanged retry or scope waiver. Private file storage
-remains proven; enhanced X1 is separately deferred. Next independent C boundary:
-browser/stream generation equality after shared-profile invalidation and separate
-explicit republication, reusing active_shared and existing profile/restart host
-fixtures. Test only the missing joined boundary; all end gates remain open.
+remains proven; enhanced X1 is separately deferred. The shared_profile_browser_followup below now closes that independent C shared-base
+browser/stream boundary. Remaining C/effective-scope and all other end gates
+remain mandatory; reuse existing receipts rather than repeating this client trial.
+
+
+Current shared-base browser/stream proof (partialL15-C/F4,V5): canonical
+standalone_level15_followup/shared_profile_browser_followup owns
+level15-shared-profile-browser/identity.json. Both actual headed Chromium151
+EN/JS/light and NL/noJS/dark runs pass five stages on two channels sharing the
+same addon/profile: Day selected, shared profile changed to Night with both old
+designs unavailable/withdrawn, both new concepts pending with no emission,
+explicit first-channel publication without second-channel activation, then
+separate second publication. Browser status, exact current generation IDs and
+Day/Night preview agree with all20 fresh ordinary HTTP captures. Histories,
+configuration/channel/playout/package and worker identity stay exact except
+intentional publication history; producer calls remain precisely day/day/night/night.
+Both owned hosts stop normally, no browser errors;20 actual images are retained,
+with representative EN selected/pending and NL dark unavailable/pending inspected.
+
+Current native verifier passes twice on unchanged captures: full emitted model
+for five On captures per run, strict plain PMT/PCR/absent-PID for five Off, exact
+source-clock and sourceAV/TSDuck throughout. Stock0.2.42 independently verifies30
+fixed actual Level1.5 page/subpage/navigation/label/colour observations. Initial
+verifier applied authored-PTS completeness to Off and failed after two valid On
+checks; preserve its source/log/units. Correction selects unchanged strict plain
+versus authored helpers, with no browser replay, oracle relaxation or product
+change. Strict all-target web Clippy/fmt pass. Reuse the pinned matching SSR/WASM
+bundle/unchanged production transport, not an exact clean-HEAD/fullCI claim;
+retained-response active_shared, nine-culture admin, editor/Lua/F6 and broader
+AV/platform proof retain their original scope. No new interactive suitable-client,
+caption/alternate-audio, native-platform, full C/base/9A acceptance. Next C is the
+remaining agreed Lua/precedence/error/inside-after-scope closure using existing
+durable/scoped-host receipts, with new work only for a named uncovered boundary.
+D native acquisition/configuration, E1/E2 adoption/platforms and enhanced X1/X3
+remain independent open gates; no push or publication.
 
 Arabic G0 assignment checkpoint9ae0088f remains valid: canonical
 arabic_g0_assignment retains the Table44/p115 pin, false7/E REDs, exact existing

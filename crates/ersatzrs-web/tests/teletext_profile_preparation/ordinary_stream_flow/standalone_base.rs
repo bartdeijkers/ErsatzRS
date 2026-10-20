@@ -18,6 +18,9 @@ mod scoped_lua;
 #[path = "standalone_base/profile_lifecycle.rs"]
 mod profile_lifecycle;
 
+#[path = "standalone_base/shared_profile_browser.rs"]
+mod shared_profile_browser;
+
 fn response(theme: &str) -> Value {
     let mut value: Value = serde_json::from_str(include_str!(
         "../../fixtures/teletext-level15-restart-v2.json"
