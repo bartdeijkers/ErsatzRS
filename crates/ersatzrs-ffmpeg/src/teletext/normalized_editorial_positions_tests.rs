@@ -4,6 +4,7 @@ use super::authored_service_tests::{input, limits, semantic_limits};
 use super::*;
 use ersatzrs_domain::*;
 
+mod main_sources;
 mod object_positions;
 
 fn position(row: u8, column: u8) -> TeletextEnhancementCommand {
@@ -137,6 +138,15 @@ fn shifted_carrier_positions_retain_original_local_ordinal_and_physical_source()
         assert_eq!(word(encoded, colour.semantic_word()), 0x14 | (4 << 11));
         let mut excluded = 0;
         for position in encoded.command_positions() {
+            let main_source = match augmented.emitter_source(position.source()) {
+                Some(TeletextAugmentedOriginSource::RetainedMain { provenance, .. })
+                    if position.source().object.is_none() =>
+                {
+                    Some(provenance)
+                }
+                _ => None,
+            };
+            assert_eq!(position.original_main_source(), main_source);
             let expected = match augmented.emitter_source(position.source()) {
                 Some(TeletextAugmentedOriginSource::RetainedMain {
                     provenance: TeletextMainCompositionSource::OriginalPage { command },
@@ -418,7 +428,8 @@ fn provenance_binding_changes_no_packet_or_physical_diagnostic_positions() {
             .encoded()
             .command_positions()
             .iter()
-            .all(|position| position.original_local_command().is_none()));
+            .all(|position| position.original_local_command().is_none()
+                && position.original_main_source().is_none()));
         assert!(compiled
             .physical()
             .encoded()
@@ -465,6 +476,15 @@ fn default_and_generated_base_commands_never_gain_original_local_ordinals() {
             .any(|position| position.original_base_glyph()
                 == Some(TeletextEnhancementPosition::new(1, 8).unwrap())));
         for position in positions {
+            let main_source = match augmented.emitter_source(position.source()) {
+                Some(TeletextAugmentedOriginSource::RetainedMain { provenance, .. })
+                    if position.source().object.is_none() =>
+                {
+                    Some(provenance)
+                }
+                _ => None,
+            };
+            assert_eq!(position.original_main_source(), main_source);
             let expected = match augmented.emitter_source(position.source()) {
                 Some(TeletextAugmentedOriginSource::RetainedMain {
                     provenance:

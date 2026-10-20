@@ -84,6 +84,7 @@ pub struct TeletextCompiledCommandPosition {
     object_header_position: Option<usize>,
     first_word: usize,
     semantic_word: usize,
+    original_main_source: Option<super::TeletextMainCompositionSource>,
     original_local_command: Option<usize>,
     original_base_glyph: Option<ersatzrs_domain::TeletextEnhancementPosition>,
 }
@@ -103,6 +104,14 @@ impl TeletextCompiledCommandPosition {
     #[must_use]
     pub const fn semantic_word(&self) -> usize {
         self.semantic_word
+    }
+    /// Exact original or derived Main provenance retained by the normalized
+    /// factory. Standalone packing, object bodies and generated carrier commands
+    /// have no Main association. A Base-cell association includes its generated
+    /// position/charset/restore words; it is not authored edit permission.
+    #[must_use]
+    pub const fn original_main_source(&self) -> Option<super::TeletextMainCompositionSource> {
+        self.original_main_source
     }
     /// Original page-local command ordinal, bound only by the normalized
     /// augmented factory's retained-main provenance. Standalone packing and
@@ -207,6 +216,7 @@ impl EncodedTeletextLocalObjectProgram {
             } else {
                 None
             };
+            position.original_main_source = source;
             position.original_local_command = match source {
                 Some(super::TeletextMainCompositionSource::OriginalPage { command }) => {
                     Some(command)
@@ -604,6 +614,7 @@ impl Input<'_> {
                 object_header_position: None,
                 first_word,
                 semantic_word: emission.index - 1,
+                original_main_source: None,
                 original_local_command: None,
                 original_base_glyph: None,
             });

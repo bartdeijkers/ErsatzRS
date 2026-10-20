@@ -164,12 +164,20 @@ scalar edits of a created Main fold into its original absent attachment; exact
 root undo restores absence and removes that attachment. A versioned concept and
 its preview do not publish themselves.
 
-The initial native TTI creation path admits standalone authored words only when
-the authenticated absent Main has no existing generated X26. Complete native
-re-encoding must match every uploaded packet. It does not convert generated
-compatibility/default/definition words into authored intent or grant an arbitrary
-replacement of an existing Main. Those remaining F1 context/consumer mechanisms
-retain their independent acceptance obligations in P9A-04.
+Native TTI creation admits standalone authored words after genuine absent Main.
+An original generated Base-only prefix may remain when the normalized factory
+binds every complete physical command/selector span to its exact Base-cell
+source. Only the appended body becomes authored Main; generated glyphs, positions
+and charset context retain their immutable source ownership. The read-only full
+Main-source projection grants no editing rights and preserves the older ordinal
+and Base-glyph projections. Definitions, defaults, generated carriers, unknown
+provenance and interleaving do not satisfy this prefix correspondence. Complete
+fresh native encoding must match every uploaded packet. Genuine Main removal
+may therefore retain generated X26; exact re-encoding and full effects qualify
+None rather than inferring absence from packet presence. No compatibility/
+default/definition words become authored intent, and arbitrary existing-Main
+replacement remains forbidden. Other F1 context/consumer mechanisms retain their
+independent acceptance obligations in P9A-04.
 
 The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit

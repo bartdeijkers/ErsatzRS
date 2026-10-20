@@ -3,6 +3,9 @@ use super::*;
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use serde_json::{json, Value};
 
+#[path = "main_presence/generated_compatibility.rs"]
+mod generated_compatibility;
+
 fn absent(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = authoring_metadata::response(theme, page, subcode);
     value["service"]["page_enhancements"][0]["local_program"] = Value::Null;

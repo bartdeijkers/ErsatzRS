@@ -108,6 +108,7 @@ struct DriverContext {
     int nativeUnicode = 0;
     bool editBaseSpacing = false;
     bool createMain = false;
+    bool createMainGeneratedBase = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -145,7 +146,8 @@ static DriverContext driverContext() {
     const QByteArray input = qgetenv("ERSATZRS_QTM_INPUT_BASENAME");
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
     const bool foreground = mode == "single-page-foreground";
-    const bool createMain = mode == "single-page-create-main";
+    const bool createMainGeneratedBase = mode == "single-page-create-main-generated-base";
+    const bool createMain = mode == "single-page-create-main" || createMainGeneratedBase;
     const bool glyphStructure = mode == "single-page-local-glyph-structure";
     const bool mixedGlyphStructure = mode == "single-page-local-mixed-glyph-structure";
     const bool styleStructure = mode == "single-page-local-style-structure";
@@ -327,7 +329,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing, createMain};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing, createMain, createMainGeneratedBase};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -2633,59 +2635,68 @@ static void editAbsentMain(QMainWindow *main, const DriverContext &context) {
     auto table = tables.front();
     auto model = table->model();
     std::vector<StructureTriplet> expected;
+    const int first = context.createMainGeneratedBase ? 2 : 0;
     // structureMatches intentionally accepts only nonempty fixed programs.
     // Pinned LevelOnePage reserves an empty list; absent OL26 imports no words.
-    if (!QTest::qWaitFor([model] {
+    if (context.createMainGeneratedBase) {
+        expected = {{41,4,8},{8,15,104},{63,31,7}};
+        structureCheck(model, expected);
+    } else if (!QTest::qWaitFor([model] {
         return model && model->columnCount() == 4 && model->rowCount() == 0;
     }, 3000)) qFatal("Actual absent-Main baseline must have exactly zero X26 rows");
-    if (table->currentIndex().isValid() || main->isWindowModified())
+    if ((!context.createMainGeneratedBase && table->currentIndex().isValid()) || main->isWindowModified())
         qFatal("Actual absent-Main baseline must have no selected triplet or edits");
     if (!dock->grab().save(QString("/work/") + context.captureName("absent-main-before")))
         qFatal("Actual absent-Main baseline capture failed");
-    structureButton(dock, "Insert copy");
-    expected.push_back({63,31,7});
-    structureCheck(model, expected);
-    structureSelect(table, 0);
+    if (!context.createMainGeneratedBase) {
+        structureButton(dock, "Insert copy");
+        expected.push_back({63,31,7});
+        structureCheck(model, expected);
+    }
+    structureSelect(table, first);
     insertAbsentMainWord(dock, context, "Set Active Position", "absent-main-position-menu");
-    expected.insert(expected.begin(), StructureTriplet{41,4,0});
+    // Pinned insertion scans the preceding AP and initializes its next row.
+    expected.insert(expected.begin() + first, StructureTriplet{context.createMainGeneratedBase ? 42 : 41,4,0});
     structureCheck(model, expected);
-    structureSelect(table, 0);
+    structureSelect(table, first);
     // Pinned cooked AP Row uses range1..24, unlike Origin modifier range0..23.
-    interiorDefinitionCoordinateStep(dock, 1, 24, 1, 2);
-    expected[0][0] = 42;
+    if (!context.createMainGeneratedBase) interiorDefinitionCoordinateStep(dock, 1, 24, 1, 2);
+    expected[first][0] = 42;
     structureCheck(model, expected);
     for (int column = 0; column < 8; ++column) {
         interiorDefinitionCoordinateStep(dock, 0, 39, column, column + 1);
-        expected[0][2] = column + 1;
+        expected[first][2] = column + 1;
         structureCheck(model, expected);
     }
     for (int word = 1; word <= 3; ++word) {
-        structureSelect(table, word);
+        const int row = first + word;
+        structureSelect(table, row);
         insertAbsentMainWord(dock, context, word == 2 ? "G0 character" : "Foreground colour",
             word == 1 ? "absent-main-foreground-menu" : word == 2
                 ? "absent-main-glyph-menu" : "absent-main-reset-menu");
-        expected.insert(expected.begin() + word, StructureTriplet{0,word == 2 ? 9 : 0,word == 2 ? 32 : 0});
+        expected.insert(expected.begin() + row, StructureTriplet{0,word == 2 ? 9 : 0,word == 2 ? 32 : 0});
         structureCheck(model, expected);
-        structureSelect(table, word);
+        structureSelect(table, row);
         const int targetColumn = word == 3 ? 9 : 8;
         for (int column = 0; column < targetColumn; ++column) {
             interiorDefinitionCoordinateStep(dock, 0, 39, column, column + 1);
-            expected[word][0] = column + 1;
+            expected[row][0] = column + 1;
             structureCheck(model, expected);
         }
-        if (word == 2) structureCode(dock, context, word, 32, 81);
+        if (word == 2) structureCode(dock, context, row, 32, 81);
         else absentMainColour(dock, context, word == 1 ? 18 : 7,
             word == 1 ? "absent-main-foreground-popup" : "absent-main-reset-popup");
-        expected[word][2] = word == 1 ? 18 : word == 2 ? 81 : 7;
+        expected[row][2] = word == 1 ? 18 : word == 2 ? 81 : 7;
         structureCheck(model, expected);
     }
-    const std::vector<StructureTriplet> final{{42,4,8},{8,0,18},{8,9,81},{9,0,7},{63,31,7}};
+    std::vector<StructureTriplet> final{{42,4,8},{8,0,18},{8,9,81},{9,0,7},{63,31,7}};
+    if (context.createMainGeneratedBase) final.insert(final.begin(), {{41,4,8},{8,15,104}});
     structureCheck(model, final);
     if (expected != final || !main->isWindowModified()) qFatal("Actual absent-Main final model differs");
     if (!dock->grab().save(QString("/work/") + context.captureName("absent-main-edited")))
         qFatal("Actual absent-Main edited capture failed");
     savedGlyphStructure = final;
-    std::puts("QTM actual absent Main: empty X26 to AP2/8, FG18@8, G0Q81@8, FG7@9, termination7; full five-row model checked");
+    std::printf("QTM actual absent Main: retained generated-Base words=%d; AP2/8, FG18@8, G0Q81@8, FG7@9, termination7; full %zu-row model checked\n", first, final.size());
 }
 static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
@@ -2727,11 +2738,11 @@ static void reloadAbsentMain(QMainWindow *main, const DriverContext &context) {
     QTest::keyClick(main, Qt::Key_F5);
     if (!confirmed || main->isWindowModified() || main->windowFilePath() != context.outputPath)
         qFatal("Actual absent-Main disk reload did not complete");
-    verifySavedGlyphStructure(main, 5);
+    verifySavedGlyphStructure(main, context.createMainGeneratedBase ? 7 : 5);
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || !dock->grab().save(QString("/work/") + context.captureName("absent-main-reloaded")))
         qFatal("Actual absent-Main reloaded dock capture failed");
-    std::puts("QTM actual absent Main: Save As followed by confirmed F5 disk reload; full five-row model retained");
+    std::printf("QTM actual absent Main: Save As followed by confirmed F5 disk reload; full %d-row model retained\n", context.createMainGeneratedBase ? 7 : 5);
 }
 static void saveAs(QMainWindow *main, const DriverContext &context) {
     QAction *save = nullptr;
@@ -2859,7 +2870,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.addFirstDefinitionPosition) verifySavedGlyphStructure(saved, 6);
         if (context.addInteriorDefinitionRow) verifySavedGlyphStructure(saved, 10);
         if (context.createMain) {
-            verifySavedGlyphStructure(saved, 5);
+            verifySavedGlyphStructure(saved, context.createMainGeneratedBase ? 7 : 5);
             reloadAbsentMain(saved, context);
         }
         if (context.insertResourceGlyph || context.deleteResourceGlyph)

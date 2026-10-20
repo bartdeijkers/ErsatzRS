@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 standalone absent-Main creation/edit/exact-undo component closed; next existing F1 first-Main compatibility with generated baseline X26, preserving original source provenance. Keep completed F2/F4/F6 and runtime scopes; no client search or external maintenance'
+current_focus = 'P9A-04 F1 standalone/complete Base-prefix Main creation and exact undo closed; next existing V6/X2 ARM runtime/adoption evidence prerequisites using recorded candidates/tools. Preserve closed F2/F4/F6 scopes and deferred Windows-package/X1/X3 decisions; no new editor variant series'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -78,12 +78,22 @@ with reopen. V29, full effects/default provenance and protected refusals retain
 scope. Canonical tmp/phase9-header-c2/main-presence/identity.json owns original
 RED, grouped/final controls, genuine saved-artifact integration, independent
 Level1.5/2.5 fixed cells, helper negatives and final checks. Existing admin and
-transport proofs are reused; no DOM or mux change. Next existing F1 action:
-qualify first Main on a source that already has compiler-generated X26. First
-retain a native defect/refusal and distinguish compatibility words from authored
-intent; smallest correction only after that evidence. Stop when exact source/
-full effects/defaults/fallback and repeat/undo are proven; do not add adjacent
-editor variants. Other current matrix requirements and deferrals are unchanged.
+transport proofs are reused; no DOM or mux change. Its
+generated_compatibility_followup now closes first Main after a complete source-bound Base prefix too:
+full factory provenance, exact generated glyph/context words, genuine pinned
+QTM seven-row SaveAs/disk reload and concept/publication/scalar/root-None undo/
+cold reopen pass. Actual three-state packets exactly match the independently
+decoded original/published/restored input. Factory17, existing Base5 and affected
+web/native controls retain their exact scopes; one obsolete postpublication test
+expectation is preserved and corrected without production relaxation. General
+interleaved/default/context correspondences remain in F1, not accepted limits.
+Do not reopen either closed component absent a concrete regression or start an
+adjacent editor variant series. Next existing V6/X2 action: inspect the recorded
+ARM candidate/runtime-adoption receipt and existing probe to identify an actually
+executable missing platform gate versus a required native environment. Reuse
+valid crossbuild/QEMU proof without relabelling it native acceptance. Do not run
+new CI/builds or resume the deferred Windows-package trial merely to fill the
+external gap. All current matrix requirements and deferrals remain unchanged.
 
 Profile/channel output lifecycle slice is committed in40ad0608; bb025c32 records
 its63 actual Windows component passes. Linux63/all9cultureSSR/headed8/AV8/

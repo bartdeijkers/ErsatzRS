@@ -28,7 +28,9 @@ release section when tagging a release.
 - Import a first standalone teletext Main enhancement program into a versioned
   concept. Preserve the distinction between absent and explicitly empty Main,
   retain checked edits through re-export and restart, and undo to exact original
-  absence. Publication remains explicit; original templates, declarations and
+  absence. First Main creation can retain an authenticated prefix of generated
+  supplementary characters without converting those source words into authored
+  commands. Publication remains explicit; original templates, declarations and
   protected page content retain their existing safeguards.
 
 - Add localized teletext draft controls for creating empty POP/GPOP resource

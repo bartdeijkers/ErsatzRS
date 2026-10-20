@@ -11,6 +11,8 @@ use ersatzrs_domain::{
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 
+mod generated;
+
 const FINAL: u32 = 63 | (31 << 6) | (7 << 11);
 
 fn fail(location: Location, word: usize) -> NativeTeletextEditorialTtiError {
@@ -41,9 +43,9 @@ pub(super) fn eligible(
     let before = baseline.packets[0].iter().any(Option::is_some);
     let after = edited.packets[0].iter().any(Option::is_some);
     if page.local_program.is_none() {
-        !before && after
+        (!before && after) || generated::creation(service, owner, baseline, edited).is_some()
     } else {
-        before && !after
+        (before && !after) || generated::removal(service, owner, baseline, edited)
     }
 }
 
@@ -65,17 +67,24 @@ pub(super) fn reconcile(
         .local_program
         .as_ref();
     let replacement = if original.is_none() {
-        // Do not turn compatibility words, default programs or definitions into
-        // authored Main intent. Their existing source-bound paths stay separate.
-        if baseline.packets[0].iter().any(Option::is_some) {
-            return Err(fail(location, 0));
-        }
-        Some(parse(edited, location, deadline)?)
+        // Preserve a complete authenticated Base-only prefix as derived source.
+        // Parse only the appended body, never generated/default/definition words.
+        let prefix = if baseline.packets[0].iter().any(Option::is_some) {
+            generated::creation(service, owner, baseline, edited)
+                .ok_or_else(|| fail(location, 0))?
+        } else {
+            0
+        };
+        Some(parse_after(edited, prefix, location, deadline)?)
     } else {
-        // Removing every X26 packet means absent, not Some(empty). Native replay
-        // must still reproduce every final packet before any concept is saved.
+        // None may retain generated Base X26. A source-bound prefix ending in
+        // the canonical terminator is only a candidate: fresh full native replay
+        // must reproduce every packet, including restored default execution.
         if edited.packets[0].iter().any(Option::is_some) {
-            return Err(fail(location, 0));
+            if !generated::removal(service, owner, baseline, edited) {
+                return Err(fail(location, 0));
+            }
+            let _ = body_words(edited, location, deadline)?;
         }
         None
     };
@@ -87,11 +96,7 @@ pub(super) fn reconcile(
     })
 }
 
-fn parse(
-    page: &Page<'_>,
-    location: Location,
-    deadline: Instant,
-) -> Result<TeletextEnhancementProgram> {
+fn body_words(page: &Page<'_>, location: Location, deadline: Instant) -> Result<Vec<u32>> {
     let mut words = Vec::new();
     let mut absent = false;
     for (designation, packet) in page.packets[0].iter().enumerate() {
@@ -110,9 +115,22 @@ fn parse(
     {
         return Err(fail(location, end));
     }
-    let body = super::structural::raw::Body::read(&words[..end], location, deadline)?;
+    words.truncate(end);
+    Ok(words)
+}
+
+fn parse_after(
+    page: &Page<'_>,
+    prefix: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<TeletextEnhancementProgram> {
+    let words = body_words(page, location, deadline)?;
+    let words = words.get(prefix..).ok_or_else(|| fail(location, prefix))?;
+    let body = super::structural::raw::Body::read(words, location, deadline)
+        .map_err(|error| shifted(error, prefix))?;
     if let Some(selector) = body.selectors.iter().find(|selector| !selector.used) {
-        return Err(fail(location, selector.index));
+        return Err(fail(location, prefix + selector.index));
     }
     let mut commands = Vec::new();
     for entry in body.entries {
@@ -122,10 +140,24 @@ fn parse(
                 .command
                 .or(entry.style)
                 .or_else(|| context(entry.word))
-                .ok_or_else(|| fail(location, entry.index))?,
+                .ok_or_else(|| fail(location, prefix + entry.index))?,
         );
     }
     TeletextEnhancementProgram::new(commands).map_err(|_| fail(location, 0))
+}
+
+fn shifted(
+    mut error: NativeTeletextEditorialTtiError,
+    prefix: usize,
+) -> NativeTeletextEditorialTtiError {
+    if let (Some(26), Some(designation), Some(column)) =
+        (error.row, error.designation, error.column)
+    {
+        let index = usize::from(designation) * 13 + column + prefix;
+        error.designation = u8::try_from(index / 13).ok();
+        error.column = Some(index % 13);
+    }
+    error
 }
 
 fn context(word: u32) -> Option<Command> {
@@ -203,8 +235,9 @@ mod tests {
         for (index, packet) in packets.iter().enumerate() {
             page.packets[0][index] = Some(packet);
         }
-        parse(
+        parse_after(
             &page,
+            0,
             Location {
                 page: 124,
                 subcode: 32,
@@ -212,6 +245,36 @@ mod tests {
             },
             Instant::now() + Duration::from_secs(1),
         )
+    }
+
+    #[test]
+    fn appended_reader_error_retains_full_page_designation_and_position() {
+        // Prefix authority is checked separately by the native factory path.
+        // This exercises a reader error after crossing the 13-word boundary.
+        let first = [0x29 | (4 << 6); 13];
+        let mut second = [FINAL; 13];
+        second[0] = 0x29 | (4 << 6);
+        second[1] = 14 << 6; // Reserved column mode.
+        let mut page = Page::default();
+        page.packets[0][0] = Some(&first);
+        page.packets[0][1] = Some(&second);
+        let error = parse_after(
+            &page,
+            14,
+            Location {
+                page: 124,
+                subcode: 32,
+                resource: None,
+            },
+            Instant::now() + Duration::from_secs(1),
+        )
+        .unwrap_err();
+        assert_eq!((error.page, error.subcode), (124, 32));
+        assert_eq!(
+            (error.row, error.designation, error.column),
+            (Some(26), Some(1), Some(1))
+        );
+        assert_eq!(error.failure, NativeTeletextEditorialTtiFailure::Structure);
     }
 
     #[test]
@@ -289,9 +352,11 @@ mod tests {
         };
         let mut page = Page::default();
         page.packets[0][1] = Some(&packet);
-        assert!(parse(&page, location, Instant::now() + Duration::from_secs(1)).is_err());
+        assert!(parse_after(&page, 0, location, Instant::now() + Duration::from_secs(1)).is_err());
         assert_eq!(
-            parse(&page, location, Instant::now()).unwrap_err().failure,
+            parse_after(&page, 0, location, Instant::now())
+                .unwrap_err()
+                .failure,
             NativeTeletextEditorialTtiFailure::TimedOut
         );
     }
