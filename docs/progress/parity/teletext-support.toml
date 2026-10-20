@@ -40,7 +40,7 @@ same-design resource creation and broader editor/font coverage remain required.
 Channel profiles/themes, shared invalidation/pending/separate publication,
 mirror isolation, Lua Off/error/On/Base expiry and scoped cold/active recovery
 have canonical evidence with sourceAV/clock/TSDuck/cleanup. Broader Lua,
-whole-host restart, effective-scope admin and platform/client gates stay open.
+whole-host restart, actual-output admin reporting and platform/client gates stay open.
 Producer selection/model/deadline fences, quotas, persistence and cancellation
 ownership remain. F6 default2 Copy/DVB handoff is verified in c07af3a1;
 tmp/phase9-f6-native-carriage/work.json owns scoped smoke/TSDuck87/87 evidence.

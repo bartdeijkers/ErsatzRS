@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: held-mosaic editor boundary proven; C effective-scope admin, D controls and E2 adoption/platforms remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: scoped admin proof reused; actual-output state reporting, D controls and E2 adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -483,9 +483,15 @@ preview/re-export/reopen, retaining metadata/page125/Night and both accepted
 generations. This closes the named B2 hold/release boundary, not complete editor/
 inventory/client acceptance. The unchanged five stock header/secondary failures
 remain in base_g0_context_followup (75dba6fd); no weaker oracle or maintenance.
-Next C: prove existing active-Lua versus Base selection and the intended admin
-preview/publication target with headed browser evidence; reuse unchanged durable/
-scoped runtime, publication/transport, profiles/isolation/admin/F6 receipts.
+Canonical effective_admin_reuse confirms that active-Lua/BaseOff authoring,
+preview and explicit scoped request/selection already have headed/localized and
+ordinary-output proof. Exact13-function/27-key-per-culture/6-file comparisons
+and18 current native/SSR regressions validate scoped reuse; no full chain replay.
+The concrete next F4/V4/V5 product gap is admin requested-versus-actually-applied
+reporting: Selected is not a real per-output ACK. Reuse the existing response/
+epoch/sequence status, preserve exact generation/scope/owner identity and cleanup,
+and never infer all clients or receiver rendering from one observation. Reuse
+unchanged durable/scoped, publication/transport, profiles/isolation/admin/F6 proof.
 D private native teletext control/operator access, E2 nativeARM/macOS/Health/
 adoption and enhanced X1-deferred/X3-upstream remain mandatory and separate.
 75dba6fd plus30aac731 were authorized/pushed with skipCI; this new follow-up is
