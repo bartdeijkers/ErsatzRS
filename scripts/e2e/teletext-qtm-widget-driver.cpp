@@ -109,6 +109,7 @@ struct DriverContext {
     bool editBaseSpacing = false;
     bool createMain = false;
     bool createMainGeneratedBase = false;
+    int mainContextDesignation = -1;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -148,6 +149,8 @@ static DriverContext driverContext() {
     const bool foreground = mode == "single-page-foreground";
     const bool createMainGeneratedBase = mode == "single-page-create-main-generated-base";
     const bool createMain = mode == "single-page-create-main" || createMainGeneratedBase;
+    const int mainContextDesignation = mode == "single-page-main-context-greek" ? 0x37
+        : mode == "single-page-main-context-latin" ? 0 : -1;
     const bool glyphStructure = mode == "single-page-local-glyph-structure";
     const bool mixedGlyphStructure = mode == "single-page-local-mixed-glyph-structure";
     const bool styleStructure = mode == "single-page-local-style-structure";
@@ -286,7 +289,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !nativeG0 && !baseSpacing && !foreground && !createMain && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !nativeG0 && !baseSpacing && !foreground && !createMain && mainContextDesignation < 0 && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -324,12 +327,16 @@ static DriverContext driverContext() {
     if (createMain && (qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed absent-Main trial requires no DRCS companion context");
+    if (mainContextDesignation >= 0 && (left != 4 || right != 12
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
+        qFatal("Fixed Main context trial requires native panels4/12 and no DRCS companion context");
     if (resourceTrial && (left != 0 || right != 0
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing, createMain, createMainGeneratedBase};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing, createMain, createMainGeneratedBase, mainContextDesignation};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -2698,6 +2705,140 @@ static void editAbsentMain(QMainWindow *main, const DriverContext &context) {
     savedGlyphStructure = final;
     std::printf("QTM actual absent Main: retained generated-Base words=%d; AP2/8, FG18@8, G0Q81@8, FG7@9, termination7; full %zu-row model checked\n", first, final.size());
 }
+// Only the two fixed Main context trials consume these native-export literals.
+// The controller binds both arrays to its immutable ready/input/target files.
+static std::vector<StructureTriplet> mainContextTriplets(const char *name) {
+    const auto raw = qgetenv(name);
+    if (raw.isEmpty() || raw.size() > 64) qFatal("Fixed Main context native words absent or oversized");
+    const auto fields = raw.split(',');
+    if (fields.size() != 5 && fields.size() != 7) qFatal("Fixed Main context native word count differs");
+    std::vector<StructureTriplet> result;
+    for (const auto &field : fields) {
+        bool valid = false;
+        const auto word = field.toUInt(&valid, 10);
+        if (!valid || field != QByteArray::number(word) || word > 0x3ffff)
+            qFatal("Fixed Main context requires canonical bounded native words");
+        result.push_back({int(word & 63),int((word >> 6) & 31),int(word >> 11)});
+    }
+    return result;
+}
+static std::vector<StructureTriplet> mainContextOriginal() {
+    auto before = mainContextTriplets("ERSATZRS_QTM_CONTEXT_BEFORE_WORDS");
+    if (before.size() != 7) qFatal("Fixed Main context original must contain seven words");
+    const auto glyph = before[3];
+    // Preserve the exact independently compiled Base scalar. It can only be a
+    // single printable G0/G2/diacritic word at the protected Base column8.
+    if (glyph[0] != 8 || glyph[2] < 32 || glyph[2] > 127
+        || !(glyph[1] == 9 || glyph[1] == 15 || glyph[1] >= 0x11))
+        qFatal("Fixed Main context original Base scalar differs");
+    const std::vector<StructureTriplet> fixed{
+        {42,4,0},{0,8,87},{8,8,0},glyph,{8,8,87},{9,9,65},{63,31,7}
+    };
+    if (before != fixed) qFatal("Fixed Main context original contains foreign words or definitions");
+    return before;
+}
+static void mainContextDataDown(QDockWidget *dock, QTableView *table,
+    const DriverContext &context, std::vector<StructureTriplet> &expected, int row, int to) {
+    structureSelect(table, row);
+    if (expected[row][1] != 8 || expected[row][2] != 87 || (to != 55 && to != 0))
+        qFatal("Fixed Main context Data edit is outside its authenticated setter");
+    QSpinBox *data = nullptr;
+    for (auto candidate : dock->findChildren<QSpinBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled()
+            || candidate->minimum() != 0 || candidate->maximum() != 127) continue;
+        const auto fields = candidate->parentWidget()->findChildren<QSpinBox *>();
+        bool address = false, mode = false;
+        for (auto field : fields) {
+            address = address || (field->maximum() == 63 && field->value() == expected[row][0]);
+            mode = mode || (field->maximum() == 31 && field->value() == 8);
+        }
+        if (fields.size() != 3 || !address || !mode) continue;
+        if (data) qFatal("Ambiguous fixed Main context raw Data control");
+        data = candidate;
+    }
+    if (!data || data->value() != 87) qFatal("Actual Main context raw Data source differs");
+    QStyleOptionSpinBox option;
+    option.initFrom(data);
+    option.rect = data->rect();
+    option.frame = data->hasFrame();
+    option.buttonSymbols = data->buttonSymbols();
+    option.stepEnabled = QAbstractSpinBox::StepDownEnabled;
+    option.subControls = QStyle::SC_All;
+    const auto down = data->style()->subControlRect(QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxDown, data);
+    if (!data->rect().contains(down.center())
+        || data->style()->hitTestComplexControl(QStyle::CC_SpinBox, &option, down.center(), data) != QStyle::SC_SpinBoxDown)
+        qFatal("Actual Main context raw Data step-down is not clickable");
+    for (int value = 86; value >= to; --value) {
+        QTest::mouseClick(data, Qt::LeftButton, Qt::NoModifier, down.center());
+        if (!QTest::qWaitFor([data, value] { return data->value() == value; }, 3000))
+            qFatal("Actual Main context raw Data did not decrease exactly once");
+        expected[row][2] = value;
+        structureCheck(table->model(), expected);
+    }
+    const auto stage = QByteArray("main-context-data-") + QByteArray::number(row);
+    if (!dock->grab().save(QString("/work/") + context.captureName(stage.constData())))
+        qFatal("Actual Main context raw Data capture failed");
+}
+static void editMainContext(QMainWindow *main, const DriverContext &context) {
+    if ((context.mainContextDesignation != 55 && context.mainContextDesignation != 0)
+        || main->isWindowModified()) qFatal("Fixed Main context requires its pristine native input");
+    auto expected = mainContextOriginal();
+    auto final = expected;
+    final[1][2] = context.mainContextDesignation;
+    if (context.mainContextDesignation == 55) final[4][2] = 55;
+    else {
+        final.erase(final.begin() + 4);
+        final.erase(final.begin() + 2);
+    }
+    if (mainContextTriplets("ERSATZRS_QTM_CONTEXT_AFTER_WORDS") != final)
+        qFatal("Fixed Main context target does not match its exact dependency change");
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual Main context dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000)) qFatal("Actual Main context dock not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual Main context table is ambiguous");
+    auto table = tables.front();
+    structureCheck(table->model(), expected);
+    if (!dock->grab().save(QString("/work/") + context.captureName("main-context-before")))
+        qFatal("Actual Main context baseline capture failed");
+    structureSelect(table, 1);
+    QCheckBox *raw = nullptr;
+    for (auto candidate : dock->findChildren<QCheckBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->text() != "Raw values") continue;
+        if (raw) qFatal("Ambiguous fixed Main context Raw values checkbox");
+        raw = candidate;
+    }
+    if (!raw || raw->isChecked()) qFatal("Actual Main context must start with cooked controls");
+    QTest::mouseClick(raw, Qt::LeftButton, Qt::NoModifier, QPoint(8, raw->rect().center().y()));
+    if (!raw->isChecked()) qFatal("Actual Main context Raw values click did not select raw controls");
+    mainContextDataDown(dock, table, context, expected, 1, context.mainContextDesignation);
+    if (context.mainContextDesignation == 55) mainContextDataDown(dock, table, context, expected, 4, 55);
+    else {
+        // Delete only the two generated context words, in descending order.
+        // QTM's actual single-row Delete preserves the glyph and all Main words.
+        for (int row : {4,2}) {
+            structureSelect(table, row);
+            structureButton(dock, "Delete");
+            expected.erase(expected.begin() + row);
+            structureCheck(table->model(), expected);
+        }
+    }
+    structureCheck(table->model(), final);
+    if (expected != final || !main->isWindowModified()) qFatal("Actual Main context final model differs");
+    if (!dock->grab().save(QString("/work/") + context.captureName("main-context-edited")))
+        qFatal("Actual Main context edited capture failed");
+    savedGlyphStructure = final;
+    std::printf("QTM actual Main context: source setter57 to%02x, exact generated restore dependency, full%zu-row model checked\n",
+        context.mainContextDesignation, final.size());
+}
+static int mainContextSavedRows(const DriverContext &context) {
+    return context.mainContextDesignation >= 0 ? (context.mainContextDesignation == 55 ? 7 : 5)
+        : (context.createMainGeneratedBase ? 7 : 5);
+}
 static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || savedGlyphStructure.size() != std::size_t(expectedCount)) qFatal("Fixed saved structure oracle absent");
@@ -2709,7 +2850,8 @@ static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32)
 // Pinned mainwindow.cpp162: F5 reloads the saved current file through the
 // original loader after its real confirmation dialog; no model is replaced here.
 static void reloadAbsentMain(QMainWindow *main, const DriverContext &context) {
-    if (!context.createMain || main->isWindowModified() || main->windowFilePath() != context.outputPath)
+    if ((!context.createMain && context.mainContextDesignation < 0)
+        || main->isWindowModified() || main->windowFilePath() != context.outputPath)
         qFatal("Absent-Main reload requires the clean actual Save As output");
     main->raise();
     main->activateWindow();
@@ -2738,11 +2880,11 @@ static void reloadAbsentMain(QMainWindow *main, const DriverContext &context) {
     QTest::keyClick(main, Qt::Key_F5);
     if (!confirmed || main->isWindowModified() || main->windowFilePath() != context.outputPath)
         qFatal("Actual absent-Main disk reload did not complete");
-    verifySavedGlyphStructure(main, context.createMainGeneratedBase ? 7 : 5);
+    verifySavedGlyphStructure(main, mainContextSavedRows(context));
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || !dock->grab().save(QString("/work/") + context.captureName("absent-main-reloaded")))
         qFatal("Actual absent-Main reloaded dock capture failed");
-    std::printf("QTM actual absent Main: Save As followed by confirmed F5 disk reload; full %d-row model retained\n", context.createMainGeneratedBase ? 7 : 5);
+    std::printf("QTM actual absent Main: Save As followed by confirmed F5 disk reload; full %d-row model retained\n", mainContextSavedRows(context));
 }
 static void saveAs(QMainWindow *main, const DriverContext &context) {
     QAction *save = nullptr;
@@ -2873,6 +3015,10 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             verifySavedGlyphStructure(saved, context.createMainGeneratedBase ? 7 : 5);
             reloadAbsentMain(saved, context);
         }
+        if (context.mainContextDesignation >= 0) {
+            verifySavedGlyphStructure(saved, mainContextSavedRows(context));
+            reloadAbsentMain(saved, context);
+        }
         if (context.insertResourceGlyph || context.deleteResourceGlyph)
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
         if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, context.resourceCallContext ? 21 : 10);
@@ -2891,7 +3037,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editBaseSpacing || context.editNativeG0 || context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow || context.createMain), context.inputName.constData(), context.outputName.constData());
+                (context.editBaseSpacing || context.editNativeG0 || context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow || context.createMain || context.mainContextDesignation >= 0), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -2949,6 +3095,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.addFirstDefinitionPosition) editFirstDefinitionPosition(main, context);
             if (context.addInteriorDefinitionRow) editInteriorDefinitionRow(main, context);
             if (context.createMain) editAbsentMain(main, context);
+            if (context.mainContextDesignation >= 0) editMainContext(main, context);
             if (context.editBaseSpacing) editBaseSpacing(main, context);
             if (context.editNativeG0) {
                 if (main->isWindowModified()

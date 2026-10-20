@@ -927,6 +927,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Import authored teletext Main charset edits together with their generated Base
+  context. Preserve supplementary source text when restoration words change or
+  disappear, retain exact root undo, and reject stale context even alongside
+  ordinary row edits. Generated words remain compiler-owned; publication stays
+  explicit.
 - Restore original and newly added teletext object bodies together from a fresh
   export. Undo retains deliberately added empty definitions, exact original
   anchors and protected consumers; publication remains an explicit action.

@@ -27,7 +27,52 @@ mod flash_charset;
 #[path = "operands/drcs_selection.rs"]
 pub(super) mod drcs_selection;
 
+mod generated_context;
+
 pub(super) type PacketWords = [Option<[u32; 13]>; 16];
+
+pub(super) fn reconcile_generated_context(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    baseline: &Page<'_>,
+    edited: &Page<'_>,
+    location: Location,
+    deadline: Instant,
+) -> Result<TeletextEditorialChanges> {
+    generated_context::reconcile(service, owner, baseline, edited, location, deadline)
+}
+
+/// Source-qualified Main context always requires complete final packets. An
+/// invalid or stale uploaded generated group cannot downgrade that requirement
+/// to selective validation merely by failing correspondence parsing.
+pub(super) fn generated_context_requires_exact(
+    baseline: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    changes: &[TeletextLocalProgramOperandOverlay],
+    location: Location,
+    deadline: Instant,
+) -> Result<bool> {
+    if !changes.iter().any(|change| {
+        change.owner() == owner
+            && matches!(
+                change.expected(),
+                TeletextColumnOperation::DesignateCharset { .. }
+            )
+    }) {
+        return Ok(false);
+    }
+    let packets = packet_words(baseline, owner, location, deadline)?;
+    let mut original = Page::default();
+    original.packets[0] = packets.each_ref().map(Option::as_ref);
+    if let Ok(required) =
+        generated_context::requires_exact(baseline, owner, &original, location, deadline)
+    {
+        Ok(required)
+    } else {
+        location.check_deadline(deadline)?;
+        Ok(false)
+    }
+}
 
 pub(super) fn reconcile(
     service: &EncodedTeletextAuthoredService,

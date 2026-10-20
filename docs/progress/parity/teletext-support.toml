@@ -4,10 +4,10 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123:1/1.5 then full2.5, neither accepted. P9A-04 owns L15/F/V/X.
-F2 metadata/zones/version closed; F1 absent-Main/Base-prefix creation/edit/undo
-closed with V29, pinned QTM and independent cells; P9A-04 owns exact boundaries.
-F1 native joint original/added position undo also closes (P9A-04).
+ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
+F2 metadata/zones/version and scoped F1 Main-presence/Base-prefix, joint original/
+added position undo and interleaved Base charset regeneration are closed.
+P9A-04 receipts pin native/QTM/independent boundaries; V29 remains exact.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay

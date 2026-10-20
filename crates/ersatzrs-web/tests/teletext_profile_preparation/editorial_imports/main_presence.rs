@@ -6,6 +6,9 @@ use serde_json::{json, Value};
 #[path = "main_presence/generated_compatibility.rs"]
 mod generated_compatibility;
 
+#[path = "main_presence/interleaved_context.rs"]
+mod interleaved_context;
+
 fn absent(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = authoring_metadata::response(theme, page, subcode);
     value["service"]["page_enhancements"][0]["local_program"] = Value::Null;

@@ -480,7 +480,14 @@ fn structural_candidate(
 ) -> Result<TeletextEditorialChanges> {
     location.check_deadline(deadline)?;
     protected_with_repacking(pages.0, pages.1, location, deadline, true, true)
-        .and_then(|()| structural::reconcile(service, owner, pages.0, pages.1, location, deadline))
+        .and_then(|()| {
+            operands::reconcile_generated_context(
+                service, owner, pages.0, pages.1, location, deadline,
+            )
+            .or_else(|_| {
+                structural::reconcile(service, owner, pages.0, pages.1, location, deadline)
+            })
+        })
         .or_else(|_| {
             // A rejected alternate interpretation must not erase the original
             // precise packet diagnosis. Deadline exhaustion still takes priority.
@@ -620,9 +627,16 @@ pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
         .main_presence
         .iter()
         .any(|program| program.owner() == owner)
+        || operands::generated_context_requires_exact(
+            baseline,
+            owner,
+            &changes.operands,
+            location,
+            deadline,
+        )?
     {
-        // Presence has no retained original word ordinals to relocate. Every
-        // uploaded final packet must exactly equal the complete native rebuild.
+        // Presence and regenerated context cannot use old packed word offsets.
+        // Every uploaded final packet must equal the complete native rebuild.
         return operands::check_packets(service, owner, &page, location, deadline);
     }
     if changes
