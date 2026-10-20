@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: D private client file storage qualified; concrete stream/teletext control remains the next prerequisite, finite/end gates stay open'
+current_focus = 'P9A-04 standalone Level 1/1.5: C shared-profile browser/stream generation matching next; D native media acquisition/configuration prerequisite remains external, all end gates stay open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -363,19 +363,20 @@ is unavailable continue independent C/E1/E2, no unchanged retry or maintenance.
 Full2.5 X1-deferred/X3-upstream and all original end gates remain mandatory.
 The current checkpoint push is explicitly authorized; no release/publication.
 
-Current L15-D storage checkpoint: private_storage_followup in P9A-04 and
-work.json owns level15-progdvb-private-qualification/identity.json. Exact native
-Installation.ini StoreType=path/StorePath bootstrap is qualified:19 private files,
-all20 known shared vendor files identical before/after, two playlist GETs and
-inspected synthetic-channel image. No capture GET or stream/teletext acceptance.
-Normal owned process exit, private temp removal and HTTP shutdown pass; original
-shared settings/negative receipts remain. No whole-OS/registry isolation claim.
-Next D: qualify one concrete channel/teletext control in that private setup or
-usable private operator session, then fixed ordinary-stream/X26/navigation/
-update/reveal/timedflash proof. No unchanged retry or client maintenance; if
-unavailable continue independent C/E1/E2. All finite/base/full9A gates remain.
-Arabic/editor/admin/Lua/isolation/AV/F6 evidence is reused within unchanged scope.
-Local checkpoint and explicit maintainer-authorized main push only; no release.
+Current L15-D prerequisite: private_storage_followup proves the exact private
+Installation.ini bootstrap (19 private files,20 shared files unchanged).
+channel_control_followup now adds exact ch/ChannelID qualification and one owned
+local custom-list double-click. The inspected row is selected/red, no capture
+GET or AV/teletext decode; shared files and normal process/temp/HTTP cleanup pass.
+This is a current client-configuration/control limit, not an ErsatzRS/decoder
+defect. Need supported private input/decoder setup or usable native operator
+session, then every ordinary HTTP/X26/page/subpage/update/reveal/flash oracle.
+Stop unchanged retries or client maintenance. Next independent C: browser/stream
+generation matching after shared-profile invalidation and separate explicit
+republication using existing host/native/browser fixtures; reuse unchanged
+editor/admin/Lua/isolation/AV/F6. P9A-04/canonical channel_control_followup owns
+pins, negatives and closure. All finite/base/full9A gates remain. Prior specific
+push47101154 is fulfilled; local checkpoints only, no new push/publication.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.
