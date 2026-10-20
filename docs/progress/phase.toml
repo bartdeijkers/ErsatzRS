@@ -67,18 +67,23 @@ Level2.5 with protected base. ADR0123 and P9A-04 L15-A..E/F/V/X own acceptance;
 neither base nor full9A is accepted. Production guide waits for independent9A.
 This current handoff supersedes older next-action prose below. No scope waiver,
 new general audit or external decoder/editor maintenance. The latest maintainer
-instruction authorizes this completed checkpoint commit/push withoutCI only;
-no further push or release publication follows.
+instruction authorized the completed40ad0608 checkpoint commit/push withoutCI;
+that push is complete. Subsequent evidence checkpoints stay local; no further
+push or release publication follows.
 
 Current output-reporting checkpoint: canonical actual_output_status_followup
 connects publication selection to separate per-output initial and transition
 receipts, including V1 startup-only and V2 live Off on ordinary Legacy/Hybrid.
-Native63, all9cultureSSR, eight headed Chromium/Firefox cases, AV8 and160 strict
-prefix transport checks pass; receipt owns final lint/smoke/source pins. No full
-C/base/9A acceptance. Next qualify the existing native Windows test environment
-for changed runtime/lifecycle evidence; build/native execution/adoption remain
-separate. D still needs supported private native teletext control/operator access;
-E2 macOS/nativeARM/Health/adoption and enhanced X1-deferred/X3-upstream stay open.
+Linux63, all9cultureSSR, eight headed Chromium/Firefox cases, AV8 and160 strict
+prefix transport checks pass; receipt owns final lint/smoke/source pins. The
+native_windows_followup now adds63 native Windows component passes at exact
+40ad0608, unchanged committed sources and exited owned runner. This is not
+packaged admin, native playback, accepted runtime adoption or full C/base/9A.
+Bounded base_client_dvbviewer_followup pins the public Demo installer7.3.1.0;
+source/static metadata is not receiver qualification. Next qualify isolated
+extraction and usable native interaction, then unchanged ordinary-stream client
+oracles. No installer was executed; no purchase/global install or lifting the
+full2.5 X1 deferral. E2 macOS/nativeARM/Health/adoption and X3-upstream remain.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
 list, separated into missing product, mandatory proof and external prerequisites.
