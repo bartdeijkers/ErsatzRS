@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 saved Main/Local/resource selections verified; next existing platform/runtime-adoption proof; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 X2 Linux active-profile/overlay Health verified; next native Windows startup artifact qualification; native ARM/macOS/adoption and X1/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -109,9 +109,13 @@ ETV_NEXT_FOLDER startup and cold restart with exact optimized candidate.4 on a
 disposable Linux database. The retained matched server/site is reused; nine
 startup/Health files remain byte-identical to c44cec71. Both real Health SSR reads
 persist50 complete results and matching zero-warning/error summaries, including
-Next Pass; both owned process groups exit normally. Empty-database availability
-is proven, not enabled-channel profile/overlay checks, current full-source build,
-headed UI, production adoption or six-RID acceptance. Original hardware/Vulkan
+Next Pass; both owned process groups exit normally. Its enabled_channels_followup
+now proves actual active H264/AAC/software/SDR profile and default/per-channel
+overlay Health, explicit profile/overlay Fail and restored Pass, persisted full
+summaries and cold restart. Three fresh hosts exit0 without force or remaining
+process group. The current matched workspace build includes preserved parallel
+infra sources; this is not a clean-HEAD package, overlay playback, headed UI,
+production adoption or six-RID acceptance. Original hardware/Vulkan
 fallback warnings remain; managed.1 pins stay exact. X2 still needs both macOS
 artifacts, native ARM/macOS and applicable platform/adoption gates; no remote
 dispatch/push. F1 resource_set_creation_followup now adds a separate atomic native
@@ -187,9 +191,11 @@ atomic malformed/protected refusals. Root undo restores absent X27 and original
 MOT provenance; original guards and formats stay closed. Both actual headed
 browsers pass, including nine cultures, JS/noJS/light/dark, readable320/1920 and
 native complete model/publication/cold-recovery verification. Strict final web
-Clippy, matched SSR/WASM, hydration/architecture and formatting pass. Select an
-existing independently executable platform/runtime-adoption requirement; no new
-adjacent editor or repertoire variants. Full F1 stays open.
+Clippy, matched SSR/WASM, hydration/architecture and formatting pass. That local
+checkpoint is e80c8367. The existing X2 Linux enabled Health subgap is now closed
+above; next qualify a suitable native Windows startup artifact/environment for
+the corresponding required proof. No adjacent editor or repertoire variants.
+Full F1 stays open.
 Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
