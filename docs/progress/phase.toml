@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F2 generic metadata/zone/version component closed; next F5 current candidate.4 Linux ordinary Burn/Convert runtime qualification from existing matrix and host tools. Preserve completed F4 scopes; no client search or external maintenance'
+current_focus = 'P9A-04 F2 generic metadata/zone/version and optimized Linux Next Burn/Convert functional components closed; next F5/V6 existing original-wire Burn/Convert transport/delivery proof. Preserve completed F4/F6 scopes; no client search or external maintenance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -270,8 +270,18 @@ QTM actual-2 artifacts and unchanged0461 template-version source/receipts. Canon
 tmp/phase9-f2-template-version/completion/identity.json owns pins and run IDs.
 The old generic geometry/subpage/set rest item leaves F2; full resource/context
 interchange remains F1/V2/X3. No product/DOM/package change or repeated editor/
-stream trial. Next F5 current Linux candidate.4 ordinary Burn/Convert runtime
-qualification using the existing matrix/host tools; reuse any already valid result.
+stream trial. F5 current optimized Linux candidate.4 functional Burn/Convert is
+now closed: both unchanged default90s xtask smoke gates pass ordinary/cached TS/
+HLS/reconnect/preview/config and all idle oracles. Burn4 captures retain880/881Hz
+Dutch audio and35 subtitle pixels; Convert4 retain879–884Hz/no burned text and
+selected Dutch WebVTT. All8 actual smoke outputs retain AAC/nld. The new host
+d0a14fc2 includes preserved parallel infra. Original host/source/captures/DB/logs
+are retained. Both outer groups drain without supervisor force; existing host
+stop uses Child::kill after worker-idle assertions, not graceful-host evidence.
+Canonical audio_language_followup/linux-ordinary-runtime/identity.json owns
+commands, hashes and scope. No source/pin or package adoption changes. Next F5/V6
+existing original-wire Linux Burn/Convert clock/continuity/delivery proof: these
+smoke captures are remuxed. Use existing URL/TSDuck tools without timing changes.
 Windows-package deferral/future120minutes remains unchanged.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
