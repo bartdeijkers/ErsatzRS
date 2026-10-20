@@ -10733,7 +10733,7 @@ Missing mandatory evidence (existing implementation is partial; a failing fixed 
 External capability/environment blockers (block only dependent acceptance):
 | Base ID / existing owner | Blocked user action and exact missing prerequisite | Next action and closure condition |
 | --- | --- | --- |
-| L15-D / V3; base-specific X1 | View/navigate/update the ordinary HTTP stream with applicable X26, page/subpage controls, manual conceal/reveal and real timed flash | Canonical base_client_qualification/progdvb_runtime/ordinary_stream_followup now proves actual ordinary-host acquisition and native red-video rendering twice on pinned private ProgDVB Standard7.73.2/exe7.73.2.0, with headed profile/validation/preview/explicit publication, strict prefix transport/offlineAV and all20 shared files/state/normal cleanup exact. Finite no-signal and earlier input/storage/control negatives remain canonical, superseded only for ordinary video acquisition. Native teletext is unproven: documented T messages reach the identified owned visible window, but Windows refuses foreground and no teletext appears; this is not a decoder-incapability finding. Need supported private teletext control/operator session, then fixed ordinary-stream X26/page/subpage/navigation/update/reveal/timedflash and native-AV oracles. No unchanged retry, external maintenance, static-image waiver or scope reduction. Bounded actual_output_status_followup/base_client_dvbviewer_followup additionally pins the public Demo installer7.3.1.0 and historical developer/wiki base-enhancement/navigation documentation. Static metadata/download only: no install or runtime qualification. Next establish isolated extraction and usable native interaction before fixed stream oracles; document missing access/environment exactly if unavailable. Independent E1/E2 work remains available; enhanced X1-deferred/X3-upstream stay mandatory |
+| L15-D / V3; base-specific X1 | View/navigate/update the ordinary HTTP stream with applicable X26, page/subpage controls, manual conceal/reveal and real timed flash | Canonical base_client_qualification/progdvb_runtime/ordinary_stream_followup now proves actual ordinary-host acquisition and native red-video rendering twice on pinned private ProgDVB Standard7.73.2/exe7.73.2.0, with headed profile/validation/preview/explicit publication, strict prefix transport/offlineAV and all20 shared files/state/normal cleanup exact. Finite no-signal and earlier input/storage/control negatives remain canonical, superseded only for ordinary video acquisition. Native teletext is unproven: documented T messages reach the identified owned visible window, but Windows refuses foreground and no teletext appears; this is not a decoder-incapability finding. Need supported private teletext control/operator session, then fixed ordinary-stream X26/page/subpage/navigation/update/reveal/timedflash and native-AV oracles. No unchanged retry, external maintenance, static-image waiver or scope reduction. The later private DVBViewer startup-only qualification is stopped by explicit maintainer direction; all owned processes exited with shared files unchanged. Do not use that client. Maintainer Kodi21.2/Android-GoogleTV/PVR IPTV Simple is now source-qualified below: three decoder files exactly match the retained21.3 negative, so no full2.5 success expectation or physical-device trial follows. The specified end-trial is conditional on suitable capability; it does not close D/V3/X1. Independent E1/E2 work remains available; enhanced X1-deferred/X3-upstream stay mandatory |
 | L15-E2 / F5,V6,X2 | Install and use the accepted runtime natively on all six supported RIDs | Unpublished candidate.4 now has four exact Linux/Windows archives, 9 native Windows and 2 Linux selected playback gates, six actual selected-language captures and scoped startup/ABI proof in audio_language_followup/package_followup. ARM results are crossbuilds only. network_compatibility_followup now adds17Linux+17nativeWindows unchanged provider/directHTTP/RTSP/image/repeat/seek/EOF/handoff/cleanup gates on exact .4 packages. Those package trials remain frozen7603285d, not current packaged-admin proof. Separately, actual_output_status_followup/native_windows_followup now proves63 current40ad0608 nativeMSVC output/pump/SSR/lifecycle unit cases, exact post-build sources and runner exit; no native playback/adoption claim. prepared_compatibility_followup now adds Linux3+nativeWindows3 exact prepared-callback/managed-guard cases, preserving five original caption/audio/seek policies and rejection/cleanup oracles; the proven portable Windows fixture is restored afterward. managed_qualification_followup adds actual .4 archive installation/offline reuse and the exact Health identity-before-version primitive on Linux and nativeWindows, with corruption-before-execution refusal; test-local pins do not adopt the candidate or prove complete Health/startup. Missing both macOS artifacts, native ARM/macOS environments, remaining applicable platform/Health proof and accepted adoption. managed.1 remains accepted; no candidate is adopted. Use existing build/package workflow and obtain native environments or separately authorized remote workflow; no push permission is inferred. Close exact source/license/dependency/build/runtime/Health and applicable playback gates before adoption; crossbuild/startup/interop are separate claims |
 | Enhanced-only X1,X3 / full9A | Edit complete POP/GPOP banks/contexts over208 and view full2.5 objects/enlargement/panels | Full2.5 client qualification remains maintainer-deferred; QTM1.0 native bank/large-context support waits upstream. Neither blocks a genuinely base-only design. Both remain mandatory for full9A, with exact capability-positive pinned editor/client end proof and all enhanced F/V/X conditions; no truncation, silent content removal, package mutation or waiver |
 
@@ -11255,10 +11255,14 @@ installer7.3.1.0 (SHAca326ff656aa5b3c144342d5956107d4f2eaca8d073b112bf137d184a7d
 not the earlier source-assessedPro7.3.2.0. Developer/wiki documentation makes
 it a base-specific candidate, not a qualified receiver. No installer/application
 execution, global configuration change or enhanced-X1 deferral change occurred.
-Next qualify isolated extraction and usable native interaction, then the fixed
-ordinary-stream X26/repertoire/page/subpage/update/reveal/timedflash/AV oracles.
-No new general audit, unchanged negative retry, external maintenance, scope
-waiver, further push or release publication follows.
+The later bounded private startup/wizard trials ingested no stream; all owned
+processes exited and shared file manifests remained exact. Maintainer2026-10-20
+stops all DVBViewer work. No further use or startup retry follows. The Kodi21.2
+qualification and conditional joint end-trial below supersede that next action;
+no physical device was accessed. Profile/output lifecycle slice40ad0608 and its
+Windows component evidencebb025c32 are committed with no owned pending work.
+Broader F/V/X acceptance remains open, not reopened. No scope waiver, new
+adjacent variant series, push or release publication follows.
 
 Scoped L15-E1 Next final-wrapper checkpoint (partial F5/V6): canonical
 standalone_level15_followup/active_next_shutdown owns sources and all outcomes.
@@ -11308,9 +11312,89 @@ Missing mandatory evidence (reuse existing valid inputs and code):
 External blockers (block dependent acceptance only):
 | ID | Concrete blocker and user impact | Resolution / next action |
 | --- | --- | --- |
-| X1 — suitable runtime candidate | No retained runtime qualifies the missing enlarged/panel/resource clause. VLC formatter covers MAIN; actual Kodi20.5 fails. Bounded imager0.2.0/2b0125b7 source qualification confirms actual native POP/GPOP0..506, enlarged and panels/DRCS offline capability, but explicit supplied resources/static images lack ordinary HTTP/TS input, automatic MOT/X27/M29 cache/lifecycle and interactive page/subpage navigation (tmp/phase9-header-c2/identity.json/client_qualification_after_local_calls). Its native decoder is not subject to the QTM208 editor bound; no new client build or runtime acceptance follows. Kodi21.3 and Tuxtxt Neutrino32e2455e are source-negative. DVB Inspector1.21/d5a4af5b also lacks the required Local/X27/enlarged/panel semantics; its retained GUI only proves capture/PID-table input (tmp/phase9-compiler-polish-client/identity.json). None is a suitable runtime; do not repeat unchanged candidates Bounded end_blocker_followup examines one new route, DVBViewer Pro7.3.2.0: official HTTP/TS and page/subpage navigation exist, but Local/POP/GPOP/MOT/X27, DRCS enlargement and panels remain unproved. Official Level2.5 wording is charset detection only. No binary/license/runtime trial or vendor contact. | Maintainer2026-10-19 defers further full2.5 suitable-client work; the later standalone1/1.5 priority authorizes bounded base-specific qualification against its own oracles. Mandatory full V3/X1 and9A remain open. No waiver, binary trial, vendor contact or decoder maintenance follows. Resume enhanced qualification only on maintainer direction and a source/capability-positive exact runtime; canonical tmp/phase9-header-c2/identity.json/end_blocker_followup retains primary sources, rejected candidates and unchanged closure conditions |
-| X2 — accepted platform artifacts/environments | Four candidate.3 artifacts now have Linux crossbuild/ABI and actual native Windows/Linux application evidence; F5 owns the exact sourceout/27Windows compatibility scopes. Both macOS candidate artifacts/environments and remaining native ARM/macOS/full-platform output gates still prevent P9A-02/V6/adoption closure. Crossbuild, startup and scoped application proof remain distinct; WSL GPU loader failure is unqualified | Use the existing locally prepared macOS manifest choice only after explicit remote-source/CI permission or a suitable local native environment; current no-push instruction remains. Obtain exact sixRID source/provenance/license/runtime and remaining applicable playback evidence before managed adoption. No hardware/platform waiver |
+| X1 — suitable runtime candidate | No retained runtime qualifies the missing enlarged/panel/resource clause. VLC formatter covers MAIN; actual Kodi20.5 fails. Bounded imager0.2.0/2b0125b7 source qualification confirms actual native POP/GPOP0..506, enlarged and panels/DRCS offline capability, but explicit supplied resources/static images lack ordinary HTTP/TS input, automatic MOT/X27/M29 cache/lifecycle and interactive page/subpage navigation (tmp/phase9-header-c2/identity.json/client_qualification_after_local_calls). Its native decoder is not subject to the QTM208 editor bound; no new client build or runtime acceptance follows. Kodi21.3 and Tuxtxt Neutrino32e2455e are source-negative. DVB Inspector1.21/d5a4af5b also lacks the required Local/X27/enlarged/panel semantics; its retained GUI only proves capture/PID-table input (tmp/phase9-compiler-polish-client/identity.json). None is a suitable runtime; do not repeat unchanged candidates Bounded end_blocker_followup examines one new route, DVBViewer Pro7.3.2.0: official HTTP/TS and page/subpage navigation exist, but Local/POP/GPOP/MOT/X27, DRCS enlargement and panels remain unproved. Official Level2.5 wording is charset detection only. No binary/license/runtime trial or vendor contact. | Maintainer2026-10-19 defers further full2.5 client hunting;2026-10-20 explicitly forbids DVBViewer and requests only bounded source qualification of their Kodi21.2/Android-GoogleTV target. That exact core is byte-identical to the retained21.3 negative in all three decoder files, with unchanged Local-type/DRCS-enlargement/panel blockers. No physical-device trial before the joint final session including2.5; no suitable-client claim or decoder maintenance. A changed capability-positive pinned client/upstream support and maintainer direction remain necessary. Canonical end_blocker_followup retains the deferral; actual_output_status_followup/kodi212_prequalification owns this target and the conditional trial below. All original V3/X1 closure conditions remain |
+| X2 — accepted platform artifacts/environments | Four candidate.4 artifacts now retain the earlier sourceout/caption proof and add selected-language,17+17 network,3+3 prepared-artifact and1+1 manager/Health-primitive Linux/nativeWindows scopes. Canonical audio_language_followup owns exact receipts; accepted managed.1 remains unchanged. ComponentWindows63 at40ad0608 is a separate current-source claim, not packaged playback/adoption. Both macOS candidate artifacts/environments and remaining native ARM/macOS/full-platform output gates still prevent P9A-02/V6/adoption closure. Crossbuild, startup and scoped application proof remain distinct; WSL GPU loader failure is unqualified | Use the existing locally prepared macOS manifest choice only after explicit remote-source/CI permission or a suitable local native environment; current no-push instruction remains. Obtain exact sixRID source/provenance/license/runtime and remaining applicable playback evidence before managed adoption. No hardware/platform waiver |
 | X3 — pinned editor dependency capability | QTM1.0 skips native POP/GPOP calls and has no object-bank loader. V8's complete original catalogue (including dormant targets) must fit one208-word Local frame: exact204 glyphs plus four wrapper words fit;205 do not. The unchanged production source/tests match tmp/phase9-resource-context/identity.json. V6/V7 retain every native command but cannot compose over208-word context in QTM; this is an external editor capability gap, not demonstrated export loss Official master/release still cac2167/1.0; the only other branch0901803 is78behind/0ahead, so no changed upstream candidate. decode.cpp637–643 still skips non-Local calls; no object-bank attachment API exists. | Maintainer2026-10-19 chooses to wait for upstream editor support and continue independent engine work. No local editor dependency enhancement/maintenance starts; all full-interchange criteria remain mandatory. Requalify only changed upstream capability; close with pinned actual QTM editing/saving of the complete over208-word catalogue, exact identities/types/protected+dormant definitions, complete-set import/preview/explicit publication/re-export/reopen. Canonical end_blocker_followup retains primary sources, capacity negatives and decision |
+
+
+Maintainer target and one conditional joint end-trial (V3/X1;2026-10-20):
+Canonical actual_output_status_followup/kodi212_prequalification owns the bounded
+source assessment, not a new client trial. Official Kodi21.2-Omega commit
+[d1a1d48c3cb3722d39264ffdd8132f755ffecd27](https://github.com/xbmc/xbmc/tree/d1a1d48c3cb3722d39264ffdd8132f755ffecd27)
+has exactly the same Teletext.cpp, Teletext.h and VideoPlayerTeletext.cpp hashes
+as retained21.3; the original fixed negative expectations stay unchanged.
+[Teletext.cpp](https://github.com/xbmc/xbmc/blob/d1a1d48c3cb3722d39264ffdd8132f755ffecd27/xbmc/video/Teletext.cpp#L3973)
+still gates Local/numbered calls at APx0<40 and derives Local type from triplet%3;
+its2678-2706/2076-2119 DRCS paths retain normal inner offsets and the double-width
+FIXME. Common inspected code provides no Android decoder override. This is
+source-based expected incompatibility for the required functions, not measured
+GoogleTV behavior or a claim that all teletext is unavailable. Existing Kodi20.5
+actual failure and21.3/22rc1 source negatives retain their own scopes; do not
+repeat them or modify external decoders.
+[IPTV Simple Omega](https://github.com/kodi-pvr/pvr.iptvsimple/tree/5a438f6223a7ccbff3626e17792ebb5b8b08efcf)
+reference manifest21.11.0 passes stream/inputstream properties to Kodi, rather
+than supplying another teletext renderer. The installed addon/inputstream,
+Kodi APK build/ABI, Android version, skin and actual remote mapping are unknown;
+this source reference is not a pin of the maintainer device. No ADB/network
+connection, install, settings change or test on that physical device occurred.
+
+Do not schedule a green full2.5 trial on unchanged stock21.2. The single joined
+final session below is prepared but gated: all independent engine/editor/runtime
+conditions must be ready, a pinned client must have capability-positive evidence
+for the retained failing functions, and the maintainer joins the final session.
+The earlier X1 deferral and X3 upstream-wait decisions remain; no new client hunt,
+DVBViewer, external maintenance or scope reduction is inferred. If stock21.2 must
+be the full2.5 receiver, changed upstream decoder capability or a separately
+authorized maintenance decision is required before a passing expectation exists.
+
+1. Freeze the exact server/site/runtime/decoder/editor versions and synthetic
+   complete-page set, metadata and fixed reference masks/identities/times. Include
+   applicable national/G2/diacritic/G3 base enhancements and essential fallback,
+   Local/POP/GPOP/default objects, DRCS/enlargement, palettes/nonspacing attributes
+   and panels. Reuse already valid independent/TSDuck/platform proof in scope;
+   this joined trial complements, never replaces, the complete acceptance matrix.
+2. Through localized admin select the same synthetic addon on two channels with
+   Day/Night profiles/themes and retained Free/Zone/Generated boundaries. Export
+   the supported complete set, perform the pinned actual QTM edit/save, import as
+   a concept and inspect the shared preview. Full large-bank/editor capability
+   is prerequisiteX3; no truncation, relabeling or hidden package edits substitute.
+3. Confirm import/preview do not change either running generation. Explicitly
+   publish with exact selection/revision/scope fences; read separate per-output
+   receipt status. Invalid/protected/stale edits must leave ordinary AV and the
+   last valid channel state safe. Reuse existing negative evidence if unchanged.
+4. Open the ordinary HTTP MPEGTS channel through the exact PVR IPTV Simple and
+   recorded inputstream route. Record any actual ffmpegdirect/timeshift use;
+   changing inputstream is not presumed to fix Kodi's renderer. Use existing
+   default capacity and ordinary Legacy/Hybrid paths within their required scope,
+   without raising limits, reconnecting a waiting viewer or dropping tracks.
+5. On the same emitted pages compare intended1/1.5 fallback and full2.5 fields,
+   navigate pages/subpages/links, observe live updates and manually reveal/conceal.
+   Kodi actions include directional page/subpage and numeric entry; record how
+   the actual remote exposes them. Info toggles HintMode and also Showl25 on each
+   transition back to hidden: track the complete four-state cycle with enhanced
+   sentinels, so disabled enhancements cannot masquerade as a2.5 success.
+6. Record timed flash over multiple complete phases, fixed glyph/object/DRCS/
+   panel/palette masks and essential fallback/navigation. A still image, TSDuck
+   alone or a basic-text success never closes full2.5 display. Stop and report
+   the first fixed-oracle mismatch without lowering the expected result.
+7. Confirm different channel themes remain simultaneous and isolated through
+   scoped Lua On/Off/profile selection, original expiry/Base return, script error
+   and restart according to the existing contracts. Reuse proven unchanged cells;
+   match browser/stream/client generations only where new joined proof is needed.
+8. Preserve source AV, selected alternate audio, captions and continuous timing;
+   pair actual receiver observations with independent decoding and required
+   transport checks. Finish with bounded cancellation, output/worker/lease cleanup
+   and durable reopen. Record device/client/inputstream versions, limitations and
+   actual pass/fail. No physical-device run occurs before this joint final session.
+
+Full9A feasibility remains explicitly conditional: X1 lacks a suitable pinned
+full-feature receiver under the current deferral/stockKodi result; X3 waits for
+upstream complete object-bank/over208-word context; X2 lacks macOS artifacts,
+nativeARM/macOS environments and remaining Health/accepted runtime adoption.
+None can be closed by further small base variants. Independent F3 product work
+may continue: qualify/correct physical alpha/mosaic black and double-width/size
+as one standard-checked bundle with original-byte/provenance and1/1.5 protection.
+All existing F/V/X clauses remain; no base-only result permits production9B.
 
 Bounded early client qualification after0675b825: reuse the actual Kodi20.5
 negative and scoped VLC MAIN receipts. The existing Kodi21.3 source assessment

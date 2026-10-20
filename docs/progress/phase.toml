@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: per-output delivery status verified; remaining C, D controls and E2 adoption/platforms remain'
+current_focus = 'P9A-04 full engine acceptance: lifecycle slice verified; bounded Kodi21.2 qualification and remaining F/V/X, no DVBViewer or device trial'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,28 +62,32 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current maintainer priority (2026-10-19): standalone Level1/1.5 first, then full
-Level2.5 with protected base. ADR0123 and P9A-04 L15-A..E/F/V/X own acceptance;
-neither base nor full9A is accepted. Production guide waits for independent9A.
-This current handoff supersedes older next-action prose below. No scope waiver,
-new general audit or external decoder/editor maintenance. The latest maintainer
-instruction authorized the completed40ad0608 checkpoint commit/push withoutCI;
-that push is complete. Subsequent evidence checkpoints stay local; no further
-push or release publication follows.
+Current maintainer direction (2026-10-20): full independent9A, including authored
+Level2.5 and correct1/1.5 fallback, before any production9B addon. The existing
+L15-A..E/F/V/X list and ADR0123 retain all conditions; neither base nor9A is
+accepted. No new general audit, adjacent variant series or external maintenance.
+This current handoff supersedes older next-action prose below. No push or
+publication is authorized by this followup.
 
-Current output-reporting checkpoint: canonical actual_output_status_followup
-connects publication selection to separate per-output initial and transition
-receipts, including V1 startup-only and V2 live Off on ordinary Legacy/Hybrid.
-Linux63, all9cultureSSR, eight headed Chromium/Firefox cases, AV8 and160 strict
-prefix transport checks pass; receipt owns final lint/smoke/source pins. The
-native_windows_followup now adds63 native Windows component passes at exact
-40ad0608, unchanged committed sources and exited owned runner. This is not
-packaged admin, native playback, accepted runtime adoption or full C/base/9A.
-Bounded base_client_dvbviewer_followup pins the public Demo installer7.3.1.0;
-source/static metadata is not receiver qualification. Next qualify isolated
-extraction and usable native interaction, then unchanged ordinary-stream client
-oracles. No installer was executed; no purchase/global install or lifting the
-full2.5 X1 deferral. E2 macOS/nativeARM/Health/adoption and X3-upstream remain.
+Profile/channel output lifecycle slice is committed in40ad0608; bb025c32 records
+its63 actual Windows component passes. Linux63/all9cultureSSR/headed8/AV8/
+transport160/smoke proof retains scope. No owned lifecycle changes or checks
+remain pending; broader C/F4 conditions remain in the matrix, not reopened here.
+DVBViewer work is stopped by explicit maintainer direction; all owned trial
+processes exited and shared file manifests stayed exact. Preserve its partial
+artifacts without further use. Kodi21.2 source qualification now reuses three
+byte-identical decoder files from the retained21.3 negative: Local invocation
+type, enlargedDRCS and side-panel gates remain. Stock21.2 is not a defensible
+full2.5-success candidate; no physical GoogleTV/Android test occurred. The P9A-04
+V3 section owns one conditional joint end-trial and the precise source limits.
+Full9A cannot close independently while X1 suitable-client qualification is
+deferred/source-negative, X3 complete QTM banks/large context awaits upstream,
+and X2 native six-RID/artifact/Health/adoption prerequisites are missing. These
+are not waived or substituted by more base variants. Next independent product
+package: qualify the existing F3 physical black/width/size spacing gap against
+standard semantics, then correct the demonstrated factory limitation as one
+bundle while preserving original bytes and intended1/1.5 fallback. No client
+hunt, decoder maintenance, physical-device test or DVBViewer work follows.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
 list, separated into missing product, mandatory proof and external prerequisites.
