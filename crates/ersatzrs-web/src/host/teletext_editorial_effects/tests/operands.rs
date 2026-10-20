@@ -125,6 +125,7 @@ fn edits(operands: &[TeletextLocalProgramOperandOverlay]) -> TeletextEditorialEd
         object_programs: &[],
         main_programs: &[],
         main_resource_invocations: &[],
+        main_presence: &[],
         bitmaps: &[],
     }
 }
@@ -626,6 +627,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
             object_programs: &[],
             main_programs: &[],
             main_resource_invocations: &[],
+            main_presence: &[],
             bitmaps: &[],
         },
         &policy().encoding,
@@ -831,11 +833,20 @@ fn native_tti_rejects_address_mode_reserved_geometry_invalid_glyph_position_and_
 }
 
 #[test]
-fn native_tti_rejects_packet_presence_changes_and_uploaded_baseline_forgery() {
+fn native_tti_complete_main_removal_is_exact_presence_and_requires_effect_permission() {
     let original = local_service(1, 1, 0);
     let records = tti_records(&original);
     let baseline = tti_bytes(records.clone());
-    let mut dropped = records.clone();
+    // This exact fixture has one X26 packet: dropping it removes the whole
+    // explicit Main. Other packet damage retains the separate Packet oracle.
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| matches!(record, TeletextTtiRecord::Packet { row: 26, .. }))
+            .count(),
+        1
+    );
+    let mut dropped = records;
     dropped.retain(|record| {
         !matches!(
             record,
@@ -846,31 +857,96 @@ fn native_tti_rejects_packet_presence_changes_and_uploaded_baseline_forgery() {
             }
         )
     });
+    let changes = reconcile_teletext_editorial_tti_with_operands(
+        &tti_mapping(),
+        &baseline,
+        &tti_bytes(dropped),
+        tti_budget(),
+        deadline(),
+        0x8040,
+        &original,
+    )
+    .unwrap();
+    assert_eq!(changes.main_presence.len(), 1);
+    let presence = &changes.main_presence[0];
+    assert_eq!(presence.owner(), address(123));
+    assert_eq!(
+        presence.expected(),
+        original.declared().semantic().page_enhancements()[&address(123)]
+            .local_program
+            .as_ref()
+    );
+    assert!(presence.replacement().is_none());
+    let mut remainder = changes.clone();
+    remainder.main_presence.clear();
+    assert!(
+        remainder.is_empty(),
+        "removal creates only exact optional Main intent"
+    );
+    let declared = original
+        .declared()
+        .clone()
+        .with_main_program_presence_overlays(
+            &changes.main_presence,
+            policy().validation.service,
+            policy().validation.declarations,
+        )
+        .unwrap();
+    let edited = ersatzrs_ffmpeg::teletext::encode_teletext_authored_service_before(
+        declared,
+        &[],
+        &policy().encoding,
+        deadline(),
+    )
+    .unwrap();
+    for kind in ["zone", "generated"] {
+        let result = validate_teletext_editorial_effects_with_operands(
+            &original,
+            &edited,
+            &project(kind, 1, 0, 40, 24),
+            changes.edits(),
+            &policy().encoding,
+            deadline(),
+        );
+        if kind == "zone" {
+            result.unwrap();
+        } else {
+            assert_eq!(
+                result.unwrap_err().reason,
+                TeletextEditorialEffectsFailure::ProtectedDisplay
+            );
+        }
+    }
+}
+
+#[test]
+fn native_tti_rejects_added_packet_and_uploaded_baseline_forgery() {
+    let original = local_service(1, 1, 0);
+    let records = tti_records(&original);
+    let baseline = tti_bytes(records.clone());
     let mut added = records.clone();
     added.push(TeletextTtiRecord::Packet {
         row: 26,
         designation: 15,
         words: [0; 13],
     });
-    for records in [dropped, added] {
-        let failure = reconcile_teletext_editorial_tti_with_operands(
-            &tti_mapping(),
-            &baseline,
-            &tti_bytes(records),
-            tti_budget(),
-            deadline(),
-            0x8040,
-            &original,
-        )
-        .err()
-        .unwrap();
-        assert_eq!(failure.failure, NativeTeletextEditorialTtiFailure::Packet);
-        assert_eq!(
-            (failure.page, failure.subcode, failure.row),
-            (123, 16, Some(26))
-        );
-        assert!(failure.designation.is_some());
-    }
+    let failure = reconcile_teletext_editorial_tti_with_operands(
+        &tti_mapping(),
+        &baseline,
+        &tti_bytes(added),
+        tti_budget(),
+        deadline(),
+        0x8040,
+        &original,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(failure.failure, NativeTeletextEditorialTtiFailure::Packet);
+    assert_eq!(
+        (failure.page, failure.subcode, failure.row),
+        (123, 16, Some(26))
+    );
+    assert!(failure.designation.is_some());
     let mut forged = records;
     let word = native_word(&original, 1);
     mutate_word(&mut forged, word, |word| (word & 0x7ff) | (7 << 11));

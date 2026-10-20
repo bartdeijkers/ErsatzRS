@@ -393,6 +393,21 @@ pub(super) fn reserve_budgets(
         overlay.resource_object_operands.len(),
         overlay.main_resource_invocations().len(),
     )?;
+    for presence in overlay.main_program_presence_overlays() {
+        items = add(items, 1)?;
+        for program in [presence.expected(), presence.replacement()]
+            .into_iter()
+            .flatten()
+        {
+            commands = add(commands, program.commands().len())?;
+            items = add(items, program.commands().len())?;
+        }
+        limit(
+            items,
+            budget.validation.service.max_structure_items,
+            "editorial structure items",
+        )?;
+    }
     limit(
         overlay.main_local_invocation_program_overlays.len(),
         budget.validation.service.max_records,

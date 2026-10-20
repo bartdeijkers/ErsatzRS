@@ -60,6 +60,8 @@ mod main_resource_invocations;
 
 #[path = "main_local_invocation_program_service.rs"]
 mod main_local_invocation_programs;
+#[path = "main_program_presence_service.rs"]
+mod main_program_presence;
 
 #[path = "local_object_glyph_program_service.rs"]
 mod local_object_glyph_programs;
@@ -250,6 +252,13 @@ pub enum TeletextServiceError {
     EmptyLocalProgramOperandOverlays,
     #[error("teletext Main call overlay set is empty")]
     EmptyMainLocalInvocationProgramOverlays,
+    #[error("teletext Main presence overlay set is empty")]
+    EmptyMainProgramPresenceOverlays,
+    #[error("teletext Main presence failed for {owner:?}: {reason}")]
+    MainProgramPresenceOverlay {
+        owner: TeletextPageAddress,
+        reason: super::TeletextMainProgramPresenceFailure,
+    },
     #[error("teletext Main call overlay failed for {owner:?}: {reason}")]
     MainLocalInvocationProgramOverlay {
         owner: TeletextPageAddress,

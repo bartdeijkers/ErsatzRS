@@ -36,6 +36,7 @@ type EventKey = (
 #[derive(Default)]
 pub(super) struct ProtectedLineage<'a> {
     main_program: Option<&'a ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay>,
+    main_presence: Option<&'a ersatzrs_domain::TeletextMainProgramPresenceOverlay>,
     programs: BTreeMap<TeletextObjectIdentity, Program<'a>>,
     main_calls: BTreeMap<usize, &'a ersatzrs_domain::TeletextMainResourceInvocationOverlay>,
     additions: BTreeMap<TeletextObjectIdentity, &'a TeletextEnhancementObjectDefinition>,
@@ -55,6 +56,7 @@ impl<'a> ProtectedLineage<'a> {
             && result.additions.is_empty()
             && result.main_program.is_none()
             && result.main_calls.is_empty()
+            && result.main_presence.is_none()
         {
             return Ok(result);
         }
@@ -72,11 +74,10 @@ impl<'a> ProtectedLineage<'a> {
                 TeletextEditorialEffectsFailure::Budget,
             ));
         }
-        if old.owner() != new.owner()
-            || old.original_program_source() != new.original_program_source()
-        {
+        if old.owner() != new.owner() {
             return Err(association());
         }
+        result.check_presence_source(old, new)?;
         result.calls = calls::Calls::new(old, new, &result, deadline)?;
         let mut indexed = BTreeMap::new();
         for (ordinal, event) in old.events().iter().enumerate() {
@@ -117,12 +118,47 @@ impl<'a> ProtectedLineage<'a> {
         Ok(result)
     }
 
+    fn check_presence_source(
+        &self,
+        old: &ersatzrs_domain::TeletextSpatialTrace,
+        new: &ersatzrs_domain::TeletextSpatialTrace,
+    ) -> Result<()> {
+        if let Some(presence) = self.main_presence {
+            let old_local = matches!(
+                old.original_program_source(),
+                ersatzrs_domain::TeletextEffectiveProgramSource::Local
+            );
+            let new_local = matches!(
+                new.original_program_source(),
+                ersatzrs_domain::TeletextEffectiveProgramSource::Local
+            );
+            if old_local != presence.expected().is_some()
+                || new_local != presence.replacement().is_some()
+            {
+                return Err(association());
+            }
+        } else if old.original_program_source() != new.original_program_source() {
+            return Err(association());
+        }
+        Ok(())
+    }
+
     fn from_edits(
         owner: ersatzrs_domain::TeletextPageAddress,
         edits: TeletextEditorialEdits<'a>,
         deadline: Instant,
     ) -> Result<Self> {
         let mut result = Self::default();
+        for presence in edits
+            .main_presence
+            .iter()
+            .filter(|presence| presence.owner() == owner)
+        {
+            check_deadline(deadline)?;
+            if result.main_presence.replace(presence).is_some() {
+                return Err(association());
+            }
+        }
         for program in edits
             .main_programs
             .iter()
@@ -186,6 +222,15 @@ impl<'a> ProtectedLineage<'a> {
 
     fn check_source_command(&self, source: TeletextEnhancementSource) -> Result<()> {
         if source.object.is_none()
+            && self.main_presence.is_some_and(|presence| {
+                presence
+                    .replacement()
+                    .is_some_and(|program| program.commands().get(source.command).is_none())
+            })
+        {
+            return Err(association());
+        }
+        if source.object.is_none()
             && self.main_program.is_some_and(|program| {
                 program
                     .replacement()
@@ -218,6 +263,9 @@ impl<'a> ProtectedLineage<'a> {
 
     pub(super) fn source(&self, source: TeletextEnhancementSource) -> CanonicalSource {
         if source.object.is_none() {
+            if self.main_presence.is_some() {
+                return CanonicalSource::Inserted(source);
+            }
             if let Some(program) = self.main_program {
                 return program.original_command(source.command).map_or(
                     CanonicalSource::Inserted(source),
@@ -274,6 +322,9 @@ impl<'a> ProtectedLineage<'a> {
         &self,
         root: TeletextSpatialRootSource,
     ) -> Option<TeletextSpatialRootSource> {
+        if self.main_presence.is_some() {
+            return None;
+        }
         match (root, self.main_program) {
             (TeletextSpatialRootSource::Local { command }, Some(program)) => program
                 .original_command(command)

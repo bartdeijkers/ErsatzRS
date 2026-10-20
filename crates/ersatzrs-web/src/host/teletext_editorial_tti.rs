@@ -20,6 +20,7 @@ use ersatzrs_domain::{
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 
+mod main_presence;
 mod operands;
 pub(super) mod resource_objects;
 pub(super) mod resources;
@@ -41,6 +42,7 @@ pub(super) struct TeletextEditorialChanges {
     pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     pub resource_operands: Vec<ersatzrs_domain::TeletextResourceObjectOperandOverlay>,
     pub object_programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    pub main_presence: Vec<ersatzrs_domain::TeletextMainProgramPresenceOverlay>,
     pub main_programs: Vec<ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay>,
     pub resource_programs: Vec<ersatzrs_domain::TeletextResourceObjectProgramOverlay>,
     pub resource_additions: Vec<ersatzrs_domain::TeletextResourceObjectDefinitionAddition>,
@@ -60,6 +62,7 @@ impl TeletextEditorialChanges {
             self.object_operands.len(),
             self.resource_operands.len(),
             self.object_programs.len(),
+            self.main_presence.len(),
             self.main_programs.len(),
             self.resource_programs.len(),
             self.resource_additions.len(),
@@ -79,6 +82,7 @@ impl TeletextEditorialChanges {
             operands: &self.operands,
             object_operands: &self.object_operands,
             object_programs: &self.object_programs,
+            main_presence: &self.main_presence,
             main_programs: &self.main_programs,
             resource_operands: &self.resource_operands,
             resource_programs: &self.resource_programs,
@@ -509,29 +513,35 @@ fn reconcile_changes(
     }
     baseline.validate_header(location)?;
     edited.validate_header(location)?;
-    let ordinary =
-        protected(&baseline, &edited, location, deadline, native.1.is_some()).and_then(|()| {
-            match native.1 {
+    let mut changes = if let Some(service) = native
+        .1
+        .filter(|service| main_presence::eligible(service, owner, &baseline, &edited))
+    {
+        protected_with_repacking(&baseline, &edited, location, deadline, true, true)?;
+        main_presence::reconcile(service, owner, &baseline, &edited, location, deadline)?
+    } else {
+        let ordinary = protected(&baseline, &edited, location, deadline, native.1.is_some())
+            .and_then(|()| match native.1 {
                 Some(service) => {
                     operands::reconcile(service, owner, &baseline, &edited, location, deadline)
                 }
                 None => Ok(TeletextEditorialChanges::default()),
+            });
+        match ordinary {
+            Ok(changes) => changes,
+            Err(original) => {
+                let Some(service) = native.1 else {
+                    return Err(original);
+                };
+                structural_candidate(
+                    service,
+                    owner,
+                    (&baseline, &edited),
+                    location,
+                    deadline,
+                    original,
+                )?
             }
-        });
-    let mut changes = match ordinary {
-        Ok(changes) => changes,
-        Err(original) => {
-            let Some(service) = native.1 else {
-                return Err(original);
-            };
-            structural_candidate(
-                service,
-                owner,
-                (&baseline, &edited),
-                location,
-                deadline,
-                original,
-            )?
         }
     };
     let mut rows = Vec::new();
@@ -606,6 +616,15 @@ pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
     let owner = owner(mapping, location)?;
     let document = location.parse(edited_bytes, budget, deadline)?;
     let page = Page::index(&document, mapping, location, deadline)?;
+    if changes
+        .main_presence
+        .iter()
+        .any(|program| program.owner() == owner)
+    {
+        // Presence has no retained original word ordinals to relocate. Every
+        // uploaded final packet must exactly equal the complete native rebuild.
+        return operands::check_packets(service, owner, &page, location, deadline);
+    }
     if changes
         .object_programs
         .iter()

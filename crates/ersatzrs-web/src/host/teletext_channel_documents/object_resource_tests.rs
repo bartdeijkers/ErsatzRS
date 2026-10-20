@@ -315,6 +315,7 @@ fn edits<'a>(
     EditorialResourceDocuments {
         base_text_edits: &[],
         main_programs: &[],
+        main_presence: &[],
         programs: (vec![], &[], &[], &[], &[]),
         resource_operands: &[],
         resource_programs: &[],

@@ -566,6 +566,10 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.base_text_edits());
+    let main_presence = parts
+        .editorial_overlay
+        .as_ref()
+        .map_or(&[][..], |overlay| overlay.main_program_presence_overlays());
     let main_programs = parts.editorial_overlay.as_ref().map_or(&[][..], |overlay| {
         overlay.main_local_invocation_program_overlays()
     });
@@ -576,6 +580,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         && resources.object_subpage_announcements.is_empty()
         && resources.object_page_selections.is_empty()
         && resources.main_resource_invocations.is_empty()
+        && main_presence.is_empty()
         && main_programs.is_empty()
         && base_text_edits.is_empty()
     {
@@ -600,6 +605,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
                 main_resource_invocations: resources.main_resource_invocations,
                 base_text_edits,
                 main_programs,
+                main_presence,
                 programs: editorial,
                 resource_operands,
                 resource_programs,

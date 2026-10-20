@@ -32,6 +32,7 @@ mod charset_context;
 mod compiler_resources;
 mod definition_additions;
 mod lineage;
+mod main_presence;
 mod main_programs;
 mod main_resource_invocations;
 mod object_operands;
@@ -135,6 +136,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub main_resource_invocations: &'a [ersatzrs_domain::TeletextMainResourceInvocationOverlay],
+    pub main_presence: &'a [ersatzrs_domain::TeletextMainProgramPresenceOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
 
@@ -181,6 +183,7 @@ pub(super) fn validate_teletext_editorial_transition(
             object_programs: &[],
             main_programs: &[],
             main_resource_invocations: &[],
+            main_presence: &[],
             bitmaps: &[],
         },
         TeletextEditorialEdits {
@@ -197,6 +200,7 @@ pub(super) fn validate_teletext_editorial_transition(
             object_programs: &[],
             main_programs: &[],
             main_resource_invocations: &[],
+            main_presence: &[],
             bitmaps: &[],
         },
         budget,
@@ -258,27 +262,7 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
                 .object_operands
                 .iter()
                 .any(|value| value.owner() == owner);
-        // A checked resource program can change compiler-owned repaint packing
-        // for every consumer; uploaded words and protected cells remain checked.
-        let structural_change = incoming
-            .object_programs
-            .iter()
-            .any(|value| value.owner() == owner)
-            || incoming
-                .main_programs
-                .iter()
-                .any(|value| value.owner() == owner)
-            || incoming
-                .main_resource_invocations
-                .iter()
-                .any(|value| value.owner() == owner)
-            || !incoming.resource_programs.is_empty()
-            || !incoming.resource_additions.is_empty()
-            || !incoming.object_resource_additions.is_empty()
-            || incoming
-                .object_page_selections
-                .iter()
-                .any(|value| value.change().display() == owner);
+        let structural_change = structural_change(incoming, owner);
         let operand_change =
             operand_change || structural_change || !incoming.resource_operands.is_empty();
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
@@ -321,6 +305,34 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
     check_deadline(deadline)
 }
 
+// A checked resource program can change compiler-owned repaint packing for
+// every consumer; uploaded words and protected cells remain checked separately.
+fn structural_change(incoming: TeletextEditorialEdits<'_>, owner: TeletextPageAddress) -> bool {
+    incoming
+        .object_programs
+        .iter()
+        .any(|value| value.owner() == owner)
+        || incoming
+            .main_programs
+            .iter()
+            .any(|value| value.owner() == owner)
+        || incoming
+            .main_resource_invocations
+            .iter()
+            .any(|value| value.owner() == owner)
+        || incoming
+            .main_presence
+            .iter()
+            .any(|value| value.owner() == owner)
+        || !incoming.resource_programs.is_empty()
+        || !incoming.resource_additions.is_empty()
+        || !incoming.object_resource_additions.is_empty()
+        || incoming
+            .object_page_selections
+            .iter()
+            .any(|value| value.change().display() == owner)
+}
+
 fn display(
     page: &EncodedTeletextAuthoredPage,
 ) -> Option<(&EncodedTeletextPage, &TeletextMainComposition)> {
@@ -357,6 +369,16 @@ fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize)
             program.expected().commands().len(),
             program.replacement().commands().len(),
             program.retained_commands().len(),
+        ]
+    }))
+    .chain(edits.main_presence.iter().flat_map(|presence| {
+        [
+            presence
+                .expected()
+                .map_or(0, |program| program.commands().len()),
+            presence
+                .replacement()
+                .map_or(0, |program| program.commands().len()),
         ]
     }))
     .chain(edits.resource_programs.iter().flat_map(|program| {
@@ -423,6 +445,8 @@ fn check_editorial_budgets(
         || cumulative.object_subpage_announcements.len() > budget.max_pages.saturating_mul(32)
         || incoming.object_page_selections.len() > budget.max_pages.saturating_mul(2)
         || cumulative.object_page_selections.len() > budget.max_pages.saturating_mul(2)
+        || incoming.main_presence.len() > budget.max_pages
+        || cumulative.main_presence.len() > budget.max_pages
         || incoming.bitmaps.len() > maximum_bitmaps
         || cumulative.bitmaps.len() > maximum_bitmaps
     {
@@ -703,6 +727,7 @@ fn check_enhancements(
     cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
 ) -> Result<()> {
+    let presence = main_presence::check(before, after, incoming, cumulative, deadline)?;
     let mut changes = BTreeMap::new();
     let main_calls =
         main_resource_invocations::check(before, after, incoming, cumulative, deadline)?;
@@ -725,23 +750,7 @@ fn check_enhancements(
             ));
         }
     }
-    let mut final_changes = BTreeSet::new();
-    for change in cumulative.operands {
-        check_deadline(deadline)?;
-        if !final_changes.insert((change.owner(), change.command()))
-            || main_programs::final_command(after, change, cumulative.main_programs)
-                != Some(TeletextEnhancementCommand::AtColumn {
-                    column: change.column(),
-                    operation: change.replacement(),
-                })
-        {
-            return Err(error(
-                Some(change.owner()),
-                None,
-                TeletextEditorialEffectsFailure::Association,
-            ));
-        }
-    }
+    check_cumulative_main_operands(after, cumulative, deadline)?;
     if before.len() != after.len() {
         return Err(error(
             None,
@@ -766,6 +775,9 @@ fn check_enhancements(
                 != links.get(owner).copied().unwrap_or(old.compositional_links)
         {
             return Err(failure());
+        }
+        if presence.contains_key(owner) {
+            continue;
         }
         match (&old.local_program, &new.local_program) {
             (Some(old), Some(new)) if main.contains_key(owner) => {
@@ -798,6 +810,31 @@ fn check_enhancements(
                 }
             }
             _ => return Err(failure()),
+        }
+    }
+    Ok(())
+}
+
+fn check_cumulative_main_operands(
+    after: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
+    cumulative: TeletextEditorialEdits<'_>,
+    deadline: Instant,
+) -> Result<()> {
+    let mut final_changes = BTreeSet::new();
+    for change in cumulative.operands {
+        check_deadline(deadline)?;
+        if !final_changes.insert((change.owner(), change.command()))
+            || main_programs::final_command(after, change, cumulative.main_programs)
+                != Some(TeletextEnhancementCommand::AtColumn {
+                    column: change.column(),
+                    operation: change.replacement(),
+                })
+        {
+            return Err(error(
+                Some(change.owner()),
+                None,
+                TeletextEditorialEffectsFailure::Association,
+            ));
         }
     }
     Ok(())

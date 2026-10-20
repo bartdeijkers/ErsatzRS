@@ -5,7 +5,7 @@ use ersatzrs_domain::{TeletextColumnOperation, TeletextEnhancementCommand};
 use std::time::Instant;
 
 #[derive(Clone, Copy)]
-pub(super) struct Entry {
+pub(in super::super) struct Entry {
     pub index: usize,
     pub word: u32,
     pub command: Option<TeletextEnhancementCommand>,
@@ -17,7 +17,7 @@ impl Entry {
         self.command.or(if styles { self.style } else { None })
     }
 }
-pub(super) struct Selector {
+pub(in super::super) struct Selector {
     pub index: usize,
     pub word: u32,
     pub used: bool,
@@ -27,7 +27,7 @@ pub(super) struct OriginalSpan {
     pub word: usize,
     pub ordinal: usize,
 }
-pub(super) struct Body {
+pub(in super::super) struct Body {
     pub entries: Vec<Entry>,
     pub selectors: Vec<Selector>,
 }

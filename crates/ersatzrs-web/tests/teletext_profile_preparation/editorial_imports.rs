@@ -39,6 +39,9 @@ use ersatzrs_web::host::{
     teletext_preview::project_teletext_preview,
 };
 
+#[path = "editorial_imports/main_presence.rs"]
+mod main_presence;
+
 #[path = "editorial_imports/compiler_polish.rs"]
 mod compiler_polish;
 #[path = "editorial_imports/compiler_polish_delivery.rs"]

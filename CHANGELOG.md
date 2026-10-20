@@ -25,6 +25,12 @@ release section when tagging a release.
 
 ### Added
 
+- Import a first standalone teletext Main enhancement program into a versioned
+  concept. Preserve the distinction between absent and explicitly empty Main,
+  retain checked edits through re-export and restart, and undo to exact original
+  absence. Publication remains explicit; original templates, declarations and
+  protected page content retain their existing safeguards.
+
 - Add localized teletext draft controls for creating empty POP/GPOP resource
   banks and announcing retained subpages on already selected pages. Explicit
   lifecycle values and current-draft checks protect each edit; multiple display

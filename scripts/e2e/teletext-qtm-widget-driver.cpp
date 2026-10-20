@@ -14,6 +14,7 @@
 #include <QMenuBar>
 #include <QSignalSpy>
 #include <QMenu>
+#include <QMessageBox>
 #include <QRadioButton>
 #include <QSpinBox>
 #include <QStyle>
@@ -106,6 +107,7 @@ struct DriverContext {
     bool editNativeG0 = false;
     int nativeUnicode = 0;
     bool editBaseSpacing = false;
+    bool createMain = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -143,6 +145,7 @@ static DriverContext driverContext() {
     const QByteArray input = qgetenv("ERSATZRS_QTM_INPUT_BASENAME");
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
     const bool foreground = mode == "single-page-foreground";
+    const bool createMain = mode == "single-page-create-main";
     const bool glyphStructure = mode == "single-page-local-glyph-structure";
     const bool mixedGlyphStructure = mode == "single-page-local-mixed-glyph-structure";
     const bool styleStructure = mode == "single-page-local-style-structure";
@@ -281,7 +284,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !nativeG0 && !baseSpacing && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !nativeG0 && !baseSpacing && !foreground && !createMain && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -316,12 +319,15 @@ static DriverContext driverContext() {
         qFatal("Fixed standalone Main/Base G2 requires its exact word/data, zero panels and no banks");
     if ((nativeG0 || baseSpacing) && (left != 0 || right != 0 || !drcs.isEmpty() || !globalDrcs.isEmpty()))
         qFatal("Fixed native G0 trial requires zero panels and no banks");
+    if (createMain && (qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
+        qFatal("Fixed absent-Main trial requires no DRCS companion context");
     if (resourceTrial && (left != 0 || right != 0
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing, createMain};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -2532,6 +2538,155 @@ static void editNativeFragmentCalls(QMainWindow *main, const DriverContext &cont
         context.insertFragmentCall ? "InsertCopy then InsertBeforeOrigin with cooked Row1-to0 Column0-to1" : "four single Delete clicks",expected.size());
 }
 
+// Pinned x26dockwidget.cpp1103: Insert copy on an empty list creates the
+// termination. Subsequent additions use only the actual Insert before menus.
+static void insertAbsentMainWord(QDockWidget *dock, const DriverContext &context,
+    const char *label, const char *stage) {
+    QPushButton *button = nullptr;
+    for (auto candidate : dock->findChildren<QPushButton *>()) {
+        QString text = candidate->text(); text.remove('&');
+        if (text != "Insert before" || !candidate->isVisible() || !candidate->isEnabled()
+            || !candidate->menu()) continue;
+        if (button) qFatal("Ambiguous absent-Main Insert before button");
+        button = candidate;
+    }
+    if (!button) qFatal("Actual absent-Main Insert before button absent");
+    auto menu = button->menu();
+    QTimer::singleShot(150, qApp, [menu, context, label, stage] {
+        const auto named = [](QMenu *parent, const char *name) {
+            QAction *found = nullptr;
+            for (auto action : parent->actions()) {
+                if (action->text() != name || !action->isVisible() || !action->isEnabled()) continue;
+                if (found) qFatal("Ambiguous absent-Main insertion action");
+                found = action;
+            }
+            if (!found) qFatal("Actual absent-Main insertion action absent");
+            return found;
+        };
+        if (!QTest::qWaitFor([menu] { return menu->isVisible(); }, 3000))
+            qFatal("Actual absent-Main insertion menu did not open");
+        auto targetMenu = menu;
+        if (QByteArray(label) != "Set Active Position") {
+            auto column = named(menu, "Column triplet");
+            auto child = column->menu();
+            if (!child) qFatal("Actual absent-Main Column submenu absent");
+            interiorDefinitionMenuSelect(menu, column);
+            QTest::keyClick(menu, Qt::Key_Right);
+            if (!QTest::qWaitFor([menu, column, child] {
+                return menu->activeAction() == column && child->isVisible();
+            }, 3000)) qFatal("Actual absent-Main Column submenu did not open");
+            targetMenu = child;
+        }
+        auto action = named(targetMenu, label);
+        if (action->menu()) qFatal("Actual absent-Main insertion target is not a leaf");
+        interiorDefinitionMenuSelect(targetMenu, action);
+        if (!targetMenu->grab().save(QString("/work/") + context.captureName(stage)))
+            qFatal("Actual absent-Main insertion menu capture failed");
+        if (targetMenu->activeAction() != action || !targetMenu->isVisible())
+            qFatal("Actual absent-Main insertion target changed before Return");
+        QTest::keyClick(targetMenu, Qt::Key_Return);
+    });
+    QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
+}
+static void absentMainColour(QDockWidget *dock, const DriverContext &context, int to,
+    const char *stage) {
+    QComboBox *colour = nullptr;
+    for (auto candidate : dock->findChildren<QComboBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != 32) continue;
+        if (colour) qFatal("Ambiguous absent-Main foreground selector");
+        colour = candidate;
+    }
+    if (!colour || colour->currentIndex() != 0 || (to != 18 && to != 7))
+        qFatal("Actual absent-Main foreground source or fixed target differs");
+    QTest::mouseClick(colour, Qt::LeftButton, Qt::NoModifier, colour->rect().center());
+    auto popup = colour->view();
+    if (!QTest::qWaitFor([popup] { return popup->isVisible(); }, 3000))
+        qFatal("Actual absent-Main foreground popup did not open");
+    const auto choice = popup->model()->index(to, colour->modelColumn(), colour->rootModelIndex());
+    popup->scrollTo(choice, QAbstractItemView::PositionAtCenter);
+    if (!QTest::qWaitFor([popup, choice] {
+        return choice.isValid() && popup->viewport()->rect().contains(popup->visualRect(choice).center());
+    }, 3000)) qFatal("Actual absent-Main foreground choice is not clickable");
+    const auto point = popup->visualRect(choice).center();
+    QTest::mouseMove(popup->viewport(), point);
+    if (!QTest::qWaitFor([popup, choice, point] {
+        return popup->isVisible() && popup->indexAt(point) == choice && popup->currentIndex() == choice;
+    }, 3000)) qFatal("Actual absent-Main foreground choice did not receive hover");
+    if (!popup->window()->grab().save(QString("/work/") + context.captureName(stage)))
+        qFatal("Actual absent-Main foreground popup capture failed");
+    QTest::mouseClick(popup->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+    if (!QTest::qWaitFor([colour, to] { return colour->currentIndex() == to; }, 3000))
+        qFatal("Actual absent-Main foreground choice was not activated");
+}
+static void editAbsentMain(QMainWindow *main, const DriverContext &context) {
+    if (!context.createMain || main->isWindowModified())
+        qFatal("Absent-Main creation requires a pristine fixed input");
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual absent-Main dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000)) qFatal("Actual absent-Main dock not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual absent-Main table is ambiguous");
+    auto table = tables.front();
+    auto model = table->model();
+    std::vector<StructureTriplet> expected;
+    // structureMatches intentionally accepts only nonempty fixed programs.
+    // Pinned LevelOnePage reserves an empty list; absent OL26 imports no words.
+    if (!QTest::qWaitFor([model] {
+        return model && model->columnCount() == 4 && model->rowCount() == 0;
+    }, 3000)) qFatal("Actual absent-Main baseline must have exactly zero X26 rows");
+    if (table->currentIndex().isValid() || main->isWindowModified())
+        qFatal("Actual absent-Main baseline must have no selected triplet or edits");
+    if (!dock->grab().save(QString("/work/") + context.captureName("absent-main-before")))
+        qFatal("Actual absent-Main baseline capture failed");
+    structureButton(dock, "Insert copy");
+    expected.push_back({63,31,7});
+    structureCheck(model, expected);
+    structureSelect(table, 0);
+    insertAbsentMainWord(dock, context, "Set Active Position", "absent-main-position-menu");
+    expected.insert(expected.begin(), StructureTriplet{41,4,0});
+    structureCheck(model, expected);
+    structureSelect(table, 0);
+    // Pinned cooked AP Row uses range1..24, unlike Origin modifier range0..23.
+    interiorDefinitionCoordinateStep(dock, 1, 24, 1, 2);
+    expected[0][0] = 42;
+    structureCheck(model, expected);
+    for (int column = 0; column < 8; ++column) {
+        interiorDefinitionCoordinateStep(dock, 0, 39, column, column + 1);
+        expected[0][2] = column + 1;
+        structureCheck(model, expected);
+    }
+    for (int word = 1; word <= 3; ++word) {
+        structureSelect(table, word);
+        insertAbsentMainWord(dock, context, word == 2 ? "G0 character" : "Foreground colour",
+            word == 1 ? "absent-main-foreground-menu" : word == 2
+                ? "absent-main-glyph-menu" : "absent-main-reset-menu");
+        expected.insert(expected.begin() + word, StructureTriplet{0,word == 2 ? 9 : 0,word == 2 ? 32 : 0});
+        structureCheck(model, expected);
+        structureSelect(table, word);
+        const int targetColumn = word == 3 ? 9 : 8;
+        for (int column = 0; column < targetColumn; ++column) {
+            interiorDefinitionCoordinateStep(dock, 0, 39, column, column + 1);
+            expected[word][0] = column + 1;
+            structureCheck(model, expected);
+        }
+        if (word == 2) structureCode(dock, context, word, 32, 81);
+        else absentMainColour(dock, context, word == 1 ? 18 : 7,
+            word == 1 ? "absent-main-foreground-popup" : "absent-main-reset-popup");
+        expected[word][2] = word == 1 ? 18 : word == 2 ? 81 : 7;
+        structureCheck(model, expected);
+    }
+    const std::vector<StructureTriplet> final{{42,4,8},{8,0,18},{8,9,81},{9,0,7},{63,31,7}};
+    structureCheck(model, final);
+    if (expected != final || !main->isWindowModified()) qFatal("Actual absent-Main final model differs");
+    if (!dock->grab().save(QString("/work/") + context.captureName("absent-main-edited")))
+        qFatal("Actual absent-Main edited capture failed");
+    savedGlyphStructure = final;
+    std::puts("QTM actual absent Main: empty X26 to AP2/8, FG18@8, G0Q81@8, FG7@9, termination7; full five-row model checked");
+}
 static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || savedGlyphStructure.size() != std::size_t(expectedCount)) qFatal("Fixed saved structure oracle absent");
@@ -2540,6 +2695,44 @@ static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32)
     structureCheck(tables.front()->model(), savedGlyphStructure);
 }
 
+// Pinned mainwindow.cpp162: F5 reloads the saved current file through the
+// original loader after its real confirmation dialog; no model is replaced here.
+static void reloadAbsentMain(QMainWindow *main, const DriverContext &context) {
+    if (!context.createMain || main->isWindowModified() || main->windowFilePath() != context.outputPath)
+        qFatal("Absent-Main reload requires the clean actual Save As output");
+    main->raise();
+    main->activateWindow();
+    if (auto handle = main->windowHandle()) handle->requestActivate();
+    if (!QTest::qWaitForWindowActive(main, 5000)) qFatal("Actual absent-Main reload window not active");
+    bool confirmed = false;
+    QTimer::singleShot(150, qApp, [main, context, &confirmed] {
+        QMessageBox *dialog = nullptr;
+        for (auto widget : QApplication::topLevelWidgets()) {
+            auto candidate = qobject_cast<QMessageBox *>(widget);
+            if (!candidate || !candidate->isVisible() || candidate->parentWidget() != main) continue;
+            if (dialog) qFatal("Ambiguous actual absent-Main reload confirmation");
+            dialog = candidate;
+        }
+        if (!dialog || dialog->standardButtons() != (QMessageBox::Yes | QMessageBox::No)
+            || dialog->text() != QString("Do you want to reload the document \"%1\" from disk?")
+                .arg(QFileInfo(context.outputPath).fileName()))
+            qFatal("Actual absent-Main reload confirmation differs");
+        auto yes = dialog->button(QMessageBox::Yes);
+        if (!yes || !yes->isVisible() || !yes->isEnabled()) qFatal("Actual reload Yes button absent");
+        if (!dialog->grab().save(QString("/work/") + context.captureName("absent-main-reload-dialog")))
+            qFatal("Actual absent-Main reload dialog capture failed");
+        confirmed = true;
+        QTest::mouseClick(yes, Qt::LeftButton, Qt::NoModifier, yes->rect().center());
+    });
+    QTest::keyClick(main, Qt::Key_F5);
+    if (!confirmed || main->isWindowModified() || main->windowFilePath() != context.outputPath)
+        qFatal("Actual absent-Main disk reload did not complete");
+    verifySavedGlyphStructure(main, 5);
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || !dock->grab().save(QString("/work/") + context.captureName("absent-main-reloaded")))
+        qFatal("Actual absent-Main reloaded dock capture failed");
+    std::puts("QTM actual absent Main: Save As followed by confirmed F5 disk reload; full five-row model retained");
+}
 static void saveAs(QMainWindow *main, const DriverContext &context) {
     QAction *save = nullptr;
     for (QAction *action : main->findChildren<QAction *>()) {
@@ -2665,6 +2858,10 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.editLocalStyleStructure) verifySavedGlyphStructure(saved, 27);
         if (context.addFirstDefinitionPosition) verifySavedGlyphStructure(saved, 6);
         if (context.addInteriorDefinitionRow) verifySavedGlyphStructure(saved, 10);
+        if (context.createMain) {
+            verifySavedGlyphStructure(saved, 5);
+            reloadAbsentMain(saved, context);
+        }
         if (context.insertResourceGlyph || context.deleteResourceGlyph)
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
         if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, context.resourceCallContext ? 21 : 10);
@@ -2683,7 +2880,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editBaseSpacing || context.editNativeG0 || context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow), context.inputName.constData(), context.outputName.constData());
+                (context.editBaseSpacing || context.editNativeG0 || context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition || context.addInteriorDefinitionRow || context.createMain), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -2740,6 +2937,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.insertFragmentCall || context.deleteFragmentCall) editNativeFragmentCalls(main,context);
             if (context.addFirstDefinitionPosition) editFirstDefinitionPosition(main, context);
             if (context.addInteriorDefinitionRow) editInteriorDefinitionRow(main, context);
+            if (context.createMain) editAbsentMain(main, context);
             if (context.editBaseSpacing) editBaseSpacing(main, context);
             if (context.editNativeG0) {
                 if (main->isWindowModified()

@@ -54,6 +54,10 @@ const OBJECT_RESOURCE_ADDITION_VERSION: u16 = 25;
 const OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION: u16 = 26;
 const OBJECT_PAGE_SELECTION_VERSION: u16 = 27;
 const MAIN_RESOURCE_INVOCATION_VERSION: u16 = 28;
+const MAIN_PROGRAM_PRESENCE_VERSION: u16 = 29;
+#[path = "editorial_overlay/main_program_presence.rs"]
+pub(super) mod main_program_presence;
+use main_program_presence::{BorrowedPresence, OptionalStoredPresence};
 
 #[path = "editorial_overlay/main_resource_invocations.rs"]
 pub(super) mod main_resource_invocations;
@@ -147,6 +151,7 @@ pub struct TeletextSavedEditorialOverlay {
     local_object_glyph_program_overlays: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     main_local_invocation_program_overlays: Vec<TeletextMainLocalInvocationProgramOverlay>,
     main_resource_invocations: Vec<TeletextMainResourceInvocationOverlay>,
+    main_program_presence_overlays: Vec<ersatzrs_domain::TeletextMainProgramPresenceOverlay>,
     resource_object_operands: Vec<TeletextResourceObjectOperandOverlay>,
     resource_object_program_overlays: Vec<TeletextResourceObjectProgramOverlay>,
     resource_object_definition_additions: Vec<TeletextResourceObjectDefinitionAddition>,
@@ -1034,6 +1039,7 @@ impl TeletextSavedEditorialOverlay {
             local_object_glyph_program_overlays: Vec::new(),
             main_local_invocation_program_overlays: Vec::new(),
             main_resource_invocations: Vec::new(),
+            main_program_presence_overlays: Vec::new(),
             resource_object_operands: Vec::new(),
             resource_object_program_overlays: Vec::new(),
             resource_object_definition_additions: Vec::new(),
@@ -1053,7 +1059,9 @@ impl TeletextSavedEditorialOverlay {
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        if !self.main_resource_invocations.is_empty() {
+        if !self.main_program_presence_overlays.is_empty() {
+            MAIN_PROGRAM_PRESENCE_VERSION
+        } else if !self.main_resource_invocations.is_empty() {
             MAIN_RESOURCE_INVOCATION_VERSION
         } else if !self.object_page_selections.is_empty() {
             OBJECT_PAGE_SELECTION_VERSION
@@ -1419,6 +1427,8 @@ closed_map!(StoredOverlay {
     object_page_selections: OptionalStoredSelections,
     #[serde(default, skip_serializing_if = "OptionalStoredInvocations::is_absent")]
     main_resource_invocations: OptionalStoredInvocations,
+    #[serde(default, skip_serializing_if = "OptionalStoredPresence::is_absent")]
+    main_program_presence_overlays: OptionalStoredPresence,
     #[serde(default, skip_serializing_if = "OptionalStoredBaseTextEdits::is_absent")]
     base_text_edits: OptionalStoredBaseTextEdits,
     export_receipt_id: EntityId,
@@ -1592,6 +1602,7 @@ impl StoredOverlay {
     }
 
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        main_program_presence::check_version(self)?;
         main_resource_invocations::check_version(self)?;
         object_page_selections::check_version(self)?;
         object_subpage_announcements::check_version(self)?;
@@ -1602,6 +1613,7 @@ impl StoredOverlay {
                 | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
                 | OBJECT_PAGE_SELECTION_VERSION
                 | MAIN_RESOURCE_INVOCATION_VERSION
+                | MAIN_PROGRAM_PRESENCE_VERSION
         ) {
             return Ok(());
         }
@@ -1753,6 +1765,7 @@ impl StoredOverlay {
                 | OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
                 | OBJECT_PAGE_SELECTION_VERSION
                 | MAIN_RESOURCE_INVOCATION_VERSION
+                | MAIN_PROGRAM_PRESENCE_VERSION
         ) {
             return object_resources::restore(self, documents, budget);
         }
@@ -1910,6 +1923,7 @@ pub(super) fn validate_association_shape(
     object_subpage_announcements::validate_association(overlay, documents, budget)?;
     object_page_selections::validate_association(overlay, documents, budget)?;
     main_resource_invocations::validate_association(overlay, documents)?;
+    main_program_presence::validate_association(overlay, documents, budget)?;
     limit(
         overlay.pages.len(),
         budget.validation.service.max_records,
@@ -2085,6 +2099,8 @@ struct BorrowedOverlay<'a> {
     object_page_selections: Option<BorrowedSelections<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     main_resource_invocations: Option<BorrowedInvocations<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    main_program_presence_overlays: Option<BorrowedPresence<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_text_edits: Option<BorrowedBaseTextEdits<'a>>,
     export_receipt_id: EntityId,
@@ -2279,8 +2295,11 @@ fn write_appended(
             prior_schema_version: (!overlay.object_resource_additions.is_empty()
                 || !overlay.object_subpage_announcements.is_empty()
                 || !overlay.object_page_selections.is_empty()
-                || !overlay.main_resource_invocations.is_empty())
+                || !overlay.main_resource_invocations.is_empty()
+                || !overlay.main_program_presence_overlays.is_empty())
             .then_some(overlay.schema_version),
+            main_program_presence_overlays: (!overlay.main_program_presence_overlays.is_empty())
+                .then_some(BorrowedPresence(&overlay.main_program_presence_overlays)),
             main_resource_invocations: (!overlay.main_resource_invocations.is_empty())
                 .then_some(BorrowedInvocations(&overlay.main_resource_invocations)),
             object_resource_additions: (!overlay.object_resource_additions.is_empty())
@@ -2432,3 +2451,7 @@ mod object_page_selection_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/main_resource_invocation_tests.rs"]
 mod main_resource_invocation_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/main_program_presence_tests.rs"]
+mod main_program_presence_tests;

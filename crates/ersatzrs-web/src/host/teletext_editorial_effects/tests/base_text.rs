@@ -37,6 +37,7 @@ fn generated_base_text_respects_free_zone_generated_and_undeclared_boundaries() 
                 object_programs: &[],
                 main_programs: &[],
                 main_resource_invocations: &[],
+                main_presence: &[],
                 bitmaps: &[],
             },
             &policy().encoding,

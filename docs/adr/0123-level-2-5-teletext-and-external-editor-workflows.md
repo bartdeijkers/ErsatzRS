@@ -151,6 +151,26 @@ receipts, explicit publication and recovery remain mandatory. Older stored roles
 reject the Main field. P9A-04 owns verification and remaining interchange scope;
 this is neither a complete editor/client qualification nor full engine acceptance.
 
+Private concept version29 separately records exact optional Main presence by
+page/subpage owner. Both expected and replacement are required fields: explicit
+null means absent, while an empty command array remains an explicit Main that
+suppresses defaults. Only genuine absent/present transitions use this role;
+versions1–28 retain their closed meanings. Every attachment rechecks original
+presence, complete execution, resources, MOT/default selection and shared bounds.
+Newly active Main or default invocation trees receive no inherited writer
+permissions, even if their pixels match the prior output. Original source bytes,
+all declarations and protected effects remain immutable. Subsequent checked
+scalar edits of a created Main fold into its original absent attachment; exact
+root undo restores absence and removes that attachment. A versioned concept and
+its preview do not publish themselves.
+
+The initial native TTI creation path admits standalone authored words only when
+the authenticated absent Main has no existing generated X26. Complete native
+re-encoding must match every uploaded packet. It does not convert generated
+compatibility/default/definition words into authored intent or grant an arbitrary
+replacement of an existing Main. Those remaining F1 context/consumer mechanisms
+retain their independent acceptance obligations in P9A-04.
+
 The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit
 trusted authoring bounds are separate from per-channel entry/region/resource

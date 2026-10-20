@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F2 generic metadata/zone/version and Linux Next Burn/Convert functional/raw-wire components closed; next existing F1 Main/Local context/style family using existing controls. Preserve completed F4/F6 scopes; no client search or external maintenance'
+current_focus = 'P9A-04 F1 standalone absent-Main creation/edit/exact-undo component closed; next existing F1 first-Main compatibility with generated baseline X26, preserving original source provenance. Keep completed F2/F4/F6 and runtime scopes; no client search or external maintenance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -66,8 +66,24 @@ Current maintainer direction (2026-10-20): full independent9A, including authore
 Level2.5 and correct1/1.5 fallback, before any production9B addon. The existing
 L15-A..E/F/V/X list and ADR0123 retain all conditions; neither base nor9A is
 accepted. No new general audit, adjacent variant series or external maintenance.
-This current handoff supersedes older next-action prose below. No push or
-publication is authorized by this followup.
+This current handoff supersedes older next-action prose below. Maintainer
+2026-10-21 authorizes a push to remote/main only after full local Phase9A
+acceptance, followed by checking all applicable CI gates on the pushed commit.
+Partial checkpoints remain local; no publication is authorized.
+
+F1 standalone Main-presence creation is now completed within its exact boundary:
+original None/no baseline X26, genuine pinned QTM menu/SaveAs/disk reload,
+concept/preview/explicit publication, scalar repeat and exact original-None undo
+with reopen. V29, full effects/default provenance and protected refusals retain
+scope. Canonical tmp/phase9-header-c2/main-presence/identity.json owns original
+RED, grouped/final controls, genuine saved-artifact integration, independent
+Level1.5/2.5 fixed cells, helper negatives and final checks. Existing admin and
+transport proofs are reused; no DOM or mux change. Next existing F1 action:
+qualify first Main on a source that already has compiler-generated X26. First
+retain a native defect/refusal and distinguish compatibility words from authored
+intent; smallest correction only after that evidence. Stop when exact source/
+full effects/defaults/fallback and repeat/undo are proven; do not add adjacent
+editor variants. Other current matrix requirements and deferrals are unchanged.
 
 Profile/channel output lifecycle slice is committed in40ad0608; bb025c32 records
 its63 actual Windows component passes. Linux63/all9cultureSSR/headed8/AV8/

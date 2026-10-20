@@ -150,7 +150,9 @@ pub(super) fn check_version(stored: &StoredOverlay) -> Result<(), TeletextDesign
         }
     } else if matches!(
         stored.schema_version,
-        super::OBJECT_PAGE_SELECTION_VERSION | super::MAIN_RESOURCE_INVOCATION_VERSION
+        super::OBJECT_PAGE_SELECTION_VERSION
+            | super::MAIN_RESOURCE_INVOCATION_VERSION
+            | super::MAIN_PROGRAM_PRESENCE_VERSION
     ) {
         if stored
             .object_subpage_announcements

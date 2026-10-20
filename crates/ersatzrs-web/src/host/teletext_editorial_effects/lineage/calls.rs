@@ -125,12 +125,27 @@ impl Calls {
     ) -> Option<TeletextSpatialInvocationId> {
         id.map(|id| self.originals.get(&id.get()).copied().unwrap_or(id))
     }
+    fn presence_transition(after: &TeletextSpatialTrace, deadline: Instant) -> Result<Self> {
+        let mut result = Self::default();
+        for call in after.invocations() {
+            check_deadline(deadline)?;
+            if !result.inserted.insert(call.id().get()) {
+                return Err(association());
+            }
+        }
+        // Every old Main/default root is retired by the checked optional
+        // transition. Newly activated roots never alias its prior writers.
+        Ok(result)
+    }
     pub(super) fn new(
         before: &TeletextSpatialTrace,
         after: &TeletextSpatialTrace,
         lineage: &ProtectedLineage<'_>,
         deadline: Instant,
     ) -> Result<Self> {
+        if lineage.main_presence.is_some() {
+            return Self::presence_transition(after, deadline);
+        }
         let mut old = BTreeMap::<Key, _>::new();
         for call in before.invocations() {
             check_deadline(deadline)?;

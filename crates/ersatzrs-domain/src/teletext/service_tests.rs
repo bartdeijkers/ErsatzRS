@@ -1375,3 +1375,6 @@ mod resource_object_definition_addition_tests;
 
 #[path = "main_local_invocation_program_tests.rs"]
 mod main_local_invocation_program_tests;
+
+#[path = "main_program_presence_tests.rs"]
+mod main_program_presence_tests;

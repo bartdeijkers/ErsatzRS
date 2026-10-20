@@ -312,6 +312,7 @@ fn check_operands(
             object_programs: &[],
             main_programs: &[],
             main_resource_invocations: &[],
+            main_presence: &[],
             bitmaps: &[],
         }
     }

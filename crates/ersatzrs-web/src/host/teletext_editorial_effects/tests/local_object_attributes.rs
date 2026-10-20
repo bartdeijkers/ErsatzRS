@@ -140,6 +140,7 @@ fn retained_sized_object_attributes_require_the_whole_original_lower_and_right_f
         object_programs: &[],
         main_programs: &[],
         main_resource_invocations: &[],
+        main_presence: &[],
         bitmaps: &[],
     };
     for kind in ["free", "zone"] {

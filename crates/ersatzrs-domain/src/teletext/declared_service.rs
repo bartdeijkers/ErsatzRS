@@ -277,6 +277,27 @@ impl TeletextDeclaredService {
         self.validate_resource_usage()?;
         Ok(self)
     }
+    /// Change Main presence and fully reauthenticate MOT/default/resource usage.
+    /// # Errors
+    /// Rejects stale presence, invalid execution and declaration/fallback mismatches
+    /// atomically; original selections, MOTs and empty companions are retained.
+    pub fn with_main_program_presence_overlays(
+        self,
+        overlays: &[super::TeletextMainProgramPresenceOverlay],
+        budget: super::TeletextServiceBudget,
+        declarations: TeletextDeclaredServiceBudget,
+    ) -> Result<Self, super::TeletextMainProgramPresenceApplyError> {
+        let semantic = self
+            .semantic
+            .with_main_program_presence_overlays(overlays, budget)?;
+        Ok(Self::new(
+            semantic,
+            self.mots,
+            self.selections,
+            self.empty_object_pages,
+            declarations,
+        )?)
+    }
     /// Replace checked glyph/colour/attribute operands in existing local definitions.
     /// Authenticated declarations, object identities/types and resource selections
     /// remain unchanged. Hosts must check all protected effects before publication.

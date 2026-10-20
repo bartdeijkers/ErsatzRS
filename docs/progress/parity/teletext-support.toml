@@ -5,7 +5,8 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123:1/1.5 then full2.5, neither accepted. P9A-04 owns L15/F/V/X.
-F2 generic metadata/zones/version authority closed; canonical receipts in P9A-04.
+F2 metadata/zones/version closed; F1 standalone absent-Main creation/edit/undo
+closed with V29, pinned QTM and independent cells; P9A-04 owns exact boundaries.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay

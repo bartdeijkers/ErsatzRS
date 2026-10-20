@@ -23,6 +23,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[path = "repeat/base_text.rs"]
 mod base_text;
+#[path = "repeat/main_presence.rs"]
+mod main_presence;
 #[path = "repeat/main_programs.rs"]
 mod main_programs;
 #[path = "repeat/main_resource_invocations.rs"]
@@ -189,6 +191,7 @@ pub(super) fn from_overlay(overlay: &TeletextSavedEditorialOverlay) -> TeletextE
         operands: overlay.local_program_operands().to_vec(),
         object_operands: overlay.local_object_operands().to_vec(),
         object_programs: overlay.local_object_glyph_program_overlays().to_vec(),
+        main_presence: overlay.main_program_presence_overlays().to_vec(),
         main_programs: overlay.main_local_invocation_program_overlays().to_vec(),
         bitmaps: overlay.drcs_bitmap_overlays().to_vec(),
     }
@@ -432,6 +435,7 @@ fn extend_root_export(
         .chain(cumulative.operands.iter().map(|operand| operand.owner()))
         .chain(cumulative.object_operands.iter().map(|operand| operand.owner()))
         .chain(cumulative.object_programs.iter().map(ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::owner))
+        .chain(cumulative.main_presence.iter().map(ersatzrs_domain::TeletextMainProgramPresenceOverlay::owner))
         .chain(cumulative.main_programs.iter().map(ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay::owner))
         .chain(cumulative.main_resource_invocations.iter().map(|value| value.owner()))
         // Preserve every actual resource consumer without exporting unrelated
@@ -508,6 +512,13 @@ pub(super) fn check_operand_budget(
             ]
         }))
         .flatten()
+        .chain(changes.main_presence.iter().flat_map(|p| {
+            [
+                1,
+                p.expected().map_or(0, |p| p.commands().len()),
+                p.replacement().map_or(0, |p| p.commands().len()),
+            ]
+        }))
         .chain(addition_work)
         .chain(bank_work)
         .chain(changes.object_subpage_announcements.iter().map(|_| 1))
@@ -519,6 +530,7 @@ pub(super) fn check_operand_budget(
             .object_programs
             .len()
             .checked_add(changes.resource_programs.len())
+            .and_then(|count| count.checked_add(changes.main_presence.len()))
             .and_then(|count| count.checked_add(changes.main_programs.len()))
             .and_then(|count| count.checked_add(changes.main_resource_invocations.len()))
             .and_then(|count| count.checked_add(changes.resource_additions.len()))
@@ -654,6 +666,22 @@ fn merge_changes(
     policy: &NativeTeletextExportPolicy,
     deadline: Instant,
 ) -> Result<TeletextEditorialChanges> {
+    if previous.main_presence.is_empty() && incoming.main_presence.is_empty() {
+        return merge_ordinary_changes(root, previous, incoming, policy, deadline);
+    }
+    let (previous, incoming, presence) = main_presence::fold(root, previous, incoming, deadline)?;
+    let mut merged = merge_ordinary_changes(root, &previous, &incoming, policy, deadline)?;
+    merged.main_presence = presence;
+    Ok(merged)
+}
+
+fn merge_ordinary_changes(
+    root: &QualifiedBaseline,
+    previous: &TeletextEditorialChanges,
+    incoming: &TeletextEditorialChanges,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<TeletextEditorialChanges> {
     let (object_operands, object_programs) = merge_object_changes(
         root,
         previous,
@@ -708,6 +736,7 @@ fn merge_changes(
         resource_programs,
         rows: merge_rows(&previous.rows, &incoming.rows, policy, deadline)?,
         operands,
+        main_presence: Vec::new(),
         main_programs,
         object_operands,
         object_programs,
@@ -966,6 +995,28 @@ fn resource_program_overlay(
 }
 
 pub(super) fn cumulative_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    if changes.main_presence.is_empty() {
+        return cumulative_without_presence(provenance, changes);
+    }
+    let mut siblings = changes.clone();
+    siblings.main_presence.clear();
+    if siblings.is_empty() {
+        TeletextSavedEditorialOverlay::new_with_main_program_presence_overlays(
+            provenance.clone(),
+            changes.main_presence.clone(),
+        )
+        .map_err(Into::into)
+    } else {
+        cumulative_without_presence(provenance, &siblings)?
+            .with_main_program_presence_overlays(changes.main_presence.clone())
+            .map_err(Into::into)
+    }
+}
+
+fn cumulative_without_presence(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
 ) -> Result<TeletextSavedEditorialOverlay> {
@@ -1292,6 +1343,7 @@ fn local_invocation_overlay(
         object_operands: changes.object_operands.clone(),
         bitmaps: changes.bitmaps.clone(),
         object_programs: ordinary,
+        main_presence: Vec::new(),
         main_programs: Vec::new(),
         resource_operands: changes.resource_operands.clone(),
         resource_programs: changes.resource_programs.clone(),
@@ -1409,6 +1461,7 @@ fn make_document(
             operands: &prepared.incoming.operands,
             object_operands: &prepared.incoming.object_operands,
             object_programs: &prepared.incoming.object_programs,
+            main_presence: &prepared.incoming.main_presence,
             main_programs: &prepared.incoming.main_programs,
             bitmaps: &prepared.incoming.bitmaps,
         },
@@ -1425,6 +1478,7 @@ fn make_document(
             operands: &prepared.cumulative.operands,
             object_operands: &prepared.cumulative.object_operands,
             object_programs: &prepared.cumulative.object_programs,
+            main_presence: &prepared.cumulative.main_presence,
             main_programs: &prepared.cumulative.main_programs,
             bitmaps: &prepared.cumulative.bitmaps,
         },

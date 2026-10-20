@@ -45,6 +45,7 @@ type EditorialProgramDocuments<'a> = (
 /// Trusted replay inputs; receipt and shared-effect qualification stay with callers.
 pub(super) struct EditorialResourceDocuments<'a> {
     pub(super) base_text_edits: &'a [ersatzrs_domain::TeletextBaseTextEdit],
+    pub(super) main_presence: &'a [ersatzrs_domain::TeletextMainProgramPresenceOverlay],
     pub(super) main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
     pub(super) programs: EditorialProgramDocuments<'a>,
     pub(super) resource_operands: &'a [TeletextResourceObjectOperandOverlay],
@@ -516,6 +517,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
         EditorialResourceDocuments {
             base_text_edits: &[],
             main_programs: &[],
+            main_presence: &[],
             programs: editorial,
             resource_operands: &[],
             resource_programs: &[],
@@ -550,6 +552,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
         && editorial.object_page_selections.is_empty()
         && editorial.main_resource_invocations.is_empty()
         && editorial.programs.4.is_empty()
+        && editorial.main_presence.is_empty()
         && editorial.main_programs.is_empty()
         && editorial.base_text_edits.is_empty()
     {
@@ -668,6 +671,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
         EditorialResourceDocuments {
             base_text_edits: &[],
             main_programs: &[],
+            main_presence: &[],
             programs: editorial,
             resource_operands: &[],
             resource_programs: &[],
@@ -772,6 +776,20 @@ fn check_original_editorial_input(
     let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
     check_deadline(deadline)?;
     check_producer_budget(document_count, policy)?;
+    let mut remaining = policy.composition.service.max_commands;
+    if editorial.main_presence.len() > policy.composition.service.max_records {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    for intent in editorial.main_presence {
+        for program in [intent.expected(), intent.replacement()]
+            .into_iter()
+            .flatten()
+        {
+            remaining = remaining
+                .checked_sub(program.commands().len())
+                .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
+        }
+    }
     if resource_additions.len() > policy.composition.service.max_objects {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
@@ -782,6 +800,7 @@ fn check_original_editorial_input(
         || !editorial.object_subpage_announcements.is_empty()
         || !editorial.object_page_selections.is_empty()
         || !editorial.main_resource_invocations.is_empty()
+        || !editorial.main_presence.is_empty()
         || !editorial.main_programs.is_empty()
         || !editorial.base_text_edits.is_empty()
     {
@@ -802,7 +821,7 @@ fn check_original_editorial_input(
             resource_operands.len(),
             resource_programs,
             (resource_additions, object_resource_additions),
-            policy.composition.service.max_commands,
+            remaining,
         )?;
     }
     if document_count == 0
@@ -811,6 +830,7 @@ fn check_original_editorial_input(
             || !object_operands.is_empty()
             || !bitmaps.is_empty()
             || !programs.is_empty()
+            || !editorial.main_presence.is_empty()
             || !editorial.main_programs.is_empty()
             || !editorial.base_text_edits.is_empty()
             || !resource_operands.is_empty()
@@ -1245,6 +1265,7 @@ fn apply_editorial_operands(
                 ChannelTeletextDocumentEncodingError::ObjectAnnouncement(Box::new(error))
             })?;
     }
+    declared = apply_main_presence(declared, editorial.main_presence, composition)?;
     if !operands.is_empty() {
         declared = declared
             .with_local_program_operand_overlays(operands, budget)
@@ -1285,6 +1306,30 @@ fn apply_editorial_operands(
             .map_err(editorial_semantic_error)?;
     }
     Ok(declared)
+}
+
+fn apply_main_presence(
+    declared: ersatzrs_domain::TeletextDeclaredService,
+    presence: &[ersatzrs_domain::TeletextMainProgramPresenceOverlay],
+    composition: TeletextProducerCompositionBudget,
+) -> Result<ersatzrs_domain::TeletextDeclaredService, ChannelTeletextDocumentEncodingError> {
+    if presence.is_empty() {
+        return Ok(declared);
+    }
+    declared
+        .with_main_program_presence_overlays(
+            presence,
+            composition.service,
+            composition.declarations,
+        )
+        .map_err(|error| match error {
+            ersatzrs_domain::TeletextMainProgramPresenceApplyError::Service(reason) => {
+                editorial_semantic_error(reason)
+            }
+            ersatzrs_domain::TeletextMainProgramPresenceApplyError::Declaration(_) => {
+                ChannelTeletextDocumentEncodingError::Association
+            }
+        })
 }
 
 fn check_editorial_resource_budget(

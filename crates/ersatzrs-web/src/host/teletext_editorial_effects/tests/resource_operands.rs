@@ -242,6 +242,7 @@ fn edits(resource_operands: &[TeletextResourceObjectOperandOverlay]) -> Teletext
         object_programs: &[],
         main_programs: &[],
         main_resource_invocations: &[],
+        main_presence: &[],
         bitmaps: &[],
     }
 }

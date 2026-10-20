@@ -43,6 +43,7 @@ fn edits(bitmaps: &[TeletextDrcsBitmapOverlay]) -> TeletextEditorialEdits<'_> {
         object_programs: &[],
         main_programs: &[],
         main_resource_invocations: &[],
+        main_presence: &[],
         bitmaps,
     }
 }

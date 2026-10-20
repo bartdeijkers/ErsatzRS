@@ -21,6 +21,7 @@ mod bitmaps;
 mod charset_context;
 mod compiler_resources;
 mod local_object_attributes;
+mod main_presence;
 mod operands;
 mod resource_operands;
 

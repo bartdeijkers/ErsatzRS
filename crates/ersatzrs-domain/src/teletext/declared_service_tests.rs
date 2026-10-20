@@ -1054,3 +1054,6 @@ fn local_object_overlay_preserves_declared_mot_inventory_defaults_and_original_s
 
 #[path = "declared_service_usage_tests.rs"]
 mod usage_tests;
+
+#[path = "main_program_presence_declared_tests.rs"]
+mod main_program_presence_declared_tests;

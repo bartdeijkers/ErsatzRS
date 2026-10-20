@@ -213,6 +213,7 @@ pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignD
             | super::OBJECT_SUBPAGE_ANNOUNCEMENT_VERSION
             | super::OBJECT_PAGE_SELECTION_VERSION
             | super::MAIN_RESOURCE_INVOCATION_VERSION
+            | super::MAIN_PROGRAM_PRESENCE_VERSION
     ) {
         if !matches!(value.prior_schema_version.0, Some(1..=24))
             || (value.schema_version == super::OBJECT_RESOURCE_ADDITION_VERSION
@@ -259,6 +260,13 @@ pub(super) fn restore(
     let invocations = super::main_resource_invocations::restore(
         stored
             .main_resource_invocations
+            .0
+            .take()
+            .unwrap_or_default(),
+    )?;
+    let presence = super::main_program_presence::restore(
+        stored
+            .main_program_presence_overlays
             .0
             .take()
             .unwrap_or_default(),
@@ -329,12 +337,26 @@ pub(super) fn restore(
     } else {
         overlay.with_object_page_selections(selections)?
     };
+    let overlay = attach_main_intents(overlay, invocations, presence)?;
+    validate_association(&overlay, documents, budget)?;
+    Ok(overlay)
+}
+
+fn attach_main_intents(
+    overlay: TeletextSavedEditorialOverlay,
+    invocations: Vec<ersatzrs_domain::TeletextMainResourceInvocationOverlay>,
+    presence: Vec<ersatzrs_domain::TeletextMainProgramPresenceOverlay>,
+) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
     let overlay = if invocations.is_empty() {
         overlay
     } else {
         overlay.with_main_resource_invocations(invocations)?
     };
-    validate_association(&overlay, documents, budget)?;
+    let overlay = if presence.is_empty() {
+        overlay
+    } else {
+        overlay.with_main_program_presence_overlays(presence)?
+    };
     Ok(overlay)
 }
 

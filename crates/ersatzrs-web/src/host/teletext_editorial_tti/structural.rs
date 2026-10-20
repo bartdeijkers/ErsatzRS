@@ -11,7 +11,7 @@ mod intents;
 mod main;
 mod program;
 mod qualify;
-mod raw;
+pub(super) mod raw;
 pub(super) mod resource;
 pub(super) mod stream;
 mod style;

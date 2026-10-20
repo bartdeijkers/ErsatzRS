@@ -1298,6 +1298,8 @@ enum Path {
     EditorialGlyphProgram,
     EditorialMainPrograms,
     EditorialMainProgram,
+    EditorialMainPresenceOverlays,
+    EditorialMainPresenceOverlay,
     EditorialMainResourceInvocations,
     EditorialMainResourceInvocation,
     EditorialDefinitionAdditions,
@@ -1457,6 +1459,11 @@ fn check_editorial_role_storage<E: serde::de::Error>(
     path: Path,
     count: usize,
 ) -> Result<(), E> {
+    if matches!(path, Path::EditorialMainPresenceOverlay) {
+        scan.check(storage::<
+            editorial_overlay::main_program_presence::StoredMainPresence,
+        >(count))?;
+    }
     if matches!(path, Path::EditorialMainResourceInvocation) {
         scan.check(storage::<
             editorial_overlay::main_resource_invocations::StoredMainResourceInvocation,
@@ -1486,6 +1493,7 @@ impl Scan {
                 | Path::EditorialResourceOperand
                 | Path::EditorialGlyphProgram
                 | Path::EditorialMainProgram
+                | Path::EditorialMainPresenceOverlay
                 | Path::EditorialMainResourceInvocation
                 | Path::EditorialResourceProgram
                 | Path::EditorialDefinitionAddition
@@ -1696,9 +1704,10 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                     Path::EditorialResourcePrograms
                 }
                 (Path::EditorialDefinitionAddition, "program")
-                | (Path::EditorialResourceProgram, "expected" | "replacement") => {
-                    Path::EditorialResourceProgramDefinition
-                }
+                | (
+                    Path::EditorialResourceProgram | Path::EditorialMainPresenceOverlay,
+                    "expected" | "replacement",
+                ) => Path::EditorialResourceProgramDefinition,
                 (Path::EditorialResourceProgramDefinition, "commands") => {
                     Path::EditorialResourceProgramCommands
                 }
@@ -1835,6 +1844,11 @@ fn glyph_program_sequence_limits(
     budget: TeletextDesignDocumentBudget,
 ) -> (usize, Path, &'static str) {
     match path {
+        Path::EditorialMainPresenceOverlays => (
+            budget.validation.service.max_records,
+            Path::EditorialMainPresenceOverlay,
+            "editorial Main presence",
+        ),
         Path::EditorialMainPrograms => (
             budget.validation.service.max_records,
             Path::EditorialMainProgram,
@@ -1902,6 +1916,9 @@ fn glyph_program_sequence_limits(
 
 fn editorial_role_path(path: Path, key: &str) -> Path {
     match (path, key) {
+        (Path::EditorialOverlay, "main_program_presence_overlays") => {
+            Path::EditorialMainPresenceOverlays
+        }
         (Path::EditorialOverlay, "main_resource_invocations") => {
             Path::EditorialMainResourceInvocations
         }

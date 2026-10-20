@@ -123,6 +123,15 @@ pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignD
         {
             return Err(invalid());
         }
+    } else if value.schema_version == super::MAIN_PROGRAM_PRESENCE_VERSION {
+        if value
+            .main_resource_invocations
+            .0
+            .as_ref()
+            .is_some_and(Vec::is_empty)
+        {
+            return Err(invalid());
+        }
     } else if !value.main_resource_invocations.is_absent() {
         return Err(invalid());
     }
@@ -186,7 +195,7 @@ pub(super) fn validate_association(
     Ok(())
 }
 
-fn target_owner(
+pub(super) fn target_owner(
     overlay: &TeletextSavedEditorialOverlay,
     documents: &[TeletextProfileDocument],
     owner: usize,
