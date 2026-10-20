@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: Arabic G2 editor/publication flow verified; D private client storage/control determines next qualification, remaining finite/end gates stay open'
+current_focus = 'P9A-04 standalone Level 1/1.5: D private client file storage qualified; concrete stream/teletext control remains the next prerequisite, finite/end gates stay open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -109,7 +109,7 @@ release publication. Exact SHA and push result belong to the canonical receipt.
 Next independent work is the remaining C live/shared/Lua/whole-host restart
 matrix using existing fixtures; D still requires usable native client control.
 All finite base packages and enhanced X1/X3/platform/adoption gates stay open.
-Bounded L15-D ProgDVB Standard7.73.2/executable7.73.2.0 now ingests the
+Earlier bounded L15-D ProgDVB Standard7.73.2/executable7.73.2.0 ingests the
 synthetic M3U provider through documented storage and identified visible native
 BUTTON/BM_CLICK; two actual playlist GETs and the inspected channel screenshot
 pass. No capture playback/ordinary live stream or teletext capability is proven.
@@ -356,12 +356,26 @@ web Clippy pass. Two preflight/controller failures and controlled stop remain;
 new supported35->36 tuple requires no driver/editor/oracle modification.
 Direct G0 editing/complete font/editor coverage remain open; no new ordinary
 HTTP/client/platform or fullA1/A2/B2/base/9A acceptance. Reuse unaffected admin/
-stream/Lua/isolation/F6 evidence only in scope. Next D: bounded documented
-private-storage/control qualification for ProgDVB before any runtime retry;
-shared settings stay preserved. If unavailable, record exact prerequisite and
-continue independent C/E1/E2, no unchanged negative candidate or maintenance.
+stream/Lua/isolation/F6 evidence only in scope. The current D storage result
+below supersedes the prior storage prerequisite; actual channel/teletext control
+still determines the client trial. Shared settings stay preserved; if control
+is unavailable continue independent C/E1/E2, no unchanged retry or maintenance.
 Full2.5 X1-deferred/X3-upstream and all original end gates remain mandatory.
-Local checkpoints only; the specific prior push is fulfilled, no new push.
+The current checkpoint push is explicitly authorized; no release/publication.
+
+Current L15-D storage checkpoint: private_storage_followup in P9A-04 and
+work.json owns level15-progdvb-private-qualification/identity.json. Exact native
+Installation.ini StoreType=path/StorePath bootstrap is qualified:19 private files,
+all20 known shared vendor files identical before/after, two playlist GETs and
+inspected synthetic-channel image. No capture GET or stream/teletext acceptance.
+Normal owned process exit, private temp removal and HTTP shutdown pass; original
+shared settings/negative receipts remain. No whole-OS/registry isolation claim.
+Next D: qualify one concrete channel/teletext control in that private setup or
+usable private operator session, then fixed ordinary-stream/X26/navigation/
+update/reveal/timedflash proof. No unchanged retry or client maintenance; if
+unavailable continue independent C/E1/E2. All finite/base/full9A gates remain.
+Arabic/editor/admin/Lua/isolation/AV/F6 evidence is reused within unchanged scope.
+Local checkpoint and explicit maintainer-authorized main push only; no release.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

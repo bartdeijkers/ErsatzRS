@@ -10733,7 +10733,7 @@ Missing mandatory evidence (existing implementation is partial; a failing fixed 
 External capability/environment blockers (block only dependent acceptance):
 | Base ID / existing owner | Blocked user action and exact missing prerequisite | Next action and closure condition |
 | --- | --- | --- |
-| L15-D / V3; base-specific X1 | View/navigate/update the ordinary HTTP stream with applicable X26, page/subpage controls, manual conceal/reveal and real timed flash | Exact ProgDVB Standard7.73.2/executable7.73.2.0 now ingests the documented synthetic M3U provider via identified visible Windows BUTTON/BM_CLICK and renders its channel name. base_client_qualification/progdvb_runtime/input_route_followup owns pins, HTTP requests and inspected screenshot; original file-dialog/control negatives remain. No capture.ts request, actual ordinary stream, AV decode or required teletext interaction is proven. Its custom channel list has no selection pattern/recognized native TreeView; conditional selection is not dispatched. Private copies/processes/HTTP servers are removed, but vendor CommonApplicationData persisted shared source settings and modified older files; absent complete baseline, shared data is preserved, not reset. Earlier private-profile claims exclude this shared storage. Need validated private storage plus operator/automation-capable channel/teletext control or a capability-positive alternative, then every ordinary HTTP/X26/navigation/update/reveal/timedflash oracle. This is a control/storage qualification limit, not a demonstrated decoder/product defect. Stop this bounded branch; no unchanged retry, external maintenance, static-image waiver or scope reduction; continue independent A1/E1 |
+| L15-D / V3; base-specific X1 | View/navigate/update the ordinary HTTP stream with applicable X26, page/subpage controls, manual conceal/reveal and real timed flash | Exact ProgDVB Standard7.73.2/executable7.73.2.0 now ingests the documented synthetic M3U provider via identified visible Windows BUTTON/BM_CLICK and renders its channel name. base_client_qualification/progdvb_runtime/input_route_followup owns pins, HTTP requests and inspected screenshot; original file-dialog/control negatives remain. No capture.ts request, actual ordinary stream, AV decode or required teletext interaction is proven. Its custom channel list has no selection pattern/recognized native TreeView; conditional selection is not dispatched. Private copies/processes/HTTP servers are removed, but vendor CommonApplicationData persisted shared source settings and modified older files; absent complete baseline, shared data is preserved, not reset. Earlier private-profile claims exclude this shared storage. Private storage is now qualified on this exact binary via private_storage_followup: native Installation.ini Main/StoreType=path and owned StorePath produce19 private files with all20 known shared vendor files byte/hash/metadata-identical before/after. This does not establish registry/whole-OS isolation. Channel/teletext operator or automation control is still required, followed by every ordinary HTTP/X26/navigation/update/reveal/timedflash oracle. This is a control/storage qualification limit, not a demonstrated decoder/product defect. No unchanged retry, external maintenance, static-image waiver or scope reduction; qualify concrete private client control, otherwise continue independent C/E1/E2 |
 | L15-E2 / F5,V6,X2 | Install and use the accepted runtime natively on all six supported RIDs | Unpublished candidate.4 now has four exact Linux/Windows archives, 9 native Windows and 2 Linux selected playback gates, six actual selected-language captures and scoped startup/ABI proof in audio_language_followup/package_followup. ARM results are crossbuilds only. Missing both candidate.4 macOS artifacts, native ARM/macOS environments, remaining applicable compatibility/platform/Health proof and accepted adoption. managed.1 remains accepted; no candidate is adopted. Use existing build/package workflow and obtain native environments or separately authorized remote workflow; no push permission is inferred. Close exact source/license/dependency/build/runtime/Health and applicable playback gates before adoption; crossbuild/startup/interop are separate claims |
 | Enhanced-only X1,X3 / full9A | Edit complete POP/GPOP banks/contexts over208 and view full2.5 objects/enlargement/panels | Full2.5 client qualification remains maintainer-deferred; QTM1.0 native bank/large-context support waits upstream. Neither blocks a genuinely base-only design. Both remain mandatory for full9A, with exact capability-positive pinned editor/client end proof and all enhanced F/V/X conditions; no truncation, silent content removal, package mutation or waiver |
 
@@ -10862,27 +10862,33 @@ Reuse prior evidence within its scope. Remaining broader C conditions and all
 A1/A2/B2/D/E1/E2/full9A requirements stay mandatory; next prioritize D's concrete
 native input/control prerequisite rather than more unmotivated stream variants.
 
-Current bounded ProgDVB input prerequisite (partialD/V3): canonical
-base_client_qualification/progdvb_runtime/input_route_followup owns
-level15-progdvb-input-route/identity.json. On the exact previous binary, vendor-
-documented M3U/provider configuration plus visible identified BUTTON/BM_CLICK
-produces two actual playlist GETs and an inspected synthetic-channel screenshot.
-Top-level/subtree lookup and direct-mouse adapter failures remain separate.
-Capture playback is not started: no capture.ts GET; the custom WindowsForms
-channel list has neither selection patterns nor a recognized TreeView, so the
-conditional selector performs no action. No live ordinary route or teletext
-capability/render/navigation/update/reveal/flash acceptance follows. All five
-bounded staged trials close their owned processes, private copies and temporary
-HTTP servers. However vendor settings persist in CommonApplicationData despite
-the four private environment overrides:9 new files and5 modified older files
-are observed, without a complete original baseline. Shared settings are
-preserved and not reset; earlier private-copy/profile wording does not prove
-shared-storage isolation. Future client trials require validated private storage
-and reliable control/operator access. No external decoder/client maintenance or
-requirement waiver. Next A1 product gap: assigned Arabic0x47/0x57 logical Text
-still reaches NationalOption refusal while exact coded rows work. Reuse the
-existing fixture/normative tables for a grouped Text-family discriminator before
-any correction; preserve positions/context/fallback and cross-script refusal.
+Current ProgDVB prerequisite (partialL15-D/V3): canonical
+base_client_qualification/progdvb_runtime/private_storage_followup owns
+level15-progdvb-private-qualification/identity.json. Reuse the retained exact
+7.73.2.0 binary and earlier input/control negatives. Read-only metadata of that
+artifact establishes Installation.ini Main/StoreType=path plus StorePath as the
+native default-data bootstrap; absent configuration defaults to shared All.
+The historical official install/folder manuals alone do not establish current
+isolation. The UIC /data parser exists but its startup invocation/order remains
+unproven, so it is not the qualified launch route. No installer or vendor binary
+is modified. One bounded fresh-copy native run with the explicit private config
+writes19 private files/8,382,030 bytes, while complete before/after manifests of
+all20 existing files in the three known shared vendor roots are identical.
+This closes the observed shared-file storage prerequisite in this configuration,
+not general registry/OS isolation. Identified native BUTTON actions fetch the
+playlist twice and show the synthetic channel name in the inspected screenshot;
+there is no capture.ts GET, AV decode or teletext display/control claim. The
+owned process closes normally, private copy is removed and HTTP server closes.
+Previous shared settings and all negative evidence remain untouched.
+
+The client/control prerequisite still blocks actual ordinary HTTP stream/X26,
+page/subpage navigation, updates, manual reveal and timed flash. Closure requires
+a supported concrete channel/teletext control action in this private configuration
+or a usable private operator session, followed by the unchanged actual-client
+oracles. Do not repeat the custom-list conditional TreeView action or infer a
+decoder defect from missing control access; no external maintenance. Independent
+C/E1/E2 work remains available; Arabic conversion/editor checkpoints below remain
+valid. This evidence checkpoint does not close L15-D, standaloneL15 or full9A.
 
 Arabic G0 assignment checkpoint9ae0088f remains valid: canonical
 arabic_g0_assignment retains the Table44/p115 pin, false7/E REDs, exact existing
@@ -10917,11 +10923,12 @@ containers exit/remove; original failed artifacts remain. Source-only empty
 Arabic keyboard mapping does not disqualify alternative glyph/X26 controls;
 direct G0 glyph edit and other complete editor-family evidence remain required.
 Reuse unmodified localized headed admin, ordinary stream/Lua/isolation/F6 scopes.
-All finite/end gates stay open. Next D: qualify a documented fully private
-ProgDVB configuration/control route before any runtime retry; preserve shared
-settings, no unchanged candidate retry/decoder maintenance. If unavailable,
-retain exact external prerequisite and continue independent C/E1/E2 closure.
-No standaloneL15/full9A acceptance, scope waiver, new push or publication.
+All finite/end gates stay open. The current private_storage_followup above
+closes the observed shared-file storage prerequisite; D channel/teletext control
+and actual stream proof remain. Preserve shared settings, no unchanged retry
+or decoder maintenance; continue independent C/E1/E2 when control is unavailable.
+No standaloneL15/full9A acceptance or scope waiver; checkpoint push has separate
+explicit maintainer authorization, with no release/publication authorization.
 
 The finite base remainder is exactlyA1,A2,B2,C,D,E1,E2 above, plus any actual
 regression against their existing F/V conditions. No character/editor variant is
