@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::teletext_output_observations::OutputObservations;
 use async_trait::async_trait;
 use ersatzrs_app::{ChannelRuntime, ChannelRuntimeError};
 use ersatzrs_core::hls::HlsSessionRegistry;
@@ -12,6 +13,7 @@ pub struct NativeChannelRuntime {
     pool: DbPool,
     hls_sessions: Arc<dyn HlsSessionRegistry>,
     preview_hls_sessions: Arc<dyn HlsSessionRegistry>,
+    teletext_outputs: OutputObservations,
 }
 
 impl NativeChannelRuntime {
@@ -25,12 +27,28 @@ impl NativeChannelRuntime {
             pool,
             hls_sessions,
             preview_hls_sessions,
+            teletext_outputs: OutputObservations::default(),
         }
     }
 }
 
 #[async_trait]
 impl ChannelRuntime for NativeChannelRuntime {
+    fn observe_teletext_output(
+        &self,
+        channel_id: EntityId,
+        initial: ersatzrs_domain::TeletextOutputObservation,
+    ) -> Option<Box<dyn ersatzrs_app::TeletextOutputObserver>> {
+        self.teletext_outputs.register(channel_id, initial)
+    }
+
+    fn teletext_output_observations(
+        &self,
+        channel_id: EntityId,
+    ) -> Option<ersatzrs_domain::TeletextChannelOutputObservations> {
+        self.teletext_outputs.snapshot(channel_id)
+    }
+
     async fn refresh_profile_playouts(
         &self,
         profile_id: EntityId,

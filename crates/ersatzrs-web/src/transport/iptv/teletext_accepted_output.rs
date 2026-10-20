@@ -272,6 +272,11 @@ pub async fn forward_accepted_teletext_output(
                     rejection: Some(TeletextPumpError::Configuration),
                 });
             }
+            let binding =
+                binding.with_control(super::teletext_output_observation::startup_control(
+                    application,
+                    intent.candidate.generation(),
+                ));
             forward_optional_seeded_teletext_output(
                 source,
                 sink,
@@ -473,6 +478,11 @@ pub async fn forward_accepted_retained_teletext_output(
                     rejection: Some(RetainedTeletextError::Configuration.into()),
                 });
             }
+            let binding =
+                binding.with_control(super::teletext_output_observation::startup_control(
+                    application,
+                    intent.candidate.generation(),
+                ));
             let output = forward_optional_seeded_retained_output(
                 source,
                 sink,

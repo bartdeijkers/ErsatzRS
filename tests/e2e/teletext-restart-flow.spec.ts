@@ -972,3 +972,114 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
         scope: 'Owned host/profile/publication/ordinary-prefix/state proof only; completion marker does not certify the external renderer.' }, null, 2));
     } finally { await context.close(); fixture.close(); }
   });
+
+
+for (const variant of [
+  { language: 'en-us', module: 'en_us', js: true, dark: false, mode: 'ts-legacy' },
+  { language: 'nl', module: 'nl', js: false, dark: true, mode: 'ts' },
+] as const) for (const live of [false, true]) {
+  test(`per-output teletext delivery status (${variant.language}/${variant.mode}/v${live ? 2 : 1})`,
+    async ({ browser, isolatedWebHost }, testInfo) => {
+      test.skip(process.platform !== 'linux', 'Intentional synthetic POSIX package; other native platforms remain separate.');
+      test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+      test.setTimeout(150_000);
+      const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath,
+        { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+      fixture.setAuthoringPolicy();
+      const policyFile = fileURLToPath(new URL('../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl));
+      const policy = JSON.parse(readFileSync(policyFile, 'utf8'));
+      if (live) { policy.version = 2; policy.live_updates = { poll_interval_ms: 25, recovery_timeout_ms: 2000 }; }
+      fixture.setOutputPolicy(JSON.stringify(policy));
+      const original = join(fixture.root, 'synthetic-client-source.ts');
+      const extended = join(fixture.root, 'synthetic-client-source-long.ts');
+      execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+        '-stream_loop', '4', '-i', original, '-t', '60', '-map', '0:v:0', '-map', '0:a:0',
+        '-c', 'copy', '-muxrate', '4953600', '-pcr_period', '20', '-mpegts_start_pid', '256',
+        '-mpegts_pmt_start_pid', '4096', '-f', 'mpegts', extended], { timeout: 30_000, maxBuffer: 65_536 });
+      renameSync(extended, original);
+      const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL,
+        javaScriptEnabled: variant.js, viewport: { width: 1280, height: 900 } });
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      let viewer: ReturnType<typeof observeTeletextUntilStop> | undefined;
+      try {
+        await page.request.post('/admin-api/settings/ui/save',
+          { form: { language: 'en-us', is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+        if (variant.mode === 'ts') await saveWrapperChoice(page, '', 'en_us', variant.js);
+        await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, variant.js);
+        const profiles = [await createProfile(page, fixture, 'day', variant.js), await createProfile(page, fixture, 'night', variant.js)];
+        const urls: string[] = [];
+        for (const [index, profile] of profiles.entries()) {
+          await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, variant.js);
+          await bind(page, fixture, profile, variant.js);
+          urls.push(await prepare(page, fixture, `Per-output delivery ${index}`, variant.js));
+          await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), variant.js);
+          await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), variant.js);
+        }
+        const calls = fixture.calls();
+        const url = urls[0];
+        await page.goto(url); await ready(page, variant.js);
+        const current = fixture.database.prepare('SELECT "GenerationId" FROM "TeletextAcceptedGenerationCurrent" WHERE "ChannelId"=?')
+          .get(fixture.channels[0]) as { GenerationId: number };
+        await expect(page.getByTestId('teletext-output')).toHaveCount(0);
+        await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+        await page.request.post('/admin-api/settings/ui/save',
+          { form: { language: variant.language, is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+        fixture.resetSourceStart();
+        viewer = observeTeletextUntilStop(`${isolatedWebHost.baseURL}/iptv/channel/${fixture.channels[0]}.ts?mode=${variant.mode}`, () => false);
+        await viewer.ready;
+        const observed = page.getByTestId('teletext-output');
+        await expect.poll(async () => {
+          await page.goto(url); await ready(page, variant.js);
+          return observed.getAttribute('data-state');
+        }, { timeout: 10_000 }).toBe('applied');
+        await expect(observed).toHaveCount(1);
+        await expect(observed).toHaveAttribute('data-requested-generation', String(current.GenerationId));
+        await expect(observed).toHaveAttribute('data-applied-generation', String(current.GenerationId));
+        await expect(page.getByTestId('teletext-output-status')).toContainText(text(variant.module)('TeletextDeliveryHelp'));
+        await observed.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath('applied.png') });
+        const prefix = viewer.prefix();
+        expect(prefix.length).toBeGreaterThan(188 * 100);
+        writeFileSync(testInfo.outputPath('ordinary-prefix.ts'), prefix);
+        await page.goto(urls[1]);
+        await ready(page, variant.js);
+        // An independently selected channel must not borrow the active output receipt.
+        await expect(page.getByTestId('teletext-output')).toHaveCount(0);
+        await page.goto(url); await ready(page, variant.js);
+        if (live) {
+        const disable = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-disable-form"]`);
+        await submit(page, disable, text(variant.module)('TeletextBindingOff'), variant.js);
+        await expect.poll(async () => {
+          await page.goto(url); await ready(page, variant.js);
+          const output = page.getByTestId('teletext-output');
+          return await output.getAttribute('data-state') === 'applied'
+            && (await output.innerText()).includes(text(variant.module)('TeletextDeliveryAbsent'))
+            && await output.getAttribute('data-requested-generation') === null;
+        }, { timeout: 10_000 }).toBe(true);
+        await page.getByTestId('teletext-output-status').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath('withdrawn.png') });
+        }
+        const closed = await viewer.close(); viewer = undefined;
+        expect(closed.ended).toBe('client-close'); expect(closed.bytes).toBeGreaterThan(prefix.length);
+        await expect.poll(async () => {
+          await page.goto(url); await ready(page, variant.js);
+          return page.getByTestId('teletext-output').count();
+        }, { timeout: 10_000 }).toBe(0);
+        const restart = await isolatedWebHost.restart();
+        expect(restart.after.pid).not.toBe(restart.before.pid);
+        await page.goto(url); await ready(page, variant.js);
+        await expect(page.getByTestId('teletext-output')).toHaveCount(0);
+        await expect(page.getByTestId('teletext-output-status')).toContainText(text(variant.module)('TeletextDeliveryEmpty'));
+        expect(errors).toEqual([]);
+        expect(fixture.unchangedPackage()).toBe(true);
+        expect(fixture.calls()).toEqual(calls);
+        writeFileSync(testInfo.outputPath('delivery-status.json'), JSON.stringify({ current, restart,
+          closed, calls, browser: browser.version(), ...variant, live, errors }, null, 2));
+      } finally {
+        await viewer?.close(); fixture.close(); await context.close();
+      }
+    });
+}

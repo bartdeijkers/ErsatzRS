@@ -135,7 +135,22 @@ pub(super) fn start_accepted_updates(
     }
     let timing = context.timing;
     let channel_id = context.channel_id;
-    let (updates, control, mut status) = teletext_output_control_channel();
+    let (updates, mut control, mut status) = teletext_output_control_channel();
+    control.observe_native_output(
+        super::super::teletext_output_observation::ObservationContext {
+            application: context.application.clone(),
+            channel_id,
+            initial: ersatzrs_domain::TeletextOutputSelectionObservation {
+                sequence: 0,
+                generation: initial.as_ref().and_then(|candidate| {
+                    super::super::teletext_output_observation::generation(candidate.generation())
+                }),
+                authored: initial
+                    .as_ref()
+                    .is_some_and(|candidate| candidate.service().is_some()),
+            },
+        },
+    );
     let trace_id = control.trace_id();
     if let Some(candidate) = &initial {
         trace_native_candidate(candidate, trace_id, "monitor_initial");
@@ -363,6 +378,7 @@ struct MonitorState<C> {
     // The expiry withdrawal can be coalesced by the bounded latest-state slot.
     // Unacknowledged successors must withdraw at the same ACK if rejected.
     expiry_replacement: bool,
+    observed_absence: Option<i64>,
 }
 
 impl<C> MonitorState<C> {
@@ -375,12 +391,23 @@ impl<C> MonitorState<C> {
             proposal: None,
             rejected: None,
             expiry_replacement: false,
+            observed_absence: None,
         }
     }
 
     fn withdraw(&mut self, updates: &watch::Sender<Option<TeletextOutputUpdate>>) -> bool {
+        self.withdraw_with_identity(updates, None)
+    }
+
+    fn withdraw_with_identity(
+        &mut self,
+        updates: &watch::Sender<Option<TeletextOutputUpdate>>,
+        identity: Option<&TeletextAcceptedGeneration>,
+    ) -> bool {
         self.handover_confirmed = false;
-        if !self.active {
+        if !self.active
+            && identity.is_none_or(|identity| self.observed_absence == Some(identity.id))
+        {
             return true;
         }
         let Some(sequence) = self.sequence.checked_add(1) else {
@@ -389,8 +416,13 @@ impl<C> MonitorState<C> {
         let Ok(update) = TeletextOutputUpdate::withdraw(sequence) else {
             return false;
         };
+        let update = match identity {
+            Some(identity) => update.with_generation(identity),
+            None => update,
+        };
         self.sequence = sequence;
         self.active = false;
+        self.observed_absence = identity.map(|identity| identity.id);
         tracing::debug!(
             target: "ersatzrs_web::transport::iptv::teletext_provenance",
             event = "monitor_proposal", sequence, action = "withdraw",
@@ -424,8 +456,10 @@ impl<C> MonitorState<C> {
         let Ok(update) = update else {
             return false;
         };
+        let update = update.with_generation(identity);
         self.sequence = sequence;
         self.active = true;
+        self.observed_absence = None;
         self.handover_confirmed = false;
         tracing::debug!(
             target: "ersatzrs_web::transport::iptv::teletext_provenance",
@@ -555,7 +589,7 @@ async fn reconcile<B: UpdateBackend>(
             Ok(true) => match B::service(candidate) {
                 Some(_) if state.active => true,
                 Some(service) => state.replace(updates, &identity, service),
-                None => state.withdraw(updates),
+                None => state.withdraw_with_identity(updates, Some(&identity)),
             },
             _ => state.withdraw(updates),
         };
@@ -661,7 +695,7 @@ async fn recover_successor<B: UpdateBackend>(
     // No await separates exact full-artifact/current confirmation from proposal.
     let replacement = match B::service(&candidate) {
         Some(service) => state.replace(updates, B::identity(&candidate), service),
-        None => state.withdraw(updates),
+        None => state.withdraw_with_identity(updates, Some(B::identity(&candidate))),
     };
     if replacement {
         state.cached = Some(candidate);
@@ -680,6 +714,12 @@ async fn run_monitor<B: UpdateBackend>(
 ) {
     let mut state = MonitorState::new(initial);
     state.active = state.cached.as_ref().and_then(B::service).is_some();
+    if !state.active {
+        state.observed_absence = state
+            .cached
+            .as_ref()
+            .map(|candidate| B::identity(candidate).id);
+    }
     loop {
         if updates.is_closed() || !state.observe_rejection(observe(), &updates, channel_id) {
             break;
@@ -784,6 +824,25 @@ mod tests {
                 crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(3),
             ),
         }
+    }
+
+    #[test]
+    fn confirmed_off_proposes_one_identified_absence_without_repeated_noop_updates() {
+        let (updates, _control, _) = teletext_output_control_channel();
+        let mut state = MonitorState::<Candidate>::new(None);
+        let mut off = candidate(11, 44).identity;
+        off.artifact_version = TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION;
+        assert!(state.withdraw_with_identity(&updates, Some(&off)));
+        assert!(!state.active);
+        assert_eq!(state.sequence, 1);
+        assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 1);
+        assert!(state.withdraw_with_identity(&updates, Some(&off)));
+        assert_eq!(state.sequence, 1);
+        off.id = 12;
+        assert!(state.withdraw_with_identity(&updates, Some(&off)));
+        assert_eq!(state.sequence, 2);
+        assert!(state.withdraw(&updates));
+        assert_eq!(state.sequence, 2);
     }
 
     #[derive(Clone, Copy)]
@@ -1240,11 +1299,14 @@ mod tests {
         assert!(!state.active);
         assert_eq!(state.cached.as_ref().unwrap().identity.id, 2);
         assert_eq!(backend.recoveries.load(Ordering::SeqCst), 1);
-        assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 1);
+        // The pre-recovery fail-closed withdrawal has no generation authority.
+        // Confirmed Off requests a distinct receipt association, not recovery.
+        assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 2);
+        assert_eq!(state.observed_absence, Some(2));
         assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
         assert_eq!(backend.recoveries.load(Ordering::SeqCst), 1);
         assert_eq!(*backend.confirmations.lock().unwrap(), vec![2, 2]);
-        assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 1);
+        assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 2);
     }
 
     #[tokio::test(start_paused = true)]

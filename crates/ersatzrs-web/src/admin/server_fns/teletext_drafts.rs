@@ -21,6 +21,9 @@ pub struct TeletextDraftPreviewData {
     pub authoring: Vec<TeletextDraftAuthoringData>,
     /// Unavailable observation remains distinct from observed absent pointers.
     pub publication: Option<TeletextDraftPublicationObservation>,
+    /// Ephemeral per-output diagnostics, separate from durable selection.
+    #[serde(default)]
+    pub outputs: Option<ersatzrs_domain::TeletextChannelOutputObservations>,
 }
 
 /// Historical declarations for the selected owner, never submitted permissions.
@@ -143,7 +146,9 @@ async fn load_preview(
         deadline,
     )
     .await?;
-    preview.project(project_preview).await
+    let mut projected = preview.project(project_preview).await?;
+    projected.outputs = application.teletext_output_observations(channel_id);
+    Ok(projected)
 }
 
 #[cfg(feature = "ssr")]
@@ -194,6 +199,7 @@ fn project_preview(
         diagnostics,
         authoring: preview.authoring().iter().map(project_authoring).collect(),
         publication: preview.publication().map(project_publication),
+        outputs: None,
     })
 }
 

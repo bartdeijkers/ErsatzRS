@@ -25,6 +25,10 @@ release section when tagging a release.
 
 ### Added
 
+- Show per-output teletext delivery observations separately from publication
+  selection, including waiting, acknowledged delivery, rejection and historical
+  last delivery. Observations expire with their output and do not survive a
+  host restart; incomplete diagnostic coverage is reported explicitly.
 - Encode explicitly authored Arabic teletext glyph forms and supplementary text
   in their original declared charset, preserving cell order and Level 1 fallback
   without requiring optional resource banks.

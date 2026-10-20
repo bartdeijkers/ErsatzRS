@@ -18,6 +18,7 @@ mod teletext_discovery_output;
 pub mod teletext_live_output;
 pub mod teletext_optional_output;
 pub mod teletext_output;
+mod teletext_output_observation;
 mod teletext_retained_output;
 mod teletext_selected_output;
 pub mod teletext_source_policy;

@@ -2,6 +2,8 @@
 
 use std::{fmt, num::NonZeroU64, sync::Arc, time::Duration};
 
+use crate::transport::iptv::teletext_output_observation::{ObservationContext, PumpObservation};
+use ersatzrs_domain::{TeletextOutputGenerationObservation, TeletextOutputSelectionObservation};
 use ersatzrs_ffmpeg::teletext::{
     EncodedTeletextAuthoredService, TeletextMultiplexError, TeletextOutputAcknowledgement,
     TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule, TeletextPmtInstallError,
@@ -22,6 +24,7 @@ pub struct TeletextOutputUpdate {
     action: Action,
     withdraw_if_rejected: bool,
     rejected: Option<TeletextOutputTransitionRejection>,
+    generation: Option<TeletextOutputGenerationObservation>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("teletext output update sequence must be positive")]
@@ -40,6 +43,7 @@ impl TeletextOutputUpdate {
             action: Action::Replace(service),
             withdraw_if_rejected: false,
             rejected: None,
+            generation: None,
         })
     }
     /// A freshly confirmed post-expiry successor must never leave expired
@@ -61,11 +65,28 @@ impl TeletextOutputUpdate {
             action: Action::Withdraw,
             withdraw_if_rejected: false,
             rejected: None,
+            generation: None,
         })
     }
     #[must_use]
     pub const fn sequence(&self) -> u64 {
         self.sequence.get()
+    }
+
+    pub(in crate::transport::iptv) fn with_generation(
+        mut self,
+        identity: &ersatzrs_domain::TeletextAcceptedGeneration,
+    ) -> Self {
+        self.generation = crate::transport::iptv::teletext_output_observation::generation(identity);
+        self
+    }
+
+    fn observation(&self) -> TeletextOutputSelectionObservation {
+        TeletextOutputSelectionObservation {
+            sequence: self.sequence(),
+            generation: self.generation.clone(),
+            authored: matches!(self.action, Action::Replace(_)),
+        }
     }
 }
 impl fmt::Debug for TeletextOutputUpdate {
@@ -133,9 +154,16 @@ pub struct TeletextOutputControl {
     updates: watch::Receiver<Option<TeletextOutputUpdate>>,
     status: watch::Sender<TeletextOutputTransitionStatus>,
     trace_id: uuid::Uuid,
+    observation: Option<ObservationContext>,
 }
 
 impl TeletextOutputControl {
+    pub(in crate::transport::iptv) fn observe_native_output(
+        &mut self,
+        context: ObservationContext,
+    ) {
+        self.observation = Some(context);
+    }
     pub(in crate::transport::iptv) const fn trace_id(&self) -> uuid::Uuid {
         self.trace_id
     }
@@ -160,6 +188,7 @@ pub fn teletext_output_control_channel() -> (
             updates: receiver,
             status,
             trace_id: uuid::Uuid::new_v4(),
+            observation: None,
         },
         observer,
     )
@@ -183,13 +212,19 @@ pub(in crate::transport::iptv) struct PumpControl {
     installed: Option<(NonZeroU64, InstalledAction)>,
     capped_failed: bool,
     source_ended: bool,
+    observation: Option<PumpObservation>,
 }
 impl PumpControl {
     pub(in crate::transport::iptv) fn new(control: TeletextOutputControl) -> Self {
+        let trace_epoch = uuid::Uuid::new_v4();
+        let observation = control
+            .observation
+            .as_ref()
+            .and_then(|context| PumpObservation::new(context, trace_epoch));
         Self {
             control,
             epoch: Arc::new(()),
-            trace_epoch: uuid::Uuid::new_v4(),
+            trace_epoch,
             trace_active_sequence: 0,
             initialized: false,
             seen: 0,
@@ -197,6 +232,7 @@ impl PumpControl {
             installed: None,
             capped_failed: false,
             source_ended: false,
+            observation,
         }
     }
     pub(in crate::transport::iptv) fn trace_window_prepared(
@@ -287,7 +323,14 @@ impl PumpControl {
             "teletext transition at an actual sink acknowledgement"
         );
     }
-    fn publish(&self, sequence: NonZeroU64, phase: TeletextOutputTransitionPhase) {
+    fn publish(&mut self, sequence: NonZeroU64, phase: TeletextOutputTransitionPhase) {
+        if let Some(observation) = &mut self.observation {
+            match phase {
+                TeletextOutputTransitionPhase::Applied => observation.acknowledge(sequence.get()),
+                TeletextOutputTransitionPhase::Rejected(_) => observation.reject(sequence.get()),
+                _ => {}
+            }
+        }
         self.control
             .status
             .send_replace(TeletextOutputTransitionStatus {
@@ -320,6 +363,9 @@ impl PumpControl {
             return;
         }
         self.seen = update.sequence();
+        if let Some(observation) = &mut self.observation {
+            observation.requested(update.observation());
+        }
         self.publish(update.sequence, TeletextOutputTransitionPhase::Waiting);
         self.desired = Some(update);
         self.reject_late_replacement();
@@ -392,6 +438,12 @@ impl PumpControl {
     ) -> Result<(), TeletextOutputError> {
         self.capped_failed = false;
         self.observe();
+        if let Some(observation) = &mut self.observation {
+            observation.initial_receipt(
+                receipt.contains_complete_cycle(),
+                receipt.signalling_announced() && !gate.authored_payload_selected(),
+            );
+        }
         if let Some((sequence, action)) = self.installed {
             let delivered = match action {
                 InstalledAction::Replace => receipt.contains_complete_cycle(),
@@ -486,6 +538,9 @@ impl PumpControl {
                 if already_withdrawn {
                     // The gate verified this fresh receipt and requires already
                     // acknowledged withdrawal PSI before accepting the no-op.
+                    if let Some(observation) = &mut self.observation {
+                        observation.installed(update.observation());
+                    }
                     self.publish(update.sequence, TeletextOutputTransitionPhase::Applied);
                     return Ok(());
                 }
@@ -494,6 +549,9 @@ impl PumpControl {
                     Action::Withdraw => InstalledAction::Withdraw,
                 };
                 self.installed = Some((update.sequence, action));
+                if let Some(observation) = &mut self.observation {
+                    observation.installed(update.observation());
+                }
                 self.publish(update.sequence, TeletextOutputTransitionPhase::Waiting);
             }
             Err(

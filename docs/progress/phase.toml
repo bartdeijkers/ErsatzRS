@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: scoped admin proof reused; actual-output state reporting, D controls and E2 adoption/platforms remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: per-output delivery status verified; remaining C, D controls and E2 adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -66,7 +66,19 @@ Current maintainer priority (2026-10-19): standalone Level1/1.5 first, then full
 Level2.5 with protected base. ADR0123 and P9A-04 L15-A..E/F/V/X own acceptance;
 neither base nor full9A is accepted. Production guide waits for independent9A.
 This current handoff supersedes older next-action prose below. No scope waiver,
-new general audit, external decoder/editor maintenance or push/publication.
+new general audit or external decoder/editor maintenance. The latest maintainer
+instruction authorizes this completed checkpoint commit/push withoutCI only;
+no further push or release publication follows.
+
+Current output-reporting checkpoint: canonical actual_output_status_followup
+connects publication selection to separate per-output initial and transition
+receipts, including V1 startup-only and V2 live Off on ordinary Legacy/Hybrid.
+Native63, all9cultureSSR, eight headed Chromium/Firefox cases, AV8 and160 strict
+prefix transport checks pass; receipt owns final lint/smoke/source pins. No full
+C/base/9A acceptance. Next qualify the existing native Windows test environment
+for changed runtime/lifecycle evidence; build/native execution/adoption remain
+separate. D still needs supported private native teletext control/operator access;
+E2 macOS/nativeARM/Health/adoption and enhanced X1-deferred/X3-upstream stay open.
 
 P9A-04 evidence now owns the finite L15-A1/A2/B1/B2/C/D/E1/E2 completion
 list, separated into missing product, mandatory proof and external prerequisites.
@@ -487,15 +499,13 @@ Canonical effective_admin_reuse confirms that active-Lua/BaseOff authoring,
 preview and explicit scoped request/selection already have headed/localized and
 ordinary-output proof. Exact13-function/27-key-per-culture/6-file comparisons
 and18 current native/SSR regressions validate scoped reuse; no full chain replay.
-The concrete next F4/V4/V5 product gap is admin requested-versus-actually-applied
-reporting: Selected is not a real per-output ACK. Reuse the existing response/
-epoch/sequence status, preserve exact generation/scope/owner identity and cleanup,
-and never infer all clients or receiver rendering from one observation. Reuse
-unchanged durable/scoped, publication/transport, profiles/isolation/admin/F6 proof.
-D private native teletext control/operator access, E2 nativeARM/macOS/Health/
-adoption and enhanced X1-deferred/X3-upstream remain mandatory and separate.
-75dba6fd plus30aac731 were authorized/pushed with skipCI; this new follow-up is
-local only, with no additional push/publication or acceptance claim.
+The named requested/applied reporting gap is now implemented and scoped-verified
+in actual_output_status_followup above. Reuse unchanged durable/scoped,
+publication/editor/transport, profiles/isolation/admin/F6 proof; no all-viewer,
+receiver-rendering, native-platform, complete C/base or full9A claim follows.
+Earlier authorized commits through79461b0c were pushed with skipCI. The current
+completed output-status checkpoint has explicit maintainer commit/push authority
+withoutCI; no further push or release publication is authorized.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

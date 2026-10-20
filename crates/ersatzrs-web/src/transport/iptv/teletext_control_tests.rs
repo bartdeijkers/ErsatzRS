@@ -20,6 +20,138 @@ use std::{
 };
 use tokio::{io::AsyncWrite, sync::Notify, time::Instant};
 
+fn observed_control(
+    mut control: TeletextOutputControl,
+) -> (
+    TeletextOutputControl,
+    Arc<ersatzrs_app::ApplicationServices>,
+) {
+    let state = crate::host::state::AppState::for_tests(
+        crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
+    );
+    control.observe_native_output(ObservationContext {
+        application: state.application.clone(),
+        channel_id: 44,
+        initial: ersatzrs_domain::TeletextOutputSelectionObservation {
+            sequence: 0,
+            generation: None,
+            authored: true,
+        },
+    });
+    (control, state.application)
+}
+
+fn observed_identity() -> ersatzrs_domain::TeletextAcceptedGeneration {
+    ersatzrs_domain::TeletextAcceptedGeneration {
+        id: 7,
+        request: ersatzrs_domain::TeletextPublicationRequest {
+            id: 6,
+            channel_id: 44,
+            design_id: 5,
+            revision: 3,
+            digest: "a".repeat(64),
+        },
+        artifact_version:
+            ersatzrs_core::repositories::TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+        artifact_digest: "b".repeat(64),
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn native_observations_acknowledge_only_delivered_cycles_and_remove_only_their_owner() {
+    use ersatzrs_domain::TeletextOutputObservationPhase as Phase;
+    let (updates, control, _) = teletext_output_control_channel();
+    let (control, application) = observed_control(control);
+    let mut first = PumpControl::new(control.clone());
+    let second = PumpControl::new(control);
+    let snapshots = || application.teletext_output_observations(44).unwrap();
+    assert_eq!(snapshots().outputs.len(), 2);
+    assert!(snapshots()
+        .outputs
+        .iter()
+        .all(|output| output.applied.is_none()));
+    let original = source_packets();
+    let mut gate = test_gate(&original);
+    let mut now = Duration::ZERO;
+    let end = gate.window_end(8).unwrap().unwrap();
+    let (receipt, _) = deliver_prefix(&mut gate, end, 0, &mut now);
+    first.acknowledge(&mut gate, &receipt, now, true).unwrap();
+    assert!(receipt.contains_complete_cycle());
+    let first_state = snapshots()
+        .outputs
+        .into_iter()
+        .find(|output| output.epoch == first.trace_epoch)
+        .unwrap();
+    assert_eq!(first_state.phase, Phase::Applied);
+    assert_eq!(first_state.applied.unwrap().sequence, 0);
+    let identity = observed_identity();
+    updates.send_replace(Some(
+        TeletextOutputUpdate::replace(1, Arc::new(authored_service_with_counter(4)))
+            .unwrap()
+            .with_generation(&identity),
+    ));
+    first.observe();
+    let state = snapshots()
+        .outputs
+        .into_iter()
+        .find(|output| output.epoch == first.trace_epoch)
+        .unwrap();
+    assert_eq!(state.phase, Phase::Waiting);
+    assert_eq!(state.applied.unwrap().sequence, 0);
+    assert_eq!(state.requested.sequence, 1);
+    // The next acknowledged old cycle installs the replacement; it is not its delivery.
+    let next_end = first.window_end(&gate, 8).unwrap().unwrap();
+    let (receipt, _) = deliver_prefix(&mut gate, next_end, end, &mut now);
+    first.acknowledge(&mut gate, &receipt, now, true).unwrap();
+    assert_eq!(
+        snapshots()
+            .outputs
+            .iter()
+            .find(|output| output.epoch == first.trace_epoch)
+            .unwrap()
+            .phase,
+        Phase::Waiting
+    );
+    let final_end = first.window_end(&gate, 8).unwrap().unwrap();
+    let (receipt, _) = deliver_prefix(&mut gate, final_end, next_end, &mut now);
+    first.acknowledge(&mut gate, &receipt, now, true).unwrap();
+    let states = snapshots();
+    let state = states
+        .outputs
+        .iter()
+        .find(|output| output.epoch == first.trace_epoch)
+        .unwrap();
+    assert_eq!(state.phase, Phase::Applied);
+    assert_eq!(state.applied.as_ref().unwrap().sequence, 1);
+    let generation = state.applied.as_ref().unwrap().generation.as_ref().unwrap();
+    assert_eq!(
+        (
+            generation.generation_id,
+            generation.request_id,
+            generation.design_id,
+            generation.revision,
+            generation.effective
+        ),
+        (7, 6, 5, 3, true)
+    );
+    assert!(states
+        .outputs
+        .iter()
+        .find(|output| output.epoch == second.trace_epoch)
+        .unwrap()
+        .applied
+        .is_none());
+    drop(first);
+    assert_eq!(snapshots().outputs.len(), 1);
+    drop(second);
+    assert!(snapshots().outputs.is_empty());
+    assert!(application
+        .teletext_output_observations(45)
+        .unwrap()
+        .outputs
+        .is_empty());
+}
+
 struct FlushBarrier {
     bytes: Mutex<Vec<u8>>,
     marker: [u8; 46],
@@ -476,6 +608,7 @@ async fn cancelling_blocked_flush_never_reports_replacement_applied_or_resumes_o
     let old = Arc::new(authored_service_with_counter(3));
     let next = Arc::new(authored_service_with_counter(4));
     let (sender, control, status) = teletext_output_control_channel();
+    let (control, application) = observed_control(control);
     sender.send_replace(Some(
         TeletextOutputUpdate::replace(1, Arc::clone(&next)).unwrap(),
     ));
@@ -500,8 +633,23 @@ async fn cancelling_blocked_flush_never_reports_replacement_applied_or_resumes_o
             status.borrow().phase(),
             TeletextOutputTransitionPhase::Waiting
         );
+        let observed = application.teletext_output_observations(44).unwrap();
+        assert_eq!(observed.outputs.len(), 1);
+        assert_eq!(
+            observed.outputs[0].phase,
+            ersatzrs_domain::TeletextOutputObservationPhase::Waiting
+        );
+        assert!(observed.outputs[0]
+            .applied
+            .as_ref()
+            .is_none_or(|applied| applied.sequence == 0));
     }
     let bytes = barrier.bytes.lock().unwrap().len();
+    assert!(application
+        .teletext_output_observations(44)
+        .unwrap()
+        .outputs
+        .is_empty());
     barrier.release();
     tokio::task::yield_now().await;
     assert_eq!(barrier.bytes.lock().unwrap().len(), bytes);

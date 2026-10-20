@@ -42,9 +42,33 @@ impl ChannelRuntimeError {
     }
 }
 
+/// A diagnostic output owner. Dropping it removes its ephemeral observation.
+/// Values are observations only; this port cannot publish or acknowledge output.
+pub trait TeletextOutputObserver: Send + Sync {
+    /// Replace this owner's bounded snapshot without extending its lifetime.
+    fn record(&self, observation: ersatzrs_domain::TeletextOutputObservation);
+}
+
 /// Runtime-neutral channel session and subtitle side effects.
 #[async_trait]
 pub trait ChannelRuntime: Send + Sync {
+    /// Register diagnostics for one actual output, never a pending publication.
+    fn observe_teletext_output(
+        &self,
+        _channel_id: EntityId,
+        _initial: ersatzrs_domain::TeletextOutputObservation,
+    ) -> Option<Box<dyn TeletextOutputObserver>> {
+        None
+    }
+
+    /// Read active output diagnostics without starting or retaining any stream.
+    fn teletext_output_observations(
+        &self,
+        _channel_id: EntityId,
+    ) -> Option<ersatzrs_domain::TeletextChannelOutputObservations> {
+        None
+    }
+
     /// Return channel numbers with an active streaming session.
     async fn active_channel_numbers(&self) -> Result<Vec<String>, ChannelRuntimeError>;
 

@@ -243,6 +243,21 @@ boundary, without interrupting ordinary audio/video playback. Report requested
 and applied state so preparation delay is visible. ADR 0121's validity and
 stale-expiry rules remain in force; expired intervals cannot publish late output.
 
+Requested/applied diagnostics are ephemeral and owned by each actual output pump,
+including its independent epoch and exact proposal/generation association. The
+initial seed starts unconfirmed. Only an actual complete-cycle sink receipt, or
+acknowledged signalling without authored payload for Off, confirms delivery.
+Installation, preparation, selection and another output's acknowledgement cannot
+confirm it. The last confirmed delivery remains explicitly historical while a
+newer request waits or is rejected. Ending the output removes its observation;
+host restart retains no delivery acknowledgement. Reads through the existing
+channel-runtime application port neither start nor extend output lifetimes.
+Startup-only output uses the same initial receipt observer without enabling a
+live monitor or changing that policy's publication/disable timing.
+The host bounds retained diagnostics at 256 outputs and marks overflow snapshots
+incomplete; this diagnostic bound never changes playback admission or capacity.
+Delivery diagnostics establish neither client rendering nor all-viewer delivery.
+
 Effective preparation validates active published interval targets before loading
 unoverridden enabled base profiles. A healthy explicit On or Off therefore does
 not require its shadowed admin profile to be usable. Off remains a member of the

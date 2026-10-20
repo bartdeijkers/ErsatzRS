@@ -13,6 +13,7 @@ use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::admin_result_view;
 
 mod editorial;
+mod output_status;
 mod resource_add;
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
@@ -365,6 +366,7 @@ fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
             {editorial::boundaries(data)}
             {editorial_controls(data)}
             {publication_controls(data)}
+            {output_status::view(data)}
         </div>
     }.into_any()
 }
@@ -841,6 +843,79 @@ mod tests {
             object_resources: Vec::new(),
             authoring: Vec::new(),
             publication: None,
+            outputs: None,
+        }
+    }
+
+    #[test]
+    fn output_status_is_localized_read_only_and_preserves_historical_receipts() {
+        use ersatzrs_domain::{
+            TeletextChannelOutputObservations, TeletextOutputGenerationObservation,
+            TeletextOutputObservation, TeletextOutputObservationPhase as Phase,
+            TeletextOutputSelectionObservation as Selection,
+        };
+        for language in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let owner = Owner::new();
+            owner.with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let mut data = preview();
+                let unavailable = output_status::view(&data).to_html();
+                assert!(unavailable.contains(tr(TextKey::TeletextDeliveryUnavailable)));
+                data.outputs = Some(TeletextChannelOutputObservations {
+                    outputs: vec![],
+                    incomplete: false,
+                });
+                assert!(output_status::view(&data)
+                    .to_html()
+                    .contains(tr(TextKey::TeletextDeliveryEmpty)));
+                let selection = |id, sequence| Selection {
+                    sequence,
+                    generation: Some(TeletextOutputGenerationObservation {
+                        generation_id: id,
+                        request_id: 8,
+                        design_id: 8,
+                        revision: 3,
+                        effective: false,
+                    }),
+                    authored: true,
+                };
+                data.outputs = Some(TeletextChannelOutputObservations {
+                    outputs: vec![TeletextOutputObservation {
+                        epoch: uuid::Uuid::new_v4(),
+                        requested: selection(20, 2),
+                        applied: Some(selection(19, 1)),
+                        phase: Phase::Waiting,
+                    }],
+                    incomplete: true,
+                });
+                let html = output_status::view(&data).to_html();
+                for text in [
+                    TextKey::TeletextDeliveryWaiting,
+                    TextKey::TeletextDeliveryHelp,
+                    TextKey::TeletextDeliveryConfirmed,
+                    TextKey::TeletextDeliveryIncomplete,
+                ] {
+                    assert!(html.contains(tr(text)), "{language}");
+                }
+                assert!(html.contains("data-requested-generation=\"20\""));
+                assert!(html.contains("data-applied-generation=\"19\""));
+                assert!(!html.contains("data-state=\"applied\""));
+                assert!(!html.contains("<form"));
+                let observation = &mut data.outputs.as_mut().unwrap().outputs[0];
+                observation.phase = Phase::Rejected;
+                assert!(output_status::view(&data)
+                    .to_html()
+                    .contains(tr(TextKey::TeletextDeliveryRejected)));
+                let observation = &mut data.outputs.as_mut().unwrap().outputs[0];
+                observation.phase = Phase::Applied;
+                observation.requested.authored = false;
+                observation.applied = Some(observation.requested.clone());
+                let html = output_status::view(&data).to_html();
+                assert!(html.contains(tr(TextKey::TeletextDeliveryAbsent)));
+                assert!(html.contains(tr(TextKey::TeletextDeliveryApplied)));
+            });
         }
     }
 

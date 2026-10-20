@@ -48,7 +48,7 @@ pub use ports::{
     RemoteStreamPlaylistRuntimeError, RemoteStreamPlaylistTroubleshootingRead,
     ScanCleanupConfirmation, ScanRuntime, ScanRuntimeError, ScanRuntimeReport, ScanWorkQueue,
     ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
-    SourceAddonRouting, WindowsStartupStatus,
+    SourceAddonRouting, TeletextOutputObserver, WindowsStartupStatus,
 };
 
 /// Native application services assembled by a composition root.
@@ -361,6 +361,37 @@ impl ApplicationServices {
         &self,
     ) -> Result<Vec<ersatzrs_core::repositories::ChannelSelectOption>> {
         queries::list_channel_filler_presets(self.ports.channels()).await
+    }
+
+    /// Read channel-isolated diagnostics without starting or retaining output.
+    #[must_use]
+    pub fn teletext_output_observations(
+        &self,
+        channel_id: i64,
+    ) -> Option<ersatzrs_domain::TeletextChannelOutputObservations> {
+        (channel_id > 0)
+            .then(|| {
+                self.ports
+                    .channel_runtime()
+                    .teletext_output_observations(channel_id)
+            })
+            .flatten()
+    }
+
+    /// Register diagnostic ownership for an actual output; never selects output.
+    #[must_use]
+    pub fn observe_teletext_output(
+        &self,
+        channel_id: i64,
+        initial: ersatzrs_domain::TeletextOutputObservation,
+    ) -> Option<Box<dyn TeletextOutputObserver>> {
+        (channel_id > 0)
+            .then(|| {
+                self.ports
+                    .channel_runtime()
+                    .observe_teletext_output(channel_id, initial)
+            })
+            .flatten()
     }
 
     /// List active channel streaming sessions.
