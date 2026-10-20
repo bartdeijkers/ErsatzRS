@@ -205,3 +205,71 @@ fn object_resource_additions_preflight_complete_declaration_limits_and_preserve_
         }
     }
 }
+
+#[test]
+fn coordinated_bank_batch_rebuilds_complete_declarations_and_combined_object_limits() {
+    let original = bind(draft(), declaration(0, 1), vec![]).unwrap();
+    let new_banks = additions();
+    let defined = TeletextResourceObjectDefinitionAddition::new(
+        TeletextEnhancementObjectDefinition {
+            identity: TeletextObjectIdentity::public(
+                identity(TeletextResourceKind::Pop, 0xa0, 0),
+                TeletextObjectId::new(31),
+            )
+            .unwrap(),
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![]).unwrap(),
+        },
+        limits(),
+    )
+    .unwrap();
+    let exact = TeletextDeclaredServiceBudget {
+        max_resources: 5,
+        max_objects: 4,
+        ..budget()
+    };
+    let changed = original
+        .clone()
+        .with_object_resource_and_definition_additions(
+            &new_banks,
+            std::slice::from_ref(&defined),
+            limits(),
+            exact,
+        )
+        .unwrap();
+    assert_eq!(changed.semantic().objects().definitions().len(), 4);
+    assert_eq!(changed.resource_inventory().len(), 5);
+    assert_eq!(changed.mots(), original.mots());
+    assert_eq!(changed.selections(), original.selections());
+    assert_eq!(changed.defaults(), original.defaults());
+    assert_eq!(changed.resolutions(), original.resolutions());
+    assert_eq!(changed.empty_object_pages(), [new_banks[2].resource()]);
+    assert_eq!(changed.semantic().base(), original.semantic().base());
+    for lowered in [
+        TeletextDeclaredServiceBudget {
+            max_objects: 3,
+            ..exact
+        },
+        TeletextDeclaredServiceBudget {
+            max_resources: 4,
+            ..exact
+        },
+    ] {
+        assert!(matches!(
+            original
+                .clone()
+                .with_object_resource_and_definition_additions(
+                    &new_banks,
+                    std::slice::from_ref(&defined),
+                    limits(),
+                    lowered
+                ),
+            Err(TeletextObjectResourceAdditionApplyError::Declaration(
+                TeletextDeclaredServiceError {
+                    reason: TeletextDeclaredServiceFailure::Budget { .. },
+                    ..
+                }
+            ))
+        ));
+    }
+}

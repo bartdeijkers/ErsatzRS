@@ -4,7 +4,10 @@ use super::{
     TeletextMagazinePresentationDraft, TeletextResolvedServiceDraft, TeletextSemanticService,
     TeletextServiceBudget, TeletextServiceError,
 };
-use crate::teletext::{TeletextObjectResourceAddition, TeletextObjectResourceAdditionApplyError};
+use crate::teletext::{
+    TeletextObjectResourceAddition, TeletextObjectResourceAdditionApplyError,
+    TeletextResourceObjectDefinitionAddition,
+};
 
 impl TeletextSemanticService {
     /// Extend the complete catalogue with distinct, previously absent POP/GPOP banks.
@@ -23,16 +26,60 @@ impl TeletextSemanticService {
         additions: &[TeletextObjectResourceAddition],
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextObjectResourceAdditionApplyError> {
-        let capacity = self.check_object_resource_additions(additions, budget)?;
+        self.with_object_resource_and_definition_additions(additions, &[], budget)
+    }
+
+    /// Add complete new banks and definitions in original banks as one graph.
+    ///
+    /// Forward references across the two explicit intent classes are validated
+    /// together. Definition additions still require an originally present bank;
+    /// this does not widen existing-bank Add to implicitly create resources.
+    /// All original content and collection provenance remain intact. Host edit,
+    /// lifecycle, effect and publication authority remain separate requirements.
+    /// # Errors
+    /// Rejects an empty bank batch, invalid original-bank additions, occupied
+    /// bank owners, combined bounds and ordinary complete-service failures.
+    pub fn with_object_resource_and_definition_additions(
+        self,
+        additions: &[TeletextObjectResourceAddition],
+        definitions: &[TeletextResourceObjectDefinitionAddition],
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextObjectResourceAdditionApplyError> {
+        let populated = if definitions.is_empty() {
+            std::collections::BTreeSet::new()
+        } else {
+            self.check_resource_definition_additions(definitions, budget)?
+                .1
+        };
+        let populated_companions = self
+            .object_companions
+            .iter()
+            .filter(|identity| populated.contains(identity))
+            .count();
+        let capacity = self.check_object_resource_additions(
+            additions,
+            definitions,
+            populated_companions,
+            budget,
+        )?;
         let mut objects = Vec::with_capacity(capacity);
         objects.extend_from_slice(self.objects.definitions());
-        let mut companions = self.object_companions;
+        let mut companions = self
+            .object_companions
+            .into_iter()
+            .filter(|identity| !populated.contains(identity))
+            .collect::<Vec<_>>();
         for addition in additions {
             objects.extend_from_slice(addition.definitions());
             if addition.definitions().is_empty() {
                 companions.push(addition.resource());
             }
         }
+        objects.extend(
+            definitions
+                .iter()
+                .map(|addition| addition.definition().clone()),
+        );
         let draft = TeletextResolvedServiceDraft {
             base: self.base,
             pages: self.pages.into_values().collect(),
@@ -61,6 +108,8 @@ impl TeletextSemanticService {
     fn check_object_resource_additions(
         &self,
         additions: &[TeletextObjectResourceAddition],
+        definitions: &[TeletextResourceObjectDefinitionAddition],
+        populated_companions: usize,
         budget: TeletextServiceBudget,
     ) -> Result<usize, TeletextObjectResourceAdditionApplyError> {
         use TeletextObjectResourceAdditionApplyError as Error;
@@ -92,11 +141,27 @@ impl TeletextSemanticService {
             "object",
             budget.max_objects,
         )?;
+        charge(
+            &mut objects,
+            definitions.len(),
+            "object",
+            budget.max_objects,
+        )?;
         let mut commands = self.remaining_object_resource_commands(budget)?;
+        for addition in definitions {
+            charge(
+                &mut commands,
+                addition.definition().program.commands().len(),
+                "authored command",
+                budget.max_commands,
+            )?;
+        }
         let mut items = budget.max_structure_items;
         charge(
             &mut items,
-            self.original_structure_items,
+            // Only original companion sentinels actually removed above are
+            // released; definitions still consume object/command budgets.
+            self.original_structure_items - populated_companions,
             "structure item",
             budget.max_structure_items,
         )?;

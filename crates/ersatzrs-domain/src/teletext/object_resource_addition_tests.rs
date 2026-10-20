@@ -493,3 +493,287 @@ fn object_resource_additions_preserve_spellings_and_preflight_their_combined_sto
         ))
     );
 }
+
+fn coordinated_batch() -> (
+    Vec<TeletextObjectResourceAddition>,
+    Vec<TeletextResourceObjectDefinitionAddition>,
+) {
+    let passive = identity(false, 0xa4, 2, 30);
+    let adaptive = identity(true, 0xa1, 0, 31);
+    let active = identity(true, 0xa5, 15, 32);
+    (
+        vec![
+            bank(
+                true,
+                0xa5,
+                15,
+                vec![definition(
+                    active,
+                    TeletextObjectType::Active,
+                    vec![invoke(adaptive, TeletextObjectType::Adaptive)],
+                )],
+            ),
+            bank(
+                false,
+                0xa4,
+                2,
+                vec![definition(
+                    passive,
+                    TeletextObjectType::Passive,
+                    vec![glyph(b'B')],
+                )],
+            ),
+        ],
+        vec![addition(definition(
+            adaptive,
+            TeletextObjectType::Adaptive,
+            vec![invoke(passive, TeletextObjectType::Passive)],
+        ))],
+    )
+}
+
+#[test]
+fn coordinated_bank_and_existing_definition_batch_validates_one_complete_graph() {
+    let original = service(input());
+    let (banks, definitions) = coordinated_batch();
+    // Neither sequential order has a complete graph. The final graph is valid.
+    assert!(original
+        .clone()
+        .with_object_resource_additions(&banks, budget())
+        .is_err());
+    assert!(original
+        .clone()
+        .with_resource_object_definition_additions(&definitions, budget())
+        .is_err());
+    let mut complete = input();
+    complete.objects.extend(
+        banks
+            .iter()
+            .flat_map(|bank| bank.definitions().iter().cloned()),
+    );
+    complete.objects.extend(
+        definitions
+            .iter()
+            .map(|addition| addition.definition().clone()),
+    );
+    let expected = service(complete);
+    let changed = original
+        .clone()
+        .with_object_resource_and_definition_additions(&banks, &definitions, budget());
+    assert_eq!(changed, Ok(expected));
+}
+
+#[test]
+fn coordinated_bank_batch_preserves_original_ownership_and_rejects_invalid_graphs() {
+    let original = service(input());
+    let snapshot = original.clone();
+    let (banks, definitions) = coordinated_batch();
+    let foreign = addition(definition(
+        identity(false, 0xa4, 2, 40),
+        TeletextObjectType::Passive,
+        vec![],
+    ));
+    assert!(matches!(
+        original
+            .clone()
+            .with_object_resource_and_definition_additions(&banks, &[foreign], budget()),
+        Err(TeletextObjectResourceAdditionApplyError::Definition(
+            TeletextResourceObjectDefinitionAdditionApplyError::MissingResource { .. }
+        ))
+    ));
+    for invalid in [
+        vec![definitions[0].clone(), definitions[0].clone()],
+        vec![addition(input().objects[0].clone())],
+    ] {
+        assert!(matches!(
+            original
+                .clone()
+                .with_object_resource_and_definition_additions(&banks, &invalid, budget()),
+            Err(TeletextObjectResourceAdditionApplyError::Definition(_))
+        ));
+    }
+    let adaptive = definitions[0].identity();
+    for commands in [
+        vec![invoke(
+            identity(false, 0xa4, 2, 30),
+            TeletextObjectType::Active,
+        )],
+        vec![invoke(adaptive, TeletextObjectType::Adaptive)],
+        vec![invoke(
+            identity(false, 0xa4, 2, 99),
+            TeletextObjectType::Passive,
+        )],
+    ] {
+        let bad = addition(definition(adaptive, TeletextObjectType::Adaptive, commands));
+        assert!(matches!(
+            original
+                .clone()
+                .with_object_resource_and_definition_additions(&banks, &[bad], budget()),
+            Err(TeletextObjectResourceAdditionApplyError::Service(
+                TeletextServiceError::Objects(_)
+            ))
+        ));
+    }
+    assert_eq!(original, snapshot);
+    assert_eq!(
+        original.with_object_resource_and_definition_additions(&[], &definitions, budget()),
+        Err(TeletextObjectResourceAdditionApplyError::Empty)
+    );
+}
+
+#[test]
+fn coordinated_bank_batch_preflights_combined_counts_before_graph_reconstruction() {
+    let original = service_with_spelling();
+    let (banks, definitions) = coordinated_batch();
+    let exact = TeletextServiceBudget {
+        max_objects: 5,
+        max_commands: 12,
+        max_records: 9,
+        max_base_content_bytes: 48,
+        ..budget()
+    };
+    let changed = original
+        .clone()
+        .with_object_resource_and_definition_additions(&banks, &definitions, exact)
+        .unwrap();
+    assert_eq!(
+        changed.base_text_spellings(),
+        original.base_text_spellings()
+    );
+    assert_eq!(
+        changed.physical_base_overlays(),
+        original.physical_base_overlays()
+    );
+    assert_eq!(changed.base(), original.base());
+    for lowered in [
+        TeletextServiceBudget {
+            max_objects: 4,
+            ..exact
+        },
+        TeletextServiceBudget {
+            max_commands: 11,
+            ..exact
+        },
+        TeletextServiceBudget {
+            max_records: 8,
+            ..exact
+        },
+        TeletextServiceBudget {
+            max_base_content_bytes: 47,
+            ..exact
+        },
+    ] {
+        assert!(matches!(
+            original
+                .clone()
+                .with_object_resource_and_definition_additions(&banks, &definitions, lowered),
+            Err(TeletextObjectResourceAdditionApplyError::Service(
+                TeletextServiceError::Budget { .. }
+            ))
+        ));
+    }
+    // Invalid graph plus exhausted aggregate budget: bounds must reject first.
+    let cyclic = addition(definition(
+        definitions[0].identity(),
+        TeletextObjectType::Adaptive,
+        vec![invoke(
+            definitions[0].identity(),
+            TeletextObjectType::Adaptive,
+        )],
+    ));
+    assert_eq!(
+        original.with_object_resource_and_definition_additions(
+            &banks,
+            &[cyclic],
+            TeletextServiceBudget {
+                max_commands: 11,
+                ..exact
+            }
+        ),
+        Err(TeletextObjectResourceAdditionApplyError::Service(
+            TeletextServiceError::Budget {
+                dimension: "authored command",
+                maximum: 11
+            }
+        ))
+    );
+}
+
+#[test]
+fn coordinated_bank_batch_populates_only_original_empty_companions() {
+    let original = service(input());
+    let new = bank(false, 0xa4, 2, vec![]);
+    let populated = addition(definition(
+        identity(false, 0xa2, 3, 28),
+        TeletextObjectType::Passive,
+        vec![glyph(b'Q')],
+    ));
+    let changed = original
+        .clone()
+        .with_object_resource_and_definition_additions(
+            std::slice::from_ref(&new),
+            std::slice::from_ref(&populated),
+            budget(),
+        )
+        .unwrap();
+    let mut complete = input();
+    complete.objects.push(populated.definition().clone());
+    let expected = TeletextSemanticService::new_with_object_companions(
+        complete,
+        vec![empty_resources()[1], new.resource()],
+        budget(),
+    )
+    .unwrap()
+    .with_physical_base_overlays(
+        original
+            .physical_base_overlays()
+            .values()
+            .cloned()
+            .collect(),
+        budget(),
+    )
+    .unwrap();
+    assert_eq!(changed, expected);
+    assert_eq!(original.object_companions(), empty_resources());
+    let overlays = original
+        .physical_base_overlays()
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
+    let exact = TeletextServiceBudget {
+        max_structure_items: 10,
+        ..budget()
+    };
+    // Independent constructor footprint: replacing one empty companion with
+    // one new empty bank does not grow the final structure count.
+    expected
+        .clone()
+        .with_physical_base_overlays(overlays, exact)
+        .unwrap();
+    assert_eq!(
+        original
+            .clone()
+            .with_object_resource_and_definition_additions(
+                std::slice::from_ref(&new),
+                std::slice::from_ref(&populated),
+                exact
+            ),
+        Ok(expected)
+    );
+    assert!(matches!(
+        original.with_object_resource_and_definition_additions(
+            &[new],
+            &[populated],
+            TeletextServiceBudget {
+                max_structure_items: 9,
+                ..budget()
+            }
+        ),
+        Err(TeletextObjectResourceAdditionApplyError::Service(
+            TeletextServiceError::Budget {
+                dimension: "structure item",
+                ..
+            }
+        ))
+    ));
+}

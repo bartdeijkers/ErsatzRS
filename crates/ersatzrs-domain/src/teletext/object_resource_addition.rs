@@ -114,5 +114,20 @@ pub enum TeletextObjectResourceAdditionApplyError {
     #[error(transparent)]
     Service(#[from] TeletextServiceError),
     #[error(transparent)]
+    Definition(super::TeletextResourceObjectDefinitionAdditionApplyError),
+    #[error(transparent)]
     Declaration(#[from] TeletextDeclaredServiceError),
+}
+
+impl From<super::TeletextResourceObjectDefinitionAdditionApplyError>
+    for TeletextObjectResourceAdditionApplyError
+{
+    fn from(error: super::TeletextResourceObjectDefinitionAdditionApplyError) -> Self {
+        match error {
+            super::TeletextResourceObjectDefinitionAdditionApplyError::Service(reason) => {
+                Self::Service(reason)
+            }
+            reason => Self::Definition(reason),
+        }
+    }
 }

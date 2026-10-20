@@ -17,7 +17,9 @@ Partial — a separate typed native new-object-resource intent now admits comple
 POP/GPOP bank sets, including empty logical owners, without widening retained-bank
 Add/Copy or TTI authority. Semantic and declared reconstruction preserve original
 content, MOTs/defaults/fallback, overlays and spellings; aggregate bounds precede
-cloning and the complete dependency graph remains mandatory. Private concept
+cloning and the complete dependency graph remains mandatory. An explicit combined
+application validates new banks and simultaneous original-bank definition additions
+in one graph; existing-bank Add still cannot acquire a new resource owner. Private concept
 version25 now retains complete new banks, explicit original-document ordinals and
 exact transmission descriptors beside the immutable original. It encloses the
 unchanged prior V1–24 role interpretation; old formats cannot acquire bank

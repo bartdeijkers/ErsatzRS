@@ -345,6 +345,30 @@ impl TeletextDeclaredService {
         service_budget: super::TeletextServiceBudget,
         declaration_budget: TeletextDeclaredServiceBudget,
     ) -> Result<Self, super::TeletextObjectResourceAdditionApplyError> {
+        self.with_object_resource_and_definition_additions(
+            additions,
+            &[],
+            service_budget,
+            declaration_budget,
+        )
+    }
+
+    /// Admit new banks and original-bank definitions through one complete graph.
+    ///
+    /// Preserves MOTs, selections, default provenance and original declarations.
+    /// Only populated original companion sentinels are removed; new empty banks
+    /// are retained. No intermediate incomplete graph or partial result escapes.
+    /// Hosts still authenticate source ownership, lifecycle, effects and publish.
+    /// # Errors
+    /// Rejects invalid or empty bank batches, non-original definition owners,
+    /// complete combined bounds and all semantic/declaration failures.
+    pub fn with_object_resource_and_definition_additions(
+        self,
+        additions: &[super::TeletextObjectResourceAddition],
+        definitions: &[super::TeletextResourceObjectDefinitionAddition],
+        service_budget: super::TeletextServiceBudget,
+        declaration_budget: TeletextDeclaredServiceBudget,
+    ) -> Result<Self, super::TeletextObjectResourceAdditionApplyError> {
         // Charge the complete old/new declaration set before semantic cloning,
         // including caller limits smaller than those used for the old service.
         preflight(
@@ -360,7 +384,14 @@ impl TeletextDeclaredService {
             .checked_add(additions.len())
             .ok_or_else(|| failure(TeletextDeclaredServiceFailure::Size))?;
         fence("resource", resources, declaration_budget.max_resources)?;
-        let mut objects = self.semantic.objects().definitions().len();
+        let mut objects = self
+            .semantic
+            .objects()
+            .definitions()
+            .len()
+            .checked_add(definitions.len())
+            .ok_or_else(|| failure(TeletextDeclaredServiceFailure::Size))?;
+        fence("object", objects, declaration_budget.max_objects)?;
         for addition in additions {
             objects = objects
                 .checked_add(addition.definitions().len())
@@ -380,7 +411,11 @@ impl TeletextDeclaredService {
         }
         let semantic = self
             .semantic
-            .with_object_resource_additions(additions, service_budget)?;
+            .with_object_resource_and_definition_additions(
+                additions,
+                definitions,
+                service_budget,
+            )?;
         let empty = semantic.object_companions().to_vec();
         Self::new(
             semantic,

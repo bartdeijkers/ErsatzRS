@@ -26,7 +26,9 @@ release section when tagging a release.
 ### Added
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
-  pages, defaults, fallback and dependencies. Private versioned concept storage
+  pages, defaults, fallback and dependencies. New banks and simultaneous
+  definitions in original banks are validated as one complete graph. Private
+  versioned concept storage
   now preserves complete new-bank definitions, source ownership and explicit
   transmission data alongside unchanged originals. Authorized native replay,
   saved-design controls and the complete editor/publication flow remain pending.

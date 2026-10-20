@@ -63,7 +63,7 @@ impl TeletextSemanticService {
             .map_err(TeletextResourceObjectDefinitionAdditionApplyError::from)
     }
 
-    fn check_resource_definition_additions(
+    pub(super) fn check_resource_definition_additions(
         &self,
         additions: &[TeletextResourceObjectDefinitionAddition],
         budget: TeletextServiceBudget,
