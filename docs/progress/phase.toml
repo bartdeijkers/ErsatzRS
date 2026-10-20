@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: candidate.4 Linux/Windows compatibility block proven; D client acquisition and E1/E2 prepared-callback/adoption/platforms remain'
+current_focus = 'P9A-04 standalone Level 1/1.5: candidate.4 prepared/provider/image compatibility proven; D client acquisition and E1/E2 Health/adoption/platforms remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -418,12 +418,25 @@ audio/clock/EOF/handoff/cleanup cases on exact optimized .4 packages. Canonical
 P9A-04 receipt pins current dirty Linux versus frozen7603285d Windows scope;
 no current packaged-Windows/fullF5/native-sixRID/adoption/base/9A claim. No code,
 test or oracle change; unchanged parent/editor/admin/Lua/isolation/F6 proof is
-reused. Next bounded gap: existing corrected prepared-artifact policy harness
-on .4, preserving Burn/Convert/Off/seek/audio/ownership and original refusals.
+reused. The prepared-artifact policy gap is now proven below with original
+Burn/Convert/Off/seek/audio/ownership and refusal oracles.
 Both macOS artifacts/nativeARM/macOS/Health/adoption and D capability remain.
 The candidate source is now on remote09a682fa; specific macOS workflow approval
 is pending, no dispatch. All finite/enhanced criteria remain; this evidence
 checkpoint stays local, previous push authority fulfilled, no publication.
+
+Current audio_language_followup/prepared_compatibility_followup closes the
+named .4 prepared-callback compatibility gap: Linux3 and nativeWindows3 existing
+cases pass, including the parent's five embedded/external Burn/Convert/Off
+policies and two managed owner/revision/path/state/missing/source-removal guards.
+Windows is frozen7603285d plus proven portable fixture5600dc32, restored exactly
+in finally; not current packaged-Windows/admin acceptance. P9A-04 pins scopes/
+receipts/reuse; no new product/test/oracle change or fullF5/E2/base/9A claim.
+Next determining base gate: D supported private stream acquisition, then all
+X26/page/subpage/update/reveal/timedflash oracles. No unchanged client retry or
+decoder maintenance. Both macOS artifacts/nativeARM/macOS/Health/adoption and all
+finite/enhanced criteria remain. Mac workflow approval pending, no dispatch;
+this checkpoint local only, no push/publication.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.
