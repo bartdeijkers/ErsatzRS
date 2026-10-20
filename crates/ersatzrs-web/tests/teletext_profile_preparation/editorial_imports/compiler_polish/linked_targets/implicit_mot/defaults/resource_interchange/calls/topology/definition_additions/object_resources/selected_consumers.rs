@@ -1,5 +1,7 @@
 //! A real editor alias cannot authorize an unannounced selected-bank S1.
 use super::*;
+#[path = "selected_consumers/admin.rs"]
+mod admin;
 #[path = "selected_consumers/announcements.rs"]
 mod announcements;
 use ersatzrs_domain::{

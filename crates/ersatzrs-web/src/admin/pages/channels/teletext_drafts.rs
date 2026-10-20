@@ -15,6 +15,8 @@ use crate::admin::ui::primitives::resource_state::admin_result_view;
 mod editorial;
 mod output_status;
 mod resource_add;
+mod resource_announcements;
+mod resource_banks;
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
 
@@ -28,6 +30,8 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "editorial-mismatch" => TextKey::TeletextEditorMismatch,
         "object-copy-invalid" => TextKey::TeletextObjectCopyInvalid,
         "object-add-invalid" => TextKey::TeletextObjectAddInvalid,
+        "resource-bank-invalid" => TextKey::TeletextResourceBankInvalid,
+        "subpage-announcement-invalid" => TextKey::TeletextSubpageAnnouncementInvalid,
         "editorial-protected" => TextKey::TeletextEditorProtected,
         "editorial-no-changes" => TextKey::TeletextEditorNoChanges,
         "editorial-no-pages" => TextKey::TeletextPreviewAbsent,
@@ -418,6 +422,8 @@ fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
                     </button>
                 </form>
             </div>
+            {resource_banks::form(data, observation)}
+            {resource_announcements::form(data, observation)}
             {resource_add::form(data, observation)}
             {object_copy_form(data, observation)}
             {editorial_import_form(data.channel_id, observation.current_design_head)}
@@ -1414,5 +1420,185 @@ mod tests {
             draft_status_text("object-add-invalid"),
             tr(TextKey::TeletextObjectAddInvalid)
         );
+    }
+    fn resource_edit_observation(
+        data: &TeletextDraftPreviewData,
+    ) -> TeletextDraftPublicationObservation {
+        TeletextDraftPublicationObservation {
+            digest: "b".repeat(64),
+            current_design_head: data.revision,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: false,
+            can_publish: false,
+            replaces_pending: false,
+        }
+    }
+
+    fn assert_resource_form_fences(html: &str) {
+        for expected in [
+            "method=\"post\"",
+            "name=\"channel_id\" value=\"44\"",
+            "name=\"design_id\" value=\"8\"",
+            "name=\"revision\" value=\"3\"",
+            "name=\"expected_design_head\" value=\"3\"",
+            "name=\"digest\"",
+            "name=\"name\" required",
+            "200 / 0010",
+            "201 / 0020",
+            "201 / 0030",
+        ] {
+            assert!(html.contains(expected), "missing {expected}: {html}");
+        }
+        for forbidden in [
+            "name=\"document_index\"",
+            "name=\"program\"",
+            "name=\"sidecar\"",
+            "name=\"authoring\"",
+            "name=\"publication\"",
+            "<textarea",
+            "<script",
+        ] {
+            assert!(!html.contains(forbidden), "unexpected {forbidden}: {html}");
+        }
+    }
+
+    #[test]
+    fn resource_bank_form_is_localized_explicit_and_available_without_existing_banks_or_metadata() {
+        for language in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let context = Owner::new();
+            context.with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let mut data = preview();
+                assert!(data.object_resources.is_empty() && data.authoring.is_empty());
+                let observation = resource_edit_observation(&data);
+                let html = resource_banks::form(&data, &observation).to_html();
+                assert_resource_form_fences(&html);
+                for expected in [
+                    "teletext-resource-bank-add-form",
+                    "/admin-api/teletext/design/add-resource-bank",
+                    "name=\"display\" required",
+                    "name=\"resource_kind\" required",
+                    "value=\"pop\"",
+                    "value=\"gpop\"",
+                    "name=\"resource_page\" required",
+                    "pattern=\"[1-8][0-9A-Fa-f]{2}\"",
+                    "name=\"logical_subpage\" type=\"number\"",
+                    "name=\"counter\" type=\"number\"",
+                    "name=\"update\" required",
+                    "value=\"unchanged\"",
+                    "value=\"changed\"",
+                    "name=\"last_subpage\" required",
+                    "value=\"false\"",
+                    "value=\"true\"",
+                ] {
+                    assert!(html.contains(expected), "missing {expected}: {html}");
+                }
+                for key in [
+                    TextKey::TeletextResourceBankTitle,
+                    TextKey::TeletextResourceBankHelp,
+                    TextKey::TeletextResourceDisplay,
+                    TextKey::TeletextResourceBankKind,
+                    TextKey::TeletextResourceBankPage,
+                    TextKey::TeletextResourceBankSubpage,
+                    TextKey::TeletextResourceBankCounter,
+                    TextKey::TeletextResourceBankUpdate,
+                    TextKey::TeletextResourceBankUnchanged,
+                    TextKey::TeletextResourceBankChanged,
+                    TextKey::TeletextResourceBankLastSubpage,
+                    TextKey::TeletextResourceBankMoreSubpages,
+                    TextKey::TeletextResourceBankFinalSubpage,
+                    TextKey::TeletextResourceBankAction,
+                ] {
+                    assert!(html.contains(tr(key)), "missing localized {key:?}: {html}");
+                }
+                assert!(!html.contains("<fieldset disabled"));
+                assert!(!html.contains("type=\"checkbox\""));
+                data.revision -= 1;
+                let historical = resource_banks::form(&data, &observation).to_html();
+                assert!(historical.contains("<fieldset disabled"));
+                assert!(historical.contains(tr(TextKey::TeletextResourceEditCurrentHelp)));
+                assert_eq!(
+                    draft_status_text("resource-bank-invalid"),
+                    tr(TextKey::TeletextResourceBankInvalid)
+                );
+            });
+        }
+    }
+
+    #[test]
+    fn resource_announcement_form_localizes_multiple_display_selection_and_retains_exact_resources()
+    {
+        use ersatzrs_domain::{
+            TeletextRawDataPageNumber, TeletextResourceIdentity, TeletextResourceKind,
+            TeletextResourceSubpageIndex,
+        };
+        for language in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let context = Owner::new();
+            context.with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let mut data = preview();
+                let observation = resource_edit_observation(&data);
+                assert!(!resource_announcements::form(&data, &observation)
+                    .to_html()
+                    .contains("<form"));
+                data.object_resources = [TeletextResourceKind::Pop, TeletextResourceKind::Gpop]
+                    .into_iter()
+                    .map(|kind| {
+                        TeletextResourceIdentity::new(
+                            kind,
+                            TeletextRawDataPageNumber::new(2, 0xc0).unwrap(),
+                            TeletextResourceSubpageIndex::new(15).unwrap(),
+                        )
+                        .unwrap()
+                    })
+                    .collect();
+                let html = resource_announcements::form(&data, &observation).to_html();
+                assert_resource_form_fences(&html);
+                for expected in [
+                    "teletext-object-subpages-announce-form",
+                    "/admin-api/teletext/design/announce-object-subpages",
+                    "name=\"resource\" required",
+                    "name=\"display\" multiple required",
+                    "size=\"5\"",
+                    "aria-describedby=\"teletext-object-subpages-help\"",
+                    "POP 2C0 S1=15",
+                    "GPOP 2C0 S1=15",
+                ] {
+                    assert!(html.contains(expected), "missing {expected}: {html}");
+                }
+                for key in [
+                    TextKey::TeletextSubpageAnnouncementTitle,
+                    TextKey::TeletextSubpageAnnouncementHelp,
+                    TextKey::TeletextSubpageAnnouncementDisplays,
+                    TextKey::TeletextSubpageAnnouncementAction,
+                ] {
+                    assert!(html.contains(tr(key)), "missing localized {key:?}: {html}");
+                }
+                for display in &data.pages {
+                    let value = serde_json::to_string(display)
+                        .unwrap()
+                        .replace('"', "&quot;");
+                    assert!(
+                        html.contains(&format!("value=\"{value}\"")),
+                        "lost display {display:?}: {html}"
+                    );
+                }
+                assert!(!html.contains("<fieldset disabled"));
+                data.revision -= 1;
+                let historical = resource_announcements::form(&data, &observation).to_html();
+                assert!(historical.contains("<fieldset disabled"));
+                assert!(historical.contains(tr(TextKey::TeletextResourceEditCurrentHelp)));
+                assert_eq!(
+                    draft_status_text("subpage-announcement-invalid"),
+                    tr(TextKey::TeletextSubpageAnnouncementInvalid)
+                );
+            });
+        }
     }
 }

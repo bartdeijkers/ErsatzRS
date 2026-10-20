@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 explicit selected-POP/GPOP subpage announcement; next localized creation/dependency controls and coordinated selection; X1/X2/X3 remain open, no DVBViewer'
+current_focus = 'P9A-04 F1 localized bank/dependency controls verified; next coordinated different-page/consumer selection; X1/X2/X3 remain open, no DVBViewer'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -148,8 +148,16 @@ effects cases (77 retained plus1affected) pass, including partial-then-complete
 display announcements, fresh V8 new-bank use, shared preview, separate publication/
 cold reopen and atomic source/owner/bounds refusals. Strict affected Clippy,
 formatting and architecture pass.
-TTI still cannot change MOT/X27. Next localized bank/dependency controls and
-coordinated different-page selection. Complete editor capacity still needs X3.
+Its announcement_admin_followup now closes localized empty-bank/lifecycle and
+multi-display S1 controls through fresh server-owned source mapping.21 focused
+API/SSR/HTTP checks and both headed browsers pass: Chromium nl/light/JS and
+Firefox en-us/dark/noJS each create/Add/announce for POP/GPOP14, with nine-culture
+labels and320/1920 overflow checks. The native owner proves all six complete
+models/units/rasters, exact source/metadata/config/Night/package preservation,
+separate publication and cold reopen. Its initial UI-preference snapshot failure
+is retained; only fixture seeding order changed, no assertions or product code.
+TTI remains closed to MOT/X27. Next coordinated different-page/consumer selection.
+Complete editor capacity still needs X3; client/platform gates remain mandatory.
 Unused removal stays deferred; keep F6 closed without a relevant regression.
 No new repertoire variants, decoder/client maintenance, device or DVBViewer work.
 

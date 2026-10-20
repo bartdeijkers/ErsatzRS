@@ -52,8 +52,14 @@ intent retains exact source-document/display/resource ownership in private V26
 storage, enclosing unchanged prior roles and optional V25 banks. Native
 receipt/head-CAS replay checks exact recorded intent, complete declarations,
 encoded X27 and protected effects. It grants no uploaded TTI selection authority.
-This is partial F1 implementation; other-page/atomic consumer selection, localized
-controls, complete editor/client proof and full 9A acceptance remain required.
+Localized current-draft forms expose empty-bank creation with explicit lifecycle
+values and batch announcements for one resource across selected display pages.
+The server resolves original producer ordinals from a fresh export's page map;
+optional authoring metadata and submitted ordinals grant no authority. Historical
+forms are disabled, all other form fields remain unique and publication stays
+separate. This is partial F1 implementation; selection of another raw page,
+atomic coordinated consumer changes, complete editor/client proof and full 9A
+acceptance remain required.
 
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.

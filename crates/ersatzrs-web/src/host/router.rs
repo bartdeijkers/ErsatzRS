@@ -240,6 +240,18 @@ pub fn build_app(app_state: AppState) -> Router {
                 )),
             )
             .route(
+                "/admin-api/teletext/design/add-resource-bank",
+                post(api::teletext_editorial::add_resource_bank).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
+                "/admin-api/teletext/design/announce-object-subpages",
+                post(api::teletext_editorial::announce_object_subpages).layer(
+                    DefaultBodyLimit::max(api::teletext::MAX_TELETEXT_FORM_BYTES),
+                ),
+            )
+            .route(
                 "/admin-api/teletext/design/copy-object",
                 post(api::teletext_editorial::copy_object).layer(DefaultBodyLimit::max(
                     api::teletext::MAX_TELETEXT_FORM_BYTES,
