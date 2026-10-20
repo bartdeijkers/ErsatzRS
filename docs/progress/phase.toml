@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 M29 reset assessment complete; original Header/POP secondary policy needs an explicit decision, no guessed reset. Next independent page-X28/page retirement using existing tools; no client search or external maintenance'
+current_focus = 'P9A-04 F4 scoped page-X28 retirement engine/decoder proof closed; M29 Header/POP policy decision remains separate. Next F2 supported metadata/zone geometry, subpage and set qualification from existing receipts; no general editor, client search or external maintenance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -253,10 +253,18 @@ explicit no-second declaration. Retained C4/cache negative and model provenance
 rule out an unqualified neutral reset. M29→Header/POP needs an explicit author/
 receiver Code-of-Practice decision or a demonstrated semantics-preserving reset;
 the protective refusal remains. Canonical m29-policy/identity.json under the same
-root owns source pins and the exact decision/closure condition. Next independently
-qualify page-X28/page retirement using existing tools. No client search, decoder
-maintenance, authoring restriction or acceptance waiver. Windows-package deferral/
-future120minutes remains unchanged.
+root owns source pins and the exact decision/closure condition. The independent
+page-retirement component now closes full-C4 X28-removal engine/decode proof for
+primary/palette/screen/remapping on200:0,200:16,201:0: Cyrillic page context to
+Header Latin or unchanged magazine Greek, then repeat. Exact basic rows/originals,
+source clock/positions/decoded AV/PMT and TSDuck pass. Both retained-X28 negatives
+fail fixed successor oracles. One original pinned decoder per case consumes462/468
+units; no reset or external repair. Native grouped1/1 and strict FFmpeg lint pass.
+Canonical page-retirement/identity.json owns source/tool/capture pins and scope:
+simulated sink times, no actual HTTP/client/navigation or uncertain secondary
+claim. No runtime code changes. Next F2 supported metadata/zone geometry/subpage/
+set qualification from existing receipts; add only missing necessary proof.
+Windows-package deferral/future120minutes remains unchanged.
 F5 eof_unclosed_followup/implementation_followup/native_windows_followup now
 closes the native Windows EOF component proof: the unchanged9.2s/20.559s cases
 pass on optimized.4 with exact cues, copied AV/Dutch AAC, shared cache and natural

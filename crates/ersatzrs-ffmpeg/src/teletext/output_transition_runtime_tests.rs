@@ -7,6 +7,9 @@ use super::*;
 use crate::teletext::{output::transition_tests::simple_with_text, psi_framing::SectionAssembler};
 use mpeg2ts_reader::mpegts_crc;
 
+#[path = "output_transition_tests/page_retirement.rs"]
+mod page_retirement;
+
 struct Forwarding<'a> {
     gate: TeletextOutputGate,
     source: &'a [[u8; 188]],
