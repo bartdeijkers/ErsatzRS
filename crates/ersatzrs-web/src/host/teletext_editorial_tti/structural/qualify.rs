@@ -29,6 +29,7 @@ pub(in super::super) fn check(
         super::super::operands::packet_words(final_service, owner, location, deadline)?;
     let mut final_page = Page::default();
     final_page.packets[0] = final_packets.each_ref().map(Option::as_ref);
+    let source = stream::Image::read(&original, location, deadline)?;
     let a = stream::Image::read(uploaded, location, deadline)?;
     let b = stream::Image::read(&final_page, location, deadline)?;
     if b.markers.len() != new.definition_positions().len() {
@@ -81,7 +82,15 @@ pub(in super::super) fn check(
         {
             return Err(fail(location));
         }
-        super::main::qualify(final_service, new, &b, main, location, deadline)
+        super::main::qualify(
+            (old, &source),
+            final_service,
+            new,
+            (&a, &b),
+            main,
+            location,
+            deadline,
+        )
     } else {
         main_sources(old, new, &a, &b, location, deadline)
     }

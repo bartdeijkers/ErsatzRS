@@ -177,6 +177,16 @@ receipts, explicit publication and recovery remain mandatory. Older stored roles
 reject the Main field. P9A-04 owns verification and remaining interchange scope;
 this is neither a complete editor/client qualification nor full engine acceptance.
 
+Main call correspondence distinguishes a compiler-derived leading header-position
+colour carrier from an authored style. Its complete producer span includes any
+row-zero compatibility selector. A source-authenticated derived span may vanish
+when the last Local call is removed while the invisible original AP remains.
+Restoration from an AP-only Main is an untrusted carrier hypothesis until the
+completed native factory reproduces the exact full span, unique HeaderPosition
+provenance and retained original AP. No generated word gains scalar or authored
+permissions. Genuine authored styles and other unqualified writers retain
+mandatory correspondence; full-prefix, catalogue and shared-effect checks remain.
+
 Private concept version29 separately records exact optional Main presence by
 page/subpage owner. Both expected and replacement are required fields: explicit
 null means absent, while an empty command array remains an explicit Main that

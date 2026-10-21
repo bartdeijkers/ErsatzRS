@@ -934,6 +934,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve a retained leading Main teletext position when deleting its last Local
+  calls or restoring the original calls from TTI. Authenticate the complete
+  generated colour/context span without granting it authored edit permissions;
+  genuine authored styles, protected consumers and explicit publication
+  retain their existing safeguards.
+
 - Import authored teletext Main charset edits together with their generated Base
   context. Preserve supplementary source text when restoration words change or
   disappear, retain exact root undo, and reject stale context even alongside

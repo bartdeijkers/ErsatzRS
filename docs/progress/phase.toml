@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 created-bank attachment and role-only restoration completed; next existing Main/Local deferred-AP editing family. Preserve completed components and external deferrals'
+current_focus = 'P9A-04 F1 direct leading Main deferred-AP lifecycle completed; next remaining complete-set resource-call/link interchange boundary. Preserve completed components and external deferrals'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -71,6 +71,21 @@ This current handoff supersedes older next-action prose below. Maintainer
 acceptance, followed by checking all applicable CI gates on the pushed commit.
 Partial checkpoints remain local; no publication is authorized.
 
+F1 direct leading Main deferred-AP call editing is completed within its native
+boundary: complete original/grown/AP-only factories, exact generated selector/FG7
+span and HeaderPosition provenance, call growth/deletion/exact root undo, shared
+preview/TTI, cold recovery and separate publication. Canonical
+tmp/phase9-header-c2/main-deferred-ap/identity.json owns all26 affected controls,
+original import RED and retained fixture-only span/style corrections. Genuine
+authored FG remains mandatory, malformed/extra derived writers reject atomically
+and no generated word gains permission. Existing editor/admin/decoder/transport
+receipts remain valid in scope. Other unqualified Main/Local/default/interleaved
+contexts remain distinct open F1 work; no adjacent small-variant series.
+Next finite F1 action: qualify the remaining complete-set resource-call/link
+editing boundary against its existing full-model native fixture. Close a named
+remaining user action with exact dependencies/protected consumers and separate
+publication/root undo; do not reopen completed selection/attachment components.
+
 F1 standalone Main-presence creation is now completed within its exact boundary:
 original None/no baseline X26, genuine pinned QTM menu/SaveAs/disk reload,
 concept/preview/explicit publication, scalar repeat and exact original-None undo
@@ -125,11 +140,8 @@ single-pass acquisition negative and corrected Arabic57/PUA expectation are
 retained without changing product bytes or decoder sources. Existing admin and
 transport/F6 receipts remain valid; no new runtime-client/font/panel claim.
 Remaining Local/default/object context families are distinct, not waived.
-Next finite F1 group: complete-set coordinated resource-target/link editing.
-Use the existing linked-target native fixture to establish the blocked accepted
-edit, preserve all complete-set identities/effective roles/protected consumers,
-and stop after its affected import/preview/publication/root-undo proof. Do not
-start another repertoire/editor variant or reopen the closed components.
+The coordinated resource-target/link selection components described below are
+completed within their recorded boundaries, superseding the earlier next action.
 All recorded external prerequisites and deferred decisions remain unchanged.
 
 F1 retained Normal/Global DRCS raw-bank selection is completed. Canonical
@@ -173,9 +185,9 @@ missing-bank/stale requests refuse without mutation. No product code changed.
 The two missing/late policy fixture negatives remain canonical; existing guards
 and budgets stay exact. Scoped strict integration Clippy and format pass.
 Only this composition proof leaves F1; no adjacent variants are added.
-Next finite existing F1 group is the named Main/Local deferred-AP editing family:
-qualify one complete original/final source witness and locate the actual edit
-refusal before changing code. Reuse closed component scopes. Preserve X1 deferral,
+The direct leading Main deferred-AP boundary is now closed by the newer receipt
+above; other unqualified arrangements retain their existing F1 scope. Reuse
+closed component scopes. Preserve X1 deferral,
 X3 upstream wait and deferred Windows package trial (future authorized120minutes).
 Push only after full local9A acceptance, then applicable exact-pushed-SHA CI.
 

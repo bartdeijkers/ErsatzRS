@@ -11,6 +11,7 @@ use ersatzrs_ffmpeg::teletext::{
 use std::time::Instant;
 
 mod correspondence;
+mod header;
 #[cfg(test)]
 mod tests;
 
@@ -85,8 +86,16 @@ fn parse(
         return Err(fail(location));
     }
     let mut old = units(catalog, native, images.0, location, deadline)?;
-    let new = units(catalog, native, images.1, location, deadline)?;
+    let mut new = units(catalog, native, images.1, location, deadline)?;
     sources(original, native, &mut old, location, deadline)?;
+    let carrier = header::prepare(
+        original,
+        native,
+        (&mut old, &mut new),
+        images,
+        location,
+        deadline,
+    )?;
     let steps = correspondence::align((&old, &new), images, location, deadline)?;
     let scalars = correspondence::scalars(
         original,
@@ -99,6 +108,9 @@ fn parse(
     )?;
     let (replacement, retained) =
         correspondence::assemble(&scalars.expected, (&old, &new), &steps, location, deadline)?;
+    if let Some(carrier) = carrier {
+        carrier.check_candidate(original, &replacement, &retained, native.owner(), location)?;
+    }
     let intent = TeletextMainLocalInvocationProgramOverlay::new(
         native.owner(),
         scalars.expected,
@@ -236,9 +248,10 @@ fn sources(
 }
 
 pub(super) fn qualify(
+    baseline: (&EncodedTeletextLocalObjectProgram, &stream::Image),
     service: &EncodedTeletextAuthoredService,
     native: &EncodedTeletextLocalObjectProgram,
-    image: &stream::Image,
+    images: (&stream::Image, &stream::Image),
     intent: &TeletextMainLocalInvocationProgramOverlay,
     location: Location,
     deadline: Instant,
@@ -253,6 +266,8 @@ pub(super) fn qualify(
     if native.owner() != intent.owner() || actual != intent.replacement() {
         return Err(fail(location));
     }
+    header::qualify(baseline, native, images, intent, location, deadline)?;
+    let image = images.1;
     for (ordinal, command) in actual.commands().iter().enumerate() {
         location.check_deadline(deadline)?;
         if !matches!(command, Command::InvokeObject { target, .. } if target.scope() == TeletextObjectScope::Local)

@@ -185,6 +185,8 @@ async fn original_main_local_invocation_deletion_preserves_complete_definition_c
 
 #[path = "main_calls/coordinated.rs"]
 mod coordinated;
+#[path = "main_calls/deferred_ap.rs"]
+mod deferred_ap;
 #[path = "main_calls/lifecycle.rs"]
 mod lifecycle;
 #[path = "main_calls/refusals.rs"]
