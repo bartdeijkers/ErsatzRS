@@ -5,6 +5,8 @@ use ersatzrs_domain::TeletextMotRoleResolution;
 mod actual_admin;
 #[path = "first_attachment/checks.rs"]
 mod checks;
+#[path = "first_attachment/created_banks.rs"]
+mod created_banks;
 #[path = "first_attachment/lifecycle.rs"]
 mod lifecycle;
 #[path = "first_attachment/source.rs"]

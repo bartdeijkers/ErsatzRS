@@ -7,8 +7,9 @@ summary    = '''
 ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
 F2 metadata/zones/version is closed. F1 closes Main-presence/Base-prefix,
 position undo, interleaved Base charset and retained DRCS selection (V30).
-role-attachment/identity.json closes native first POP/GPOP/DRCS/GDRCS attachment,
-retarget, partial/exact root restore (V31), localized headed forms and strict lint.
+role-attachment closes first four-role attachment/undo (V31), headed forms/lint;
+created-bank-attachment closes native V25/V31/V25 bank-create/attach/role-undo,
+retaining populated banks/lifecycle. P9A-04 owns both canonical identities.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay
