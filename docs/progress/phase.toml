@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F3 same-page Main/unique-Local C2 completed; select the next source-positive complete-set/dependency or authored-context boundary from existing F/V/X list. Preserve closed components and external deferrals'
+current_focus = 'P9A-04 X2 native Windows default/channel configuration-overlay playback completed at exact40ad host/candidate.4; remaining native ARM/macOS artifacts/environments and accepted runtime adoption retain their prerequisites'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -70,6 +70,26 @@ This current handoff supersedes older next-action prose below. Maintainer
 2026-10-21 authorizes a push to remote/main only after full local Phase9A
 acceptance, followed by checking all applicable CI gates on the pushed commit.
 Partial checkpoints remain local; no publication is authorized.
+
+X2 native Windows default/channel configuration-overlay playback is completed
+within exact40ad host7d2d/candidate.4 scope. Canonical
+tmp/phase9-next-local-teletext/level15-next-managed-qualification/overlay-playback/native-windows/identity.json
+owns four actual ordinary raw Burn/Convert captures,640/1280x180 over protected
+SQL320x180,92 unchanged20s/12s transport checks, Dutch AAC881/880Hz, Burn57pixels,
+both actual Convert WebVTT renditions, protected source/SQL/overlay bytes and
+four Ctrl+C/exit0/unforced hosts with natural complete Job cleanup. All twelve
+scoped current sources match; this is not current full-package/adoption proof.
+The original stale-fixture rescan rejection is retained. Exactly one clone-only
+six-hour library cadence clock is prepared at actualUTC with complete one-cell
+snapshot equality; all after-host Library/Media/clock cells remain protected.
+Earlier env/import adapter failures remain negative tooling evidence. Existing
+Linux/native capture, AV, SQL and Job mechanisms are reused; no product change.
+Next native platform output/adoption work requires native ARM/macOS environments
+and both macOS artifacts. Current-source Windows-package work stays deferred,
+with120minutes reserved for a future authorized trial; do not retry it now.
+The existing F/V/X list retains other required product/proof boundaries; do not
+invent substitute editor/character variants or reopen completed components.
+Full local9A acceptance still precedes the authorized push and exact-SHA CI.
 
 F3 same-page Main/unique-original-Local C2 is completed. Canonical
 tmp/phase9-header-c2/identity.json, cross_emitter_c2_qualification owns exact
