@@ -648,8 +648,8 @@ async fn production_display_units_decode_active_override_and_original_fallback()
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =

@@ -2,6 +2,10 @@
 //! POSIX shell fixture intentionally runs only on Unix; Windows acceptance is separate.
 #![cfg(unix)]
 
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use std::{collections::BTreeMap, path::Path, time::Duration};
 
 use chrono::{TimeZone as _, Utc};

@@ -74,7 +74,7 @@ fn annex_g33_keeps_held_shapes_and_exact_original_control_bytes() {
         let mut units = native(&edited, address(0x1234)).data_units().to_vec();
         units.push(super::super::packets::terminator(2));
         std::fs::write(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            test_manifest_dir!()
                 .join("../..")
                 .join(root)
                 .join("annex-g33.json"),

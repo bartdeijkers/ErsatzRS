@@ -480,8 +480,7 @@ async fn attach_canvas(fixture: &Fixture, item: i64) {
 }
 
 async fn attach_source_clock(fixture: &Fixture, item: i64) {
-    let font =
-        FsPath::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/Roboto-Regular.ttf");
+    let font = test_manifest_dir!().join("../../assets/fonts/Roboto-Regular.ttf");
     let text = format!(
         "{{% if Now.Unix < {} %}}X{{% else %}}XX{{% endif %}}",
         (fixture.at + TimeDelta::hours(1) + TimeDelta::seconds(15)).timestamp()

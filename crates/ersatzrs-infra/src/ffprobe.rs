@@ -2079,7 +2079,7 @@ mod jpeg_xl_tests {
     #[ignore = "requires verified FFmpeg9 ffprobe via FFPROBE_PATH"]
     async fn apng_timing_probes_one_cycle_for_finite_and_infinite_containers() {
         for name in ["animated-two-colour.png", "animated-two-colour-finite.png"] {
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            let path = test_manifest_dir!()
                 .join("../ersatzrs-ffmpeg/tests/fixtures/graphics")
                 .join(name);
             let extractor = super::FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());

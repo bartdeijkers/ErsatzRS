@@ -1,3 +1,7 @@
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -414,7 +418,7 @@ fn shell_quote(value: &str) -> String {
 }
 
 fn big_buck_bunny_fixture() -> Option<PathBuf> {
-    let crate_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let crate_root = test_manifest_dir!();
     let workspace_root = crate_root.join("../..");
     [
         "testdata/bbb_sunflower_1080p_30fps_normal.mp4",

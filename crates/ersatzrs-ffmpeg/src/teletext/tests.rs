@@ -395,8 +395,7 @@ async fn real_runtime_decodes_authored_unicode_styles_and_subtitles() {
         .iter()
         .flat_map(|page| page.data_units().iter().flatten().copied())
         .collect();
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/calibration/wrap-authored-teletext.py");
+    let script = test_manifest_dir!().join("../../scripts/calibration/wrap-authored-teletext.py");
     let stream =
         crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &raw, 128 * 1024)
             .await

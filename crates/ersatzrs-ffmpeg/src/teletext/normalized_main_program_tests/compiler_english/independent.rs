@@ -184,8 +184,7 @@ async fn english_two_pair_resource_carrier_decodes_with_pinned_imager() {
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let helper = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-polish-carrier-decoder.py");
+    let helper = test_manifest_dir!().join("../../scripts/e2e/teletext-polish-carrier-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output = crate::teletext_probe::run_probe(

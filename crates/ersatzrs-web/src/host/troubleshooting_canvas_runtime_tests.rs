@@ -45,8 +45,7 @@ async fn assets(fixture: &Fixture) -> (PathBuf, PathBuf, PathBuf) {
 
 pub(super) async fn install(fixture: &Fixture, query: &mut PlaybackPreviewQuery) {
     let (image, motion, ass) = assets(fixture).await;
-    let font =
-        FsPath::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/Roboto-Regular.ttf");
+    let font = test_manifest_dir!().join("../../assets/fonts/Roboto-Regular.ttf");
     let script = GraphicsElementConfig::Script(ScriptGraphicsConfig {
         command: Some("return 'setcolor red\\nrect 8 8 32 32 fill\\n'".into()),
         ..Default::default()

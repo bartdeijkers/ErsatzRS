@@ -447,8 +447,7 @@ async fn record_utc_expiry_fragments(
 }
 
 async fn verify_after_ack(directory: &Path, ffmpeg: &str, views: &[Capture; 3], expiry: &Expiry) {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-expiry-provenance.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-expiry-provenance.py");
     let report_path = directory.join("qualified-expiry.json");
     client_capture::probe(
         &client_capture::selected("ERSATZRS_TELETEXT_TEST_PYTHON"),

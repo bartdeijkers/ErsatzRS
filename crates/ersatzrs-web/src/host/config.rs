@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use leptos::config::{get_configuration, ConfFile, LeptosOptions};
@@ -34,10 +34,14 @@ fn parse_streaming_listen_addr(
         .transpose()
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "Startup resolves Cargo/nextest's runtime manifest before the compiled development fallback"
+)]
 pub fn leptos_configuration() -> ConfFile {
-    let manifest = Path::new(WEB_CRATE_CARGO_TOML);
+    let manifest = runtime_manifest(std::env::var_os("CARGO_MANIFEST_DIR"));
     let mut config = if manifest.is_file() {
-        get_configuration(Some(WEB_CRATE_CARGO_TOML))
+        get_configuration(manifest.to_str())
     } else {
         get_configuration(None)
     };
@@ -45,6 +49,13 @@ pub fn leptos_configuration() -> ConfFile {
     let config = config.as_mut().expect("valid leptos config");
     normalize_release_options(&mut config.leptos_options);
     config.clone()
+}
+
+fn runtime_manifest(crate_dir: Option<std::ffi::OsString>) -> PathBuf {
+    crate_dir.map_or_else(
+        || PathBuf::from(WEB_CRATE_CARGO_TOML),
+        |root| PathBuf::from(root).join("Cargo.toml"),
+    )
 }
 
 /// Whether development-only HTTP and admin routes may be registered.
@@ -85,6 +96,16 @@ fn normalize_release_options(options: &mut LeptosOptions) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_manifest_uses_the_execution_checkout_and_retains_packaged_fallback() {
+        let runtime = PathBuf::from("relocated-checkout").join("crates/ersatzrs-web");
+        assert_eq!(
+            runtime_manifest(Some(runtime.clone().into_os_string())),
+            runtime.join("Cargo.toml")
+        );
+        assert_eq!(runtime_manifest(None), PathBuf::from(WEB_CRATE_CARGO_TOML));
+    }
 
     #[test]
     fn streaming_address_requires_an_explicit_socket_address() {

@@ -12255,10 +12255,10 @@ mod tests {
     }
 
     fn testdata_fixture() -> Option<PathBuf> {
-        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let workspace_root = test_manifest_dir!()
             .parent()
             .and_then(Path::parent)
-            .unwrap_or_else(|| Path::new("."));
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
         [
             "testdata/bbb_sunflower_1080p_30fps_normal.mp4",
             "testdata/bbb_sunflower_1080p_60fps_normal.mp4",

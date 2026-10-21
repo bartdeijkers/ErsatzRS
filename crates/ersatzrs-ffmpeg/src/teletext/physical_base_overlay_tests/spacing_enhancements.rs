@@ -15,7 +15,7 @@ fn export_page(name: &str, page: &EncodedTeletextPage) {
     let mut units = page.data_units().to_vec();
     units.push(super::super::packets::terminator(2));
     std::fs::write(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        test_manifest_dir!()
             .join("../..")
             .join(root)
             .join(format!("{name}.json")),

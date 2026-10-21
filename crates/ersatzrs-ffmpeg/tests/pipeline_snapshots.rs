@@ -1,3 +1,7 @@
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -3715,12 +3719,9 @@ fn graphics_template_renderer_writes_svg() {
     variables.insert("title".to_owned(), "A & B".to_owned());
     variables.insert("subtitle".to_owned(), "<Tonight>".to_owned());
 
-    let template_path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../assets/graphics/lower-third.svg"
-    );
+    let template_path = test_manifest_dir!().join("../../assets/graphics/lower-third.svg");
     let output_path = renderer
-        .render_template_file(template_path, &variables)
+        .render_template_file(&template_path, &variables)
         .expect("template renders");
 
     let svg_text = std::fs::read_to_string(output_path).expect("rendered svg can be read");
@@ -4879,7 +4880,7 @@ fn unproven_backends_keep_their_hardware_path_for_sdr_profiles() {
 // ── p8c-03: animated WebP graphics and watermark inputs ─────────────────────
 
 fn graphics_fixture(name: &str) -> String {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    test_manifest_dir!()
         .join("tests/fixtures/graphics")
         .join(name)
         .to_string_lossy()

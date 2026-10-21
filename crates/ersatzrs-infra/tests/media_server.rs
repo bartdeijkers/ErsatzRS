@@ -3,6 +3,10 @@
 //! items whose local file is missing as `RemoteOnly`/`Unavailable`.
 mod common;
 
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use ersatzrs_infra::media_server::{
     flag_missing_media_server_items, flag_unavailable_media_server_items,
 };
@@ -114,7 +118,7 @@ async fn unavailable_flags_present_item_with_missing_local_file_as_remote_only()
     attach_file(
         &pool,
         here,
-        concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
+        &test_manifest_dir!().join("Cargo.toml").to_string_lossy(),
     )
     .await;
     let moved = seed_movie(&pool, "moved", 0).await;
@@ -123,7 +127,7 @@ async fn unavailable_flags_present_item_with_missing_local_file_as_remote_only()
     attach_file(
         &pool,
         restored,
-        concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
+        &test_manifest_dir!().join("Cargo.toml").to_string_lossy(),
     )
     .await;
 
@@ -153,7 +157,7 @@ async fn unavailable_flags_present_item_with_missing_local_file_as_unavailable_w
     attach_file(
         &pool,
         restored,
-        concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
+        &test_manifest_dir!().join("Cargo.toml").to_string_lossy(),
     )
     .await;
 

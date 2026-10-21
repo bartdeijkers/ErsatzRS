@@ -293,8 +293,7 @@ async fn verify_capture(
     let units_name = format!("channel-{channel}-g1-units.json");
     let units_path = directory.join(&units_name);
     live_client::write_new(&units_path, &encoded).unwrap();
-    let script =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/e2e/teletext-g1-live-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-g1-live-decoder.py");
     let helper = live_client::read_bounded(&script, 65_536).unwrap();
     assert_eq!(
         live_client::hash(&helper),

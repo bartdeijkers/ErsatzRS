@@ -391,9 +391,8 @@ mod tests {
 
     #[test]
     fn canonical_skills_have_valid_frontmatter_and_exact_mirror_pointers() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("xtask has workspace parent");
+        let manifest = test_manifest_dir!();
+        let root = manifest.parent().expect("xtask has workspace parent");
         let mut skill_count = 0;
         for entry in fs::read_dir(root.join("skills")).expect("read skills") {
             let entry = entry.expect("skill entry");

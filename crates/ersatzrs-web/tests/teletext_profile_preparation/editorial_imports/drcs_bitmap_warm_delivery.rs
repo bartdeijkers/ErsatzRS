@@ -412,7 +412,7 @@ async fn verify_with_decoder(
             .await;
         let prefix = directory.join(format!("viewer-{index}-original-units.json"));
         let suffix = directory.join(format!("viewer-{index}-updated-units.json"));
-        let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let script = test_manifest_dir!()
             .join("../../scripts/e2e")
             .join(script_name);
         let theme = if index == 2 { "night" } else { "day" };

@@ -62,8 +62,7 @@ async fn nonuniform_active_header_background_decodes_with_pinned_independent_ima
         )
         .unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-header-context-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-header-context-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =

@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+#[cfg(test)]
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 pub mod addon_artwork;
 pub mod addon_chapters;
 mod addon_list_selection;

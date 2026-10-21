@@ -272,8 +272,7 @@ pub(super) async fn verify_capture_mode(
     )
     .unwrap();
     let theme = if channel == 1 { "day" } else { "night" };
-    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-editor-drcs-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-editor-drcs-decoder.py");
     let output = client_capture::probe(
         "python3",
         &[
@@ -347,8 +346,7 @@ pub(super) async fn verify_sparse_edited_capture(
     )
     .unwrap();
     let theme = if channel == 1 { "day" } else { "night" };
-    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-sparse-editor-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-sparse-editor-decoder.py");
     assert_eq!(
         live_client::hash(&std::fs::read(&script).unwrap()),
         "1a4613ec59ddb6e85b22e80fad702edc51de1fd30f7b8097d990b104177a03aa"

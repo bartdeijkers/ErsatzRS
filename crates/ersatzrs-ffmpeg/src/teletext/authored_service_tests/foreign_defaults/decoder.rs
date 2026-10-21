@@ -34,8 +34,8 @@ fn request(cells: &[serde_json::Value]) -> serde_json::Value {
 }
 
 async fn decode(request: &serde_json::Value) -> std::io::Result<Vec<u8>> {
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let input = serde_json::to_vec(request).unwrap();

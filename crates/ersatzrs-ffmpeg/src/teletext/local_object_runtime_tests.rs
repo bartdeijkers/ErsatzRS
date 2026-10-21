@@ -157,8 +157,7 @@ async fn pinned_libzvbi_0_2_42_local_definition_marker_limitation_is_reproduced(
     {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-object-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let report =
@@ -175,8 +174,7 @@ async fn pinned_libzvbi_0_2_42_local_definition_marker_limitation_is_reproduced(
 #[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
 async fn authored_local_objects_decode_with_pinned_independent_teletextimager() {
     let request = conformance_request(&conformance_cases());
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-imager-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-imager-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let report =
@@ -385,8 +383,7 @@ async fn advanced_local_objects_decode_with_pinned_independent_teletextimager() 
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-imager-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-imager-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let report =

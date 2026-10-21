@@ -487,8 +487,8 @@ async fn compiled_same_emitter_colour_ties_decode_with_pinned_imager() {
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -522,8 +522,7 @@ async fn compiled_local_colour_tie_decodes_with_libzvbi() {
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-object-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -626,8 +625,8 @@ async fn base_unicode_active_override_decodes_with_pinned_imager() {
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -761,7 +760,7 @@ async fn assert_national_overlap_decoding(english: bool) {
     }]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(if english {
+    let script = test_manifest_dir!().join(if english {
         "../../scripts/e2e/teletext-national-carrier-calibration.py"
     } else {
         "../../scripts/e2e/teletext-main-composition-decoder.py"
@@ -864,8 +863,8 @@ async fn redundant_initial_object_position_decodes_without_wire_or_colour_change
     {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -890,8 +889,8 @@ async fn composed_main_program_decodes_with_pinned_independent_teletextimager() 
     {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -962,8 +961,8 @@ async fn pinned_imager_g1_alphabet_limitation_preserves_level15_fallback() {
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -1002,8 +1001,7 @@ async fn g1_alphabet_decodes_without_national_substitutions_with_libzvbi() {
     {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-object-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -1072,8 +1070,7 @@ async fn original_non_latin_g0_assignments_decode_with_libzvbi() {
     ]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-object-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -1614,8 +1611,8 @@ async fn assert_contextual_decoding(cases: Vec<serde_json::Value>, fixture_env: 
     if let Some(path) = crate::locator::first_non_empty_env(&[fixture_env]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =

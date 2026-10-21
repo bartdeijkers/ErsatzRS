@@ -8,6 +8,11 @@
     clippy::new_without_default
 )]
 
+#[cfg(test)]
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 pub mod admin;
 
 #[cfg(not(target_arch = "wasm32"))]

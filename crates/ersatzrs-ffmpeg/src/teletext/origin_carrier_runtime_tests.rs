@@ -341,8 +341,8 @@ async fn original_active_origin_carrier_decodes_without_changing_level15_fallbac
     let request =
         serde_json::to_vec(&serde_json::json!({"expected_version":"0.2.0","cases":[case()]}))
             .unwrap();
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =

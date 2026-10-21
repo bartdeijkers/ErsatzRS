@@ -223,8 +223,7 @@ async fn complete_carousel_shared_charset_aliases_decode() {
     }
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-object-decoder.py");
     let report =
         crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
             .await

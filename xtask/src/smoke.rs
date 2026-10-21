@@ -89,7 +89,12 @@ fn run_inner(opts: Opts) -> Result<()> {
 
     let log_path = root.path.join("ersatzrs-web-smoke.log");
     let database_url = format!("sqlite:{}", db_path.display());
-    let mut server = ServerProcess::start(&database_url, &root.path, &log_path)?;
+    let mut server = ServerProcess::start(
+        &database_url,
+        &root.path,
+        &log_path,
+        opts.server_bin.as_deref(),
+    )?;
 
     wait_for_health(&opts.timeout)?;
     seed_streaming_fixture(
@@ -263,6 +268,7 @@ struct Opts {
     channels: Vec<String>,
     timeout: Duration,
     media_path: Option<PathBuf>,
+    server_bin: Option<PathBuf>,
     keep_temp: bool,
     check_ts: bool,
     check_hls: bool,
@@ -277,6 +283,7 @@ impl Opts {
         let mut channels = Vec::new();
         let mut timeout = Duration::from_secs(DEFAULT_TIMEOUT_SECONDS);
         let mut media_path = None;
+        let mut server_bin = None;
         let mut keep_temp = false;
         let mut check_ts = true;
         let mut check_hls = true;
@@ -317,6 +324,13 @@ impl Opts {
                     };
                     media_path = Some(PathBuf::from(value));
                 }
+                "--server-bin" => {
+                    i += 1;
+                    let Some(value) = args.get(i) else {
+                        bail!("--server-bin requires a path");
+                    };
+                    server_bin = Some(PathBuf::from(value));
+                }
                 "--keep-temp" => keep_temp = true,
                 "--interlace-probe" => interlace_probe = true,
                 "--next" => next = true,
@@ -356,6 +370,7 @@ impl Opts {
             channels,
             timeout,
             media_path,
+            server_bin,
             keep_temp,
             check_ts,
             check_hls,
@@ -415,8 +430,13 @@ struct ServerProcess {
 }
 
 impl ServerProcess {
-    fn start(database_url: &str, home: &Path, log_path: &Path) -> Result<Self> {
-        let binary = build_web_binary()?;
+    fn start(
+        database_url: &str,
+        home: &Path,
+        log_path: &Path,
+        server_bin: Option<&Path>,
+    ) -> Result<Self> {
+        let binary = resolve_web_binary(server_bin, build_web_binary)?;
         let log = fs::File::create(log_path)
             .with_context(|| format!("creating smoke log {}", log_path.display()))?;
         let stderr = log
@@ -424,6 +444,15 @@ impl ServerProcess {
             .with_context(|| format!("cloning smoke log {}", log_path.display()))?;
 
         let mut command = Command::new(&binary);
+        let checkout = env::current_dir().context("resolving smoke checkout")?;
+        if let Some(root) = checkout
+            .ancestors()
+            .find(|root| root.join("crates/ersatzrs-web/Cargo.toml").is_file())
+        {
+            command.env("CARGO_MANIFEST_DIR", root.join("crates/ersatzrs-web"));
+        } else {
+            command.env_remove("CARGO_MANIFEST_DIR");
+        }
         command
             .env("DATABASE_URL", database_url)
             .env("ErsatzRS_DATABASE__URL", database_url)
@@ -485,6 +514,20 @@ fn build_web_binary() -> Result<PathBuf> {
         "ersatzrs-web"
     };
     Ok(resolve_target_dir().join("debug").join(exe))
+}
+
+fn resolve_web_binary(
+    prebuilt: Option<&Path>,
+    build: impl FnOnce() -> Result<PathBuf>,
+) -> Result<PathBuf> {
+    let Some(path) = prebuilt else {
+        return build();
+    };
+    if !path.is_file() {
+        bail!("prebuilt smoke server is not a file: {}", path.display());
+    }
+    path.canonicalize()
+        .with_context(|| format!("resolving prebuilt smoke server {}", path.display()))
 }
 
 fn resolve_target_dir() -> PathBuf {
@@ -1203,9 +1246,47 @@ fn print_help() {
     eprintln!("    --channel N       Channel number to probe (default: 1)");
     eprintln!("    --timeout S       Overall startup/probe timeout seconds (default: 90)");
     eprintln!("    --media PATH      Use an existing media file instead of generating one");
+    eprintln!("    --server-bin PATH Use this prebuilt server; never build a replacement");
     eprintln!("    --hls-lifecycle  Also prove StopOnDisconnect HLS and mode=ts sessions drain");
     eprintln!("    --skip-ts         Skip /iptv/channel/<n>.ts?mode=ts probe");
     eprintln!("    --skip-hls        Skip HLS segmenter playlist probes");
     eprintln!("    --interlace-probe Verify native playback detects interlaced generated media");
     eprintln!("    --keep-temp       Keep temporary DB/media/log directory for debugging");
+}
+
+#[cfg(test)]
+mod prebuilt_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_server_and_missing_server_never_invoke_the_builder() {
+        let root = SmokeRoot::new(false).unwrap();
+        let server = root.path.join("prebuilt-server");
+        fs::write(&server, b"not executed by this selection test").unwrap();
+        assert_eq!(
+            resolve_web_binary(Some(&server), || panic!("must not rebuild")).unwrap(),
+            server.canonicalize().unwrap()
+        );
+        for invalid in [root.path.clone(), root.path.join("missing-server")] {
+            assert!(resolve_web_binary(Some(&invalid), || panic!("must not rebuild")).is_err());
+        }
+    }
+
+    #[test]
+    fn default_mode_retains_build_and_explicit_cli_selection() {
+        let expected = PathBuf::from("built-server");
+        assert_eq!(
+            resolve_web_binary(None, || Ok(expected.clone())).unwrap(),
+            expected
+        );
+        assert!(Opts::parse(vec!["--server-bin".into()]).is_err());
+        let opts = Opts::parse(vec![
+            "--server-bin".into(),
+            "candidate".into(),
+            "--next".into(),
+        ])
+        .unwrap();
+        assert_eq!(opts.server_bin.as_deref(), Some(Path::new("candidate")));
+        assert!(opts.next && opts.check_hls_lifecycle);
+    }
 }

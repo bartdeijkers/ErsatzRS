@@ -1,5 +1,9 @@
 mod common;
 
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use ersatzrs_core::repositories::{EmbyConnectionConfig, EmbyService as _};
 use ersatzrs_infra::emby::{
     sync_emby_collection_library, sync_emby_movie_library, sync_emby_show_by_id,
@@ -310,7 +314,7 @@ async fn emby_sync_restores_non_normal_movie_with_matching_etag() {
             then.status(200).json_body(movie_page_json(
                 1,
                 "movie-restore",
-                concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
+                &test_manifest_dir!().join("Cargo.toml").to_string_lossy(),
             ));
         })
         .await;
@@ -338,7 +342,10 @@ async fn emby_sync_restores_non_normal_movie_with_matching_etag() {
     assert_eq!(media_item_state(&pool).await, 0);
     assert_eq!(
         media_file_path(&pool).await,
-        concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")
+        test_manifest_dir!()
+            .join("Cargo.toml")
+            .to_string_lossy()
+            .into_owned()
     );
     assert_eq!(playback.calls_async().await, 2);
 }

@@ -221,60 +221,147 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-  test:
-    name: Test
-    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner != 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
-    # Gate on the fast fmt job so a formatting failure doesn't burn a full
-    # test build on the serial self-hosted runner.
-    needs: fmt
-    # Leave headroom for the other runners and the interactive WSL session.
+  build:
+    name: Build CI artifacts
+    needs: [preflight, fmt]
+    if: ${{ always() && !cancelled() && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    timeout-minutes: 120
+    outputs:
+      rust_artifact: ${{ steps.identity.outputs.rust_artifact }}
+      web_artifact: ${{ steps.identity.outputs.web_artifact }}
     env:
       CARGO_BUILD_JOBS: "1"
-      NEXTEST_TEST_THREADS: "4"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: ${{ inputs.runner == 'github-hosted' && '-C link-arg=-fuse-ld=lld' || '' }}
+      LEPTOS_OUTPUT_NAME: ersatzrs-web
+      LEPTOS_HASH_FILES: "false"
+      BUILD_RUST: ${{ !inputs.browser_only || inputs.browser_only == 'none' }}
+      BUILD_WEB: ${{ !inputs.test_only && !inputs.next_engine_only }}
     steps:
+      - name: Validate dispatch mode
+        env:
+          TEST_ONLY: ${{ inputs.test_only }}
+          NEXT_ONLY: ${{ inputs.next_engine_only }}
+          TELETEXT_ONLY: ${{ inputs.teletext_only }}
+          BROWSER_ONLY: ${{ inputs.browser_only }}
+        run: |
+          python3 - <<'PYCODE'
+          import os
+          modes = [os.environ[key] == 'true' for key in ('TEST_ONLY', 'NEXT_ONLY')]
+          modes += [os.environ[key] not in ('', 'none') for key in ('TELETEXT_ONLY', 'BROWSER_ONLY')]
+          if sum(modes) > 1:
+              raise SystemExit('Focused CI modes are mutually exclusive')
+          PYCODE
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: wasm32-unknown-unknown
       - name: Reset persistent target-dir (manual escape hatch)
         if: ${{ inputs.reset_target_dir == true }}
         run: rm -rf "$CARGO_TARGET_DIR"
-      # This job only ever runs self-hosted (see the `if:` above), so it
-      # relies solely on the persistent CARGO_TARGET_DIR set at workflow
-      # level (see the comment above `env:`) — no remote cache needed here.
-      - name: Install Stylance CLI
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.runner == 'github-hosted' }}
+        with:
+          key: ci-build
+          cache-bin: "true"
+      - name: Install LLVM linker
+        if: ${{ inputs.runner == 'github-hosted' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes lld
+      - name: Install build tools
         run: |
           if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
             cargo install stylance-cli --version 0.8.2 --locked
           fi
-      - name: Install cargo-nextest
-        run: |
-          if ! command -v cargo-nextest >/dev/null 2>&1; then
+          if ! command -v cargo-nextest >/dev/null 2>&1 || [[ "$(cargo nextest --version)" != cargo-nextest\ 0.9.140* ]]; then
             cargo install cargo-nextest --version 0.9.140 --locked
           fi
-      # Unit, binary and integration tests, no doctests. Next and teletext
-      # tests run in their dedicated jobs below. The `ci`
-      # profile adds a JUnit report so per-test durations land in an artifact;
-      # .config/nextest.toml reports anything slower than 60s in the summary.
-      - name: Test
-        run: cargo nextest run --profile ci --workspace --lib --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust general)"
-      # nextest resolves its store directory from the workspace root, not from
-      # CARGO_TARGET_DIR, so the report lands in <workspace>/target/nextest even
-      # though build artifacts go to the persistent target-dir. Look in both and
-      # stage the report inside the workspace: upload-artifact cannot read paths
-      # outside it, and CARGO_TARGET_DIR points at the workspace's parent.
+          if [[ "$BUILD_WEB" == 'true' ]] && { ! command -v cargo-leptos >/dev/null 2>&1 || [ "$(cargo leptos --version)" != "cargo-leptos 0.3.6" ]; }; then
+            cargo install cargo-leptos --version 0.3.6 --locked
+          fi
+      - name: Build CI helper executables
+        run: |
+          git diff --exit-code
+          cargo build --locked -p xtask --bin xtask
+          "$CARGO_TARGET_DIR/debug/xtask" target-size
+          cargo build --locked -p ersatzrs-ffmpeg --example provision_runtime
+          mkdir -p ci-artifacts/build-rust/bin ci-artifacts/build-web/bin
+          for kind in rust web; do
+            cp "$CARGO_TARGET_DIR/debug/xtask" "ci-artifacts/build-$kind/bin/xtask"
+            cp "$CARGO_TARGET_DIR/debug/examples/provision_runtime" "ci-artifacts/build-$kind/bin/provision_runtime"
+          done
+      - name: Archive Rust tests and ordinary smoke server
+        if: env.BUILD_RUST == 'true'
+        run: |
+          cargo build --locked --bin ersatzrs-web
+          cp "$CARGO_TARGET_DIR/debug/ersatzrs-web" ci-artifacts/build-rust/bin/ersatzrs-web-smoke
+          cp "$(command -v cargo-nextest)" ci-artifacts/build-rust/bin/cargo-nextest
+          cargo nextest archive --locked --workspace --lib --bins --tests --archive-file ci-artifacts/build-rust/nextest.tar.zst
+          python3 scripts/ci-build-artifacts.py pack --kind rust --directory ci-artifacts/build-rust \
+            --archive ci-artifacts/rust.tar.gz --sha "$GITHUB_SHA"
+      - name: Build matched server and complete Leptos site
+        if: env.BUILD_WEB == 'true'
+        env:
+          # Native lld flags must never reach the wasm32 linker.
+          RUSTFLAGS: ""
+          LEPTOS_SITE_ROOT: ${{ github.workspace }}/ci-artifacts/build-web/site
+        run: |
+          (cd crates/ersatzrs-web && stylance . --output-file public/bundle.css && cargo leptos build)
+          cp "$CARGO_TARGET_DIR/debug/ersatzrs-web" ci-artifacts/build-web/bin/ersatzrs-web
+          cp -R crates/ersatzrs-web/public/. ci-artifacts/build-web/site/
+          python3 scripts/ci-build-artifacts.py pack --kind web --directory ci-artifacts/build-web \
+            --archive ci-artifacts/web.tar.gz --sha "$GITHUB_SHA"
+      - name: Record immutable artifact names
+        id: identity
+        run: |
+          echo "rust_artifact=ci-rust-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          echo "web_artifact=ci-web-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        if: env.BUILD_RUST == 'true'
+        with:
+          name: ${{ steps.identity.outputs.rust_artifact }}
+          path: ci-artifacts/rust.tar.gz
+          compression-level: 0
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: env.BUILD_WEB == 'true'
+        with:
+          name: ${{ steps.identity.outputs.web_artifact }}
+          path: ci-artifacts/web.tar.gz
+          compression-level: 0
+          retention-days: 7
+
+  test:
+    name: Test
+    needs: build
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    env:
+      NEXTEST_TEST_THREADS: "4"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.rust_artifact }}
+          path: ci-input
+      - name: Restore verified Rust build
+        run: |
+          python3 scripts/ci-build-artifacts.py restore --kind rust --archive ci-input/rust.tar.gz \
+            --directory "$RUNNER_TEMP/ci-build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB" \
+            --sha "$GITHUB_SHA" --env-file "$GITHUB_ENV"
+      - name: General Rust regressions
+        run: |
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" \
+            --profile ci -E "$(python3 scripts/ci-teletext-selection.py rust general)"
       - name: Collect test timings
         if: always()
         run: |
           mkdir -p ci-artifacts
-          report="$(find "$GITHUB_WORKSPACE/target/nextest" \
-            "$CARGO_TARGET_DIR/nextest" \
-            -type f -name junit.xml 2>/dev/null | head -n 1)"
-          if [ -n "$report" ]; then
-            cp "$report" ci-artifacts/junit.xml
-            echo "Collected $report"
-          else
-            echo "No nextest JUnit report found" >&2
-          fi
+          report="target/nextest/ci/junit.xml"
+          if [ ! -f "$report" ]; then report="$CARGO_TARGET_DIR/nextest/ci/junit.xml"; fi
+          if [ -f "$report" ]; then cp "$report" ci-artifacts/junit.xml; fi
       - name: Upload test timings
         if: always()
         uses: actions/upload-artifact@v7
@@ -283,70 +370,10 @@ jobs:
           path: ci-artifacts/junit.xml
           if-no-files-found: warn
           retention-days: 14
-      - name: Validate progress index (docs/progress/)
-        run: cargo xtask progress check
-      - name: Validate architecture boundaries and debt ratchets
-        run: cargo xtask architecture-lint
-      - name: Check persistent target-dir size
-        run: cargo xtask target-size
-
-  test_hosted:
-    name: Test (${{ matrix.shard }})
-    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner == 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
-    runs-on: ubuntu-24.04
-    # Keep cold workspace linking within the hosted job lifetime by splitting
-    # the large web crate's library and binary test targets. Preserve native
-    # runner parallelism; debug info is not needed to determine test outcomes.
-    env:
-      CARGO_PROFILE_TEST_DEBUG: "0"
-      RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
-    needs: fmt
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - workspace-minus-web
-          - web-lib
-          - web-bins
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # Without an explicit key, rust-cache's default (job id + OS/env
-          # hash) does not factor in the matrix value, so all three shards
-          # collided on one cache entry and raced to restore/save it.
-          key: test-hosted-${{ matrix.shard }}
-          cache-bin: "true"
-      - name: Install LLVM linker
+      - name: Validate progress index and architecture boundaries
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes lld
-      - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.8.2 --locked
-      - name: Install cargo-nextest
-        run: |
-          if ! command -v cargo-nextest >/dev/null 2>&1; then
-            cargo install cargo-nextest --version 0.9.140 --locked
-          fi
-      - name: Test remaining workspace
-        if: matrix.shard == 'workspace-minus-web'
-        run: cargo nextest run --profile ci --workspace --exclude ersatzrs-web --lib --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust general)"
-      - name: Test web library
-        if: matrix.shard == 'web-lib'
-        run: cargo nextest run --profile ci -p ersatzrs-web --lib -E "$(python3 scripts/ci-teletext-selection.py rust general)"
-      # `--bins` alone left the ersatzrs-web integration targets (tests/*.rs)
-      # unrun on this path, while the self-hosted `test` job covers them
-      # through `--tests`. Keep the two paths equivalent.
-      - name: Test web binaries and integration tests
-        if: matrix.shard == 'web-bins'
-        run: cargo nextest run --profile ci -p ersatzrs-web --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust general)"
-      - name: Validate progress index (docs/progress/)
-        if: matrix.shard == 'workspace-minus-web'
-        run: cargo xtask progress check
-      - name: Validate architecture boundaries and debt ratchets
-        if: matrix.shard == 'workspace-minus-web'
-        run: cargo xtask architecture-lint
+          "$CI_XTASK" progress check
+          "$CI_XTASK" architecture-lint
 
   next_engine:
     name: Next engine
@@ -354,28 +381,24 @@ jobs:
       run:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
-    needs: fmt
-    if: ${{ always() && !cancelled() && (!inputs.browser_only || inputs.browser_only == 'none') && (inputs.next_engine_only || (!inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && needs.fmt.result == 'success')) }}
+    needs: build
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
       NEXTEST_TEST_THREADS: "4"
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
-      - name: Validate dispatch mode
-        if: ${{ inputs.next_engine_only && (inputs.test_only || (inputs.teletext_only && inputs.teletext_only != 'none')) }}
-        run: |
-          echo "::error::Focused CI modes are mutually exclusive; select one focused gate."
-          exit 1
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - name: Reset persistent target-dir (manual escape hatch)
-        if: ${{ inputs.reset_target_dir == true }}
-        run: rm -rf "$CARGO_TARGET_DIR"
-      - uses: Swatinem/rust-cache@v2
-        if: ${{ inputs.runner == 'github-hosted' }}
+      - uses: actions/download-artifact@v8
         with:
-          cache-bin: "true"
+          name: ${{ needs.build.outputs.rust_artifact }}
+          path: ci-input
+      - name: Restore verified Rust build
+        run: |
+          python3 scripts/ci-build-artifacts.py restore --kind rust --archive ci-input/rust.tar.gz \
+            --directory "$RUNNER_TEMP/ci-build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB" \
+            --sha "$GITHUB_SHA" --env-file "$GITHUB_ENV"
       - name: Prepare isolated runtime and diagnostics
         run: |
           mkdir -p ci-artifacts/next-engine
@@ -384,14 +407,6 @@ jobs:
           echo "TMPDIR=$runtime_tmp" >> "$GITHUB_ENV"
           git rev-parse HEAD > ci-artifacts/next-engine/ersatzrs-sha.txt
           rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
-      - name: Install test tools
-        run: |
-          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
-            cargo install stylance-cli --version 0.8.2 --locked
-          fi
-          if ! command -v cargo-nextest >/dev/null 2>&1; then
-            cargo install cargo-nextest --version 0.9.140 --locked
-          fi
       - name: Stage Next and validated FFmpeg runtime
         env:
           GH_TOKEN: ${{ github.token }}
@@ -401,20 +416,20 @@ jobs:
           sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/next-engine/next-sha256.txt
           echo "ETV_NEXT_FOLDER=$TMPDIR/next" >> "$GITHUB_ENV"
           echo "ERSATZRS_NEXT_TEST_BIN=$TMPDIR/next/ersatztv-channel" >> "$GITHUB_ENV"
-          cargo run --locked -p ersatzrs-ffmpeg --example provision_runtime -- "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/next-engine/ffmpeg-runtime.log
+          "$CI_PROVISION_RUNTIME" "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/next-engine/ffmpeg-runtime.log
           python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/next-engine/rtsp-test-server.log
           echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
       - name: Next components, real-engine decoding and HTTP EOF
         run: |
-          ./run.sh test -p ersatzrs-infra -p ersatzrs-web --lib --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py rust next)" 2>&1 | tee ci-artifacts/next-engine/tests.log
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py rust next) & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
-          ERSATZRS_SMOKE_PORT="$smoke_port" cargo xtask smoke --next --hls-lifecycle --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke.log
+          ERSATZRS_SMOKE_PORT="$smoke_port" "$CI_XTASK" smoke --server-bin "$CI_SMOKE_SERVER" --next --hls-lifecycle --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke.log
       - name: Next Hybrid playback with converted subtitles
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
-          ERSATZRS_SMOKE_PORT="$smoke_port" cargo xtask smoke --next-convert --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke-convert.log
+          ERSATZRS_SMOKE_PORT="$smoke_port" "$CI_XTASK" smoke --server-bin "$CI_SMOKE_SERVER" --next-convert --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke-convert.log
       - name: Collect Next diagnostics
         if: always()
         run: |
@@ -444,8 +459,8 @@ jobs:
       run:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
-    needs: fmt
-    if: ${{ always() && !cancelled() && (!inputs.browser_only || inputs.browser_only == 'none') && ((inputs.teletext_only && inputs.teletext_only != 'none') || (!inputs.test_only && !inputs.next_engine_only && needs.fmt.result == 'success')) }}
+    needs: build
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -458,20 +473,16 @@ jobs:
       NEXTEST_TEST_THREADS: "4"
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
-      - name: Validate dispatch mode
-        if: ${{ inputs.teletext_only && inputs.teletext_only != 'none' && (inputs.test_only || inputs.next_engine_only || (inputs.browser_only && inputs.browser_only != 'none')) }}
-        run: |
-          echo "::error::Focused CI modes are mutually exclusive; select one focused gate."
-          exit 1
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - name: Reset persistent target-dir (manual escape hatch)
-        if: ${{ inputs.reset_target_dir == true }}
-        run: rm -rf "$CARGO_TARGET_DIR"
-      - uses: Swatinem/rust-cache@v2
-        if: ${{ inputs.runner == 'github-hosted' }}
+      - uses: actions/download-artifact@v8
         with:
-          cache-bin: "true"
+          name: ${{ needs.build.outputs.rust_artifact }}
+          path: ci-input
+      - name: Restore verified Rust build
+        run: |
+          python3 scripts/ci-build-artifacts.py restore --kind rust --archive ci-input/rust.tar.gz \
+            --directory "$RUNNER_TEMP/ci-build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB" \
+            --sha "$GITHUB_SHA" --env-file "$GITHUB_ENV"
       - name: Prepare isolated runtime and diagnostics
         run: |
           mkdir -p ci-artifacts/teletext-${{ matrix.level }}
@@ -480,14 +491,6 @@ jobs:
           echo "TMPDIR=$runtime_tmp" >> "$GITHUB_ENV"
           git rev-parse HEAD > ci-artifacts/teletext-${{ matrix.level }}/ersatzrs-sha.txt
           rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
-      - name: Install test tools
-        run: |
-          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
-            cargo install stylance-cli --version 0.8.2 --locked
-          fi
-          if ! command -v cargo-nextest >/dev/null 2>&1; then
-            cargo install cargo-nextest --version 0.9.140 --locked
-          fi
       - name: Stage Next and validated FFmpeg runtime
         env:
           GH_TOKEN: ${{ github.token }}
@@ -497,12 +500,12 @@ jobs:
           sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/teletext-${{ matrix.level }}/next-sha256.txt
           echo "ETV_NEXT_FOLDER=$TMPDIR/next" >> "$GITHUB_ENV"
           echo "ERSATZRS_NEXT_TEST_BIN=$TMPDIR/next/ersatztv-channel" >> "$GITHUB_ENV"
-          cargo run --locked -p ersatzrs-ffmpeg --example provision_runtime -- "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/teletext-${{ matrix.level }}/ffmpeg-runtime.log
+          "$CI_PROVISION_RUNTIME" "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/teletext-${{ matrix.level }}/ffmpeg-runtime.log
           python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/teletext-${{ matrix.level }}/rtsp-test-server.log
           echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
       - name: Teletext workspace regressions
         run: |
-          cargo nextest run --profile ci --workspace --lib --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL")" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/tests.log
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL")" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/tests.log
       - name: Preserve workspace test timings
         if: always()
         run: |
@@ -512,7 +515,7 @@ jobs:
           rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
       - name: Teletext Next runtime regressions
         run: |
-          ./run.sh test -p ersatzrs-infra -p ersatzrs-web --lib --profile ci --run-ignored all --no-tests pass -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime)" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/next-tests.log
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all --no-tests pass -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime) & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/next-tests.log
       - name: Collect teletext diagnostics
         if: always()
         run: |
@@ -538,11 +541,10 @@ jobs:
 
   hydration:
     name: Playwright E2E (${{ matrix.suite }}, ${{ matrix.project }})
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
-    # Gate on the fast fmt job so formatting failures do not burn a browser
-    # E2E build.
-    needs: fmt
-    if: ${{ always() && !cancelled() && ((inputs.browser_only && inputs.browser_only != 'none') || (!inputs.test_only && !inputs.next_engine_only && ((inputs.teletext_only && inputs.teletext_only != 'none') || needs.fmt.result == 'success'))) }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    # All six jobs execute the same verified SSR/WASM build.
+    needs: build
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only }}
     # One job per general/1.5/2.5 suite and Playwright project. The suite runs on a single worker because
     # it mutates shared application state in its test database (TEST.md): each
     # job runs scripts/e2e/playwright-e2e.sh separately, and that script
@@ -552,8 +554,8 @@ jobs:
     # one job.
     #
     # All six suite/project combinations run serially within this workflow. Both self-hosted
-    # runners share one machine, so two suites building ersatzrs-web and
-    # driving browsers at once compete for its CPU and memory; an otherwise
+    # runners share one machine, so simultaneous browser suites compete for
+    # CPU and memory; an otherwise
     # unexplained Chromium hydration timeout occurred while both overlapped.
     # `max-parallel: 1` removes that contention; `fail-fast: false` still runs
     # the remaining combinations when one fails. It only serializes within one workflow run: a
@@ -571,33 +573,18 @@ jobs:
       ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.suite }}-${{ matrix.project }}
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
-      - name: Validate dispatch mode
-        if: ${{ inputs.browser_only && inputs.browser_only != 'none' && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none')) }}
-        run: |
-          echo "::error::Focused CI modes are mutually exclusive; select one focused gate."
-          exit 1
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/download-artifact@v8
         with:
-          targets: wasm32-unknown-unknown
-      - name: Reset persistent target-dir (manual escape hatch)
-        if: ${{ inputs.reset_target_dir == true }}
-        run: rm -rf "$CARGO_TARGET_DIR"
-      # Only needed on the GitHub-hosted fallback path: self-hosted runs
-      # reuse the persistent CARGO_TARGET_DIR set at workflow level instead
-      # (see the comment above `env:`).
-      - uses: Swatinem/rust-cache@v2
-        if: ${{ inputs.runner == 'github-hosted' }}
-        with:
-          # Hosted runners restore these pinned tools to avoid repeated
-          # cold installs.
-          cache-bin: "true"
+          name: ${{ needs.build.outputs.web_artifact }}
+          path: ci-input
+      - name: Restore verified web build
+        run: |
+          python3 scripts/ci-build-artifacts.py restore --kind web --archive ci-input/web.tar.gz \
+            --directory "$RUNNER_TEMP/ci-build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB" \
+            --sha "$GITHUB_SHA" --env-file "$GITHUB_ENV"
       - name: Hydration lint
-        run: cargo xtask hydration-lint -p ersatzrs-web
-      # Only needed on the GitHub-hosted fallback path: self-hosted runs
-      # already have a warm ~/.npm cache from the shared, persistent $HOME
-      # (npm's cache directory is not inside the git checkout, so it is
-      # never touched by actions/checkout's clean step).
+        run: '"$CI_XTASK" hydration-lint -p ersatzrs-web'
       - uses: actions/cache@v6
         if: ${{ inputs.runner == 'github-hosted' }}
         with:
@@ -606,23 +593,15 @@ jobs:
           restore-keys: |
             npm-${{ runner.os }}-
       - name: Install web E2E tools
-        run: |
-          set -euo pipefail
-          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
-            cargo install stylance-cli --version 0.8.2 --locked
-          fi
-          if ! command -v cargo-leptos >/dev/null 2>&1 || [ "$(cargo leptos --version)" != "cargo-leptos 0.3.6" ]; then
-            cargo install cargo-leptos --version 0.3.6 --locked
-          fi
-          npm ci
+        run: npm ci
       - name: Stage pinned playback runtimes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          runtime_tmp="$RUNNER_TEMP/browser-runtime-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-${{ matrix.project }}"
+          runtime_tmp="$RUNNER_TEMP/browser-runtime-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-${{ matrix.suite }}-${{ matrix.project }}"
           mkdir -p "$runtime_tmp"
           python3 scripts/release/stage-next.py --rid linux-x64 --output "$runtime_tmp/next"
-          cargo run --locked -p ersatzrs-ffmpeg --example provision_runtime -- "$runtime_tmp/ffmpeg" "$GITHUB_ENV"
+          "$CI_PROVISION_RUNTIME" "$runtime_tmp/ffmpeg" "$GITHUB_ENV"
           echo "ETV_NEXT_FOLDER=$runtime_tmp/next" >> "$GITHUB_ENV"
           echo "ERSATZRS_FFMPEG_DIR=$runtime_tmp/ffmpeg" >> "$GITHUB_ENV"
       - name: Playwright E2E suite or bounded fixture recovery
@@ -732,8 +711,10 @@ jobs:
           test -f ARCHITECTURE.md
           test -f PORTING.md
           test -f docs/README.md
-      - name: Check CI suite ownership
-        run: python3 scripts/ci-teletext-selection_test.py
+      - name: Check CI suite ownership and artifact integrity
+        run: |
+          python3 scripts/ci-teletext-selection_test.py
+          python3 scripts/ci-build-artifacts_test.py
       - name: Check CI trigger contract
         run: |
           if grep -Eq '^[[:space:]]*types:.*[[:space:],]labeled([][[:space:],]|$)' .github/workflows/ci.yml; then

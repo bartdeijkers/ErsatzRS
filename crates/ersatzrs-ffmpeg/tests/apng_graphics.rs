@@ -1,8 +1,13 @@
 //! UCU-10 row213: APNG graphics use the animation demuxer's loop option.
+
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use ersatzrs_ffmpeg::{image_file_is_animated, InputFile};
 
 fn fixture(name: &str) -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    test_manifest_dir!()
         .join("tests/fixtures/graphics")
         .join(name)
 }

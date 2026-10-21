@@ -1,3 +1,8 @@
+#[cfg(test)]
+#[macro_use]
+#[path = "../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use std::process::ExitCode;
 
 mod affected_checks;

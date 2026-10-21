@@ -51,8 +51,7 @@ async fn complete_authored_carousel_pes_passes_tsduck_and_detects_counter_damage
         }
     }
     assert_eq!(magazine_batches, 4);
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/calibration/wrap-authored-teletext.py");
+    let script = test_manifest_dir!().join("../../scripts/calibration/wrap-authored-teletext.py");
     let stream = crate::teletext_probe::run_probe(
         &python,
         &[script.to_str().unwrap(), "--packetized"],

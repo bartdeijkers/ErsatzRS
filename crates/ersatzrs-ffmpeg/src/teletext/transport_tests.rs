@@ -366,8 +366,7 @@ fn largest_page_is_split_into_bounded_pes_without_losing_units_or_continuity() {
 async fn packetized_fixture() -> Vec<u8> {
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .expect("set the Python executable");
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/calibration/wrap-authored-teletext.py");
+    let script = test_manifest_dir!().join("../../scripts/calibration/wrap-authored-teletext.py");
     let mut carousel = TeletextCarousel::new(set(vec![draft(200, 1, false), draft(888, 0, true)]));
     let mut packetizer = TeletextPacketizer::new(0x100).unwrap();
     let anchor = TeletextTimestamp::new(90_000).unwrap();

@@ -65,10 +65,7 @@ pub(super) async fn source_inner(
     let raw = root.join(format!("{scenario}.ts"));
     let mut python = Command::new("python3");
     python
-        .arg(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../scripts/calibration/generate-teletext-fixture.py"),
-        )
+        .arg(test_manifest_dir!().join("../../scripts/calibration/generate-teletext-fixture.py"))
         .arg(&raw)
         .args(["--scenario", scenario]);
     tool(python).await;

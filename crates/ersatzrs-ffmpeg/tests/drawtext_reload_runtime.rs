@@ -1,3 +1,7 @@
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -22,8 +26,7 @@ fn packaged_drawtext_reloads_text_in_the_same_process() {
     let root = tempfile::tempdir().expect("temporary runtime proof directory");
     let text_path = root.path().join("dynamic text ü.txt");
     let output_path = root.path().join("decoded frames.rgb");
-    let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets/fonts/Roboto-Regular.ttf");
+    let font_path = test_manifest_dir!().join("../../assets/fonts/Roboto-Regular.ttf");
     std::fs::write(&text_path, "FIRST").expect("initial text file");
 
     let filter = DrawtextFilterBuilder::new(

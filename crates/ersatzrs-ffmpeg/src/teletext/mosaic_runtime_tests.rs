@@ -185,8 +185,7 @@ async fn run_native(cases: Vec<serde_json::Value>, expected_count: usize) {
     {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-mosaic-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-mosaic-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -237,8 +236,8 @@ async fn composed_mosaic_spacing_decodes_with_pinned_imager() {
     {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script =
+        test_manifest_dir!().join("../../scripts/e2e/teletext-main-composition-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =

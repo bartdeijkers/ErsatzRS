@@ -78,6 +78,8 @@ jobs:
           if 'teletext_only:' in Path('.github/workflows/ci.yml').read_text():
               required -= {'Playwright E2E (chromium)', 'Playwright E2E (firefox)'}
               required |= {'Teletext 1.5', 'Teletext 2.5'}
+              if 'name: Build CI artifacts' in Path('.github/workflows/ci.yml').read_text():
+                  required.add('Build CI artifacts')
               required |= {f'Playwright E2E ({suite}, {browser})'
                            for suite in ('general', '1.5', '2.5')
                            for browser in ('chromium', 'firefox')}

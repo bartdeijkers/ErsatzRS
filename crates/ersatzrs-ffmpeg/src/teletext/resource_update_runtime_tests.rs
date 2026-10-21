@@ -157,8 +157,7 @@ async fn consecutive_complete_carousel_drcs_updates_decode_with_one_warm_cache()
     }
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-resource-update-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-resource-update-decoder.py");
     let report =
         crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
             .await

@@ -1,5 +1,9 @@
 mod common;
 
+#[macro_use]
+#[path = "../../../tests/support/manifest_dir.rs"]
+mod test_manifest;
+
 use ersatzrs_core::repositories::{JellyfinConnectionConfig, JellyfinService as _};
 use ersatzrs_domain::{MediaStream, MediaStreamKind};
 use ersatzrs_infra::jellyfin::{
@@ -284,7 +288,7 @@ async fn jellyfin_sync_restores_non_normal_movie_with_matching_etag() {
             then.status(200).json_body(movie_page_json(
                 1,
                 "movie-restore",
-                concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
+                &test_manifest_dir!().join("Cargo.toml").to_string_lossy(),
             ));
         })
         .await;
@@ -312,7 +316,10 @@ async fn jellyfin_sync_restores_non_normal_movie_with_matching_etag() {
     assert_eq!(media_item_state(&pool).await, 0);
     assert_eq!(
         media_file_path(&pool).await,
-        concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")
+        test_manifest_dir!()
+            .join("Cargo.toml")
+            .to_string_lossy()
+            .into_owned()
     );
     assert_eq!(playback.calls_async().await, 2);
 }

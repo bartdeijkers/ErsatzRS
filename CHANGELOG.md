@@ -641,6 +641,10 @@ release section when tagging a release.
   Playwright into general and both teletext suites for Chromium and Firefox.
   Teletext-only recovery can rerun either level without rerunning unrelated
   checks; focused results remain distinct from complete green CI.
+  Build the selected CI test executables and matched server/WASM site once,
+  then run each suite from verified same-revision artifacts without rebuilding.
+  Relocatable fixture and runtime-manifest paths preserve execution on another
+  runner; missing or corrupt build products fail explicitly.
 
 - Require finite agent work packages with explicit closure conditions, scoped
   completion, evidence reuse and separate external blockers, preserving all

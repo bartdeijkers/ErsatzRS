@@ -116,15 +116,12 @@ runner-pool-specific branch concurrency group, so hosted fallback can proceed
 independently from automatic self-hosted CI. Routine pull-request labels do not
 trigger CI; this prevents dependency automation from starting duplicate
 full-suite runs while applying labels. GitHub-hosted jobs start cold and do not
-share the local runner's Cargo cache. Hosted Test work is split into non-web,
-web-library, and web-binary shards, uses the runner's native Cargo parallelism,
-omits test-profile debug info, and uses LLVM's `lld` linker so cold all-features
-linking stays within the hosted job lifetime. Hosted runs cache their pinned
-Cargo tools; self-hosted runs leave the maintainer's existing tool binaries
-untouched. The full test selection remains intact, and self-hosted CI retains
-one ordinary workspace Test job, with Next tests in their dedicated job below.
-This path remains an explicit
-fallback rather than the default.
+share the local runner's Cargo cache. Hosted native builds omit test-profile
+debug information and use LLVM's `lld` linker. All test execution jobs consume
+the artifacts built by the selected pool's shared producer, rather than linking
+separate hosted shards. Cargo tools are prepared in the build job; execution
+jobs use its verified nextest/helper executables. The full test selection remains
+intact. Hosted execution remains an explicit fallback rather than the default.
 
 Two self-hosted runners share one physical machine. Each runner runs its jobs
 serially in its own workspace, so sharing build output across that runner's
@@ -136,8 +133,8 @@ the runner creates once per repo and `actions/checkout`'s default `git clean
 -ffdx` never touches (it only cleans inside the checkout itself). This lets
 `target/` persist across every self-hosted job and run instead of being wiped
 and restored through `Swatinem/rust-cache`'s remote cache service every time
-— the `clippy`, `test`, and `hydration` jobs on that path no longer restore a
-remote cache at all; only the GitHub-hosted fallback still does, since its
+— the `clippy` and artifact-build jobs on that path do not restore a remote
+cache; execution jobs use the verified build artifacts instead; only the GitHub-hosted fallback still does, since its
 VMs are ephemeral. If a self-hosted CI run ever looks inconsistent with its
 diff (a false pass or fail that doesn't match the change), suspect a stale
 persistent `target/` first: either dispatch the workflow with the
@@ -145,6 +142,56 @@ persistent `target/` first: either dispatch the workflow with the
 the runner. This is unrelated to the local interactive dev target-dir and its
 stale-binary trap below — this mechanism only sets `CARGO_TARGET_DIR` inside
 the GitHub Actions job environment and never touches `.cargo/config.toml`.
+
+### Build once, execute tests in separate jobs
+
+**Build CI artifacts** produces the application test/runtime inputs once for
+all selected execution jobs on the selected Linux runner pool:
+
+- A Rust artifact contains the complete workspace nextest archive, the pinned
+  nextest executable, the ordinary smoke server and the CI helper executables.
+- A web artifact contains one matched Leptos SSR server, WASM/JS, the complete
+  site assets and the CI helper executables. All six Playwright jobs use it.
+
+The producer retains the native/test and Leptos build graphs as distinct build
+products. Hosted native linker flags never reach the WASM build. General Rust,
+Next and teletext jobs execute nextest archives without compiling again. The
+former hosted cold-link test shards are unnecessary because linking belongs to
+the shared build job. Playwright's prebuilt mode verifies the supplied bundle
+and skips Cargo, Leptos, CSS generation and source-asset overlays. Ordinary local
+runs retain the existing build path.
+
+Each product has a versioned manifest with the exact source SHA, platform/libc,
+toolchain/build flags and per-file hashes, sizes and executable status. Consumers
+verify the checkout, expected product, complete inventory and contents before
+execution. Wrong, missing, corrupt or incompatible artifacts fail; they do not
+trigger a replacement build. The tar envelope preserves executable permissions.
+Artifact names include the producer run/attempt; consumers use its job outputs,
+so a failed-job rerun can retain the original successful build while a newly
+executed producer publishes a distinct artifact.
+
+Every execution job retains its own database, runtime, port and diagnostics.
+Runtime staging and all test selection, ignored/helper semantics and resource
+limits remain in the execution jobs. Source fixtures use
+`tests/support/manifest_dir.rs` to resolve the Cargo/nextest runtime package
+directory before their original compiled fallback; relocated
+web hosts use the execution checkout's manifest and the explicit site directory.
+Format, Clippy, dependency and source-contract checks remain independent gates.
+This Linux build-sharing arrangement is not native acceptance for other RIDs.
+
+Focused dispatch builds only the required products: Rust for `test_only` or
+`next_engine_only`, web for `browser_only`, and both for `teletext_only` or full
+CI. The same-SHA failed-job rerun reuses its successful producer artifact; a new
+revision needs a new verified build. Artifacts expire after seven days, after
+which the producer must run again. No cross-revision artifact reuse is allowed.
+
+The smoke runner accepts an explicitly selected server without rebuilding:
+
+```bash
+cargo xtask smoke --server-bin <verified-server> --next --keep-temp
+```
+
+A missing or invalid explicit server fails without falling back to Cargo.
 
 ### Next engine CI check
 
@@ -199,7 +246,8 @@ gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=2.5
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=all
 ```
 
-Each level selects its Rust job and both browser projects. A job rerun tests
+Each level selects its Rust job and both browser projects, after the shared
+artifact producer. A job rerun tests
 its original SHA; dispatch tests the new branch revision. The title
 `CI (Teletext only)` and separate concurrency group prevent a focused run
 from cancelling or standing in for full CI. Focused modes are mutually
@@ -231,7 +279,7 @@ gh run view <run-id> --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
 
 Create the release tag only when the evidence run reports the same full
 `headSha`, `status: completed`, and `conclusion: success`, **and** its job
-list shows `success` for `Format`, `Clippy`, the `Test` job(s) for its runner
+list shows `success` for `Format`, `Clippy`, `Build CI artifacts`, the `Test` job(s) for its runner
 configuration, both `Teletext` levels, all six `Playwright E2E` suite/project
 combinations, `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
@@ -323,7 +371,7 @@ gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f test_only=true
 
 This runs the general `Test` job, including progress and architecture validation,
 but excludes the separately owned teletext and Next tests. Unrelated jobs are
-skipped. Hosted runners use the equivalent Rust test shards.
+skipped. Both runner pools execute the same archived workspace selection.
 The run is titled `CI (Test only)` and cannot suppress a later full CI run through
 the duplicate-run check. It is scoped test evidence, not full CI acceptance.
 When deliberately preserving earlier checks, `[skip ci]` on the repair commit

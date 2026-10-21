@@ -217,8 +217,7 @@ async fn original_c3_fragments_and_object_overlays_decode_independently() {
     {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-base-footprint-decoder.py");
+    let script = test_manifest_dir!().join("../../scripts/e2e/teletext-base-footprint-decoder.py");
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
