@@ -960,6 +960,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep Next channel capacity, session resources and output reserved when process
+  or prepared-producer termination cannot be confirmed. Revoke further callbacks
+  while retaining ownership, and release confirmed failures normally after the
+  final playback checkpoint.
+
 - Retain the selected Jellyfin/Emby media source with its exact scanned file and
   use it for authenticated Next playback instead of requesting the provider's
   default variant. Different versions can share a provider path without taking

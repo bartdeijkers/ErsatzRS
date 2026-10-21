@@ -313,8 +313,10 @@ async fn unconfirmed_cleanup_quarantines_capacity_but_reaped_failure_does_not() 
     assert!(
         !host
             .quarantine_unconfirmed_cleanup(
-                &RemoteStreamError::PreparedProducerFailed,
-                &mut reservation
+                Some(&RemoteStreamError::PreparedProducerFailed),
+                false,
+                &mut reservation,
+                None,
             )
             .await
     );
@@ -322,8 +324,10 @@ async fn unconfirmed_cleanup_quarantines_capacity_but_reaped_failure_does_not() 
     assert!(host.cleanup_quarantine.lock().await.is_empty());
     assert!(
         host.quarantine_unconfirmed_cleanup(
-            &RemoteStreamError::PreparedTerminationUnconfirmed,
-            &mut reservation
+            Some(&RemoteStreamError::PreparedTerminationUnconfirmed),
+            false,
+            &mut reservation,
+            None,
         )
         .await
     );
@@ -570,3 +574,6 @@ async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_ex
     }
     host.pool.close().await;
 }
+
+#[path = "host_tests/cleanup.rs"]
+mod cleanup;

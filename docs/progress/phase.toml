@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'F5 selected provider-source identity completed; next one retained remote-only source for AV and captions'
+current_focus = 'F5 Next uncertain-cleanup ownership completed; next one retained remote-only source for AV and captions'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,21 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F5 selected-source prerequisite is completed: exact JF/Emby IDs, version-owned
-file identity, genuine path moves and stale-request/cache guards are verified.
-NULL publication retains deferred credentials; ambiguous moves refuse atomically.
-P9A-04 and provider-scan identity remote_only_boundary.source_identity_followup
-own canonical tests, ordinary TS/HLS smoke, strict lint and retained negatives.
-The isolated final persister correction is covered by actual Next bind_media
-and provider service regressions; reuse unchanged web/native/playback scopes.
-Next finite F5 step: one owned finite authenticated source shared by AV and
-captions, exact selected provider/version, full EOF, size/time, worker-held
-admission, cancellation and cleanup. URI binding is not immutable bytes.
-ADR0121/0127 and P9A-04 retain the full requirement. Reuse existing mapped
-native/Next, editor/isolation/transport/F6 proof; reopen only for regression.
-Keep platform/adoption distinct: accepted Next.1 retains real outpoint/audio
-failures; candidate.4 is not the production repair. The existing macOS candidate-
-only workflow awaits permission. No known-red push or publication. Exact1b95 CI
+F5 Next uncertain-cleanup ownership is completed within its host-finalizer
+boundary: revoke callbacks and retain complete context/output/registry/capacity
+on Next stop-timeout/stop-IO or producer uncertainty; confirmed failures recover.
+The final playback checkpoint still precedes capacity/registry release.
+P9A-04 and provider-scan identity remote_only_boundary.shutdown_ownership_followup
+own exact23 lifecycle/native compatibility passes, final checks and the retained
+sandbox-only failure.5280955b selected-provider identity and unchanged native
+Legacy/Hybrid smoke, caption clocks/editor/isolation/transport/F6 remain valid.
+Next finite F5 step: one seekable owned finite authenticated source shared by AV
+and captions, exact selected provider/version, complete EOF, bounded storage/
+time/admission/cancellation and cleanup. Existing single-use pipes cannot supply
+seek/range/reopen. Provider spool defaults await maintainer preference; addon
+quota authority cannot be reused. URI binding is not immutable source bytes.
+Platform/adoption remains distinct: accepted Next.1 retains real outpoint/audio
+failures; candidate.4 is not the production repair. The macOS candidate-only
+workflow awaits permission. No known-red push or publication. Exact1b95 CI
 remains12success/fourfailure/one intentional skip; all applicable exact-new-SHA
 jobs and native platform/adoption remain required before CI-green.
 

@@ -4,7 +4,7 @@ use super::{
     config,
     coordinator::{ChannelPublisher, RefreshError, RefreshOutcome},
     process::{NextProcess, ProcessError},
-    session::NextSession,
+    session::{NextSession, SessionError, SessionExit},
 };
 use crate::{
     db::DbPool,
@@ -48,10 +48,25 @@ pub struct NextHost {
     config_overlays: Option<PathBuf>,
     // Failed descendant cleanup cannot release capacity or reuse its output.
     // Existing capacity admission bounds this host-lifetime quarantine.
-    cleanup_quarantine: Mutex<Vec<ActiveTranscodeReservation>>,
+    cleanup_quarantine: Mutex<Vec<QuarantinedCleanup>>,
     publishers: Mutex<HashMap<i64, ChannelPublisher>>,
     pub(super) dynamic_contexts: Mutex<HashMap<uuid::Uuid, DynamicContext>>,
     pub(super) burn_cache: super::burn_cache::BurnCache,
+}
+
+// Removed contexts no longer admit callbacks, but keep their exact resource
+// owners alive alongside capacity when termination cannot be confirmed.
+struct QuarantinedCleanup {
+    _reservation: Option<ActiveTranscodeReservation>,
+    _context: Option<DynamicContext>,
+}
+
+struct SessionCompletion {
+    request: NextStart,
+    session: Arc<NextSession>,
+    instance: uuid::Uuid,
+    outcome: Result<SessionExit, SessionError>,
+    reservation: Option<ActiveTranscodeReservation>,
 }
 
 /// One exact Next process instance; normal playback and preview never share it.
@@ -148,18 +163,26 @@ impl NextHost {
 
     async fn quarantine_unconfirmed_cleanup(
         &self,
-        error: &crate::remote_stream::RemoteStreamError,
+        error: Option<&crate::remote_stream::RemoteStreamError>,
+        process_unconfirmed: bool,
         reservation: &mut Option<ActiveTranscodeReservation>,
+        context: Option<DynamicContext>,
     ) -> bool {
-        if !matches!(
-            error,
-            crate::remote_stream::RemoteStreamError::PreparedTerminationUnconfirmed
-        ) {
+        if !process_unconfirmed
+            && !matches!(
+                error,
+                Some(crate::remote_stream::RemoteStreamError::PreparedTerminationUnconfirmed)
+            )
+        {
             return false;
         }
-        if let Some(reservation) = reservation.take() {
-            self.cleanup_quarantine.lock().await.push(reservation);
-        }
+        self.cleanup_quarantine
+            .lock()
+            .await
+            .push(QuarantinedCleanup {
+                _reservation: reservation.take(),
+                _context: context,
+            });
         true
     }
 
@@ -299,47 +322,100 @@ impl NextHost {
                 })) => outcome,
                 never = checkpoints.run(&session) => match never {},
             };
-            checkpoints.finish(&session).await;
-            if let Err(error) = outcome {
-                tracing::warn!(channel_id = request.channel_id, %error, "Next session failed");
-            }
-            if !host
-                .shutdown_producers(instance, request.channel_id, &mut reservation)
-                .await
-            {
-                return;
-            }
-            // Keep capacity and registry ownership until process and files are gone.
-            if let Err(error) = tokio::fs::remove_dir_all(&request.output).await {
-                if error.kind() != std::io::ErrorKind::NotFound {
-                    tracing::warn!(channel_id = request.channel_id, kind = ?error.kind(), "Next output cleanup failed");
-                }
-            }
-            drop(reservation);
-            registry
-                .remove_if_current(&(session as Arc<dyn HlsSessionHandle>))
-                .await;
+            host.finalize_session(
+                &*registry,
+                SessionCompletion {
+                    request,
+                    session: session.clone(),
+                    instance,
+                    outcome,
+                    reservation,
+                },
+                checkpoints.finish(&session),
+            )
+            .await;
         }))
+    }
+
+    async fn finalize_session(
+        &self,
+        registry: &dyn HlsSessionRegistry,
+        completion: SessionCompletion,
+        checkpoint: impl std::future::Future<Output = ()>,
+    ) {
+        let SessionCompletion {
+            request,
+            session,
+            instance,
+            outcome,
+            mut reservation,
+        } = completion;
+        // End callback admission before the existing checkpoint wait, retaining
+        // the complete removed owner and admission until that write settles.
+        let context = release_dynamic_context(&mut *self.dynamic_contexts.lock().await, instance);
+        checkpoint.await;
+        let process_unconfirmed = matches!(
+            &outcome,
+            Err(SessionError::Process(
+                ProcessError::CleanupTimeout
+                    | ProcessError::Io {
+                        operation: "stop",
+                        ..
+                    }
+            ))
+        );
+        if let Err(error) = outcome {
+            tracing::warn!(channel_id = request.channel_id, %error, "Next session failed");
+        }
+        if !self
+            .shutdown_producers(
+                context,
+                request.channel_id,
+                process_unconfirmed,
+                &mut reservation,
+            )
+            .await
+        {
+            return;
+        }
+        // Keep capacity and registry ownership until confirmed process cleanup
+        // and output removal, including ordinary startup or reaped failures.
+        if let Err(error) = tokio::fs::remove_dir_all(&request.output).await {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(channel_id = request.channel_id, kind = ?error.kind(), "Next output cleanup failed");
+            }
+        }
+        drop(reservation);
+        registry
+            .remove_if_current(&(session as Arc<dyn HlsSessionHandle>))
+            .await;
     }
 
     async fn shutdown_producers(
         &self,
-        instance: uuid::Uuid,
+        context: Option<DynamicContext>,
         channel_id: i64,
+        process_unconfirmed: bool,
         reservation: &mut Option<ActiveTranscodeReservation>,
     ) -> bool {
-        // Revoke callbacks before awaiting cleanup. Unconfirmed termination keeps
-        // the HLS registry, output directory and capacity reserved.
-        let context = release_dynamic_context(&mut *self.dynamic_contexts.lock().await, instance);
-        if let Some(context) = context {
-            if let Err(error) = context.transfers.shutdown().await {
-                tracing::warn!(channel_id, "Next producer cleanup failed");
-                return !self
-                    .quarantine_unconfirmed_cleanup(&error, reservation)
-                    .await;
-            }
+        // Callback admission has ended. Retain the complete removed context if
+        // either Next or a prepared producer may still be running.
+        let error = if let Some(context) = &context {
+            context.transfers.shutdown().await.err()
+        } else {
+            None
+        };
+        if error.is_some() {
+            tracing::warn!(channel_id, "Next producer cleanup failed");
         }
-        true
+        !self
+            .quarantine_unconfirmed_cleanup(
+                error.as_ref(),
+                process_unconfirmed,
+                reservation,
+                context,
+            )
+            .await
     }
 
     /// Next sessions read one channel manifest, including publications made by
