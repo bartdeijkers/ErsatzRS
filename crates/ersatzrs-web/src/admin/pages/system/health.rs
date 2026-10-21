@@ -36,6 +36,8 @@ pub fn HealthPage() -> impl IntoView {
 
 #[island]
 fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
+    // Hydrated islands must restore the page language before rendering updates.
+    crate::admin::i18n::provide_i18n_context();
     let snapshot = RwSignal::new(initial_snapshot);
     let refresh = ServerAction::<RefreshHealthSnapshot>::new();
     let load_toast = use_toast();

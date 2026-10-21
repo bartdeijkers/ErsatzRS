@@ -28,6 +28,91 @@ async function linkContrast(link: Locator): Promise<number> {
   });
 }
 
+// F5: invalid source-spool policy must remain visible in the existing localized
+// Health flow. Actual AV fallback and quota ownership have native runtime proof.
+for (const javaScriptEnabled of [true, false]) {
+  for (const isDarkMode of [true, false]) {
+    test(`provider source storage Health (JavaScript ${javaScriptEnabled}, dark ${isDarkMode})`, async ({ browser, baseURL }, testInfo) => {
+      test.skip(!databasePath, 'Requires the disposable E2E database.');
+      test.setTimeout(60_000);
+      const database = new DatabaseSync(databasePath!);
+      database.exec('PRAGMA busy_timeout=10000;');
+      const keys = [
+        'teletext.work.max_concurrent',
+        'teletext.source_storage.total_bytes',
+        'teletext.source_storage.maximum_source_bytes',
+        'teletext.source_storage.minimum_free_bytes',
+      ];
+      const original = keys.map(key => database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?').get(key) as { Value: string } | undefined);
+      const write = (key: string, value: string | undefined) => {
+        if (value === undefined) database.prepare('DELETE FROM "ConfigElement" WHERE "Key"=?').run(key);
+        else database.prepare('INSERT OR REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, value);
+      };
+      const context = await browser.newContext({ baseURL, javaScriptEnabled });
+      try {
+        write(keys[0], undefined);
+        write(keys[1], '21474836480');
+        write(keys[3], '2147483648');
+        const page = await context.newPage();
+        const errors: string[] = [];
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+        for (const [language, title, invalid, healthy, refresh] of [
+          ['en-us', 'Teletext work configuration',
+            'Provider source storage configuration is invalid or unavailable. Optional provider teletext captions are unavailable; ordinary audio/video playback remains available.',
+            'Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready.', 'Refresh'],
+          ['nl', 'Instellingen voor teleteksttaken',
+            'De opslaginstellingen voor providerbronnen zijn ongeldig of niet beschikbaar. Optionele teletekstondertitels van providers zijn niet beschikbaar; gewone audio- en videoweergave blijft beschikbaar.',
+            'Teleteksttaken worden standaard één voor één uitgevoerd. Dit is geen geheugenlimiet en bevestigt niet dat zelfgemaakte pagina’s klaar zijn voor uitzending.', 'Vernieuwen'],
+        ]) {
+          write(keys[2], '0');
+          expect((await page.request.post('/admin-api/settings/ui/save', {
+            form: { is_dark_mode: String(isDarkMode), language }, maxRedirects: 0,
+          })).status()).toBe(303);
+          expect((await page.request.post('/admin-api/system/health/refresh', { maxRedirects: 0 })).status()).toBe(303);
+          await page.goto('/system/health');
+          const row = page.getByRole('row').filter({ has: page.getByText(title, { exact: true }) });
+          await expect(row).toContainText(invalid);
+          if (javaScriptEnabled) {
+            await page.waitForFunction(
+              () => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,
+              undefined, { timeout: 15_000 },
+            );
+          }
+          const stored = () => {
+            const value = database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?').get('health.results') as { Value: string };
+            return (JSON.parse(value.Value) as { title: string; status: string }[])
+              .find(result => result.title === 'Teletext work configuration');
+          };
+          expect(stored()?.status).toBe('Warning');
+          await row.scrollIntoViewIfNeeded();
+          await row.screenshot({ path: `test-results/teletext-storage-health-${testInfo.project.name}-${javaScriptEnabled}-${isDarkMode}-${language}.png` });
+          write(keys[2], '8589934592');
+          const refreshed = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes(
+            javaScriptEnabled ? '/admin-api/refresh_health_snapshot' : '/admin-api/system/health/refresh',
+          ));
+          await page.getByRole('button', { name: refresh, exact: true }).click();
+          expect((await refreshed).status()).toBe(javaScriptEnabled ? 200 : 303);
+          await expect(row).toContainText(healthy);
+          await expect(row).not.toContainText(invalid);
+          await expect(page.getByRole('button', { name: refresh, exact: true })).toBeEnabled();
+          expect(stored()?.status).toBe('Pass');
+          expect(database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?').get(keys[2])).toEqual({ Value: '8589934592' });
+          expect(errors).toEqual([]);
+        }
+      } finally {
+        keys.forEach((key, index) => write(key, original[index]?.Value));
+        await context.request.post('/admin-api/settings/ui/save', {
+          form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
+        });
+        await context.request.post('/admin-api/system/health/refresh', { maxRedirects: 0 });
+        database.close();
+        await context.close();
+      }
+    });
+  }
+}
+
 // P9A-02 proves the selected decoder, not authored-page or TV-guide delivery.
 // The wrapper supplies a real FFmpeg 9 runtime and an isolated SQLite database.
 for (const javaScriptEnabled of [true, false]) {

@@ -968,6 +968,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep Health results in the selected admin language after a hydrated refresh,
+  including recovery from invalid teletext source-storage settings.
+
 - Keep Next channel capacity, session resources and output reserved when process
   or prepared-producer termination cannot be confirmed. Revoke further callbacks
   while retaining ownership, and release confirmed failures normally after the
