@@ -3,6 +3,7 @@ import { closeSync, constants, copyFileSync, existsSync, fstatSync, lstatSync, m
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitForHydration } from './hydration';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
@@ -150,10 +151,10 @@ async function assertPreview(page: Page, theme: 'day' | 'night', address = '200'
   expect(colours[theme === 'day' ? 'red' : 'blue']).toBeGreaterThan(0);
   expect(colours[theme === 'day' ? 'blue' : 'red']).toBe(0);
 }
-function publication(fixture: TeletextChannelFixture): unknown[][] {
+function publication(fixture: TeletextChannelFixture, database = fixture.database): unknown[][] {
   return ['TeletextPublicationRequest', 'TeletextEffectivePublicationRequestCurrent',
     'TeletextAcceptedGeneration', 'TeletextEffectiveAcceptedGenerationCurrent'].map(table =>
-    fixture.database.prepare(`SELECT * FROM "${table}" WHERE "ChannelId" IN (?,?) ORDER BY 1`).all(...fixture.channels));
+    database.prepare(`SELECT * FROM "${table}" WHERE "ChannelId" IN (?,?) ORDER BY 1`).all(...fixture.channels));
 }
 function safety(fixture: TeletextChannelFixture): unknown {
   const snapshot = fixture.safetySnapshot() as { configuration: unknown; channels: unknown; playouts: unknown; package: unknown };
@@ -164,13 +165,13 @@ function safety(fixture: TeletextChannelFixture): unknown {
       fixture.database.prepare(`SELECT * FROM "${table}" WHERE "ChannelId" IN (?,?) ORDER BY 1`).all(...fixture.channels)),
   };
 }
-function foreign(fixture: TeletextChannelFixture): unknown {
+function foreign(fixture: TeletextChannelFixture, database = fixture.database): unknown {
   return {
-    bindings: fixture.database.prepare('SELECT * FROM "ChannelTeletextBinding" WHERE "ChannelId" NOT IN (?,?) ORDER BY "ChannelId","AddonId"').all(...fixture.channels),
-    profiles: fixture.database.prepare('SELECT * FROM "TeletextProfile" WHERE "AddonId"!=? ORDER BY "Id"').all(fixture.addonId),
-    packages: fixture.database.prepare('SELECT * FROM "AddonInstallation" WHERE "AddonId"!=? ORDER BY "AddonId"').all(fixture.addonId),
+    bindings: database.prepare('SELECT * FROM "ChannelTeletextBinding" WHERE "ChannelId" NOT IN (?,?) ORDER BY "ChannelId","AddonId"').all(...fixture.channels),
+    profiles: database.prepare('SELECT * FROM "TeletextProfile" WHERE "AddonId"!=? ORDER BY "Id"').all(fixture.addonId),
+    packages: database.prepare('SELECT * FROM "AddonInstallation" WHERE "AddonId"!=? ORDER BY "AddonId"').all(fixture.addonId),
     publications: ['TeletextPublicationRequest', 'TeletextAcceptedGeneration', 'TeletextEffectivePublicationRequestCurrent', 'TeletextEffectiveAcceptedGenerationCurrent'].map(table =>
-      fixture.database.prepare(`SELECT * FROM "${table}" WHERE "ChannelId" NOT IN (?,?) ORDER BY 1`).all(...fixture.channels)),
+      database.prepare(`SELECT * FROM "${table}" WHERE "ChannelId" NOT IN (?,?) ORDER BY 1`).all(...fixture.channels)),
   };
 }
 function utcMilliseconds(value: string): number {
@@ -711,7 +712,11 @@ async function localized(page: Page, fixture: TeletextChannelFixture, url: strin
       name: text('TeletextEditorImport'), exact: true,
     }))
       .toHaveText(text('TeletextEditorImport'));
-    await expect(editor.locator('form')).toHaveCount(3);
+    await expect(editor.getByTestId('teletext-resource-bank-add-form'))
+      .toHaveAttribute('action', '/admin-api/teletext/design/add-resource-bank');
+    await expect(editor.getByTestId('teletext-resource-bank-add-form').getByRole('button'))
+      .toHaveText(text('TeletextResourceBankAction'));
+    await expect(editor.locator('form')).toHaveCount(4);
     await page.getByTestId('teletext-preview-model').locator('ul a').click(); await ready(page, js);
     await assertPreview(page, theme, '201');
     if ((culture === 'en-us' || culture === 'nl') && state === 'selected') {
@@ -923,7 +928,33 @@ for (const js of [true, false]) for (const dark of [false, true]) {
         }, maxRedirects: 0 });
       } finally {
         try { await context.close(); }
-        finally { try { await schedulingContext.close(); } finally { fixture.close(); } }
+        finally {
+          try { await schedulingContext.close(); }
+          finally {
+            const published = publication(fixture);
+            const foreignRows = foreign(fixture);
+            const database = new DatabaseSync(databasePath!);
+            database.exec('PRAGMA busy_timeout=10000;');
+            const designs = fixture.designs().map(design => design.Id);
+            const revisions = () => designs.map(id => database.prepare(
+              'SELECT * FROM "TeletextDesignRevision" WHERE "DesignId"=? ORDER BY "Revision"').all(id));
+            const otherPlayouts = () => database.prepare(
+              'SELECT * FROM "Playout" WHERE "ChannelId" NOT IN (?,?) ORDER BY "Id"').all(...fixture.channels);
+            const originalRevisions = revisions();
+            const originalOtherPlayouts = otherPlayouts();
+            try {
+              fixture.close();
+              expect(publication(fixture, database)).toEqual(published);
+              expect(foreign(fixture, database)).toEqual(foreignRows);
+              expect(revisions()).toEqual(originalRevisions);
+              expect(otherPlayouts()).toEqual(originalOtherPlayouts);
+              expect(database.prepare('SELECT COUNT(*) AS count FROM "Playout" WHERE "ChannelId" IN (?,?)')
+                .get(...fixture.channels)).toEqual({ count: 0 });
+              expect(database.prepare('SELECT COUNT(*) AS count FROM "PlayoutTeletextInterval" WHERE "PlayoutId" IN (?,?)')
+                .get(...fixture.channels)).toEqual({ count: 0 });
+            } finally { database.close(); }
+          }
+        }
       }
     }
   });

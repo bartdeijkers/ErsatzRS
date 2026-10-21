@@ -654,6 +654,8 @@ release section when tagging a release.
   preserving parallel isolation and the existing exact timing assertions.
   Native export and workload checks follow the versioned TTI companion and
   complete object-header work contracts while retaining strict boundaries.
+  Browser checks use repository-owned disposable databases and retire only
+  fixture-owned Scripted playouts while retaining immutable publication history.
 
 - Require finite agent work packages with explicit closure conditions, scoped
   completion, evidence reuse and separate external blockers, preserving all

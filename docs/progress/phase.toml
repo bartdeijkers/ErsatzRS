@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'Mapped-provider report/targeted-show component closed; correct exact-SHA browser failures and accepted Next timing/adoption gate'
+current_focus = 'Browser DB/form/Health fixture correction verified headed in both browsers; finish remaining exact-SHA CI and accepted Next timing/adoption prerequisite'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,12 +62,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current CI correction boundary (2026-10-21): run39584827198 at exact1b95
-retains two red Rust teletext jobs and four Level1.5 Chromium failures (40pass,
-15not run). Native setup/Level2.5 fixture fixes are local0c8/bdab checkpoints;
-accepted Next.1 timing/language and browser database/form/Health assertions
-remain open. Other browser jobs continue. No full-CI claim or new known-red push.
-Canonical provider-scan/identity.json owns exact job logs and next corrections.
+Current CI correction boundary (2026-10-21): three fixture failures are closed
+by same-DB headed Chromium/Firefox sequences (three cases each), protecting exact
+localized controls, immutable history and foreign state. P9A-04 and canonical
+provider-scan/identity.json ci_browser_correction own the evidence and retained
+socket-launch negative. Accepted Next.1 still fails caption timing/audio metadata;
+old1b95 remaining browser jobs continue. No full-CI claim or new known-red push.
+Next collect their terminal results and finish the existing candidate/adoption
+prerequisite; the macOS candidate-only workflow awaits permission.
 
 Native teletext CI setup follow-up (2026-10-21): pushed1b95c864 proves real
 local Rust hits on both runners (8s), a real web hit and unchanged manifest

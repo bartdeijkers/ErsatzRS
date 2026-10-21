@@ -149,7 +149,10 @@ for required_asset in \
   fi
 done
 
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-playwright-e2e.XXXXXX")"
+# SQL fixtures require repo-owned throwaway data. Leave TMPDIR unchanged so
+# browser profile sockets keep their ordinary short system paths.
+mkdir -p "$REPO_ROOT/tmp"
+TMP_ROOT="$(mktemp -d "$REPO_ROOT/tmp/ersatzrs-playwright-e2e.XXXXXX")"
 mkdir -p "$TMP_ROOT/home"
 DB_PATH="$TMP_ROOT/ErsatzRS.db"
 TMP_HOME_ENV="$(native_env_path "$TMP_ROOT/home")"

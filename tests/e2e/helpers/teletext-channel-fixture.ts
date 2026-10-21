@@ -483,6 +483,10 @@ export class TeletextChannelFixture {
       this.database.prepare('UPDATE "Channel" SET "IsEnabled"=0,"ShowInEpg"=0 WHERE "Id" IN (?,?)').run(...this.channels);
       this.database.prepare('UPDATE "ChannelTeletextBinding" SET "Enabled"=0 WHERE "AddonId"=?').run(this.addonId);
       this.database.prepare('UPDATE "AddonInstallation" SET "Enabled"=0 WHERE "AddonId"=?').run(this.addonId);
+      // Keep immutable teletext histories/files, but retire only our runtime
+      // playouts and their cascading live intervals/checkpoints. Disabling an
+      // add-on alone leaves legitimate global Health failures for later specs.
+      this.database.prepare('DELETE FROM "Playout" WHERE "ChannelId" IN (?,?)').run(...this.channels);
       this.restoreSettings();
       this.database.close();
       // The wrapper owns later removal of this directory after host shutdown.
