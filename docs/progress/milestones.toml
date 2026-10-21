@@ -16035,7 +16035,7 @@ push, installation or deployment is implied.
 id         = 'p9a-r1-cases'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Reconcile the finite remaining teletext cases'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'teletext-support'
 depends_on = []
 acceptance = '''
@@ -16045,12 +16045,12 @@ Smallest necessary work: Perform one bounded record reconciliation using only cu
 Testable stop condition: Every listed ambiguity is resolved in its ordinary owning package with an exact source and finite residual cells, or has a sourced explicit maintainer decision gate stating the unresolved classification and closure condition; all affected ownership/dependencies remain acyclic and progress validation passes. No product, feature or milestone acceptance follows from reconciliation alone.
 '''
 evidence = '''
-Status: Not started. Exact remaining gap: F1 other unqualified families/interleaved/generated-default/context/call/resource dependencies; F3 other context/lowering/C2 correspondences; F4 other-than-qualified X28 resource/context retirement; V1 every combination; V2/B2 remaining editor cases; V5/C remaining lifecycle matrix; F5 other policy/provider/input/output cells are not yet exhaustively named. The old unused-object-removal deferral does not unambiguously classify it as mandatory or optional for 9A.
-Reuse: The historical L15 and F/V/X receipt archives in P9A-04, ADRs 0100/0120/0122/0123, tmp/phase9-next-local-teletext/work.json/standalone_level15_followup, tmp/phase9-header-c2/identity.json, tmp/phase9-mot-retirement/m29-policy/identity.json and provider-scan/identity.json. Preserve every prior scoped completion and fixed negative.
-Missing mandatory proof: A finite clause-to-qualified-row/missing-named-cell/external-prerequisite map for the listed ambiguities. Any fact that existing sources cannot resolve needs a specifically sourced maintainer decision gate, not a guessed cell or silent waiver.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: Complete within bounded record reconciliation, not product acceptance.
+Canonical: tmp/phase9-next-local-teletext/provider-scan/identity.json case_reconciliation_followup. The ordinary owners below now name AB1..7, AE1..5, EB1..2, EE1..4, SI1..4 and SO1..5. Their sources are the pre-existing receipt exclusions and ADR0121/0123 clauses, not newly invented variants or a provider/engine Cartesian product. Complete scoped actions remain closed. Original P9A-01..04 acceptance is unchanged.
+Resolved ownership: F1/V2 -> editor-base/enhanced/upstream; F3/V1 -> author-base/enhanced; F4/V5 -> completed lifecycle-base plus retirement-enhanced/m29-policy/client-enhanced; F5 -> source-inventory/source-output and platform/adoption. Applicable L15 rows consume those same primary owners. Admin and platform owners consume shared proof instead of commissioning duplicates.
+Exact record uncertainties remain visible as finite obligations, not presumed defects: AB7/AE5 and EB2/EE1..3 need the existing accepted inventory-to-receipt classification owned by standards; SI4/SO5 need the recorded source-format/preference classification. These are bounded proof-ledger tasks using only the already accepted inventory and named exclusions; no speculative case is authorized by historical other-family wording. The sole unresolved optionality decision is unused-object removal, explicitly owned in editor-enhanced; it remains deferred until classified, never silently waived.
+New acceptance evidence: Existing lifecycle receipts jointly satisfy the explicit base component boundary; lifecycle-base is Complete. Actual receiver effects remain client-owned. Existing prepared-callback, provider-policy, public Convert and localized Health scopes are removed from residual wording.
+Missing mandatory proof: None for this record-reconciliation component. Product/conformance/editor/source/client/platform proof remains with the named owners and typed full9A dependencies.
 '''
 
 [[milestone]]
@@ -16067,12 +16067,10 @@ Smallest necessary work: Reconcile the existing UCU baseline, ADR clauses and pi
 Testable stop condition: Every unchanged P9A-01 acceptance clause has an explicit accepted decision/source and primary proof owner; no unsupported full-page encoder, unapproved restriction, invented fallback or unresolved standards decision is represented as accepted.
 '''
 evidence = '''
-Status: Not started. Exact remaining gap: The P9A-01 standards gate is still open; ownership decisions and implementation receipts do not establish complete normative acceptance.
-Reuse: P9A-01 evidence chronology, ADRs 0100/0120/0122/0123 and the existing teletext interchange reference and pinned editor audits.
-Missing mandatory proof: Clause-complete accepted standards/compatibility mapping, including Level3.5 exclusion, full2.5 versus base fallback and the suitable-client proof contract; technical proofs remain with their functional owners.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: Not started. Exact finite work: S1 classify the recorded AB1/AB2 conversion exclusions against original glyph/context rules, retaining raw identity and explicit ambiguity; S2 map AB7/AE5 to the existing accepted Table4/A7/A8/C3 and palette/repertoire/nonspacing/DRCS/object/panel/fallback inventories and existing fixed receipts; S3 resolve EB2/EE1..3 only by naming an existing mandatory context/set/dependency action or its already-qualified receipt. An absence of an exhausted historical case list is missing inventory proof, not a new product defect or maintainer-approved restriction.
+Smallest next action: Use the already accepted ADR0123 inventory and cited receipt limits once; record each named admitted obligation as qualified, an exact missing mandatory proof, or a sourced unresolved standards interpretation. No fresh general standards audit, speculative combinations or external decoder/editor maintenance. Unused-object optionality is a separate editor-enhanced maintainer gate.
+Reuse: P9A-01 unchanged acceptance and clause-owner index; accepted ADRs0100/0120/0122/0123; the existing teletext-interchange reference and pinned editor audits. Author/editor owners below contain the exact residual sources. All named qualified components remain closed.
+Missing mandatory proof/stop: Each S1..S3 classification is finite, source-linked and assigned, and every unchanged P9A-01 clause has an explicit accepted decision/source and primary proof owner. Normative interpretation must not be substituted with a convenient decoder result. An interpretation requiring a restriction is presented explicitly, never enacted by this record task.
 '''
 
 [[milestone]]
@@ -16089,12 +16087,13 @@ Smallest necessary work: Use r1 to name only the existing missing local/remote o
 Testable stop condition: Every unchanged P9A-03 clause is regression-proven on the reconciled finite source inventory, with no guessed descriptor equivalence or lost provider track, ordinary subtitle or alternate-audio identity.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: Mapped-provider acquisition and optional reports are scoped-complete, but advertised descriptors are not transmitted-page/subcode/charset/region inventory. Complete source/version/page readiness and stale-state selection remain unproved.
-Reuse: P9A-03 canonical tmp/phase9-next-local-teletext/provider-scan/identity.json mapped_provider_actions, 047b6005 six native provider cases, 56 compatibility regressions, bounded ffprobe report and local acquisition receipts. Completed retained-source/public-HLS/Health components have separate owners below.
-Missing mandatory proof: Observed versus advertised page inventory, approved subtitle/language/charset/region/provenance facts, distinct page identities, SQLite/rescan/missing-file/version selection and source replacement invalidation on the named supported provider cells.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Finite remaining cells:
+SI1 missing implementation/acceptance: approved transmitted body/subcode/charset/region/provenance and page-readiness persistence, rather than treating NotAcquired or bounded HeadersObserved as complete page bodies. Source: unchanged P9A-03 acceptance and ADR0121 source-page contract.
+SI2 mandatory persistence/identity proof: existing selected source/version/stream/page identities through SQLite/rescan, missing file, version selection and replacement invalidation without losing provider/ordinary subtitle/alternate-audio identity. Reuse mapped provider claims/guards; do not recreate their completed tests.
+SI3 source-format classification: recorded TS188/single-section-PMT/current parser boundaries are temporary, not approved permanent restrictions. Map each limit to the accepted source-inventory clause and qualify its exact supported/refused behavior; do not infer an all-container Cartesian product.
+SI4 record proof: bind the existing observed-versus-advertised and alias/page distinctions to SI1..3 and their exact existing receipts. Historical other-formats wording establishes no additional concrete variant without a source-linked gap.
+Reuse/closed: tmp/phase9-next-local-teletext/provider-scan/identity.json mapped_provider_actions (six native/56compatibility cases and targeted-show acquisition), remote_only_boundary.source_identity_followup and native local inventory receipts. Reports/ephemeral playback intents alone do not certify complete persistent readiness. Retained-source/public-HLS/Health component owners stay Complete.
+Missing proof/stop: SI1..4 have source-supported implementation and exact persistent invalidation/selection/refusal proof. Raw descriptors, charset guesses and ephemeral caption success are insufficient. No new provider-specific acquisition variant is justified by already closed mapped-provider rows.
 '''
 
 [[milestone]]
@@ -16111,12 +16110,14 @@ Smallest necessary work: After r1, finish only named missing native/Next Burn/Co
 Testable stop condition: Every reconciled mandatory F5/L15-E1 source-output cell passes its exact positive/refusal and lifetime oracles with unchanged audio/subtitle safety; no full-platform or managed adoption inference.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: The finite complete native/Next policy/provider/input/output residual inventory is still due; selected unpublished candidate.4 Linux/Windows and retained/public-HLS components do not establish all F5 or accepted runtime repair.
-Reuse: F5 historical archive; audio_language_followup, prepared_compatibility_followup, network_compatibility_followup, active_next_shutdown and linux_copy_transport_followup; existing ordinary Linux/nativeWindows Burn/Convert clock/AV/selected-language smoke/TSDuck receipts. Reuse the named Complete retained-source/public-HLS/Health/F6 milestones.
-Missing mandatory proof: Only r1-identified missing source/policy/timing/error/worker/lease/cleanup cells and their required actual source-caption/AV/audio/clock/cancellation oracles. Platform adoption belongs to p9a-managed-adoption.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Finite remaining cells (matrix authority ADR0121 Engine/source/output matrix, four output rows and five lifecycle rules; no mandated provider/engine/policy/container Cartesian product):
+SO1 mandatory integration proof: native ordinary public HLS segmenter/direct source-caption policy, including the accepted exact-page transcode/extraction path or exact unsupported-copy refusal. Qualified Hybrid internal HLS-item-worker plus final MPEG-TS wrapper is not this public native route.
+SO2 unqualified lifecycle/implementation boundary: native live HTTP/RTSP page-specific shared streaming decode and one-shot consume-once with bounded cancellation. The existing shared-pipe bitmap component and native route captures do not establish endless-input/general one-shot behavior; do not await complete endless extraction or double-consume a producer.
+SO3 mandatory route join: exact Next unsupported live/one-shot refusal and independently source-bound prepared alternative, per ADR0100/0121. Reuse the completed prepared compatibility policies/interval/seek/audio/owner-revision controls, not a fresh matrix.
+SO4 mandatory integration proof: one genuinely scanned remote-only retained provider source through ordinary public HLS Burn. Existing retained-private Convert, public Jellyfin Convert and mapped Burn proofs do not close this consumer join. Reuse their exact fixture, public route, native selected-page timing/AV/audio and owner cleanup oracles; no three-provider duplication.
+SO5 mandatory preference/source-policy ledger: bind existing exact-item/channel/global, forced/default/accessibility/Off and explicit-page proofs to the accepted selection clauses; classify only a genuinely missing named boundary, not another inferred variant. Candidate-to-accepted runtime adoption is managed-adoption, not this proof.
+Reuse/closed: provider-scan/identity.json mapped_caption_playback (24 provider/eight Local controls), mapped_next_delivery (three Convert), mapped_next_policies (six Burn/Off), remote_only_boundary source_identity_followup/shutdown_ownership_followup/finite_http_acquisition_followup/retained_source_integration_followup and its public-HLS/Health children; work.json large_finite_followup, first_header_followup, cache_hit_followup, final_http_replacement_followup, eof_unclosed_followup.implementation_followup; audio_language_followup.prepared_compatibility_followup (Linux3/nativeWindows3 scopes). Native source-route/consumer-origin/source-caption and completed F6 retain exact scope. Old parent remaining_implementation/next_action snapshots do not reopen these components.
+Missing proof/stop: SO1..5 pass exact source/AV/selected-audio/caption/clock/owner/cleanup and visible-refusal oracles within their accepted route boundaries. No capacity increase, timing relaxation, extra connection, dropped track, engine switch or producer reread substitutes. Managed.1 remains accepted; candidate.4 success is not adoption.
 '''
 
 [[milestone]]
@@ -16133,12 +16134,16 @@ Smallest necessary work: Complete the r1-named existing base repertoire/conversi
 Testable stop condition: All reconciled base A1/A2/F3/V1 cells preserve original context and essential fallback and pass exact glyph/attribute/position/conversion oracles; raw-coded success alone never establishes logical Unicode conversion.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: Remaining supplementary/composite Unicode and unqualified alias/conversion cells, fixed glyph/font/attribute/position proof and retained row-zero/secondary uncertainty need finite reconciliation; a stock decoder near-match is insufficient.
-Reuse: L15-A1/A2 historical receipts: base_conformance, national_base_context, regional_unicode_context, non_latin_coded_context, greek_native_unicode, native_cyrillic_hebrew, native_g2_text, base_g0_context_followup and held_mosaics_followup. Complete generated-G2 is owned separately.
-Missing mandatory proof: Complete fixed intended1/1.5 repertoire/enhancement inventory and independent fallback proof. Five retained base_g0_context decoder failures remain unresolved; no decoder-defect attribution is assumed.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Finite remaining cells (W is tmp/phase9-next-local-teletext/work.json, subtree standalone_level15_followup):
+AB1 implementation qualification, not nine demonstrated defects: Unicode eligibility for Polish5B, Turkish23, Serbian5D/7D, Romanian24/5D/5E/7D and Latvian5C. W/regional_unicode_context/unqualified_alias_positions and raw_identity preserve supported raw-coded identities.
+AB2 implementation qualification: G2 combining40..4F, ambiguous58/7F and retained Greek numeral-sign/block aliases, per W/native_g2_text/qualification_limits and normative, W/greek_native_unicode/scope_kept_open. Preserve original context/fallback and explicit errors; no inferred shaping/bidi requirement.
+AB3 mandatory independent proof: six fixed Cyrillic/Hebrew slots24/4A,24/6A,25/4A,25/6A,25/26,55/23, retaining36 observed failures. W/native_cyrillic_hebrew/independent and level15-cyrillic-hebrew/independent-final.json preserve exact normative Й/й, ї and pound oracles. Product versus tool attribution remains unproved.
+AB4 mandatory independent proof: GreekG2 code34 multiplication U+00D7 versus Latin x U+0078, four retained failures. W/native_g2_text/independent and level15-native-g2/independent-1.json;1916/1920 agreements remain valid, not full acceptance.
+AB5 mandatory independent proof: three physical-header pound and two explicit-German-secondary observations,5/38 retained mismatches. level15-base-g0-context/identity.json verification.independent/normative; original absent Header/POP uncertainty is distinct from explicit no-second-G0.
+AB6 mandatory font/equivalence proof: three separated-margin product-atlas differences in W/held_mosaics_followup and level15-held-mosaics/identity.json. Hold/Release semantics,21 fixed observations/nine equalities and18/21 atlas matches remain completed.
+AB7 mandatory inventory trace: standards owns exact Table4/A7/A8/C3/repertoire mapping to existing receipts; broad other-glyph phrases establish no additional concrete variant. No relaxed expectation or unchanged negative rerun closes AB3..6.
+Reuse/closed: Assigned Latin contexts, GreekG0, Cyrillic20/24/25 and Hebrew55G0, Arabic47/57G0 and qualifiedG2, generated supplementary provenance, Base ESC and held-mosaic semantics retain their exact W receipts. Generated-G2, editor and actual reveal/flash/navigation have separate owners.
+Missing proof/stop: AB1/2 have source-supported eligibility/explicit rejection without changing raw identity; AB3..6 have fixed independent/font correspondence with exact attribution; AB7 is clause-complete. Only demonstrated conversion defects justify product changes. Full base semantics remain required, independently of optional2.5 banks/client.
 '''
 
 [[milestone]]
@@ -16155,12 +16160,13 @@ Smallest necessary work: Resolve only r1-named required Table4/A7/A8/C3 and cont
 Testable stop condition: Every agreed enhanced feature and reconciled combination passes exact model/native/independent bounds, updates, rejection and fallback oracles; no unsupported3.5 behavior, relaxed oracle or static-preview substitute.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: F3 other context/lowering/C2 correspondences and V1 every-combination wording need finite cell ownership. Physical00/10/0E/0F enhanced proof passes but stocklibzvbi retains22 fixed unwanted1/1.5-response failures.
-Reuse: F3/V1 historical archive, cross_emitter_c2_qualification, foreign_default_qualification, nonuniform_row_tail_followup, original_secondary_followup, physical_spacing_followup and its genuine-editor/delivery children. Already completed scoped source/context/lowering components remain closed in those receipts.
-Missing mandatory proof: The reconciled complete authored/conformance/fallback residual cells, independent fixed glyph/raster decoding and applicable TSDuck proof. Suitable actual full2.5 display belongs to p9a-client-enhanced.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Finite remaining cells (H is tmp/phase9-header-c2/identity.json):
+AE1 mandatory intended1/1.5 fallback proof: physical00/10/0E/0F have22 retained wrong-level responses. tmp/phase9-next-local-teletext/work.json physical_spacing_followup preserves the completed10 enhanced fixtures/14 fixed cells/four raster oracles and genuine-editor/delivery proof; these enhanced responses are not extra base requirements.
+AE2 unqualified original C.2 cross-page order when competing writers cross POP/GPOP resources; AE3 unqualified order when the same physical definition participates in repeated instances. H/cross_emitter_c2_qualification/limits and normative.limits. Same-page Main plus unique original Local C.2 is completed and must not reopen. Neither limit proves a general encoder defect.
+AE4 mandatory authored-resolution proof: mixed original defaults versus explicit selected nested POP/GPOP dependencies. ADR0123 Enhanced model and wire boundary and H/f3_foreign_default_qualification/remaining/existing_native_scope. Completed foreign-default whole-body realization remains closed; retained nested-X27 decoder limitations do not authorize external maintenance.
+AE5 mandatory full feature-inventory trace: standards owns the exact existing Table4/A7/A8/C3, palettes/remapping, extended repertoire/mosaics, nonspacing, DRCS, Local/Public/Global objects, side-panel and fallback clauses, including dependency/bounds/update/atomic rejection. Unspecified other-combination wording authorizes no invented Cartesian product.
+Reuse: H cross-emitter/foreign-default/nonuniform-row-tail/original-secondary receipts and physical_spacing_followup. Every named qualified context/lowering/native/editor slice remains closed.
+Missing proof/stop: Resolve AE1 with unchanged fallback oracles, qualify AE2..4 against original identities/provenance/full effects/bounds, and supply AE5 clause-complete ownership/conformance proof. Actual full2.5 display remains client-enhanced; no stock-decoder near-match is full acceptance.
 '''
 
 [[milestone]]
@@ -16177,12 +16183,11 @@ Smallest necessary work: Finish the r1-named fitting base actual-editor cases th
 Testable stop condition: Every reconciled base B2/F1/V2 cell passes actual pinned editor save, lossless concept/shared preview/reexport/reopen and explicit publication with targeted unsupported/ambiguous rejection and unchanged package authority.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: The fitting base context/origin/attribute/repertoire and complete-set residual cases are not exhaustively named; completed Main/Local exact root-undo, generated-G2 and metadata must not reopen merely because broader B2 is incomplete.
-Reuse: native_main_capacity, repertoire_editor_interop, native_editor_interop, native_spelling_followup/integration, arabic_editor, held_mosaics_followup/editor and the Complete metadata/generated-G2/Main-Local selection receipts. All earlier named closed Main/context/position actions stay closed in the historical archive.
-Missing mandatory proof: Actual pinned fitting-base complete set and named remaining editor-context save cells with full roundtrip and separate publication; no mandatory2.5 client or over208-word object bank is imposed on a valid base document.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Finite remaining cells:
+EB1 mandatory actual-editor proof: direct ArabicG0 glyph editing, distinct from completed generatedG2 edits in47/57. Source: P9A-04 Arabic editor receipt and tmp/phase9-next-local-teletext/work.json standalone_level15_followup/arabic_editor. Use one bundled pinned-editor action only if its source/context eligibility is established; correct only an attributable refusal/defect.
+EB2 mandatory fitting complete-set actual-editor proof ledger: ADR0123 External editing, drafts and publication requires page/subpage/supported-set identity/navigation. Standards must identify the exact remaining saved-set action or its existing qualifying receipt; no evidence establishes a missing export mechanism. Completed subset/geometry/metadata mechanics are not reopened.
+Reuse/closed: W=tmp/phase9-next-local-teletext/work.json standalone_level15_followup: native_main_capacity; repertoire_editor_interop; native_editor_interop; generated_g2_editor/implementation_followup; arabic_editor generatedG2; held_mosaics_followup/editor; native_spelling_followup/integration. Complete metadata/generated-base/selection-undo owners, and header-c2 main-presence/generated_compatibility_followup, coordinated-positions and main-contexts retain exact root-undo, actual save/import/preview/reopen/publication scopes.
+Missing proof/stop: EB1 and the specifically sourced EB2 action have actual pinned save, lossless concept/shared preview/reexport/reopen and separate explicit publication, exact identities/navigation and located refusal. No2.5 bank/client or over208-word requirement is imposed on a valid base page; no blanket editor-chain replay.
 '''
 
 [[milestone]]
@@ -16199,12 +16204,14 @@ Smallest necessary work: After r1, finish only named engine/import/export/effect
 Testable stop condition: All reconciled enhanced internal interchange cells pass full complete-factory/native/TTI/shared-preview/draft/publication/reopen oracles; the final enhanced aggregate separately requires upstream actual-editor proof.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: F1 other unqualified context/style/deferred-AP/generated-default/cross-resource families and complete fitting/oversized dependency cases still lack a finite residual inventory. Native bank/over208 actual-QTM capability is separately deferred upstream.
-Reuse: F1/V2 historical archive, tmp/phase9-header-c2/identity.json and resource-set-creation, main-presence, coordinated-positions, main-contexts, drcs-page-selection, role-attachment, created-bank-attachment, main-deferred-ap and local-call-import receipts. Their explicitly completed scoped components remain closed.
-Missing mandatory proof: The finite remaining resource/context/set/dependency engine/editor cells; external pinned actual native POP/GPOP and complete over208 context proof is owned by p9a-editor-upstream, not simulated by truncating this package.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Finite remaining cells:
+EE1 Local/default/object context correspondence outside the completed source-bound Main-charset boundary, per tmp/phase9-header-c2/main-contexts/identity.json source_classification_limit.
+EE2 deferred-AP correspondence outside completed direct leading Main and steady derived-Flash Local last-call deletion/root undo, per main-deferred-ap/identity.json remaining and row-tail-background/local-call-import/identity.json qualified_user_boundary.
+EE3 complete fitting/oversized resource-set/definition/dependency graph proof beyond the exact qualified bank/selection/retarget components, per original F1/V2 and ADR0123 full catalogue/identity/publication contract. Standards owns the bounded exact-instance/qualified-receipt classification for EE1..3; the old broad wording names no further demonstrated failure and authorizes no new variant by itself.
+EE4 actual native POP/GPOP and complete over208-word editor capability belongs exclusively to editor-upstream/X3, including dormant/protected definitions. Wait changed upstream; never truncate or relabel native semantics.
+Exact external classification gate: Unused-object deletion remains maintainer-deferred. Original F1, old sessions and tmp/phase9-f1-original-position/work.json excluded / header-c2 coordinated-positions receipt preserve the exclusion; no reviewed accepted source establishes mandatory versus optional9A status. Before final closure, obtain an explicit classification: mandatory9A action with a named owner/stop, or expressly optional deferred work. No deletion is implemented and no original acceptance is waived while unresolved.
+Reuse/closed: Complete selection-undo; header-c2 resource-set-creation/consumer_cross_role_native_followup, main-presence, coordinated-positions, main-contexts, drcs-page-selection, role-attachment, created-bank-attachment, main-deferred-ap and row-tail-background/local-call-import. V28 selections/MOT-only undo, V31 first attach/retarget/restore, populated created-bank composition and native Public-to-Global crossing remain closed.
+Missing proof/stop: Each sourced EE1..3 surviving action has complete-factory/model/native/TTI/shared-preview/draft/separate-publication/reopen proof and full protected-catalogue identities; optionality gate is explicitly resolved; final actual-editor EE4 proof remains mandatory through editor-upstream.
 '''
 
 [[milestone]]
@@ -16365,7 +16372,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-lifecycle-base'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete base profiles Lua and restart lifecycle'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases']
 acceptance = '''
@@ -16375,21 +16382,20 @@ Smallest necessary work: Finish r1-named independent base profile/On/Off/Continu
 Testable stop condition: Every reconciled mandatory base C/F4/V5 cell has exact durable interval/authority/generation/ordinary-AV/cleanup proof; no different output ACK or stale selection is reported Applied.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: The full remaining precedence/error/inside-after-scope/restart/cleanup matrix has not been exhaustively named; completed requested/applied reporting, shared-base and scoped Lua trials retain closure.
-Reuse: shared_profile_lifecycle_followup, active_shared_profile_followup, active_lua_expiry_followup, active_mirror_scope_followup, shared_profile_browser_followup, lua_base_precedence_followup, lua_profile_edit_followup, effective_admin_reuse, actual_output_status_followup/native_windows_followup and tmp/phase9-lua-intervals/identity.json continue_reopen_followup/rebuild_reopen_followup (b4462a76).
-Missing mandatory proof: Only reconciled remaining base lifecycle/browser-stream generation/whole-host restart cells. M29 policy and other enhanced resource retirement are separately owned and do not automatically block base C.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: Complete within the base application/host lifecycle component. Existing scoped receipts now jointly cover every named C/F4/V5 action; no additional uncovered base cross-cell is established. No new runtime experiment or product change is claimed.
+Clause-to-receipt join (W=tmp/phase9-next-local-teletext/work.json standalone_level15_followup): bindings/shared edit-delete/missing-wrong-unavailable profile/mirror Night-Off isolation -> shared_profile_lifecycle_followup (level15-profile-lifecycle/identity.json,13captures); live invalidation/pending/separate republication -> active_shared_profile_followup; actual Lua Off/error/automatic Base -> active_lua_expiry_followup; mirror scoped On/expiry/isolation -> active_mirror_scope_followup; explicit On over BaseOff -> lua_base_precedence_followup; Lua-only edit/stale-expired refusal/original expiry -> lua_profile_edit_followup.
+Continue/fresh Base, Refresh/Reset/KeepCurrent and handled/uncaught rollback -> tmp/phase9-lua-intervals/identity.json continue_reopen_followup/rebuild_reopen_followup, final b4462a76 seven native cases. Whole-host insideOn/insideOff/afterOff expiry -> W/scoped_host_restart and positive level15-scope-native-3 result, checkpoint4a5b22f3; future start/afterOn expiry -> W/future_on_host_restart, checkpointf4626c68. These later receipts supersede earlier broad remaining-matrix text.
+Browser/shared-stream generation equality -> W/shared_profile_browser_followup and effective_admin_reuse with original effective-admin/effective-editor receipts. Actual output receipt/epoch/requested-versus-applied/restart cleanup -> W/actual_output_status_followup. Existing localized controls and no package activation/ordinary playback/protected state invariants retain their qualified scope.
+Missing mandatory proof: None within this base application/host component. Actual receiver recovery remains client-base, enhanced resource/M29 effects remain retirement-enhanced/m29-policy/client-enhanced, and other native RID/adoption claims stay platform-owned. Those separate obligations do not reopen this completed base component.
 '''
 
 [[milestone]]
 id         = 'p9a-retirement-enhanced'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete enhanced resource retirement and recovery'
-status     = 'In progress'
+status     = 'Blocked'
 feature    = 'teletext-support'
-depends_on = ['p9a-r1-cases']
+depends_on = ['p9a-r1-cases', 'p9a-m29-policy', 'p9a-client-enhanced']
 acceptance = '''
 Requirement owner: F4/V5 enhanced resource/context retirement and P9A-04 dependency/update safety.
 User action/proof: Safely replace or remove agreed enhanced resources on original outputs with complete receiver history, exact owner acknowledgements and immutable source models.
@@ -16397,12 +16403,10 @@ Smallest necessary work: Use r1 to identify missing enhanced retirement cells, t
 Testable stop condition: Every reconciled enhanced retirement cell has literal complete transition, receiver-history/ACK/clock/AV/cleanup and required independent/client proof; m29-policy and client-enhanced remain separate final gates.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: Remaining full page/resource/context retirement beyond qualified X28 primary/palette cases, broader automatic recovery and clean open-client shutdown are not finite yet; M29 semantics is a separately blocked decision.
-Reuse: tmp/phase9-mot-retirement/identity.json and ordinary-tcp, automatic, populated-http, warm-qualification and page-retirement identity.json receipts: neutral/populated MOT publication and pinned independent cached-page effects, qualified full-C4 X28 primary/palette transitions are already complete within their exact scopes.
-Missing mandatory proof: The reconciled other resource/context retirement/recovery cells and actual suitable-client effect where mandatory. Existing simulated-sink or independent cached-page proof is not actual client navigation.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: Blocked on explicit M29 semantics and suitable enhanced receiver proof, not an unspecified internal variant series.
+Closed engine scopes: tmp/phase9-mot-retirement/identity.json plus ordinary-tcp/automatic/populated-http/warm-qualification/page-retirement receipts prove qualified neutral/populated MOT publication, ordinary HTTP and independent cached-page retirement effects, plus full-C4 X28 primary/palette retirement. Preserve these exact completed boundaries.
+Exact remaining gap: Accepted resource/default update/removal still needs actual suitable-client effects on the original stream and the M29 author/receiver semantics decision. These are primary-owned by client-enhanced and m29-policy. The historical phrase other-resource/context supplies no additional named independently executable engine defect or test cell; a new one needs an existing explicit clause/negative before implementation.
+Missing proof/stop: Consume the resolved policy and actual client retirement/recovery/clock/AV/cleanup receipts, retaining the complete original page/resource model and protective refusal until semantics are established. Simulated sinks/independent cached-page effects do not establish actual client navigation. Unclassified normative resource proof remains required through author-enhanced and the full aggregate, not silently accepted by this blocked component.
 '''
 
 [[milestone]]
@@ -16441,12 +16445,9 @@ Smallest necessary work: Finish only named changed base flows using shared app v
 Testable stop condition: Every changed applicable base admin flow and agent file action shares validation and broadcast model, passes all supported cultures and required headed/browser modes, and leaves broadcast unchanged until explicit publication.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: Changed base management/file-workflow boundaries identified by r1 still require complete joined proof; earlier nine-culture/headed/no-JS receipts remain valid.
-Reuse: V4 historical archive, existing nine-culture SSR and headed Chromium/Firefox light/dark/hydrated/no-JS receipts, effective_admin_reuse, actual_output_status_followup and existing editor/file-workflow validation receipts.
-Missing mandatory proof: Any r1-named remaining structured agent file/validation/preview proof and changed-base localized headed Chromium/Firefox light/dark plus hydrated/no-JS generation joins, with Health links where changed.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Exact remaining proof: A1 joined design/profile, structured agent file/export, pinned-editor concept import, shared validation/located preview and separate explicit publication. Source: unchanged P9A-04 interchange/management paragraphs and V4. Join editor-base's EB1/EB2 to existing localized action receipts; identify one missing action only if that exact join fails.
+Reuse/closed: Existing nine-culture SSR and headed Chromium/Firefox light/dark/hydrated/no-JS, effective_admin_reuse, actual_output_status_followup, shared-profile browser proof, editor/file validation and completed source-health8headed refresh cases. Lifecycle-base now closes the common application/host controls; do not replay those unchanged paths.
+Missing proof/stop: Each named A1 action has canonical shared-app validation, same-model preview and explicit-publication authority, with mandatory changed-boundary localization/browser proof. No blanket browser rerun or new editor variant follows from this ledger join. Actual client display is separately owned.
 '''
 
 [[milestone]]
@@ -16463,12 +16464,9 @@ Smallest necessary work: Verify only r1-named changed enhanced resource/upload/p
 Testable stop condition: All reconciled changed enhanced admin actions pass the mandatory localized/browser matrix and shared validation without duplicating unchanged base checks.
 '''
 evidence = '''
-Status: In progress. Exact remaining gap: Remaining changed enhanced resource/set/retirement UI joins are not accepted by earlier scoped Add/Copy/empty-bank proofs.
-Reuse: V4 announcement_admin_followup, exact four-definition native export/reopen, current-draft lifecycle/batch-S1 and current-head Add/Copy headed receipts, plus base admin evidence in its primary owner.
-Missing mandatory proof: Remaining changed enhanced flow coverage in every culture and headed Chromium/Firefox light/dark/hydrated/no-JS, same validated broadcast generation and correct pending/applied/Health state.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: In progress. Exact remaining proof: A2 joins the EE1..3 specifically sourced supported resource upload/preview/draft/separate-publication actions and resolved retirement reporting to mandatory localized/shared-validation receipts. Source: V4/P9A-04 and announcement_admin_followup. No unspecified new enhanced UI variant is authorized.
+Reuse/closed: Add/Copy, empty-bank/current-draft lifecycle/batch-S1 and four-definition native export/reopen, all earlier9culture/headed/browser modes and base admin actions retain their exact evidence. Parent editor/retirement owners supply the exact changed action; shared obligations stay there.
+Missing proof/stop: Every named supported A2 action has correct generation/located errors/revision/ownership/pending-applied state and applicable headed Chromium/Firefox light/dark/hydrated/no-JS/localization proof; unchanged controls are reused, not replayed.
 '''
 
 [[milestone]]
@@ -16631,7 +16629,7 @@ phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete the independent applicable platform Health output matrix'
 status     = 'Not started'
 feature    = 'teletext-support'
-depends_on = ['p9a-r1-cases']
+depends_on = ['p9a-r1-cases', 'p9a-source-output', 'p9a-macos-artifacts', 'p9a-native-arm', 'p9a-native-macos', 'p9a-windows-package']
 acceptance = '''
 Requirement owner: P9A-02 optional/operator reports and provenance; F5/V6/X2 and L15-E2 shared platform safety.
 User action/proof: See accurate optional decoder/runtime Health and retain ordinary AV/subtitles/selected alternate audio across every applicable supported output policy.
@@ -16639,12 +16637,9 @@ Smallest necessary work: Reconcile and close independently executable named plat
 Testable stop condition: Every r1-named applicable independent safety/provenance cell passes or is explicitly owned by the exact still-open native/artifact package; package completion requires all cells within this owner proven, not merely categorized.
 '''
 evidence = '''
-Status: Not started. Exact remaining gap: Remaining applicable source/output/failure/startup/Health and license/build provenance cells need r1 inventory. Earlier selected Linux/nativeWindows manager/Health/overlay/configuration output checks are component proof.
-Reuse: P9A-02 bounded probe/operator nine-culture Health receipts, managed_qualification_followup/startup_health/enabled_channels_followup/native_windows_followup, exact Linux/Windows source/license/ABI/network/prepared/overlay-output scopes and completed source-health owner.
-Missing mandatory proof: Only the finite existing platform Health/output/provenance residual cells, accurate persisted result/runtime identity and applicable ordinary/source-subtitle/alternate-audio regressions; all six-RID closure remains required.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Status: Not started; completion waits for the listed source-output/native/artifact prerequisites. Exact remaining proof: PS1 consume exact six-RID source/build/license/dependency/decoder probe qualification from the artifact/native owners; PS2 join the accepted source/output/failure contracts from source-output to truthful optional/operator Health and ordinary subtitle/alternate-audio safety. No additional independent Linux/Windows Health experiment is concretely established by the current record.
+Reuse/closed: P9A-02 bounded decoder/operator nine-culture Health, manager/startup/enabled-channel/nativeWindows receipts, exact Linux/nativeWindows configuration-precedence/playback/cleanup scopes and completed6137 localized refresh. Crossbuild, QEMU, interop, native runtime and current package remain separate claims.
+Missing proof/stop: Every PS1/PS2 applicable clause has the exact completed primary receipt and accurate persisted Health/runtime identity; no missing native artifact/environment or deferred120minute Windows-package proof is replaced by local success. Managed adoption is a separate owner after this join, not a new duplicate test matrix.
 '''
 
 [[milestone]]
