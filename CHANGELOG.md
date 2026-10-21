@@ -15,13 +15,19 @@ release section when tagging a release.
 
 ### Security
 
+- Update certificate validation to rustls-webpki 0.103.16 and webpki-roots
+  1.0.10, and ZIP handling to 9.0.5. Resolve RUSTSEC-2026-0381,
+  RUSTSEC-2026-0382 and RUSTSEC-2026-0367 through RUSTSEC-2026-0369,
+  retaining strict package path checks.
+
 - Update the locked HTTPS client runtime to Rustls 0.23.46, addressing
   [RUSTSEC-2026-0346](https://rustsec.org/advisories/RUSTSEC-2026-0346.html),
   [RUSTSEC-2026-0347](https://rustsec.org/advisories/RUSTSEC-2026-0347.html),
   [RUSTSEC-2026-0348](https://rustsec.org/advisories/RUSTSEC-2026-0348.html) and
   [RUSTSEC-2026-0349](https://rustsec.org/advisories/RUSTSEC-2026-0349.html).
-- Require Ammonia 4.2.3 for release-note HTML sanitization, addressing
-  RUSTSEC-2021-0157 and RUSTSEC-2021-0158 without weakening sanitizer policy.
+- Require Ammonia 4.2.4 for release-note HTML sanitization, addressing
+  RUSTSEC-2021-0157, RUSTSEC-2021-0158 and CSS URL-filtering advisory
+  RUSTSEC-2026-0373 without weakening sanitizer policy.
 
 ### Added
 

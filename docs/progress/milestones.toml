@@ -2383,6 +2383,23 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+CI/security follow-up to pushed1fdde013 (includes shared CI split f37f9aea):
+The first actual full split run39556886485 instantiated both Rust teletext and all
+six browser jobs. The maintainer cancelled it after Cargo deny found six new
+advisories; cancellation is confirmed and no full-CI success is claimed.
+Ammonia4.2.4, rustls-webpki0.103.16, webpki-roots1.0.10 and ZIP9.0.5 now pass the
+unchanged cargo-deny0.19.6 advisory/bans/license/source policy against advisory DB
+4b587f00996ebe5c05a73eaef105ef241e876414. All unrelated lock package records remain
+exact. ZIP9 names decode fallibly to existing Next Identity errors; TTI/support
+readers retain their assertions. Existing31 managed-runtime/extraction/TTI-ZIP/
+support-bundle/release-note controls pass4e90bd68 (2.091s). Canonical provider-scan
+identity.json and its security_followup own logs/versions/remaining closeout.
+Strict affected FFmpeg/infra/web all-target Clippy passes on the patched graph.
+A new correction SHA/full-CI result remains due; an old-SHA rerun cannot verify
+the dependency fix. Earlier valid source/editor/playback/transport
+proof remains scoped; no runtime artifact pin or acceptance condition changes.
+
+
 2026-10-21 mapped Jellyfin movie-report component completed:
 Managed library movie/episode leaves now retain the actual scan claim and require a
 selected source ID/path plus explicit unique embedded indexes. Only exact item

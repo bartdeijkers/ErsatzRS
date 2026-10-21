@@ -2882,7 +2882,7 @@ mod tests {
         assert_eq!(archive.len(), 3, "preserve every report");
         let names = archive
             .file_names()
-            .map(str::to_owned)
+            .map(|name| name.unwrap().into_owned())
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(
             names.len(),

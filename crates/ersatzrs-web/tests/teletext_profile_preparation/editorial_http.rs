@@ -148,7 +148,7 @@ async fn bundle(response: Response) -> BTreeMap<String, Vec<u8>> {
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).unwrap();
         assert!(entry.is_file());
-        let name = entry.name().to_owned();
+        let name = entry.name().unwrap().into_owned();
         assert!(!name.contains(['/', '\\']));
         let mut body = Vec::new();
         entry.read_to_end(&mut body).unwrap();

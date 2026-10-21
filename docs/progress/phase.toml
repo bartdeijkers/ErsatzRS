@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-03 mapped-Jellyfin movie report/rescan completed; commit and push with first split-CI run, then finish mapped provider report actions'
+current_focus = 'Cargo deny security repair completed: commit verified patched graph, then obtain new exact-SHA full split-CI evidence'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -73,6 +73,17 @@ full-local9A push restriction. Check the exact pushed SHA and every applicable
 job; rerun only failed jobs on that SHA. Code fixes require a new SHA. Include
 shared f37f9aea and verify its first actual split-CI run; no release publication.
 
+Cargo deny follow-up is the current finite package. Pushed checkpoint1fdde013
+includes CI split f37f9aea. First actual run39556886485 created both teletext Rust
+jobs and all six browser jobs, then was cancelled at maintainer request after
+six dependency advisories; no CI-green claim. Four patched libraries now pass
+fresh cargo-deny0.19.6 with unchanged policy and unrelated lock records. ZIP9's
+fallible names retain strict Next rejection;31 existing archive/sanitization/
+TTI/support checks pass. Canonical provider-scan/identity.json security_followup
+owns exact versions/logs. Strict affected all-target Clippy passes; finish staged/progress checks and
+commit the verified security repair. A corrected SHA needs its own full run; do not rerun
+the old SHA as proof of this fix. CI remains stopped while preparing the repair.
+
 P9A-03 mapped-Jellyfin movie report/rescan is completed. Canonical
 tmp/phase9-next-local-teletext/provider-scan/identity.json owns the original native
 no-report RED, three actual managed-library native passes,105 affected provider/
@@ -84,9 +95,9 @@ Deep rescan replaces the old observation while preserving file/version/four trac
 Owned physical checks retain source and capacity after caller loss. Test-only
 imports/Burn-default/type/duration corrections and borrow-only error translation
 retain original oracles/native proof. Existing editor/publication/isolation/
-transport/F6 results remain valid in scope. The current finite step is finish
-progress/staged checks and push the coherent checkpoint including f37f9aea; verify
-all applicable jobs on the exact SHA before calling it CI-green.
+transport/F6 results remain valid in scope. The component was committed/pushed in1fdde013; its full-CI gate is pending the
+security correction above. Verify all applicable jobs on the corrected exact SHA
+before calling it CI-green.
 
 Next complete the existing P9A-03 mapped-provider report action package: connect
 Emby/Plex declarations, forward genuine claims for targeted shows, and prove the

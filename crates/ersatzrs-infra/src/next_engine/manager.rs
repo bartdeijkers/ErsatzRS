@@ -609,10 +609,11 @@ fn archive_files(
             let mut entry = zip
                 .by_index(index)
                 .map_err(|_| NextRuntimeError::Identity)?;
-            if entry.is_dir()
-                && (entry.name() == root || entry.name() == format!("{root}/"))
-                && entry.size() == 0
-            {
+            let path = entry
+                .name()
+                .map_err(|_| NextRuntimeError::Identity)?
+                .into_owned();
+            if entry.is_dir() && (path == root || path == format!("{root}/")) && entry.size() == 0 {
                 continue;
             }
             if entry.is_dir()
@@ -622,7 +623,6 @@ fn archive_files(
             {
                 return Err(NextRuntimeError::Identity);
             }
-            let path = entry.name().to_owned();
             add(&path, entry.size(), &mut entry)?;
         }
     } else {
