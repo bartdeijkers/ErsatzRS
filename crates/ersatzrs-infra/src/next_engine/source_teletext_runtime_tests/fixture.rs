@@ -25,6 +25,17 @@ use ersatzrs_domain::{
     reason = "Explicit opt-in disposable native proof root"
 )]
 pub(super) fn proof_root() -> PathBuf {
+    if let Some(parent) = std::env::var_os("ERSATZRS_NEXT_TELETEXT_PROOF_PARENT") {
+        assert!(
+            std::env::var_os("ERSATZRS_NEXT_TELETEXT_PROOF_DIR").is_none(),
+            "select either an exact proof directory or a parent for isolated cases"
+        );
+        return tempfile::Builder::new()
+            .prefix("source-teletext-")
+            .tempdir_in(parent)
+            .expect("create an isolated case in the existing proof parent")
+            .keep();
+    }
     let root = PathBuf::from(
         std::env::var_os("ERSATZRS_NEXT_TELETEXT_PROOF_DIR").expect("set a fresh proof directory"),
     );

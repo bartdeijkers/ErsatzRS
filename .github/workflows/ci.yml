@@ -601,6 +601,9 @@ jobs:
           rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
       - name: Teletext Next runtime regressions
         run: |
+          proof_parent="$GITHUB_WORKSPACE/ci-artifacts/teletext-$TELETEXT_LEVEL/source-proofs"
+          mkdir -p "$proof_parent"
+          export ERSATZRS_NEXT_TELETEXT_PROOF_PARENT="$proof_parent"
           "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all --no-tests pass -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime) & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/next-tests.log
       - name: Collect teletext diagnostics
         if: always()

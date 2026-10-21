@@ -194,6 +194,13 @@ restoring and extracting tests; consumers use the preserved copies. The first
 build-once trial grew this cache to 107 GiB on a 115-GiB runner volume and
 required that cleanup before test extraction.
 
+Native source-teletext cases retain the manual `ERSATZRS_NEXT_TELETEXT_PROOF_DIR`
+contract for a single fresh directory. CI instead supplies an existing
+`ERSATZRS_NEXT_TELETEXT_PROOF_PARENT` beneath the job diagnostics; each case
+allocates a distinct retained child with the existing tempfile helper. Selecting
+both modes is an error. This isolates parallel cases and preserves negative
+fixtures without changing runtime inputs or assertions.
+
 Every execution job retains its own database, runtime, port and diagnostics.
 Runtime staging and all test selection, ignored/helper semantics and resource
 limits remain in the execution jobs. Source fixtures use

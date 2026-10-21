@@ -650,6 +650,8 @@ release section when tagging a release.
   Completed oversized Cargo caches are cleared before consumers extract tests.
   Native Next acquisition tests receive the same pinned archive and manifest
   as runtime staging, preserving their identity and health checks.
+  Source-caption runtime tests use independent retained evidence directories,
+  preserving parallel isolation and the existing exact timing assertions.
 
 - Require finite agent work packages with explicit closure conditions, scoped
   completion, evidence reuse and separate external blockers, preserving all

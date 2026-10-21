@@ -2404,24 +2404,22 @@ The cancelled old-SHA run cannot verify this dependency fix. Earlier valid sourc
 proof remains scoped; no runtime artifact pin or acceptance condition changes.
 
 
-CI local-handoff checkpoint (2026-10-21): the maintainer requested cancellation
-of full run39567649749 on ba58d2a4 and a fresh full run after this correction.
-Its completed Test3960 and general-Chromium339 checks passed; Next418/419 failed
-only because the mandatory package test lacked archive/manifest inputs. The two
-Teletext1.5 failures were stale opaque-storage expectations; existing version2
-storage is intentionally supported while unchanged host association rejects role
-mismatch. Fifteen affected storage tests and strict infra all-target Clippy pass.
-Same-host artifact transfer now uses atomic producer-scoped hash-verified copies,
-four owned cache groups and unchanged manifest verification/GitHub fallback.
-Eighteen artifact contracts, three selector checks, workflow lint and the exact
-pinned package staging block pass. The formerly failing actual Next package
-acquisition/health test now passes3d538c48 with these exact archive/manifest
-inputs; no test skip or weakened identity oracle. The inactive107GiB cache on
-a115GiB volume now triggers the existing60GiB cleanup rule after immutable
-publication. Canonical provider-scan/identity.json ci_local_handoff_followup owns
-logs and retained negatives. Closure still requires an actual local-cache hit
-and every applicable job on the newly pushed exact SHA; no full-CI claim yet.
-Provider follow-up and parallel work remain uncommitted. No release publication.
+Native teletext CI setup follow-up (2026-10-21): pushed1b95c864 proves real
+local Rust hits on both runners (8s), a real web hit and unchanged manifest
+restoration; producer, Test and Next engine now pass. Its1859 Level1.5 workspace
+regressions pass. Ten subsequent native cases initially stop before execution
+because their mandatory proof root is missing. The fixture now accepts one
+explicit existing CI parent and allocates ten independent retained case roots;
+manual fresh-DIR behavior remains exact. With the same managed FFmpeg9/v2.0.6,
+all11 native cases pass on unchanged candidate.4; accepted managed.1 passes8/11
+and retains three genuine FINAL source-outpoint failures. No clock, caption,
+AV/audio, cleanup oracle or test selection is weakened. Strict infra all-target
+Clippy and workflow lint pass. Canonical provider-scan/identity.json
+ci_source_proof_followup owns both native runs and preserved negative roots.
+This closes the fixture setup component, not the accepted-runtime defect.
+Next: finish unaffected run39584827198 jobs and the existing X2/adoption route;
+the prepared two-macOS candidate-only workflow awaits explicit permission.
+No production pin or publication changes; parallel provider work is preserved.
 
 2026-10-21 mapped Jellyfin movie-report component completed:
 Managed library movie/episode leaves now retain the actual scan claim and require a
