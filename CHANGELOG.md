@@ -31,6 +31,12 @@ release section when tagging a release.
 
 ### Added
 
+- Add managed, bounded complete HTTP source acquisition for teletext preparation.
+  Temporary files and work capacity survive abandoned callers until actual I/O
+  ends; partial, truncated and oversized responses are rejected. Provider caption
+  playback still requires native qualification, storage admission and session
+  integration.
+
 - Import a first standalone teletext Main enhancement program into a versioned
   concept. Preserve the distinction between absent and explicitly empty Main,
   retain checked edits through re-export and restart, and undo to exact original

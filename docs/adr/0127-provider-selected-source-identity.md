@@ -8,7 +8,8 @@ Proposed
 
 Partial — selected-source persistence, version-owned file keys, private cache
 identity and request binding are implemented as one F5 prerequisite. P9A-04 owns
-verification. Retained finite HTTP source acquisition remains open; neither a
+verification. A complete-response acquisition primitive is implemented; aggregate
+storage admission and retained native/session integration remain open. Neither a
 provider declaration nor a URL fingerprint proves immutable source bytes.
 
 ## Context
@@ -56,6 +57,17 @@ fresh headers; they and the raw source selector never enter published relay URLs
 The fingerprint is an association guard, not an authentication capability or a
 content digest. Retained finite source ownership and byte qualification remain
 separate requirements.
+
+Retained whole provider sources use a dedicated configurable storage budget,
+separate from add-on artifact authority. The maintainer-approved defaults are
+20 GiB total, 8 GiB per acquired source and at least 2 GiB free space. Every limit
+is configurable. The total accounts for all simultaneously retained source
+files and copies, including owners still preparing, decoding, playing or held
+after uncertain cleanup. Reservations and actual I/O must remain bounded after
+caller loss. Exhaustion explicitly refuses caption preparation and preserves
+ordinary AV; it grants no partial-source, caption-readiness or acceptance waiver.
+The complete-response primitive's explicit byte ceiling does not implement this
+aggregate storage policy by itself.
 
 ## Consequences
 

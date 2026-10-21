@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'F5 Next uncertain-cleanup ownership completed; next one retained remote-only source for AV and captions'
+current_focus = 'F5 bounded complete HTTP acquisition primitive completed; next shared remote AV/caption integration'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,19 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F5 Next uncertain-cleanup ownership is completed within its host-finalizer
-boundary: revoke callbacks and retain complete context/output/registry/capacity
-on Next stop-timeout/stop-IO or producer uncertainty; confirmed failures recover.
-The final playback checkpoint still precedes capacity/registry release.
-P9A-04 and provider-scan identity remote_only_boundary.shutdown_ownership_followup
-own exact23 lifecycle/native compatibility passes, final checks and the retained
-sandbox-only failure.5280955b selected-provider identity and unchanged native
-Legacy/Hybrid smoke, caption clocks/editor/isolation/transport/F6 remain valid.
-Next finite F5 step: one seekable owned finite authenticated source shared by AV
-and captions, exact selected provider/version, complete EOF, bounded storage/
-time/admission/cancellation and cleanup. Existing single-use pipes cannot supply
-seek/range/reopen. Provider spool defaults await maintainer preference; addon
-quota authority cannot be reused. URI binding is not immutable source bytes.
+F5 complete finite HTTP acquisition primitive is completed:18 grouped EOF,
+partial/length/limit/deadline/caller-loss and actual-file-owner/cleanup-scope
+controls pass. The adapter retains actual I/O work independently of its caller;
+a deadline without settlement returns uncertainty. It grants no source readiness.
+P9A-04 and provider-scan identity remote_only_boundary.finite_http_acquisition_followup
+own current sources, logs and final lint. b9dd974e closes uncertain Next cleanup;
+5280955b closes selected-provider identity. Their unchanged native/editor/
+isolation/transport/F6 scopes remain valid; do not reopen without regression.
+Next finite F5 integration: reserve aggregate spool storage, acquire the exact
+current finite authenticated source once, native-qualify its full layout and
+retain those local bytes through actual caption and AV/session workers. Next
+runs locally and accepts Source::Local, but qualify per-programme reader
+ownership/reopen/expiry before choosing reuse: a session-only file vector is
+not bounded retention for a continuously watched channel.
+The adapter's per-response ceiling is not global quota authority. The approved
+provider budget is20GiB total,8GiB per source and at least2GiB free, all configurable;
+implement it separately from addon authority. Refusal preserves ordinary AV.
+Native metadata/page/clock readiness and cancellation/replacement proof remain required.
 Platform/adoption remains distinct: accepted Next.1 retains real outpoint/audio
 failures; candidate.4 is not the production repair. The macOS candidate-only
 workflow awaits permission. No known-red push or publication. Exact1b95 CI

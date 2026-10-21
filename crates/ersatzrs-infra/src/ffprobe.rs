@@ -16,12 +16,14 @@ pub mod teletext_probe;
 mod local;
 mod local_cleanup_scope;
 mod local_teletext;
+mod remote_source_snapshot;
 
 pub use local_cleanup_scope::{LocalProbeCleanupError, LocalProbeCleanupScope};
 pub use local_teletext::{
     LocalMediaProbe, LocalTeletextAcquisition, LocalTeletextHeaderProblem, LocalTeletextHeaders,
     LocalTeletextSourceGuard, LocalTeletextSourceGuardError,
 };
+pub use remote_source_snapshot::retain_complete_http_source;
 
 use std::collections::BTreeMap;
 use std::path::Path;
