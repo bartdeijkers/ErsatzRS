@@ -150,9 +150,11 @@ the GitHub Actions job environment and never touches `.cargo/config.toml`.
 
 The existing CI workflow reports **Next engine** as a separate job alongside
 Test and the Chromium/Firefox Playwright jobs. It uses the selected runner pool
-and the same tested ErsatzRS commit. The ordinary Test jobs exclude
-`next_engine::`; the Next job runs those component tests and the opt-in real-engine
-decoding test together. The ignored subprocess fixture remains helper-only.
+and the same tested ErsatzRS commit. General Test jobs exclude `next_engine::`
+and the teletext selectors. The Next job runs its non-teletext component and
+opt-in real-engine tests; named teletext cases move to the teletext jobs below
+with their original runtime requirements. The ignored subprocess fixture remains
+helper-only.
 Local `test-closeout` still runs the complete ordinary workspace selection.
 
 The job stages the published Next channel binary with the release staging
@@ -164,6 +166,48 @@ starting, and a job-specific temporary directory isolates its files from
 Playwright and the live server. Test output, JUnit timings, host logs, runtime
 identity and the ErsatzRS SHA are uploaded as `next-engine-<run>-<attempt>`.
 A Linux job is not acceptance for the other supported platforms.
+
+### Teletext CI checks
+
+CI reports **Teletext 1.5** and **Teletext 2.5** as separate Rust jobs.
+Playwright has six serial jobs: **general**, **1.5**, and **2.5**, each in
+Chromium and Firefox, with independent ports and diagnostic artifacts.
+`scripts/ci-teletext-selection.py` owns the disjoint selectors. General Test
+and Playwright jobs exclude the tests moved to these jobs. Rust integration
+binary names are matched as well as test names, so unnamed tests in teletext
+integration targets are retained on both runner pools.
+
+Shared infrastructure and unclassified teletext tests default to the 1.5 job.
+The 2.5 job owns the named enhanced object/resource/DRCS/palette/panel/context
+families, including their Level 1/1.5 fallback assertions. This is CI ownership,
+not a claim that either level has passed product acceptance. A change to shared
+validation, transport, preview, or fallback can require both jobs. Existing
+opt-in editor, decoder, client and native-platform acceptance remains opt-in;
+this split does not turn unavailable prerequisites into CI successes.
+
+Both Rust jobs preserve ordinary ignored-test behavior. Teletext tests moved
+from the Next job retain that job's runtime staging and include-ignored
+selection, while helper subprocess fixtures remain excluded. Each job retains
+its source SHA, runtime identity, logs and separate workspace/Next JUnit reports.
+
+To check a corrected revision without rerunning unrelated jobs:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=1.5
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=2.5
+# Run both levels and all four teletext browser jobs:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=all
+```
+
+Each level selects its Rust job and both browser projects. A job rerun tests
+its original SHA; dispatch tests the new branch revision. The title
+`CI (Teletext only)` and separate concurrency group prevent a focused run
+from cancelling or standing in for full CI. Focused modes are mutually
+exclusive. On the shared host, wait for an existing run using the same suite
+ports to finish before dispatching recovery. Record the new SHA, the targeted
+results and the earlier unaffected checks; do not claim fresh full CI from a
+targeted dispatch. For the same SHA,
+GitHub's **Re-run failed jobs** also preserves already successful jobs.
 
 ## Release-candidate CI gate
 
@@ -188,7 +232,8 @@ gh run view <run-id> --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
 Create the release tag only when the evidence run reports the same full
 `headSha`, `status: completed`, and `conclusion: success`, **and** its job
 list shows `success` for `Format`, `Clippy`, the `Test` job(s) for its runner
-configuration, both `Playwright E2E` projects, `Cargo deny`, and
+configuration, both `Teletext` levels, all six `Playwright E2E` suite/project
+combinations, `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
 because skipped jobs do not fail a run. A failed, cancelled, queued, or
 in-progress run is not release evidence. Any commit or amend after the
@@ -276,8 +321,9 @@ reusing unaffected checks, dispatch the existing workflow with `test_only`:
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f test_only=true
 ```
 
-This runs the complete `Test` job, including progress and architecture validation,
-and skips unrelated jobs. Hosted runners use the equivalent Rust test shards.
+This runs the general `Test` job, including progress and architecture validation,
+but excludes the separately owned teletext and Next tests. Unrelated jobs are
+skipped. Hosted runners use the equivalent Rust test shards.
 The run is titled `CI (Test only)` and cannot suppress a later full CI run through
 the duplicate-run check. It is scoped test evidence, not full CI acceptance.
 When deliberately preserving earlier checks, `[skip ci]` on the repair commit
@@ -318,13 +364,14 @@ gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f browser_only=both
 This runs the selected browser jobs with the existing matched Leptos build,
 pinned runtime staging and isolated application runner. `both` runs 22 cases
 through the existing matrix with `max-parallel: 1`, preserving serial execution
-and avoiding resource contention between browser projects. Normal CI still runs
-both full browser suites. The `CI (Browser recovery)` title identifies partial
-evidence and cannot suppress full CI through Preflight. Its browser-specific
+and avoiding resource contention between browser projects. Normal CI runs all
+six general/1.5/2.5 browser jobs. The `CI (Browser recovery)` title identifies
+partial evidence and cannot suppress full CI through Preflight. Its
+browser-specific
 concurrency group preserves other running gates. On a shared host, wait for an
 existing job of the same project to release its port before starting recovery.
-Combining this mode with `test_only` or
-`next_engine_only` fails before checkout or building.
+Combining this mode with `test_only`,
+`next_engine_only` or `teletext_only` fails before checkout or building.
 
 Record the repaired SHA and the earlier full run when reusing unaffected
 results. This three-spec recovery is scoped evidence; it does not establish full

@@ -1,5 +1,5 @@
 name: CI
-run-name: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
+run-name: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
 
 on:
   pull_request:
@@ -58,6 +58,16 @@ on:
         type: boolean
         required: false
         default: false
+      teletext_only:
+        description: Run teletext Rust and Chromium/Firefox jobs (partial CI; incompatible with other focused modes)
+        type: choice
+        required: false
+        default: none
+        options:
+          - none
+          - all
+          - '1.5'
+          - '2.5'
       browser_only:
         description: Run the 11 cases in the three failed-fixture specs in selected browsers (partial CI; incompatible with other focused modes)
         type: choice
@@ -82,7 +92,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}', inputs.browser_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}', inputs.browser_only) || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -117,7 +127,7 @@ jobs:
   # queue time to save a duplicate that is comparatively rare.
   preflight:
     name: Preflight
-    if: ${{ !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    if: ${{ !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -147,6 +157,7 @@ jobs:
               (run) => run.id !== context.runId && run.conclusion === 'success'
                 && run.display_title !== 'CI (Test only)'
                 && run.display_title !== 'CI (Next engine only)'
+                && run.display_title !== 'CI (Teletext only)'
                 && run.display_title !== 'CI (Browser recovery)',
             );
             core.setOutput('skip', proven.length > 0 ? 'true' : 'false');
@@ -212,7 +223,7 @@ jobs:
 
   test:
     name: Test
-    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner != 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
+    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner != 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # test build on the serial self-hosted runner.
@@ -240,12 +251,12 @@ jobs:
           if ! command -v cargo-nextest >/dev/null 2>&1; then
             cargo install cargo-nextest --version 0.9.140 --locked
           fi
-      # Unit, binary and integration tests, no doctests. Next component tests
-      # run in the dedicated Next engine job below. The `ci`
+      # Unit, binary and integration tests, no doctests. Next and teletext
+      # tests run in their dedicated jobs below. The `ci`
       # profile adds a JUnit report so per-test durations land in an artifact;
       # .config/nextest.toml reports anything slower than 60s in the summary.
       - name: Test
-        run: cargo nextest run --profile ci --workspace --lib --bins --tests -E 'not test(next_engine::)'
+        run: cargo nextest run --profile ci --workspace --lib --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust general)"
       # nextest resolves its store directory from the workspace root, not from
       # CARGO_TARGET_DIR, so the report lands in <workspace>/target/nextest even
       # though build artifacts go to the persistent target-dir. Look in both and
@@ -281,7 +292,7 @@ jobs:
 
   test_hosted:
     name: Test (${{ matrix.shard }})
-    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner == 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
+    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner == 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
     runs-on: ubuntu-24.04
     # Keep cold workspace linking within the hosted job lifetime by splitting
     # the large web crate's library and binary test targets. Preserve native
@@ -320,16 +331,16 @@ jobs:
           fi
       - name: Test remaining workspace
         if: matrix.shard == 'workspace-minus-web'
-        run: cargo nextest run --profile ci --workspace --exclude ersatzrs-web --lib --bins --tests -E 'not test(next_engine::)'
+        run: cargo nextest run --profile ci --workspace --exclude ersatzrs-web --lib --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust general)"
       - name: Test web library
         if: matrix.shard == 'web-lib'
-        run: cargo nextest run --profile ci -p ersatzrs-web --lib
+        run: cargo nextest run --profile ci -p ersatzrs-web --lib -E "$(python3 scripts/ci-teletext-selection.py rust general)"
       # `--bins` alone left the ersatzrs-web integration targets (tests/*.rs)
       # unrun on this path, while the self-hosted `test` job covers them
       # through `--tests`. Keep the two paths equivalent.
       - name: Test web binaries and integration tests
         if: matrix.shard == 'web-bins'
-        run: cargo nextest run --profile ci -p ersatzrs-web --bins --tests
+        run: cargo nextest run --profile ci -p ersatzrs-web --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust general)"
       - name: Validate progress index (docs/progress/)
         if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask progress check
@@ -344,7 +355,7 @@ jobs:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     needs: fmt
-    if: ${{ always() && !cancelled() && (!inputs.browser_only || inputs.browser_only == 'none') && (inputs.next_engine_only || (!inputs.test_only && needs.fmt.result == 'success')) }}
+    if: ${{ always() && !cancelled() && (!inputs.browser_only || inputs.browser_only == 'none') && (inputs.next_engine_only || (!inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && needs.fmt.result == 'success')) }}
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
@@ -352,9 +363,9 @@ jobs:
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
       - name: Validate dispatch mode
-        if: ${{ inputs.test_only && inputs.next_engine_only }}
+        if: ${{ inputs.next_engine_only && (inputs.test_only || (inputs.teletext_only && inputs.teletext_only != 'none')) }}
         run: |
-          echo "::error::test_only and next_engine_only are mutually exclusive; select one focused gate."
+          echo "::error::Focused CI modes are mutually exclusive; select one focused gate."
           exit 1
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -395,7 +406,7 @@ jobs:
           echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
       - name: Next components, real-engine decoding and HTTP EOF
         run: |
-          ./run.sh test -p ersatzrs-infra -p ersatzrs-web --lib --profile ci --run-ignored all -E '(test(next_engine::) or test(transport::iptv::next_media::)) and not test(fixture_child)' 2>&1 | tee ci-artifacts/next-engine/tests.log
+          ./run.sh test -p ersatzrs-infra -p ersatzrs-web --lib --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py rust next)" 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
@@ -427,14 +438,112 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  teletext:
+    name: Teletext ${{ matrix.level }}
+    defaults:
+      run:
+        shell: bash
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    needs: fmt
+    if: ${{ always() && !cancelled() && (!inputs.browser_only || inputs.browser_only == 'none') && ((inputs.teletext_only && inputs.teletext_only != 'none') || (!inputs.test_only && !inputs.next_engine_only && needs.fmt.result == 'success')) }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        level: ${{ fromJSON(inputs.teletext_only == '1.5' && '["1.5"]' || inputs.teletext_only == '2.5' && '["2.5"]' || '["1.5","2.5"]') }}
+    env:
+      CARGO_BUILD_JOBS: "1"
+      TELETEXT_LEVEL: ${{ matrix.level }}
+      NEXTEST_TEST_THREADS: "4"
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
+    steps:
+      - name: Validate dispatch mode
+        if: ${{ inputs.teletext_only && inputs.teletext_only != 'none' && (inputs.test_only || inputs.next_engine_only || (inputs.browser_only && inputs.browser_only != 'none')) }}
+        run: |
+          echo "::error::Focused CI modes are mutually exclusive; select one focused gate."
+          exit 1
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.runner == 'github-hosted' }}
+        with:
+          cache-bin: "true"
+      - name: Prepare isolated runtime and diagnostics
+        run: |
+          mkdir -p ci-artifacts/teletext-${{ matrix.level }}
+          runtime_tmp="$RUNNER_TEMP/teletext-${{ matrix.level }}-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -p "$runtime_tmp"
+          echo "TMPDIR=$runtime_tmp" >> "$GITHUB_ENV"
+          git rev-parse HEAD > ci-artifacts/teletext-${{ matrix.level }}/ersatzrs-sha.txt
+          rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
+      - name: Install test tools
+        run: |
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
+          if ! command -v cargo-nextest >/dev/null 2>&1; then
+            cargo install cargo-nextest --version 0.9.140 --locked
+          fi
+      - name: Stage Next and validated FFmpeg runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release/stage-next.py --rid linux-x64 --output "$TMPDIR/next" | tee ci-artifacts/teletext-${{ matrix.level }}/next-runtime.log
+          cp "$TMPDIR/next/origin.json" ci-artifacts/teletext-${{ matrix.level }}/next-origin.json
+          sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/teletext-${{ matrix.level }}/next-sha256.txt
+          echo "ETV_NEXT_FOLDER=$TMPDIR/next" >> "$GITHUB_ENV"
+          echo "ERSATZRS_NEXT_TEST_BIN=$TMPDIR/next/ersatztv-channel" >> "$GITHUB_ENV"
+          cargo run --locked -p ersatzrs-ffmpeg --example provision_runtime -- "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/teletext-${{ matrix.level }}/ffmpeg-runtime.log
+          python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/teletext-${{ matrix.level }}/rtsp-test-server.log
+          echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
+      - name: Teletext workspace regressions
+        run: |
+          cargo nextest run --profile ci --workspace --lib --bins --tests -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL")" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/tests.log
+      - name: Preserve workspace test timings
+        if: always()
+        run: |
+          report="target/nextest/ci/junit.xml"
+          if [ ! -f "$report" ]; then report="$CARGO_TARGET_DIR/nextest/ci/junit.xml"; fi
+          if [ -f "$report" ]; then cp "$report" ci-artifacts/teletext-${{ matrix.level }}/workspace-junit.xml; fi
+          rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
+      - name: Teletext Next runtime regressions
+        run: |
+          ./run.sh test -p ersatzrs-infra -p ersatzrs-web --lib --profile ci --run-ignored all --no-tests pass -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime)" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/next-tests.log
+      - name: Collect teletext diagnostics
+        if: always()
+        run: |
+          python3 - <<'PYCODE'
+          import os, pathlib, shutil
+          destination = pathlib.Path('ci-artifacts/teletext-${{ matrix.level }}')
+          destination.mkdir(parents=True, exist_ok=True)
+          for root in (pathlib.Path('target/nextest'), pathlib.Path(os.environ['CARGO_TARGET_DIR']) / 'nextest'):
+              report = root / 'ci/junit.xml'
+              if report.is_file():
+                  shutil.copyfile(report, destination / 'junit.xml')
+          for index, log in enumerate(pathlib.Path(os.environ.get('TMPDIR', os.environ['RUNNER_TEMP'])).glob('ersatzrs-smoke-*/ersatzrs-web-smoke.log')):
+              shutil.copyfile(log, destination / f'host-{index}.log')
+          PYCODE
+      - name: Upload teletext diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: teletext-${{ matrix.level }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-artifacts/teletext-${{ matrix.level }}/
+          if-no-files-found: warn
+          retention-days: 14
+
   hydration:
-    name: Playwright E2E (${{ matrix.project }})
+    name: Playwright E2E (${{ matrix.suite }}, ${{ matrix.project }})
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so formatting failures do not burn a browser
     # E2E build.
     needs: fmt
-    if: ${{ always() && !cancelled() && ((inputs.browser_only && inputs.browser_only != 'none') || (!inputs.test_only && !inputs.next_engine_only && needs.fmt.result == 'success')) }}
-    # One job per Playwright project. The suite runs on a single worker because
+    if: ${{ always() && !cancelled() && ((inputs.browser_only && inputs.browser_only != 'none') || (!inputs.test_only && !inputs.next_engine_only && ((inputs.teletext_only && inputs.teletext_only != 'none') || needs.fmt.result == 'success'))) }}
+    # One job per general/1.5/2.5 suite and Playwright project. The suite runs on a single worker because
     # it mutates shared application state in its test database (TEST.md): each
     # job runs scripts/e2e/playwright-e2e.sh separately, and that script
     # creates its own temporary database and web host per invocation, so the
@@ -442,31 +551,30 @@ jobs:
     # than by `--shard` also keeps every `mode: 'serial'` group whole inside
     # one job.
     #
-    # The projects run one after the other, not side by side. Both self-hosted
+    # All six suite/project combinations run serially within this workflow. Both self-hosted
     # runners share one machine, so two suites building ersatzrs-web and
     # driving browsers at once compete for its CPU and memory; an otherwise
     # unexplained Chromium hydration timeout occurred while both overlapped.
-    # `max-parallel: 1` removes that contention at the cost of roughly ten
-    # minutes of wall time; `fail-fast: false` still runs the second project
-    # when the first fails. It only serializes within one workflow run: a
+    # `max-parallel: 1` removes that contention; `fail-fast: false` still runs
+    # the remaining combinations when one fails. It only serializes within one workflow run: a
     # second concurrent run can still overlap. Each project keeps its own port
     # so either runner can take either job.
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"project":"firefox","port":"18410"}]}' || '{"include":[{"project":"chromium","port":"18409"},{"project":"firefox","port":"18410"}]}') }}
+      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}') }}
     env:
       # Keep CI independent from the maintainer's live admin server on 8409.
       ERSATZRS_E2E_PORT: ${{ matrix.port }}
       # Keep each project's result JSON and host log separate; both jobs upload
       # from test-results/.
-      ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.project }}
+      ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.suite }}-${{ matrix.project }}
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
       - name: Validate dispatch mode
-        if: ${{ inputs.browser_only && inputs.browser_only != 'none' && (inputs.test_only || inputs.next_engine_only) }}
+        if: ${{ inputs.browser_only && inputs.browser_only != 'none' && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none')) }}
         run: |
-          echo "::error::browser_only, test_only and next_engine_only are mutually exclusive; select one focused gate."
+          echo "::error::Focused CI modes are mutually exclusive; select one focused gate."
           exit 1
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -521,6 +629,7 @@ jobs:
         env:
           BROWSER_ONLY: ${{ inputs.browser_only }}
           BROWSER_PROJECT: ${{ matrix.project }}
+          BROWSER_SUITE: ${{ matrix.suite }}
         run: |
           export ErsatzRS_FFMPEG__PATH="$FFMPEG_PATH"
           export ErsatzRS_FFPROBE__PATH="$FFPROBE_PATH"
@@ -529,13 +638,15 @@ jobs:
           playwright_args=(--project="$BROWSER_PROJECT")
           if [[ -n "$BROWSER_ONLY" && "$BROWSER_ONLY" != 'none' ]]; then
             playwright_args+=(block-preview.spec.ts teletext-authoring-flow.spec.ts teletext-editor-flow.spec.ts)
+          else
+            playwright_args+=("$(python3 scripts/ci-teletext-selection.py browser "$BROWSER_SUITE")")
           fi
           scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
       - name: Upload Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-e2e-${{ matrix.project }}
+          name: playwright-e2e-${{ matrix.suite }}-${{ matrix.project }}
           path: |
             test-results/
             playwright-report/
@@ -621,6 +732,8 @@ jobs:
           test -f ARCHITECTURE.md
           test -f PORTING.md
           test -f docs/README.md
+      - name: Check CI suite ownership
+        run: python3 scripts/ci-teletext-selection_test.py
       - name: Check CI trigger contract
         run: |
           if grep -Eq '^[[:space:]]*types:.*[[:space:],]labeled([][[:space:],]|$)' .github/workflows/ci.yml; then

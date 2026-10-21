@@ -72,6 +72,15 @@ jobs:
           required = {'Format', 'Clippy', 'Test', 'Playwright E2E (chromium)',
                       'Playwright E2E (firefox)', 'Cargo deny', 'Documentation links',
                       'Commit lint', 'Next engine'}
+          # The checked-out immutable source determines the CI job contract;
+          # historical releases retain their original two-browser requirement.
+          from pathlib import Path
+          if 'teletext_only:' in Path('.github/workflows/ci.yml').read_text():
+              required -= {'Playwright E2E (chromium)', 'Playwright E2E (firefox)'}
+              required |= {'Teletext 1.5', 'Teletext 2.5'}
+              required |= {f'Playwright E2E ({suite}, {browser})'
+                           for suite in ('general', '1.5', '2.5')
+                           for browser in ('chromium', 'firefox')}
           runs = gh('run', 'list', '--workflow', 'ci.yml', '--commit', os.environ['SOURCE_SHA'],
                     '--limit', '100', '--json', 'databaseId,headSha,status,conclusion')
           for run in runs:

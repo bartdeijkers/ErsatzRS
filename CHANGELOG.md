@@ -631,6 +631,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Separate teletext Level 1.5/shared and Level 2.5 Rust CI checks, and split
+  Playwright into general and both teletext suites for Chromium and Firefox.
+  Teletext-only recovery can rerun either level without rerunning unrelated
+  checks; focused results remain distinct from complete green CI.
+
 - Require finite agent work packages with explicit closure conditions, scoped
   completion, evidence reuse and separate external blockers, preserving all
   acceptance requirements.
