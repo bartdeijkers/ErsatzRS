@@ -198,9 +198,44 @@ fn fold(
             .find(|resolution| resolution.display() == change.display())
             .ok_or_else(fail)?;
         let links = meta.compositional_links.map_or_else(
-            || resolution.materialized_level25_links().map_err(|_| fail()),
+            || {
+                (if *resolution.role(change.role())
+                    == ersatzrs_domain::TeletextMotRoleResolution::Unselected
+                {
+                    resolution.materialized_level25_attachment_links()
+                } else {
+                    resolution.materialized_level25_links()
+                })
+                .map_err(|_| fail())
+            },
             Ok,
         )?;
+        if change.is_unselected_restoration() {
+            let prior = cumulative
+                .object_page_selections
+                .iter()
+                .find(|prior| {
+                    prior.change().display() == change.display()
+                        && prior.change().role() == change.role()
+                })
+                .ok_or_else(fail)?;
+            if change.restored_unselected_links() != Some(meta.compositional_links)
+                || *resolution.role(change.role())
+                    != ersatzrs_domain::TeletextMotRoleResolution::Unselected
+                || change.replacement() != links.link(change.role())
+                || prior.document_index() != saved.document_index()
+                || prior.change().expected_links() != meta.compositional_links
+                || prior.change().expected_role()
+                    != ersatzrs_domain::TeletextMotRoleResolution::Unselected
+            {
+                return Err(fail());
+            }
+            cumulative.object_page_selections.retain(|prior| {
+                prior.change().display() != change.display()
+                    || prior.change().role() != change.role()
+            });
+            continue;
+        }
         cumulative.object_page_selections.retain(|prior| {
             prior.change().display() != change.display() || prior.change().role() != change.role()
         });
@@ -213,7 +248,7 @@ fn fold(
                 return Err(fail());
             }
         } else {
-            let rooted = TeletextObjectPageSelectionChange::new(
+            let rooted = rooted_selection(
                 change.display(),
                 change.role(),
                 meta.compositional_links,
@@ -320,7 +355,7 @@ pub(super) fn fold_announcement(
         ),
     )
     .map_err(|_| fail())?;
-    let updated = TeletextObjectPageSelectionChange::new(
+    let updated = rooted_selection(
         change.display(),
         role,
         change.expected_links(),
@@ -330,4 +365,136 @@ pub(super) fn fold_announcement(
     .map_err(|_| fail())?;
     *prior = TeletextSavedObjectPageSelectionChange::new(prior.document_index(), updated)?;
     Ok(true)
+}
+
+fn rooted_selection(
+    display: ersatzrs_domain::TeletextPageAddress,
+    role: ersatzrs_domain::TeletextX27LinkRole,
+    links: Option<ersatzrs_domain::TeletextX27Level25Links>,
+    expected: ersatzrs_domain::TeletextMotRoleResolution,
+    replacement: ersatzrs_domain::TeletextX27LinkDeclaration,
+) -> std::result::Result<
+    TeletextObjectPageSelectionChange,
+    ersatzrs_domain::TeletextObjectPageSelectionError,
+> {
+    if expected == ersatzrs_domain::TeletextMotRoleResolution::Unselected {
+        TeletextObjectPageSelectionChange::new_attachment(display, role, links, replacement)
+    } else {
+        TeletextObjectPageSelectionChange::new(display, role, links, expected, replacement)
+    }
+}
+
+/// Exact receipt-owned attachment roles to restore to their immutable unselected roots.
+pub struct NativeTeletextPageAttachmentsRestoreRequest {
+    pub name: String,
+    pub receipt_id: EntityId,
+    pub receipt_digest: String,
+    pub expected_design_head: i64,
+    pub roles: Vec<(
+        ersatzrs_domain::TeletextPageAddress,
+        ersatzrs_domain::TeletextX27LinkRole,
+    )>,
+}
+impl fmt::Debug for NativeTeletextPageAttachmentsRestoreRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NativeTeletextPageAttachmentsRestoreRequest")
+            .field("receipt_id", &self.receipt_id)
+            .field("expected_design_head", &self.expected_design_head)
+            .field("roles", &self.roles.len())
+            .finish_non_exhaustive()
+    }
+}
+/// Restore selected attachment roles as one unpublished concept; publication is separate.
+/// # Errors
+/// Rejects stale/foreign authority, nonattachment roles, incomplete final dependencies,
+/// exceeded bounds and protected changes without saving or altering live output.
+pub async fn restore_teletext_editorial_page_attachments(
+    application: &ApplicationServices,
+    request: NativeTeletextPageAttachmentsRestoreRequest,
+    policy: NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
+    apply(
+        application,
+        Request {
+            name: request.name,
+            receipt_id: request.receipt_id,
+            receipt_digest: request.receipt_digest,
+            expected_design_head: request.expected_design_head,
+            action: Action::Restorations(request.roles),
+        },
+        policy,
+        deadline,
+    )
+    .await
+}
+pub(super) fn preflight_restorations(
+    roles: &[(
+        ersatzrs_domain::TeletextPageAddress,
+        ersatzrs_domain::TeletextX27LinkRole,
+    )],
+    budget: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<()> {
+    check_deadline(deadline)?;
+    if roles.is_empty() {
+        return Err(NativeTeletextEditorialImportError::NoChanges);
+    }
+    if roles.len() > budget.max_records.min(budget.max_structure_items) {
+        return Err(NativeTeletextEditorialImportError::Budget);
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for &(display, role) in roles {
+        check_deadline(deadline)?;
+        if !seen.insert((display, role.wire_code())) {
+            return Err(fail());
+        }
+    }
+    Ok(())
+}
+pub(super) fn restore(
+    baselines: Baselines,
+    roles: Vec<(
+        ersatzrs_domain::TeletextPageAddress,
+        ersatzrs_domain::TeletextX27LinkRole,
+    )>,
+    revision: i64,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<(super::EncodedStoredDesign, String)> {
+    preflight_restorations(&roles, policy.document.validation.service, deadline)?;
+    let latest = declared(baselines.latest.as_ref().ok_or_else(fail)?)?;
+    let mut incoming = Vec::new();
+    for (display, role) in roles {
+        check_deadline(deadline)?;
+        let saved = baselines
+            .cumulative
+            .object_page_selections
+            .iter()
+            .find(|saved| saved.change().display() == display && saved.change().role() == role)
+            .ok_or_else(fail)?;
+        let metadata = latest
+            .semantic()
+            .page_enhancements()
+            .get(&display)
+            .ok_or_else(fail)?;
+        let resolution = latest
+            .resolutions()
+            .iter()
+            .find(|r| r.display() == display)
+            .ok_or_else(fail)?;
+        let intent = TeletextObjectPageSelectionChange::new_unselected_restoration(
+            saved.change(),
+            metadata.compositional_links,
+            *resolution.role(role),
+        )
+        .map_err(|_| fail())?;
+        incoming.push(
+            TeletextSavedObjectPageSelectionChange::for_unselected_restoration(
+                saved.document_index(),
+                intent,
+            )?,
+        );
+    }
+    encode(baselines, incoming, vec![], revision, policy, deadline)
 }

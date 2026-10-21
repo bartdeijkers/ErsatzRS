@@ -1,4 +1,4 @@
-//! Closed selected-role wire, deliberately separate from trusted domain results.
+//! Closed selected-role/attachment wire, separate from trusted domain results.
 use super::super::super::Entry;
 use super::super::map_only;
 use super::{invalid, TeletextDesignDocumentError, TeletextSavedObjectPageSelectionChange};
@@ -29,9 +29,18 @@ record!(StoredSelection {
     display: Entry,
     role: X27Role,
     expected_links: Vec<TeletextX27Level25Links>,
-    expected_role: SelectedRole,
+    expected_role: ExpectedRole,
     replacement: TeletextX27LinkDeclaration,
 });
+// Untagged preserves the historical selected-role object exactly; the new
+// branch accepts only its sealed marker, never a trusted resolution enum.
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum ExpectedRole {
+    Selected(SelectedRole),
+    Unselected(UnselectedRole),
+}
+record!(UnselectedRole { unselected: bool });
 record!(SelectedRole {
     target: TeletextRawDataPageNumber,
     requirements: Requirements,
@@ -206,6 +215,9 @@ impl From<Candidate> for TeletextMotResolutionCandidate {
     }
 }
 impl StoredSelection {
+    pub(super) const fn is_attachment(&self) -> bool {
+        matches!(self.expected_role, ExpectedRole::Unselected(_))
+    }
     pub(super) const fn is_drcs(&self) -> bool {
         matches!(self.role, X27Role::Drcs | X27Role::Gdrcs)
     }
@@ -213,21 +225,16 @@ impl StoredSelection {
 impl From<TeletextSavedObjectPageSelectionChange> for StoredSelection {
     fn from(value: TeletextSavedObjectPageSelectionChange) -> Self {
         let change = value.change();
-        let TeletextMotRoleResolution::Selected {
-            target,
-            requirements,
-            provenance,
-            original_mot,
-        } = change.expected_role()
-        else {
-            unreachable!("typed change requires selected original")
-        };
-        Self {
-            document_index: value.document_index(),
-            display: entry(change.display()),
-            role: change.role().into(),
-            expected_links: change.expected_links().into_iter().collect(),
-            expected_role: SelectedRole {
+        let expected_role = match change.expected_role() {
+            TeletextMotRoleResolution::Unselected => {
+                ExpectedRole::Unselected(UnselectedRole { unselected: true })
+            }
+            TeletextMotRoleResolution::Selected {
+                target,
+                requirements,
+                provenance,
+                original_mot,
+            } => ExpectedRole::Selected(SelectedRole {
                 target,
                 requirements: match requirements {
                     TeletextMotResolutionRequirements::MotExtent(value) => {
@@ -239,7 +246,17 @@ impl From<TeletextSavedObjectPageSelectionChange> for StoredSelection {
                 },
                 provenance: provenance.into(),
                 original_mot: original_mot.into_iter().map(Into::into).collect(),
-            },
+            }),
+            TeletextMotRoleResolution::Unresolved { .. } => {
+                unreachable!("typed saved change requires a selected or unselected original")
+            }
+        };
+        Self {
+            document_index: value.document_index(),
+            display: entry(change.display()),
+            role: change.role().into(),
+            expected_links: change.expected_links().into_iter().collect(),
+            expected_role,
             replacement: change.replacement(),
         }
     }
@@ -247,30 +264,50 @@ impl From<TeletextSavedObjectPageSelectionChange> for StoredSelection {
 impl TryFrom<StoredSelection> for TeletextSavedObjectPageSelectionChange {
     type Error = TeletextDesignDocumentError;
     fn try_from(value: StoredSelection) -> Result<Self, Self::Error> {
-        if value.expected_links.len() > 1 || value.expected_role.original_mot.len() > 1 {
+        if value.expected_links.len() > 1 {
             return Err(invalid());
         }
-        let original = value.expected_role;
-        let role = TeletextMotRoleResolution::Selected {
-            target: original.target,
-            requirements: match original.requirements {
-                Requirements::MotExtent { value } => {
-                    TeletextMotResolutionRequirements::MotExtent(value)
+        let display = address(&value.display);
+        let role = value.role.into();
+        let links = value.expected_links.into_iter().next();
+        let change = match value.expected_role {
+            ExpectedRole::Unselected(marker) => {
+                if !marker.unselected {
+                    return Err(invalid());
                 }
-                Requirements::X27Mask { value } => {
-                    TeletextMotResolutionRequirements::X27Mask(value)
+                TeletextObjectPageSelectionChange::new_attachment(
+                    display,
+                    role,
+                    links,
+                    value.replacement,
+                )
+            }
+            ExpectedRole::Selected(original) => {
+                if original.original_mot.len() > 1 {
+                    return Err(invalid());
                 }
-            },
-            provenance: original.provenance.into(),
-            original_mot: original.original_mot.into_iter().next().map(Into::into),
-        };
-        let change = TeletextObjectPageSelectionChange::new(
-            address(&value.display),
-            value.role.into(),
-            value.expected_links.into_iter().next(),
-            role,
-            value.replacement,
-        )
+                let expected = TeletextMotRoleResolution::Selected {
+                    target: original.target,
+                    requirements: match original.requirements {
+                        Requirements::MotExtent { value } => {
+                            TeletextMotResolutionRequirements::MotExtent(value)
+                        }
+                        Requirements::X27Mask { value } => {
+                            TeletextMotResolutionRequirements::X27Mask(value)
+                        }
+                    },
+                    provenance: original.provenance.into(),
+                    original_mot: original.original_mot.into_iter().next().map(Into::into),
+                };
+                TeletextObjectPageSelectionChange::new(
+                    display,
+                    role,
+                    links,
+                    expected,
+                    value.replacement,
+                )
+            }
+        }
         .map_err(|_| invalid())?;
         Self::new(value.document_index, change)
     }

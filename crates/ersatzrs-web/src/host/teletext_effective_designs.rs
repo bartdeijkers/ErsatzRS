@@ -86,6 +86,7 @@ pub struct RestoredEffectiveOriginalDesign {
     digest: String,
     originals: EncodedChannelTeletextOriginals,
     edit_policy: TeletextSavedEditPolicy,
+    object_page_attachments: Vec<ersatzrs_domain::TeletextObjectPageSelectionChange>,
 }
 impl RestoredEffectiveOriginalDesign {
     pub(super) fn with_resource_lifecycle_variants(
@@ -164,6 +165,11 @@ impl RestoredEffectiveOriginalDesign {
     #[must_use]
     pub fn transmissions(&self) -> &[TeletextServiceResourceTransmission] {
         &self.originals.transmissions
+    }
+    /// Authenticated cumulative first attachments, for descriptive native undo choices only.
+    #[must_use]
+    pub fn object_page_attachments(&self) -> &[ersatzrs_domain::TeletextObjectPageSelectionChange] {
+        &self.object_page_attachments
     }
     #[must_use]
     pub const fn edit_policy(&self) -> TeletextSavedEditPolicy {
@@ -719,5 +725,8 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
         digest: stored.digest,
         originals,
         edit_policy: parts.edit_policy,
+        object_page_attachments: super::teletext_designs::restored_object_page_attachments(
+            parts.editorial_overlay.as_ref(),
+        ),
     })
 }

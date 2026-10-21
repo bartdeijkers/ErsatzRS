@@ -215,6 +215,7 @@ pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignD
             | super::MAIN_RESOURCE_INVOCATION_VERSION
             | super::MAIN_PROGRAM_PRESENCE_VERSION
             | super::DRCS_PAGE_SELECTION_VERSION
+            | super::RETAINED_ROLE_ATTACHMENT_VERSION
     ) {
         if !matches!(value.prior_schema_version.0, Some(1..=24))
             || (value.schema_version == super::OBJECT_RESOURCE_ADDITION_VERSION

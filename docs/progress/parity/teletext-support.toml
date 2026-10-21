@@ -5,10 +5,10 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
-F2 metadata/zones/version and scoped F1 Main-presence/Base-prefix, joint original/
-added position undo and interleaved Base charset regeneration are closed.
-Retained DRCS/GDRCS selection/undo closes through localized admin/publication/
-reopen; V30 preserves prior versions and protected equal-pixel bank identities.
+F2 metadata/zones/version is closed. F1 closes Main-presence/Base-prefix,
+position undo, interleaved Base charset and retained DRCS selection (V30).
+role-attachment/identity.json closes native first POP/GPOP/DRCS/GDRCS attachment,
+retarget, partial/exact root restore (V31), localized headed forms and strict lint.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay
@@ -26,9 +26,8 @@ editor/publication and default2 two-channel TCP/AV/transport proofs retain scope
 failure_prefix proves literal failed-prefix retention; initial EOF stays
 unclassified, with no unchanged retries. Full client/interchange/runtime stays open.
 
-P9A-04 owns closed V25–28 resource/Main/Local selection and absent-X27/MOT root
-undo (e80c8367), protected refusal, effects/TTI/preview/publication/reopen and
-localized matched-bundle proof. Other F1 work stays open; Base/Local stay distinct.
+P9A-04 owns closed V25–28 selection/root undo(e80c8367), protected effects,
+TTI/preview/publication/reopen and localized bundle proof. Base/Local stay distinct.
 
 Profile/theme/mirror/Lua proof retains scope. P9A-04 owns actual_output_status
 Linux/Windows63/headed/restart/conditional Kodi and X2 startup_health active-profile/

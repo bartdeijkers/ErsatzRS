@@ -18,6 +18,15 @@ fn kind_label(kind: TeletextResourceKind) -> &'static str {
         _ => "—",
     }
 }
+fn role_name(kind: TeletextResourceKind) -> &'static str {
+    match kind {
+        TeletextResourceKind::Pop => "pop",
+        TeletextResourceKind::Gpop => "gpop",
+        TeletextResourceKind::Drcs => "drcs",
+        TeletextResourceKind::Gdrcs => "gdrcs",
+        _ => "",
+    }
+}
 fn object_label(identity: TeletextObjectIdentity) -> String {
     if let Some(resource) = identity.resource() {
         format!(
@@ -200,6 +209,18 @@ pub(super) fn form(
     data: &TeletextDraftPreviewData,
     observation: &TeletextDraftPublicationObservation,
 ) -> AnyView {
+    (
+        selection_form(data, observation),
+        attachment_forms(data, observation),
+        restoration_forms(data, observation),
+    )
+        .into_any()
+}
+
+fn selection_form(
+    data: &TeletextDraftPreviewData,
+    observation: &TeletextDraftPublicationObservation,
+) -> AnyView {
     if data.object_choices.pages.is_empty()
         && data.object_choices.calls.is_empty()
         && data.object_choices.main_calls.is_empty()
@@ -212,13 +233,7 @@ pub(super) fn form(
         let prefix = format!("teletext-object-page-{index}");
         let target_id = format!("{prefix}-target");
         let mask_id = format!("{prefix}-mask");
-        let role = match page.role {
-            TeletextResourceKind::Pop => "pop",
-            TeletextResourceKind::Gpop => "gpop",
-            TeletextResourceKind::Drcs => "drcs",
-            TeletextResourceKind::Gdrcs => "gdrcs",
-            _ => "",
-        };
+        let role = role_name(page.role);
         let display = serde_json::to_string(&page.display).unwrap_or_default();
         let legend = format!("{} {} / {:04X} · {}",tr(TextKey::TeletextResourceDisplay),page.display.page.get(),page.display.subcode.get(),kind_label(page.role));
         view! {
@@ -261,4 +276,203 @@ pub(super) fn form(
             <p style:display=if current { "none" } else { "" }>{tr(TextKey::TeletextResourceEditCurrentHelp)}</p>
         </form>
     }.into_any()
+}
+
+fn attachment_forms(
+    data: &TeletextDraftPreviewData,
+    observation: &TeletextDraftPublicationObservation,
+) -> AnyView {
+    let current = data.revision == observation.current_design_head;
+    data.object_choices.unselected_roles.iter().enumerate().map(|(index, role)| {
+        let prefix = format!("teletext-object-page-attachment-{index}");
+        let list_id = format!("{prefix}-pages");
+        let help_id = format!("{prefix}-help");
+        let mask_help_id = format!("{prefix}-mask-help");
+        let display = serde_json::to_string(&role.display).unwrap_or_default();
+        let first = data.object_resources.iter().find(|resource| resource.kind() == role.role);
+        let target = first.map_or_else(String::new, |resource| raw_page_label(resource.page()));
+        let mask = first.map_or(0, |first| data.object_resources.iter()
+            .filter(|resource| resource.kind() == role.role && resource.page() == first.page())
+            .fold(0u16, |mask, resource| mask | (1u16 << resource.logical_subpage().get())));
+        let mut seen = std::collections::BTreeSet::new();
+        let options = data.object_resources.iter().filter(|resource| resource.kind() == role.role)
+            .filter(|resource| seen.insert((resource.page().magazine(), resource.page().page())))
+            .map(|resource| view! { <option value=raw_page_label(resource.page())></option> }).collect_view();
+        let legend = format!("{} {} / {:04X} · {}", tr(TextKey::TeletextResourceDisplay),
+            role.display.page.get(), role.display.subcode.get(), kind_label(role.role));
+        view! {
+            <form method="post" action="/admin-api/teletext/design/attach-object-page"
+                class=style::preview_form data-testid="teletext-object-page-attach-form" aria-describedby=help_id.clone()>
+                {editorial_export_fields(data,observation)}
+                {hidden("display",display)}
+                {hidden("role",role_name(role.role).to_owned())}
+                <fieldset disabled=!current style:min-width="0">
+                    <legend>{tr(TextKey::TeletextObjectAttachmentTitle)}" · "{legend}</legend>
+                    <p id=help_id.clone()>{tr(TextKey::TeletextObjectAttachmentHelp)}</p>
+                    <label for=format!("{prefix}-name")>{tr(TextKey::TeletextDesignName)}</label>
+                    <input id=format!("{prefix}-name") name="name" required maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
+                    <datalist id=list_id.clone()>{options}</datalist>
+                    <label for=format!("{prefix}-target")>{tr(TextKey::TeletextObjectSelectionPageTarget)}</label>
+                    <input id=format!("{prefix}-target") name="target" required maxlength="3"
+                        pattern="[1-8][0-9A-Fa-f]{2}" value=target list=list_id/>
+                    <label for=format!("{prefix}-mask")>{tr(TextKey::TeletextObjectSelectionMask)}</label>
+                    <input id=format!("{prefix}-mask") name="mask" required pattern="[0-9A-Fa-f]{1,4}"
+                        minlength="1" maxlength="4" value=format!("{mask:04X}") aria-describedby=mask_help_id.clone()/>
+                    <p id=mask_help_id>{tr(TextKey::TeletextObjectSelectionMaskHelp)}</p>
+                    <button type="submit" class=btn_class(ButtonVariant::Primary)>{tr(TextKey::TeletextObjectAttachmentAction)}</button>
+                </fieldset>
+                <p style:display=if current { "none" } else { "" }>{tr(TextKey::TeletextResourceEditCurrentHelp)}</p>
+            </form>
+        }
+    }).collect_view().into_any()
+}
+
+fn restoration_forms(
+    data: &TeletextDraftPreviewData,
+    observation: &TeletextDraftPublicationObservation,
+) -> AnyView {
+    let current = data.revision == observation.current_design_head;
+    data.object_choices.restorable_attachments.iter().enumerate().map(|(index, role)| {
+        let prefix = format!("teletext-object-page-restore-{index}");
+        let help_id = format!("{prefix}-help");
+        let display = serde_json::to_string(&role.display).unwrap_or_default();
+        let legend = format!("{} {} / {:04X} · {}",tr(TextKey::TeletextResourceDisplay),
+            role.display.page.get(),role.display.subcode.get(),kind_label(role.role));
+        view! {
+            <form method="post" action="/admin-api/teletext/design/restore-page-attachment"
+                class=style::preview_form data-testid="teletext-object-page-restore-form" aria-describedby=help_id.clone()>
+                {editorial_export_fields(data,observation)}
+                {hidden("display",display)}
+                {hidden("role",role_name(role.role).to_owned())}
+                <fieldset disabled=!current style:min-width="0">
+                    <legend>{tr(TextKey::TeletextObjectAttachmentRestoreTitle)}" · "{legend}</legend>
+                    <p id=help_id.clone()>{tr(TextKey::TeletextObjectAttachmentRestoreHelp)}</p>
+                    <label for=format!("{prefix}-name")>{tr(TextKey::TeletextDesignName)}</label>
+                    <input id=format!("{prefix}-name") name="name" required maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
+                    <button type="submit" class=btn_class(ButtonVariant::Primary)>{tr(TextKey::TeletextObjectAttachmentRestoreAction)}</button>
+                </fieldset>
+                <p style:display=if current { "none" } else { "" }>{tr(TextKey::TeletextResourceEditCurrentHelp)}</p>
+            </form>
+        }
+    }).collect_view().into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::admin::server_fns::teletext_drafts::{
+        TeletextDraftPublicationState, TeletextObjectChoicesObservation,
+    };
+
+    fn preview() -> TeletextDraftPreviewData {
+        serde_json::from_value(serde_json::json!({
+            "channel_id": 1, "design_id": 2, "revision": 3,
+            "owner": {"page": 201, "subcode": 32}, "image_url": null,
+            "effective": false, "valid_until": null, "pages": [],
+            "resource_objects": [],
+            "object_resources": [
+                {"kind": "drcs", "page": {"magazine": 1, "page": 192}, "logical_subpage": 0},
+                {"kind": "drcs", "page": {"magazine": 1, "page": 192}, "logical_subpage": 3},
+                {"kind": "gdrcs", "page": {"magazine": 1, "page": 193}, "logical_subpage": 0}
+            ],
+            "object_choices": {
+                "pages": [], "calls": [], "main_calls": [], "definitions": [],
+                "unselected_roles": [{"display": {"page": 201, "subcode": 32}, "role": "drcs"}],
+                "restorable_attachments": [{"display": {"page": 200, "subcode": 32}, "role": "gpop"}]
+            },
+            "navigation": [], "diagnostics": [], "authoring": [], "publication": null,
+            "outputs": null
+        })).unwrap()
+    }
+
+    fn observation() -> TeletextDraftPublicationObservation {
+        TeletextDraftPublicationObservation {
+            digest: "a".repeat(64),
+            current_design_head: 3,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: true,
+            can_publish: false,
+            replaces_pending: false,
+        }
+    }
+
+    #[test]
+    fn attachment_forms_are_localized_named_native_concepts_with_exact_fences_and_history() {
+        for language in [
+            "en-us", "nl", "de-de", "fr-fr", "es-es", "es-419", "it-it", "pt-br", "pl",
+        ] {
+            Owner::new().with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let mut data = preview();
+                let mut observed = observation();
+                let html = form(&data, &observed).to_html();
+                for key in [
+                    TextKey::TeletextObjectAttachmentTitle,
+                    TextKey::TeletextObjectAttachmentHelp,
+                    TextKey::TeletextObjectAttachmentAction,
+                    TextKey::TeletextObjectAttachmentRestoreTitle,
+                    TextKey::TeletextObjectAttachmentRestoreHelp,
+                    TextKey::TeletextObjectAttachmentRestoreAction,
+                    TextKey::TeletextObjectSelectionMaskHelp,
+                ] {
+                    assert!(html.contains(tr(key)), "{language}: {key:?}");
+                }
+                for action in ["attach-object-page", "restore-page-attachment"] {
+                    assert!(html.contains(&format!(
+                        "method=\"post\" action=\"/admin-api/teletext/design/{action}\""
+                    )));
+                }
+                for field in [
+                    "channel_id",
+                    "design_id",
+                    "revision",
+                    "digest",
+                    "expected_design_head",
+                    "name",
+                    "display",
+                    "role",
+                ] {
+                    assert_eq!(
+                        html.matches(&format!("name=\"{field}\"")).count(),
+                        2,
+                        "{language}: {field}"
+                    );
+                }
+                assert!(html.contains("value=\"1C0\""));
+                assert!(html.contains("value=\"0009\""));
+                assert!(
+                    !html.contains("value=\"1C1\""),
+                    "another kind is never an attachment target"
+                );
+                assert_eq!(
+                    html.matches("<option ").count(),
+                    1,
+                    "deduplicate retained S1 owners"
+                );
+                assert!(!html.contains("teletext-object-pages-choose-form"));
+                assert!(!html.contains("<fieldset disabled"));
+                observed.current_design_head += 1;
+                let historical = form(&data, &observed).to_html();
+                assert_eq!(historical.matches("<fieldset disabled").count(), 2);
+                assert!(historical.contains(tr(TextKey::TeletextResourceEditCurrentHelp)));
+                data.object_choices.unselected_roles.clear();
+                data.object_choices.restorable_attachments.clear();
+                assert!(!form(&data, &observed).to_html().contains("<form"));
+            });
+        }
+    }
+
+    #[test]
+    fn historical_choice_observations_default_new_attachment_lists_without_inventing_targets() {
+        let observed: TeletextObjectChoicesObservation =
+            serde_json::from_value(serde_json::json!({
+                "pages": [], "calls": [], "main_calls": [], "definitions": []
+            }))
+            .unwrap();
+        assert!(observed.unselected_roles.is_empty());
+        assert!(observed.restorable_attachments.is_empty());
+        assert!(observed.pages.is_empty());
+    }
 }

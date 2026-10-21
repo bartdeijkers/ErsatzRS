@@ -12,6 +12,8 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 mod actual_admin;
 #[path = "raw_page_selection/checks.rs"]
 mod checks;
+#[path = "raw_page_selection/first_attachment.rs"]
+mod first_attachment;
 #[path = "raw_page_selection/lifecycle.rs"]
 mod lifecycle;
 #[path = "raw_page_selection/negatives.rs"]

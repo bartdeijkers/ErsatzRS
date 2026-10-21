@@ -3,17 +3,20 @@ use super::{
     check_deadline, TeletextAuthoringError, TeletextMainCallChoiceObservation,
     TeletextObjectCallChoiceObservation, TeletextObjectChoicesObservation,
     TeletextObjectDefinitionChoiceObservation, TeletextObjectPageChoiceObservation,
+    TeletextObjectPageRoleObservation,
 };
 use ersatzrs_domain::{
     TeletextEnhancementCommand, TeletextEnhancementObjectDefinition,
-    TeletextMotResolutionRequirements, TeletextMotRoleResolution, TeletextPageAddress,
-    TeletextResourceKind, TeletextX27LinkRole,
+    TeletextMotResolutionRequirements, TeletextMotRoleResolution,
+    TeletextObjectPageSelectionChange, TeletextPageAddress, TeletextResourceKind,
+    TeletextX27LinkRole,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 
 pub(super) fn observe(
     service: &EncodedTeletextAuthoredService,
+    attachments: &[TeletextObjectPageSelectionChange],
     deadline: Instant,
 ) -> Result<TeletextObjectChoicesObservation, TeletextAuthoringError> {
     check_deadline(deadline)?;
@@ -21,12 +24,39 @@ pub(super) fn observe(
     for resolution in service.declared().resolutions() {
         check_deadline(deadline)?;
         for role in TeletextX27LinkRole::ALL {
+            if *resolution.role(role) == TeletextMotRoleResolution::Unselected
+                && service
+                    .declared()
+                    .resource_inventory()
+                    .iter()
+                    .any(|resource| resource.kind() == role.kind())
+            {
+                observed
+                    .unselected_roles
+                    .push(TeletextObjectPageRoleObservation {
+                        display: resolution.display(),
+                        role: role.kind(),
+                    });
+            }
             append_role(
                 &mut observed,
                 resolution.display(),
                 role.kind(),
                 *resolution.role(role),
             );
+        }
+    }
+    for attachment in attachments {
+        check_deadline(deadline)?;
+        if attachment.expected_role() == TeletextMotRoleResolution::Unselected
+            && !attachment.is_unselected_restoration()
+        {
+            observed
+                .restorable_attachments
+                .push(TeletextObjectPageRoleObservation {
+                    display: attachment.display(),
+                    role: attachment.role().kind(),
+                });
         }
     }
     for definition in service.declared().semantic().objects().definitions() {

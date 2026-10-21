@@ -7,6 +7,31 @@ use super::{
 };
 
 impl TeletextDeclaredDisplayResolution {
+    /// Materialize an original first-attachment context without inventing MOT authority.
+    ///
+    /// An absent MOT is sufficient only when every authenticated role is exactly
+    /// unselected. Existing selected/MOT contexts retain their original rules.
+    /// This grants no inventory, edit or publication authority.
+    /// # Errors
+    /// Rejects unresolved roles or any non-MOT selected role requiring X27 provenance.
+    pub fn materialized_level25_attachment_links(
+        &self,
+    ) -> Result<TeletextX27Level25Links, TeletextDrcsExtensionError> {
+        if self.mot().is_some()
+            || TeletextX27LinkRole::ALL
+                .iter()
+                .any(|role| *self.role(*role) != TeletextMotRoleResolution::Unselected)
+        {
+            return self.materialized_level25_links();
+        }
+        materialize(self).map_err(|error| match error {
+            MaterializationError::Unproven => TeletextDrcsExtensionError::UnprovenOtherRoles {
+                display: self.display(),
+            },
+            MaterializationError::Link(error) => TeletextDrcsExtensionError::Link(error),
+        })
+    }
+
     /// Derive four X27 roles solely from this authenticated MOT resolution.
     /// This does not validate inventory, grant edit permission or authorize
     /// publication, and cannot materialize an existing X27-mask resolution.

@@ -219,16 +219,14 @@ fn raw_choice_preflight_rejects_duplicates_bounds_and_empty_actions() {
         preflight(&[page, page], &[], budget(), deadline()),
         Err(NativeTeletextEditorialImportError::Association)
     ));
-    assert!(matches!(
-        preflight(
-            &[TeletextObjectPageChoice {
-                role: TeletextX27LinkRole::Drcs,
-                ..page
-            }],
-            &[],
-            budget(),
-            deadline()
-        ),
-        Err(NativeTeletextEditorialImportError::Association)
-    ));
+    // Raw choices bound all four admitted roles. Native source resolution and
+    // closed saved versions separately authenticate selection/attachment authority.
+    for role in TeletextX27LinkRole::ALL {
+        let choice = TeletextObjectPageChoice { role, ..page };
+        assert!(preflight(&[choice], &[], budget(), deadline()).is_ok());
+        assert!(matches!(
+            preflight(&[choice, choice], &[], budget(), deadline()),
+            Err(NativeTeletextEditorialImportError::Association)
+        ));
+    }
 }

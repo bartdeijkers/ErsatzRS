@@ -56,6 +56,7 @@ const OBJECT_PAGE_SELECTION_VERSION: u16 = 27;
 const MAIN_RESOURCE_INVOCATION_VERSION: u16 = 28;
 const MAIN_PROGRAM_PRESENCE_VERSION: u16 = 29;
 const DRCS_PAGE_SELECTION_VERSION: u16 = 30;
+const RETAINED_ROLE_ATTACHMENT_VERSION: u16 = 31;
 #[path = "editorial_overlay/main_program_presence.rs"]
 pub(super) mod main_program_presence;
 use main_program_presence::{BorrowedPresence, OptionalStoredPresence};
@@ -1060,7 +1061,9 @@ impl TeletextSavedEditorialOverlay {
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        if self.has_drcs_page_selections() {
+        if self.has_retained_role_attachments() {
+            RETAINED_ROLE_ATTACHMENT_VERSION
+        } else if self.has_drcs_page_selections() {
             DRCS_PAGE_SELECTION_VERSION
         } else if !self.main_program_presence_overlays.is_empty() {
             MAIN_PROGRAM_PRESENCE_VERSION
@@ -1618,6 +1621,7 @@ impl StoredOverlay {
                 | MAIN_RESOURCE_INVOCATION_VERSION
                 | MAIN_PROGRAM_PRESENCE_VERSION
                 | DRCS_PAGE_SELECTION_VERSION
+                | RETAINED_ROLE_ATTACHMENT_VERSION
         ) {
             return Ok(());
         }
@@ -1771,6 +1775,7 @@ impl StoredOverlay {
                 | MAIN_RESOURCE_INVOCATION_VERSION
                 | MAIN_PROGRAM_PRESENCE_VERSION
                 | DRCS_PAGE_SELECTION_VERSION
+                | RETAINED_ROLE_ATTACHMENT_VERSION
         ) {
             return object_resources::restore(self, documents, budget);
         }
@@ -2464,3 +2469,7 @@ mod main_program_presence_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/drcs_page_selection_tests.rs"]
 mod drcs_page_selection_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/retained_role_attachment_tests.rs"]
+mod retained_role_attachment_tests;

@@ -103,6 +103,21 @@ even when masks coincide. Fresh TTI retains saved authority but cannot create or
 undo it; exact-root undo remains an explicit native selection. No bank creation,
 renaming, package mutation or extra publication authority follows.
 
+An explicit first-attachment intent admits a retained POP/GPOP or Normal/Global
+DRCS bank for an exactly Unselected display role. Private V31 preserves exact
+original X27 presence/body and producer ownership; earlier formats retain their
+closed meaning. An absent-MOT context may materialize four unused roles only
+when all four authenticated roles are Unselected. Existing MOT-only
+materialization and announcement guards remain unchanged. Complete source and
+final-factory qualification, resource inventory and protected consumers remain
+mandatory. Subsequent retargets retain the Unselected root. Explicit restoration
+authenticates the current receipt and immutable original before removing only
+the matching cumulative attachment; partial restoration retains sibling roles,
+and final restoration preserves exact original X27 absence or body. Its typed
+undo marker is transient and cannot enter saved overlays or direct domain
+reconstruction. Saving remains an unpublished concept; publication is separate.
+No bank creation, new invocation or uploaded TTI selection authority follows.
+
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.
 Independent old/new resource allocations and complete native packet comparisons

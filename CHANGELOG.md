@@ -56,6 +56,9 @@ release section when tagging a release.
   preserving glyph slots, subtables and protected shared consumers, including
   equal-pixel bank changes. Exact undo restores the original design; saving a
   choice still requires separate publication.
+  Named draft forms can also attach retained POP/GPOP and Normal/Global DRCS
+  banks to previously unselected roles. Retargeting and partial undo preserve
+  sibling choices; exact undo restores the original absent or unused links.
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous

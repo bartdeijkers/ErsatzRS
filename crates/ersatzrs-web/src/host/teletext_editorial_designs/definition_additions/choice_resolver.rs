@@ -81,6 +81,62 @@ pub async fn choose_teletext_editorial_object_pages(
     .await
 }
 
+/// Attach retained banks only to exactly unselected receipt-owned roles.
+/// # Errors
+/// Rejects existing selections, consumer edits, stale authority and incomplete
+/// final native graphs; the operation saves only an unpublished concept.
+pub async fn attach_teletext_editorial_object_pages(
+    application: &ApplicationServices,
+    request: NativeTeletextObjectPagesChooseRequest,
+    policy: NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
+    if !request.calls.is_empty() {
+        return Err(invalid());
+    }
+    apply(
+        application,
+        Request {
+            name: request.name,
+            receipt_id: request.receipt_id,
+            receipt_digest: request.receipt_digest,
+            expected_design_head: request.expected_design_head,
+            action: Action::AttachmentChoices(request.selections),
+        },
+        policy,
+        deadline,
+    )
+    .await
+}
+pub(super) fn resolve_attachments(
+    latest: &QualifiedBaseline,
+    choices: &[TeletextObjectPageChoice],
+    budget: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<(
+    Vec<TeletextSavedObjectPageSelectionChange>,
+    Vec<TeletextResourceObjectProgramOverlay>,
+)> {
+    preflight(choices, &[], budget, deadline)?;
+    let service = latest
+        .original
+        .view()
+        .encoded()
+        .ok_or_else(invalid)?
+        .declared();
+    for choice in choices {
+        check_deadline(deadline)?;
+        if !service.resolutions().iter().any(|resolution| {
+            resolution.display() == choice.display
+                && *resolution.role(choice.role)
+                    == ersatzrs_domain::TeletextMotRoleResolution::Unselected
+        }) {
+            return Err(invalid());
+        }
+    }
+    resolve(latest, choices, &[], budget, deadline)
+}
+
 fn invalid() -> NativeTeletextEditorialImportError {
     NativeTeletextEditorialImportError::Association
 }
@@ -178,9 +234,14 @@ fn resolve_pages(
             .ok_or_else(invalid)?;
         let links = metadata.compositional_links.map_or_else(
             || {
-                resolution
-                    .materialized_level25_links()
-                    .map_err(|_| invalid())
+                (if *resolution.role(choice.role)
+                    == ersatzrs_domain::TeletextMotRoleResolution::Unselected
+                {
+                    resolution.materialized_level25_attachment_links()
+                } else {
+                    resolution.materialized_level25_links()
+                })
+                .map_err(|_| invalid())
             },
             Ok,
         )?;
@@ -203,13 +264,24 @@ fn resolve_pages(
             }
             continue;
         }
-        let change = TeletextObjectPageSelectionChange::new(
-            choice.display,
-            choice.role,
-            metadata.compositional_links,
-            *resolution.role(choice.role),
-            replacement,
-        )
+        let change = if *resolution.role(choice.role)
+            == ersatzrs_domain::TeletextMotRoleResolution::Unselected
+        {
+            TeletextObjectPageSelectionChange::new_attachment(
+                choice.display,
+                choice.role,
+                metadata.compositional_links,
+                replacement,
+            )
+        } else {
+            TeletextObjectPageSelectionChange::new(
+                choice.display,
+                choice.role,
+                metadata.compositional_links,
+                *resolution.role(choice.role),
+                replacement,
+            )
+        }
         .map_err(|_| invalid())?;
         let mapping = latest
             .body

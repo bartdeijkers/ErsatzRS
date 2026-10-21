@@ -63,7 +63,7 @@ mod object_choices;
 pub use crate::admin::server_fns::teletext_drafts::{
     TeletextMainCallChoiceObservation, TeletextObjectCallChoiceObservation,
     TeletextObjectChoicesObservation, TeletextObjectDefinitionChoiceObservation,
-    TeletextObjectPageChoiceObservation,
+    TeletextObjectPageChoiceObservation, TeletextObjectPageRoleObservation,
 };
 mod scope;
 pub use metadata::TeletextAuthoringPageMetadata;
@@ -961,7 +961,11 @@ fn render_original(
         pages,
         resource_objects: resource_objects(service),
         object_resources: object_resources(service),
-        object_choices: object_choices::observe(service, deadline)?,
+        object_choices: object_choices::observe(
+            service,
+            restored.object_page_attachments(),
+            deadline,
+        )?,
         authoring: metadata::base(restored, owner, deadline)?,
         hold,
         deadline,

@@ -154,6 +154,7 @@ pub(super) fn check_version(stored: &StoredOverlay) -> Result<(), TeletextDesign
             | super::MAIN_RESOURCE_INVOCATION_VERSION
             | super::MAIN_PROGRAM_PRESENCE_VERSION
             | super::DRCS_PAGE_SELECTION_VERSION
+            | super::RETAINED_ROLE_ATTACHMENT_VERSION
     ) {
         if stored
             .object_subpage_announcements

@@ -88,14 +88,16 @@ impl fmt::Debug for NativeTeletextObjectResourcesAddRequest {
 #[path = "definition_additions/page_selections.rs"]
 mod page_selections;
 pub use page_selections::{
-    select_teletext_editorial_object_pages, NativeTeletextObjectPagesSelectRequest,
+    restore_teletext_editorial_page_attachments, select_teletext_editorial_object_pages,
+    NativeTeletextObjectPagesSelectRequest, NativeTeletextPageAttachmentsRestoreRequest,
 };
 #[path = "definition_additions/choice_resolver.rs"]
 mod choice_resolver;
 pub use choice_resolver::{
-    choose_teletext_editorial_object_consumers, choose_teletext_editorial_object_pages,
-    NativeTeletextObjectConsumersChooseRequest, NativeTeletextObjectPagesChooseRequest,
-    TeletextMainCallChoice, TeletextObjectCallChoice, TeletextObjectPageChoice,
+    attach_teletext_editorial_object_pages, choose_teletext_editorial_object_consumers,
+    choose_teletext_editorial_object_pages, NativeTeletextObjectConsumersChooseRequest,
+    NativeTeletextObjectPagesChooseRequest, TeletextMainCallChoice, TeletextObjectCallChoice,
+    TeletextObjectPageChoice,
 };
 
 #[path = "definition_additions/consumer_selections.rs"]
@@ -105,6 +107,13 @@ pub use consumer_selections::{
 };
 
 enum Action {
+    AttachmentChoices(Vec<TeletextObjectPageChoice>),
+    Restorations(
+        Vec<(
+            ersatzrs_domain::TeletextPageAddress,
+            ersatzrs_domain::TeletextX27LinkRole,
+        )>,
+    ),
     Consumers(Box<TeletextEditorialChanges>),
     ConsumerChoices {
         selections: Vec<TeletextObjectPageChoice>,
@@ -154,6 +163,12 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
         return Err(NativeTeletextEditorialImportError::Budget);
     }
     let definitions = match &request.action {
+        Action::AttachmentChoices(choices) => {
+            return choice_resolver::preflight(choices, &[], budget, deadline);
+        }
+        Action::Restorations(roles) => {
+            return page_selections::preflight_restorations(roles, budget, deadline);
+        }
         Action::Consumers(changes) => {
             return consumer_selections::preflight(changes, budget, deadline)
         }
@@ -261,7 +276,9 @@ fn resolve(
 )> {
     check_deadline(deadline)?;
     let (source, new_object_id) = match action {
-        Action::Selections { .. }
+        Action::AttachmentChoices(_)
+        | Action::Restorations(_)
+        | Action::Selections { .. }
         | Action::Choices { .. }
         | Action::Consumers(_)
         | Action::ConsumerChoices { .. } => {
@@ -421,6 +438,23 @@ fn definition_addition(
     })
 }
 
+fn encode_attachments(
+    baselines: Baselines,
+    choices: &[super::TeletextObjectPageChoice],
+    revision: i64,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<(EncodedStoredDesign, String)> {
+    let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
+    let (selections, programs) = choice_resolver::resolve_attachments(
+        latest,
+        choices,
+        policy.document.validation.service,
+        deadline,
+    )?;
+    page_selections::encode(baselines, selections, programs, revision, policy, deadline)
+}
+
 fn encode(
     mut baselines: Baselines,
     action: Action,
@@ -429,6 +463,12 @@ fn encode(
     deadline: Instant,
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
+    if let Action::AttachmentChoices(choices) = action {
+        return encode_attachments(baselines, &choices, revision, policy, deadline);
+    }
+    if let Action::Restorations(roles) = action {
+        return page_selections::restore(baselines, roles, revision, policy, deadline);
+    }
     if let Action::Consumers(changes) = action {
         return consumer_selections::encode(baselines, &changes, revision, policy, deadline);
     }

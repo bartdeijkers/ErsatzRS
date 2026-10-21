@@ -1,4 +1,4 @@
-//! Private V27 object/V30 DRCS exact-old role intent; storage is not replay authority.
+//! Private V27/V30 selections and V31 retained-role attachments; storage is not replay authority.
 use super::super::MAX_BINDINGS;
 use super::{
     invalid, limit, StoredOverlay, TeletextDesignDocumentBudget, TeletextDesignDocumentError,
@@ -23,12 +23,31 @@ pub struct TeletextSavedObjectPageSelectionChange {
 }
 impl TeletextSavedObjectPageSelectionChange {
     /// # Errors
-    /// Rejects an out-of-range ordinal; attachment checks source membership.
+    /// Rejects an out-of-range ordinal or transient native undo; attachment
+    /// checks source membership.
     pub fn new(
         document_index: usize,
         change: TeletextObjectPageSelectionChange,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        if document_index >= MAX_BINDINGS {
+        if document_index >= MAX_BINDINGS || change.is_unselected_restoration() {
+            return Err(invalid());
+        }
+        Ok(Self {
+            document_index,
+            change,
+        })
+    }
+    /// Wrap transient native undo for the authenticated cumulative fold only.
+    ///
+    /// This wrapper cannot be attached to a saved editorial overlay. Native
+    /// replay must remove the matching original attachment before encoding.
+    /// # Errors
+    /// Rejects a nonrestoration change or an out-of-range source ordinal.
+    pub fn for_unselected_restoration(
+        document_index: usize,
+        change: TeletextObjectPageSelectionChange,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if document_index >= MAX_BINDINGS || !change.is_unselected_restoration() {
             return Err(invalid());
         }
         Ok(Self {
@@ -58,17 +77,37 @@ impl TeletextSavedEditorialOverlay {
     }
     /// Compose exact-old selection intent with retained editorial roles.
     /// # Errors
-    /// Rejects empty/repeated attachment and duplicate display/role owners.
+    /// Rejects empty/repeated attachment, transient native undo and duplicate
+    /// display/role owners.
     pub fn with_object_page_selections(
         mut self,
         selections: Vec<TeletextSavedObjectPageSelectionChange>,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        if selections.is_empty() || !self.object_page_selections.is_empty() {
+        if selections.is_empty()
+            || !self.object_page_selections.is_empty()
+            || selections
+                .iter()
+                .any(|value| value.change.is_unselected_restoration())
+        {
             return Err(invalid());
         }
         distinct(&selections)?;
         self.object_page_selections = selections;
         Ok(self)
+    }
+    pub(super) const fn has_retained_role_attachments(&self) -> bool {
+        let selections = self.object_page_selections.as_slice();
+        let mut index = 0;
+        while index < selections.len() {
+            if matches!(
+                selections[index].change.expected_role(),
+                ersatzrs_domain::TeletextMotRoleResolution::Unselected
+            ) {
+                return true;
+            }
+            index += 1;
+        }
+        false
     }
     pub(super) const fn has_drcs_page_selections(&self) -> bool {
         let selections = self.object_page_selections.as_slice();
@@ -129,13 +168,26 @@ pub(super) fn check_version(stored: &StoredOverlay) -> Result<(), TeletextDesign
         .0
         .as_ref()
         .is_some_and(|values| values.iter().any(StoredSelection::is_drcs));
-    // Historical wire enums listed DRCS, but V27–V29 never admitted those roles.
-    if (stored.schema_version == super::DRCS_PAGE_SELECTION_VERSION) != has_drcs {
+    let has_attachment = stored
+        .object_page_selections
+        .0
+        .as_ref()
+        .is_some_and(|values| values.iter().any(StoredSelection::is_attachment));
+    if stored.schema_version == super::RETAINED_ROLE_ATTACHMENT_VERSION {
+        if !has_attachment {
+            return Err(invalid());
+        }
+    } else if has_attachment
+        // Historical wire enums listed DRCS, but V27–V29 never admitted those roles.
+        || (stored.schema_version == super::DRCS_PAGE_SELECTION_VERSION) != has_drcs
+    {
         return Err(invalid());
     }
     if matches!(
         stored.schema_version,
-        super::OBJECT_PAGE_SELECTION_VERSION | super::DRCS_PAGE_SELECTION_VERSION
+        super::OBJECT_PAGE_SELECTION_VERSION
+            | super::DRCS_PAGE_SELECTION_VERSION
+            | super::RETAINED_ROLE_ATTACHMENT_VERSION
     ) {
         if stored
             .object_page_selections

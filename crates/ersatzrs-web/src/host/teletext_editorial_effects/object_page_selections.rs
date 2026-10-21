@@ -51,7 +51,28 @@ pub(super) fn apply(
         {
             return Err(failure(owner));
         }
-        resource_exists(after, owner, role, change.replacement())?;
+        if change.is_unselected_restoration() {
+            let final_links = after
+                .semantic()
+                .page_enhancements()
+                .get(&owner)
+                .ok_or_else(|| failure(owner))?
+                .compositional_links;
+            if !matches!(
+                change.replacement().target(),
+                TeletextX27LinkTarget::Unspecified { .. }
+            ) || resolved_role(after, owner, role, final_links)?
+                != TeletextMotRoleResolution::Unselected
+                || cumulative
+                    .object_page_selections
+                    .iter()
+                    .any(|saved| saved.change().display() == owner && saved.change().role() == role)
+            {
+                return Err(failure(owner));
+            }
+        } else {
+            resource_exists(after, owner, role, change.replacement())?;
+        }
         let initial = materialized(before, owner, expected_links)?;
         let current = links.get(&owner).copied().unwrap_or(initial);
         if current.link(role).validity() != change.replacement().validity() {
@@ -210,7 +231,10 @@ fn resolved_role(
             .map_err(|_| failure(owner));
     }
     let Some(link) = links.map(|links| links.link(role)) else {
-        return Ok(*original.role(role));
+        // The supplied body describes the state being authenticated, which can
+        // precede this service's final X27 links during cumulative replay. With
+        // no MOT and no original X27 there was no source for a selected role.
+        return Ok(TeletextMotRoleResolution::Unselected);
     };
     Ok(match link.target() {
         TeletextX27LinkTarget::Page { page } if link.validity().applies_at_level25() => {
@@ -243,14 +267,16 @@ pub(super) fn same_resources(
         if change.display() != before.address {
             continue;
         }
-        let TeletextX27LinkTarget::Page { page } = change.replacement().target() else {
-            return false;
+        let page = match change.replacement().target() {
+            TeletextX27LinkTarget::Page { page } => Some(page),
+            TeletextX27LinkTarget::Unspecified { .. } if change.is_unselected_restoration() => None,
+            TeletextX27LinkTarget::Unspecified { .. } => return false,
         };
         match change.role() {
-            TeletextX27LinkRole::Pop => expected.objects.public = Some(page),
-            TeletextX27LinkRole::Gpop => expected.objects.global = Some(page),
-            TeletextX27LinkRole::Drcs => normal = Some(page),
-            TeletextX27LinkRole::Gdrcs => global = Some(page),
+            TeletextX27LinkRole::Pop => expected.objects.public = page,
+            TeletextX27LinkRole::Gpop => expected.objects.global = page,
+            TeletextX27LinkRole::Drcs => normal = page,
+            TeletextX27LinkRole::Gdrcs => global = page,
         }
     }
     let Ok(drcs) = TeletextDrcsPageLinks::new(normal, global) else {

@@ -137,14 +137,16 @@ mod object_resources;
 mod repeat;
 pub use definition_additions::{
     add_teletext_editorial_object_resources, add_teletext_editorial_resource_definitions,
-    announce_teletext_editorial_object_subpages, choose_teletext_editorial_object_consumers,
-    choose_teletext_editorial_object_pages, copy_teletext_editorial_resource_definition,
+    announce_teletext_editorial_object_subpages, attach_teletext_editorial_object_pages,
+    choose_teletext_editorial_object_consumers, choose_teletext_editorial_object_pages,
+    copy_teletext_editorial_resource_definition, restore_teletext_editorial_page_attachments,
     select_teletext_editorial_object_consumers, select_teletext_editorial_object_pages,
     NativeTeletextObjectConsumersChooseRequest, NativeTeletextObjectConsumersSelectRequest,
     NativeTeletextObjectPagesChooseRequest, NativeTeletextObjectPagesSelectRequest,
     NativeTeletextObjectResourcesAddRequest, NativeTeletextObjectSubpagesAnnounceRequest,
-    NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
-    TeletextMainCallChoice, TeletextObjectCallChoice, TeletextObjectPageChoice,
+    NativeTeletextPageAttachmentsRestoreRequest, NativeTeletextResourceDefinitionAddRequest,
+    NativeTeletextResourceDefinitionCopyRequest, TeletextMainCallChoice, TeletextObjectCallChoice,
+    TeletextObjectPageChoice,
 };
 
 type Result<T> = std::result::Result<T, NativeTeletextEditorialImportError>;

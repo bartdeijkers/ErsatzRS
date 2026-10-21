@@ -22,6 +22,9 @@ type Choices = (
     Vec<TeletextMainCallChoice>,
 );
 
+mod attachments;
+pub use attachments::{attach_object_page, restore_page_attachment};
+
 pub async fn choose_object_pages(
     State(state): State<AppState>,
     Form(pairs): Form<Vec<(String, String)>>,

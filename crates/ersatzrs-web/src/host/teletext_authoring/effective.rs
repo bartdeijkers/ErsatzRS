@@ -241,7 +241,13 @@ fn render_original(
             .unwrap_or_default(),
         object_choices: restored
             .encoded()
-            .map(|service| super::object_choices::observe(service, deadline))
+            .map(|service| {
+                super::object_choices::observe(
+                    service,
+                    restored.object_page_attachments(),
+                    deadline,
+                )
+            })
             .transpose()?
             .unwrap_or_default(),
         authoring: super::metadata::effective(restored, request.owner, deadline)?,

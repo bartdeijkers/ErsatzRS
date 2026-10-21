@@ -252,6 +252,18 @@ pub fn build_app(app_state: AppState) -> Router {
                 ),
             )
             .route(
+                "/admin-api/teletext/design/attach-object-page",
+                post(api::teletext_editorial::attach_object_page).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
+                "/admin-api/teletext/design/restore-page-attachment",
+                post(api::teletext_editorial::restore_page_attachment).layer(
+                    DefaultBodyLimit::max(api::teletext::MAX_TELETEXT_FORM_BYTES),
+                ),
+            )
+            .route(
                 "/admin-api/teletext/design/choose-object-pages",
                 post(api::teletext_editorial::choose_object_pages).layer(DefaultBodyLimit::max(
                     api::teletext::MAX_TELETEXT_FORM_BYTES,

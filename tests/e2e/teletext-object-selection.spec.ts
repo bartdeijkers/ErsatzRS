@@ -178,7 +178,7 @@ test('coordinate selected object pages and existing calls through localized curr
   test.setTimeout(240_000);
   const directory = dirname(resolve(readyPath!));
   const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as Ready;
-  test.skip(ready.case === 'teletext-drcs-raw-page-selection', 'Owned retained DRCS selection case runs below.');
+  test.skip(['teletext-drcs-raw-page-selection', 'teletext-first-retained-role-attachment'].includes(ready.case), 'Another owned retained-role case runs below.');
   expect(ready.probe_version).toBe(1); expect(['teletext-explicit-object-selection', 'teletext-main-local-object-selection']).toContain(ready.case);
   expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   const mainMode = ready.case === 'teletext-main-local-object-selection';
@@ -346,6 +346,127 @@ test('choose retained DRCS banks and restore exact source through localized curr
     if (!js) expect(hashes[2]).toBe(hashes[0]);
     await visit(page, preview(ready, revision - 1)); if (js) await waitForHydration(page);
     await expect(page.getByTestId(formId).locator('fieldset').first()).toHaveAttribute('disabled', ''); expect(errors).toEqual([]);
+  } finally { await settings(page, 'en-us', false); await context.close(); }
+  expect(revision).toBe(js ? 2 : 4);
+  marker(directory, `${testInfo.project.name}-object-selection.json`, {
+    probe_version: 1, case: ready.case, design_id: ready.design_id, revision, digest,
+    language, dark: !js, javascript: js, browser: browser.version(), hashes, errors,
+  });
+  if (!js) marker(directory, 'browser-complete.json', { probe_version: 1, case: ready.case, design_id: ready.design_id, revision, digest });
+});
+
+
+type AttachmentReady = Omit<DrcsReady, 'raw_roles'> & {
+  raw_roles: { role: 'drcs'; selected_page: RawPage; mask: string }[];
+};
+function attachmentPreview(ready: AttachmentReady, revision: number): string {
+  return `/channels/${ready.channel_id}/teletext?design_id=${ready.design_id}&revision=${revision}&page=${ready.selected_display.page}&subcode=0020`;
+}
+async function attachmentRoleForms(page: Page, ready: AttachmentReady, restore: boolean): Promise<Locator[]> {
+  const forms = await page.getByTestId(restore ? 'teletext-object-page-restore-form' : 'teletext-object-page-attach-form').all();
+  const found: Locator[] = [];
+  for (const form of forms) {
+    if (await field(form, 'role') === ready.raw_roles[0].role
+      && key(JSON.parse(await field(form, 'display'))) === key(ready.selected_display)) found.push(form);
+  }
+  return found;
+}
+async function attachmentRoleForm(page: Page, ready: AttachmentReady, restore: boolean): Promise<Locator> {
+  const forms = await attachmentRoleForms(page, ready, restore); expect(forms).toHaveLength(1); return forms[0];
+}
+async function attachmentLabels(form: Locator, module: string, restore: boolean): Promise<void> {
+  const prefix = restore ? 'TeletextObjectAttachmentRestore' : 'TeletextObjectAttachment';
+  await expect(form.locator('legend')).toContainText(translation(module, `${prefix}Title`));
+  await expect(form.locator('p').first()).toHaveText(translation(module, `${prefix}Help`));
+  await expect(form.locator('button[type="submit"]')).toHaveText(translation(module, `${prefix}Action`));
+  await expect(form.locator('label').first()).toHaveText(translation(module, 'TeletextDesignName'));
+  if (!restore) {
+    await expect(form.locator('label').nth(1)).toHaveText(translation(module, 'TeletextObjectSelectionPageTarget'));
+    await expect(form.locator('label').nth(2)).toHaveText(translation(module, 'TeletextObjectSelectionMask'));
+    await expect(form.locator('p').nth(1)).toHaveText(translation(module, 'TeletextObjectSelectionMaskHelp'));
+  }
+}
+async function attachmentCultures(page: Page, ready: AttachmentReady, revision: number, restore: boolean): Promise<void> {
+  for (const [language, module] of cultures) {
+    await settings(page, language, false);
+    await visit(page, attachmentPreview(ready, revision)); await waitForHydration(page);
+    await expect(page.locator('html')).toHaveAttribute('lang', language);
+    await attachmentLabels(await attachmentRoleForm(page, ready, restore), module, restore);
+  }
+}
+
+test('attach an unselected retained role and undo to its exact root through localized draft forms', async ({ browser }, testInfo) => {
+  test.skip(!readyPath, 'Requires the owned first retained-role attachment native fixture.');
+  test.setTimeout(240_000);
+  const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as AttachmentReady;
+  test.skip(ready.case !== 'teletext-first-retained-role-attachment', 'Another owned selection case runs above.');
+  const directory = dirname(resolve(readyPath!));
+  expect(ready.probe_version).toBe(1); expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  expect(ready.channel_id).toBe(1); expect(ready.revision).toBe(1); expect(ready.digest).toMatch(/^[a-f0-9]{64}$/);
+  expect(ready.selected_display).toEqual({ page: 227, subcode: 32 });
+  expect(ready.preserved_display).toEqual({ page: 125, subcode: 32 });
+  expect(ready.raw_roles).toEqual([{ role: 'drcs', selected_page: { magazine: 1, page: 0xc0 }, mask: '0003' }]);
+  expect(resolve(ready.marker_file)).toBe(join(directory, 'browser-complete.json')); expect(ready.timeout_seconds).toBe(600);
+  expect(['chromium', 'firefox']).toContain(testInfo.project.name);
+  const js = testInfo.project.name === 'chromium', language = js ? 'nl' : 'en-us', module = js ? 'nl' : 'en_us';
+  expect(existsSync(ready.marker_file)).toBe(false);
+  expect(existsSync(join(directory, `${testInfo.project.name}-object-selection.json`))).toBe(false);
+  let revision = js ? 1 : 2, digest = ready.digest;
+  if (!js) {
+    const previous = JSON.parse(bounded(join(directory, 'chromium-object-selection.json')).toString('utf8'));
+    expect(previous.probe_version).toBe(1); expect(previous.case).toBe(ready.case); expect(previous.design_id).toBe(ready.design_id);
+    expect(previous.revision).toBe(2); expect(previous.errors).toEqual([]); expect(previous.digest).toMatch(/^[a-f0-9]{64}$/);
+    digest = previous.digest;
+  }
+  testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
+  const context = await browser.newContext({ baseURL: ready.base_url, javaScriptEnabled: js, viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage(); page.setDefaultTimeout(15_000); page.setDefaultNavigationTimeout(30_000);
+  const errors: string[] = [], hashes: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  try {
+    if (js) await attachmentCultures(page, ready, revision, false);
+    await settings(page, language, !js);
+    for (const [operation, restore] of (js ? [false] : [true, false]).entries()) {
+      await visit(page, attachmentPreview(ready, revision)); if (js) await waitForHydration(page);
+      await expect(page.locator('html')).toHaveAttribute('lang', language);
+      await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', js ? 'light' : 'dark');
+      const form = await attachmentRoleForm(page, ready, restore);
+      expect(await attachmentRoleForms(page, ready, !restore)).toHaveLength(0);
+      await attachmentLabels(form, module, restore);
+      expect(await field(form, 'revision')).toBe(String(revision)); expect(await field(form, 'expected_design_head')).toBe(String(revision));
+      expect(await field(form, 'digest')).toBe(digest);
+      const before = await publication(page), pixels = rasterHash(await raster(page, ready.selected_display.page, 480));
+      hashes.push(pixels);
+      await form.locator('[name="name"]').fill(restore ? 'Exact originally unselected role' : 'Retained normal DRCS first attachment');
+      if (!restore) {
+        const target = form.locator('[name="target"]'), list = await target.getAttribute('list');
+        expect(list).toBeTruthy(); expect(await form.locator(`#${list} option`).evaluateAll(elements => elements.map(element => (element as HTMLOptionElement).value))).toContain('1C0');
+        await target.fill('1C0'); await form.locator('[name="mask"]').fill('0003');
+      }
+      for (const width of [320, 1920]) {
+        await page.setViewportSize({ width, height: 900 }); await form.scrollIntoViewIfNeeded();
+        const box = await form.boundingBox(); expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+        expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`attachment-${operation}-${width}.png`) });
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await submit(page, form); if (js) await waitForHydration(page); revision += 1;
+      expect(new URL(page.url()).searchParams.get('saved')).toBe('draft');
+      await visit(page, attachmentPreview(ready, revision)); if (js) await waitForHydration(page);
+      const current = await attachmentRoleForm(page, ready, !restore);
+      expect(await attachmentRoleForms(page, ready, restore)).toHaveLength(0);
+      expect(await field(current, 'revision')).toBe(String(revision)); expect(await field(current, 'expected_design_head')).toBe(String(revision));
+      const nextDigest = await field(current, 'digest'); expect(nextDigest).toMatch(/^[a-f0-9]{64}$/); expect(nextDigest).not.toBe(digest); digest = nextDigest;
+      // This links-only attachment does not alter authored visible content.
+      expect(rasterHash(await raster(page, ready.selected_display.page, 480))).toBe(pixels);
+      const after = await publication(page); expect([after.generation_id, after.request_id]).toEqual([before.generation_id, before.request_id]);
+    }
+    if (js) await attachmentCultures(page, ready, revision, true);
+    await visit(page, attachmentPreview(ready, revision - 1)); if (js) await waitForHydration(page);
+    const historical = await attachmentRoleForm(page, ready, false);
+    await expect(historical.locator('fieldset')).toHaveAttribute('disabled', ''); expect(errors).toEqual([]);
   } finally { await settings(page, 'en-us', false); await context.close(); }
   expect(revision).toBe(js ? 2 : 4);
   marker(directory, `${testInfo.project.name}-object-selection.json`, {

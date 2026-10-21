@@ -102,6 +102,7 @@ pub struct RestoredOriginalTeletextDesign {
     digest: String,
     originals: EncodedChannelTeletextOriginals,
     edit_policy: TeletextSavedEditPolicy,
+    object_page_attachments: Vec<ersatzrs_domain::TeletextObjectPageSelectionChange>,
 }
 impl RestoredOriginalTeletextDesign {
     pub(super) fn with_resource_lifecycle_variants(
@@ -171,6 +172,11 @@ impl RestoredOriginalTeletextDesign {
     #[must_use]
     pub fn transmissions(&self) -> &[TeletextServiceResourceTransmission] {
         &self.originals.transmissions
+    }
+    /// Authenticated cumulative first attachments, for descriptive native undo choices only.
+    #[must_use]
+    pub fn object_page_attachments(&self) -> &[ersatzrs_domain::TeletextObjectPageSelectionChange] {
+        &self.object_page_attachments
     }
     #[must_use]
     pub const fn edit_policy(&self) -> TeletextSavedEditPolicy {
@@ -529,9 +535,6 @@ pub(super) fn compile_restored_parts_with_resource_intents(
     overlays: Vec<TeletextPhysicalBaseOverlay>,
     resources: super::teletext_stored_designs::EditorialResourceIntents<'_>,
 ) -> Result<RestoredOriginalTeletextDesign, NativeTeletextDesignError> {
-    let resource_operands = resources.operands;
-    let resource_programs = resources.programs;
-    let resource_additions = resources.additions;
     check_deadline(deadline)?;
     super::teletext_stored_designs::check_authenticated_editorial_resource_intents(
         parts.editorial_overlay.as_ref(),
@@ -573,9 +576,9 @@ pub(super) fn compile_restored_parts_with_resource_intents(
     let main_programs = parts.editorial_overlay.as_ref().map_or(&[][..], |overlay| {
         overlay.main_local_invocation_program_overlays()
     });
-    let originals = if resource_operands.is_empty()
-        && resource_programs.is_empty()
-        && resource_additions.is_empty()
+    let originals = if resources.operands.is_empty()
+        && resources.programs.is_empty()
+        && resources.additions.is_empty()
         && resources.object_resource_additions.is_empty()
         && resources.object_subpage_announcements.is_empty()
         && resources.object_page_selections.is_empty()
@@ -607,9 +610,9 @@ pub(super) fn compile_restored_parts_with_resource_intents(
                 main_programs,
                 main_presence,
                 programs: editorial,
-                resource_operands,
-                resource_programs,
-                resource_additions,
+                resource_operands: resources.operands,
+                resource_programs: resources.programs,
+                resource_additions: resources.additions,
             },
             deadline,
             region,
@@ -628,6 +631,19 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         digest: stored.digest,
         originals,
         edit_policy: parts.edit_policy,
+        object_page_attachments: restored_object_page_attachments(parts.editorial_overlay.as_ref()),
+    })
+}
+
+// Only the already authenticated cumulative attachment list is projected.
+pub(super) fn restored_object_page_attachments(
+    overlay: Option<&ersatzrs_app::teletext_design_documents::TeletextSavedEditorialOverlay>,
+) -> Vec<ersatzrs_domain::TeletextObjectPageSelectionChange> {
+    overlay.map_or_else(Vec::new, |overlay| {
+        overlay.object_page_selections().iter()
+            .map(ersatzrs_app::teletext_design_documents::TeletextSavedObjectPageSelectionChange::change)
+            .filter(|change| change.expected_role() == ersatzrs_domain::TeletextMotRoleResolution::Unselected)
+            .collect()
     })
 }
 

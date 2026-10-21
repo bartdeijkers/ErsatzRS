@@ -21,6 +21,13 @@ pub struct TeletextObjectPageSelectionChange {
     expected_links: Option<TeletextX27Level25Links>,
     expected_role: TeletextMotRoleResolution,
     replacement: TeletextX27LinkDeclaration,
+    unselected_restoration: Option<UnselectedRestorationRoot>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnselectedRestorationRoot {
+    Absent,
+    Explicit(TeletextX27Level25Links),
 }
 
 /// Atomic selection rejection retains no partially reconstructed service.
@@ -97,7 +104,125 @@ impl TeletextObjectPageSelectionChange {
             expected_links,
             expected_role,
             replacement,
+            unselected_restoration: None,
         })
+    }
+
+    /// Select an existing retained bank for an exactly unselected display role.
+    ///
+    /// This is separate from selected-page retargeting. The complete service
+    /// still authenticates the original resolution, bank kind and final graph.
+    /// # Errors
+    /// Rejects selected explicit originals, inapplicable declarations and changes
+    /// to explicit link validity. Absent originals use the canonical Level 2.5
+    /// materialization validity.
+    pub fn new_attachment(
+        display: TeletextPageAddress,
+        role: TeletextX27LinkRole,
+        expected_links: Option<TeletextX27Level25Links>,
+        replacement: TeletextX27LinkDeclaration,
+    ) -> Result<Self, TeletextObjectPageSelectionError> {
+        let original = expected_links.map(|links| links.link(role));
+        if !replacement.validity().applies_at_level25()
+            || !matches!(replacement.target(), TeletextX27LinkTarget::Page { .. })
+            || original.is_some_and(|link| {
+                !link.validity().applies_at_level25()
+                    || link.validity() != replacement.validity()
+                    || !matches!(link.target(), TeletextX27LinkTarget::Unspecified { .. })
+            })
+            || original.is_none()
+                && replacement.validity() != super::super::TeletextX27LinkValidity::Level25Only
+        {
+            return Err(TeletextObjectPageSelectionError::InvalidChange);
+        }
+        Ok(Self {
+            display,
+            role,
+            expected_links,
+            expected_role: TeletextMotRoleResolution::Unselected,
+            replacement,
+            unselected_restoration: None,
+        })
+    }
+
+    /// Describe native cumulative undo of a first attachment to its exact root.
+    ///
+    /// This transient marker is not domain rebuild or saved-edit authority. The
+    /// native fold must match its retained original attachment before removing
+    /// that cumulative intent and reconstructing the complete root generation.
+    /// # Errors
+    /// Rejects nonattachment originals, nested restoration and stale or malformed
+    /// selected declarations/provenance. The current role must exactly describe
+    /// the attachment's current replacement, including its mask and validity.
+    pub fn new_unselected_restoration(
+        original_attachment: Self,
+        current_links: Option<TeletextX27Level25Links>,
+        current_selected_role: TeletextMotRoleResolution,
+    ) -> Result<Self, TeletextObjectPageSelectionError> {
+        use super::super::{
+            TeletextMotLinkProvenance, TeletextMotResolutionRequirements,
+            TeletextSubpageRequirementMask, TeletextX27LinkValidity, TeletextX27Magazine,
+        };
+        let display = original_attachment.display;
+        let role = original_attachment.role;
+        let Some(current) = current_links.map(|links| links.link(role)) else {
+            return Err(TeletextObjectPageSelectionError::InvalidChange);
+        };
+        let TeletextX27LinkTarget::Page { page: target } = current.target() else {
+            return Err(TeletextObjectPageSelectionError::InvalidChange);
+        };
+        if original_attachment.is_unselected_restoration()
+            || original_attachment.expected_role != TeletextMotRoleResolution::Unselected
+            || current != original_attachment.replacement
+            || current_selected_role
+                != (TeletextMotRoleResolution::Selected {
+                    target,
+                    requirements: TeletextMotResolutionRequirements::X27Mask(
+                        current.required_subpages(),
+                    ),
+                    provenance: TeletextMotLinkProvenance::X27 { display, role },
+                    original_mot: None,
+                })
+        {
+            return Err(TeletextObjectPageSelectionError::InvalidChange);
+        }
+        let replacement = match original_attachment.expected_links {
+            Some(links) => links.link(role),
+            None => TeletextX27LinkDeclaration::new(
+                TeletextX27LinkTarget::Unspecified {
+                    magazine: TeletextX27Magazine::new(display.page.magazine())?,
+                },
+                TeletextX27LinkValidity::Level25Only,
+                TeletextSubpageRequirementMask::new(u16::MAX),
+            )?,
+        };
+        Ok(Self {
+            display,
+            role,
+            expected_links: current_links,
+            expected_role: current_selected_role,
+            replacement,
+            unselected_restoration: Some(match original_attachment.expected_links {
+                Some(links) => UnselectedRestorationRoot::Explicit(links),
+                None => UnselectedRestorationRoot::Absent,
+            }),
+        })
+    }
+
+    /// Whether this is transient native root-undo intent, never a direct rebuild.
+    #[must_use]
+    pub const fn is_unselected_restoration(&self) -> bool {
+        self.unselected_restoration.is_some()
+    }
+
+    /// Exact root X27 presence/body bound by transient native restoration intent.
+    #[must_use]
+    pub const fn restored_unselected_links(&self) -> Option<Option<TeletextX27Level25Links>> {
+        match self.unselected_restoration {
+            Some(UnselectedRestorationRoot::Absent) => Some(None),
+            Some(UnselectedRestorationRoot::Explicit(links)) => Some(Some(links)),
+            None => None,
+        }
     }
     #[must_use]
     pub const fn display(&self) -> TeletextPageAddress {
@@ -196,22 +321,24 @@ impl TeletextDeclaredService {
         {
             return Err(Error::MissingResource { display, role });
         }
-        let (links, mut resources) =
-            match prior {
-                Some(update) => update,
-                None => (
-                    match metadata.compositional_links {
-                        Some(links) => links,
-                        None => resolution.materialized_level25_links().map_err(
-                            |error| match error {
-                                TeletextDrcsExtensionError::Link(error) => Error::Link(error),
-                                _ => Error::UnprovenRoles { display },
-                            },
-                        )?,
-                    },
-                    metadata.resources,
-                ),
-            };
+        let (links, mut resources) = match prior {
+            Some(update) => update,
+            None => (
+                match metadata.compositional_links {
+                    Some(links) => links,
+                    None => (if change.expected_role == TeletextMotRoleResolution::Unselected {
+                        resolution.materialized_level25_attachment_links()
+                    } else {
+                        resolution.materialized_level25_links()
+                    })
+                    .map_err(|error| match error {
+                        TeletextDrcsExtensionError::Link(error) => Error::Link(error),
+                        _ => Error::UnprovenRoles { display },
+                    })?,
+                },
+                metadata.resources,
+            ),
+        };
         if links.link(role).validity() != change.replacement.validity() {
             return Err(Error::InvalidChange);
         }
@@ -260,6 +387,14 @@ impl TeletextDeclaredService {
         service_budget: TeletextServiceBudget,
         declaration_budget: TeletextDeclaredServiceBudget,
     ) -> Result<(), TeletextObjectPageSelectionError> {
+        // Native undo must first remove the retained cumulative attachment;
+        // transient restoration never authorizes a direct partial rebuild.
+        if changes
+            .iter()
+            .any(TeletextObjectPageSelectionChange::is_unselected_restoration)
+        {
+            return Err(TeletextObjectPageSelectionError::InvalidChange);
+        }
         // Bound all raw intents/maps and both program bodies before indexing or cloning.
         let mut items = service_budget.max_structure_items;
         super::super::service::charge(

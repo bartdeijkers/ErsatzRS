@@ -5,6 +5,8 @@ use super::*;
 mod consumers;
 #[path = "object_page_selection_drcs_tests.rs"]
 mod drcs;
+#[path = "object_page_attachment_tests.rs"]
+mod object_page_attachment;
 
 fn limits() -> TeletextServiceBudget {
     TeletextServiceBudget {

@@ -8,16 +8,27 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextObjectChoicesObservation {
     pub pages: Vec<TeletextObjectPageChoiceObservation>,
+    #[serde(default)]
+    pub unselected_roles: Vec<TeletextObjectPageRoleObservation>,
+    #[serde(default)]
+    pub restorable_attachments: Vec<TeletextObjectPageRoleObservation>,
     pub calls: Vec<TeletextObjectCallChoiceObservation>,
     pub main_calls: Vec<TeletextMainCallChoiceObservation>,
     pub definitions: Vec<TeletextObjectDefinitionChoiceObservation>,
 }
 
-/// Selected POP/GPOP roles; defaults and original resolution provenance are unchanged.
+/// Descriptive role identity; fresh native checks grant attachment or undo authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextObjectPageRoleObservation {
+    pub display: TeletextPageAddress,
+    pub role: ersatzrs_domain::TeletextResourceKind,
+}
+
+/// Selected object/DRCS roles; defaults and original resolution provenance are unchanged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextObjectPageChoiceObservation {
     pub display: TeletextPageAddress,
-    /// Only POP/GPOP occur in native observations; submitted kinds are untrusted.
+    /// Only POP/GPOP/DRCS/GDRCS occur; submitted kinds are untrusted.
     pub role: ersatzrs_domain::TeletextResourceKind,
     pub target: ersatzrs_domain::TeletextRawDataPageNumber,
     pub required_subpages: ersatzrs_domain::TeletextSubpageRequirementMask,
