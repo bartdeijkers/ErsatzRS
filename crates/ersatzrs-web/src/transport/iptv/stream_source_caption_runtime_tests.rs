@@ -1,14 +1,22 @@
-//! Opt-in ordinary Local-source bitmap Burn/Off proof, independent of authored
+//! Opt-in ordinary Local/mapped-provider bitmap Burn/Off proof, independent of authored
 //! page rendering. Unix shell addon/tool ownership follows the parent fixture.
 //! A passing finite routed prefix is not full source/engine/client acceptance.
 
+use ersatzrs_app::ScanRuntime as _;
 use ersatzrs_core::repositories::{ManagedLibraryOperationRepository as _, ManagedLibraryScanSpec};
 use ersatzrs_domain::{ChannelSubtitleMode, ManagedLibraryOperationKind, MediaSourceKind};
-use ersatzrs_infra::ffprobe::LocalProbeCleanupScope;
+use ersatzrs_infra::ffprobe::{FfprobeExtractor, LocalProbeCleanupScope};
 use ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository;
 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
 
 use super::*;
+
+#[path = "../../../tests/provider_teletext_scan/fixture.rs"]
+#[allow(
+    dead_code,
+    reason = "Shared provider fixture also supplies standalone scan constructors and negative declarations to its integration test"
+)]
+mod mapped_provider_fixture;
 
 const WIDTH: usize = 492;
 const HEIGHT: usize = 250;
@@ -164,6 +172,136 @@ async fn scan_source(state: &AppState, library: &Path, ffprobe: &str) -> (i64, i
         "real managed scan must retain source caption metadata"
     );
     rows[0]
+}
+
+async fn scan_caption_owner(
+    state: &AppState,
+    library: &Path,
+    source: &Path,
+    ffprobe: &str,
+    owner: MediaSourceKind,
+) -> (i64, i64, Option<mapped_provider_fixture::Provider>) {
+    if owner == MediaSourceKind::Local {
+        let (item, version) = scan_source(state, library, ffprobe).await;
+        return (item, version, None);
+    }
+    let scope = LocalProbeCleanupScope::new();
+    let probe = scope
+        .scope(FfprobeExtractor::new(ffprobe).extract_local_with_teletext(source))
+        .await
+        .unwrap();
+    let provider = if owner == MediaSourceKind::Jellyfin {
+        mapped_provider_fixture::Provider::start(&probe).await
+    } else {
+        mapped_provider_fixture::Provider::for_action(
+            &probe,
+            owner,
+            false,
+            mapped_provider_fixture::Declaration::Exact,
+        )
+        .await
+    };
+    mapped_provider_fixture::seed_existing_pool(
+        &state.pool,
+        library,
+        &provider.address,
+        owner,
+        false,
+    )
+    .await;
+    let repository = SqliteManagedLibraryOperationRepository(state.pool.clone());
+    let operation = repository
+        .enqueue_scan(
+            ManagedLibraryOperationKind::ManualScan,
+            1,
+            ManagedLibraryScanSpec {
+                provider: owner,
+                show_id: None,
+                deep_scan: true,
+            },
+            false,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let claim = repository
+        .claim_operation(operation.id, Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    let runtime = crate::host::scanning::NativeScanRuntime::new(state.pool.clone());
+    let outcome = scope
+        .scope(runtime.scan_library(owner, 1, true, &(), Some(&claim)))
+        .await;
+    scope.close();
+    scope.wait_cleanup().await.unwrap();
+    assert_eq!(scope.cleanup_status(), Ok(true));
+    outcome.expect("actual managed provider scan must finish before playback");
+    assert!(repository.complete_operation(&claim).await.unwrap());
+    assert_eq!(
+        state
+            .application
+            .operations()
+            .entity_locker()
+            .active_teletext_work(),
+        0
+    );
+    let (item, version) = assert_mapped_scan(state, &probe, owner).await;
+    (item, version, Some(provider))
+}
+
+async fn assert_mapped_scan(
+    state: &AppState,
+    probe: &ersatzrs_infra::ffprobe::LocalMediaProbe,
+    owner: MediaSourceKind,
+) -> (i64, i64) {
+    use ersatzrs_domain::{SourceTeletextBinding, SourceTeletextObservedPages};
+    let rows: Vec<(i64, i64, i64, i64, String)> = sqlx::query_as(
+        r#"SELECT m."Id",v."Id",f."Id",s."Id",f."Path" FROM "MediaItem" m
+           JOIN "LibraryPath" p ON p."Id"=m."LibraryPathId"
+           JOIN "MediaVersion" v ON v."MovieId"=m."Id"
+           JOIN "MediaFile" f ON f."MediaVersionId"=v."Id"
+           JOIN "MediaStream" s ON s."MediaVersionId"=v."Id"
+           WHERE p."LibraryId"=1 AND s."Codec"='dvb_teletext' AND s."MediaStreamKind"=3 LIMIT 2"#,
+    )
+    .fetch_all(&state.pool)
+    .await
+    .unwrap();
+    let [(item, version, file, stream, path)] = rows.as_slice() else {
+        panic!("one exact provider-owned scanned caption source is required");
+    };
+    assert_eq!(path, mapped_provider_fixture::PROVIDER_PATH);
+    // This read-only transaction verifies the actual managed scan's stored report.
+    let mut tx = state.pool.begin().await.unwrap();
+    let report = ersatzrs_infra::teletext_source::load(&mut tx, *stream, *file)
+        .await
+        .unwrap()
+        .expect("the actual managed scan must persist its report");
+    tx.rollback().await.unwrap();
+    let SourceTeletextBinding::Bound(binding) = report.binding else {
+        panic!("actual provider binding must remain bound");
+    };
+    assert_eq!(binding.provider, owner);
+    assert_eq!(binding.media_source_id, 1);
+    assert_eq!(
+        (
+            binding.media_version_id,
+            binding.media_file_id,
+            binding.media_stream_id
+        ),
+        (*version, *file, *stream)
+    );
+    let acquisition = probe.teletext.as_ref().unwrap();
+    assert_eq!(&binding.source_revision, acquisition.revision());
+    assert_eq!(report.stream_index, 2);
+    let SourceTeletextObservedPages::HeadersObserved(headers) = report.observed_pages else {
+        panic!("actual observed pages are required before selection");
+    };
+    assert_eq!(
+        headers.as_ref(),
+        acquisition.headers().for_stream(2).unwrap()
+    );
+    (*item, *version)
 }
 
 async fn software_profile(state: &AppState) {
@@ -441,33 +579,34 @@ async fn calibration(tools: &[String; 3], source: &Path, root: &Path) -> [Vec<u8
     expected
 }
 
-async fn late_source_rejection_uses_actual_receipt(
+async fn selected_scanned_receipt(
     state: &AppState,
     source: &Path,
     item: i64,
     version: i64,
-) {
+    deadline: tokio::time::Instant,
+) -> std::sync::Arc<ersatzrs_infra::playback::source_teletext::runtime::PlaybackSource> {
     use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionContext};
-    use ersatzrs_infra::transcode_capacity::{try_reserve_active_transcode, ActiveTranscodeSlot};
 
     let path = source.to_str().unwrap();
-    let file: i64 =
-        sqlx::query_scalar(r#"SELECT "Id" FROM "MediaFile" WHERE "MediaVersionId"=? AND "Path"=?"#)
+    let files: Vec<(i64, String)> =
+        sqlx::query_as(r#"SELECT "Id","Path" FROM "MediaFile" WHERE "MediaVersionId"=? LIMIT 2"#)
             .bind(version)
-            .bind(path)
-            .fetch_one(&state.pool)
+            .fetch_all(&state.pool)
             .await
             .unwrap();
+    let [(file, original)] = files.as_slice() else {
+        panic!("one exact scanned source file is required");
+    };
     let locker = state.application.operations().entity_locker();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
     let selection = runtime::select(RuntimeSelectionContext {
         source_teletext_delivery: ersatzrs_domain::SourceTeletextCaptionDelivery::Burn,
         pool: &state.pool,
         locker: &locker,
         media_item_id: Some(item),
         media_version_id: Some(version),
-        media_file_id: Some(file),
-        original_path: path,
+        media_file_id: Some(*file),
+        original_path: original,
         resolved_path: path,
         languages: &["eng".to_owned()],
         subtitle_mode: ChannelSubtitleMode::Any,
@@ -488,6 +627,24 @@ async fn late_source_rejection_uses_actual_receipt(
     assert_eq!(interval.start(), Duration::new(2, 123_456_789));
     assert_eq!(interval.duration(), Duration::new(9, 876_543_210));
     assert_eq!(locker.active_teletext_work(), 0);
+    receipt
+}
+
+async fn late_source_rejection_uses_actual_receipt(
+    state: &AppState,
+    source: &Path,
+    item: i64,
+    version: i64,
+    owner: MediaSourceKind,
+) {
+    use ersatzrs_infra::transcode_capacity::{try_reserve_active_transcode, ActiveTranscodeSlot};
+
+    let locker = state.application.operations().entity_locker();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    let receipt = Box::pin(selected_scanned_receipt(
+        state, source, item, version, deadline,
+    ))
+    .await;
     let reservation = try_reserve_active_transcode(
         DEFAULT_ACTIVE_TRANSCODE_LIMIT,
         ActiveTranscodeSlot::new_mpeg_ts("native-source-caption-preopen"),
@@ -504,6 +661,18 @@ async fn late_source_rejection_uses_actual_receipt(
         .await;
     let (consumer, primary) =
         assert_consumer_plan_fences(state, receipt, &reservation, deadline).await;
+    if owner != MediaSourceKind::Local {
+        assert_changed_mapping_rejects_receipt(
+            state,
+            owner,
+            &consumer,
+            &primary,
+            &ordinary,
+            &reservation,
+            deadline,
+        )
+        .await;
+    }
     let mut context = source_caption_denial_context(state, consumer, ordinary.clone());
     let modified = source.metadata().unwrap().modified().unwrap();
     let file = std::fs::File::options().write(true).open(source).unwrap();
@@ -545,6 +714,79 @@ async fn late_source_rejection_uses_actual_receipt(
     );
     println!(
         "actual source receipt rejected changed filesystem mtime before open; exact ordinary command selected, no child spawn claimed"
+    );
+}
+
+async fn assert_changed_mapping_rejects_receipt(
+    state: &AppState,
+    owner: MediaSourceKind,
+    consumer: &super::super::source_teletext::Consumer,
+    primary: &ersatzrs_ffmpeg::FfmpegCommand,
+    ordinary: &ersatzrs_ffmpeg::FfmpegCommand,
+    reservation: &ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation,
+    deadline: tokio::time::Instant,
+) {
+    let (read, write) = match owner {
+        MediaSourceKind::Jellyfin => (
+            r#"SELECT "LocalPath" FROM "JellyfinPathReplacement" WHERE "JellyfinMediaSourceId"=1"#,
+            r#"UPDATE "JellyfinPathReplacement" SET "LocalPath"=? WHERE "JellyfinMediaSourceId"=1"#,
+        ),
+        MediaSourceKind::Emby => (
+            r#"SELECT "LocalPath" FROM "EmbyPathReplacement" WHERE "EmbyMediaSourceId"=1"#,
+            r#"UPDATE "EmbyPathReplacement" SET "LocalPath"=? WHERE "EmbyMediaSourceId"=1"#,
+        ),
+        MediaSourceKind::Plex => (
+            r#"SELECT "LocalPath" FROM "PlexPathReplacement" WHERE "PlexMediaSourceId"=1"#,
+            r#"UPDATE "PlexPathReplacement" SET "LocalPath"=? WHERE "PlexMediaSourceId"=1"#,
+        ),
+        MediaSourceKind::Local => panic!("mapped configuration guard requires a provider"),
+    };
+    let original: String = sqlx::query_scalar(read)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+    let changed = format!("{original}-changed");
+    assert_eq!(
+        sqlx::query(write)
+            .bind(&changed)
+            .execute(&state.pool)
+            .await
+            .unwrap()
+            .rows_affected(),
+        1
+    );
+    let mut context = source_caption_denial_context(state, consumer.clone(), ordinary.clone());
+    let selected = super::super::source_caption_recovery::before_open(
+        primary,
+        &mut context,
+        Some(reservation),
+        deadline,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        sqlx::query(write)
+            .bind(&original)
+            .execute(&state.pool)
+            .await
+            .unwrap()
+            .rows_affected(),
+        1
+    );
+    assert_eq!(selected.unwrap().unwrap(), *ordinary);
+    assert!(context.source_caption.is_none());
+    assert_eq!(
+        state
+            .application
+            .operations()
+            .entity_locker()
+            .active_teletext_work(),
+        0
+    );
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        1
     );
 }
 
@@ -920,7 +1162,7 @@ async fn finish_hybrid_case(state: &AppState, mode: StreamingMode) {
     );
 }
 
-async fn run_source_captions(streaming_mode: StreamingMode) {
+async fn initialize_source_caption_runtime() -> [String; 3] {
     let _ = tracing_subscriber::fmt()
         .with_env_filter("ersatzrs_web=debug,ersatzrs_infra=debug")
         .with_test_writer()
@@ -933,16 +1175,38 @@ async fn run_source_captions(streaming_mode: StreamingMode) {
     ];
     assert_eq!(ersatzrs_ffmpeg::ffmpeg_path(), tools[0]);
     assert_eq!(ersatzrs_ffmpeg::ffprobe_path(), tools[1]);
+    tools
+}
+
+async fn run_source_captions(streaming_mode: StreamingMode) {
+    let tools = initialize_source_caption_runtime().await;
+    run_source_caption_owner(streaming_mode, MediaSourceKind::Local, &tools).await;
+}
+
+async fn run_source_caption_owner(
+    streaming_mode: StreamingMode,
+    owner: MediaSourceKind,
+    tools: &[String; 3],
+) {
     let root = tempfile::tempdir().unwrap().keep();
-    println!("bounded routed source-caption evidence: {}", root.display());
+    println!(
+        "bounded routed source-caption evidence: {}, owner={owner:?}, route={streaming_mode:?}",
+        root.display()
+    );
     let library = root.join("library");
-    let source = local_source(&tools[0], &library).await;
-    let expected = calibration(&tools, &source, &root).await;
+    let mut source = local_source(&tools[0], &library).await;
+    if owner != MediaSourceKind::Local {
+        let mapped = library.join("movie.ts");
+        tokio::fs::rename(&source, &mapped).await.unwrap();
+        source = mapped;
+    }
+    let expected = calibration(tools, &source, &root).await;
     // Reuse the parent application constructor. This empty server supplies its
-    // unrelated Plex fixture address; the actual item below is managed Local.
+    // unrelated Plex fixture address; caption-source ownership is scanned below.
     let unused_provider = Server::start(Router::new()).await;
     let state = application(&root, &unused_provider).await;
-    let (item, version) = scan_source(&state, &library, &tools[1]).await;
+    let (item, version, provider) =
+        scan_caption_owner(&state, &library, &source, &tools[1], owner).await;
     software_profile(&state).await;
     let generation = install_and_accept(&state, &root).await;
     let internal = Server::start(build_internal_app(state.clone())).await;
@@ -952,7 +1216,7 @@ async fn run_source_captions(streaming_mode: StreamingMode) {
     state.streaming_http_addr.set(public.address).unwrap();
     let calls = tokio::fs::read(root.join("addon-calls")).await.unwrap();
     Box::pin(late_source_rejection_uses_actual_receipt(
-        &state, &source, item, version,
+        &state, &source, item, version, owner,
     ))
     .await;
     // Establish ordinary AV first, before attributing any routed deadline
@@ -989,7 +1253,7 @@ async fn run_source_captions(streaming_mode: StreamingMode) {
             .await
             .unwrap();
         verify_case(
-            &tools,
+            tools,
             &output,
             &expected,
             &actual,
@@ -1015,6 +1279,34 @@ async fn run_source_captions(streaming_mode: StreamingMode) {
             "routed source caption verified: {label}, originalPID512, defaultcapacity2, packets={}",
             output.len() / 188
         );
+    }
+    finish_caption_owner(&state, provider, owner, public, internal, unused_provider).await;
+}
+
+async fn finish_caption_owner(
+    state: &AppState,
+    provider: Option<mapped_provider_fixture::Provider>,
+    owner: MediaSourceKind,
+    public: Server,
+    internal: Server,
+    unused_provider: Server,
+) {
+    assert_eq!(
+        state
+            .application
+            .operations()
+            .entity_locker()
+            .active_teletext_work(),
+        0
+    );
+    assert!(state.hls_sessions.active_channels().await.is_empty());
+    if let Some(provider) = provider {
+        let expected = if owner == MediaSourceKind::Plex {
+            [1, 0]
+        } else {
+            [1, 1]
+        };
+        assert_eq!(provider.close().await, expected);
     }
     public.finish().await;
     internal.finish().await;
@@ -1058,6 +1350,43 @@ fn normal_hybrid_local_route_burns_exact_source_caption_and_preserves_off_and_al
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0
     );
+}
+
+fn mapped_provider_routes(streaming_mode: StreamingMode) {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(async {
+            let tools = initialize_source_caption_runtime().await;
+            for owner in [
+                MediaSourceKind::Jellyfin,
+                MediaSourceKind::Emby,
+                MediaSourceKind::Plex,
+            ] {
+                run_source_caption_owner(streaming_mode, owner, &tools).await;
+                assert_eq!(
+                    active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+                    0
+                );
+            }
+        }));
+}
+
+#[test]
+#[ignore = "requires pinned FFmpeg/ffprobe9, TSDuck, loopback and fresh isolated app-data; actual managed mapped-provider scans and ordinary HTTP output"]
+fn normal_mapped_provider_route_burns_exact_source_caption_and_preserves_off_and_alternate_audio() {
+    mapped_provider_routes(StreamingMode::TransportStream);
+}
+
+#[test]
+#[ignore = "requires pinned FFmpeg/ffprobe9, TSDuck, loopback and fresh isolated app-data; actual managed mapped-provider scans, native HLS producer and final HTTP wrapper"]
+fn normal_hybrid_mapped_provider_route_burns_exact_source_caption_and_preserves_off_and_alternate_audio(
+) {
+    mapped_provider_routes(StreamingMode::TransportStreamHybrid);
 }
 
 #[path = "stream_source_caption_initializer_tests.rs"]

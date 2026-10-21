@@ -965,6 +965,9 @@ release section when tagging a release.
   show refresh and Plex Other Video. Bind reports to the current source, stream
   and acquired scan lease, replace stale observations on deep rescan, and retain
   ordinary subtitles and alternate audio when native enrichment is unavailable.
+  Page-qualified caption preparation can use those mapped files without changing
+  their provider identity. Current mapping and held-file checks reject stale
+  sources while preserving ordinary playback and alternate-audio selection.
 
 - Preserve source-derived steady teletext header context when removing and
   restoring Local object calls through TTI concepts. Exact root undo and

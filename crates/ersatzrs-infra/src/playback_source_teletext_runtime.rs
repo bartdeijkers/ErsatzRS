@@ -76,6 +76,7 @@ pub struct PlaybackSource {
     candidate: SourceTeletextCaptionCandidate,
     item: i64,
     original: String,
+    resolved: String,
     pool: DbPool,
     locker: EntityLocker,
     deadline: Instant,
@@ -166,7 +167,11 @@ impl PlaybackSource {
             .await;
         scope.0.close();
         scope.0.wait_cleanup().await.map_err(|_| unavailable())?;
-        checked.map_err(|_| unavailable())
+        checked.map_err(|_| unavailable())?;
+        if self.candidate.request.binding.provider != ersatzrs_domain::MediaSourceKind::Local {
+            self.recheck_candidate(deadline).await?;
+        }
+        Ok(())
     }
 
     /// Check the generated caption owner's selected native stream identities.
@@ -291,6 +296,16 @@ impl PlaybackSource {
         {
             return Err(unavailable());
         }
+        before(
+            deadline,
+            crate::media_server::teletext::caption_physical_original(
+                &self.pool,
+                &request.binding,
+                &self.original,
+                &self.resolved,
+            ),
+        )
+        .await?;
         Ok(())
     }
 }
@@ -378,6 +393,7 @@ pub async fn select(context: RuntimeSelectionContext<'_>) -> Result<Option<Selec
         candidate: source.candidate().clone(),
         item,
         original: context.original_path.to_owned(),
+        resolved: context.resolved_path.to_owned(),
         pool: context.pool.clone(),
         locker: context.locker.clone(),
         deadline: work_deadline,
@@ -425,10 +441,20 @@ async fn prepare(
             if source_caption_has_competing_choice(candidate, candidates.iter(), version) {
                 continue;
             }
+            let physical_original = before(
+                deadline,
+                crate::media_server::teletext::caption_physical_original(
+                    context.pool,
+                    &candidate.request.binding,
+                    context.original_path,
+                    context.resolved_path,
+                ),
+            )
+            .await?;
             let decoded = extractor
                 .decode_local_teletext_page(
                     candidate.request.clone(),
-                    PathBuf::from(context.original_path),
+                    physical_original,
                     PathBuf::from(context.resolved_path),
                     deadline,
                     work.hold_work(),
@@ -469,6 +495,18 @@ async fn prepare(
     .await?;
     if current != candidates {
         return Err(unavailable());
+    }
+    for candidate in &current {
+        before(
+            deadline,
+            crate::media_server::teletext::caption_physical_original(
+                context.pool,
+                &candidate.request.binding,
+                context.original_path,
+                context.resolved_path,
+            ),
+        )
+        .await?;
     }
     Ok(qualified)
 }

@@ -256,8 +256,19 @@ pub(super) async fn database_for(
         .unwrap();
     pool.execute("PRAGMA foreign_keys=ON").await.unwrap();
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    seed_existing_pool(&pool, local, address, provider, show).await;
+    pool
+}
+
+pub(super) async fn seed_existing_pool(
+    pool: &SqlitePool,
+    local: &std::path::Path,
+    address: &str,
+    provider: MediaSourceKind,
+    show: bool,
+) {
     sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
-        .execute(&pool)
+        .execute(pool)
         .await
         .unwrap();
     let (schema, path_sql) = match provider {
@@ -265,7 +276,7 @@ pub(super) async fn database_for(
             r#"
             INSERT INTO "JellyfinMediaSource" ("Id","ServerName") VALUES (1,'Synthetic fixture');
             INSERT INTO "JellyfinLibrary" ("Id","ItemId","ShouldSyncItems") VALUES (1,'synthetic-library',1);
-            INSERT INTO "JellyfinConnection" ("Id","JellyfinMediaSourceId") VALUES (1,1);
+            INSERT INTO "JellyfinConnection" ("JellyfinMediaSourceId") VALUES (1);
             INSERT INTO "ConfigElement" ("Key","Value") VALUES ('jellyfin.current_server_api_key','synthetic-test-only');
         "#,
             r#"INSERT INTO "JellyfinPathReplacement" ("JellyfinPath","LocalPath","JellyfinMediaSourceId") VALUES ('/synthetic-provider',?,1)"#,
@@ -274,7 +285,7 @@ pub(super) async fn database_for(
             r#"
             INSERT INTO "EmbyMediaSource" ("Id","ServerName") VALUES (1,'Synthetic fixture');
             INSERT INTO "EmbyLibrary" ("Id","ItemId","ShouldSyncItems") VALUES (1,'synthetic-library',1);
-            INSERT INTO "EmbyConnection" ("Id","EmbyMediaSourceId") VALUES (1,1);
+            INSERT INTO "EmbyConnection" ("EmbyMediaSourceId") VALUES (1);
             INSERT INTO "ConfigElement" ("Key","Value") VALUES ('emby.current_server_api_key','synthetic-test-only');
         "#,
             r#"INSERT INTO "EmbyPathReplacement" ("EmbyPath","LocalPath","EmbyMediaSourceId") VALUES ('/synthetic-provider',?,1)"#,
@@ -283,7 +294,7 @@ pub(super) async fn database_for(
             r#"
             INSERT INTO "PlexMediaSource" ("Id","ClientIdentifier","ServerName") VALUES (1,'synthetic-client','Synthetic fixture');
             INSERT INTO "PlexLibrary" ("Id","Key","ShouldSyncItems") VALUES (1,'1',1);
-            INSERT INTO "PlexConnection" ("Id","IsActive","PlexMediaSourceId") VALUES (1,1,1);
+            INSERT INTO "PlexConnection" ("IsActive","PlexMediaSourceId") VALUES (1,1);
             INSERT INTO "ConfigElement" ("Key","Value") VALUES ('plex.server_auth_token.synthetic-client','synthetic-test-only');
         "#,
             r#"INSERT INTO "PlexPathReplacement" ("PlexPath","LocalPath","PlexMediaSourceId") VALUES ('/synthetic-provider',?,1)"#,
@@ -293,22 +304,27 @@ pub(super) async fn database_for(
     // Provider library subtypes refer to this parent; source subtypes refer to
     // the already inserted MediaSource parent.
     sqlx::query(r#"INSERT INTO "Library" ("Id","Name","MediaKind","MediaSourceId") VALUES (1,'Synthetic',?,1)"#)
-        .bind(if show { 2 } else { 1 }).execute(&pool).await.unwrap();
-    sqlx::raw_sql(schema).execute(&pool).await.unwrap();
+        .bind(if show { 2 } else { 1 }).execute(pool).await.unwrap();
+    sqlx::raw_sql(schema).execute(pool).await.unwrap();
     sqlx::query(path_sql)
         .bind(local.to_str().unwrap())
-        .execute(&pool)
+        .execute(pool)
         .await
         .unwrap();
-    update_connection(&pool, address, provider).await;
-    pool
+    update_connection(pool, address, provider).await;
 }
 
 pub(super) async fn update_connection(pool: &SqlitePool, address: &str, provider: MediaSourceKind) {
     let query = match provider {
-        MediaSourceKind::Jellyfin => r#"UPDATE "JellyfinConnection" SET "Address"=? WHERE "Id"=1"#,
-        MediaSourceKind::Emby => r#"UPDATE "EmbyConnection" SET "Address"=? WHERE "Id"=1"#,
-        MediaSourceKind::Plex => r#"UPDATE "PlexConnection" SET "Uri"=? WHERE "Id"=1"#,
+        MediaSourceKind::Jellyfin => {
+            r#"UPDATE "JellyfinConnection" SET "Address"=? WHERE "JellyfinMediaSourceId"=1"#
+        }
+        MediaSourceKind::Emby => {
+            r#"UPDATE "EmbyConnection" SET "Address"=? WHERE "EmbyMediaSourceId"=1"#
+        }
+        MediaSourceKind::Plex => {
+            r#"UPDATE "PlexConnection" SET "Uri"=? WHERE "PlexMediaSourceId"=1"#
+        }
         MediaSourceKind::Local => panic!("fixture supports provider protocols only"),
     };
     assert_eq!(

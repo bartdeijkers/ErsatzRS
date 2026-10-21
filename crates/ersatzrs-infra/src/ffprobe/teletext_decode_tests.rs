@@ -42,8 +42,17 @@ fn parse(value: &Value) -> Result<SourceTeletextBitmapEvents, SourceTeletextPage
 }
 
 #[test]
-fn request_requires_actual_local_parent_and_transport_identities() {
-    assert_eq!(request().validate(), Ok(()));
+fn request_syntax_preserves_provider_parent_and_transport_identities() {
+    for provider in MediaSourceKind::ALL {
+        let mut candidate = request();
+        candidate.binding.provider = provider;
+        let unchanged = candidate.clone();
+        assert_eq!(candidate.validate(), Ok(()));
+        assert_eq!(
+            candidate, unchanged,
+            "validation must not rewrite source identity"
+        );
+    }
     let mut cases = Vec::new();
     for field in 0..4 {
         for value in [0, -1] {
@@ -56,15 +65,6 @@ fn request_requires_actual_local_parent_and_transport_identities() {
             }
             cases.push(candidate);
         }
-    }
-    for provider in [
-        MediaSourceKind::Plex,
-        MediaSourceKind::Jellyfin,
-        MediaSourceKind::Emby,
-    ] {
-        let mut candidate = request();
-        candidate.binding.provider = provider;
-        cases.push(candidate);
     }
     let mut candidate = request();
     candidate.stream_index = -1;

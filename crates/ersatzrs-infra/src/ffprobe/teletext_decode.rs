@@ -8,7 +8,9 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use ersatzrs_core::locking::TeletextWorkHold;
-use ersatzrs_domain::{MediaSourceKind, SourceTeletextBindingIdentity, TeletextPageNumber};
+#[cfg(test)]
+use ersatzrs_domain::MediaSourceKind;
+use ersatzrs_domain::{SourceTeletextBindingIdentity, TeletextPageNumber};
 use ersatzrs_ffmpeg::teletext::source_observation::SuppliedTeletextHeaderWindow;
 use ersatzrs_ffmpeg::InputFile;
 use serde::Deserialize;
@@ -54,6 +56,8 @@ const MAX_FRAMES: usize = 4096;
 const SOURCE_LABEL: &str = "source teletext page";
 
 /// Explicit page request, not proof of current database ownership or readiness.
+/// Provider identities remain intact; syntactic acceptance grants no source I/O
+/// authority or assurance that a mapped physical source is current.
 /// Subpages remain updates of this same selected page, never separate choices.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceTeletextPageDecodeRequest {
@@ -68,7 +72,6 @@ pub struct SourceTeletextPageDecodeRequest {
 impl SourceTeletextPageDecodeRequest {
     fn validate(&self) -> Result<(), SourceTeletextPageDecodeError> {
         if self.binding.validate().is_err()
-            || self.binding.provider != MediaSourceKind::Local
             || self.stream_index < 0
             || !(0x20..=0x1ffe).contains(&self.pid)
             || self.program_number == 0

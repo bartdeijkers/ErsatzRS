@@ -206,11 +206,22 @@ where
     let scope = Scope(LocalProbeCleanupScope::new());
     let extractor = FfprobeExtractor::new(request.ffprobe.to_str().ok_or_else(unavailable)?);
     let operation = async {
+        let original = tokio::time::timeout_at(
+            request.deadline,
+            crate::media_server::teletext::caption_physical_original(
+                pool,
+                &request.pending.candidate().request.binding,
+                &request.pending.original_path,
+                path,
+            ),
+        )
+        .await
+        .map_err(|_| unavailable())??;
         let source = Arc::new(
             extractor
                 .prepare_local_teletext_source(
                     request.pending.candidate().request.clone(),
-                    request.pending.original_path.clone().into(),
+                    original,
                     path.into(),
                     request.deadline,
                     work.hold_work(),

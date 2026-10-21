@@ -3,9 +3,10 @@ use ersatzrs_core::repositories::{
     ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
 };
 use ersatzrs_domain::{
-    ManagedLibraryOperationKind, SourceTeletextBindingIdentity, SourceTeletextDescriptors,
-    SourceTeletextHeaderProgram, SourceTeletextHeaderWindow, SourceTeletextObservedHeader,
-    SourceTeletextPrograms, SourceTeletextProvenance, SourceTeletextRevision,
+    ManagedLibraryOperationKind, MediaSourceKind, SourceTeletextBindingIdentity,
+    SourceTeletextDescriptors, SourceTeletextHeaderProgram, SourceTeletextHeaderWindow,
+    SourceTeletextObservedHeader, SourceTeletextPrograms, SourceTeletextProvenance,
+    SourceTeletextRevision,
 };
 use sqlx::{sqlite::SqlitePoolOptions, Executor as _};
 
@@ -52,7 +53,12 @@ impl Fixture {
             MediaSourceKind::Plex => {
                 r#"INSERT INTO "PlexLibrary" ("Id","ShouldSyncItems") VALUES (21,1); INSERT INTO "PlexMediaSource" ("Id") VALUES (11);"#
             }
-            _ => panic!("fixture supports only selected test providers"),
+            MediaSourceKind::Jellyfin => {
+                r#"INSERT INTO "JellyfinLibrary" ("Id","ShouldSyncItems") VALUES (21,1); INSERT INTO "JellyfinMediaSource" ("Id") VALUES (11);"#
+            }
+            MediaSourceKind::Emby => {
+                r#"INSERT INTO "EmbyLibrary" ("Id","ShouldSyncItems") VALUES (21,1); INSERT INTO "EmbyMediaSource" ("Id") VALUES (11);"#
+            }
         };
         sqlx::raw_sql(subtypes).execute(&pool).await.unwrap();
         let repository = SqliteManagedLibraryOperationRepository(pool.clone());
@@ -345,23 +351,44 @@ async fn duplicate_global_indexes_are_rejected_even_without_a_second_report() {
 }
 
 #[tokio::test]
-async fn absent_unbound_nonlocal_and_headerless_reports_provide_no_caption_readiness() {
-    let fixture = Fixture::new(MediaSourceKind::Local).await;
-    assert!(fixture.candidates().await.unwrap().is_empty());
-    assert!(fixture.requests().await.unwrap().is_empty());
-    let mut observation = report(MediaSourceKind::Local);
-    observation.observed_pages = SourceTeletextObservedPages::NotAcquired;
-    fixture.store(&observation).await;
-    assert!(fixture.candidates().await.unwrap().is_empty());
-    assert!(fixture.requests().await.unwrap().is_empty());
-    observation.binding = SourceTeletextBinding::Unavailable;
-    fixture.store(&observation).await;
-    assert!(fixture.candidates().await.unwrap().is_empty());
-    assert!(fixture.requests().await.unwrap().is_empty());
-    let remote = Fixture::new(MediaSourceKind::Plex).await;
-    remote.store(&report(MediaSourceKind::Plex)).await;
-    assert!(remote.candidates().await.unwrap().is_empty());
-    assert!(remote.requests().await.unwrap().is_empty());
+async fn bound_provider_requests_retain_identity_without_granting_caption_readiness() {
+    for provider in MediaSourceKind::ALL {
+        let fixture = Fixture::new(provider).await;
+        assert!(fixture.candidates().await.unwrap().is_empty());
+        assert!(fixture.requests().await.unwrap().is_empty());
+        let mut observation = report(provider);
+        fixture.store(&observation).await;
+        let SourceTeletextBinding::Bound(expected) = &observation.binding else {
+            unreachable!();
+        };
+        let candidates = fixture.candidates().await.unwrap();
+        assert_eq!(candidates.len(), 2);
+        assert!(candidates
+            .iter()
+            .all(|candidate| &candidate.request.binding == expected));
+        let requests = fixture.requests().await.unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests
+            .iter()
+            .all(|request| &request.candidate.request.binding == expected));
+
+        observation.observed_pages = SourceTeletextObservedPages::NotAcquired;
+        fixture.store(&observation).await;
+        assert!(fixture.candidates().await.unwrap().is_empty());
+        assert!(fixture.requests().await.unwrap().is_empty());
+        observation.binding = SourceTeletextBinding::Unavailable;
+        fixture.store(&observation).await;
+        assert!(fixture.candidates().await.unwrap().is_empty());
+        assert!(fixture.requests().await.unwrap().is_empty());
+
+        fixture.store(&report(provider)).await;
+        sqlx::query(r#"UPDATE "MediaVersion" SET "MovieId"=NULL WHERE "Id"=301"#)
+            .execute(&fixture.pool)
+            .await
+            .unwrap();
+        assert!(fixture.candidates().await.is_err());
+        assert!(fixture.requests().await.is_err());
+    }
 }
 
 #[tokio::test]

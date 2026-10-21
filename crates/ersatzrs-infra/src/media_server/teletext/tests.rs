@@ -1,7 +1,10 @@
 //! Provider declarations and native layouts must agree before acquisition can bind.
-use super::{declaration_matches, is_teletext, native_tracks_match};
-use ersatzrs_core::repositories::ProviderMediaSourceDeclaration;
-use ersatzrs_domain::{MediaStream, MediaStreamKind};
+use super::{caption_physical_original, declaration_matches, is_teletext, native_tracks_match};
+use ersatzrs_core::repositories::{ProviderMediaSourceDeclaration, RemoteMediaSourceKind};
+use ersatzrs_domain::{
+    MediaSourceKind, MediaStream, MediaStreamKind, SourceTeletextBindingIdentity,
+    SourceTeletextRevision,
+};
 
 fn track(index: i32, kind: MediaStreamKind, codec: &str) -> MediaStream {
     MediaStream {
@@ -92,4 +95,105 @@ fn native_correspondence_requires_every_index_kind_and_codec() {
     }
     assert!(declaration_matches(&declaration(), &provider));
     assert!(native_tracks_match(&provider, &provider));
+}
+
+/// Mapping intent alone grants neither a readable file nor caption readiness.
+#[tokio::test]
+async fn caption_locator_requires_the_current_owning_provider_mapping() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (11),(22)"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for kind in RemoteMediaSourceKind::ALL {
+        let provider = kind.provider_name();
+        let domain = match kind {
+            RemoteMediaSourceKind::Plex => MediaSourceKind::Plex,
+            RemoteMediaSourceKind::Jellyfin => MediaSourceKind::Jellyfin,
+            RemoteMediaSourceKind::Emby => MediaSourceKind::Emby,
+        };
+        // All identifiers come from the closed provider enum.
+        sqlx::query(crate::db::assert_sql_safe(format!(
+            r#"INSERT INTO "{provider}MediaSource" ("Id") VALUES (11),(22)"#
+        )))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let table = format!("{provider}PathReplacement");
+        let insert = format!(
+            r#"INSERT INTO "{table}" ("{provider}MediaSourceId","{provider}Path","LocalPath") VALUES (?,?,?)"#
+        );
+        let source = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        for (id, folder) in [(11, &source), (22, &elsewhere)] {
+            sqlx::query(crate::db::assert_sql_safe(&insert))
+                .bind(id)
+                .bind("/provider")
+                .bind(folder.path().to_str().unwrap())
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let mut binding = SourceTeletextBindingIdentity::new(
+            11,
+            domain,
+            1,
+            2,
+            3,
+            SourceTeletextRevision::new("synthetic-unopened-revision".into()).unwrap(),
+        )
+        .unwrap();
+        let original = "/provider/movie.ts";
+        let physical = source.path().join("movie.ts");
+        let resolved = physical.to_str().unwrap();
+        assert_eq!(
+            caption_physical_original(&pool, &binding, original, resolved)
+                .await
+                .unwrap(),
+            physical
+        );
+        binding.media_source_id = 22;
+        assert!(
+            caption_physical_original(&pool, &binding, original, resolved)
+                .await
+                .is_err()
+        );
+        binding.media_source_id = 11;
+        sqlx::query(crate::db::assert_sql_safe(format!(
+            r#"UPDATE "{table}" SET "LocalPath"=? WHERE "{provider}MediaSourceId"=11"#
+        )))
+        .bind(elsewhere.path().to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(
+            caption_physical_original(&pool, &binding, original, resolved)
+                .await
+                .is_err()
+        );
+        sqlx::query(crate::db::assert_sql_safe(format!(
+            r#"DELETE FROM "{table}" WHERE "{provider}MediaSourceId"=11"#
+        )))
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(
+            caption_physical_original(&pool, &binding, original, resolved)
+                .await
+                .is_err()
+        );
+        binding.provider = MediaSourceKind::Local;
+        assert_eq!(
+            caption_physical_original(&pool, &binding, original, resolved)
+                .await
+                .unwrap(),
+            std::path::PathBuf::from(original),
+            "Local must retain its distinct original-path guard"
+        );
+    }
 }

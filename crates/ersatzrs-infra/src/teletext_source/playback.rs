@@ -1,8 +1,10 @@
-//! Read-only caption choices from exact stored local source observations.
+//! Read-only caption requests from exact stored source observations.
 //!
 //! An actually observed header and a wire subtitle descriptor identify a
 //! candidate, not a ready page. Separate descriptor discovery can request a
-//! later current window without asserting that its page was observed. The
+//! later current window without asserting that its page was observed.
+//! A provider binding retains its provider identity and is only metadata intent;
+//! the caller must qualify its current owner-scoped physical mapping. The
 //! caller must verify current source bytes, actual bitmap decoding and
 //! playback-worker ownership separately. Descriptor
 //! tag 0x46 retains its provenance but never classifies a codec by itself; the
@@ -12,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    MediaSourceKind, SourceTeletextBinding, SourceTeletextObservation, SourceTeletextObservedPages,
+    SourceTeletextBinding, SourceTeletextObservation, SourceTeletextObservedPages,
     SourceTeletextPid, TeletextLanguage, TeletextPageNumber,
 };
 use ersatzrs_ffmpeg::teletext::source_descriptors::{
@@ -72,7 +74,7 @@ impl SourceTeletextCaptionCandidate {
 /// Load bounded caption candidates against one exact item/version/file/path.
 ///
 /// All database reads share one read-only snapshot and reuse the source report's
-/// current-parent validation. Missing reports, unbound/nonlocal sources and
+/// current-parent validation. Missing reports, unbound sources and
 /// unobserved pages supply no choices. Distinct programs, pages, languages and
 /// subtitle roles remain distinct; subpages update the same page choice.
 /// This does not read media, run a decoder, persist readiness or change tracks.
@@ -105,7 +107,7 @@ pub async fn load_caption_candidates(
 /// bounds, exact codec/index and actual type-6 program descriptor provenance.
 /// The stored current-PSI window may contain no page headers; a descriptor page
 /// absent from that prefix remains discoverable, never an observed/ready page.
-/// Missing current PSI, missing descriptors, unbound and nonlocal observations
+/// Missing current PSI, missing descriptors and unbound observations
 /// supply no requests. Every page/language/role/program remains distinct so
 /// callers can reject ambiguity before bounded window preparation. This API
 /// performs no source I/O, decoding, ranking or database writes.
@@ -253,9 +255,6 @@ fn append_candidates(
     else {
         return Ok(());
     };
-    if binding.provider != MediaSourceKind::Local {
-        return Ok(());
-    }
     let observed: BTreeSet<_> = window
         .headers
         .iter()

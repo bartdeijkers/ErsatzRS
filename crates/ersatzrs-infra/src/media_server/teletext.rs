@@ -11,7 +11,9 @@ use ersatzrs_core::repositories::{
     ManagedLibraryOperationClaim, ProviderMediaSourceDeclaration, RemoteMediaSourceKind,
     RepositoryError, Result,
 };
-use ersatzrs_domain::{MediaSourceKind, MediaStream, MediaStreamKind};
+use ersatzrs_domain::{
+    MediaSourceKind, MediaStream, MediaStreamKind, SourceTeletextBindingIdentity,
+};
 use sqlx::Transaction;
 
 use crate::db::{Db, DbPool};
@@ -55,6 +57,36 @@ impl MappedTeletextSource {
             RemoteMediaSourceKind::Plex => ("PlexPathReplacement", "PlexPath", "PlexMediaSourceId"),
         }
     }
+}
+
+/// Keep the persisted provider locator separate from its physical file.
+/// The caller still proves exact database ownership and holds/checks the file;
+/// resolving an operator mapping grants no source or caption readiness itself.
+pub(crate) async fn caption_physical_original(
+    pool: &DbPool,
+    binding: &SourceTeletextBindingIdentity,
+    original: &str,
+    resolved: &str,
+) -> Result<PathBuf> {
+    let provider = match binding.provider {
+        MediaSourceKind::Local => return Ok(PathBuf::from(original)),
+        MediaSourceKind::Plex => RemoteMediaSourceKind::Plex,
+        MediaSourceKind::Jellyfin => RemoteMediaSourceKind::Jellyfin,
+        MediaSourceKind::Emby => RemoteMediaSourceKind::Emby,
+    };
+    let current = resolve(
+        pool,
+        MappedTeletextSource {
+            provider,
+            id: binding.media_source_id,
+        },
+        original,
+    )
+    .await?;
+    if current != resolved {
+        return Err(conflict("mapped caption source locator has changed"));
+    }
+    Ok(PathBuf::from(current))
 }
 
 /// Lives through the ordinary leaf transaction and its final source/lease check.

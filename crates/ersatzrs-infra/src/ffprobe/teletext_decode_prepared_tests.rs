@@ -85,7 +85,7 @@ async fn invalid_preparation_request_cannot_open_source_or_start_probe() {
     let locker = EntityLocker::new();
     let scope = LocalProbeCleanupScope::new();
     let mut invalid = request();
-    invalid.binding.provider = MediaSourceKind::Jellyfin;
+    invalid.binding.media_source_id = 0;
     let result = scope
         .scope(
             FfprobeExtractor::new("must-not-start-synthetic-probe").prepare_local_teletext_source(
