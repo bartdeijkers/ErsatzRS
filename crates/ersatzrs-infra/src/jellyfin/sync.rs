@@ -55,6 +55,39 @@ pub async fn sync_jellyfin_movie_library_with_progress<S>(
 where
     S: JellyfinServiceTrait,
 {
+    sync_jellyfin_movie_library_with_managed_claim(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_item_id,
+        deep_scan,
+        progress,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Retains the existing provider scan arguments while forwarding managed leaf-write authority"
+)]
+async fn sync_jellyfin_movie_library_with_managed_claim<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
     let mut synced = 0;
     let mut pages = PageProgress::new(JELLYFIN_PAGE_SIZE);
     let mut present_item_ids = std::collections::HashSet::new();
@@ -103,6 +136,7 @@ where
                     library_item_id,
                     item,
                     &playback,
+                    managed_claim,
                 )
                 .await?;
                 synced += 1;
@@ -223,6 +257,39 @@ pub async fn sync_jellyfin_show_library_with_progress<S>(
 where
     S: JellyfinServiceTrait,
 {
+    sync_jellyfin_show_library_with_managed_claim(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_item_id,
+        deep_scan,
+        progress,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Retains the existing provider scan arguments while forwarding managed leaf-write authority"
+)]
+async fn sync_jellyfin_show_library_with_managed_claim<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
     let mut synced = 0;
     let mut shows_completed: usize = 0;
     let mut pages = PageProgress::new(JELLYFIN_PAGE_SIZE);
@@ -255,6 +322,7 @@ where
                 deep_scan,
                 &mut present_seasons,
                 &mut present_episodes,
+                managed_claim,
             )
             .await?;
             shows_completed += 1;
@@ -324,6 +392,7 @@ async fn sync_one_jellyfin_show<S>(
     deep_scan: bool,
     present_seasons: &mut std::collections::HashSet<String>,
     present_episodes: &mut std::collections::HashSet<String>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<usize>
 where
     S: JellyfinServiceTrait,
@@ -400,6 +469,7 @@ where
                         season_id,
                         episode,
                         &playback,
+                        managed_claim,
                     )
                     .await?;
                     synced += 1;
@@ -498,6 +568,7 @@ pub async fn sync_jellyfin_show_by_id(
         deep_scan,
         &mut std::collections::HashSet::new(),
         &mut std::collections::HashSet::new(),
+        None,
     )
     .await?;
 
@@ -778,6 +849,25 @@ pub async fn sync_library_by_id_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    sync_library_by_id_with_managed_claim(pool, library_id, deep_scan, progress, None).await
+}
+
+/// Synchronize one library while forwarding its managed-operation claim to leaf writes.
+///
+/// Unmanaged callers should use [`sync_library_by_id_with_progress`]. Movie and
+/// episode persistence validates managed authority; provider etag skipping is unchanged.
+///
+/// # Errors
+///
+/// Returns an error when configuration, provider requests, managed authority, or
+/// database writes fail.
+pub async fn sync_library_by_id_with_managed_claim(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
@@ -829,7 +919,7 @@ pub async fn sync_library_by_id_with_progress(
 
     let service = JellyfinService::new();
     let synced = if kind == LibraryMediaKind::Shows {
-        sync_jellyfin_show_library_with_progress(
+        sync_jellyfin_show_library_with_managed_claim(
             pool,
             &service,
             &config,
@@ -838,10 +928,11 @@ pub async fn sync_library_by_id_with_progress(
             &parent_id,
             deep_scan,
             progress,
+            managed_claim,
         )
         .await
     } else {
-        sync_jellyfin_movie_library_with_progress(
+        sync_jellyfin_movie_library_with_managed_claim(
             pool,
             &service,
             &config,
@@ -850,6 +941,7 @@ pub async fn sync_library_by_id_with_progress(
             &parent_id,
             deep_scan,
             progress,
+            managed_claim,
         )
         .await
     }?;

@@ -624,9 +624,24 @@ errors require rollback and the caller retains ownership through commit. Missing
 records never prove absent pages. Stream/file deletion cascades remove reports;
 narrow actual-change triggers also clear them before existing file upserts or
 in-place stream identity updates, preserving no-op writes and ordinary tracks.
-The Local scanner now activates descriptor acquisition through those existing
-writer transactions; supported remote acquisition and actual source-page/body/
-charset observations remain open. Descriptors never confer page readiness or
+Local scans and managed Jellyfin library movie/episode leaves for mapped regular
+files now activate that report-only writer. Jellyfin requires the selected source
+ID/path, explicit unique nonnegative embedded indexes, exact item-path equality
+and complete native index/kind/codec correspondence. Missing indexes are never
+inferred from provider stream IDs or ordinary projection fallbacks. Plex/Emby
+retain the same optional untrusted declaration, without activating their report
+acquisition. Provider MediaFile paths and ordinary track projection stay intact.
+Mapped acquisition requires the genuine current scan claim and existing cleanup
+scope. Native primary/auxiliary probes and each owned filesystem/header stage have
+ten-second limits; actual workers retain their source and scope after caller loss.
+A stalled filesystem call cannot be preempted: uncertainty remains fatal and the
+actual worker retains ownership until exit. Transactional mapping/source checks
+and renewed lease checks fence the ordinary leaf/report commit; post-write changes
+require rollback. Confirmed optional acquisition failure before report writes
+preserves ordinary metadata. This is descriptor/header association, not source
+caption readiness, immutable-byte proof or remote-URL acquisition. P9A-03 owns
+native movie verification and remaining episode, targeted-show claim, provider,
+source-page/body/charset gaps. Descriptors never confer page readiness or
 source-page selection. A bounded supplied-window PSI observer now reuses the section/PAT/PMT parsers
 without reserving a new output PID. It retains exact current PAT/CAT/all-PMT
 bytes, versions, descriptors and every membership of the already occupied PID.

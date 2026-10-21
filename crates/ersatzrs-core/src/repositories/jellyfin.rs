@@ -118,6 +118,8 @@ pub struct JellyfinCollectionMediaItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct JellyfinPlaybackMetadata {
+    /// Provider declaration only; native acquisition must independently qualify it.
+    pub source_declaration: Option<super::ProviderMediaSourceDeclaration>,
     pub duration: Duration,
     pub width: i32,
     pub height: i32,

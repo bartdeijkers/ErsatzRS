@@ -5,6 +5,49 @@ use ersatzrs_domain::{
 
 use super::Result;
 
+/// Untrusted provider-selected source and explicitly reported stream indexes.
+///
+/// This declaration certifies neither file bytes nor native stream identity.
+/// Acquisition adapters must independently match the selected file, native
+/// layout, current source revision and durable parents before using it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProviderMediaSourceDeclaration {
+    pub source_id: String,
+    pub path: String,
+    pub stream_indexes: Vec<i32>,
+}
+
+impl ProviderMediaSourceDeclaration {
+    /// Retain a complete, unambiguous declaration without inferring indexes.
+    #[must_use]
+    pub fn new(
+        source_id: String,
+        path: String,
+        indexes: impl IntoIterator<Item = Option<i32>>,
+    ) -> Option<Self> {
+        if source_id.trim().is_empty() || path.trim().is_empty() {
+            return None;
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stream_indexes = Vec::new();
+        for index in indexes {
+            let index = index?;
+            if index < 0 || !seen.insert(index) {
+                return None;
+            }
+            stream_indexes.push(index);
+        }
+        if stream_indexes.is_empty() {
+            return None;
+        }
+        Some(Self {
+            source_id,
+            path,
+            stream_indexes,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RemoteMediaSourceKind {
     Jellyfin,

@@ -7,18 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ersatzrs_core::repositories::{ManagedLibraryOperationClaim, RepositoryError};
-use ersatzrs_domain::{
-    MediaSourceKind, SourceTeletextBinding, SourceTeletextBindingIdentity,
-    SourceTeletextDescriptor, SourceTeletextDescriptors, SourceTeletextObservation,
-    SourceTeletextObservedPages, SourceTeletextPid, SourceTeletextProgram, SourceTeletextPrograms,
-    SourceTeletextProvenance,
-};
+use ersatzrs_domain::MediaSourceKind;
 use ersatzrs_infra::db::Db;
-use ersatzrs_infra::ffprobe::teletext::TeletextProjectionWarning;
-use ersatzrs_infra::ffprobe::teletext_probe::{
-    ProbedTeletextStream, TeletextProbeDescriptors, TeletextProbePid, TeletextProbePrograms,
-    TeletextProbeSnapshot,
-};
+use ersatzrs_infra::ffprobe::teletext_probe::TeletextProbeSnapshot;
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, FfprobeMediaVersion, LocalTeletextAcquisition};
 use ersatzrs_infra::repositories::claim_is_current;
 use ersatzrs_infra::teletext_source::{self, SourceTeletextParents};
@@ -145,7 +136,13 @@ impl LocalTeletextWrite {
         for stream in streams {
             let parents =
                 fresh_parents(tx, version_id, context.file_id, stream.stream_index).await?;
-            let observation = observation(context.source_id, parents, acquisition, stream)?;
+            let observation = teletext_source::acquired_observation(
+                context.source_id,
+                MediaSourceKind::Local,
+                parents,
+                acquisition,
+                stream,
+            )?;
             if !acquisition.is_current(path) {
                 if self.report_written {
                     return Err(conflict(
@@ -229,113 +226,6 @@ async fn fresh_parents(
         media_version_id: version_id,
         media_stream_id: *stream_id,
         media_file_id: file_id,
-    })
-}
-
-fn observation(
-    source_id: i64,
-    parents: SourceTeletextParents,
-    acquisition: &LocalTeletextAcquisition,
-    stream: &ProbedTeletextStream,
-) -> Result<SourceTeletextObservation> {
-    let binding = SourceTeletextBindingIdentity::new(
-        source_id,
-        MediaSourceKind::Local,
-        parents.media_version_id,
-        parents.media_file_id,
-        parents.media_stream_id,
-        acquisition.revision().clone(),
-    )
-    .map_err(|_| conflict("invalid local teletext parent binding"))?;
-    let pid = match stream.pid {
-        TeletextProbePid::Unavailable => SourceTeletextPid::Unavailable,
-        TeletextProbePid::Unusable => SourceTeletextPid::Unusable,
-        TeletextProbePid::Available(pid) => SourceTeletextPid::Reported(pid),
-    };
-    let mut observation = SourceTeletextObservation::new(
-        SourceTeletextBinding::Bound(binding),
-        stream.stream_index,
-        SourceTeletextProvenance::Ffprobe9PackedDescriptorProjection,
-        pid,
-        programs(&stream.programs)?,
-        descriptors(&stream.descriptors)?,
-    )
-    .map_err(|_| conflict("invalid local teletext projection"))?;
-    if let Some(headers) = acquisition.headers().for_stream(stream.stream_index) {
-        observation.observed_pages =
-            SourceTeletextObservedPages::HeadersObserved(Box::new(headers.clone()));
-        observation
-            .validate()
-            .map_err(|_| conflict("invalid local teletext header observation"))?;
-    }
-    Ok(observation)
-}
-
-fn programs(programs: &TeletextProbePrograms) -> Result<SourceTeletextPrograms> {
-    Ok(match programs {
-        TeletextProbePrograms::Unavailable(_) => SourceTeletextPrograms::Unavailable,
-        TeletextProbePrograms::Unusable(_) => SourceTeletextPrograms::Unusable,
-        TeletextProbePrograms::Available(programs) => {
-            if programs.len() > teletext_source::MAX_SOURCE_TELETEXT_PROGRAMS {
-                return Err(conflict(
-                    "local teletext program projection exceeds its bound",
-                ));
-            }
-            SourceTeletextPrograms::Reported(
-                programs
-                    .iter()
-                    .map(|program| SourceTeletextProgram {
-                        program_id: program.program_id,
-                        program_number: program.program_number,
-                        pmt_pid: program.pmt_pid,
-                        pcr_pid: program.pcr_pid,
-                    })
-                    .collect(),
-            )
-        }
-    })
-}
-
-fn descriptors(descriptors: &TeletextProbeDescriptors) -> Result<SourceTeletextDescriptors> {
-    Ok(match descriptors {
-        TeletextProbeDescriptors::Unavailable(_) => SourceTeletextDescriptors::Unavailable,
-        TeletextProbeDescriptors::Unusable(_) => SourceTeletextDescriptors::Unusable,
-        TeletextProbeDescriptors::Available(descriptors) => {
-            if descriptors.entries.len() > teletext_source::MAX_SOURCE_TELETEXT_DESCRIPTORS {
-                return Err(conflict(
-                    "local teletext descriptor projection exceeds its bound",
-                ));
-            }
-            let entries = descriptors
-                .entries
-                .iter()
-                .map(|entry| {
-                    SourceTeletextDescriptor::new(
-                        u32::try_from(entry.projection_ordinal)
-                            .map_err(|_| conflict("local teletext ordinal exceeds its bound"))?,
-                        entry.language.clone(),
-                        entry.descriptor_type,
-                        entry.wire_magazine,
-                        entry.wire_page,
-                    )
-                    .map_err(|_| conflict("invalid local teletext descriptor"))
-                })
-                .collect::<Result<Vec<_>>>()?;
-            let trailing_unpaired_pairs = descriptors
-                .warning
-                .map(|warning| match warning {
-                    TeletextProjectionWarning::TrailingUnpairedPairs { count } => {
-                        u32::try_from(count).map_err(|_| {
-                            conflict("local teletext trailing pairs exceed their bound")
-                        })
-                    }
-                })
-                .transpose()?;
-            SourceTeletextDescriptors::Reported {
-                entries,
-                trailing_unpaired_pairs,
-            }
-        }
     })
 }
 

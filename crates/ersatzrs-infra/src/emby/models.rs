@@ -115,6 +115,7 @@ pub(super) struct EmbyPlaybackInfoResponse {
 #[serde(rename_all = "PascalCase")]
 pub(super) struct EmbyMediaSourceResponse {
     pub(super) id: Option<String>,
+    pub(super) path: Option<String>,
     #[serde(default)]
     pub(super) run_time_ticks: i64,
     #[serde(default)]
@@ -132,7 +133,7 @@ pub(super) struct EmbyMediaStreamResponse {
     pub(super) height: Option<i32>,
     pub(super) width: Option<i32>,
     #[serde(default)]
-    pub(super) index: i32,
+    pub(super) index: Option<i32>,
     #[serde(default)]
     pub(super) is_default: bool,
     #[serde(default)]

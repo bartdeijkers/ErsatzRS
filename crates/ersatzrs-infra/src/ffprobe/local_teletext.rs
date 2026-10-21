@@ -209,6 +209,19 @@ impl LocalTeletextAcquisition {
         &self.revision
     }
 
+    /// Recheck a mapped source under the existing owned reader and cleanup scope.
+    pub(crate) async fn is_current_owned(self: &Arc<Self>, path: &Path) -> super::Result<bool> {
+        let source = path.to_owned();
+        let acquisition = self.clone();
+        headers::run_owned(path, AUXILIARY_TIMEOUT, move |stop| {
+            stop.check_source_guard()?;
+            let current = acquisition.is_current(&source);
+            stop.check_source_guard()?;
+            Ok(current)
+        })
+        .await
+    }
+
     /// Compare both the still-held original and a fresh path open. This is an
     /// observed filesystem association, not a source-byte integrity certificate.
     #[must_use]
@@ -230,7 +243,61 @@ async fn extract_with_timeout(
     auxiliary_timeout: Duration,
 ) -> super::Result<LocalMediaProbe> {
     let guard = LocalFileRevision::open(path).ok();
-    let bytes = local::capture(extractor.command_for(path), path.to_owned(), None).await?;
+    extract_with_guard(extractor, path, guard, None, auxiliary_timeout).await
+}
+
+/// Optional mapped-file scan enrichment: every probe stage has a deadline and
+/// belongs to the managed scan's existing cleanup scope. No remote URL opens.
+pub(crate) async fn extract_mapped_report(
+    extractor: &FfprobeExtractor,
+    path: &Path,
+) -> super::Result<Option<LocalMediaProbe>> {
+    if super::LocalProbeCleanupScope::current().is_none() {
+        return Ok(None);
+    }
+    let source = path.to_owned();
+    let result = async {
+        let guard = headers::run_owned(path, AUXILIARY_TIMEOUT, move |stop| {
+            stop.check_source_guard()?;
+            let guard = LocalFileRevision::open(&source).ok();
+            stop.check_source_guard()?;
+            Ok(guard)
+        })
+        .await?;
+        let Some(guard) = guard else { return Ok(None) };
+        extract_with_guard(
+            extractor,
+            path,
+            Some(guard),
+            Some(Instant::now() + AUXILIARY_TIMEOUT),
+            AUXILIARY_TIMEOUT,
+        )
+        .await
+        .map(Some)
+    }
+    .await;
+    match result {
+        Err(error @ (FfprobeError::Cancelled { .. } | FfprobeError::CleanupUnconfirmed { .. })) => {
+            Err(error)
+        }
+        Err(_) => Ok(None), // Optional native enrichment must preserve provider AV metadata.
+        Ok(probe) => Ok(probe),
+    }
+}
+
+async fn extract_with_guard(
+    extractor: &FfprobeExtractor,
+    path: &Path,
+    guard: Option<LocalFileRevision>,
+    primary_deadline: Option<Instant>,
+    auxiliary_timeout: Duration,
+) -> super::Result<LocalMediaProbe> {
+    let bytes = local::capture(
+        extractor.command_for(path),
+        path.to_owned(),
+        primary_deadline,
+    )
+    .await?;
     let primary: FfprobeOutput =
         serde_json::from_slice(&bytes).map_err(|source| FfprobeError::Json {
             path: path.display().to_string(),
@@ -238,9 +305,21 @@ async fn extract_with_timeout(
         })?;
     let media = super::project_to_media_version(path, &primary);
     let primary_snapshot = teletext_probe::project(&primary, TeletextProbeEncoding::Ffprobe9Base64);
-    let teletext = match guard.filter(|guard| guard.is_current(path)) {
+    let guard = match guard {
+        Some(guard) => current_guard(guard, path, primary_deadline.is_some()).await?,
+        None => None,
+    };
+    let teletext = match guard {
         Some(guard) if identities(&primary_snapshot).is_some_and(|ids| !ids.is_empty()) => {
-            acquire(extractor, path, guard, &primary_snapshot, auxiliary_timeout).await?
+            acquire(
+                extractor,
+                path,
+                guard,
+                &primary_snapshot,
+                auxiliary_timeout,
+                primary_deadline.is_some(),
+            )
+            .await?
         }
         _ => None,
     };
@@ -253,11 +332,12 @@ async fn acquire(
     guard: LocalFileRevision,
     primary: &TeletextProbeSnapshot,
     timeout: Duration,
+    owned_checks: bool,
 ) -> super::Result<Option<Arc<LocalTeletextAcquisition>>> {
     // Check immediately before the second source open as well as after it.
-    if !guard.is_current(path) {
+    let Some(guard) = current_guard(guard, path, owned_checks).await? else {
         return Ok(None);
-    }
+    };
     let result = local::capture(
         auxiliary_command(extractor, path),
         path.to_owned(),
@@ -272,9 +352,12 @@ async fn acquire(
             };
             let snapshot =
                 teletext_probe::project(&auxiliary, TeletextProbeEncoding::Ffprobe9Base64);
-            if identities(primary) != identities(&snapshot) || !guard.is_current(path) {
+            if identities(primary) != identities(&snapshot) {
                 return Ok(None);
             }
+            let Some(guard) = current_guard(guard, path, owned_checks).await? else {
+                return Ok(None);
+            };
             let Some(revision) = guard.revision() else {
                 return Ok(None);
             };
@@ -289,6 +372,24 @@ async fn acquire(
             Ok(Some(Arc::new(headers::acquire(acquired, path).await?)))
         }
     }
+}
+
+async fn current_guard(
+    guard: LocalFileRevision,
+    path: &Path,
+    owned: bool,
+) -> super::Result<Option<LocalFileRevision>> {
+    if !owned {
+        return Ok(guard.is_current(path).then_some(guard));
+    }
+    let source = path.to_owned();
+    headers::run_owned(path, AUXILIARY_TIMEOUT, move |stop| {
+        stop.check_source_guard()?;
+        let current = guard.is_current(&source);
+        stop.check_source_guard()?;
+        Ok(current.then_some(guard))
+    })
+    .await
 }
 
 fn optional_failure(error: FfprobeError) -> super::Result<Option<Arc<LocalTeletextAcquisition>>> {

@@ -118,6 +118,8 @@ pub struct EmbyCollectionMediaItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmbyPlaybackMetadata {
+    /// Provider declaration only; native acquisition must independently qualify it.
+    pub source_declaration: Option<super::ProviderMediaSourceDeclaration>,
     pub duration: Duration,
     pub width: i32,
     pub height: i32,

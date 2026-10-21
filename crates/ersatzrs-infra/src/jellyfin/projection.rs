@@ -376,6 +376,21 @@ pub(super) fn project_playback(
     response: JellyfinPlaybackInfoResponse,
 ) -> Option<JellyfinPlaybackMetadata> {
     let media_source = response.media_sources.into_iter().next()?;
+    let source_declaration = media_source
+        .id
+        .clone()
+        .zip(media_source.path.clone())
+        .and_then(|(id, path)| {
+            ersatzrs_core::repositories::ProviderMediaSourceDeclaration::new(
+                id,
+                path,
+                media_source
+                    .media_streams
+                    .iter()
+                    .filter(|stream| !stream.is_external)
+                    .map(|stream| stream.index),
+            )
+        });
     let video = media_source
         .media_streams
         .iter()
@@ -395,6 +410,7 @@ pub(super) fn project_playback(
     );
 
     Some(JellyfinPlaybackMetadata {
+        source_declaration,
         duration: Duration::nanoseconds(media_source.run_time_ticks * 100),
         width,
         height,
@@ -420,7 +436,7 @@ pub(super) fn project_stream(stream: JellyfinMediaStreamResponse) -> Option<Medi
 
     let is_video = matches!(kind, MediaStreamKind::Video);
     let mut projected = MediaStream {
-        index: stream.index,
+        index: stream.index.unwrap_or_default(),
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
         profile: stream
@@ -584,3 +600,6 @@ mod rotation_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod source_declaration_tests;

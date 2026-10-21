@@ -183,11 +183,12 @@ impl ScanRuntime for NativeScanRuntime {
             .map(|_| ScanRuntimeReport::default())
             .map_err(scan_error),
             MediaSourceKind::Jellyfin => {
-                ersatzrs_infra::jellyfin::sync_library_by_id_with_progress(
+                ersatzrs_infra::jellyfin::sync_library_by_id_with_managed_claim(
                     &self.pool,
                     library_id,
                     deep_scan,
                     Some(progress),
+                    managed_claim,
                 )
                 .await
                 .map(|_| ScanRuntimeReport::default())

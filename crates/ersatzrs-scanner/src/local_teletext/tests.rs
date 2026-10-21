@@ -1,3 +1,5 @@
+use ersatzrs_domain::{SourceTeletextBinding, SourceTeletextObservation};
+
 use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{ManagedLibraryOperationRepository, ManagedLibraryScanSpec};
 use ersatzrs_domain::ManagedLibraryOperationKind;

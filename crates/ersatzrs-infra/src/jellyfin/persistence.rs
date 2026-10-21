@@ -7,8 +7,20 @@ pub(super) async fn upsert_jellyfin_movie(
     library_item_id: &str,
     item: &JellyfinMediaItem,
     playback: &JellyfinPlaybackMetadata,
+    claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<i64> {
+    let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
+        pool,
+        claim,
+        media_source_id,
+        library_id,
+        &item.path,
+        playback.source_declaration.as_ref(),
+        &playback.streams,
+    )
+    .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    teletext.check_claim(&mut tx, library_id).await?;
     ensure_jellyfin_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
@@ -25,6 +37,7 @@ pub(super) async fn upsert_jellyfin_movie(
     )
     .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
+    teletext.persist(&mut tx, library_id, version_id).await?;
     tx.commit().await.repository()?;
     Ok(item_id)
 }
@@ -64,6 +77,10 @@ pub(super) async fn upsert_jellyfin_season(
     Ok(id)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Retains the provider leaf context and its genuine managed scan claim"
+)]
 pub(super) async fn upsert_jellyfin_episode(
     pool: &DbPool,
     media_source_id: i64,
@@ -72,8 +89,20 @@ pub(super) async fn upsert_jellyfin_episode(
     season_id: i64,
     item: &JellyfinMediaItem,
     playback: &JellyfinPlaybackMetadata,
+    claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<()> {
+    let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
+        pool,
+        claim,
+        media_source_id,
+        library_id,
+        &item.path,
+        playback.source_declaration.as_ref(),
+        &playback.streams,
+    )
+    .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    teletext.check_claim(&mut tx, library_id).await?;
     ensure_jellyfin_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
@@ -89,6 +118,7 @@ pub(super) async fn upsert_jellyfin_episode(
     crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &playback.streams)
         .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
+    teletext.persist(&mut tx, library_id, version_id).await?;
     tx.commit().await.repository()?;
     Ok(())
 }

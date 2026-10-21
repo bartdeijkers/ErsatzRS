@@ -12,10 +12,13 @@ use sqlx::{Row as _, Transaction};
 use crate::db::{Db, DbRow};
 use crate::repositories::managed_library_operation::claim_is_current;
 
+mod acquisition;
 mod codec;
 mod header_codec;
 mod parents;
 mod playback;
+
+pub use acquisition::acquired_observation;
 
 pub use playback::{
     discover_caption_requests, load_caption_candidates, SourceTeletextCaptionCandidate,

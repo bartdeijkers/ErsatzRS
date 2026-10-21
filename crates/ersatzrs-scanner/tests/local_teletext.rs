@@ -10,6 +10,7 @@ use ersatzrs_domain::{
     SourceTeletextObservedPages, SourceTeletextPid, SourceTeletextRevision,
 };
 use ersatzrs_infra::ffprobe::LocalProbeCleanupScope;
+use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionContext};
 use ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository;
 use ersatzrs_infra::teletext_source;
 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
@@ -520,7 +521,6 @@ async fn native_scan_caption_selection_uses_wire_language_and_exact_decoded_page
 async fn native_shared_caption_runtime_releases_preparation_and_preserves_ordinary_fallback() {
     use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
     use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
-    use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionContext};
     use tokio::time::Instant;
 
     let (probe, fixture) = inputs();
@@ -548,6 +548,7 @@ async fn native_shared_caption_runtime_releases_preparation_and_preserves_ordina
         languages: &languages,
         subtitle_mode: ChannelSubtitleMode::Any,
         streaming_mode: StreamingMode::TransportStream,
+        source_teletext_delivery: ersatzrs_domain::SourceTeletextCaptionDelivery::Burn,
         playback_interval: None,
         deadline: Instant::now() + std::time::Duration::from_secs(20),
     };

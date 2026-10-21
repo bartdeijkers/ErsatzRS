@@ -112,7 +112,11 @@ pub(super) async fn acquire(
 
 /// The blocking owner and its registered capacity survive the awaiting caller.
 /// No database mutation or publication can happen in this closure.
-async fn run_owned<T, F>(path: &Path, timeout: Duration, work: F) -> crate::ffprobe::Result<T>
+pub(super) async fn run_owned<T, F>(
+    path: &Path,
+    timeout: Duration,
+    work: F,
+) -> crate::ffprobe::Result<T>
 where
     T: Send + 'static,
     F: FnOnce(&ReadStop<'_, T>) -> crate::ffprobe::Result<T> + Send + 'static,

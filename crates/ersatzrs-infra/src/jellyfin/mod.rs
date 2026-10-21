@@ -41,7 +41,8 @@ pub use sync::{
     sync_jellyfin_collection_library_with_progress, sync_jellyfin_movie_library,
     sync_jellyfin_movie_library_with_progress, sync_jellyfin_show_by_id,
     sync_jellyfin_show_library, sync_jellyfin_show_library_with_progress, sync_library_by_id,
-    sync_library_by_id_with_options, sync_library_by_id_with_progress,
+    sync_library_by_id_with_managed_claim, sync_library_by_id_with_options,
+    sync_library_by_id_with_progress,
 };
 
 use models::{

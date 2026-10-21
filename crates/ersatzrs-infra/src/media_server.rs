@@ -23,6 +23,7 @@ use sqlx::Row;
 use crate::db::{assert_sql_safe, DbPool};
 
 pub(crate) mod jellyfin_emby;
+pub(crate) mod teletext;
 
 /// State values mirroring `ErsatzTV.Core.Domain.MediaItemState`.
 pub(crate) const STATE_NORMAL: i64 = 0;
@@ -257,13 +258,26 @@ pub async fn load_media_server_path_replacements(
     fk_column: &str,
     media_source_id: i64,
 ) -> Result<Vec<PathReplacement>, sqlx::Error> {
+    load_path_replacements_from(pool, table, path_column, fk_column, media_source_id).await
+}
+
+pub(crate) async fn load_path_replacements_from<'e, E>(
+    executor: E,
+    table: &str,
+    path_column: &str,
+    fk_column: &str,
+    media_source_id: i64,
+) -> Result<Vec<PathReplacement>, sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = crate::db::Db>,
+{
     let sql = format!(
         r#"SELECT "{path_column}" AS "SourcePath", "LocalPath" AS "LocalPath"
-           FROM "{table}" WHERE "{fk_column}" = ?"#
+           FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Id""#
     );
     let rows = sqlx::query(assert_sql_safe(&sql))
         .bind(media_source_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await?;
 
     let mut replacements = Vec::new();

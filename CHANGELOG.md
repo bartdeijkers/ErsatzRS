@@ -939,6 +939,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve native teletext descriptors and observed page headers during managed
+  Jellyfin scans of explicitly mapped files. Bind reports to the current source,
+  stream and scan lease, replace stale observations on deep rescan, and retain
+  ordinary subtitles and alternate audio when native enrichment is unavailable.
+
 - Preserve source-derived steady teletext header context when removing and
   restoring Local object calls through TTI concepts. Exact root undo and
   publication isolation remain enforced; generated Flash stays protected.

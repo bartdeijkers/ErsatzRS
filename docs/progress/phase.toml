@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 native steady derived-Flash Local call deletion/root undo completed; next existing F1 complete-set/dependency boundary against canonical evidence'
+current_focus = 'P9A-03 mapped-Jellyfin movie report/rescan completed; commit and push with first split-CI run, then finish mapped provider report actions'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -67,27 +67,37 @@ Level2.5 and correct1/1.5 fallback, before any production9B addon. The existing
 L15-A..E/F/V/X list and ADR0123 retain all conditions; neither base nor9A is
 accepted. No new general audit, adjacent variant series or external maintenance.
 This current handoff supersedes older next-action prose below. Maintainer
-2026-10-21 authorizes a push to remote/main only after full local Phase9A
-acceptance, followed by checking all applicable CI gates on the pushed commit.
-Partial checkpoints remain local; no publication is authorized.
+2026-10-21 now authorizes each sufficiently verified coherent checkpoint to be
+committed and pushed to remote/main with CI (no skip marker), superseding the
+full-local9A push restriction. Check the exact pushed SHA and every applicable
+job; rerun only failed jobs on that SHA. Code fixes require a new SHA. Include
+shared f37f9aea and verify its first actual split-CI run; no release publication.
 
-F1 native steady derived-Flash Local call editing is completed. Canonical
-tmp/phase9-header-c2/row-tail-background/local-call-import/identity.json owns the
-actual last-call deletion RED, private derived-carrier correction, full original/
-scalar/AP-only native targets, exact concept/source/model/units/preview, cold
-reopen and root undo. Four structural Flash forgeries preserve head/receipt/
-publication; profiles, package, Night and settings remain exact. All151 parser
-and43 native regressions pass. Fixture-only protected Header, navigation/helper,
-projector and width failures remain separate from the product defect. General
-Flash style decoding is unchanged. Earlier F3 source/independent decoder and
-editor/admin/transport/F6 evidence retains its exact scope; no new client proof.
-Next inspect only the existing F1 complete-set/dependency clause and canonical
-resource-set-creation evidence to identify a source-positive remaining user
-boundary or its exact external prerequisite. Do not add an adjacent variant or
-repeat closed chains without a concrete gap. X1 defer and X3 upstream wait remain
-unchanged; no DVBViewer/physical Kodi trial or Windows-package retry. Previous
-platform completions retain scope. Push only after full local9A acceptance,
-then check all applicable CI on that exact pushed SHA.
+P9A-03 mapped-Jellyfin movie report/rescan is completed. Canonical
+tmp/phase9-next-local-teletext/provider-scan/identity.json owns the original native
+no-report RED, three actual managed-library native passes,105 affected provider/
+source/storage/scanner regressions and strict four-crate all-target Clippy.
+Exact selected path and complete explicit/native indexes/kinds/codecs bind the
+held source; confirmed optional failure preserves ordinary tracks, expired lease
+refuses leaf writes, and mapping/source/lease checks fence the transaction.
+Deep rescan replaces the old observation while preserving file/version/four tracks.
+Owned physical checks retain source and capacity after caller loss. Test-only
+imports/Burn-default/type/duration corrections and borrow-only error translation
+retain original oracles/native proof. Existing editor/publication/isolation/
+transport/F6 results remain valid in scope. The current finite step is finish
+progress/staged checks and push the coherent checkpoint including f37f9aea; verify
+all applicable jobs on the exact SHA before calling it CI-green.
+
+Next complete the existing P9A-03 mapped-provider report action package: connect
+Emby/Plex declarations, forward genuine claims for targeted shows, and prove the
+remaining movie/episode leaves and refusals with existing tools. Native episode
+and provider playback remain unproven; remote-only sources still need genuine
+acquisition identity. Do not remove Local-only playback guards merely because
+reports now exist. F1 complete-set/dependency qualification found no new codec
+loss; actual complete-bank/context editor work stays X3 upstream-wait. Do not
+compensate with new tiny editor variants. F1 steady-call/root undo and earlier
+platform completions remain closed. X1 defer/no DVBViewer/physical Kodi trial
+and the Windows-package defer with a future120-minute reservation remain.
 
 X2 native Windows default/channel configuration-overlay playback is completed
 within exact40ad host7d2d/candidate.4 scope. Canonical

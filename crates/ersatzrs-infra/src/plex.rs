@@ -64,6 +64,8 @@ pub struct PlexLibrarySummary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlexMediaItem {
+    /// Provider declaration only; native acquisition must independently qualify it.
+    pub source_declaration: Option<ersatzrs_core::repositories::ProviderMediaSourceDeclaration>,
     /// Folder-derived tags populated only by Other Video scans.
     pub folder_tags: Vec<String>,
     pub key: String,
@@ -1834,6 +1836,20 @@ fn project_media_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
         .filter(|media| !media.part.is_empty())
         .max_by_key(|media| media.id)?;
     let part = media.part.into_iter().next()?;
+    let source_declaration = part.file.clone().filter(|_| part.id > 0).and_then(|path| {
+        ersatzrs_core::repositories::ProviderMediaSourceDeclaration::new(
+            part.id.to_string(),
+            path,
+            part.stream
+                .iter()
+                .filter(|stream| {
+                    !(stream.stream_type == Some(3)
+                        && stream.index.is_none()
+                        && stream.key.is_some())
+                })
+                .map(|stream| stream.index),
+        )
+    });
     let video = part
         .stream
         .iter()
@@ -1843,6 +1859,7 @@ fn project_media_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
         .and_then(|stream| stream.height)
         .unwrap_or(media.height);
     Some(PlexMediaItem {
+        source_declaration,
         folder_tags: Vec::new(),
         key: item.key.or(item.rating_key)?,
         etag: item.updated_at.map(|value| value.to_string()),
@@ -3867,3 +3884,6 @@ mod stream_projection_tests {
             .is_some_and(|hint| hint.contains("Plex")));
     }
 }
+
+#[cfg(test)]
+mod source_declaration_tests;

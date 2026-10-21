@@ -155,6 +155,16 @@ impl FfprobeExtractor {
         local_teletext::extract(self, path.as_ref()).await
     }
 
+    /// Bounded, optional native metadata for an explicitly mapped provider file.
+    /// The caller retains the genuine provider/file/lease witness; this only
+    /// supplies a held physical acquisition and never authorizes playback.
+    pub(crate) async fn extract_mapped_teletext_report(
+        &self,
+        path: &Path,
+    ) -> Result<Option<LocalMediaProbe>> {
+        local_teletext::extract_mapped_report(self, path).await
+    }
+
     /// Probe a persisted Remote Stream URL or media-producing add-on.
     ///
     /// Add-on stdout is connected directly to ffprobe stdin and both
