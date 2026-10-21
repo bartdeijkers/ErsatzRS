@@ -22,6 +22,32 @@ struct Atom {
     command: Command,
 }
 
+#[derive(Clone, Copy)]
+enum CarrierKind {
+    Style(u8),
+    SteadyFlash,
+}
+impl CarrierKind {
+    fn read(entry: raw::Entry) -> Option<Self> {
+        if entry.command.is_some() || entry.selector.is_some() {
+            return None;
+        }
+        if let Some(kind) = entry.style.as_ref().and_then(super::style::kind) {
+            return Some(Self::Style(kind));
+        }
+        // Only the exact derived steady/slow operation is supported. This is
+        // not general authored Flash decoding or styling authority.
+        (entry.word & 63 < 40 && entry.word >> 6 == 7).then_some(Self::SteadyFlash)
+    }
+
+    fn matches_family(self, entry: raw::Entry) -> bool {
+        match self {
+            Self::Style(kind) => entry.style.as_ref().and_then(super::style::kind) == Some(kind),
+            Self::SteadyFlash => entry.word & 63 < 40 && (entry.word >> 6) & 31 == 7,
+        }
+    }
+}
+
 /// An untrusted carrier hypothesis, never an authored style or edit authority.
 /// Only the completed native candidate can discharge this exact producer claim.
 pub(in super::super) struct ProspectiveCarrier {
@@ -164,22 +190,22 @@ pub(super) fn read(
             .first()
             .copied()
             .ok_or_else(|| fail(location))?;
-        if original.index != 0 || original.word != old[0] || original.style.is_none() {
+        let kind = CarrierKind::read(original).ok_or_else(|| fail(location))?;
+        if original.index != 0 || old.first() != Some(&original.word) {
             return Err(fail(location));
         }
         before.entries.remove(0);
         if let Some(entry) = after.entries.first() {
             if entry.index == 0 && entry.word == original.word {
                 after.entries.remove(0);
-                if after.entries.first().is_some_and(|entry| {
-                    entry.style.as_ref().and_then(super::style::kind)
-                        == original.style.as_ref().and_then(super::style::kind)
-                }) {
+                if after
+                    .entries
+                    .first()
+                    .is_some_and(|entry| kind.matches_family(*entry))
+                {
                     return Err(fail(location));
                 }
-            } else if entry.style.is_some_and(|command| {
-                super::style::kind(&command) == original.style.as_ref().and_then(super::style::kind)
-            }) {
+            } else if kind.matches_family(*entry) {
                 return Err(fail(location));
             }
         }
@@ -321,18 +347,26 @@ fn prospective(
     let Some(entry) = after.entries.first() else {
         return Ok(None);
     };
-    if !matches!(
+    let background = matches!(
         entry.style,
         Some(Command::AtColumn {
             operation: TeletextColumnOperation::Background { .. },
             ..
         })
-    ) {
+    );
+    let flash = definition.program.commands().len() == 1
+        && matches!(CarrierKind::read(*entry), Some(CarrierKind::SteadyFlash));
+    if !background && !flash {
         return Ok(None);
     }
     if entry.index != 0
         || entry.word & 63 != u32::from(position.column())
-        || calls.first().is_none_or(|call| call.first != 1)
+        || calls.first().is_none_or(|call| {
+            call.first != 1
+                || !matches!(call.command, Command::InvokeObject { target, .. }
+                    if target.scope() == TeletextObjectScope::Local
+                        && target.owner() == definition.identity.owner())
+        })
     {
         return Err(fail(location));
     }

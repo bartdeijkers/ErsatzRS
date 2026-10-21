@@ -105,6 +105,15 @@ impl Retained {
     }
 
     pub(super) async fn assert_unchanged(&self, fixture: &Fixture, flow: &Flow) {
+        self.assert_unchanged_width(fixture, flow, 56 * 12).await;
+    }
+
+    pub(super) async fn assert_unchanged_width(
+        &self,
+        fixture: &Fixture,
+        flow: &Flow,
+        width: usize,
+    ) {
         assert_retained_storage(fixture, flow).await;
         assert_eq!(
             calculate_addon_content_sha256(&fixture.root.path().join("package"))
@@ -132,7 +141,7 @@ impl Retained {
                 *expected
             );
         }
-        generations::assert_same_output(&recover(fixture, 2).await, &flow.accepted[1]);
+        generations::assert_same_output_width(&recover(fixture, 2).await, &flow.accepted[1], width);
     }
 }
 

@@ -234,6 +234,55 @@ fn local_leading_ap_before_only_calls_remains_original_and_carrier_stays_prospec
 }
 
 #[test]
+fn local_steady_flash_carrier_is_prospective_only_for_exact_ap_only_root() {
+    let ap = Command::SetPosition {
+        position: TeletextEnhancementPosition::new(0, 8).unwrap(),
+    };
+    let flash = 8 | (7 << 6);
+    let fixture = Fixture::new(vec![ap], &[]);
+    let candidate = fixture.parse(&[flash, ORIGIN, CALL]).unwrap();
+    assert_eq!(candidate.replacement, [ap, call(Some(0))]);
+    assert_eq!(candidate.retained, [Some(0), None]);
+    assert!(candidate.carrier.is_some());
+    assert!(structure(&candidate).has_invocation_structure_changes());
+    for words in [
+        vec![flash, flash, ORIGIN, CALL],
+        vec![9 | (7 << 6), ORIGIN, CALL],
+        vec![0x28 | (7 << 6), ORIGIN, CALL],
+        vec![flash | (1 << 11), ORIGIN, CALL],
+        vec![flash | (8 << 11), ORIGIN, CALL],
+        vec![flash],
+    ] {
+        assert!(fixture.parse(&words).is_err(), "refused carrier {words:x?}");
+    }
+    let authored = Fixture::new(vec![ap, glyph(8, b'B')], &[B]);
+    assert!(authored.parse(&[flash, ORIGIN, CALL, B]).is_err());
+}
+
+#[test]
+fn local_carrier_classification_keeps_unknowns_calls_and_other_flash_distinct() {
+    let location = Location {
+        page: 124,
+        subcode: 32,
+        resource: None,
+    };
+    let words = [8 | (7 << 6), 8 | (7 << 6) | (8 << 11), CALL, B];
+    let mut body =
+        super::raw::Body::read(&words, location, Instant::now() + Duration::from_secs(5)).unwrap();
+    let kind = super::CarrierKind::read(body.entries[0]).unwrap();
+    assert!(matches!(kind, super::CarrierKind::SteadyFlash));
+    assert!(kind.matches_family(body.entries[1]));
+    assert!(super::CarrierKind::read(body.entries[1]).is_none());
+    assert!(!kind.matches_family(body.entries[2]));
+    assert!(!kind.matches_family(body.entries[3]));
+    body.entries[0].command = Some(call(None));
+    assert!(super::CarrierKind::read(body.entries[0]).is_none());
+    body.entries[0].command = None;
+    body.entries[0].selector = Some(0);
+    assert!(super::CarrierKind::read(body.entries[0]).is_none());
+}
+
+#[test]
 fn local_only_leading_anchor_keeps_two_calls_without_changing_resource_policy() {
     let ap = Command::SetPosition {
         position: TeletextEnhancementPosition::new(0, 8).unwrap(),

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F3 steady mixed-row-tail Local header materialization completed; next F1 native qualification of source-authenticated derived Flash carriers during supported Local call-topology edits'
+current_focus = 'P9A-04 F1 native steady derived-Flash Local call deletion/root undo completed; next existing F1 complete-set/dependency boundary against canonical evidence'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -71,24 +71,23 @@ This current handoff supersedes older next-action prose below. Maintainer
 acceptance, followed by checking all applicable CI gates on the pushed commit.
 Partial checkpoints remain local; no publication is authorized.
 
-F3 steady mixed-row-tail Local header materialization is completed. Canonical
-tmp/phase9-header-c2/identity.json, nonuniform_row_tail_followup links the exact
-existing complete-factory RED, rejected colour-only hypothesis, unchanged
-original source/commands/geometry/fallback and source-owned native Flash word.
-All136 affected regressions and three independent decoder tests pass. Eleven
-prior complete decoder inputs remain exact; the bounded new observer checks32
-steady cells at both levels and rejects valid-Hamming Flash corruption that the
-old colour/glyph-only helper accepts. Wrong background and grouped nonsteady/
-phase-sensitive fallback refusals remain mandatory. Strict lint/review pass.
-No new GUI/editor/stream/client proof; unproven phase state gains no admission.
-Next F1 qualify the existing export/import path for supported Local call-count
-edits on this newly supported Flash-carrier object. The retained/scalar path is
-source/span/exact-byte based, but structural call reading requires an editable
-style family that currently omits Flash. First retain a genuine native import
-result; only then correct that derived-carrier classifier without making Flash
-an editable authored style. Require complete expected model/native/effects,
-forged-carrier refusal and exact root undo. No adjacent variants before closure.
-Previous platform completions and external deferrals retain scope.
+F1 native steady derived-Flash Local call editing is completed. Canonical
+tmp/phase9-header-c2/row-tail-background/local-call-import/identity.json owns the
+actual last-call deletion RED, private derived-carrier correction, full original/
+scalar/AP-only native targets, exact concept/source/model/units/preview, cold
+reopen and root undo. Four structural Flash forgeries preserve head/receipt/
+publication; profiles, package, Night and settings remain exact. All151 parser
+and43 native regressions pass. Fixture-only protected Header, navigation/helper,
+projector and width failures remain separate from the product defect. General
+Flash style decoding is unchanged. Earlier F3 source/independent decoder and
+editor/admin/transport/F6 evidence retains its exact scope; no new client proof.
+Next inspect only the existing F1 complete-set/dependency clause and canonical
+resource-set-creation evidence to identify a source-positive remaining user
+boundary or its exact external prerequisite. Do not add an adjacent variant or
+repeat closed chains without a concrete gap. X1 defer and X3 upstream wait remain
+unchanged; no DVBViewer/physical Kodi trial or Windows-package retry. Previous
+platform completions retain scope. Push only after full local9A acceptance,
+then check all applicable CI on that exact pushed SHA.
 
 X2 native Windows default/channel configuration-overlay playback is completed
 within exact40ad host7d2d/candidate.4 scope. Canonical

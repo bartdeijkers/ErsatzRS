@@ -934,6 +934,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve source-derived steady teletext header context when removing and
+  restoring Local object calls through TTI concepts. Exact root undo and
+  publication isolation remain enforced; generated Flash stays protected.
 - Compile the qualified Local-object header layout with changing row colours,
   preserving original object positions, steady presentation and Level 1.5
   fallback. Generated position writers use only proven unchanged attributes.

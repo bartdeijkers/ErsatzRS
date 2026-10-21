@@ -199,9 +199,13 @@ The inserted word retains only its original AP's HeaderPosition provenance;
 retained commands keep their original ordinals. Complete original/physical
 comparison, geometry, full effects and Level1/1.5 fallback remain mandatory.
 This closes the qualified steady mixed-colour header layout, not all contexts
-or temporal flash. Source-authenticated derived Flash classification in Local
-call-topology TTI imports remains a separate F1 integration obligation; it must
-not make generated Flash words generally editable authored styles.
+or temporal flash. Native Local call-topology TTI imports authenticate this
+steady carrier through its exact original HeaderPosition span and native word.
+An AP-only source may restore one prospective carrier only immediately before
+a checked same-owner Local call; the completed native producer and full effects
+must discharge that hypothesis. Generated Flash stays protected context, outside
+general authored style decoding. Concept import and exact root undo preserve
+explicit publication and immutable source ownership.
 
 Private concept version29 separately records exact optional Main presence by
 page/subpage owner. Both expected and replacement are required fields: explicit

@@ -209,6 +209,27 @@ async fn assert_call_concept(
     intent: &TeletextLocalObjectGlyphProgramOverlay,
     schema_version: u16,
 ) -> TeletextRaster {
+    assert_call_concept_with_preview(
+        fixture,
+        flow,
+        concept,
+        expected,
+        intent,
+        schema_version,
+        external_editor_probe::preview_page,
+    )
+    .await
+}
+
+async fn assert_call_concept_with_preview(
+    fixture: &Fixture,
+    flow: &Flow,
+    concept: &SavedEditorialTeletextDesign,
+    expected: &EncodedTeletextAuthoredService,
+    intent: &TeletextLocalObjectGlyphProgramOverlay,
+    schema_version: u16,
+    render: fn(&EncodedTeletextAuthoredService, u16) -> TeletextRaster,
+) -> TeletextRaster {
     let stored = drcs_bitmap::stored(fixture, concept).await;
     let documents = decode_teletext_design_documents(&stored.document, designs::budget()).unwrap();
     let overlay = documents.editorial_overlay().unwrap();
@@ -253,8 +274,8 @@ async fn assert_call_concept(
         designs::units(restored.encoded().unwrap()),
         designs::units(expected)
     );
-    let preview = external_editor_probe::preview_page(restored.encoded().unwrap(), 124);
-    assert_eq!(preview, external_editor_probe::preview_page(expected, 124));
+    let preview = render(restored.encoded().unwrap(), 124);
+    assert_eq!(preview, render(expected, 124));
     preview
 }
 
@@ -601,3 +622,6 @@ async fn local_wrapper_retained_call_origin_native_import_preview_reopen_preserv
 
 #[path = "retained_calls/structure.rs"]
 mod structure;
+
+#[path = "retained_calls/steady_header.rs"]
+mod steady_header;
