@@ -243,7 +243,7 @@ impl TeletextAuthoringPreview {
     pub fn resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
         &self.resource_objects
     }
-    /// Existing POP/GPOP resources, including explicitly empty companions.
+    /// Retained POP/GPOP and DRCS/GDRCS banks, including empty object companions.
     /// Observation establishes neither addition nor publication authority.
     #[must_use]
     pub fn object_resources(&self) -> &[TeletextResourceIdentity] {
@@ -996,6 +996,8 @@ fn object_resources(
                 resource.kind(),
                 ersatzrs_domain::TeletextResourceKind::Pop
                     | ersatzrs_domain::TeletextResourceKind::Gpop
+                    | ersatzrs_domain::TeletextResourceKind::Drcs
+                    | ersatzrs_domain::TeletextResourceKind::Gdrcs
             )
         })
         .copied()

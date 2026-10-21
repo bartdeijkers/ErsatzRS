@@ -12,7 +12,12 @@ pub(super) fn form(
     data: &TeletextDraftPreviewData,
     observation: &TeletextDraftPublicationObservation,
 ) -> AnyView {
-    if data.object_resources.is_empty() {
+    if !data.object_resources.iter().any(|resource| {
+        matches!(
+            resource.kind(),
+            TeletextResourceKind::Pop | TeletextResourceKind::Gpop
+        )
+    }) {
         return ().into_any();
     }
     let current = data.revision == observation.current_design_head;

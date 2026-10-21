@@ -82,7 +82,14 @@ pub(super) fn check(
             let actual = match change.role() {
                 TeletextX27LinkRole::Pop => page.resources.objects.public,
                 TeletextX27LinkRole::Gpop => page.resources.objects.global,
-                _ => return Err(failure(owner)),
+                TeletextX27LinkRole::Drcs => page
+                    .resources
+                    .drcs
+                    .page(ersatzrs_domain::TeletextDrcsTableScope::Normal),
+                TeletextX27LinkRole::Gdrcs => page
+                    .resources
+                    .drcs
+                    .page(ersatzrs_domain::TeletextDrcsTableScope::Global),
             };
             if actual != Some(target) {
                 return Err(failure(owner));

@@ -123,7 +123,10 @@ pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignD
         {
             return Err(invalid());
         }
-    } else if value.schema_version == super::MAIN_PROGRAM_PRESENCE_VERSION {
+    } else if matches!(
+        value.schema_version,
+        super::MAIN_PROGRAM_PRESENCE_VERSION | super::DRCS_PAGE_SELECTION_VERSION
+    ) {
         if value
             .main_resource_invocations
             .0

@@ -1887,6 +1887,95 @@ mod tests {
         );
     }
 
+    fn drcs_resource_selection_fixture() -> TeletextDraftPreviewData {
+        use crate::admin::server_fns::teletext_drafts::TeletextObjectPageChoiceObservation;
+        use ersatzrs_domain::{
+            TeletextRawDataPageNumber, TeletextResourceIdentity, TeletextResourceKind,
+            TeletextResourceSubpageIndex, TeletextSubpageRequirementMask,
+        };
+        let resource = |kind, raw| {
+            TeletextResourceIdentity::new(
+                kind,
+                TeletextRawDataPageNumber::new(2, raw).unwrap(),
+                TeletextResourceSubpageIndex::new(0).unwrap(),
+            )
+            .unwrap()
+        };
+        let mut data = preview();
+        for (role, old, new) in [
+            (TeletextResourceKind::Drcs, 0xc0, 0xc2),
+            (TeletextResourceKind::Gdrcs, 0xd0, 0xd2),
+        ] {
+            let original = resource(role, old);
+            data.object_resources
+                .extend([original, resource(role, new)]);
+            data.object_choices
+                .pages
+                .push(TeletextObjectPageChoiceObservation {
+                    display: owner(200, 0x10),
+                    role,
+                    target: original.page(),
+                    required_subpages: TeletextSubpageRequirementMask::new(1),
+                });
+        }
+        data
+    }
+
+    #[test]
+    fn resource_selection_drcs_roles_localize_and_keep_object_actions_separate() {
+        for language in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let context = Owner::new();
+            context.with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let mut data = drcs_resource_selection_fixture();
+                let observation = resource_edit_observation(&data);
+                let html = resource_selection::form(&data, &observation).to_html();
+                assert!(html.contains(tr(TextKey::TeletextObjectSelectionTitle)));
+                assert!(html.contains("DRCS/GDRCS"));
+                for (index, kind, current, alternate) in
+                    [(0, "drcs", "2C0", "2C2"), (1, "gdrcs", "2D0", "2D2")]
+                {
+                    assert!(html.contains(&format!("name=\"page_{index}_role\" value=\"{kind}\"")));
+                    assert!(html.contains(&format!(
+                        "value=\"{current}\" list=\"teletext-object-pages-{kind}\""
+                    )));
+                    let list = html
+                        .split_once(&format!("<datalist id=\"teletext-object-pages-{kind}\">"))
+                        .unwrap()
+                        .1
+                        .split_once("</datalist>")
+                        .unwrap()
+                        .0;
+                    assert_eq!(list.matches("<option ").count(), 2);
+                    assert!(list.contains(&format!("value=\"{alternate}\"")));
+                }
+                for forbidden in [
+                    "page_0_program",
+                    "page_0_expected",
+                    "name=\"document_index\"",
+                    "name=\"sidecar\"",
+                    "teletext-object-pages-pop",
+                    "teletext-object-pages-gpop",
+                ] {
+                    assert!(!html.contains(forbidden), "{forbidden}");
+                }
+                assert!(!resource_add::form(&data, &observation)
+                    .to_html()
+                    .contains("<form"));
+                assert!(!resource_announcements::form(&data, &observation)
+                    .to_html()
+                    .contains("<form"));
+                assert!(!html.contains("<fieldset disabled"));
+                data.revision -= 1;
+                let history = resource_selection::form(&data, &observation).to_html();
+                assert!(history.contains("<fieldset disabled"));
+                assert!(history.contains(tr(TextKey::TeletextResourceEditCurrentHelp)));
+            });
+        }
+    }
+
     #[test]
     fn resource_selection_form_localizes_exact_pages_masks_and_explicit_typed_calls() {
         for language in [

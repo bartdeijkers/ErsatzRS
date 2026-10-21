@@ -52,6 +52,10 @@ release section when tagging a release.
   undo, separate publication and restart. Root undo also restores originally absent
   X27 declarations and their exact MOT provenance. Full engine/editor/client
   acceptance remains open.
+  The same draft controls can select retained Normal and Global DRCS bank pages,
+  preserving glyph slots, subtables and protected shared consumers, including
+  equal-pixel bank changes. Exact undo restores the original design; saving a
+  choice still requires separate publication.
 
 - Add atomic native validation for new POP/GPOP resource sets, preserving existing
   pages, defaults, fallback and dependencies. New banks and simultaneous

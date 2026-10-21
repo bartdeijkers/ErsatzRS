@@ -108,11 +108,7 @@ pub(super) fn preflight(
     let mut roles = BTreeSet::new();
     for choice in selections {
         check_deadline(deadline)?;
-        if !matches!(
-            choice.role,
-            TeletextX27LinkRole::Pop | TeletextX27LinkRole::Gpop
-        ) || !roles.insert((choice.display, choice.role.wire_code()))
-        {
+        if !roles.insert((choice.display, choice.role.wire_code())) {
             return Err(invalid());
         }
     }

@@ -18,7 +18,7 @@ pub struct TeletextObjectPageSelectionConsumers<'a> {
     pub resources: &'a [TeletextResourceObjectProgramOverlay],
 }
 impl TeletextDeclaredService {
-    /// Change selected POP/GPOP roles and every checked consumer in one draft.
+    /// Change selected object/DRCS roles and every checked consumer in one draft.
     ///
     /// Existing Main/Local/resource originals are authenticated before cloning;
     /// no incomplete intermediate service escapes. Main ordering, type, offset,

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 Main/interleaved Base charset edit/repacking/undo closed; next existing complete-set resource-target/link editing group. Preserve closed boundaries and recorded external prerequisites'
+current_focus = 'P9A-04 F1 retained DRCS/GDRCS bank selection and exact undo closed; continue only remaining finite resource/set/dependency group. Preserve completed boundaries and recorded external prerequisites'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -131,6 +131,22 @@ edit, preserve all complete-set identities/effective roles/protected consumers,
 and stop after its affected import/preview/publication/root-undo proof. Do not
 start another repertoire/editor variant or reopen the closed components.
 All recorded external prerequisites and deferred decisions remain unchanged.
+
+F1 retained Normal/Global DRCS raw-bank selection is completed. Canonical
+tmp/phase9-header-c2/drcs-page-selection/identity.json owns the qualified original/
+direct-final factories, API refusal, sealed V30/prior-version guards, complete
+concept/shared preview/TTI, explicit current-CAS publication, exact root undo,
+cold recovery and protected equal-pixel bank identities. Controls123, qualified
+domain26, affected native11, matched SSR/WASM, all-nine-culture SSR/headed labels,
+light-JS/dark-noJS form saves and full native history/publication/reopen pass.
+Test-only quota/expectation/form-order corrections and original negatives stay
+retained. Reuse untouched editor/transport/F6 proof; no new runtime-client claim.
+This removes only the named retained-bank choice from the existing F1 remainder.
+Next: remaining complete-set dependency/target groups from the finite F/V/X row;
+keep X1 deferred, X3 upstream wait and Windows-package deferral/120min unchanged.
+Build cache crossed60GiB during these checks; preserve current bundle/evidence
+and clean after this checkpoint before another large build. No relevant check
+remains running at closure; only the explicit verified slice is committed.
 
 Profile/channel output lifecycle slice is committed in40ad0608; bb025c32 records
 its63 actual Windows component passes. Linux63/all9cultureSSR/headed8/AV8/

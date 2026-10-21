@@ -20,7 +20,7 @@ fn foreground(colour: u8) -> TeletextEnhancementCommand {
         },
     }
 }
-fn original() -> Vec<u8> {
+pub(super) fn original() -> Vec<u8> {
     let source = super::resource_object_operand_tests::original(true);
     let mut value: Value = serde_json::from_slice(&source).unwrap();
     let mut response: Value =
@@ -49,7 +49,7 @@ fn original() -> Vec<u8> {
     value["documents"][0]["response"] = json!(serde_json::to_string_pretty(&response).unwrap());
     bytes(&value)
 }
-fn change() -> TeletextMainResourceInvocationOverlay {
+pub(super) fn change() -> TeletextMainResourceInvocationOverlay {
     TeletextMainResourceInvocationOverlay::new(address(16), 1, call(false, 15), call(true, 15))
         .unwrap()
 }

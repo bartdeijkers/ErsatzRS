@@ -205,6 +205,11 @@ impl From<Candidate> for TeletextMotResolutionCandidate {
         }
     }
 }
+impl StoredSelection {
+    pub(super) const fn is_drcs(&self) -> bool {
+        matches!(self.role, X27Role::Drcs | X27Role::Gdrcs)
+    }
+}
 impl From<TeletextSavedObjectPageSelectionChange> for StoredSelection {
     fn from(value: TeletextSavedObjectPageSelectionChange) -> Self {
         let change = value.change();

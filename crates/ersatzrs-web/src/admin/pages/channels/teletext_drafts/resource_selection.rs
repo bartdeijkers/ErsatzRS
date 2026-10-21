@@ -13,6 +13,8 @@ fn kind_label(kind: TeletextResourceKind) -> &'static str {
     match kind {
         TeletextResourceKind::Pop => "POP",
         TeletextResourceKind::Gpop => "GPOP",
+        TeletextResourceKind::Drcs => "DRCS",
+        TeletextResourceKind::Gdrcs => "GDRCS",
         _ => "—",
     }
 }
@@ -52,6 +54,8 @@ fn page_list_id(kind: TeletextResourceKind) -> &'static str {
     match kind {
         TeletextResourceKind::Pop => "teletext-object-pages-pop",
         TeletextResourceKind::Gpop => "teletext-object-pages-gpop",
+        TeletextResourceKind::Drcs => "teletext-object-pages-drcs",
+        TeletextResourceKind::Gdrcs => "teletext-object-pages-gdrcs",
         _ => "",
     }
 }
@@ -65,8 +69,15 @@ fn target_list_id(kind: TeletextObjectType) -> &'static str {
 }
 
 fn page_catalogue(data: &TeletextDraftPreviewData) -> AnyView {
-    [TeletextResourceKind::Pop, TeletextResourceKind::Gpop]
+    ersatzrs_domain::TeletextX27LinkRole::ALL
         .into_iter()
+        .map(ersatzrs_domain::TeletextX27LinkRole::kind)
+        .filter(|kind| {
+            data.object_choices
+                .pages
+                .iter()
+                .any(|page| page.role == *kind)
+        })
         .map(|kind| {
             let mut seen = std::collections::BTreeSet::new();
             let options = data
@@ -201,7 +212,13 @@ pub(super) fn form(
         let prefix = format!("teletext-object-page-{index}");
         let target_id = format!("{prefix}-target");
         let mask_id = format!("{prefix}-mask");
-        let role = if page.role == TeletextResourceKind::Pop { "pop" } else { "gpop" };
+        let role = match page.role {
+            TeletextResourceKind::Pop => "pop",
+            TeletextResourceKind::Gpop => "gpop",
+            TeletextResourceKind::Drcs => "drcs",
+            TeletextResourceKind::Gdrcs => "gdrcs",
+            _ => "",
+        };
         let display = serde_json::to_string(&page.display).unwrap_or_default();
         let legend = format!("{} {} / {:04X} · {}",tr(TextKey::TeletextResourceDisplay),page.display.page.get(),page.display.subcode.get(),kind_label(page.role));
         view! {

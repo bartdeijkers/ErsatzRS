@@ -92,6 +92,17 @@ Complete native concept, TTI, shared-preview, explicit-publication and cold-reop
 proof and both localized headed form paths are scoped to the synthetic consumers.
 Full F1/interchange/client/platform and independent engine acceptance remain open.
 
+The same native selection path also admits retained original Normal/Global DRCS
+raw banks. It changes checked DRCS resource links and applicable X27 roles as
+one final service, retaining glyph scope/S1/slot, full original catalogues,
+transmissions, MOT/default provenance and every unselected role. Private V30
+requires genuine DRCS/GDRCS selection intent; V1–29 retain their closed meanings.
+Source association requires the exact original producer inventory and all
+required subtables. Protected-cell comparison includes actual bank identity,
+even when masks coincide. Fresh TTI retains saved authority but cannot create or
+undo it; exact-root undo remains an explicit native selection. No bank creation,
+renaming, package mutation or extra publication authority follows.
+
 Partial — checked additions to existing POP/GPOP catalogues now have a dedicated
 native host action bound to the retained current-revision receipt and head CAS.
 Independent old/new resource allocations and complete native packet comparisons

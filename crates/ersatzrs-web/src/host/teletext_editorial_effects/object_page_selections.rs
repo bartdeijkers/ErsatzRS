@@ -2,10 +2,11 @@
 use super::subpage_announcements::failure;
 use super::{check_deadline, Result, TeletextEditorialEdits};
 use ersatzrs_domain::{
-    TeletextDeclaredService, TeletextMotLevel25Resolution, TeletextMotLinkProvenance,
-    TeletextMotResolutionRequirements, TeletextMotRoleResolution, TeletextPageAddress,
-    TeletextResolvedPageEnhancementDraft, TeletextResourceKind, TeletextX27Level25Links,
-    TeletextX27LinkDeclaration, TeletextX27LinkRole, TeletextX27LinkTarget,
+    TeletextDeclaredService, TeletextDrcsPageLinks, TeletextDrcsTableScope,
+    TeletextMotLevel25Resolution, TeletextMotLinkProvenance, TeletextMotResolutionRequirements,
+    TeletextMotRoleResolution, TeletextPageAddress, TeletextResolvedPageEnhancementDraft,
+    TeletextX27Level25Links, TeletextX27LinkDeclaration, TeletextX27LinkRole,
+    TeletextX27LinkTarget,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -177,11 +178,7 @@ fn resource_exists(
     role: TeletextX27LinkRole,
     link: TeletextX27LinkDeclaration,
 ) -> Result<()> {
-    let kind = match role {
-        TeletextX27LinkRole::Pop => TeletextResourceKind::Pop,
-        TeletextX27LinkRole::Gpop => TeletextResourceKind::Gpop,
-        _ => return Err(failure(owner)),
-    };
+    let kind = role.kind();
     if !link.validity().applies_at_level25()
         || !matches!(link.target(),
         TeletextX27LinkTarget::Page { page } if service.resource_inventory().iter()
@@ -232,13 +229,15 @@ fn resolved_role(
 }
 
 /// Clone only the tiny resource-link record, never catalogues or command bodies.
-/// Full DRCS and the other object role remain exact semantic equals.
+/// Only explicitly selected roles change; defaults and every other role stay exact.
 pub(super) fn same_resources(
     before: &TeletextResolvedPageEnhancementDraft,
     after: &TeletextResolvedPageEnhancementDraft,
     incoming: TeletextEditorialEdits<'_>,
 ) -> bool {
     let mut expected = before.resources;
+    let mut normal = expected.drcs.page(TeletextDrcsTableScope::Normal);
+    let mut global = expected.drcs.page(TeletextDrcsTableScope::Global);
     for saved in incoming.object_page_selections {
         let change = saved.change();
         if change.display() != before.address {
@@ -250,8 +249,13 @@ pub(super) fn same_resources(
         match change.role() {
             TeletextX27LinkRole::Pop => expected.objects.public = Some(page),
             TeletextX27LinkRole::Gpop => expected.objects.global = Some(page),
-            _ => return false,
+            TeletextX27LinkRole::Drcs => normal = Some(page),
+            TeletextX27LinkRole::Gdrcs => global = Some(page),
         }
     }
+    let Ok(drcs) = TeletextDrcsPageLinks::new(normal, global) else {
+        return false;
+    };
+    expected.drcs = drcs;
     after.resources == expected
 }

@@ -20,14 +20,11 @@ pub(super) fn observe(
     let mut observed = TeletextObjectChoicesObservation::default();
     for resolution in service.declared().resolutions() {
         check_deadline(deadline)?;
-        for (role, kind) in [
-            (TeletextX27LinkRole::Pop, TeletextResourceKind::Pop),
-            (TeletextX27LinkRole::Gpop, TeletextResourceKind::Gpop),
-        ] {
+        for role in TeletextX27LinkRole::ALL {
             append_role(
                 &mut observed,
                 resolution.display(),
-                kind,
+                role.kind(),
                 *resolution.role(role),
             );
         }

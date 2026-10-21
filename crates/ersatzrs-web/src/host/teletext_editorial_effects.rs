@@ -443,8 +443,14 @@ fn check_editorial_budgets(
         || !bounded_editorial_commands(cumulative, budget.max_commands)
         || incoming.object_subpage_announcements.len() > budget.max_pages.saturating_mul(32)
         || cumulative.object_subpage_announcements.len() > budget.max_pages.saturating_mul(32)
-        || incoming.object_page_selections.len() > budget.max_pages.saturating_mul(2)
-        || cumulative.object_page_selections.len() > budget.max_pages.saturating_mul(2)
+        || incoming.object_page_selections.len()
+            > budget
+                .max_pages
+                .saturating_mul(ersatzrs_domain::TeletextX27LinkRole::ALL.len())
+        || cumulative.object_page_selections.len()
+            > budget
+                .max_pages
+                .saturating_mul(ersatzrs_domain::TeletextX27LinkRole::ALL.len())
         || incoming.main_presence.len() > budget.max_pages
         || cumulative.main_presence.len() > budget.max_pages
         || incoming.bitmaps.len() > maximum_bitmaps
@@ -1342,6 +1348,42 @@ fn same_attributes(
             lineage,
         )
 }
+// Equal masks do not authorize rebinding a protected glyph to another bank.
+fn drcs_binding(
+    composition: &TeletextMainComposition,
+    cell: TeletextDisplayCell<'_>,
+    deadline: Instant,
+) -> Result<Option<ersatzrs_domain::TeletextResourceIdentity>> {
+    let Some(origin) = cell
+        .origin()
+        .and_then(|index| composition.display_resolution().origins().get(index))
+    else {
+        return Ok(None);
+    };
+    let candidate = origin.candidate_index();
+    if !matches!(
+        composition
+            .glyph_intent()
+            .records()
+            .get(candidate)
+            .and_then(ersatzrs_domain::TeletextExecutedGlyphIntent::glyph),
+        Some(ersatzrs_domain::TeletextGlyphIdentity::Drcs { .. })
+    ) {
+        return Ok(None);
+    }
+    for record in composition.drcs_execution().records() {
+        check_deadline(deadline)?;
+        if record.candidate_index() == candidate {
+            return Ok(Some(record.resource()));
+        }
+    }
+    Err(error(
+        Some(composition.owner()),
+        origin.visual_position(),
+        TeletextEditorialEffectsFailure::Unresolved,
+    ))
+}
+
 fn compare_cell(
     old: &TeletextMainComposition,
     new: &TeletextMainComposition,
@@ -1382,7 +1424,9 @@ fn compare_cell(
     if origin_signature(old, before, None) != origin_signature(new, after, Some(lineage)) {
         return Err(mismatch());
     }
-    if !charset_context::same_cell(old, new, before, after, lineage, deadline)? {
+    if !charset_context::same_cell(old, new, before, after, lineage, deadline)?
+        || drcs_binding(old, before, deadline)? != drcs_binding(new, after, deadline)?
+    {
         return Err(mismatch());
     }
     let unresolved = || {

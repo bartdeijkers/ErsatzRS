@@ -32,7 +32,8 @@ function objectLabel(identity: ObjectIdentity): string {
   expect(['pop', 'gpop']).toContain(resource.kind);
   return `${resource.kind.toUpperCase()} ${resource.page.magazine.toString(16).toUpperCase()}${resource.page.page.toString(16).padStart(2, '0').toUpperCase()} S1=${resource.logical_subpage} #${identity.object_id}`;
 }
-function preview(ready: Ready, revision: number): string {
+type PreviewReady = Pick<Ready, 'channel_id' | 'design_id' | 'revision'>;
+function preview(ready: PreviewReady, revision: number): string {
   return `/channels/${ready.channel_id}/teletext?design_id=${ready.design_id}&revision=${revision}&page=124&subcode=0020`;
 }
 async function settings(page: Page, language: string, dark: boolean): Promise<void> {
@@ -40,12 +41,13 @@ async function settings(page: Page, language: string, dark: boolean): Promise<vo
     form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
   })).status()).toBe(303);
 }
-async function labels(page: Page, module: string): Promise<void> {
+async function labels(page: Page, module: string, drcs = false): Promise<void> {
   const form = page.getByTestId(formId);
   await expect(form.locator('legend').first()).toHaveText(translation(module, 'TeletextObjectSelectionTitle'));
   await expect(form.locator('#teletext-object-pages-help')).toHaveText(translation(module, 'TeletextObjectSelectionHelp'));
   await expect(form.locator('#teletext-object-pages-mask-help')).toHaveText(translation(module, 'TeletextObjectSelectionMaskHelp'));
   await expect(form.locator('button[type="submit"]')).toHaveText(translation(module, 'TeletextObjectSelectionAction'));
+  if (drcs) return;
   for (const label of ['Caller', 'Command', 'CurrentTarget', 'Offset']) {
     await expect(form.locator('dt').filter({ hasText: translation(module, `TeletextObjectSelection${label}`) }).first()).toBeVisible();
   }
@@ -55,12 +57,12 @@ async function labels(page: Page, module: string): Promise<void> {
     await expect(form.locator('legend').filter({ hasText: `${translation(module, 'TeletextObjectSelectionMainCalls')} 1` })).toBeVisible();
   }
 }
-async function cultureAndLayout(page: Page, ready: Ready, output: (name: string) => string): Promise<void> {
+async function cultureAndLayout(page: Page, ready: PreviewReady, output: (name: string) => string, drcs = false): Promise<void> {
   for (const [language, module] of cultures) {
     await settings(page, language, false);
     await visit(page, preview(ready, ready.revision)); await waitForHydration(page);
     await expect(page.locator('html')).toHaveAttribute('lang', language);
-    await labels(page, module);
+    await labels(page, module, drcs);
   }
   for (const width of [320, 1920]) {
     await page.setViewportSize({ width, height: 900 });
@@ -176,6 +178,7 @@ test('coordinate selected object pages and existing calls through localized curr
   test.setTimeout(240_000);
   const directory = dirname(resolve(readyPath!));
   const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as Ready;
+  test.skip(ready.case === 'teletext-drcs-raw-page-selection', 'Owned retained DRCS selection case runs below.');
   expect(ready.probe_version).toBe(1); expect(['teletext-explicit-object-selection', 'teletext-main-local-object-selection']).toContain(ready.case);
   expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   const mainMode = ready.case === 'teletext-main-local-object-selection';
@@ -246,4 +249,108 @@ test('coordinate selected object pages and existing calls through localized curr
   if (!js) marker(directory, 'browser-complete.json', {
     probe_version: 1, case: ready.case, design_id: ready.design_id, revision, digest,
   });
+});
+
+type DrcsReady = PreviewReady & Pick<Ready, 'probe_version' | 'case' | 'base_url' | 'digest' | 'marker_file' | 'timeout_seconds'> & {
+  selected_display: { page: number; subcode: number };
+  preserved_display: { page: number; subcode: number };
+  raw_roles: { role: 'drcs' | 'gdrcs'; original_page: RawPage; selected_page: RawPage; mask: string }[];
+};
+async function fillDrcs(form: Locator, ready: DrcsReady, selected: boolean): Promise<void> {
+  await form.locator('[name="name"]').fill(selected ? 'Retained DRCS and GDRCS banks' : 'Exact original DRCS and GDRCS banks');
+  const changed = new Set<string>(), preserved = new Set<string>();
+  const untouched = await form.locator('input[name^="call_"], input[name^="main_"]').evaluateAll(elements => elements.map(
+    element => ({ name: (element as HTMLInputElement).name, value: (element as HTMLInputElement).value })));
+  for (const input of await form.locator('input[name^="page_"][name$="_role"]').all()) {
+    const prefix = (await input.getAttribute('name'))!.slice(0, -5);
+    const role = await input.inputValue(), owner = JSON.parse(await field(form, `${prefix}_display`));
+    const target = form.locator(`[name="${prefix}_target"]`), mask = form.locator(`[name="${prefix}_mask"]`);
+    const choice = ready.raw_roles.find(choice => choice.role === role);
+    expect(choice).toBeDefined();
+    const rawLabel = (raw: RawPage) => `${raw.magazine.toString(16).toUpperCase()}${raw.page.toString(16).padStart(2, '0').toUpperCase()}`;
+    const original = rawLabel(choice!.original_page), next = rawLabel(choice!.selected_page);
+    await expect(target).toHaveAttribute('list', `teletext-object-pages-${role}`);
+    const options = await form.locator(`#teletext-object-pages-${role} option`).evaluateAll(elements => elements.map(element => (element as HTMLOptionElement).value));
+    expect(options).toContain(original); expect(options).toContain(next);
+    expect(await mask.inputValue()).toBe(choice!.mask);
+    if (key(owner) === key(ready.selected_display)) {
+      expect(await target.inputValue()).toBe(selected ? original : next);
+      await target.fill(selected ? next : original); changed.add(role);
+    } else {
+      expect(owner).toEqual(ready.preserved_display);
+      expect(await target.inputValue()).toBe(original); preserved.add(role);
+    }
+    expect(await mask.inputValue()).toBe(choice!.mask);
+  }
+  expect([...changed].sort()).toEqual(['drcs', 'gdrcs']);
+  expect([...preserved].sort()).toEqual(['drcs', 'gdrcs']);
+  for (const before of untouched) expect(await field(form, before.name)).toBe(before.value);
+}
+
+test('choose retained DRCS banks and restore exact source through localized current draft forms', async ({ browser }, testInfo) => {
+  test.skip(!readyPath, 'Requires the owned retained DRCS selection native fixture.');
+  test.setTimeout(240_000);
+  const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as DrcsReady;
+  test.skip(ready.case !== 'teletext-drcs-raw-page-selection', 'Another owned selection case runs above.');
+  const directory = dirname(resolve(readyPath!));
+  expect(ready.probe_version).toBe(1); expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  expect(ready.channel_id).toBe(1); expect(ready.revision).toBe(1); expect(ready.digest).toMatch(/^[a-f0-9]{64}$/);
+  expect(ready.selected_display).toEqual({ page: 124, subcode: 32 });
+  expect(ready.preserved_display).toEqual({ page: 125, subcode: 32 });
+  expect(ready.raw_roles).toEqual([
+    { role: 'drcs', original_page: { magazine: 1, page: 0xc0 }, selected_page: { magazine: 1, page: 0xc2 }, mask: '0003' },
+    { role: 'gdrcs', original_page: { magazine: 1, page: 0xc1 }, selected_page: { magazine: 1, page: 0xc3 }, mask: '0003' },
+  ]);
+  expect(resolve(ready.marker_file)).toBe(join(directory, 'browser-complete.json')); expect(ready.timeout_seconds).toBe(600);
+  expect(['chromium', 'firefox']).toContain(testInfo.project.name);
+  const js = testInfo.project.name === 'chromium', language = js ? 'nl' : 'en-us', module = js ? 'nl' : 'en_us';
+  expect(existsSync(ready.marker_file)).toBe(false);
+  expect(existsSync(join(directory, `${testInfo.project.name}-object-selection.json`))).toBe(false);
+  let revision = ready.revision + (js ? 0 : 1), digest = ready.digest;
+  if (!js) {
+    const previous = JSON.parse(bounded(join(directory, 'chromium-object-selection.json')).toString('utf8'));
+    expect(previous.probe_version).toBe(1); expect(previous.case).toBe(ready.case); expect(previous.design_id).toBe(ready.design_id);
+    expect(previous.revision).toBe(2); expect(previous.errors).toEqual([]); expect(previous.digest).toMatch(/^[a-f0-9]{64}$/);
+    digest = previous.digest;
+  }
+  testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
+  const context = await browser.newContext({ baseURL: ready.base_url, javaScriptEnabled: js, viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage(); page.setDefaultTimeout(15_000); page.setDefaultNavigationTimeout(30_000);
+  const errors: string[] = [], hashes: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  try {
+    if (js) await cultureAndLayout(page, ready, name => testInfo.outputPath(name), true);
+    await settings(page, language, !js);
+    for (const [operation, selected] of (js ? [true] : [false, true]).entries()) {
+      await visit(page, preview(ready, revision)); if (js) await waitForHydration(page);
+      await expect(page.locator('html')).toHaveAttribute('lang', language);
+      await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', js ? 'light' : 'dark');
+      await labels(page, module, true);
+      const before = await publication(page), pixels = rasterHash(await raster(page, 124));
+      if (hashes.length === 0) hashes.push(pixels);
+      const form = page.getByTestId(formId);
+      expect(await field(form, 'revision')).toBe(String(revision)); expect(await field(form, 'expected_design_head')).toBe(String(revision));
+      expect(await field(form, 'digest')).toBe(digest);
+      await fillDrcs(form, ready, selected);
+      await form.locator('button[type="submit"]').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath(`${operation}-before.png`) });
+      await submit(page, form); if (js) await waitForHydration(page); revision += 1;
+      const current = page.getByTestId(formId);
+      expect(await field(current, 'revision')).toBe(String(revision)); expect(await field(current, 'expected_design_head')).toBe(String(revision));
+      expect(new URL(page.url()).searchParams.get('saved')).toBe('draft');
+      const nextDigest = await field(current, 'digest'); expect(nextDigest).toMatch(/^[a-f0-9]{64}$/); expect(nextDigest).not.toBe(digest); digest = nextDigest;
+      const afterPixels = rasterHash(await raster(page, 124)); expect(afterPixels).not.toBe(pixels); hashes.push(afterPixels);
+      const after = await publication(page); expect([after.generation_id, after.request_id]).toEqual([before.generation_id, before.request_id]);
+      await current.locator('button[type="submit"]').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath(`${operation}-after.png`) });
+    }
+    if (!js) expect(hashes[2]).toBe(hashes[0]);
+    await visit(page, preview(ready, revision - 1)); if (js) await waitForHydration(page);
+    await expect(page.getByTestId(formId).locator('fieldset').first()).toHaveAttribute('disabled', ''); expect(errors).toEqual([]);
+  } finally { await settings(page, 'en-us', false); await context.close(); }
+  expect(revision).toBe(js ? 2 : 4);
+  marker(directory, `${testInfo.project.name}-object-selection.json`, {
+    probe_version: 1, case: ready.case, design_id: ready.design_id, revision, digest,
+    language, dark: !js, javascript: js, browser: browser.version(), hashes, errors,
+  });
+  if (!js) marker(directory, 'browser-complete.json', { probe_version: 1, case: ready.case, design_id: ready.design_id, revision, digest });
 });

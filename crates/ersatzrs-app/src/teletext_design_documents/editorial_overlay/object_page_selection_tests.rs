@@ -50,7 +50,7 @@ fn overlay() -> TeletextSavedEditorialOverlay {
         .with_object_resource_additions(additions())
         .unwrap()
 }
-fn saved() -> Vec<u8> {
+pub(super) fn saved() -> Vec<u8> {
     append_teletext_design_editorial_overlay(&original(true), &overlay(), budget())
         .unwrap()
         .into_bytes()

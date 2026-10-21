@@ -75,6 +75,8 @@ fn page_choices(rows: Rows) -> Result<Vec<TeletextObjectPageChoice>> {
             let role = match take(&mut values, "role")?.as_str() {
                 "pop" => TeletextX27LinkRole::Pop,
                 "gpop" => TeletextX27LinkRole::Gpop,
+                "drcs" => TeletextX27LinkRole::Drcs,
+                "gdrcs" => TeletextX27LinkRole::Gdrcs,
                 _ => return Err(invalid()),
             };
             let target = raw_page(&take(&mut values, "target")?)?;
@@ -362,6 +364,39 @@ mod tests {
         assert_eq!(calls[0].caller, calls[0].target);
     }
     #[test]
+    fn four_resource_page_roles_preserve_explicit_choices_without_object_call_authority() {
+        let mut values = pairs();
+        values.retain(|(key, _)| !key.starts_with("page_"));
+        for (index, role) in ["gpop", "pop", "gdrcs", "drcs"].into_iter().enumerate() {
+            values.extend([
+                (
+                    format!("page_{index}_display"),
+                    serde_json::to_string(&TeletextPageAddress {
+                        page: TeletextPageNumber::new(124).unwrap(),
+                        subcode: TeletextSubcode::new(32).unwrap(),
+                    })
+                    .unwrap(),
+                ),
+                (format!("page_{index}_role"), role.to_owned()),
+                (format!("page_{index}_target"), "2C2".into()),
+                (format!("page_{index}_mask"), "8001".into()),
+            ]);
+        }
+        let (_, (pages, calls, _)) =
+            input(values).unwrap_or_else(|_| panic!("four explicit page roles"));
+        assert_eq!(
+            pages.iter().map(|page| page.role).collect::<Vec<_>>(),
+            TeletextX27LinkRole::ALL
+        );
+        assert!(pages
+            .iter()
+            .all(|page| page.target.page() == 0xc2 && page.required_subpages.get() == 0x8001));
+        assert_eq!(calls.len(), 1);
+        for role in ["DRCS", "GDRCS"] {
+            assert!(object_target(&format!("{role} 2C2 S1=0 #32")).is_err());
+        }
+    }
+    #[test]
     fn shared_page_datalist_values_preserve_literal_raw_address_and_reject_invalid_magazines() {
         assert_eq!(
             raw_page("2e1").unwrap_or_else(|_| panic!("raw target")),
@@ -460,7 +495,7 @@ mod tests {
             ("page_0_mask", "10000"),
             ("page_0_mask", "0x1"),
             ("page_0_mask", ""),
-            ("page_0_role", "gdrcs"),
+            ("page_0_role", "mot"),
             ("call_0_command", "-1"),
             ("call_0_caller", "null"),
         ] {

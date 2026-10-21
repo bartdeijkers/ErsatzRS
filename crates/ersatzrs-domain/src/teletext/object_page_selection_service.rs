@@ -1,7 +1,7 @@
 //! One complete semantic rebuild for role changes and checked resource programs.
 use super::{
     BTreeMap, TeletextMagazinePresentationDraft, TeletextObjectIdentity, TeletextPageAddress,
-    TeletextResolvedObjectPageLinks, TeletextResolvedServiceDraft, TeletextSemanticService,
+    TeletextResolvedPageResourceSelection, TeletextResolvedServiceDraft, TeletextSemanticService,
     TeletextServiceBudget, TeletextServiceError, TeletextX27Level25Links,
 };
 use crate::teletext::{
@@ -15,7 +15,10 @@ impl TeletextSemanticService {
         self,
         updates: BTreeMap<
             TeletextPageAddress,
-            (TeletextX27Level25Links, TeletextResolvedObjectPageLinks),
+            (
+                TeletextX27Level25Links,
+                TeletextResolvedPageResourceSelection,
+            ),
         >,
         main: &BTreeMap<(TeletextPageAddress, usize), &TeletextMainResourceInvocationOverlay>,
         local: &BTreeMap<TeletextObjectIdentity, &TeletextLocalObjectGlyphProgramOverlay>,
@@ -25,12 +28,12 @@ impl TeletextSemanticService {
         // The declared entry point preflights old/final budgets and exact bodies
         // before reaching this sole clone/reconstruction boundary.
         let mut pages = self.pages;
-        for (display, (links, objects)) in updates {
+        for (display, (links, resources)) in updates {
             let page = pages
                 .get_mut(&display)
                 .ok_or(TeletextServiceError::MissingPage { address: display })?;
             page.compositional_links = Some(links);
-            page.resources.objects = objects;
+            page.resources = resources;
         }
         for page in pages.values_mut() {
             let mut changes = main

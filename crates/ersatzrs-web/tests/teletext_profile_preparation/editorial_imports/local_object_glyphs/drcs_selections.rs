@@ -16,6 +16,8 @@ use ersatzrs_ffmpeg::teletext::{
 pub(super) mod fixture;
 #[path = "drcs_selections/oracle.rs"]
 mod oracle;
+#[path = "drcs_selections/raw_page_selection.rs"]
+mod raw_page_selection;
 use fixture::{
     bank, encoding, free, generated_right, identity, narrow_main, narrow_right, operation, scope,
     selector_word, word, zone, COLUMNS, COMMANDS, VISUAL,

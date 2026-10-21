@@ -152,6 +152,15 @@ pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignD
         {
             return Err(invalid());
         }
+    } else if value.schema_version == super::DRCS_PAGE_SELECTION_VERSION {
+        if value
+            .main_program_presence_overlays
+            .0
+            .as_ref()
+            .is_some_and(Vec::is_empty)
+        {
+            return Err(invalid());
+        }
     } else if !value.main_program_presence_overlays.is_absent() {
         return Err(invalid());
     }

@@ -7,7 +7,9 @@ summary    = '''
 ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
 F2 metadata/zones/version and scoped F1 Main-presence/Base-prefix, joint original/
 added position undo and interleaved Base charset regeneration are closed.
-P9A-04 receipts pin native/QTM/independent boundaries; V29 remains exact.
+P9A-04 receipts pin native/QTM/independent boundaries. Retained DRCS/GDRCS raw-bank
+selection/undo is closed through localized admin/publication/reopen; private V30
+keeps prior versions and protected equal-pixel bank identities exact.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay

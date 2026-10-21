@@ -1,12 +1,13 @@
-//! Atomic raw POP/GPOP role selection and checked resource-consumer changes.
+//! Atomic raw X27 role selection and checked resource-consumer changes.
 use super::{fence, no_mot_role, preflight};
 use crate::teletext::{
     TeletextDeclaredService, TeletextDeclaredServiceBudget, TeletextDeclaredServiceError,
-    TeletextDrcsExtensionError, TeletextMotLevel25Resolution, TeletextMotResolutionError,
-    TeletextMotRoleResolution, TeletextPageAddress, TeletextResolvedObjectPageLinks,
-    TeletextResourceKind, TeletextResourceObjectProgramOverlay, TeletextServiceBudget,
-    TeletextServiceError, TeletextX27Level25Links, TeletextX27LinkDeclaration,
-    TeletextX27LinkError, TeletextX27LinkRole, TeletextX27LinkTarget,
+    TeletextDrcsExtensionError, TeletextDrcsPageLinks, TeletextDrcsTableScope,
+    TeletextMotLevel25Resolution, TeletextMotResolutionError, TeletextMotRoleResolution,
+    TeletextPageAddress, TeletextResolvedPageResourceSelection,
+    TeletextResourceObjectProgramOverlay, TeletextServiceBudget, TeletextServiceError,
+    TeletextX27Level25Links, TeletextX27LinkDeclaration, TeletextX27LinkError, TeletextX27LinkRole,
+    TeletextX27LinkTarget,
 };
 #[path = "object_page_selection_consumers.rs"]
 mod consumers;
@@ -29,7 +30,7 @@ pub enum TeletextObjectPageSelectionError {
     Empty,
     #[error("object page selection requires a role or consumer change")]
     EmptyConsumers,
-    #[error("object page selection requires POP/GPOP and a changed Level 2.5 page target")]
+    #[error("object page selection requires a changed Level 2.5 page target")]
     InvalidChange,
     #[error("object page selection repeats {display:?}, {role:?}")]
     Duplicate {
@@ -71,7 +72,7 @@ impl TeletextObjectPageSelectionChange {
     /// Replacement selects a different raw page with its explicit required S1
     /// mask. Mask-only additions retain the separate announcement operation.
     /// # Errors
-    /// Rejects other roles, unselected/unresolved originals, same-page targets,
+    /// Rejects unselected/unresolved originals, same-page targets,
     /// unspecified replacements and original/replacement Level 3.5-only links.
     pub fn new(
         display: TeletextPageAddress,
@@ -80,8 +81,7 @@ impl TeletextObjectPageSelectionChange {
         expected_role: TeletextMotRoleResolution,
         replacement: TeletextX27LinkDeclaration,
     ) -> Result<Self, TeletextObjectPageSelectionError> {
-        if !matches!(role, TeletextX27LinkRole::Pop | TeletextX27LinkRole::Gpop)
-            || !replacement.validity().applies_at_level25()
+        if !replacement.validity().applies_at_level25()
             || expected_links.is_some_and(|links| {
                 !links.link(role).validity().applies_at_level25()
                     || links.link(role).validity() != replacement.validity()
@@ -122,7 +122,7 @@ impl TeletextObjectPageSelectionChange {
 }
 
 impl TeletextDeclaredService {
-    /// Change raw object-page roles and their checked resource consumers atomically.
+    /// Change raw object/DRCS-page roles and checked resource consumers atomically.
     ///
     /// The final draft alone undergoes complete semantic collection and declared
     /// authentication. Original catalogue identities/types, MOTs, defaults and
@@ -156,9 +156,15 @@ impl TeletextDeclaredService {
     fn object_page_selection_update(
         &self,
         change: TeletextObjectPageSelectionChange,
-        prior: Option<(TeletextX27Level25Links, TeletextResolvedObjectPageLinks)>,
+        prior: Option<(
+            TeletextX27Level25Links,
+            TeletextResolvedPageResourceSelection,
+        )>,
     ) -> Result<
-        (TeletextX27Level25Links, TeletextResolvedObjectPageLinks),
+        (
+            TeletextX27Level25Links,
+            TeletextResolvedPageResourceSelection,
+        ),
         TeletextObjectPageSelectionError,
     > {
         use TeletextObjectPageSelectionError as Error;
@@ -182,11 +188,7 @@ impl TeletextDeclaredService {
         let TeletextX27LinkTarget::Page { page: target } = change.replacement.target() else {
             return Err(Error::InvalidChange);
         };
-        let kind = if role == TeletextX27LinkRole::Pop {
-            TeletextResourceKind::Pop
-        } else {
-            TeletextResourceKind::Gpop
-        };
+        let kind = role.kind();
         if !self
             .resource_inventory
             .iter()
@@ -194,7 +196,7 @@ impl TeletextDeclaredService {
         {
             return Err(Error::MissingResource { display, role });
         }
-        let (links, mut objects) =
+        let (links, mut resources) =
             match prior {
                 Some(update) => update,
                 None => (
@@ -207,7 +209,7 @@ impl TeletextDeclaredService {
                             },
                         )?,
                     },
-                    metadata.resources.objects,
+                    metadata.resources,
                 ),
             };
         if links.link(role).validity() != change.replacement.validity() {
@@ -231,11 +233,24 @@ impl TeletextDeclaredService {
             return Err(Error::Unresolved { display, role });
         }
         match role {
-            TeletextX27LinkRole::Pop => objects.public = Some(target),
-            TeletextX27LinkRole::Gpop => objects.global = Some(target),
-            _ => return Err(Error::InvalidChange),
+            TeletextX27LinkRole::Pop => resources.objects.public = Some(target),
+            TeletextX27LinkRole::Gpop => resources.objects.global = Some(target),
+            TeletextX27LinkRole::Drcs | TeletextX27LinkRole::Gdrcs => {
+                let normal = if role == TeletextX27LinkRole::Drcs {
+                    Some(target)
+                } else {
+                    resources.drcs.page(TeletextDrcsTableScope::Normal)
+                };
+                let global = if role == TeletextX27LinkRole::Gdrcs {
+                    Some(target)
+                } else {
+                    resources.drcs.page(TeletextDrcsTableScope::Global)
+                };
+                resources.drcs = TeletextDrcsPageLinks::new(normal, global)
+                    .map_err(|error| TeletextServiceError::Drcs(error.into()))?;
+            }
         }
-        Ok((links, objects))
+        Ok((links, resources))
     }
 
     fn check_object_page_selection_budgets(

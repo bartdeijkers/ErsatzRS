@@ -4,9 +4,7 @@ use super::{
     TeletextChannelDocumentEncodingPolicy, TeletextProducerCompositionBudget,
     TeletextProfileDocument,
 };
-use ersatzrs_domain::{
-    TeletextDeclaredService, TeletextResourceKind, TeletextX27LinkRole, TeletextX27LinkTarget,
-};
+use ersatzrs_domain::{TeletextDeclaredService, TeletextX27LinkTarget};
 
 pub(super) fn check_source(
     documents: &[TeletextProfileDocument],
@@ -44,11 +42,7 @@ pub(super) fn check_source(
         {
             return Err(invalid());
         }
-        let kind = match change.role() {
-            TeletextX27LinkRole::Pop => TeletextResourceKind::Pop,
-            TeletextX27LinkRole::Gpop => TeletextResourceKind::Gpop,
-            _ => return Err(invalid()),
-        };
+        let kind = change.role().kind();
         let TeletextX27LinkTarget::Page { page } = change.replacement().target() else {
             return Err(invalid());
         };

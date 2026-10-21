@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "object_page_selection_consumers_tests.rs"]
 mod consumers;
+#[path = "object_page_selection_drcs_tests.rs"]
+mod drcs;
 
 fn limits() -> TeletextServiceBudget {
     TeletextServiceBudget {
@@ -523,16 +525,6 @@ fn check_invalid_selection_constructor_intent(first: TeletextObjectPageSelection
         link(0xa2, 1)
     )
     .is_err());
-    for role in [TeletextX27LinkRole::Drcs, TeletextX27LinkRole::Gdrcs] {
-        assert!(TeletextObjectPageSelectionChange::new(
-            first.display(),
-            role,
-            first.expected_links(),
-            first.expected_role(),
-            first.replacement()
-        )
-        .is_err());
-    }
     let denied = TeletextX27LinkDeclaration::new(
         TeletextX27LinkTarget::Page { page: raw(0xa3) },
         TeletextX27LinkValidity::Level35Only,

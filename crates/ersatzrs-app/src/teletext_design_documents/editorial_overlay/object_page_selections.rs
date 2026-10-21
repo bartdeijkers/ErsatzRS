@@ -1,4 +1,4 @@
-//! Private V27 exact-old role intent; storage is not native replay authority.
+//! Private V27 object/V30 DRCS exact-old role intent; storage is not replay authority.
 use super::super::MAX_BINDINGS;
 use super::{
     invalid, limit, StoredOverlay, TeletextDesignDocumentBudget, TeletextDesignDocumentError,
@@ -70,6 +70,20 @@ impl TeletextSavedEditorialOverlay {
         self.object_page_selections = selections;
         Ok(self)
     }
+    pub(super) const fn has_drcs_page_selections(&self) -> bool {
+        let selections = self.object_page_selections.as_slice();
+        let mut index = 0;
+        while index < selections.len() {
+            if matches!(
+                selections[index].change.role(),
+                TeletextX27LinkRole::Drcs | TeletextX27LinkRole::Gdrcs
+            ) {
+                return true;
+            }
+            index += 1;
+        }
+        false
+    }
     /// Typed instructions; native replay still authenticates originals and effects.
     #[must_use]
     pub fn object_page_selections(&self) -> &[TeletextSavedObjectPageSelectionChange] {
@@ -110,7 +124,19 @@ impl Serialize for BorrowedSelections<'_> {
     }
 }
 pub(super) fn check_version(stored: &StoredOverlay) -> Result<(), TeletextDesignDocumentError> {
-    if stored.schema_version == super::OBJECT_PAGE_SELECTION_VERSION {
+    let has_drcs = stored
+        .object_page_selections
+        .0
+        .as_ref()
+        .is_some_and(|values| values.iter().any(StoredSelection::is_drcs));
+    // Historical wire enums listed DRCS, but V27–V29 never admitted those roles.
+    if (stored.schema_version == super::DRCS_PAGE_SELECTION_VERSION) != has_drcs {
+        return Err(invalid());
+    }
+    if matches!(
+        stored.schema_version,
+        super::OBJECT_PAGE_SELECTION_VERSION | super::DRCS_PAGE_SELECTION_VERSION
+    ) {
         if stored
             .object_page_selections
             .0
@@ -173,11 +199,7 @@ pub(super) fn validate_association(
         let TeletextX27LinkTarget::Page { page } = change.replacement().target() else {
             return Err(invalid());
         };
-        let kind = match change.role() {
-            TeletextX27LinkRole::Pop => TeletextResourceKind::Pop,
-            TeletextX27LinkRole::Gpop => TeletextResourceKind::Gpop,
-            _ => return Err(invalid()),
-        };
+        let kind = change.role().kind();
         // Structural only: prior announcements can alter the expected X27 body.
         // Exact original role/link equality belongs to authenticated native replay.
         let exists = |resource: ersatzrs_domain::TeletextResourceIdentity| {
@@ -191,7 +213,11 @@ pub(super) fn validate_association(
                 overlay
                     .object_resource_additions()
                     .iter()
-                    .filter(|bank| bank.document_index() == value.document_index)
+                    // New object-bank authority never creates a DRCS source bank.
+                    .filter(|bank| {
+                        matches!(kind, TeletextResourceKind::Pop | TeletextResourceKind::Gpop)
+                            && bank.document_index() == value.document_index
+                    })
                     .map(|bank| bank.addition().resource()),
             )
             .filter(|resource| exists(*resource))
