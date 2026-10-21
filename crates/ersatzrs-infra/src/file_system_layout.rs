@@ -62,6 +62,12 @@ pub fn addon_processed_media_folder() -> PathBuf {
     data_folder().join("addon-processed-media")
 }
 
+/// Private retained provider inputs and cross-process storage reservations.
+#[must_use]
+pub fn provider_source_storage_folder() -> PathBuf {
+    data_folder().join("provider-sources")
+}
+
 /// Root for the managed ADR 0008 `FFmpeg` runtime (`~/.ersatzrs/ffmpeg`).
 #[must_use]
 pub fn ffmpeg_runtime_folder() -> PathBuf {

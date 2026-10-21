@@ -102,7 +102,7 @@ impl FfprobeExtractor {
                 source,
             });
         }
-        let snapshot = Arc::new(captured.snapshot);
+        let snapshot = captured.snapshot;
         let frames = local::capture_retained(
             qualification::command(&self.ffprobe_path, &source.request, snapshot.path())?,
             "finite source teletext text events".into(),

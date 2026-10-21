@@ -8,9 +8,10 @@ Proposed
 
 Partial — selected-source persistence, version-owned file keys, private cache
 identity and request binding are implemented as one F5 prerequisite. P9A-04 owns
-verification. A complete-response acquisition primitive is implemented; aggregate
-storage admission and retained native/session integration remain open. Neither a
-provider declaration nor a URL fingerprint proves immutable source bytes.
+verification. Complete-response acquisition, configurable shared storage
+admission and retained native/session input are implemented. Their named Linux
+candidate proof is separate from accepted-runtime adoption and the remaining F5
+matrix. Neither a provider declaration nor a URL fingerprint proves source bytes.
 
 ## Context
 
@@ -66,8 +67,45 @@ files and copies, including owners still preparing, decoding, playing or held
 after uncertain cleanup. Reservations and actual I/O must remain bounded after
 caller loss. Exhaustion explicitly refuses caption preparation and preserves
 ordinary AV; it grants no partial-source, caption-readiness or acceptance waiver.
-The complete-response primitive's explicit byte ceiling does not implement this
-aggregate storage policy by itself.
+Use the existing configuration repository, with byte-valued keys
+`teletext.source_storage.total_bytes`,
+`teletext.source_storage.maximum_source_bytes`, and
+`teletext.source_storage.minimum_free_bytes`. Changed limits govern subsequent
+admissions; admitted immutable sources retain their original charge. Invalid
+settings refuse optional caption preparation and warn through the existing
+localized teletext-work health check.
+
+Reserve the complete peak, including copies, before acquiring provider bytes.
+One shared state directory, OS admission locks and opaque durable receipts
+coordinate participating processes. Charge actual owners through writes, probes,
+decoders and readers, including abandoned callers and uncertain cleanup. Delete
+owned files before releasing their receipt. A stale or unlocked receipt never
+proves that former native consumers stopped; retain its charge until independent
+cleanup proof permits recovery. No age-based reclamation is authorized here.
+
+Acquire one complete authenticated response, then native-qualify those exact
+retained bytes. Compare the entire embedded index/kind/codec layout, alternate
+audio selection metadata and attached-picture status with the selected database
+file. Create ephemeral provider-bound descriptor intents with the actual native
+filesystem revision; never manufacture SQL readiness or substitute a content
+hash for that revision. Bind the private caption cache separately to the full
+content hash and length, provider/file/track intent, descriptor provenance,
+selected video and existing complete-source clock policy. The complete PSI/PES
+and EOF validation still runs; an already retained input need not be copied.
+
+Use bounded occurrence entries under the existing Next session owner. A local
+path alone cannot report per-programme native reader/reopen lifetime. Therefore
+publish a capability-protected, occurrence-bound internal HTTP file grant with
+HEAD and byte ranges. All AV opens use the same retained file as captions, not
+another provider download. Expiry denies new opens; existing actual readers
+retain their file and quota until completion. Revalidate the original published
+selection before caption promotion. Each new AV open revalidates exact source
+identity independently from later presentation or caption-selection changes;
+presentation-only channel edits keep the same immutable file grant readable.
+Refused optional preparation preserves ordinary AV; a changed source cannot fall
+back to a stale grant. Session shutdown fences callbacks and joins preparation, actual
+readers and storage cleanup under the existing single cleanup budget. Unknown
+cleanup retains the complete session ownership and capacity as before.
 
 ## Consequences
 
@@ -77,9 +115,11 @@ cannot reuse prepared captions or silently retarget a previously issued media
 request. Existing schema health readiness follows the additive migration.
 
 An in-flight URI can still return changed bytes without changing its selector.
-F5 therefore still requires bounded owned acquisition, complete EOF and source
-qualification, cancellation, cleanup and ordinary playback evidence. No client,
-platform or runtime-adoption acceptance follows from this prerequisite.
+The retained-input component provides bounded owned acquisition, complete EOF,
+source qualification and joined session cleanup; P9A-04 identifies its exact
+proof scope. Remaining providers, formats, delivery policies, native platforms,
+restart recovery and accepted-runtime adoption still require their applicable
+acceptance evidence. No client or complete F5 acceptance follows from this slice.
 
 ## Alternatives Considered
 

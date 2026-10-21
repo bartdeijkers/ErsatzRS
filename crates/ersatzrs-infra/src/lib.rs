@@ -90,6 +90,7 @@ mod playout_duration;
 pub mod plex;
 pub mod provider_collection_refresh;
 pub(crate) mod provider_collections;
+pub mod provider_source_storage;
 pub mod provider_subtitles;
 pub mod published_interval_source;
 pub mod remote_stream;

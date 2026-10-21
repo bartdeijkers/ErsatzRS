@@ -216,6 +216,37 @@ pub(crate) async fn project_deferred_item_with_audio(
     .await
 }
 
+/// Use only independently acquired intents from this exact retained provider input.
+pub(super) async fn project_retained_scheduled_item(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &super::schedule::ScheduledMedia,
+    source: wire::Source,
+    resolution: &Resolution,
+    audio: AudioDirective,
+    origin: &std::sync::Arc<super::retained_source_origin::RetainedOrigin>,
+) -> Result<DeferredProjection> {
+    let source_text =
+        super::source_teletext::pending_from_retained(pool, channel, media, &source, origin)
+            .await?;
+    project_deferred_item_selected(
+        pool,
+        channel,
+        &media.item,
+        media.media_version_id,
+        source,
+        resolution,
+        SelectionDirectives {
+            audio,
+            subtitle_id: None,
+            diagnostics: None,
+            source_pending: false,
+            source_text,
+        },
+    )
+    .await
+}
+
 struct SelectionDirectives {
     audio: AudioDirective,
     subtitle_id: Option<i64>,

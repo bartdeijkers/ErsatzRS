@@ -19,6 +19,7 @@ mod parents;
 mod playback;
 
 pub use acquisition::acquired_observation;
+pub(crate) use playback::descriptor_candidates_from_acquired;
 
 pub use playback::{
     discover_caption_requests, load_caption_candidates, SourceTeletextCaptionCandidate,

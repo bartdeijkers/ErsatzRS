@@ -131,11 +131,15 @@ impl ProbeRetention {
         hold: ersatzrs_core::locking::TeletextWorkHold,
         source: std::sync::Arc<super::LocalTeletextSourceGuard>,
     ) -> Self {
+        let shared_snapshot = source
+            .retained_source
+            .as_ref()
+            .map(|source| source.file.clone());
         Self {
             hold,
             source,
             snapshot: None,
-            shared_snapshot: None,
+            shared_snapshot,
             confirmed: true,
         }
     }

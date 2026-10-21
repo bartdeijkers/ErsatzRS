@@ -27,6 +27,7 @@ pub use headers::{LocalTeletextHeaderProblem, LocalTeletextHeaders};
 
 mod headers;
 pub(super) use headers::run_source_guard_owned;
+mod retained_report;
 mod source_av_origin;
 mod source_clock;
 mod source_cue;
@@ -81,6 +82,7 @@ pub struct LocalTeletextAcquisition {
 /// mutation nor forces an external process to consume this open handle.
 pub struct LocalTeletextSourceGuard {
     guard: LocalFileRevision,
+    pub(super) retained_source: Option<Arc<super::RetainedProviderSource>>,
 }
 
 impl std::fmt::Debug for LocalTeletextSourceGuard {
@@ -120,7 +122,10 @@ impl LocalTeletextSourceGuard {
         if guard.revision().as_ref() != Some(expected_revision) || !guard.is_current(path) {
             return Err(LocalTeletextSourceGuardError::Changed);
         }
-        Ok(Self { guard })
+        Ok(Self {
+            guard,
+            retained_source: None,
+        })
     }
 
     /// Check the held file and actual resolved path against the original association.
@@ -154,6 +159,44 @@ pub(crate) async fn open_source_guard_owned(
         Ok(Arc::new(guard))
     })
     .await
+}
+
+/// Bind the actual retained private file to its acquired filesystem revision.
+/// The blocking owner retains both bytes and storage admission after caller loss.
+pub(crate) async fn open_retained_source_guard_owned(
+    source: Arc<super::RetainedProviderSource>,
+    expected: SourceTeletextRevision,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> super::Result<Arc<LocalTeletextSourceGuard>> {
+    headers::run_source_guard_owned(deadline, hold, move |stop| {
+        stop.check_source_guard()?;
+        let mut guard = LocalTeletextSourceGuard::open(source.path(), &expected)
+            .map_err(|_| source_guard_changed())?;
+        let input_handle = source
+            .file
+            .as_file()
+            .try_clone()
+            .and_then(Handle::from_file)
+            .map_err(|_| source_guard_changed())?;
+        if guard.guard.original != input_handle || guard.guard.len != source.length {
+            return Err(source_guard_changed());
+        }
+        check_source_guard_paths(&guard, source.path(), source.path())?;
+        stop.check_source_guard()?;
+        guard.retained_source = Some(source);
+        Ok(Arc::new(guard))
+    })
+    .await
+}
+
+pub(super) async fn extract_retained_report(
+    extractor: &FfprobeExtractor,
+    source: Arc<super::RetainedProviderSource>,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> super::Result<LocalMediaProbe> {
+    retained_report::extract_retained_report(extractor, source, deadline, hold).await
 }
 
 /// Recheck both locators before or after source-consuming work without running

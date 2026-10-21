@@ -149,6 +149,7 @@ async fn public_iptv_routes_never_dispatch_internal_callbacks_for_forged_local_h
             "/ffmpeg/concat/900?wrapper_id=invalid",
             "/ffmpeg/stream/900?wrapper_id=invalid",
             "/ffmpeg/next-media/1/2/3",
+        "/ffmpeg/next-source/00000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000002",
             "/ffmpeg/next-item/1/2/digest/3",
             "/ffmpeg/next-prepared/instance/transfer",
             "/ffmpeg/next-canvas?binding=invalid",
@@ -211,6 +212,7 @@ fn public_ffmpeg_profile_shapes_keep_both_existing_admin_aliases() {
         "/ffmpeg/next-song-background",
         "/ffmpeg/next-canvas",
         "/ffmpeg/next-media/1/2/3",
+        "/ffmpeg/next-source/00000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000002",
         "/ffmpeg/external-media/1/2",
         "/ffmpeg/unknown-callback",
         "/ffmpeg/profiles/42/callback",
@@ -235,6 +237,7 @@ async fn internal_routes_require_actual_loopback_peer_and_keep_capability_checks
     ] {
         for path in [
             "/ffmpeg/next-media/1/2/3",
+        "/ffmpeg/next-source/00000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000002",
             "/ffmpeg/next-song-background?binding=invalid",
         ] {
             let mut request = Request::builder()

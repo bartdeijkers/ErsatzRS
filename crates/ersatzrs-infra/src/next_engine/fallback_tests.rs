@@ -122,6 +122,7 @@ async fn shared_manifest_gaps_reach_normal_and_preview_sessions_only_on_their_ch
                     started_at: chrono::Utc::now(),
                     request,
                     transfers: Arc::default(),
+                    source_files: std::sync::Arc::default(),
                     fallback: Arc::default(),
                     gaps: Arc::default(),
                     troubleshooting: None,
@@ -214,6 +215,7 @@ pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::
                 deadline: Instant::now() + std::time::Duration::from_secs(30),
             },
             transfers: Arc::default(),
+            source_files: std::sync::Arc::default(),
             fallback: Arc::default(),
             troubleshooting: None,
             gaps: Arc::new(tokio::sync::Mutex::new(vec![Gap {

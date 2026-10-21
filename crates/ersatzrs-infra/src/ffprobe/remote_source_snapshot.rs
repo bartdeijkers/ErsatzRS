@@ -2,8 +2,10 @@
 
 use std::{io::Write as _, sync::Arc};
 
+use crate::provider_source_storage::ProviderSourceLease;
 use ersatzrs_core::locking::TeletextWorkHold;
 use reqwest::{header, Response, StatusCode};
+use sha2::{Digest as _, Sha256};
 use tempfile::NamedTempFile;
 use tokio::{sync::oneshot, time::Instant};
 
@@ -14,7 +16,49 @@ use super::{
 
 const LABEL: &str = "complete finite HTTP source";
 type Snapshot = Arc<NamedTempFile>;
-type Reply = oneshot::Sender<Result<Snapshot>>;
+type Reply = oneshot::Sender<Result<Captured>>;
+
+struct Captured {
+    file: Snapshot,
+    storage: Option<Arc<ProviderSourceLease>>,
+    length: u64,
+    digest: [u8; 32],
+}
+
+/// Complete private response bytes; native/source/track readiness is separate.
+/// Every actual reader or decoder must retain this owner, not only its path.
+pub(crate) struct RetainedProviderSource {
+    pub(crate) file: Snapshot,
+    pub(crate) storage: Arc<ProviderSourceLease>,
+    pub(crate) length: u64,
+    pub(crate) digest: [u8; 32],
+}
+
+impl RetainedProviderSource {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        self.file.path()
+    }
+}
+
+pub(crate) async fn retain_provider_http_source(
+    response: Response,
+    deadline: Instant,
+    maximum_bytes: u64,
+    hold: TeletextWorkHold,
+    storage: Arc<ProviderSourceLease>,
+) -> Result<Arc<RetainedProviderSource>> {
+    if maximum_bytes > storage.source_limit() {
+        return Err(too_large());
+    }
+    let captured = retain(response, deadline, maximum_bytes, hold, Some(storage)).await?;
+    let storage = captured.storage.ok_or_else(invalid)?;
+    Ok(Arc::new(RetainedProviderSource {
+        file: captured.file,
+        storage,
+        length: captured.length,
+        digest: captured.digest,
+    }))
+}
 
 /// Retain one complete, nonempty HTTP response in a private temporary file.
 ///
@@ -39,6 +83,18 @@ pub async fn retain_complete_http_source(
     maximum_bytes: u64,
     hold: TeletextWorkHold,
 ) -> Result<Snapshot> {
+    retain(response, deadline, maximum_bytes, hold, None)
+        .await
+        .map(|captured| captured.file)
+}
+
+async fn retain(
+    response: Response,
+    deadline: Instant,
+    maximum_bytes: u64,
+    hold: TeletextWorkHold,
+    storage: Option<Arc<ProviderSourceLease>>,
+) -> Result<Captured> {
     let owner = local_cleanup_scope::register_current()
         .map_err(|error| match error {
             AdmissionError::Closed => cancelled(),
@@ -56,7 +112,7 @@ pub async fn retain_complete_http_source(
             reply: &mut reply,
             deadline,
         };
-        let result = acquire(response, maximum_bytes, &hold, stop).await;
+        let result = acquire(response, maximum_bytes, &hold, stop, storage).await;
         let confirmed = !matches!(result, Err(FfprobeError::CleanupUnconfirmed { .. }));
         // Failed sends drop their private snapshot before reporting cleanup.
         let _ = reply.send(result);
@@ -107,7 +163,8 @@ async fn acquire(
     maximum_bytes: u64,
     hold: &TeletextWorkHold,
     mut stop: Stop<'_>,
-) -> Result<Snapshot> {
+    storage: Option<Arc<ProviderSourceLease>>,
+) -> Result<Captured> {
     stop.check()?;
     if response.status() != StatusCode::OK
         || response.headers().contains_key(header::CONTENT_RANGE)
@@ -133,47 +190,65 @@ async fn acquire(
     if declared.is_some_and(|length| length > maximum_bytes) {
         return Err(too_large());
     }
-    let created_hold = hold.clone();
-    let file = tokio::task::spawn_blocking(move || {
-        let _hold = created_hold;
-        tempfile::Builder::new()
-            .prefix("ersatzrs-finite-source-")
-            .tempfile()
-            .map(Arc::new)
-    })
-    .await
-    .map_err(|_| uncertain())?
-    .map_err(|_| invalid())?;
+    let file = create_file(hold.clone(), storage.clone()).await?;
     let mut total = 0_u64;
+    let mut digest = Sha256::new();
     while let Some(chunk) = stop.chunk(&mut response).await? {
         total = total
             .checked_add(u64::try_from(chunk.len()).map_err(|_| too_large())?)
             .filter(|total| *total <= maximum_bytes)
             .ok_or_else(too_large)?;
         stop.check()?;
-        file_operation(file.clone(), hold.clone(), move |file| {
+        let hashing = chunk.clone();
+        file_operation(file.clone(), hold.clone(), storage.clone(), move |file| {
             let mut writer = file.as_file();
             writer.write_all(&chunk)
         })
         .await?;
+        digest.update(&hashing);
         stop.check()?;
     }
     if total == 0 || declared.is_some_and(|length| length != total) {
         return Err(invalid());
     }
-    file_operation(file.clone(), hold.clone(), |file| {
+    file_operation(file.clone(), hold.clone(), storage.clone(), |file| {
         let mut writer = file.as_file();
         writer.flush()
     })
     .await?;
     stop.check()?;
-    Ok(file)
+    Ok(Captured {
+        file,
+        storage,
+        length: total,
+        digest: digest.finalize().into(),
+    })
+}
+
+async fn create_file(
+    hold: TeletextWorkHold,
+    storage: Option<Arc<ProviderSourceLease>>,
+) -> Result<Snapshot> {
+    tokio::task::spawn_blocking(move || {
+        let _hold = hold;
+        let mut builder = tempfile::Builder::new();
+        builder.prefix("ersatzrs-finite-source-");
+        match &storage {
+            Some(storage) => builder.tempfile_in(storage.directory()),
+            None => builder.tempfile(),
+        }
+        .map(Arc::new)
+    })
+    .await
+    .map_err(|_| uncertain())?
+    .map_err(|_| invalid())
 }
 
 // Field order also protects unwinding: remove/close the actual file owner before
 // releasing the work hold, even if its awaiting async future was abandoned.
 struct FileOperation {
     file: Snapshot,
+    _storage: Option<Arc<ProviderSourceLease>>,
     _hold: TeletextWorkHold,
 }
 
@@ -186,12 +261,21 @@ impl FileOperation {
     }
 }
 
-async fn file_operation<T, F>(file: Snapshot, hold: TeletextWorkHold, operation: F) -> Result<T>
+async fn file_operation<T, F>(
+    file: Snapshot,
+    hold: TeletextWorkHold,
+    storage: Option<Arc<ProviderSourceLease>>,
+    operation: F,
+) -> Result<T>
 where
     T: Send + 'static,
     F: FnOnce(&NamedTempFile) -> std::io::Result<T> + Send + 'static,
 {
-    let retained = FileOperation { file, _hold: hold };
+    let retained = FileOperation {
+        file,
+        _storage: storage,
+        _hold: hold,
+    };
     tokio::task::spawn_blocking(move || retained.run(operation))
         .await
         .map_err(|_| uncertain())?

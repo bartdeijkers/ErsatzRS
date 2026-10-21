@@ -17,6 +17,9 @@ use crate::{
     teletext_source::{replace, SourceTeletextParents},
 };
 
+#[path = "acquired_descriptor_tests.rs"]
+mod acquired;
+
 struct Fixture {
     pool: DbPool,
     claim: ManagedLibraryOperationClaim,

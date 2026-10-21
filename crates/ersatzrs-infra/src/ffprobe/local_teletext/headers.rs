@@ -225,7 +225,7 @@ struct ActiveHeaders {
     observers: BTreeMap<i32, SuppliedTeletextHeaderObserver>,
 }
 
-fn read_headers<T>(
+pub(super) fn read_headers<T>(
     acquired: &LocalTeletextAcquisition,
     path: &Path,
     stop: &ReadStop<'_, T>,

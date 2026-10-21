@@ -79,6 +79,52 @@ impl PreparedLocalTeletextSource {
 }
 
 impl FfprobeExtractor {
+    /// Prepare a provider request against its one complete retained input.
+    ///
+    /// Both locators name the same private file used for AV. The original
+    /// provider binding and real filesystem revision remain unchanged. Source
+    /// and storage ownership follow every actual reader and native subprocess.
+    /// # Errors
+    /// Rejects invalid requests, stale retained bytes, missing scope, invalid
+    /// native evidence, deadline/cancellation or unconfirmed worker cleanup.
+    pub(crate) async fn prepare_retained_teletext_source(
+        &self,
+        request: SourceTeletextPageDecodeRequest,
+        source: Arc<crate::ffprobe::RetainedProviderSource>,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<PreparedLocalTeletextSource, SourceTeletextPageDecodeError> {
+        request.validate()?;
+        check_deadline(deadline)?;
+        if LocalProbeCleanupScope::current().is_none() {
+            return Err(SourceTeletextPageDecodeError::NoCleanupScope);
+        }
+        let path = source.path().to_owned();
+        let guard = local_teletext::open_retained_source_guard_owned(
+            source,
+            request.binding.source_revision.clone(),
+            deadline,
+            hold.clone(),
+        )
+        .await
+        .map_err(probe_error)?;
+        let native = self
+            .capture_local_teletext_native_origin(
+                guard.clone(),
+                (path.clone(), path.clone()),
+                deadline,
+                hold,
+            )
+            .await?;
+        Ok(PreparedLocalTeletextSource {
+            request,
+            original: path.clone(),
+            resolved: path,
+            guard,
+            native,
+        })
+    }
+
     /// Prepare held-source native observations before page/window decoding.
     ///
     /// One absolute budget of at most fifteen seconds covers owned source

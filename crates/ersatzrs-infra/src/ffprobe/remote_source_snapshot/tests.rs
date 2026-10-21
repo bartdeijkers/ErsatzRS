@@ -1,6 +1,10 @@
 use super::*;
-use crate::ffprobe::LocalProbeCleanupScope;
+use crate::{
+    ffprobe::LocalProbeCleanupScope,
+    provider_source_storage::{Policy, ProviderSourceStore},
+};
 use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+use futures_util::FutureExt as _;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
@@ -190,6 +194,7 @@ async fn one_absolute_deadline_refuses_incomplete_http_body_and_drains_actual_wo
                     reply: &mut reply,
                     deadline,
                 },
+                None,
             )
             .await;
             assert!(matches!(result, Err(FfprobeError::Timeout { .. })));
@@ -273,13 +278,28 @@ async fn caller_loss_and_scope_close_cancel_incomplete_http_without_publishing_a
 #[tokio::test]
 async fn actual_blocking_file_operation_keeps_snapshot_and_hold_after_its_awaiter_is_aborted() {
     let locker = EntityLocker::new();
-    let file = Arc::new(NamedTempFile::new().unwrap());
+    let hold = hold(&locker);
+    let root = tempfile::tempdir().unwrap();
+    let storage = ProviderSourceStore::new(root.path().to_owned())
+        .reserve(
+            Policy {
+                total_bytes: 8,
+                maximum_source_bytes: 8,
+                minimum_free_bytes: 0,
+            },
+            8,
+            8,
+            hold.clone(),
+        )
+        .await
+        .unwrap();
+    let cleanup = storage.cleanup();
+    let file = Arc::new(NamedTempFile::new_in(storage.directory()).unwrap());
     let path = file.path().to_owned();
     let weak = Arc::downgrade(&file);
-    let hold = hold(&locker);
     let (started, ready) = oneshot::channel();
     let (release, wait) = std::sync::mpsc::channel();
-    let caller = tokio::spawn(file_operation(file, hold, move |file| {
+    let caller = tokio::spawn(file_operation(file, hold, Some(storage), move |file| {
         started.send(()).unwrap();
         wait.recv().unwrap();
         let mut writer = file.as_file();
@@ -289,6 +309,7 @@ async fn actual_blocking_file_operation_keeps_snapshot_and_hold_after_its_awaite
     caller.abort();
     assert!(caller.await.unwrap_err().is_cancelled());
     assert!(path.exists() && weak.upgrade().is_some());
+    assert!(cleanup.wait().now_or_never().is_none());
     assert_eq!(locker.active_teletext_work(), 1);
     assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
     release.send(()).unwrap();
@@ -301,4 +322,6 @@ async fn actual_blocking_file_operation_keeps_snapshot_and_hold_after_its_awaite
     .unwrap();
     assert!(weak.upgrade().is_none());
     assert!(!path.exists());
+    cleanup.wait().await.unwrap();
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
 }

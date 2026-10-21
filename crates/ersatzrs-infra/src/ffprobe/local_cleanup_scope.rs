@@ -182,34 +182,34 @@ fn mark_uncertain(state: &mut State) {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum AdmissionError {
+pub(crate) enum AdmissionError {
     Closed,
     Unconfirmed,
     Capacity,
 }
 
-pub(super) fn register_current() -> Result<Option<OwnerGuard>, AdmissionError> {
+pub(crate) fn register_current() -> Result<Option<OwnerGuard>, AdmissionError> {
     CURRENT
         .try_with(|scope| scope.register().map(Some))
         .unwrap_or(Ok(None))
 }
 
-pub(super) struct OwnerGuard {
+pub(crate) struct OwnerGuard {
     scope: LocalProbeCleanupScope,
     completed: bool,
 }
 
 impl OwnerGuard {
-    pub(super) fn cancellation_requested(&self) -> bool {
+    pub(crate) fn cancellation_requested(&self) -> bool {
         self.scope.state().closed_at.is_some()
     }
 
-    pub(super) async fn cancelled(&self) {
+    pub(crate) async fn cancelled(&self) {
         let mut changed = self.scope.inner.changed.subscribe();
         let _ = changed.wait_for(|state| state.closed_at.is_some()).await;
     }
 
-    pub(super) fn complete(mut self, confirmed: bool) {
+    pub(crate) fn complete(mut self, confirmed: bool) {
         self.finish(confirmed);
         self.completed = true;
     }

@@ -31,6 +31,7 @@ use crate::{
 use super::{
     burn_cache::{BurnCache, CacheError},
     protocol::Source,
+    retained_source_origin::RetainedOrigin,
     schedule::ScheduledMedia,
 };
 
@@ -40,6 +41,8 @@ pub(super) const CLOCK_POLICY: &str = "complete-source-copyts-selected-video-eof
 pub(crate) struct PendingText {
     descriptor: SourceTeletextCaptionDescriptorRequest,
     pub(super) original_path: String,
+    origin: Option<Arc<RetainedOrigin>>,
+    retained_route: Option<Source>,
 }
 
 impl PendingText {
@@ -50,12 +53,18 @@ impl PendingText {
 
     pub(super) fn identity(&self) -> serde_json::Value {
         let candidate = self.candidate();
-        serde_json::json!({"clock_policy":CLOCK_POLICY,"binding":candidate.request.binding,
+        let mut identity = serde_json::json!({"clock_policy":CLOCK_POLICY,"binding":candidate.request.binding,
             "stream":candidate.request.stream_index,"pid":candidate.request.pid,
             "program":candidate.request.program_number,"page":candidate.request.page.get(),
             "language":candidate.language.as_str(),"role":candidate.descriptor_type,
             "psi":candidate.psi_fingerprint,"descriptors":candidate.descriptor_occurrences.iter().map(|entry|
-                (entry.descriptor_tag,entry.language.as_str(),entry.descriptor_type,entry.wire_magazine,entry.wire_page)).collect::<Vec<_>>()})
+                (entry.descriptor_tag,entry.language.as_str(),entry.descriptor_type,entry.wire_magazine,entry.wire_page)).collect::<Vec<_>>()});
+        if let Some(origin) = &self.origin {
+            if let Some(value) = identity.as_object_mut() {
+                value.insert("retained_source".into(), origin.identity());
+            }
+        }
+        identity
     }
 }
 
@@ -70,19 +79,12 @@ pub(super) async fn pending(
     media: &ScheduledMedia,
     source: &Source,
 ) -> Result<Option<Selection>> {
-    let item = &media.item;
-    let mode = item.subtitle_mode.unwrap_or(channel.subtitle_mode);
-    if mode == ChannelSubtitleMode::None
-        || channel.stream_selector_mode == ChannelStreamSelectorMode::Custom
-        || item.pinned_stream_selection.is_some()
-        || !matches!(source, Source::Local { .. })
-        || media.remote_stream_id.is_some()
-    {
+    if !selection_enabled(channel, media) || !matches!(source, Source::Local { .. }) {
         return Ok(None);
     }
     let descriptors = discover_caption_requests(
         pool,
-        item.media_item_id,
+        media.item.media_item_id,
         media.media_version_id,
         media.media_file_id,
         &media.path,
@@ -95,6 +97,49 @@ pub(super) async fn pending(
         .into_iter()
         .map(|request| request.candidate)
         .collect::<Vec<_>>();
+    rank_pending(pool, channel, media, &candidates, None, None).await
+}
+
+pub(super) fn selection_enabled(channel: &Channel, media: &ScheduledMedia) -> bool {
+    media.item.subtitle_mode.unwrap_or(channel.subtitle_mode) != ChannelSubtitleMode::None
+        && channel.stream_selector_mode != ChannelStreamSelectorMode::Custom
+        && media.item.pinned_stream_selection.is_none()
+        && media.remote_stream_id.is_none()
+}
+
+pub(super) async fn pending_from_retained(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &ScheduledMedia,
+    source: &Source,
+    origin: &Arc<RetainedOrigin>,
+) -> Result<Option<Selection>> {
+    if !selection_enabled(channel, media) {
+        return Ok(None);
+    }
+    if !matches!(source, Source::Http { .. }) || !origin.matches_media(media) {
+        return Err(unavailable());
+    }
+    rank_pending(
+        pool,
+        channel,
+        media,
+        origin.candidates(),
+        Some(origin.clone()),
+        Some(source.clone()),
+    )
+    .await
+}
+async fn rank_pending(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &ScheduledMedia,
+    candidates: &[SourceTeletextCaptionCandidate],
+    origin: Option<Arc<RetainedOrigin>>,
+    retained_route: Option<Source>,
+) -> Result<Option<Selection>> {
+    let item = &media.item;
+    let mode = item.subtitle_mode.unwrap_or(channel.subtitle_mode);
     if candidates.is_empty() {
         return Ok(None);
     }
@@ -109,7 +154,7 @@ pub(super) async fn pending(
         media.media_version_id,
         &languages,
         mode,
-        &candidates,
+        candidates,
     )
     .await?
     .map(|selected| Selection {
@@ -119,6 +164,8 @@ pub(super) async fn pending(
                 candidate: selected.candidate,
             },
             original_path: media.path.clone(),
+            origin,
+            retained_route,
         },
     }))
 }
@@ -187,9 +234,6 @@ where
             .min(Instant::now() + std::time::Duration::from_secs(15)),
         ..request
     };
-    let Source::Local { path, .. } = request.source else {
-        return Err(unavailable());
-    };
     let configured = tokio::time::timeout_at(
         request.deadline,
         SqliteConfigRepository(pool.clone()).get("teletext.work.max_concurrent"),
@@ -206,29 +250,7 @@ where
     let scope = Scope(LocalProbeCleanupScope::new());
     let extractor = FfprobeExtractor::new(request.ffprobe.to_str().ok_or_else(unavailable)?);
     let operation = async {
-        let original = tokio::time::timeout_at(
-            request.deadline,
-            crate::media_server::teletext::caption_physical_original(
-                pool,
-                &request.pending.candidate().request.binding,
-                &request.pending.original_path,
-                path,
-            ),
-        )
-        .await
-        .map_err(|_| unavailable())??;
-        let source = Arc::new(
-            extractor
-                .prepare_local_teletext_source(
-                    request.pending.candidate().request.clone(),
-                    original,
-                    path.into(),
-                    request.deadline,
-                    work.hold_work(),
-                )
-                .await
-                .map_err(|_| unavailable())?,
-        );
+        let source = prepare_source(pool, &extractor, request, work.hold_work()).await?;
         prepare_cached_text(
             source,
             extractor,
@@ -246,6 +268,86 @@ where
         return Err(unavailable());
     }
     result
+}
+
+async fn prepare_source(
+    pool: &DbPool,
+    extractor: &FfprobeExtractor,
+    request: Preparation<'_>,
+    hold: TeletextWorkHold,
+) -> Result<Arc<PreparedLocalTeletextSource>> {
+    if let Some(origin) = &request.pending.origin {
+        let route = request
+            .pending
+            .retained_route
+            .as_ref()
+            .ok_or_else(unavailable)?;
+        if !same_source(route, request.source) {
+            return Err(unavailable());
+        }
+        return extractor
+            .prepare_retained_teletext_source(
+                request.pending.candidate().request.clone(),
+                origin.source(),
+                request.deadline,
+                hold,
+            )
+            .await
+            .map(Arc::new)
+            .map_err(|_| unavailable());
+    }
+    let Source::Local { path, .. } = request.source else {
+        return Err(unavailable());
+    };
+    let original = tokio::time::timeout_at(
+        request.deadline,
+        crate::media_server::teletext::caption_physical_original(
+            pool,
+            &request.pending.candidate().request.binding,
+            &request.pending.original_path,
+            path,
+        ),
+    )
+    .await
+    .map_err(|_| unavailable())??;
+    extractor
+        .prepare_local_teletext_source(
+            request.pending.candidate().request.clone(),
+            original,
+            path.into(),
+            request.deadline,
+            hold,
+        )
+        .await
+        .map(Arc::new)
+        .map_err(|_| unavailable())
+}
+fn same_source(first: &Source, second: &Source) -> bool {
+    match (first, second) {
+        (Source::Local { path: first, .. }, Source::Local { path: second, .. }) => first == second,
+        (
+            Source::Http {
+                uri: first,
+                headers: first_headers,
+                ..
+            },
+            Source::Http {
+                uri: second,
+                headers: second_headers,
+                ..
+            },
+        ) => first == second && first_headers == second_headers,
+        _ => false,
+    }
+}
+fn selected_video(source: &Source, video: Option<&super::protocol::Track>) -> Option<u32> {
+    video.and_then(|video| {
+        video
+            .source
+            .as_ref()
+            .filter(|selected| same_source(selected, source))
+            .and(video.stream_index)
+    })
 }
 
 async fn prepare_cached_text<F, Fut>(
@@ -290,17 +392,7 @@ where
                     .prepare_local_teletext_text(
                         source,
                         request.ffmpeg,
-                        request
-                            .video
-                            .and_then(|video| match (&video.source, request.source) {
-                                (
-                                    Some(Source::Local {
-                                        path: video_path, ..
-                                    }),
-                                    Source::Local { path, .. },
-                                ) if video_path == path => video.stream_index,
-                                _ => None,
-                            }),
+                        selected_video(request.source, request.video),
                         request.deadline,
                         build_hold.clone(),
                     )
@@ -370,3 +462,7 @@ fn unavailable() -> RepositoryError {
         "selected finite source page is unavailable",
     )
 }
+
+#[cfg(test)]
+#[path = "source_teletext/retained_tests.rs"]
+mod retained_tests;

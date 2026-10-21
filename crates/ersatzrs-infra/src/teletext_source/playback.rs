@@ -22,7 +22,7 @@ use ersatzrs_ffmpeg::teletext::source_descriptors::{
 };
 use sqlx::Transaction;
 
-use super::{column, load};
+use super::{codec, column, load, SourceTeletextParents};
 use crate::{
     db::{Db, DbPool},
     ffprobe::{
@@ -137,6 +137,79 @@ pub async fn discover_caption_requests(
             .map(|candidate| SourceTeletextCaptionDescriptorRequest { candidate })
             .collect()
     })
+}
+
+/// Project descriptor intents from one already held native source acquisition.
+///
+/// This pure bridge reuses stored-report validation and descriptor discovery,
+/// including aggregate bounds. It neither verifies database membership nor
+/// reads a source, writes a report or establishes caption readiness. The caller
+/// must qualify the exact provider item/file, complete native track layout and
+/// current held source before constructing these observations with
+/// `acquired_observation`; its physical revision is retained unchanged.
+///
+/// # Errors
+/// Rejects malformed, mismatched or excessive observations atomically.
+pub(crate) fn descriptor_candidates_from_acquired(
+    observations: &[(SourceTeletextParents, SourceTeletextObservation)],
+) -> Result<Vec<SourceTeletextCaptionCandidate>> {
+    if observations.len() > MAX_TELETEXT_PROBE_STREAMS {
+        return Err(unavailable());
+    }
+    let mut file = None;
+    let mut source = None;
+    let mut streams = BTreeSet::new();
+    let mut indexes = BTreeSet::new();
+    let mut candidates = Vec::new();
+    let mut wire_entries = 0;
+    for (parents, observation) in observations {
+        if [
+            parents.media_version_id,
+            parents.media_file_id,
+            parents.media_stream_id,
+        ]
+        .iter()
+        .any(|id| *id <= 0)
+            || !streams.insert(parents.media_stream_id)
+            || !indexes.insert(observation.stream_index)
+        {
+            return Err(unavailable());
+        }
+        codec::validate(observation).map_err(|_| unavailable())?;
+        let current_file = (parents.media_version_id, parents.media_file_id);
+        if file
+            .replace(current_file)
+            .is_some_and(|old| old != current_file)
+        {
+            return Err(unavailable());
+        }
+        if let SourceTeletextBinding::Bound(binding) = &observation.binding {
+            if binding.media_version_id != parents.media_version_id
+                || binding.media_file_id != parents.media_file_id
+                || binding.media_stream_id != parents.media_stream_id
+            {
+                return Err(unavailable());
+            }
+            let current_source = (
+                binding.media_source_id,
+                binding.provider,
+                &binding.source_revision,
+            );
+            if source
+                .replace(current_source)
+                .is_some_and(|old| old != current_source)
+            {
+                return Err(unavailable());
+            }
+        }
+        append_candidates(
+            observation,
+            &mut candidates,
+            &mut wire_entries,
+            DiscoveryMode::DescriptorOnly,
+        )?;
+    }
+    Ok(candidates)
 }
 
 async fn load_requests(

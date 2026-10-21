@@ -14,9 +14,11 @@ pub mod teletext_origin;
 pub mod teletext_probe;
 
 mod local;
-mod local_cleanup_scope;
+pub(crate) mod local_cleanup_scope;
 mod local_teletext;
 mod remote_source_snapshot;
+mod retained_source_reader;
+pub(crate) use retained_source_reader::{open_retained_source_reader, RetainedSourceReader};
 
 pub use local_cleanup_scope::{LocalProbeCleanupError, LocalProbeCleanupScope};
 pub use local_teletext::{
@@ -24,6 +26,7 @@ pub use local_teletext::{
     LocalTeletextSourceGuard, LocalTeletextSourceGuardError,
 };
 pub use remote_source_snapshot::retain_complete_http_source;
+pub(crate) use remote_source_snapshot::{retain_provider_http_source, RetainedProviderSource};
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -108,6 +111,15 @@ pub struct FfprobeExtractor {
 }
 
 impl FfprobeExtractor {
+    pub(crate) async fn extract_retained_teletext_report(
+        &self,
+        source: std::sync::Arc<RetainedProviderSource>,
+        deadline: tokio::time::Instant,
+        hold: ersatzrs_core::locking::TeletextWorkHold,
+    ) -> Result<LocalMediaProbe> {
+        local_teletext::extract_retained_report(self, source, deadline, hold).await
+    }
+
     #[must_use]
     pub fn new(ffprobe_path: impl Into<String>) -> Self {
         Self {

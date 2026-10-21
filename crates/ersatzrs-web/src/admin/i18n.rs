@@ -1691,6 +1691,7 @@ pub enum TextKey {
     TeletextWorkDefault,
     TeletextWorkConfigured,
     TeletextWorkInvalid,
+    TeletextSourceStorageInvalid,
     TeletextOutputTitle,
     TeletextOutputAbsentBrief,
     TeletextOutputAbsentHelp,
@@ -4117,6 +4118,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TeletextWorkDefault,
     TextKey::TeletextWorkConfigured,
     TextKey::TeletextWorkInvalid,
+    TextKey::TeletextSourceStorageInvalid,
     TextKey::TeletextOutputTitle,
     TextKey::TeletextOutputAbsentBrief,
     TextKey::TeletextOutputAbsentHelp,
@@ -5864,6 +5866,9 @@ fn scan_and_playback_health_message(
 
 fn teletext_work_health_message(language: UiLanguage, message: &str) -> Option<String> {
     match message {
+        value if value == text(UiLanguage::English, TextKey::TeletextSourceStorageInvalid) => {
+            Some(text(language, TextKey::TeletextSourceStorageInvalid).to_owned())
+        }
         "Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready." => {
             Some(text(language, TextKey::TeletextWorkDefault).to_owned())
         }
@@ -7019,7 +7024,11 @@ mod tests {
                 health_check_title_text(language, title),
                 text(language, TextKey::TeletextWorkTitle)
             );
-            for key in [TextKey::TeletextWorkDefault, TextKey::TeletextWorkInvalid] {
+            for key in [
+                TextKey::TeletextWorkDefault,
+                TextKey::TeletextWorkInvalid,
+                TextKey::TeletextSourceStorageInvalid,
+            ] {
                 let canonical = text(UiLanguage::English, key);
                 let localized = text(language, key);
                 assert!(!localized.is_empty());

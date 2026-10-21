@@ -200,9 +200,9 @@ impl NextHost {
                 window.end,
                 deadline,
                 |channel, media| async {
-                    let projected = self
-                        .project_schedule(channel, media, replacements, window.start)
-                        .await?;
+                    let projected =
+                        Box::pin(self.project_schedule(channel, media, replacements, window.start))
+                            .await?;
                     *gaps.lock().await = projected.gaps;
                     Ok(projected.items)
                 },
@@ -284,7 +284,15 @@ impl NextHost {
                 &graphics,
             )
             .await?;
-            if projection.pending_burn.is_some() {
+            let retained_intent =
+                super::super::retained_source_origin::RetainedSourceIntent::discover(
+                    &self.pool,
+                    &channel,
+                    &media,
+                    &projection.original_source,
+                )
+                .await;
+            if projection.pending_burn.is_some() || retained_intent.is_some() {
                 let identity = super::super::dynamic_projection::fingerprint(
                     &self.pool,
                     &media,

@@ -387,7 +387,7 @@ async fn live_credit_window(fixture: &mut Fixture, uri: &str) -> (uuid::Uuid, St
 async fn troubleshooting_live_http_and_rtsp_credits_rebase_join_without_changing_publication() {
     for uri in ["https://example.test/live", "rtsp://example.test/live"] {
         let mut fixture = Fixture::new().await;
-        let (instance, digest) = live_credit_window(&mut fixture, uri).await;
+        let (instance, digest) = Box::pin(live_credit_window(&mut fixture, uri)).await;
         let joined = fixture.media.item.start + chrono::Duration::seconds(2);
         let resolved = fixture
             .host

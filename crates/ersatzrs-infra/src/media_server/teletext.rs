@@ -294,7 +294,7 @@ pub(super) fn declaration_matches(
         && indexes.windows(2).all(|pair| pair[0] != pair[1])
 }
 
-fn native_tracks_match(provider: &[MediaStream], native: &[MediaStream]) -> bool {
+pub(crate) fn native_tracks_match(provider: &[MediaStream], native: &[MediaStream]) -> bool {
     let mut declared = provider
         .iter()
         .filter(|stream| stream.kind != MediaStreamKind::ExternalSubtitle)

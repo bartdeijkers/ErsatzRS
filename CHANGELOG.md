@@ -31,11 +31,13 @@ release section when tagging a release.
 
 ### Added
 
-- Add managed, bounded complete HTTP source acquisition for teletext preparation.
-  Temporary files and work capacity survive abandoned callers until actual I/O
-  ends; partial, truncated and oversized responses are rejected. Provider caption
-  playback still requires native qualification, storage admission and session
-  integration.
+- Add shared source storage admission and retained HTTP inputs for provider
+  teletext caption preparation. Configurable defaults reserve at most 20 GiB
+  total and 8 GiB per source while keeping 2 GiB free. Native-qualified inputs
+  can supply both captions and Next AV without a second provider download;
+  refused preparation preserves ordinary AV. Actual workers retain their files
+  and storage claims through cancellation and cleanup. Source changes remain
+  guarded; presentation-only channel edits keep existing file grants readable.
 
 - Import a first standalone teletext Main enhancement program into a versioned
   concept. Preserve the distinction between absent and explicitly empty Main,

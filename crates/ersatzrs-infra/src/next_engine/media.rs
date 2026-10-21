@@ -436,6 +436,33 @@ impl MediaRelay {
         })
     }
 
+    /// Seekable immutable bytes owned by one active process and occurrence.
+    /// No upstream reconnect or fresh provider open is permitted by this grant.
+    pub(crate) fn retained_source(
+        &self,
+        instance: Uuid,
+        source: Uuid,
+        probe_hint: Option<super::protocol::ProbeHint>,
+    ) -> Result<Source> {
+        let address = self
+            .address
+            .get()
+            .ok_or_else(|| unavailable("media listener not configured"))?;
+        Ok(Source::Http {
+            uri: format!("http://{address}/ffmpeg/next-source/{instance}/{source}"),
+            probe_hint,
+            is_live: Some(false),
+            headers: vec![format!("{ACCESS_HEADER}: {}", self.capability)],
+            user_agent: None,
+            keep_alive: Some(true),
+            reconnect: Some(false),
+            reconnect_delay_max: None,
+            timeout_us: Some(20_000_000),
+            in_point_ms: None,
+            out_point_ms: None,
+        })
+    }
+
     /// Open one exact persisted binding with current credentials. Call only after
     /// authenticating the internal capability. No schedule locks are acquired.
     /// The caller streams the response; dropping it cancels the upstream body.

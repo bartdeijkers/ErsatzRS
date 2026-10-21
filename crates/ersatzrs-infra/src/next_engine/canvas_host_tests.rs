@@ -42,6 +42,7 @@ async fn fixture() -> (NextHost, Uuid, CanvasBinding, tempfile::TempDir) {
         },
         troubleshooting: None,
         transfers: Arc::default(),
+        source_files: std::sync::Arc::default(),
         fallback: Arc::default(),
         gaps: Arc::default(),
     };
@@ -201,6 +202,7 @@ async fn canvas_session_preview_is_transient_and_instance_specific() {
             request: original.request.clone(),
             troubleshooting: original.troubleshooting.clone(),
             transfers: Arc::default(),
+            source_files: std::sync::Arc::default(),
             fallback: Arc::default(),
             gaps: Arc::default(),
         };

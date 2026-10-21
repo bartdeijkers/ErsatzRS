@@ -51,6 +51,7 @@ pub struct NextHost {
     cleanup_quarantine: Mutex<Vec<QuarantinedCleanup>>,
     publishers: Mutex<HashMap<i64, ChannelPublisher>>,
     pub(super) dynamic_contexts: Mutex<HashMap<uuid::Uuid, DynamicContext>>,
+    pub(super) source_storage: crate::provider_source_storage::ProviderSourceStore,
     pub(super) burn_cache: super::burn_cache::BurnCache,
 }
 
@@ -75,6 +76,7 @@ pub(super) struct DynamicContext {
     pub request: NextStart,
     pub troubleshooting: Option<Arc<super::troubleshooting::Session>>,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
+    pub source_files: Arc<super::session_source_files::SessionSourceFiles>,
     pub fallback: Arc<Mutex<Option<super::fallback::Occurrence>>>,
     pub gaps: Arc<Mutex<Vec<super::fallback::Gap>>>,
 }
@@ -91,6 +93,7 @@ fn retain_dynamic_context(
             started_at,
             request: request.clone(),
             transfers: Arc::default(),
+            source_files: Arc::default(),
             fallback: Arc::default(),
             gaps: Arc::default(),
             troubleshooting: None,
@@ -125,6 +128,9 @@ impl NextHost {
     pub fn new(pool: DbPool, locker: EntityLocker, root: PathBuf) -> Self {
         Self {
             media: Arc::new(super::media::MediaRelay::new()),
+            source_storage: crate::provider_source_storage::ProviderSourceStore::new(
+                crate::file_system_layout::provider_source_storage_folder(),
+            ),
             pool,
             locker,
             burn_cache: super::burn_cache::BurnCache::new(root.join("burn-subtitles")),
@@ -401,7 +407,11 @@ impl NextHost {
         // Callback admission has ended. Retain the complete removed context if
         // either Next or a prepared producer may still be running.
         let error = if let Some(context) = &context {
-            context.transfers.shutdown().await.err()
+            let (transfers, sources) = tokio::join!(
+                context.transfers.shutdown(),
+                context.source_files.shutdown()
+            );
+            transfers.err().or_else(|| sources.err())
         } else {
             None
         };
@@ -488,9 +498,9 @@ impl NextHost {
             let projected_gaps = publication_gaps.clone();
             let outcome = publisher
                 .refresh_before(start, finish, deadline, |channel, media| async move {
-                    let ProjectedSchedule { items, gaps } = self
-                        .project_schedule(channel, media, replacements, start)
-                        .await?;
+                    let ProjectedSchedule { items, gaps } =
+                        Box::pin(self.project_schedule(channel, media, replacements, start))
+                            .await?;
                     *projected_gaps.lock().await = gaps;
                     Ok(items)
                 })

@@ -5,11 +5,12 @@ use std::num::NonZeroUsize;
 use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckResult, HealthCheckStatus, Pool, Result,
 };
-use crate::repositories::common::decode_string_column;
+use crate::{provider_source_storage::Policy, repositories::common::decode_string_column};
 
 const KEY: &str = "teletext.work.max_concurrent";
 const DEFAULT_MESSAGE: &str = "Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready.";
 const INVALID_MESSAGE: &str = "Teletext work concurrency must be a positive integer. Native teletext operations are unavailable until this setting is corrected.";
+const INVALID_STORAGE_MESSAGE: &str = "Provider source storage configuration is invalid or unavailable. Optional provider teletext captions are unavailable; ordinary audio/video playback remains available.";
 
 pub(crate) struct TeletextWorkHealthCheck {
     pool: Pool<Db>,
@@ -33,7 +34,7 @@ impl HealthCheck for TeletextWorkHealthCheck {
             .fetch_optional(&self.pool)
             .await
             .map_err(sqlx_error)?;
-        let (status, message) = match row {
+        let (mut status, mut message) = match row {
             None => (HealthCheckStatus::Pass, DEFAULT_MESSAGE.to_owned()),
             Some(row) => match decode_string_column(&row, "Value").ok()
                 .and_then(|value| value.parse::<NonZeroUsize>().ok()) {
@@ -43,6 +44,10 @@ impl HealthCheck for TeletextWorkHealthCheck {
                 None => (HealthCheckStatus::Warning, INVALID_MESSAGE.to_owned()),
             },
         };
+        if status == HealthCheckStatus::Pass && Policy::load(&self.pool).await.is_err() {
+            status = HealthCheckStatus::Warning;
+            INVALID_STORAGE_MESSAGE.clone_into(&mut message);
+        }
         Ok(HealthCheckResult::new(
             self.title(),
             status,
@@ -57,6 +62,9 @@ mod tests {
     use super::*;
     use ersatzrs_core::health::HealthCheckSummary;
     use sqlx::sqlite::SqlitePoolOptions;
+
+    #[path = "storage.rs"]
+    mod storage;
 
     async fn pool() -> Pool<Db> {
         let pool = SqlitePoolOptions::new()

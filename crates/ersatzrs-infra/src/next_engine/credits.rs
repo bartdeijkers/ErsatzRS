@@ -356,6 +356,7 @@ mod tests {
                     deadline: tokio::time::Instant::now() + std::time::Duration::from_secs(30),
                 },
                 transfers: Arc::default(),
+                source_files: std::sync::Arc::default(),
                 fallback: Arc::default(),
                 gaps: Arc::default(),
                 troubleshooting: None,

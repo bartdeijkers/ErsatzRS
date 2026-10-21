@@ -11,6 +11,9 @@ mod clock;
 #[path = "source_teletext_runtime_tests/fixture.rs"]
 mod fixture;
 
+#[path = "provider_source_runtime_tests.rs"]
+mod provider_source_runtime_tests;
+
 #[path = "source_teletext_runtime_tests/eof.rs"]
 mod eof;
 

@@ -112,7 +112,10 @@ async fn real_next_troubleshooting_finishes_with_reports_and_selected_tracks() {
     let item = super::super::protocol::Playout {
         version: super::super::protocol::PLAYOUT_VERSION.to_owned(),
         items: vec![
-            prepare_troubleshooting_fixture(&clip, &subtitle, &ffmpeg, start, finish).await,
+            Box::pin(prepare_troubleshooting_fixture(
+                &clip, &subtitle, &ffmpeg, start, finish,
+            ))
+            .await,
         ],
     };
     tokio::fs::write(

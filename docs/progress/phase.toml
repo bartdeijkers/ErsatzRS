@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'F5 bounded complete HTTP acquisition primitive completed; next shared remote AV/caption integration'
+current_focus = 'F5 retained provider input component completed on native Linux candidate; next actual web/public stream-route proof'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,29 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F5 complete finite HTTP acquisition primitive is completed:18 grouped EOF,
-partial/length/limit/deadline/caller-loss and actual-file-owner/cleanup-scope
-controls pass. The adapter retains actual I/O work independently of its caller;
-a deadline without settlement returns uncertainty. It grants no source readiness.
-P9A-04 and provider-scan identity remote_only_boundary.finite_http_acquisition_followup
-own current sources, logs and final lint. b9dd974e closes uncertain Next cleanup;
-5280955b closes selected-provider identity. Their unchanged native/editor/
-isolation/transport/F6 scopes remain valid; do not reopen without regression.
-Next finite F5 integration: reserve aggregate spool storage, acquire the exact
-current finite authenticated source once, native-qualify its full layout and
-retain those local bytes through actual caption and AV/session workers. Next
-runs locally and accepts Source::Local, but qualify per-programme reader
-ownership/reopen/expiry before choosing reuse: a session-only file vector is
-not bounded retention for a continuously watched channel.
-The adapter's per-response ceiling is not global quota authority. The approved
-provider budget is20GiB total,8GiB per source and at least2GiB free, all configurable;
-implement it separately from addon authority. Refusal preserves ordinary AV.
-Native metadata/page/clock readiness and cancellation/replacement proof remain required.
+F5 retained provider input component now joins dedicated configurable20/8/2GiB
+shared storage, full authenticated source acquisition, exact native/track/audio
+qualification and occurrence-bound seekable AV from the same caption bytes.
+The actual Linux candidate.4 batch passes three providers with one acquisition
+each, page889 source-clock/copied H264/Dutch AAC, plus JF None/pinned-Off/quota
+ordinary-AV controls and joined cleanup. No SQL source-readiness report or local
+mapping is used. Canonical provider-scan/identity.json
+remote_only_boundary.retained_source_integration_followup owns38 primitive and36
+affected/native checks, final5 source-grant/actual-owner regressions and8
+HTTP/localization/loopback controls; scoped lint receipts are recorded there.
+The callback adapter does not close the actual web/public stream-route boundary. That boundary is the next finite F5 action, reusing source/editor/
+isolation/transport/F6 proof within unchanged scope. Keep unconfirmed storage
+receipts charged; crash recovery, broader policies/formats/native platforms and
+accepted runtime adoption remain their existing requirements.
 Platform/adoption remains distinct: accepted Next.1 retains real outpoint/audio
 failures; candidate.4 is not the production repair. The macOS candidate-only
-workflow awaits permission. No known-red push or publication. Exact1b95 CI
-remains12success/fourfailure/one intentional skip; all applicable exact-new-SHA
-jobs and native platform/adoption remain required before CI-green.
+workflow awaits permission. No push or publication in this package. The last
+recorded full1b95 CI run has four red gates; no fresh CI claim follows here.
 
 Native teletext CI setup follow-up (2026-10-21): pushed1b95c864 proves real
 local Rust hits on both runners (8s), a real web hit and unchanged manifest

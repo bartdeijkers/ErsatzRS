@@ -7,7 +7,7 @@ use tokio::time::{timeout_at, Instant};
 use super::{dynamic_item, dynamic_projection, host::NextHost, protocol};
 
 impl NextHost {
-    async fn project_session_snapshot(
+    pub(super) async fn project_session_snapshot(
         &self,
         request: &super::host::NextStart,
         instance: uuid::Uuid,
@@ -199,6 +199,18 @@ impl NextHost {
                 self.resolve_producer(before, producer, &request, instance, audio, now, deadline),
             )
             .await;
+        }
+        let provider = super::provider_source_host::ProviderRequest {
+            request: &request,
+            instance,
+            item_id,
+            audio,
+            now,
+            until,
+            deadline,
+        };
+        if let Some(resolved) = Box::pin(self.resolve_provider_source(&before, &provider)).await? {
+            return Ok(resolved);
         }
         Box::pin(self.resolve_concrete(
             before, &request, item_id, instance, audio, now, until, deadline, true,

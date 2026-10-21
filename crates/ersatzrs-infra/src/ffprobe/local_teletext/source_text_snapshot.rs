@@ -14,10 +14,12 @@ use tokio::time::Instant;
 use super::{headers, source_window, LocalTeletextSourceGuard};
 use crate::ffprobe::{teletext_decode::SourceTeletextPageDecodeRequest, FfprobeError, Result};
 
-/// Constructed only after actual EOF, complete PSI/PES and a flushed exact copy.
+/// Constructed only after actual EOF and complete PSI/PES validation.
+/// Ordinary inputs supply a flushed exact copy; retained private inputs share
+/// their already held file only after the same complete-source validation.
 /// No window span, PCR-to-media mapping or complete page inventory is implied.
 pub(crate) struct CompleteTextSnapshot {
-    pub(crate) snapshot: tempfile::NamedTempFile,
+    pub(crate) snapshot: Arc<tempfile::NamedTempFile>,
     pub(crate) psi_fingerprint: [u8; 32],
     pub(crate) selected_page_observed: bool,
 }
@@ -53,16 +55,14 @@ fn capture<T>(
     }
     let mut psi = SourceTeletextPsiObserver::new(request.pid).map_err(|_| invalid())?;
     let mut assembler = SuppliedTeletextAssembler::new(request.pid).map_err(|_| invalid())?;
-    let mut file = tempfile::Builder::new()
-        .prefix("ersatzrs-teletext-text-")
-        .suffix(".ts")
-        .tempfile()
-        .map_err(|_| invalid())?;
+    let mut file = copy_destination(guard)?;
     let mut selected_started = false;
     let mut selected_page_observed = false;
     // Memory is independent of source length. The existing worker deadline and
     // ReadStop bound total work; its hold remains owned until actual completion.
-    let mut writer = std::io::BufWriter::with_capacity(64 * 1024, file.as_file_mut());
+    let mut writer = file
+        .as_mut()
+        .map(|file| std::io::BufWriter::with_capacity(64 * 1024, file.as_file_mut()));
     for ordinal in 0..len / 188 {
         stop.check_source_guard()?;
         if ordinal > 0 && ordinal.is_multiple_of(MAX_SOURCE_OBSERVATION_PACKETS as u64) {
@@ -94,7 +94,9 @@ fn capture<T>(
                 }
             }
         }
-        writer.write_all(&raw).map_err(|_| invalid())?;
+        if let Some(writer) = &mut writer {
+            writer.write_all(&raw).map_err(|_| invalid())?;
+        }
     }
     stop.check_source_guard()?;
     assembler.finish().map_err(|_| invalid())?;
@@ -110,14 +112,31 @@ fn capture<T>(
     {
         return Err(invalid());
     }
-    writer.flush().map_err(|_| invalid())?;
+    if let Some(writer) = &mut writer {
+        writer.flush().map_err(|_| invalid())?;
+    }
     drop(writer);
     stop.check_source_guard()?;
     Ok(CompleteTextSnapshot {
-        snapshot: file,
+        snapshot: match &guard.retained_source {
+            Some(source) => source.file.clone(),
+            None => Arc::new(file.ok_or_else(invalid)?),
+        },
         psi_fingerprint: headers::fingerprint(&observed),
         selected_page_observed,
     })
+}
+
+fn copy_destination(guard: &LocalTeletextSourceGuard) -> Result<Option<tempfile::NamedTempFile>> {
+    if guard.retained_source.is_some() {
+        return Ok(None);
+    }
+    tempfile::Builder::new()
+        .prefix("ersatzrs-teletext-text-")
+        .suffix(".ts")
+        .tempfile()
+        .map(Some)
+        .map_err(|_| invalid())
 }
 
 fn invalid() -> FfprobeError {

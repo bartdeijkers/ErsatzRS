@@ -45,7 +45,7 @@ pub(crate) async fn project_snapshot(
     replacements: &[PathReplacement],
     published_audio: Option<usize>,
 ) -> Result<Snapshot> {
-    project_snapshot_with_source_text(
+    Box::pin(project_snapshot_with_source_text(
         pool,
         locker,
         relay,
@@ -56,7 +56,7 @@ pub(crate) async fn project_snapshot(
         replacements,
         published_audio,
         true,
-    )
+    ))
     .await
 }
 
@@ -207,24 +207,7 @@ pub(crate) async fn fingerprint(
     // the underlying programme. Keep source revisions and provider identity
     // tied to the original selected media, including its path replacements.
     let input = pending.map_or(&projection.original_source, |pending| &pending.source);
-    let local_revision = if let Source::Local { path, .. } = input {
-        let metadata = tokio::fs::metadata(path).await.map_err(|_| unavailable())?;
-        if !metadata.is_file() {
-            return Err(unavailable());
-        }
-        let modified = metadata
-            .modified()
-            .map_err(|_| unavailable())?
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| unavailable())?;
-        Some(json!({
-            "resolved_path": path,
-            "size": metadata.len(),
-            "modified": (modified.as_secs(), modified.subsec_nanos()),
-        }))
-    } else {
-        None
-    };
+    let local_revision = local_source_identity(input).await?;
     let subtitle = pending.map(|pending| {
         let subtitle = &pending.subtitle;
         json!({
@@ -259,6 +242,19 @@ pub(crate) async fn fingerprint(
             ),
         );
     }
+    if let Some(intent) = super::retained_source_origin::RetainedSourceIntent::discover(
+        pool,
+        channel,
+        media,
+        &projection.original_source,
+    )
+    .await
+    {
+        binding
+            .as_object_mut()
+            .ok_or_else(unavailable)?
+            .insert("finite_provider_intent".into(), intent.identity());
+    }
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
     Ok(Identity {
@@ -270,6 +266,27 @@ pub(crate) async fn fingerprint(
             "fallback_subtitle_language": preferences.fallback_subtitle_language,
         }))?,
         cache_key: digest(&binding)?,
+    })
+}
+
+async fn local_source_identity(input: &Source) -> Result<Option<serde_json::Value>> {
+    Ok(if let Source::Local { path, .. } = input {
+        let metadata = tokio::fs::metadata(path).await.map_err(|_| unavailable())?;
+        if !metadata.is_file() {
+            return Err(unavailable());
+        }
+        let modified = metadata
+            .modified()
+            .map_err(|_| unavailable())?
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| unavailable())?;
+        Some(json!({
+            "resolved_path": path,
+            "size": metadata.len(),
+            "modified": (modified.as_secs(), modified.subsec_nanos()),
+        }))
+    } else {
+        None
     })
 }
 

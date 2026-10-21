@@ -159,6 +159,7 @@ fn context(channel: &Channel, ffmpeg: &Path, root: &Path) -> super::super::host:
         },
         troubleshooting: None,
         transfers: Arc::default(),
+        source_files: std::sync::Arc::default(),
         fallback: Arc::default(),
         gaps: Arc::default(),
     }
