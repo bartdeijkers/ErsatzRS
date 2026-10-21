@@ -18,6 +18,9 @@ use super::*;
 )]
 mod mapped_provider_fixture;
 
+#[path = "stream_source_caption_runtime_tests/next.rs"]
+mod next;
+
 const WIDTH: usize = 492;
 const HEIGHT: usize = 250;
 const FRAME_BYTES: usize = WIDTH * HEIGHT * 3;
