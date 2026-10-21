@@ -93,9 +93,15 @@ pub(in crate::teletext) fn prepare(
                 }
             }
             let positions: Vec<_> = witnesses.values().map(|witness| witness.position).collect();
-            let evidence = TeletextAttributeTransmissionEvidence::new(
+            let page_positions = if local {
+                absolute_page_positions(&composition, &encoded, &witnesses)?
+            } else {
+                Vec::new()
+            };
+            let evidence = TeletextAttributeTransmissionEvidence::new_with_same_page_order(
                 composition.spatial_trace(),
                 &positions,
+                &page_positions,
                 budget.collection.max_commands,
             )
             .map_err(|reason| TeletextMainCompositionError {
@@ -114,12 +120,54 @@ pub(in crate::teletext) fn prepare(
             }
         }
         if super::foreground(&composition, unsettled.column).is_none() {
-            // A different executing instance cannot gain invented time order.
+            // Missing, foreign or ambiguous producers cannot gain time order.
             // Final packing retains the original located lowering refusal.
             break;
         }
     }
     Ok((composition, witnesses.into_values().collect()))
+}
+
+fn absolute_page_positions(
+    composition: &TeletextMainComposition,
+    encoded: &EncodedTeletextLocalObjectProgram,
+    witnesses: &BTreeMap<usize, Witness>,
+) -> Result<Vec<TeletextAttributeTransmissionPosition>, TeletextMainCompositionError> {
+    let mut result = Vec::new();
+    let eligible =
+        super::super::composed_main::same_page::eligible_events(composition.spatial_trace());
+    for witness in witnesses.values() {
+        if eligible.get(witness.position.event_ordinal) != Some(&true) {
+            continue;
+        }
+        let source = witness.position.source;
+        let expected = match source.object {
+            Some(identity) => TeletextMainCompositionSource::Object {
+                identity,
+                command: source.command,
+            },
+            None => TeletextMainCompositionSource::OriginalPage {
+                command: source.command,
+            },
+        };
+        let mut matches = encoded.command_positions().iter().filter(|position| {
+            position
+                .retained_source()
+                .and_then(|source| composition.source_location(source))
+                == Some(expected)
+        });
+        let position = matches.next().ok_or_else(|| state_error(composition))?;
+        if matches.next().is_some()
+            || triplet(encoded, position.semantic_word()) != Some(witness.bytes)
+        {
+            return Err(state_error(composition));
+        }
+        result.push(TeletextAttributeTransmissionPosition {
+            word: position.semantic_word(),
+            ..witness.position
+        });
+    }
+    Ok(result)
 }
 
 fn prefix_witnesses(

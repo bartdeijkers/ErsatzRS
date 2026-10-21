@@ -5,15 +5,13 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
-F2 metadata/zones/version is closed. F1 closes Main-presence/Base-prefix,
-position undo, interleaved Base charset and retained DRCS selection (V30).
-role-attachment closes first four-role attachment/undo (V31), headed forms/lint;
-created-bank-attachment closes native V25/V31/V25 with banks/lifecycle retained.
-P9A-04 owns receipts.
-main-deferred-ap closes leading Main AP/call growth/deletion/undo, exact
-carrier spans, preview/publication/reopen and26 controls.
-Authored styles stay exact; other contexts remain F1.
-F1 native Public↔Global consumers pass; P9A-04 owns proof.
+F2 metadata/zones/version is closed. F1 closes Main presence/Base-prefix,
+position undo, interleaved charset, V30 DRCS, V31 first attachment/undo,
+created-bank attachment, direct leading Main AP/calls and Public↔Global consumers.
+P9A-04 owns exact native/editor/admin scopes and other open contexts.
+F3 cross_emitter_c2_qualification closes same-page Main/unique-original-Local
+order: exact sources/final words, complete factory/preview/fallback,33 controls
+and pinned independent1.5/2.5 cells; cross-page/ambiguous order stays unknown.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identity/source/effects/default/fallback/bounds stay protected. A7/A8/C3, foreign-X26, repertoires/fonts, objects/DRCS/panels and

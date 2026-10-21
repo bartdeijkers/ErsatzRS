@@ -27,6 +27,9 @@ use super::resource_transmission::{
 };
 use super::TeletextResourceObjectAllocations;
 
+#[path = "same_page_transmission.rs"]
+pub(super) mod same_page;
+
 /// Packing diagnostics remapped to authored/default/base or original object intent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("teletext page {owner:?}, location {location:?}: {reason}")]
@@ -393,7 +396,7 @@ fn transmission_evidence(
             });
         }
     }
-    TeletextAttributeTransmissionEvidence::new(original, &positions, maximum)
+    same_page::original_evidence(original, &positions, maximum)
         .map_err(|reason| fail(reason.into()))
 }
 
@@ -462,7 +465,8 @@ impl EncodedTeletextPhysicalDisplayProgram {
 /// inserting fallback again. Original service links and header colour remain
 /// authoritative. Physical evidence comes only from this encoder's actual final
 /// command positions, including inserted compatibility selectors. Unmapped
-/// resource bodies and different executing instances gain no timing authority.
+/// resource bodies gain no cross-page timing authority. Only exact retained Local
+/// sources can opt into authenticated same-page transmission order.
 /// Matching owners do not certify the composition/service generation pairing.
 /// # Errors
 /// Returns actual-source replay, packing or transmission diagnostics. Default
@@ -480,10 +484,10 @@ pub fn compile_teletext_physical_display_program(
     compile_physical_with_context(
         service,
         composition,
-        actual_program,
-        catalog,
+        (actual_program, catalog),
         allocations,
         (replay_budget, packing_budget),
+        None,
         &mut TeletextCompileContext::new(None, None, None),
     )
 }
@@ -491,16 +495,20 @@ pub fn compile_teletext_physical_display_program(
 pub(super) fn compile_physical_with_context(
     service: &TeletextSemanticService,
     composition: &TeletextMainComposition,
-    actual_program: &TeletextEnhancementProgram,
-    catalog: &TeletextEnhancementObjectCatalog,
+    program: (
+        &TeletextEnhancementProgram,
+        &TeletextEnhancementObjectCatalog,
+    ),
     allocations: &TeletextResourceObjectAllocations,
     budgets: (
         TeletextEnhancementCollectionBudget,
         TeletextObjectCatalogBudget,
     ),
+    augmented: Option<&super::TeletextAugmentedOriginProgram<'_>>,
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextPhysicalDisplayProgram, TeletextPhysicalDisplayEncodingError> {
     let (replay_budget, packing_budget) = budgets;
+    let (actual_program, catalog) = program;
     if let Some(resources) = context.resources {
         resources.validate_catalog(catalog, allocations)?;
     }
@@ -534,6 +542,12 @@ pub(super) fn compile_physical_with_context(
         &encoded,
         replay_budget.max_commands,
         context.resources,
+        &same_page::PhysicalSource {
+            service,
+            composition,
+            program,
+            augmented,
+        },
     )?;
     let replay = replay.with_transmission_context(
         service,
@@ -550,6 +564,7 @@ fn physical_transmission_evidence(
     encoded: &EncodedTeletextLocalObjectProgram,
     maximum: usize,
     resources: Option<&ResourceTransmissionContext<'_>>,
+    retained: &same_page::PhysicalSource<'_, '_>,
 ) -> Result<TeletextAttributeTransmissionEvidence, TeletextPhysicalDisplayTransmissionError> {
     let trace = replay.spatial_trace();
     let fail = |reason| TeletextPhysicalDisplayTransmissionError {
@@ -620,7 +635,7 @@ fn physical_transmission_evidence(
             });
         }
     }
-    TeletextAttributeTransmissionEvidence::new(trace, &positions, maximum).map_err(fail)
+    same_page::physical_evidence(retained, trace, &positions, maximum).map_err(fail)
 }
 
 #[cfg(test)]

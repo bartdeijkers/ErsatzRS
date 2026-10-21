@@ -1,11 +1,12 @@
 //! Checked correspondence to final emitted words, not receiver/publication authority.
 
 use super::{
-    TeletextAttributeSource, TeletextEnhancementSource, TeletextSpatialInvocationId,
+    TeletextAttributeSource, TeletextEffectiveProgramSource, TeletextEnhancementSource,
+    TeletextObjectScope, TeletextSpatialInvocationId, TeletextSpatialRootSource,
     TeletextSpatialTrace,
 };
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A producer's final semantic word, after all compatibility insertions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,11 +19,13 @@ pub struct TeletextAttributeTransmissionPosition {
 
 /// Immutable exact-trace evidence. The caller must derive words from the actual
 /// final producer. Correspondence checking does not authenticate arbitrary input.
-/// Sparse entries never establish order between different executing instances.
+/// Ordinary sparse entries establish only emitter-local order. An explicit
+/// checked same-page table may additionally compare exact Local emitters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TeletextAttributeTransmissionEvidence {
     original: TeletextSpatialTrace,
     words: Vec<Option<usize>>,
+    same_page_words: Option<Vec<Option<usize>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -95,7 +98,55 @@ impl TeletextAttributeTransmissionEvidence {
         Ok(Self {
             original: original.clone(),
             words,
+            same_page_words: None,
         })
+    }
+
+    /// Add actual absolute words from one explicit Local page's native packing.
+    /// Ordinary positions retain their emitter-relative meaning. Every page
+    /// entry must also be an ordinary witnessed event, with an exact Local root,
+    /// owner and unambiguous instance. The native producer must authenticate
+    /// these coordinates; this constructor does not authenticate packet bytes.
+    /// # Errors
+    /// Rejects oversized combined storage, foreign/default/resource sources,
+    /// repeated object instances, missing ordinary witnesses and duplicate words.
+    pub fn new_with_same_page_order(
+        original: &TeletextSpatialTrace,
+        positions: &[TeletextAttributeTransmissionPosition],
+        page_positions: &[TeletextAttributeTransmissionPosition],
+        maximum: usize,
+    ) -> Result<Self, TeletextAttributeTransmissionError> {
+        if page_positions.len() > original.events().len() || page_positions.len() > maximum {
+            return Err(TeletextAttributeTransmissionError::Budget { maximum });
+        }
+        if page_positions.is_empty() {
+            return Self::new(original, positions, maximum);
+        }
+        let combined = same_page_storage(original, positions.len(), page_positions.len());
+        if combined.is_none_or(|bytes| bytes > isize::MAX as usize) {
+            return Err(TeletextAttributeTransmissionError::AllocationSize);
+        }
+        let mut result = Self::new(original, positions, maximum)?;
+        let eligible = same_page_events(original);
+        let mut origins = BTreeMap::new();
+        let mut words = vec![None; original.events().len()];
+        let mut used = BTreeSet::new();
+        for position in page_positions {
+            let ordinal = position.event_ordinal;
+            let event = original.events().get(ordinal);
+            if event.is_none_or(|event| {
+                event.source() != position.source || event.invocation() != position.invocation
+            }) || result.words.get(ordinal).is_none_or(Option::is_none)
+                || !eligible[ordinal]
+                || !same_origin(position, result.words[ordinal], &mut origins)
+                || words[ordinal].replace(position.word).is_some()
+                || !used.insert(position.word)
+            {
+                return Err(TeletextAttributeTransmissionError::Correspondence { event: ordinal });
+            }
+        }
+        result.same_page_words = Some(words);
+        Ok(result)
     }
 
     #[must_use]
@@ -103,9 +154,9 @@ impl TeletextAttributeTransmissionEvidence {
         &self.original == original
     }
 
-    /// Compare only original Enhancement writers from the same exact executing
-    /// instance (or original Local main). Base/default writers cannot gain time
-    /// priority here. Arbitrary resource/storage order is never compared.
+    /// Compare original Enhancement writers within their exact emitter, or
+    /// across explicitly witnessed native same-page coordinates. Base/default
+    /// writers and arbitrary resource/storage order never gain time priority.
     #[must_use]
     pub fn compare(
         &self,
@@ -119,7 +170,8 @@ impl TeletextAttributeTransmissionEvidence {
         if first.invocation() != second.invocation()
             || first.source().object != second.source().object
         {
-            return None;
+            let words = self.same_page_words.as_ref()?;
+            return Some(words[incoming]?.cmp(&words[current]?));
         }
         if first.invocation().is_none()
             && !matches!(
@@ -150,3 +202,109 @@ impl TeletextAttributeTransmissionEvidence {
             .then_some(event_ordinal)
     }
 }
+
+fn same_page_storage(
+    original: &TeletextSpatialTrace,
+    ordinary_count: usize,
+    page_count: usize,
+) -> Option<usize> {
+    original
+        .events()
+        .len()
+        .checked_mul(
+            std::mem::size_of::<super::TeletextSpatialEvent>()
+                + 2 * std::mem::size_of::<Option<usize>>(),
+        )
+        .and_then(|bytes| {
+            original
+                .invocations()
+                .len()
+                .checked_mul(std::mem::size_of::<super::TeletextSpatialInvocation>())
+                .and_then(|other| bytes.checked_add(other))
+        })
+        .and_then(|bytes| {
+            ordinary_count
+                .checked_add(page_count)
+                .and_then(|count| {
+                    count.checked_mul(std::mem::size_of::<TeletextAttributeTransmissionPosition>())
+                })
+                .and_then(|other| bytes.checked_add(other))
+        })
+        .and_then(|bytes| {
+            original
+                .events()
+                .len()
+                .checked_mul(std::mem::size_of::<bool>())
+                .and_then(|other| bytes.checked_add(other))
+        })
+        .and_then(|bytes| {
+            original
+                .invocations()
+                .len()
+                .checked_mul(std::mem::size_of::<(super::TeletextObjectIdentity, usize)>())
+                .and_then(|other| bytes.checked_add(other))
+        })
+        .and_then(|bytes| {
+            page_count
+                .checked_mul(std::mem::size_of::<(usize, usize)>())
+                .and_then(|other| bytes.checked_add(other))
+        })
+}
+
+fn same_page_events(original: &TeletextSpatialTrace) -> Vec<bool> {
+    if !matches!(
+        original.original_program_source(),
+        TeletextEffectiveProgramSource::Local
+    ) {
+        return vec![false; original.events().len()];
+    }
+    let mut counts = BTreeMap::new();
+    for call in original.invocations() {
+        *counts.entry(call.target()).or_insert(0_usize) += 1;
+    }
+    original
+        .events()
+        .iter()
+        .map(|event| {
+            if !matches!(event.root_source(), TeletextSpatialRootSource::Local { .. }) {
+                return false;
+            }
+            match (event.source().object, event.invocation()) {
+                (None, None) => true,
+                (Some(target), Some(id)) => {
+                    target.scope() == TeletextObjectScope::Local
+                        && target.owner() == Some(original.owner())
+                        && original
+                            .invocations()
+                            .get(id.get())
+                            .is_some_and(|invocation| {
+                                invocation.id() == id
+                                    && invocation.target() == target
+                                    && invocation.root_source() == event.root_source()
+                            })
+                        && counts.get(&target) == Some(&1)
+                }
+                _ => false,
+            }
+        })
+        .collect()
+}
+
+fn same_origin(
+    position: &TeletextAttributeTransmissionPosition,
+    ordinary: Option<usize>,
+    origins: &mut BTreeMap<usize, usize>,
+) -> bool {
+    let Some(origin) = ordinary.and_then(|word| position.word.checked_sub(word)) else {
+        return false;
+    };
+    let Some(invocation) = position.invocation else {
+        return origin == 0;
+    };
+    origins
+        .insert(invocation.get(), origin)
+        .is_none_or(|previous| previous == origin)
+}
+
+#[cfg(test)]
+mod tests;

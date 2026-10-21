@@ -2,6 +2,9 @@
 //! The Unicode/Active oracle uses the bounded normalization candidate; other
 //! fixtures retain their explicit encoder paths. Full client acceptance is separate.
 
+#[path = "main_composition_runtime_tests/same_page_c2.rs"]
+mod same_page_c2;
+
 use ersatzrs_domain::*;
 
 use super::main_composition::{compose_teletext_main_program, TeletextMainCompositionBudget};

@@ -203,10 +203,10 @@ pub(super) fn compile_augmented_with_context_and_usage<'a>(
         let mut physical = compile_physical_with_context(
             service,
             composition,
-            augmented.program(),
-            augmented.catalog(),
+            (augmented.program(), augmented.catalog()),
             allocations,
             (replay_budget, packing_budget),
+            Some(augmented),
             context,
         )
         .map_err(|error| {

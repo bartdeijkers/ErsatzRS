@@ -307,7 +307,7 @@ fn compatibility_words_shift_evidence_without_changing_original_sources() {
 }
 
 #[test]
-fn older_cross_instance_unknown_is_not_erased_by_later_local_pair() {
+fn explicit_same_page_words_resolve_active_priority_over_later_executed_main_pair() {
     let service = service(
         vec![
             position(1, 18),
@@ -318,30 +318,96 @@ fn older_cross_instance_unknown_is_not_erased_by_later_local_pair() {
         ],
         Some((TeletextObjectType::Active, vec![foreground(0, 13)])),
     );
-    let result = compile(&service);
-    let attrs = result.composition().attribute_execution();
-    let field = attrs.cell(1, 18).unwrap().foreground();
+    let unchanged = service.clone();
+    let standalone = compose_teletext_main_program(&service, owner(), budget()).unwrap();
+    let unresolved = standalone.attribute_execution();
+    let field = unresolved.cell(1, 18).unwrap().foreground();
     assert_eq!(field.value(), None);
-    let last = &attrs.pending()[field.pending().unwrap()];
-    assert!(last.previous().is_some());
-    assert!(result
-        .composition()
-        .display_resolution()
-        .cell(1, 18)
-        .unwrap()
-        .attributes()
-        .foreground()
-        .pending()
-        .is_some());
-    let evidence = attrs.transmission_evidence().unwrap();
-    let cross = &attrs.pending()[last.previous().unwrap()];
+    let last = &unresolved.pending()[field.pending().unwrap()];
+    let cross = &unresolved.pending()[last.previous().unwrap()];
+    let ordinary = evidence_positions(&standalone);
+    let legacy = TeletextAttributeTransmissionEvidence::new(
+        standalone.spatial_trace(),
+        &ordinary,
+        budget().collection.max_commands,
+    )
+    .unwrap();
     assert_eq!(
-        evidence.compare(
+        legacy.compare(
             cross.first_source().unwrap(),
             cross.second_source().unwrap()
         ),
         None
     );
+    let legacy_display = resolve_teletext_attribute_execution_with_transmission(
+        standalone.base_display(),
+        standalone.spatial_trace(),
+        standalone.glyph_layers(),
+        standalone.colour_context().row_colours(),
+        budget().collection.max_commands,
+        &legacy,
+    )
+    .unwrap();
+    assert_eq!(
+        legacy_display.cell(1, 18).unwrap().foreground().value(),
+        None
+    );
+
+    let result = compile(&service);
+    let native = result.encoded();
+    let main = [1, 3].map(|command| {
+        native
+            .command_positions()
+            .iter()
+            .find(|position| {
+                result.composition().source_location(position.source())
+                    == Some(TeletextMainCompositionSource::OriginalPage { command })
+            })
+            .unwrap()
+    });
+    let active = native
+        .command_positions()
+        .iter()
+        .find(|position| {
+            position.source()
+                == TeletextEnhancementSource {
+                    object: Some(target()),
+                    command: 0,
+                }
+        })
+        .unwrap();
+    // C.2 uses actual transmission positions after the effect-start and placed
+    // position ties. Section13.1 puts this Local body after Main, even though
+    // the spatial traversal executes the second Main writer after its call.
+    assert!(main[0].semantic_word() < main[1].semantic_word());
+    assert!(main[1].semantic_word() < active.semantic_word());
+    assert_eq!(word(&result, main[0].semantic_word()), 0x12 | (4 << 11));
+    assert_eq!(word(&result, main[1].semantic_word()), 0x12 | (2 << 11));
+    assert_eq!(word(&result, active.semantic_word()), 13 << 11);
+    assert_pink(&result, 1, 18);
+    let field = result
+        .composition()
+        .attribute_execution()
+        .cell(1, 18)
+        .unwrap()
+        .foreground();
+    assert!(
+        matches!(field.source(), Some(TeletextAttributeSource::Enhancement {
+        location: TeletextEnhancementSource { object: Some(identity), command: 0 }, invocation: Some(id), ..
+    }) if identity == target() && id.get() == 0)
+    );
+    let evidence = result
+        .composition()
+        .attribute_execution()
+        .transmission_evidence()
+        .unwrap();
+    assert!(evidence
+        .compare(
+            cross.first_source().unwrap(),
+            cross.second_source().unwrap()
+        )
+        .is_some());
+    assert_eq!(service, unchanged);
 }
 
 #[test]

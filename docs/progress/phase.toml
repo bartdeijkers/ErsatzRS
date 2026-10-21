@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 Public/Global native consumer retarget proof completed; next concrete remaining authored-context or complete-set/dependency boundary from existing F/V/X list. Preserve closed components and external deferrals'
+current_focus = 'P9A-04 F3 same-page Main/unique-Local C2 completed; select the next source-positive complete-set/dependency or authored-context boundary from existing F/V/X list. Preserve closed components and external deferrals'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -70,6 +70,22 @@ This current handoff supersedes older next-action prose below. Maintainer
 2026-10-21 authorizes a push to remote/main only after full local Phase9A
 acceptance, followed by checking all applicable CI gates on the pushed commit.
 Partial checkpoints remain local; no publication is authorized.
+
+F3 same-page Main/unique-original-Local C2 is completed. Canonical
+tmp/phase9-header-c2/identity.json, cross_emitter_c2_qualification owns exact
+normative order, source/root/instance/body/final-word correspondence, complete
+authored factory/shared preview and preserved1.5 fallback. Final33 regressions,
+pinned independent1.5/2.5 decoding plus three wrong-colour refusals, strict lint
+and web consumer check pass;1705 unaffected broad results are reused. Its old
+blanket cross-emitter refusals are superseded only for this qualified same-page
+case. Missing/foreign/default/cross-page/ambiguous repeated sources gain no
+ordering authority. No browser/transport/client or fullF3 claim. All checks are
+terminal and only preserved parallel changes remain after the local checkpoint;
+canonical evidence owns its SHA and exact dirty-worktree hashes.
+Next choose one source-positive existing F1 complete-set/dependency or F3 context
+boundary and an explicit stopping condition. Do not reopen this completed slice
+or compensate X1/X3 deferrals with another small editor variant. Windows-package
+work remains deferred; a future authorized trial reserves120minutes.
 
 F1 native Public↔Global consumer crossing is completed. Canonical
 tmp/phase9-header-c2/resource-set-creation/identity.json,

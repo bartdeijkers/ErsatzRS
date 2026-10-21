@@ -934,6 +934,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Compile teletext header calls with competing Main and Local attributes when
+  their actual transmitted words establish a definite order within one page.
+  Preview and encoded output retain the original source and Level 1.5 fallback;
+  unavailable or ambiguous transmission order keeps its existing safeguards.
 - Preserve a retained leading Main teletext position when deleting its last Local
   calls or restoring the original calls from TTI. Authenticate the complete
   generated colour/context span without granting it authored edit permissions;

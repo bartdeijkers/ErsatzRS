@@ -243,38 +243,66 @@ fn local_active_prefix_settles_its_own_header_foreground_before_a_later_call() {
 mod local_active;
 
 #[test]
-fn main_prefix_cannot_settle_a_different_active_instance() {
+fn same_page_main_and_unique_active_native_words_settle_header_before_later_call() {
     let service = fixture(|passive, active| vec![fg(8, 1), active, position(9), passive]);
     let saved = service.clone();
     let budget = limits().normalization;
-    let original = compose_teletext_main_program(
-        &service,
-        service.base().pages[0].address,
-        budget.composition,
-    )
-    .unwrap();
+    let owner = service.base().pages[0].address;
+    let original = compose_teletext_main_program(&service, owner, budget.composition).unwrap();
     assert_eq!(super::super::foreground(&original, 9), None);
-    let error =
-        compile_teletext_normalized_main_program(&service, service.base().pages[0].address, budget)
-            .unwrap_err();
-    let crate::teletext::TeletextNormalizedMainProgramFailure::Original(error) = error.reason
-    else {
-        panic!("different-instance uncertainty must remain an original refusal")
-    };
-    let TeletextComposedMainEncodingError::Packing(error) = *error else {
-        panic!("uncertain foreground must retain its native lowering diagnostic")
-    };
+    let normalized = compile_teletext_normalized_main_program(&service, owner, budget).unwrap();
     assert_eq!(
-        error.location,
-        Some(TeletextMainCompositionSource::OriginalPage { command: 3 })
+        super::super::foreground(normalized.original(), 9),
+        Some(TeletextColourReference::new(4).unwrap())
     );
+    let setters = normalized
+        .original()
+        .program()
+        .commands()
+        .iter()
+        .zip(normalized.original().provenance())
+        .filter_map(|(command, source)| {
+            matches!(source, TeletextMainCompositionSource::HeaderPosition { .. })
+                .then_some(*command)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(setters, [fg(9, 4)]);
+    let native = normalized.encoded();
+    let main = native
+        .command_positions()
+        .iter()
+        .find(|position| {
+            position.original_main_source()
+                == Some(TeletextMainCompositionSource::OriginalPage { command: 0 })
+        })
+        .unwrap();
+    let target = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65534));
+    let body = [0, 1].map(|command| {
+        native
+            .command_positions()
+            .iter()
+            .find(|position| {
+                position.source().object == Some(target)
+                    && position.original_object_source()
+                        == Some(TeletextMainCompositionSource::Object {
+                            identity: target,
+                            command,
+                        })
+            })
+            .unwrap()
+    });
+    assert!(main.semantic_word() < body[0].semantic_word());
+    assert!(body[0].semantic_word() < body[1].semantic_word());
+    let actual = normalized
+        .physical()
+        .replay()
+        .attribute_execution()
+        .before_adaptive_cell(0, 9)
+        .unwrap()
+        .foreground();
     assert_eq!(
-        error.reason,
-        crate::teletext::TeletextLocalObjectProgramEncodingFailure::Lowering(
-            crate::teletext::TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
-                position: TeletextEnhancementPosition::new(0, 9).unwrap(),
-            }
-        )
+        actual.value(),
+        Some(TeletextColourReference::new(4).unwrap())
     );
     assert_eq!(service, saved);
 }
@@ -361,3 +389,5 @@ fn c2_prefix_keeps_final_208_word_capacity_authoritative() {
         assert_eq!(service, saved);
     }
 }
+
+mod same_page;

@@ -789,8 +789,11 @@ An actual-program packing diagnostic now binds replay and X26 packing within
 one call, using unchanged selected resource links and the original header colour.
 Its sparse C.2 evidence matches actual main/object sources directly to final
 semantic words, including compatibility insertions. Repeated definition calls
-retain distinct instances; unavailable resource words and cross-instance order
-remain unknown. Consuming that evidence updates only actual attributes, display
+retain distinct instances. An explicit checked table may additionally order
+Main and uniquely invoked original Local definitions within their one X26 page,
+using actual absolute native words. Unavailable resource words, separate pages
+and ambiguous repeated-definition comparisons remain unknown. Consuming that
+evidence updates only actual attributes, display
 and colour, leaving original targets and retained glyph/DRCS/geometry unchanged.
 This binds final-word evidence; it does not prove full wire-page equivalence.
 Physical raster diagnostics now consume only the immutable actual replay through
@@ -936,9 +939,14 @@ original or augmented executing instance before compatibility planning and
 comparison; native defaults retain their original root and owner. Reuse requires
 unchanged resource definitions, types and physical allocations. Markers, padding,
 zero-output commands and synthetic default calls establish no command timestamp.
-Annex C.2 evidence compares only writers in one exact executing object instance;
-storage, pointer or carousel order cannot rank separate instances. Retain those
-uncertainties. The candidate does not establish update history, served delivery
+Ordinary Annex C.2 evidence compares writers in one exact executing instance.
+An explicit same-page table may compare Main and unique original Local instances
+only when actual packed X26 words authenticate their relative transmission order
+(Annex C.2, section 13.1 and Annex B.2/B.3). Source/root/owner/instance identity,
+exact retained bodies and final relocation must agree; emitter-relative and
+absolute coordinates must not be mixed. Storage, pointers or carousel order
+cannot rank separate resource pages or ambiguous repeated instances. Retain
+those uncertainties. The candidate does not establish update history, served delivery
 or host publication. Independent decoding must distinguish the original
 decoder deficiency from the receipted test-only correction; both preserve the
 normative authored-service fixture and positive expected cells.
@@ -1312,11 +1320,17 @@ inclusive sweep rejects sixteen known simultaneous open intervals across all
 object types, preserving unresolved intervals and original call diagnostics.
 Known-overlap counts grant no full admission certificate; A.7/A.8 admission,
 C.3, physical equivalence and complete renderer/preview/publication remain open.
-Known same-emitter C.2 ties may use the actual final packed word positions. The
-compiled factory must map them to original sources and executing instances and
-rebuild the shared immutable attribute/display/colour result. Standalone analysis
-and unsupported cross-instance comparisons stay pending; source ordinals, pointer
-values and definition storage order do not certify transmission order.
+Known same-emitter C.2 ties may use actual final packed word positions. The
+compiled factory may also supply an explicit same-page absolute table for Main
+and uniquely invoked original Local definitions. Keep ordinary emitter-relative
+witnesses unchanged; validate exact source/root/owner, unique words and stable
+per-instance coordinate origins within shared bounds. Authenticate current
+packing before settlement and rederive final positions after relocation. Generated
+wrappers/default roots or unavailable, foreign and repeated-definition sources
+acquire no same-page authority. Rebuild the shared immutable attribute/display/
+colour result and require complete original/physical equivalence. Standalone
+analysis and unsupported cross-instance comparisons stay pending; source ordinals,
+pointers and definition storage order alone do not certify transmission order.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

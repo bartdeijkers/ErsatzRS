@@ -665,10 +665,10 @@ fn diagnostic_nested_adaptive_background_candidate_preserves_full_original_model
     let physical = crate::teletext::composed_main::compile_physical_with_context(
         service,
         &original,
-        original.program(),
-        candidate,
+        (original.program(), candidate),
         &allocations,
         (budget.replay, budget.packing),
+        None,
         &mut crate::teletext::compile_context::TeletextCompileContext::new(None, None, None),
     )
     .unwrap();

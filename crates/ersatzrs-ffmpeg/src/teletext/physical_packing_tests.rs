@@ -341,8 +341,84 @@ fn final_compatibility_restore_and_local_definition_words_settle_own_ties() {
     );
 }
 
+fn assert_local_page_order(shared: &TeletextSemanticService, original: &TeletextMainComposition) {
+    let attrs = original.attribute_execution();
+    let field = attrs.cell(1, 18).unwrap().foreground();
+    assert_eq!(field.value(), None);
+    let pending = &attrs.pending()[field.pending().unwrap()];
+    let ordinary = original
+        .spatial_trace()
+        .events()
+        .iter()
+        .enumerate()
+        .map(
+            |(event_ordinal, event)| TeletextAttributeTransmissionPosition {
+                event_ordinal,
+                source: event.source(),
+                invocation: event.invocation(),
+                word: event_ordinal,
+            },
+        )
+        .collect::<Vec<_>>();
+    let legacy = TeletextAttributeTransmissionEvidence::new(
+        original.spatial_trace(),
+        &ordinary,
+        collection().max_commands,
+    )
+    .unwrap();
+    assert_eq!(
+        legacy.compare(
+            pending.first_source().unwrap(),
+            pending.second_source().unwrap()
+        ),
+        None
+    );
+    let result = compile(shared, original, original.program());
+    let native = result.encoded();
+    let positions = [
+        TeletextEnhancementSource {
+            object: None,
+            command: 1,
+        },
+        TeletextEnhancementSource {
+            object: Some(local(0xffff)),
+            command: 0,
+        },
+    ]
+    .map(|source| {
+        native
+            .command_positions()
+            .iter()
+            .find(|position| position.source() == source)
+            .unwrap()
+    });
+    // C.2 and section13.1 use actual packet order: this Local definition follows
+    // the retained Main writer despite its earlier execution in the spatial walk.
+    assert!(positions[0].semantic_word() < positions[1].semantic_word());
+    for (position, expected) in positions.into_iter().zip([0x12 | (4 << 11), 13 << 11]) {
+        let index = position.semantic_word();
+        let offset = 1 + (index % 13) * 3;
+        assert_eq!(
+            &native.packet_bodies()[index / 13][offset..offset + 3],
+            &crate::teletext::packets::hamming_24_18(expected)
+        );
+    }
+    assert_pink(&result, 1, 18);
+    let field = result
+        .replay()
+        .attribute_execution()
+        .cell(1, 18)
+        .unwrap()
+        .foreground();
+    assert!(
+        matches!(field.source(), Some(TeletextAttributeSource::Enhancement {
+        location: TeletextEnhancementSource { object: Some(target), command: 0 }, invocation: Some(id), ..
+    }) if target == local(0xffff) && id.get() == 0)
+    );
+}
+
 #[test]
-fn different_instances_and_unmapped_resource_definitions_do_not_gain_order() {
+fn explicit_same_page_local_order_keeps_unmapped_resource_definitions_unresolved() {
     let local_target = local(0xffff);
     let shared = service(
         Some(vec![
@@ -361,27 +437,7 @@ fn different_instances_and_unmapped_resource_definitions_do_not_gain_order() {
         false,
     );
     let original = compose(&shared);
-    let result = compile(&shared, &original, original.program());
-    let field = result
-        .replay()
-        .attribute_execution()
-        .cell(1, 18)
-        .unwrap()
-        .foreground();
-    assert_eq!(field.value(), None);
-    let pending = &result.replay().attribute_execution().pending()[field.pending().unwrap()];
-    assert_eq!(
-        result
-            .replay()
-            .attribute_execution()
-            .transmission_evidence()
-            .unwrap()
-            .compare(
-                pending.first_source().unwrap(),
-                pending.second_source().unwrap()
-            ),
-        None
-    );
+    assert_local_page_order(&shared, &original);
 
     let resource = public(0xa0, 0xffff);
     let selected = resource.resource().unwrap().page();
