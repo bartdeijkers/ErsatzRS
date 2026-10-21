@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 retained DRCS/GDRCS bank selection and exact undo closed; continue only remaining finite resource/set/dependency group. Preserve completed boundaries and recorded external prerequisites'
+current_focus = 'P9A-04 X2 Linux Next configuration-overlay playback completed; next qualify the existing F1 first retained-role attachment gap with valid original/final factories. Preserve completed components and deferred external decisions'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -144,9 +144,27 @@ retained. Reuse untouched editor/transport/F6 proof; no new runtime-client claim
 This removes only the named retained-bank choice from the existing F1 remainder.
 Next: remaining complete-set dependency/target groups from the finite F/V/X row;
 keep X1 deferred, X3 upstream wait and Windows-package deferral/120min unchanged.
-Build cache crossed60GiB during these checks; preserve current bundle/evidence
-and clean after this checkpoint before another large build. No relevant check
-remains running at closure; only the explicit verified slice is committed.
+After23fd9d40, the configured cache cleanup completed with matched bundle and
+evidence preserved. The subsequent ordinary Linux host uses the same configured
+target directory; no relevant runtime check remains running at closure.
+
+X2 Linux ordinary Next configuration-overlay playback is completed. Canonical
+tmp/phase9-next-local-teletext/level15-next-managed-qualification/overlay-playback/identity.json
+owns four Burn/Convert raw captures: SQL320x180 unchanged, default640x180,
+channel override1280x180,92/92 strict clock/continuity/delivery checks, selected
+AAC/nld880Hz, Burn pixels/actual Convert Dutch WebVTT and complete unforced
+cleanup. Current workspace host at23fd includes preserved parallel infra; this
+is not a clean-HEAD package, graphics or runtime-adoption claim. The original
+SQL-tool refusal is retained; only three exact due maintenance clocks are
+validated forward inside the owned host against its provider clock, with four
+rejecting bad goldens. Reuse unchanged editor/transport/F6 results. Only the
+named Linux overlay merge/playback obligation leaves X2; native-platform and
+package/adoption prerequisites retain scope. No owned process remains.
+Next finite F1 action: qualify complete original/final factories for first
+attachment of a retained bank to an originally Unselected display role, then
+prove the existing native authority gap. Stop qualification if the source is
+invalid; no bank creation, generic visual editor or adjacent variant series.
+All recorded deferrals and the full-local9A-before-push/CI rule remain unchanged.
 
 Profile/channel output lifecycle slice is committed in40ad0608; bb025c32 records
 its63 actual Windows component passes. Linux63/all9cultureSSR/headed8/AV8/

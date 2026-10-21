@@ -7,19 +7,18 @@ summary    = '''
 ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
 F2 metadata/zones/version and scoped F1 Main-presence/Base-prefix, joint original/
 added position undo and interleaved Base charset regeneration are closed.
-P9A-04 receipts pin native/QTM/independent boundaries. Retained DRCS/GDRCS raw-bank
-selection/undo is closed through localized admin/publication/reopen; private V30
-keeps prior versions and protected equal-pixel bank identities exact.
+Retained DRCS/GDRCS selection/undo closes through localized admin/publication/
+reopen; V30 preserves prior versions and protected equal-pixel bank identities.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identities/bytes/roots/effects/spans, defaults, fallback and bounds stay
 protected. A7/A8/C3, foreign-X26, repertoires/fonts, objects/DRCS/panels and
 receivers remain mandatory; wrappers are derived. F1/F3 receipts own limits.
 
-base_g0_context_followup retains ESC/reset/secondary/Header/POP provenance and
-stock33/38; five disagreements remain open without invented7F. Held mosaics
-preserve controls/reset/held glyphs in shared preview/carrier/zones/captions;
-held_mosaics_followup owns proof, pinnedQTM and atlas differences. A1/A2/B2 stay open.
+base_g0_context_followup owns ESC/reset/secondary/Header/POP and stock33/38;
+five disagreements remain, no invented7F. held_mosaics_followup owns preserved
+controls/reset/glyphs across preview/carrier/zones/captions and QTM/atlas
+differences. A1/A2/B2 remain open.
 physical_spacing_followup preserves both size origins/C.3/held state/zones/raw0F
 basic content. Stocklibzvbi passes10 enhanced fixtures/4 rasters but fails22
 basic no-response observations; no relaxed fallback claim. Its pinned four-menu
@@ -31,20 +30,18 @@ P9A-04 owns closed V25–28 resource/Main/Local selection and absent-X27/MOT roo
 undo (e80c8367), protected refusal, effects/TTI/preview/publication/reopen and
 localized matched-bundle proof. Other F1 work stays open; Base/Local stay distinct.
 
-Profile/theme/mirror/Lua proof retains scope. actual_output_status_followup owns
-Linux/Windows63, headed owner/restart and conditional Kodi proof. X2 startup_health
-proves scoped Linux/nativeWindows active-profile/overlay Health/error/recovery/
-cold restart. Linux includes parallel infra; Windows is exact archived40ad.
-F5 owns exact40ad Windows Burn/Convert functional8AAC/nld captures/natural Job
-cleanup and46/46 raw HTTP transport/delivery at unchanged20s/12s limits.
-P9A-04 retains artifacts/tool negatives and each scoped platform claim.
-Linux.4 copy HTTP/HLS:86 checks/rolling delivery. Optimized ordinary Burn/Convert
-functional gates close too: all8 captures AAC/nld. Raw Burn/Convert wire proof
-also closes46/46 with selected AV/captions/protected SQL and graceful cleanup;
-F5 owns exact scopes and retained tool negative.
+Profile/theme/mirror/Lua proof retains scope. P9A-04 owns actual_output_status
+Linux/Windows63/headed/restart/conditional Kodi and X2 startup_health active-profile/
+overlay/error/recovery/cold restart (Linux parallel infra; Windows exact40ad).
+F5 owns Windows Burn/Convert8AAC/nld/raw46/46/natural Job cleanup, Linux.4 copy86
+and ordinary8AAC/nld/raw46/46/AV/captions/protected SQL/graceful cleanup; 20s/12s limits and tool negatives remain. X2 Linux configuration-overlay playback
+now closes: four Burn/Convert captures, default640/channel1280x180 over protected
+SQL320x180,92 strict transport checks, Dutch AAC/captions/unforced cleanup.
+managed_qualification_followup/overlay-playback/identity.json owns current
+workspace/candidate.4 scope and bounded maintenance-clock guard, not graphics.
 F4 closes MOT engine/HTTP/cache and scoped X28-retirement engine/decode proof.
 It owns limits and the unresolved M29 Header/POP policy. Warm-client remains open. Windows-package deferred; future120minutes.
-Full-package/overlay/sixRID/adoption and ARM/macOS prerequisites remain open. Lifecycle/quota/cancellation fences
+Full-package/remaining platform-overlay/sixRID/adoption and ARM/macOS prerequisites remain open. Lifecycle/quota/cancellation fences
 and open Lua/recovery/client requirements remain. F6 default2 Copy/DVB is verified
 in c07af3a1; tmp/phase9-f6-native-carriage/work.json owns87/87 TSDuck.
 
