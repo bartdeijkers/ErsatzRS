@@ -645,6 +645,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Track Phase 9A acceptance through finite, separately closable milestone
+  dependencies, with preserved handoff history separate from current work.
+
 - Separate teletext Level 1.5/shared and Level 2.5 Rust CI checks, and split
   Playwright into general and both teletext suites for Chromium and Firefox.
   Teletext-only recovery can rerun either level without rerunning unrelated

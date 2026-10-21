@@ -155,6 +155,8 @@ struct Phase {
     summary: String,
     next_steps: String,
     #[serde(default)]
+    handoff_history: String,
+    #[serde(default)]
     checklist: Vec<ChecklistItem>,
     #[serde(default)]
     known_todo: Vec<Note>,
@@ -503,6 +505,7 @@ fn sync() -> Result<Connection> {
         ("current_focus", &phase.current_focus),
         ("summary", &phase.summary),
         ("next_steps", &phase.next_steps),
+        ("handoff_history", &phase.handoff_history),
     ] {
         tx.execute("INSERT INTO phase VALUES(?1,?2)", params![key, value])?;
     }
@@ -1215,12 +1218,7 @@ fn cmd_check() -> Result<()> {
                         milestone.id
                     ));
                 }
-                if milestone.status == "Complete" && milestone.evidence.trim().is_empty() {
-                    errors.push(format!(
-                        "milestone `{}`: Complete milestones require evidence",
-                        milestone.id
-                    ));
-                }
+                errors.extend(milestone_completion_errors(milestone, &milestone_statuses));
                 let unique_dependencies: std::collections::HashSet<&str> =
                     milestone.depends_on.iter().map(String::as_str).collect();
                 if unique_dependencies.len() != milestone.depends_on.len() {
@@ -1238,13 +1236,6 @@ fn cmd_check() -> Result<()> {
                     } else if !milestone_ids.contains(dependency.as_str()) {
                         errors.push(format!(
                             "milestone `{}`: dependency `{dependency}` does not resolve",
-                            milestone.id
-                        ));
-                    } else if milestone.status == "Complete"
-                        && milestone_statuses.get(dependency.as_str()).copied() != Some("Complete")
-                    {
-                        errors.push(format!(
-                            "milestone `{}`: Complete milestone depends on incomplete `{dependency}`",
                             milestone.id
                         ));
                     }
@@ -1414,6 +1405,38 @@ fn milestone_ids_are_unique(milestones: &[Milestone]) -> bool {
     ids.len() == milestones.len()
 }
 
+fn milestone_completion_errors(
+    milestone: &Milestone,
+    statuses: &std::collections::HashMap<&str, &str>,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    if milestone.status != "Complete" {
+        return errors;
+    }
+    if milestone.evidence.trim().is_empty() {
+        errors.push(format!(
+            "milestone `{}`: Complete milestones require evidence",
+            milestone.id
+        ));
+    }
+    for dependency in &milestone.depends_on {
+        // Self references and unresolved dependencies have separate schema errors.
+        if dependency == &milestone.id {
+            continue;
+        }
+        if statuses
+            .get(dependency.as_str())
+            .is_some_and(|status| *status != "Complete")
+        {
+            errors.push(format!(
+                "milestone `{}`: Complete milestone depends on incomplete `{dependency}`",
+                milestone.id
+            ));
+        }
+    }
+    errors
+}
+
 /// Validate a milestone's pointer at its plan document.
 ///
 /// `plans/` carries detailed future work that does not fit in the milestone.
@@ -1540,9 +1563,45 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use super::{
-        milestone_dependency_cycle, milestone_ids_are_unique, milestone_plan_error,
-        test_route_contract_errors, HydrationPage, Milestone,
+        milestone_completion_errors, milestone_dependency_cycle, milestone_ids_are_unique,
+        milestone_plan_error, test_route_contract_errors, HydrationPage, Milestone, Phase,
     };
+
+    #[test]
+    fn phase_without_handoff_history_remains_valid() {
+        let phase: Phase = toml::from_str(
+            r#"
+current_phase = "Phase 9"
+current_focus = "Current package"
+summary = "Current progress."
+next_steps = "Run current package."
+"#,
+        )
+        .expect("legacy phase fields must remain valid");
+
+        assert_eq!(phase.next_steps, "Run current package.");
+        assert!(phase.handoff_history.is_empty());
+    }
+
+    #[test]
+    fn phase_keeps_current_next_steps_separate_from_handoff_history() {
+        let phase: Phase = toml::from_str(
+            r#"
+current_phase = "Phase 9"
+current_focus = "Current package"
+summary = "Current progress."
+next_steps = "Run current package."
+handoff_history = "Earlier instruction: investigate another package."
+"#,
+        )
+        .expect("current phase and historical handoffs must parse independently");
+
+        assert_eq!(phase.next_steps, "Run current package.");
+        assert_eq!(
+            phase.handoff_history,
+            "Earlier instruction: investigate another package."
+        );
+    }
 
     fn milestone(id: &str, depends_on: &[&str]) -> Milestone {
         Milestone {
@@ -1603,6 +1662,100 @@ mod tests {
         // plan that is really there, so a rename cannot leave a dead pointer.
         done.plan = Some("plans/gone.md".to_owned());
         assert!(milestone_plan_error(&done, |_| false).is_some());
+    }
+
+    fn completion_errors(milestones: &[Milestone]) -> Vec<String> {
+        let statuses = milestones
+            .iter()
+            .map(|entry| (entry.id.as_str(), entry.status.as_str()))
+            .collect();
+        milestones
+            .iter()
+            .flat_map(|entry| milestone_completion_errors(entry, &statuses))
+            .collect()
+    }
+
+    fn complete_milestone(id: &str, depends_on: &[&str]) -> Milestone {
+        let mut entry = milestone(id, depends_on);
+        entry.status = "Complete".to_owned();
+        entry.evidence = "Verified acceptance evidence.".to_owned();
+        entry
+    }
+
+    #[test]
+    fn complete_milestones_reject_every_open_dependency_status() {
+        for status in ["Not started", "In progress", "Blocked", "Deferred"] {
+            let mut child = milestone("child", &[]);
+            child.status = status.to_owned();
+            let entries = [complete_milestone("parent", &["child"]), child];
+
+            assert_eq!(
+                completion_errors(&entries),
+                ["milestone `parent`: Complete milestone depends on incomplete `child`"],
+                "{status}"
+            );
+        }
+    }
+
+    #[test]
+    fn complete_milestones_accept_complete_dependency_chains() {
+        let entries = [
+            complete_milestone("parent", &["child"]),
+            complete_milestone("child", &["leaf"]),
+            complete_milestone("leaf", &[]),
+        ];
+
+        assert!(completion_errors(&entries).is_empty());
+    }
+
+    #[test]
+    fn complete_milestones_require_nonblank_evidence() {
+        for evidence in ["", " \t\n"] {
+            let mut entry = complete_milestone("parent", &[]);
+            entry.evidence = evidence.to_owned();
+
+            assert_eq!(
+                completion_errors(&[entry]),
+                ["milestone `parent`: Complete milestones require evidence"]
+            );
+        }
+    }
+
+    #[test]
+    fn open_milestones_allow_incomplete_dependencies_and_missing_evidence() {
+        for status in ["Not started", "In progress", "Blocked", "Deferred"] {
+            let mut parent = milestone("parent", &["child"]);
+            parent.status = status.to_owned();
+            let entries = [parent, milestone("child", &[])];
+
+            assert!(completion_errors(&entries).is_empty(), "{status}");
+        }
+    }
+
+    #[test]
+    fn complete_milestone_chains_reject_an_open_required_leaf() {
+        for status in ["Not started", "In progress", "Blocked", "Deferred"] {
+            let mut leaf = milestone("leaf", &[]);
+            leaf.status = status.to_owned();
+            let entries = [
+                complete_milestone("parent", &["child"]),
+                complete_milestone("child", &["leaf"]),
+                leaf,
+            ];
+
+            assert_eq!(
+                completion_errors(&entries),
+                ["milestone `child`: Complete milestone depends on incomplete `leaf`"],
+                "{status}"
+            );
+        }
+    }
+
+    #[test]
+    fn milestone_completion_leaves_invalid_references_to_schema_checks() {
+        let entry = complete_milestone("parent", &["parent", "missing"]);
+
+        assert!(completion_errors(&[entry]).is_empty());
     }
 
     fn hydration(route: &str) -> HydrationPage {

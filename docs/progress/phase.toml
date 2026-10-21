@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'Phase 9A finite work-package ownership and closure registry after completed F5 retained-input and Health boundaries'
+current_focus = 'p9a-r1-cases — reconcile the specifically recorded remaining-case ambiguities'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,26 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Current package: p9a-r1-cases (the bounded reconciliation of the existing
+F1/F3/F4/F5/V1/V2/V5 and applicable L15 inventory ambiguities).
+First action: map the specifically recorded unresolved families to existing
+normative rows and canonical receipts; distinguish named missing implementation,
+mandatory proof and external prerequisite. Do not invent or execute variants.
+Stop when each ambiguity has a finite owner/cell or a sourced explicit decision
+prerequisite, and every mandatory package remains reachable from p9a-04.
+
+The ordinary Phase9A milestones are the sole executable completion collection.
+Use their dependency/status/evidence fields; dated narratives and handoff_history
+are historical evidence, never a source of a competing next action.
+Closed components stay closed unless a concrete regression is recorded.
+External client/editor/platform/policy packages retain their recorded restrictions,
+including X1 deferral, X3 upstream wait, no DVBViewer, conditional physical Kodi
+end-trial and the deferred Windows-package trial with120minutes reserved.
+No push or publication. Production9B waits for complete independent9A acceptance.
+'''
+
+# Preserved historical handoffs; excluded from progress next.
+handoff_history = '''
 F5 retained provider input component now joins dedicated configurable20/8/2GiB
 shared storage, full authenticated source acquisition, exact native/track/audio
 qualification and occurrence-bound seekable AV from the same caption bytes.

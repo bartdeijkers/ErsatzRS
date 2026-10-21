@@ -14,7 +14,7 @@ source of truth, and is unrelated to the application's runtime database.
 
 | File | Holds |
 | --- | --- |
-| `phase.toml` | Current phase, focus, summary, immediate next steps, and blocking decisions. |
+| `phase.toml` | Current phase, focus, summary, immediate next steps, blocking decisions, and preserved historical handoffs. |
 | `milestones.toml` | Fine-grained plan milestones, dependencies, status, acceptance, and completion evidence. |
 | `parity/<slug>.toml` | One file per ErsatzTV feature: source, target, status, ADR refs, summary. |
 | `routes.toml` | Admin UI route coverage (`routed=false` = advertised-but-404 placeholder). |
@@ -62,6 +62,14 @@ sqlite3 progress.db "SELECT feature, status FROM parity WHERE status != 'Ported'
 - New session/handoff entry: `cargo xtask progress add-session --agent "…"
   --summary "…"` (appends one NDJSON line), or edit `sessions.ndjson` directly.
 - Validate before committing: `cargo xtask progress check`.
+
+`phase.toml` keeps one current package and its next executable action in
+`current_focus`/`next_steps`. Optional `handoff_history` preserves superseded
+handoffs in the same file and derived index; `progress next` does not print it.
+Dated next-action prose cannot override the current package. Separately closable
+work uses ordinary milestones and dependencies. A Complete parent requires all
+listed dependencies Complete, including mandatory Blocked or Deferred packages.
+Nonempty evidence and a passing tracker check do not prove substantive acceptance.
 
 The DB refreshes itself when any source file is newer than `progress.db`, so an
 explicit `cargo xtask progress sync` is rarely needed.
