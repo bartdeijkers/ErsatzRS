@@ -172,7 +172,7 @@ async fn effective_digest_type_version_and_bounded_payload_corruption_is_not_abs
 }
 
 #[tokio::test]
-async fn opaque_effective_design_cannot_become_a_base_publication_or_editor_export() {
+async fn opaque_effective_export_storage_grants_no_base_publication_or_activation() {
     use crate::repositories::teletext_publications::tests::Fixture as PublicationFixture;
     use ersatzrs_core::repositories::TeletextPublicationRepository as _;
 
@@ -204,14 +204,32 @@ async fn opaque_effective_design_cannot_become_a_base_publication_or_editor_expo
         receipt_version: 1,
         receipt: b"synthetic base editor receipt".to_vec(),
     };
-    assert!(matches!(
-        designs.create_export(&export, 1024, 1024).await.unwrap(),
-        M::Rejected(R::InvalidValues)
-    ));
+    // Storage admits both supported opaque formats. Semantic editor-role
+    // association remains an application check, not a property of these bytes.
+    let M::Saved(metadata) = designs.create_export(&export, 1024, 1024).await.unwrap() else {
+        panic!("supported opaque effective export rejected")
+    };
+    assert_eq!(metadata.design_id, head.id);
+    assert_eq!(metadata.revision, export.revision);
+    assert_eq!(metadata.expected_design_head, export.expected_design_head);
+    assert_eq!(metadata.design_digest, export.design_digest);
+    assert_eq!(metadata.receipt_version, export.receipt_version);
+    assert_eq!(metadata.digest, sha256_hex(&export.receipt));
+    let stored = designs
+        .export(metadata.id, 1024, 1024)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.metadata, metadata);
+    assert_eq!(stored.receipt, export.receipt);
+    let receipts: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "TeletextDesignExportReceipt""#)
+        .fetch_one(&designs.0)
+        .await
+        .unwrap();
+    assert_eq!(receipts, 1);
     for query in [
         r#"SELECT COUNT(*) FROM "TeletextPublicationRequest""#,
         r#"SELECT COUNT(*) FROM "TeletextAcceptedGeneration""#,
-        r#"SELECT COUNT(*) FROM "TeletextDesignExportReceipt""#,
     ] {
         let count: i64 = sqlx::query_scalar(query)
             .fetch_one(&designs.0)
@@ -223,7 +241,7 @@ async fn opaque_effective_design_cannot_become_a_base_publication_or_editor_expo
 }
 
 #[tokio::test]
-async fn stored_base_export_rejects_an_original_redeclared_as_effective_after_reopen() {
+async fn opaque_export_reopens_exact_bytes_with_a_supported_original_role_change() {
     let (directory, repo) = fixture().await;
     let head = saved(repo.save(&request(None), DOCUMENT.len()).await.unwrap());
     let M::Saved(export) = repo
@@ -254,25 +272,22 @@ async fn stored_base_export_rejects_an_original_redeclared_as_effective_after_re
         .unwrap();
     repo.0.close().await;
     let repo = SqliteTeletextDesignRepository(open(&directory.path().join("designs.sqlite")).await);
-    // Both opaque formats can be read, but a base export cannot borrow version 2.
+    // The opaque repository retains supported version 2 without reinterpreting
+    // the receipt. The application must still bind its captured semantic role.
+    let original = repo.revision(head.id, 1, 1024).await.unwrap().unwrap();
     assert_eq!(
-        repo.revision(head.id, 1, 1024)
-            .await
-            .unwrap()
-            .unwrap()
-            .document_version,
+        original.document_version,
         TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION
     );
-    assert!(matches!(
-        repo.export(export.id, 1024, 1024).await,
-        Err(RepositoryError::Decode {
-            kind: "teletext design storage",
-            ..
-        })
-    ));
+    assert_eq!(original.document, DOCUMENT);
+    assert_eq!(original.digest, sha256_hex(DOCUMENT));
+    let stored = repo.export(export.id, 1024, 1024).await.unwrap().unwrap();
+    assert_eq!(stored.metadata, export);
+    assert_eq!(stored.receipt, b"synthetic original export");
     let receipts: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "TeletextDesignExportReceipt""#)
         .fetch_one(&repo.0)
         .await
         .unwrap();
     assert_eq!(receipts, 1);
+    assert_eq!(repo.head(head.id).await.unwrap(), Some(head));
 }

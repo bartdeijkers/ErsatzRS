@@ -2395,10 +2395,33 @@ readers retain their assertions. Existing31 managed-runtime/extraction/TTI-ZIP/
 support-bundle/release-note controls pass4e90bd68 (2.091s). Canonical provider-scan
 identity.json and its security_followup own logs/versions/remaining closeout.
 Strict affected FFmpeg/infra/web all-target Clippy passes on the patched graph.
-A new correction SHA/full-CI result remains due; an old-SHA rerun cannot verify
-the dependency fix. Earlier valid source/editor/playback/transport
+Correction abba9646 is committed and pushed to origin/main. The maintainer
+requested CI stop; replacement run39560024587 on that exact SHA is confirmed
+completed/cancelled with no active jobs. No automatic restart or full-CI success
+is claimed. Local
+repair evidence remains valid; remote Cargo deny did not run before cancellation.
+The cancelled old-SHA run cannot verify this dependency fix. Earlier valid source/editor/playback/transport
 proof remains scoped; no runtime artifact pin or acceptance condition changes.
 
+
+CI local-handoff checkpoint (2026-10-21): the maintainer requested cancellation
+of full run39567649749 on ba58d2a4 and a fresh full run after this correction.
+Its completed Test3960 and general-Chromium339 checks passed; Next418/419 failed
+only because the mandatory package test lacked archive/manifest inputs. The two
+Teletext1.5 failures were stale opaque-storage expectations; existing version2
+storage is intentionally supported while unchanged host association rejects role
+mismatch. Fifteen affected storage tests and strict infra all-target Clippy pass.
+Same-host artifact transfer now uses atomic producer-scoped hash-verified copies,
+four owned cache groups and unchanged manifest verification/GitHub fallback.
+Eighteen artifact contracts, three selector checks, workflow lint and the exact
+pinned package staging block pass. The formerly failing actual Next package
+acquisition/health test now passes3d538c48 with these exact archive/manifest
+inputs; no test skip or weakened identity oracle. The inactive107GiB cache on
+a115GiB volume now triggers the existing60GiB cleanup rule after immutable
+publication. Canonical provider-scan/identity.json ci_local_handoff_followup owns
+logs and retained negatives. Closure still requires an actual local-cache hit
+and every applicable job on the newly pushed exact SHA; no full-CI claim yet.
+Provider follow-up and parallel work remain uncommitted. No release publication.
 
 2026-10-21 mapped Jellyfin movie-report component completed:
 Managed library movie/episode leaves now retain the actual scan claim and require a

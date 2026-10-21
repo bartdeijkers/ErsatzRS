@@ -645,6 +645,11 @@ release section when tagging a release.
   then run each suite from verified same-revision artifacts without rebuilding.
   Relocatable fixture and runtime-manifest paths preserve execution on another
   runner; missing or corrupt build products fail explicitly.
+  Same-host runners copy digest-verified artifacts through a bounded local
+  cache, retaining GitHub downloads as a fallback and all existing validation.
+  Completed oversized Cargo caches are cleared before consumers extract tests.
+  Native Next acquisition tests receive the same pinned archive and manifest
+  as runtime staging, preserving their identity and health checks.
 
 - Require finite agent work packages with explicit closure conditions, scoped
   completion, evidence reuse and separate external blockers, preserving all

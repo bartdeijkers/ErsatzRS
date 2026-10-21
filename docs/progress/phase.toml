@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'Cargo deny security repair completed: commit verified patched graph, then obtain new exact-SHA full split-CI evidence'
+current_focus = 'Commit/push verified local CI artifact handoff; check all applicable jobs on the replacement exact SHA'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,25 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+CI local-handoff checkpoint (2026-10-21): the maintainer requested cancellation
+of full run39567649749 on ba58d2a4 and a fresh full run after this correction.
+Its completed Test3960 and general-Chromium339 checks passed; Next418/419 failed
+only because the mandatory package test lacked archive/manifest inputs. The two
+Teletext1.5 failures were stale opaque-storage expectations; existing version2
+storage is intentionally supported while unchanged host association rejects role
+mismatch. Fifteen affected storage tests and strict infra all-target Clippy pass.
+Same-host artifact transfer now uses atomic producer-scoped hash-verified copies,
+four owned cache groups and unchanged manifest verification/GitHub fallback.
+Eighteen artifact contracts, three selector checks, workflow lint and the exact
+pinned package staging block pass. The formerly failing actual Next package
+acquisition/health test now passes3d538c48 with these exact archive/manifest
+inputs; no test skip or weakened identity oracle. The inactive107GiB cache on
+a115GiB volume now triggers the existing60GiB cleanup rule after immutable
+publication. Canonical provider-scan/identity.json ci_local_handoff_followup owns
+logs and retained negatives. Closure still requires an actual local-cache hit
+and every applicable job on the newly pushed exact SHA; no full-CI claim yet.
+Provider follow-up and parallel work remain uncommitted. No release publication.
+
 Current maintainer direction (2026-10-20): full independent9A, including authored
 Level2.5 and correct1/1.5 fallback, before any production9B addon. The existing
 L15-A..E/F/V/X list and ADR0123 retain all conditions; neither base nor9A is

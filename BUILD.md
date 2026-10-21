@@ -170,6 +170,30 @@ Artifact names include the producer run/attempt; consumers use its job outputs,
 so a failed-job rerun can retain the original successful build while a newly
 executed producer publishes a distinct artifact.
 
+Self-hosted consumers first copy the exact producer archive through a shared local
+cache. Its key includes the repository, source SHA, producer run and attempt;
+its expected archive SHA256 comes from the producer's GitHub job outputs. A hit
+is exposed only after an atomic copy matches that hash, then the normal
+source/platform/file validation still runs. A missing or inaccessible local
+cache uses the same GitHub artifact download; corruption is an explicit error.
+GitHub-hosted jobs continue to use GitHub artifacts directly. Successful
+failed-job reruns retain the original producer key and digest.
+
+The default cache is the runner user's `.cache/ersatzrs/ci-artifacts` directory.
+Same-host runners must use the same home filesystem, or the repository variable
+`CI_LOCAL_ARTIFACT_CACHE` must name a shared dedicated directory accessible to
+both. Different hosts without that storage safely fall back to download. Only
+four producer groups are retained; pruning recognizes the helper's exact
+ownership marker and preserves unrelated directories. Artifacts are still
+uploaded to GitHub for fallback and diagnostics.
+
+After publishing both immutable products, the self-hosted producer cleans its
+inactive configured Cargo target when it reaches the repository's 60-GiB
+threshold (or `ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB`). This leaves room for
+restoring and extracting tests; consumers use the preserved copies. The first
+build-once trial grew this cache to 107 GiB on a 115-GiB runner volume and
+required that cleanup before test extraction.
+
 Every execution job retains its own database, runtime, port and diagnostics.
 Runtime staging and all test selection, ignored/helper semantics and resource
 limits remain in the execution jobs. Source fixtures use

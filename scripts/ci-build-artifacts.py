@@ -9,8 +9,12 @@ from pathlib import Path, PurePosixPath
 import platform
 import re
 import shutil
+import stat
 import subprocess
+import sys
 import tarfile
+import tempfile
+from contextlib import suppress
 
 
 REQUIRED = {
@@ -20,6 +24,8 @@ REQUIRED = {
             "site/bundle.css", "site/channel-preview.js", "site/vendor/hls/hls.mjs",
             "site/vendor/hls/LICENSE"),
 }
+LOCAL_GROUP_MARKER = ".ersatzrs-ci-artifacts"
+LOCAL_GROUP_OWNER = b"ersatzrs-ci-artifacts-group-v1\n"
 
 
 def digest(path):
@@ -124,22 +130,200 @@ def restore(archive, root, sha, env_file, kind):
         raise
 
 
+def local_entry(cache, key):
+    """Separate producer groups from their two immutable artifact kinds."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}", key):
+        raise ValueError("unsafe local CI artifact cache key")
+    group, separator, kind = key.rpartition("-")
+    if not separator or not group or kind not in REQUIRED:
+        raise ValueError("local CI artifact cache key must end in -rust or -web")
+    group_path = cache / group
+    return group_path, group_path / f"{kind}.tar.gz", kind
+
+
+def check_cache_directories(cache, group):
+    if cache.is_symlink() or group.is_symlink():
+        raise ValueError("local CI artifact cache directories must not be symlinks")
+
+
+def regular_entry(path):
+    """Reject symlinks and other non-file entries instead of following them."""
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISREG(mode):
+        raise ValueError("local CI artifact cache entry must be a regular file")
+    return True
+
+
+def owned_local_group(group, strict=True):
+    marker = group / LOCAL_GROUP_MARKER
+    try:
+        if not regular_entry(marker):
+            return False
+        if marker.stat().st_size != len(LOCAL_GROUP_OWNER) or marker.read_bytes() != LOCAL_GROUP_OWNER:
+            raise ValueError("local CI artifact cache ownership marker differs")
+        return True
+    except ValueError:
+        if strict:
+            raise
+        return False
+
+
+def initialize_local_group(cache, group):
+    """Claim only an empty group, using one complete atomic ownership marker."""
+    if owned_local_group(group):
+        return
+    if any(group.iterdir()):
+        # Another producer may have published its marker after our first read.
+        if owned_local_group(group):
+            return
+        raise ValueError("refusing nonempty unowned local CI artifact cache group")
+    descriptor, name = tempfile.mkstemp(prefix=".owner-", dir=cache)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(LOCAL_GROUP_OWNER)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, group / LOCAL_GROUP_MARKER)
+        except FileExistsError:
+            if not owned_local_group(group):
+                raise ValueError("local CI artifact cache ownership marker differs") from None
+    finally:
+        with suppress(OSError):
+            temporary.unlink()
+
+
+def prune_local(cache, current):
+    """Keep at most four producer groups, preserving the just-published group."""
+    groups = [path for path in cache.iterdir()
+              if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}", path.name)
+              and not path.is_symlink() and path.is_dir()
+              and owned_local_group(path, strict=False)]
+    old = sorted((path for path in groups if path != current),
+                 key=lambda path: path.stat().st_mtime_ns)
+    for path in old[:max(0, len(groups) - 4)]:
+        shutil.rmtree(path)
+
+
+def publish_local(archive: Path, sha: str, kind: str, key: str, cache: Path) -> str:
+    """Publish digest-bound bytes; pack/restore retain source and host authority."""
+    if not re.fullmatch(r"[0-9a-f]{40}", sha) or kind not in REQUIRED:
+        raise ValueError("local CI artifact publication needs a source SHA and kind")
+    group, entry, key_kind = local_entry(cache, key)
+    if kind != key_kind:
+        raise ValueError("local CI artifact cache key has the wrong kind")
+    if not regular_entry(archive):
+        raise ValueError("local CI artifact archive is missing")
+    expected = digest(archive)
+    temporary = None
+    try:
+        check_cache_directories(cache, group)
+        group.mkdir(parents=True, exist_ok=True)
+        initialize_local_group(cache, group)
+        if regular_entry(entry):
+            if digest(entry) != expected:
+                raise ValueError("immutable local CI artifact cache entry differs")
+        else:
+            descriptor, name = tempfile.mkstemp(prefix=".publish-", dir=group)
+            os.close(descriptor)
+            temporary = Path(name)
+            shutil.copyfile(archive, temporary)
+            if digest(temporary) != expected:
+                raise ValueError("local CI artifact changed during publication")
+            with temporary.open("rb") as handle:
+                os.fsync(handle.fileno())
+            try:
+                os.link(temporary, entry)
+            except FileExistsError:
+                if not regular_entry(entry) or digest(entry) != expected:
+                    raise ValueError("immutable local CI artifact cache entry differs") from None
+        os.utime(group, None)
+        prune_local(cache, group)
+    except OSError:
+        print("Local CI artifact cache unavailable; using GitHub artifact fallback", file=sys.stderr)
+    finally:
+        if temporary is not None:
+            with suppress(OSError):
+                temporary.unlink()
+    return expected
+
+
+def fetch_local(archive: Path, expected_digest: str, key: str, cache: Path) -> bool:
+    """Expose a cache hit only after a complete temporary copy matches its hash."""
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+        raise ValueError("a full CI artifact SHA256 is required")
+    group, entry, _ = local_entry(cache, key)
+    if archive.is_symlink():
+        raise ValueError("local CI artifact destination must not be a symlink")
+    temporary = None
+    try:
+        check_cache_directories(cache, group)
+        if not owned_local_group(group):
+            return False
+        if not regular_entry(entry):
+            return False
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, name = tempfile.mkstemp(prefix=".fetch-", dir=archive.parent)
+        os.close(descriptor)
+        temporary = Path(name)
+        shutil.copyfile(entry, temporary)
+        if digest(temporary) != expected_digest:
+            raise ValueError("local CI artifact cache hash mismatch")
+        os.replace(temporary, archive)
+        return True
+    except OSError:
+        print("Local CI artifact cache unavailable; using GitHub artifact fallback", file=sys.stderr)
+        return False
+    finally:
+        if temporary is not None:
+            with suppress(OSError):
+                temporary.unlink()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("pack", "restore", "verify"))
-    parser.add_argument("--directory", type=Path, required=True)
+    parser.add_argument("mode", choices=("pack", "restore", "verify", "publish-local", "fetch-local"))
+    parser.add_argument("--directory", type=Path)
     parser.add_argument("--kind", choices=("rust", "web"), required=True)
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--sha", required=True)
     parser.add_argument("--env-file", type=Path)
+    parser.add_argument("--cache-key")
+    parser.add_argument("--expected-digest")
+    parser.add_argument("--output-file", type=Path)
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
         parser.error("a full source SHA is required")
-    if args.mode in ("pack", "restore") and not args.archive:
-        parser.error("pack/restore requires --archive")
+    local = args.mode in ("publish-local", "fetch-local")
+    if not local and not args.directory:
+        parser.error("pack/restore/verify requires --directory")
+    if args.mode != "verify" and not args.archive:
+        parser.error("this mode requires --archive")
+    if local and not args.cache_key:
+        parser.error("local cache modes require --cache-key")
+    if args.mode == "fetch-local" and not args.expected_digest:
+        parser.error("fetch-local requires --expected-digest")
     actual_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if args.sha != actual_sha:
         parser.error("execution checkout differs from the requested source SHA")
+    if local:
+        cache = Path(os.environ.get("CI_LOCAL_ARTIFACT_CACHE", "")) if os.environ.get(
+            "CI_LOCAL_ARTIFACT_CACHE") else Path.home() / ".cache/ersatzrs/ci-artifacts"
+        if local_entry(cache, args.cache_key)[2] != args.kind:
+            parser.error("local CI artifact cache key has the wrong kind")
+        if args.mode == "publish-local":
+            value = "digest=" + publish_local(args.archive, args.sha, args.kind, args.cache_key, cache)
+        else:
+            value = "hit=" + str(fetch_local(args.archive, args.expected_digest, args.cache_key, cache)).lower()
+        if args.output_file:
+            with args.output_file.open("a") as handle:
+                handle.write(value + "\n")
+        print(value)
+        return
     root = args.directory.resolve()
     if args.mode == "pack":
         pack(root, args.archive, args.sha, args.kind)

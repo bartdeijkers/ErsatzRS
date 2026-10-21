@@ -111,6 +111,9 @@ permissions:
 # selection" for the recovery step if this directory ever looks stale.
 env:
   CARGO_TARGET_DIR: ${{ github.workspace }}/../ci-target
+  # Same-host runners share the user's cache by default. Other machines safely
+  # miss this cache and download the unchanged GitHub artifact instead.
+  CI_LOCAL_ARTIFACT_CACHE: ${{ vars.CI_LOCAL_ARTIFACT_CACHE }}
 
 jobs:
   # A direct fast-forward merge gives main the exact commit a feature-branch
@@ -230,6 +233,10 @@ jobs:
     outputs:
       rust_artifact: ${{ steps.identity.outputs.rust_artifact }}
       web_artifact: ${{ steps.identity.outputs.web_artifact }}
+      rust_cache_key: ${{ steps.identity.outputs.rust_cache_key }}
+      web_cache_key: ${{ steps.identity.outputs.web_cache_key }}
+      rust_digest: ${{ steps.identity.outputs.rust_digest }}
+      web_digest: ${{ steps.identity.outputs.web_digest }}
     env:
       CARGO_BUILD_JOBS: "1"
       CARGO_PROFILE_TEST_DEBUG: "0"
@@ -318,6 +325,28 @@ jobs:
         run: |
           echo "rust_artifact=ci-rust-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           echo "web_artifact=ci-web-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          for artifact_kind in rust web; do
+            if [[ -f "ci-artifacts/$artifact_kind.tar.gz" ]]; then
+              artifact_digest=$(sha256sum "ci-artifacts/$artifact_kind.tar.gz")
+              artifact_digest=${artifact_digest%% *}
+              echo "${artifact_kind}_digest=$artifact_digest" >> "$GITHUB_OUTPUT"
+              echo "${artifact_kind}_cache_key=$GITHUB_REPOSITORY_ID-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$artifact_kind" >> "$GITHUB_OUTPUT"
+            fi
+          done
+      - name: Publish local Rust artifact
+        if: ${{ inputs.runner != 'github-hosted' && env.BUILD_RUST == 'true' }}
+        env:
+          CI_ARTIFACT_KEY: ${{ steps.identity.outputs.rust_cache_key }}
+        run: |
+          python3 scripts/ci-build-artifacts.py publish-local --kind rust --archive ci-artifacts/rust.tar.gz \
+            --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY"
+      - name: Publish local web artifact
+        if: ${{ inputs.runner != 'github-hosted' && env.BUILD_WEB == 'true' }}
+        env:
+          CI_ARTIFACT_KEY: ${{ steps.identity.outputs.web_cache_key }}
+        run: |
+          python3 scripts/ci-build-artifacts.py publish-local --kind web --archive ci-artifacts/web.tar.gz \
+            --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY"
       - uses: actions/upload-artifact@v7
         if: env.BUILD_RUST == 'true'
         with:
@@ -332,6 +361,17 @@ jobs:
           path: ci-artifacts/web.tar.gz
           compression-level: 0
           retention-days: 7
+      - name: Bound completed self-hosted build cache
+        if: ${{ inputs.runner != 'github-hosted' }}
+        run: |
+          # All consumers use uploaded/local immutable copies, never this target.
+          cache_kib=$(du -sk -- "$CARGO_TARGET_DIR" | awk '{print $1}')
+          cache_limit_gib="${ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB:-60}"
+          [[ "$cache_limit_gib" =~ ^[0-9]+$ ]]
+          if (( cache_kib >= cache_limit_gib * 1024 * 1024 )); then
+            echo "Completed build cache exceeds ${cache_limit_gib} GiB; freeing it before consumers restore artifacts."
+            cargo clean
+          fi
 
   test:
     name: Test
@@ -342,7 +382,18 @@ jobs:
       NEXTEST_TEST_THREADS: "4"
     steps:
       - uses: actions/checkout@v7
+      - name: Fetch local rust artifact
+        id: local_artifact
+        if: ${{ inputs.runner != 'github-hosted' }}
+        env:
+          CI_ARTIFACT_KEY: ${{ needs.build.outputs.rust_cache_key }}
+          CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.rust_digest }}
+        run: |
+          python3 scripts/ci-build-artifacts.py fetch-local --kind rust --archive ci-input/rust.tar.gz \
+            --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
+            --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
+        if: steps.local_artifact.outputs.hit != 'true'
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -390,7 +441,18 @@ jobs:
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
       - uses: actions/checkout@v7
+      - name: Fetch local rust artifact
+        id: local_artifact
+        if: ${{ inputs.runner != 'github-hosted' }}
+        env:
+          CI_ARTIFACT_KEY: ${{ needs.build.outputs.rust_cache_key }}
+          CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.rust_digest }}
+        run: |
+          python3 scripts/ci-build-artifacts.py fetch-local --kind rust --archive ci-input/rust.tar.gz \
+            --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
+            --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
+        if: steps.local_artifact.outputs.hit != 'true'
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -411,7 +473,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 scripts/release/stage-next.py --rid linux-x64 --output "$TMPDIR/next" | tee ci-artifacts/next-engine/next-runtime.log
+          # Retain the same pinned archive for the real acquisition/health test.
+          python3 - <<'PYCODE' | tee ci-artifacts/next-engine/next-runtime.log
+          import importlib.util, os, pathlib
+          spec = importlib.util.spec_from_file_location('stage_next', 'scripts/release/stage-next.py')
+          stage = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(stage)
+          asset = stage.MANIFEST['runtime_packages']['linux-x64']['asset']
+          archive = pathlib.Path(os.environ['TMPDIR']) / asset
+          archive.write_bytes(stage.download(f'{stage.DOWNLOAD_BASE}/{asset}', stage.MAX_ARCHIVE))
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE={archive}\n')
+              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST={pathlib.Path("scripts/release/next-patches/manifest.json").resolve()}\n')
+          stage.stage_patched_snapshot('linux-x64', pathlib.Path(os.environ['TMPDIR']) / 'next', archive)
+          PYCODE
           cp "$TMPDIR/next/origin.json" ci-artifacts/next-engine/next-origin.json
           sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/next-engine/next-sha256.txt
           echo "ETV_NEXT_FOLDER=$TMPDIR/next" >> "$GITHUB_ENV"
@@ -474,7 +549,18 @@ jobs:
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
       - uses: actions/checkout@v7
+      - name: Fetch local rust artifact
+        id: local_artifact
+        if: ${{ inputs.runner != 'github-hosted' }}
+        env:
+          CI_ARTIFACT_KEY: ${{ needs.build.outputs.rust_cache_key }}
+          CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.rust_digest }}
+        run: |
+          python3 scripts/ci-build-artifacts.py fetch-local --kind rust --archive ci-input/rust.tar.gz \
+            --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
+            --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
+        if: steps.local_artifact.outputs.hit != 'true'
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -574,7 +660,18 @@ jobs:
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
       - uses: actions/checkout@v7
+      - name: Fetch local web artifact
+        id: local_artifact
+        if: ${{ inputs.runner != 'github-hosted' }}
+        env:
+          CI_ARTIFACT_KEY: ${{ needs.build.outputs.web_cache_key }}
+          CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.web_digest }}
+        run: |
+          python3 scripts/ci-build-artifacts.py fetch-local --kind web --archive ci-input/web.tar.gz \
+            --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
+            --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
+        if: steps.local_artifact.outputs.hit != 'true'
         with:
           name: ${{ needs.build.outputs.web_artifact }}
           path: ci-input
