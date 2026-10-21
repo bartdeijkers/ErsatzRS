@@ -3,10 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
-    TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
-    TeletextEnhancementObjectCatalog, TeletextEnhancementProgram, TeletextEnhancementProgramError,
-    TeletextEnhancementSource, TeletextObjectCatalogBudget, TeletextObjectCatalogError,
-    TeletextObjectIdentity, TeletextObjectScope, TeletextObjectType,
+    TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
+    TeletextEnhancementProgram, TeletextEnhancementProgramError, TeletextEnhancementSource,
+    TeletextExecutedAttribute, TeletextExecutedAttributes, TeletextFlashMode, TeletextFlashRate,
+    TeletextObjectCatalogBudget, TeletextObjectCatalogError, TeletextObjectIdentity,
+    TeletextObjectScope, TeletextObjectType,
 };
 
 use super::TeletextMainComposition;
@@ -176,14 +177,14 @@ fn derive_inner(
         {
             continue;
         }
-        if let Some(colour) = common_background(
+        if let Some(operation) = header_operation(
             composition,
             definition.identity,
             definition.object_type,
             position.column(),
             work,
         )? {
-            replacements.insert(definition.identity, (position.column(), colour));
+            replacements.insert(definition.identity, (position.column(), operation));
         }
     }
     let total = commands
@@ -204,14 +205,11 @@ fn derive_inner(
         inserted: BTreeSet::new(),
     };
     for definition in &mut definitions {
-        if let Some(&(column, colour)) = replacements.get(&definition.identity) {
+        if let Some(&(column, operation)) = replacements.get(&definition.identity) {
             let mut body = definition.program.commands().to_vec();
             body.insert(
                 1,
-                TeletextEnhancementCommand::AtColumn {
-                    column,
-                    operation: TeletextColumnOperation::Background { colour },
-                },
+                TeletextEnhancementCommand::AtColumn { column, operation },
             );
             definition.program = TeletextEnhancementProgram::new(body)?;
             sources.inserted.insert(definition.identity);
@@ -226,13 +224,58 @@ fn derive_inner(
     })
 }
 
-fn common_background(
+fn header_operation(
+    composition: &TeletextMainComposition,
+    identity: TeletextObjectIdentity,
+    object_type: TeletextObjectType,
+    column: u8,
+    work: &mut Work,
+) -> Result<Option<TeletextColumnOperation>, DerivationError> {
+    if let Some(colour) = common_value(
+        composition,
+        identity,
+        object_type,
+        column,
+        TeletextExecutedAttributes::background,
+        work,
+    )? {
+        return Ok(Some(TeletextColumnOperation::Background { colour }));
+    }
+    if let Some(colour) = common_value(
+        composition,
+        identity,
+        object_type,
+        column,
+        TeletextExecutedAttributes::foreground,
+        work,
+    )? {
+        return Ok(Some(TeletextColumnOperation::Foreground { colour }));
+    }
+    Ok(common_value(
+        composition,
+        identity,
+        object_type,
+        column,
+        TeletextExecutedAttributes::flash,
+        work,
+    )?
+    // Other flash encodings may advance receiver phase counters. Mode/rate
+    // equality alone does not establish preservation of that temporal state.
+    .filter(|flash| flash.mode() == TeletextFlashMode::Steady && flash.rate() == TeletextFlashRate::Slow1Hz)
+    .map(|flash| TeletextColumnOperation::Flash {
+        mode: flash.mode(),
+        rate: flash.rate(),
+    }))
+}
+
+fn common_value<T: Copy + Eq>(
     composition: &TeletextMainComposition,
     identity: TeletextObjectIdentity,
     object_type: TeletextObjectType,
     relative_column: u8,
+    read: fn(TeletextExecutedAttributes) -> TeletextExecutedAttribute<T>,
     work: &mut Work,
-) -> Result<Option<TeletextColourReference>, DerivationError> {
+) -> Result<Option<T>, DerivationError> {
     let mut common = None;
     let width = composition.display_geometry().total_width();
     for invocation in composition.spatial_trace().invocations() {
@@ -266,14 +309,16 @@ fn common_background(
             else {
                 return Ok(None);
             };
-            let field = attributes.background();
-            let Some(colour) = field.value().filter(|_| field.pending().is_none()) else {
+            // The original Local/Active projection excludes Adaptive and
+            // Passive composites. A value is never a guessed call-time default.
+            let field = read(*attributes);
+            let Some(value) = field.value().filter(|_| field.pending().is_none()) else {
                 return Ok(None);
             };
-            if common.is_some_and(|previous| previous != colour) {
+            if common.is_some_and(|previous| previous != value) {
                 return Ok(None);
             }
-            common = Some(colour);
+            common = Some(value);
         }
     }
     Ok(common)

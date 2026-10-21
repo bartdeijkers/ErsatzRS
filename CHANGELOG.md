@@ -934,6 +934,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Compile the qualified Local-object header layout with changing row colours,
+  preserving original object positions, steady presentation and Level 1.5
+  fallback. Generated position writers use only proven unchanged attributes.
 - Compile teletext header calls with competing Main and Local attributes when
   their actual transmitted words establish a definite order within one page.
   Preview and encoded output retain the original source and Level 1.5 fallback;

@@ -187,6 +187,22 @@ provenance and retained original AP. No generated word gains scalar or authored
 permissions. Genuine authored styles and other unqualified writers retain
 mandatory correspondence; full-prefix, catalogue and shared-effect checks remain.
 
+Local Active/Adaptive leading header positions may use a physical-only column
+writer when its exact original attribute is known and unchanged across every
+actual invocation and the full possible affected row tail. Prefer background,
+then foreground. If both colours vary, only a proven original Steady/Slow1Hz
+Flash value may currently materialize that position; deriving other flash
+modes/rates could reset receiver phase state that tuple equality does not prove.
+Charge every candidate scan to the existing shared work budget before cloning
+or packing; preserve full catalogues and exact command/instance/source bounds.
+The inserted word retains only its original AP's HeaderPosition provenance;
+retained commands keep their original ordinals. Complete original/physical
+comparison, geometry, full effects and Level1/1.5 fallback remain mandatory.
+This closes the qualified steady mixed-colour header layout, not all contexts
+or temporal flash. Source-authenticated derived Flash classification in Local
+call-topology TTI imports remains a separate F1 integration obligation; it must
+not make generated Flash words generally editable authored styles.
+
 Private concept version29 separately records exact optional Main presence by
 page/subpage owner. Both expected and replacement are required fields: explicit
 null means absent, while an empty command array remains an explicit Main that

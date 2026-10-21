@@ -3,6 +3,9 @@
 use super::*;
 use crate::teletext::authored_service_tests::{declared, transmissions};
 
+mod nonuniform_decoder;
+mod nonuniform_header;
+
 fn fixture(
     object_type: TeletextObjectType,
     scope: TeletextObjectScope,
@@ -802,7 +805,7 @@ fn object_header_derivation_maps_only_retained_original_commands() {
 }
 
 #[test]
-fn object_header_derivation_preserves_body_when_actual_contexts_conflict() {
+fn object_header_derivation_uses_shared_foreground_when_invocation_backgrounds_differ() {
     for outer_type in [TeletextObjectType::Adaptive, TeletextObjectType::Active] {
         for suffix in [false, true] {
             conflicting_actual_backgrounds(outer_type, suffix);
@@ -867,12 +870,17 @@ fn conflicting_actual_backgrounds(outer_type: TeletextObjectType, suffix: bool) 
         usize::MAX,
     );
     assert!(admitted > 0);
-    assert_eq!(derived.unwrap().catalog(), service.objects());
+    nonuniform_header::assert_foreground_derivation(
+        &original,
+        service.objects(),
+        &derived.unwrap(),
+        outer,
+    );
 }
 
 #[test]
-fn object_header_derivation_active_requires_known_background_over_entire_row_tail() {
-    let (mut draft, _, _) =
+fn object_header_derivation_preserves_changing_row_colours_with_steady_context() {
+    let (mut draft, outer, child) =
         nested_header_draft(TeletextObjectType::Active, TeletextObjectType::Passive);
     draft.base.pages[0]
         .rows
@@ -915,7 +923,13 @@ fn object_header_derivation_active_requires_known_background_over_entire_row_tai
         usize::MAX,
     );
     assert!(admitted > 0);
-    assert_eq!(derived.unwrap().catalog(), service.objects());
+    nonuniform_header::assert_flash_derivation(
+        &original,
+        service.objects(),
+        &derived.unwrap(),
+        outer,
+    );
+    nonuniform_header::assert_complete(&saved, &original, (outer, child));
 }
 
 #[test]
