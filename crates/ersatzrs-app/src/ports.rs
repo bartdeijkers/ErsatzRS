@@ -330,7 +330,8 @@ pub trait ScanRuntime: Send + Sync {
         managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
     ) -> Result<ScanRuntimeReport, ScanRuntimeError>;
 
-    /// Execute one provider-specific targeted show scan.
+    /// Execute one provider-specific targeted show scan. Managed callers forward
+    /// the exact acquired claim; absent claims grant no managed write authority.
     async fn scan_show(
         &self,
         provider: MediaSourceKind,
@@ -338,6 +339,7 @@ pub trait ScanRuntime: Send + Sync {
         show_id: EntityId,
         deep_scan: bool,
         progress: &dyn ScanProgressSink,
+        managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
     ) -> Result<(), ScanRuntimeError>;
 
     /// Extract embedded subtitles after a successful eligible deep show scan.

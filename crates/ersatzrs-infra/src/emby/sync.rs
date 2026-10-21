@@ -55,6 +55,39 @@ pub async fn sync_emby_movie_library_with_progress<S>(
 where
     S: EmbyServiceTrait,
 {
+    sync_emby_movie_library_with_managed_claim(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_item_id,
+        deep_scan,
+        progress,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Retains existing provider scan arguments while forwarding managed leaf-write authority"
+)]
+async fn sync_emby_movie_library_with_managed_claim<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &EmbyConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> Result<usize>
+where
+    S: EmbyServiceTrait,
+{
     let mut synced = 0;
     let mut pages = PageProgress::new(EMBY_PAGE_SIZE);
     let mut present_item_ids = std::collections::HashSet::new();
@@ -98,6 +131,7 @@ where
                     library_item_id,
                     item,
                     &playback,
+                    managed_claim,
                 )
                 .await?;
                 synced += 1;
@@ -217,6 +251,39 @@ pub async fn sync_emby_show_library_with_progress<S>(
 where
     S: EmbyServiceTrait,
 {
+    sync_emby_show_library_with_managed_claim(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_item_id,
+        deep_scan,
+        progress,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Retains existing provider scan arguments while forwarding managed leaf-write authority"
+)]
+async fn sync_emby_show_library_with_managed_claim<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &EmbyConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> Result<usize>
+where
+    S: EmbyServiceTrait,
+{
     let mut synced = 0;
     let mut shows_completed: usize = 0;
     let mut pages = PageProgress::new(EMBY_PAGE_SIZE);
@@ -244,6 +311,7 @@ where
                 deep_scan,
                 &mut present_seasons,
                 &mut present_episodes,
+                managed_claim,
             )
             .await?;
             shows_completed += 1;
@@ -308,6 +376,7 @@ async fn sync_one_emby_show<S>(
     deep_scan: bool,
     present_seasons: &mut std::collections::HashSet<String>,
     present_episodes: &mut std::collections::HashSet<String>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<usize>
 where
     S: EmbyServiceTrait,
@@ -381,6 +450,7 @@ where
                         season_id,
                         episode,
                         &playback,
+                        managed_claim,
                     )
                     .await?;
                     synced += 1;
@@ -577,6 +647,20 @@ pub async fn sync_library_by_id_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    sync_library_by_id_with_managed_claim(pool, library_id, deep_scan, progress, None).await
+}
+
+/// Synchronize a library with its genuine managed scan claim.
+///
+/// # Errors
+/// Returns an error when configuration, provider requests, managed authority or writes fail.
+pub async fn sync_library_by_id_with_managed_claim(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
@@ -623,7 +707,7 @@ pub async fn sync_library_by_id_with_progress(
 
     let service = EmbyService::new();
     let synced = if kind == LibraryMediaKind::Shows {
-        sync_emby_show_library_with_progress(
+        sync_emby_show_library_with_managed_claim(
             pool,
             &service,
             &config,
@@ -632,10 +716,11 @@ pub async fn sync_library_by_id_with_progress(
             &parent_id,
             deep_scan,
             progress,
+            managed_claim,
         )
         .await
     } else {
-        sync_emby_movie_library_with_progress(
+        sync_emby_movie_library_with_managed_claim(
             pool,
             &service,
             &config,
@@ -644,6 +729,7 @@ pub async fn sync_library_by_id_with_progress(
             &parent_id,
             deep_scan,
             progress,
+            managed_claim,
         )
         .await
     }?;
@@ -673,6 +759,22 @@ pub async fn sync_emby_show_by_id(
     show_id: i64,
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
+    sync_emby_show_by_id_with_managed_claim(pool, library_id, show_id, deep_scan, progress, None)
+        .await
+}
+
+/// Synchronize one show with its genuine managed scan claim, without library cleanup.
+///
+/// # Errors
+/// Returns an error when configuration, provider requests, managed authority or writes fail.
+pub async fn sync_emby_show_by_id_with_managed_claim(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<usize> {
     let target = load_target_emby_show_scan(pool, library_id, show_id).await?;
     if !target.should_sync_items {
@@ -731,6 +833,7 @@ pub async fn sync_emby_show_by_id(
         deep_scan,
         &mut std::collections::HashSet::new(),
         &mut std::collections::HashSet::new(),
+        managed_claim,
     )
     .await?;
 

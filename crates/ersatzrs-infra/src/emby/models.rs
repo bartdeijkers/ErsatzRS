@@ -132,7 +132,10 @@ pub(super) struct EmbyMediaStreamResponse {
     pub(super) language: Option<String>,
     pub(super) height: Option<i32>,
     pub(super) width: Option<i32>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::media_server::deserialize_present_stream_index"
+    )]
     pub(super) index: Option<i32>,
     #[serde(default)]
     pub(super) is_default: bool,

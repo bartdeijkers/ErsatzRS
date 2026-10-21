@@ -1,4 +1,4 @@
-//! Report-only enrichment of an explicitly mapped Jellyfin source.
+//! Report-only enrichment of explicitly mapped provider sources.
 //!
 //! Provider indexes are declarations, not native identities. Only an exact
 //! selected path and complete embedded track match can bind a held acquisition.
@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use ersatzrs_core::path_replacement::replace_path;
 use ersatzrs_core::repositories::{
-    ManagedLibraryOperationClaim, ProviderMediaSourceDeclaration, RepositoryError, Result,
+    ManagedLibraryOperationClaim, ProviderMediaSourceDeclaration, RemoteMediaSourceKind,
+    RepositoryError, Result,
 };
 use ersatzrs_domain::{MediaSourceKind, MediaStream, MediaStreamKind};
 use sqlx::Transaction;
@@ -19,10 +20,47 @@ use crate::ffprobe::{FfprobeError, FfprobeExtractor, LocalTeletextAcquisition};
 use crate::repositories::{claim_is_current, SqlxResultExt as _};
 use crate::teletext_source::{self, SourceTeletextParents};
 
+/// Trusted adapter kind plus the current configured source row, not a provider ID.
+#[derive(Clone, Copy)]
+pub(crate) struct MappedTeletextSource {
+    pub provider: RemoteMediaSourceKind,
+    pub id: i64,
+}
+
+impl MappedTeletextSource {
+    fn domain_kind(self) -> MediaSourceKind {
+        match self.provider {
+            RemoteMediaSourceKind::Jellyfin => MediaSourceKind::Jellyfin,
+            RemoteMediaSourceKind::Emby => MediaSourceKind::Emby,
+            RemoteMediaSourceKind::Plex => MediaSourceKind::Plex,
+        }
+    }
+
+    fn parent_tables(self) -> (&'static str, &'static str) {
+        match self.provider {
+            RemoteMediaSourceKind::Jellyfin => ("JellyfinLibrary", "JellyfinMediaSource"),
+            RemoteMediaSourceKind::Emby => ("EmbyLibrary", "EmbyMediaSource"),
+            RemoteMediaSourceKind::Plex => ("PlexLibrary", "PlexMediaSource"),
+        }
+    }
+
+    fn path_tables(self) -> (&'static str, &'static str, &'static str) {
+        match self.provider {
+            RemoteMediaSourceKind::Jellyfin => (
+                "JellyfinPathReplacement",
+                "JellyfinPath",
+                "JellyfinMediaSourceId",
+            ),
+            RemoteMediaSourceKind::Emby => ("EmbyPathReplacement", "EmbyPath", "EmbyMediaSourceId"),
+            RemoteMediaSourceKind::Plex => ("PlexPathReplacement", "PlexPath", "PlexMediaSourceId"),
+        }
+    }
+}
+
 /// Lives through the ordinary leaf transaction and its final source/lease check.
 pub(crate) struct MappedTeletextWrite {
     claim: Option<ManagedLibraryOperationClaim>,
-    source_id: i64,
+    source: MappedTeletextSource,
     provider_path: String,
     local_path: Option<PathBuf>,
     acquisition: Option<Arc<LocalTeletextAcquisition>>,
@@ -33,7 +71,7 @@ impl MappedTeletextWrite {
     pub(crate) async fn acquire(
         pool: &DbPool,
         claim: Option<&ManagedLibraryOperationClaim>,
-        source_id: i64,
+        source: MappedTeletextSource,
         library_id: i64,
         item_path: &str,
         declaration: Option<&ProviderMediaSourceDeclaration>,
@@ -41,7 +79,7 @@ impl MappedTeletextWrite {
     ) -> Result<Self> {
         let mut write = Self {
             claim: claim.cloned(),
-            source_id,
+            source,
             provider_path: item_path.to_owned(),
             local_path: None,
             acquisition: None,
@@ -62,7 +100,7 @@ impl MappedTeletextWrite {
         }) else {
             return Ok(write);
         };
-        let resolved = resolve(pool, source_id, &declaration.path).await?;
+        let resolved = resolve(pool, source, &declaration.path).await?;
         let path = PathBuf::from(resolved);
         // A physical regular file is qualified by the owned native acquisition,
         // never by provider JSON, an availability flag or a mapped path alone.
@@ -88,28 +126,31 @@ impl MappedTeletextWrite {
         let Some(claim) = &self.claim else {
             return Ok(());
         };
-        let matches: bool = sqlx::query_scalar(
+        let (library_table, source_table) = self.source.parent_tables();
+        // Identifiers come exclusively from the closed adapter enum above.
+        let sql = format!(
             r#"SELECT EXISTS(SELECT 1 FROM "Library" l
-               JOIN "JellyfinLibrary" jl ON jl."Id"=l."Id"
-               JOIN "JellyfinMediaSource" s ON s."Id"=l."MediaSourceId"
+               JOIN "{library_table}" provider_library ON provider_library."Id"=l."Id"
+               JOIN "{source_table}" provider_source ON provider_source."Id"=l."MediaSourceId"
                JOIN "ManagedLibraryLease" lease ON lease."LibraryId"=l."Id"
                WHERE l."Id"=? AND l."Id"=? AND l."MediaSourceId"=?
                  AND lease."OperationId"=? AND lease."OwnerToken"=? AND lease."LeaseOwner"=?)"#,
-        )
-        .bind(library_id)
-        .bind(claim.operation.library_id)
-        .bind(self.source_id)
-        .bind(
-            claim
-                .operation
-                .parent_operation_id
-                .unwrap_or(claim.operation.id),
-        )
-        .bind(&claim.operation.owner_token)
-        .bind(&claim.lease_owner)
-        .fetch_one(&mut **tx)
-        .await
-        .repository()?;
+        );
+        let matches: bool = sqlx::query_scalar(crate::db::assert_sql_safe(&sql))
+            .bind(library_id)
+            .bind(claim.operation.library_id)
+            .bind(self.source.id)
+            .bind(
+                claim
+                    .operation
+                    .parent_operation_id
+                    .unwrap_or(claim.operation.id),
+            )
+            .bind(&claim.operation.owner_token)
+            .bind(&claim.lease_owner)
+            .fetch_one(&mut **tx)
+            .await
+            .repository()?;
         if !matches || !claim_is_current(tx, claim).await? {
             return Err(conflict("mapped source scan claim is no longer current"));
         }
@@ -131,8 +172,7 @@ impl MappedTeletextWrite {
         let (Some(path), Some(acquisition)) = (&self.local_path, &self.acquisition) else {
             return Ok(false);
         };
-        if resolve(&mut **tx, self.source_id, &self.provider_path).await? != path.to_string_lossy()
-        {
+        if resolve(&mut **tx, self.source, &self.provider_path).await? != path.to_string_lossy() {
             return Ok(false);
         }
         match acquisition.is_current_owned(path).await {
@@ -155,10 +195,12 @@ impl MappedTeletextWrite {
             return Ok(());
         };
         if !self.source_current(tx).await? {
-            return Ok(()); // Before any report write, ordinary metadata may commit.
+            // Optional source failure may preserve ordinary metadata, but the
+            // owned verification above must not outlive its write authority.
+            return self.check_claim(tx, library_id).await;
         }
         let TeletextProbeSnapshot::Available(streams) = acquisition.snapshot() else {
-            return Ok(());
+            return self.check_claim(tx, library_id).await;
         };
         for stream in streams {
             let rows: Vec<(i64, i64)> = sqlx::query_as(
@@ -185,8 +227,8 @@ impl MappedTeletextWrite {
                 media_file_id: *file_id,
             };
             let observation = teletext_source::acquired_observation(
-                self.source_id,
-                MediaSourceKind::Jellyfin,
+                self.source.id,
+                self.source.domain_kind(),
                 parents,
                 acquisition,
                 stream,
@@ -241,19 +283,15 @@ fn is_teletext(stream: &MediaStream) -> bool {
         && stream.codec.as_deref() == Some("dvb_teletext")
 }
 
-async fn resolve<'e, E>(executor: E, source_id: i64, path: &str) -> Result<String>
+async fn resolve<'e, E>(executor: E, source: MappedTeletextSource, path: &str) -> Result<String>
 where
     E: sqlx::Executor<'e, Database = Db>,
 {
-    let replacements = super::load_path_replacements_from(
-        executor,
-        "JellyfinPathReplacement",
-        "JellyfinPath",
-        "JellyfinMediaSourceId",
-        source_id,
-    )
-    .await
-    .repository()?;
+    let (table, path_column, source_column) = source.path_tables();
+    let replacements =
+        super::load_path_replacements_from(executor, table, path_column, source_column, source.id)
+            .await
+            .repository()?;
     Ok(replace_path(&replacements, path, super::HOST_PLATFORM))
 }
 

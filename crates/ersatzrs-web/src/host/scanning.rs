@@ -173,11 +173,12 @@ impl ScanRuntime for NativeScanRuntime {
         managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
     ) -> Result<ScanRuntimeReport, ScanRuntimeError> {
         match provider {
-            MediaSourceKind::Plex => ersatzrs_infra::plex::sync_library_by_id_with_progress(
+            MediaSourceKind::Plex => ersatzrs_infra::plex::sync_library_by_id_with_managed_claim(
                 &self.pool,
                 library_id,
                 deep_scan,
                 Some(progress),
+                managed_claim,
             )
             .await
             .map(|_| ScanRuntimeReport::default())
@@ -194,11 +195,12 @@ impl ScanRuntime for NativeScanRuntime {
                 .map(|_| ScanRuntimeReport::default())
                 .map_err(scan_error)
             }
-            MediaSourceKind::Emby => ersatzrs_infra::emby::sync_library_by_id_with_progress(
+            MediaSourceKind::Emby => ersatzrs_infra::emby::sync_library_by_id_with_managed_claim(
                 &self.pool,
                 library_id,
                 deep_scan,
                 Some(progress),
+                managed_claim,
             )
             .await
             .map(|_| ScanRuntimeReport::default())
@@ -266,34 +268,40 @@ impl ScanRuntime for NativeScanRuntime {
         show_id: EntityId,
         deep_scan: bool,
         progress: &dyn ScanProgressSink,
+        managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
     ) -> Result<(), ScanRuntimeError> {
         match provider {
-            MediaSourceKind::Plex => ersatzrs_infra::plex::sync_plex_show_by_id(
+            MediaSourceKind::Plex => ersatzrs_infra::plex::sync_plex_show_by_id_with_managed_claim(
                 &self.pool,
                 library_id,
                 show_id,
                 deep_scan,
                 Some(progress),
+                managed_claim,
             )
             .await
             .map(|_| ())
             .map_err(scan_error),
-            MediaSourceKind::Jellyfin => ersatzrs_infra::jellyfin::sync_jellyfin_show_by_id(
+            MediaSourceKind::Jellyfin => {
+                ersatzrs_infra::jellyfin::sync_jellyfin_show_by_id_with_managed_claim(
+                    &self.pool,
+                    library_id,
+                    show_id,
+                    deep_scan,
+                    Some(progress),
+                    managed_claim,
+                )
+                .await
+                .map(|_| ())
+                .map_err(scan_error)
+            }
+            MediaSourceKind::Emby => ersatzrs_infra::emby::sync_emby_show_by_id_with_managed_claim(
                 &self.pool,
                 library_id,
                 show_id,
                 deep_scan,
                 Some(progress),
-            )
-            .await
-            .map(|_| ())
-            .map_err(scan_error),
-            MediaSourceKind::Emby => ersatzrs_infra::emby::sync_emby_show_by_id(
-                &self.pool,
-                library_id,
-                show_id,
-                deep_scan,
-                Some(progress),
+                managed_claim,
             )
             .await
             .map(|_| ())

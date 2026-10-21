@@ -12,7 +12,10 @@ pub(super) async fn upsert_jellyfin_movie(
     let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
         pool,
         claim,
-        media_source_id,
+        crate::media_server::teletext::MappedTeletextSource {
+            provider: ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+            id: media_source_id,
+        },
         library_id,
         &item.path,
         playback.source_declaration.as_ref(),
@@ -94,7 +97,10 @@ pub(super) async fn upsert_jellyfin_episode(
     let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
         pool,
         claim,
-        media_source_id,
+        crate::media_server::teletext::MappedTeletextSource {
+            provider: ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+            id: media_source_id,
+        },
         library_id,
         &item.path,
         playback.source_declaration.as_ref(),

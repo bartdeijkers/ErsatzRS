@@ -3,7 +3,7 @@ use crate::repositories::common::decode_enum_column;
 use crate::repositories::common::upsert_sql;
 use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, TimeZone, Utc};
-use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_core::repositories::{ManagedLibraryOperationClaim, RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
 use reqwest::{
     header::{HeaderValue, ACCEPT},
@@ -911,6 +911,37 @@ pub async fn sync_plex_movie_library_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    sync_plex_movie_library_with_managed_claim(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_key,
+        deep_scan,
+        progress,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    reason = "Preserves the provider scan context and progress while forwarding managed leaf-write authority"
+)]
+async fn sync_plex_movie_library_with_managed_claim(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
+) -> Result<usize> {
     let mut synced = 0;
     let mut start_index = 0;
     let mut present_item_ids = std::collections::HashSet::new();
@@ -948,9 +979,16 @@ pub async fn sync_plex_movie_library_with_progress(
                 .await
                 .repository()?
             } else {
-                let item_id =
-                    upsert_plex_movie(pool, config, media_source_id, library_id, library_key, item)
-                        .await?;
+                let item_id = upsert_plex_movie(
+                    pool,
+                    config,
+                    media_source_id,
+                    library_id,
+                    library_key,
+                    item,
+                    managed_claim,
+                )
+                .await?;
                 synced += 1;
                 Some(item_id)
             };
@@ -1087,6 +1125,37 @@ pub async fn sync_plex_other_video_library_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    sync_plex_other_video_library_with_managed_claim(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_key,
+        deep_scan,
+        progress,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    reason = "Preserves the provider scan context and progress while forwarding managed leaf-write authority"
+)]
+async fn sync_plex_other_video_library_with_managed_claim(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
+) -> Result<usize> {
     // Resolve once before publication; failure must not erase existing tags.
     let libraries = tokio::time::timeout(
         std::time::Duration::from_secs(10),
@@ -1155,6 +1224,7 @@ pub async fn sync_plex_other_video_library_with_progress(
                         library_id,
                         library_key,
                         item,
+                        managed_claim,
                     )
                     .await?,
                 )
@@ -1271,6 +1341,37 @@ pub async fn sync_plex_show_library_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    sync_plex_show_library_with_managed_claim(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_key,
+        deep_scan,
+        progress,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    reason = "Preserves the provider scan context and progress while forwarding managed leaf-write authority"
+)]
+async fn sync_plex_show_library_with_managed_claim(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
+) -> Result<usize> {
     let mut synced = 0;
     let mut shows_completed: usize = 0;
     let mut show_start_index = 0;
@@ -1300,6 +1401,7 @@ pub async fn sync_plex_show_library_with_progress(
                 deep_scan,
                 &mut present_seasons,
                 &mut present_episodes,
+                managed_claim,
             )
             .await?;
             shows_completed += 1;
@@ -1371,6 +1473,7 @@ async fn sync_one_plex_show(
     deep_scan: bool,
     present_seasons: &mut std::collections::HashSet<String>,
     present_episodes: &mut std::collections::HashSet<String>,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
 ) -> Result<usize> {
     // Ports the body of
     // `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexTelevisionLibraryScanner.cs::ScanSingleShowInternal`.
@@ -1434,6 +1537,7 @@ async fn sync_one_plex_show(
                         season_id,
                         episode,
                         config,
+                        managed_claim,
                     )
                     .await?;
                     synced += 1;
@@ -1596,8 +1700,23 @@ async fn upsert_plex_movie(
     library_id: i64,
     library_key: &str,
     item: &PlexMediaItem,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
 ) -> Result<i64> {
+    let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
+        pool,
+        managed_claim,
+        crate::media_server::teletext::MappedTeletextSource {
+            provider: ersatzrs_core::repositories::RemoteMediaSourceKind::Plex,
+            id: media_source_id,
+        },
+        library_id,
+        &item.path,
+        item.source_declaration.as_ref(),
+        &item.streams,
+    )
+    .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    teletext.check_claim(&mut tx, library_id).await?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1614,6 +1733,8 @@ async fn upsert_plex_movie(
         &streams,
     )
     .await?;
+    teletext.persist(&mut tx, library_id, version_id).await?;
+    teletext.check_claim(&mut tx, library_id).await?;
     tx.commit().await.repository()?;
     Ok(item_id)
 }
@@ -1625,8 +1746,23 @@ async fn upsert_plex_other_video(
     library_id: i64,
     library_key: &str,
     item: &PlexMediaItem,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
 ) -> Result<i64> {
+    let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
+        pool,
+        managed_claim,
+        crate::media_server::teletext::MappedTeletextSource {
+            provider: ersatzrs_core::repositories::RemoteMediaSourceKind::Plex,
+            id: media_source_id,
+        },
+        library_id,
+        &item.path,
+        item.source_declaration.as_ref(),
+        &item.streams,
+    )
+    .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    teletext.check_claim(&mut tx, library_id).await?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1653,6 +1789,8 @@ async fn upsert_plex_other_video(
         &streams,
     )
     .await?;
+    teletext.persist(&mut tx, library_id, version_id).await?;
+    teletext.check_claim(&mut tx, library_id).await?;
     tx.commit().await.repository()?;
     Ok(item_id)
 }
@@ -1708,6 +1846,10 @@ async fn upsert_plex_season(
     Ok(id)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Retains the exact episode source/version context and managed leaf-write claim"
+)]
 async fn upsert_plex_episode(
     pool: &DbPool,
     media_source_id: i64,
@@ -1716,8 +1858,23 @@ async fn upsert_plex_episode(
     season_id: i64,
     item: &PlexMediaItem,
     config: &PlexConnectionConfig,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
 ) -> Result<()> {
+    let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
+        pool,
+        managed_claim,
+        crate::media_server::teletext::MappedTeletextSource {
+            provider: ersatzrs_core::repositories::RemoteMediaSourceKind::Plex,
+            id: media_source_id,
+        },
+        library_id,
+        &item.path,
+        item.source_declaration.as_ref(),
+        &item.streams,
+    )
+    .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    teletext.check_claim(&mut tx, library_id).await?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1732,6 +1889,8 @@ async fn upsert_plex_episode(
     // (ErsatzTV.Scanner/Core/Metadata/MediaServerTelevisionLibraryScanner.cs:832):
     // Plex subtitle streams are diffed into Subtitle rows after stream writes.
     crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &streams).await?;
+    teletext.persist(&mut tx, library_id, version_id).await?;
+    teletext.check_claim(&mut tx, library_id).await?;
     tx.commit().await.repository()?;
     Ok(())
 }
@@ -3155,6 +3314,29 @@ pub async fn sync_library_by_id_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    sync_library_by_id_with_managed_claim(pool, library_id, deep_scan, progress, None).await
+}
+
+/// Synchronize one Plex library with its managed leaf-write authority.
+///
+/// Movie, episode and Other Video reports use the existing selected provider
+/// source. Etag skips and collection/network synchronization remain unchanged.
+///
+/// # Errors
+///
+/// Returns an error when configuration, provider requests, managed authority or
+/// database writes fail.
+#[allow(
+    clippy::too_many_lines,
+    reason = "Preserves the existing provider-kind dispatch and connection loading"
+)]
+pub async fn sync_library_by_id_with_managed_claim(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l
@@ -3213,7 +3395,7 @@ pub async fn sync_library_by_id_with_progress(
     let service = PlexService::new();
     let synced = match kind {
         2 => {
-            let synced = sync_plex_show_library_with_progress(
+            let synced = sync_plex_show_library_with_managed_claim(
                 pool,
                 &service,
                 &config,
@@ -3222,13 +3404,14 @@ pub async fn sync_library_by_id_with_progress(
                 &library_key,
                 deep_scan,
                 progress,
+                managed_claim,
             )
             .await?;
             sync_plex_networks(pool, &service, &config, library_id).await?;
             Ok(synced)
         }
         1 => {
-            sync_plex_movie_library_with_progress(
+            sync_plex_movie_library_with_managed_claim(
                 pool,
                 &service,
                 &config,
@@ -3237,11 +3420,12 @@ pub async fn sync_library_by_id_with_progress(
                 &library_key,
                 deep_scan,
                 progress,
+                managed_claim,
             )
             .await
         }
         4 => {
-            sync_plex_other_video_library_with_progress(
+            sync_plex_other_video_library_with_managed_claim(
                 pool,
                 &service,
                 &config,
@@ -3250,6 +3434,7 @@ pub async fn sync_library_by_id_with_progress(
                 &library_key,
                 deep_scan,
                 progress,
+                managed_claim,
             )
             .await
         }
@@ -3290,6 +3475,24 @@ pub async fn sync_plex_show_by_id(
     show_id: i64,
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
+    sync_plex_show_by_id_with_managed_claim(pool, library_id, show_id, deep_scan, progress, None)
+        .await
+}
+
+/// Synchronize a targeted Plex show while forwarding its managed scan claim.
+///
+/// # Errors
+///
+/// Returns an error when show lookup, provider requests, managed authority or
+/// database writes fail.
+pub async fn sync_plex_show_by_id_with_managed_claim(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
 ) -> Result<usize> {
     let target = load_target_plex_show_scan(pool, library_id, show_id).await?;
     if plex_source_is_missing(pool, target.media_source_id).await? {
@@ -3348,6 +3551,7 @@ pub async fn sync_plex_show_by_id(
         deep_scan,
         &mut std::collections::HashSet::new(),
         &mut std::collections::HashSet::new(),
+        managed_claim,
     )
     .await?;
 

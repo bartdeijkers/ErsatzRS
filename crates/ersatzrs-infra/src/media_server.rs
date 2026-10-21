@@ -25,6 +25,18 @@ use crate::db::{assert_sql_safe, DbPool};
 pub(crate) mod jellyfin_emby;
 pub(crate) mod teletext;
 
+/// Preserve a provider integer's presence without accepting an explicit null.
+/// Missing fields use the surrounding field's default; supplied values retain
+/// the ordinary required-i32 deserialization contract.
+pub(crate) fn deserialize_present_stream_index<'de, D>(
+    deserializer: D,
+) -> Result<Option<i32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    <i32 as serde::Deserialize<'de>>::deserialize(deserializer).map(Some)
+}
+
 /// State values mirroring `ErsatzTV.Core.Domain.MediaItemState`.
 pub(crate) const STATE_NORMAL: i64 = 0;
 pub(crate) const STATE_FILE_NOT_FOUND: i64 = 1;

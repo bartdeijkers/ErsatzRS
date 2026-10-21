@@ -511,6 +511,23 @@ pub async fn sync_jellyfin_show_by_id(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    sync_jellyfin_show_by_id_with_managed_claim(
+        pool, library_id, show_id, deep_scan, progress, None,
+    )
+    .await
+}
+
+/// Targeted show scan retaining the actual acquired managed-library claim.
+/// # Errors
+/// Returns provider, current-claim or atomic persistence failures.
+pub async fn sync_jellyfin_show_by_id_with_managed_claim(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> Result<usize> {
     let target = load_target_jellyfin_show_scan(pool, library_id, show_id).await?;
     if !target.should_sync_items {
         tracing::warn!(
@@ -568,7 +585,7 @@ pub async fn sync_jellyfin_show_by_id(
         deep_scan,
         &mut std::collections::HashSet::new(),
         &mut std::collections::HashSet::new(),
-        None,
+        managed_claim,
     )
     .await?;
 

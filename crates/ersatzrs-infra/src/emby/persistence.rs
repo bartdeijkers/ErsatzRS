@@ -7,8 +7,23 @@ pub(super) async fn upsert_emby_movie(
     library_item_id: &str,
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
+    claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<i64> {
+    let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
+        pool,
+        claim,
+        crate::media_server::teletext::MappedTeletextSource {
+            provider: ersatzrs_core::repositories::RemoteMediaSourceKind::Emby,
+            id: media_source_id,
+        },
+        library_id,
+        &item.path,
+        playback.source_declaration.as_ref(),
+        &playback.streams,
+    )
+    .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    teletext.check_claim(&mut tx, library_id).await?;
     ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
@@ -25,6 +40,7 @@ pub(super) async fn upsert_emby_movie(
     )
     .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
+    teletext.persist(&mut tx, library_id, version_id).await?;
     tx.commit().await.repository()?;
     Ok(item_id)
 }
@@ -64,6 +80,10 @@ pub(super) async fn upsert_emby_season(
     Ok(id)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Retains provider leaf context and its genuine managed scan claim"
+)]
 pub(super) async fn upsert_emby_episode(
     pool: &DbPool,
     media_source_id: i64,
@@ -72,8 +92,23 @@ pub(super) async fn upsert_emby_episode(
     season_id: i64,
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
+    claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<()> {
+    let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
+        pool,
+        claim,
+        crate::media_server::teletext::MappedTeletextSource {
+            provider: ersatzrs_core::repositories::RemoteMediaSourceKind::Emby,
+            id: media_source_id,
+        },
+        library_id,
+        &item.path,
+        playback.source_declaration.as_ref(),
+        &playback.streams,
+    )
+    .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    teletext.check_claim(&mut tx, library_id).await?;
     ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
@@ -89,6 +124,7 @@ pub(super) async fn upsert_emby_episode(
     crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &playback.streams)
         .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
+    teletext.persist(&mut tx, library_id, version_id).await?;
     tx.commit().await.repository()?;
     Ok(())
 }

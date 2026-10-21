@@ -4780,7 +4780,14 @@ async fn execute_scan_work_with_runtime_and_claim(
             deep_scan,
         } => {
             let result = runtime
-                .scan_show(provider, library_id, show_id, deep_scan, &progress)
+                .scan_show(
+                    provider,
+                    library_id,
+                    show_id,
+                    deep_scan,
+                    &progress,
+                    managed_claim,
+                )
                 .await;
             match result {
                 Ok(()) if deep_scan => runtime
@@ -4949,7 +4956,12 @@ mod scan_execution_tests {
             show_id: EntityId,
             deep_scan: bool,
             progress: &dyn ScanProgressSink,
+            managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
         ) -> Result<(), ScanRuntimeError> {
+            self.claims
+                .lock()
+                .expect("claims")
+                .push(managed_claim.cloned());
             self.calls.lock().expect("calls").push(format!(
                 "show:{provider:?}:{library_id}:{show_id}:{deep_scan}"
             ));
@@ -5009,9 +5021,17 @@ mod scan_execution_tests {
             show_id: EntityId,
             deep_scan: bool,
             progress: &dyn ScanProgressSink,
+            managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
         ) -> Result<(), ScanRuntimeError> {
             self.inner
-                .scan_show(provider, library_id, show_id, deep_scan, progress)
+                .scan_show(
+                    provider,
+                    library_id,
+                    show_id,
+                    deep_scan,
+                    progress,
+                    managed_claim,
+                )
                 .await
         }
 
@@ -5090,39 +5110,80 @@ mod scan_execution_tests {
             lease_owner: "actual-acquired-lease-owner".to_owned(),
         };
         let unchanged = claim.clone();
+        let mut show_claim = claim.clone();
+        show_claim.operation.scan = Some(ManagedLibraryScanSpec {
+            provider: MediaSourceKind::Jellyfin,
+            show_id: Some(81),
+            deep_scan: true,
+        });
+        let unchanged_show = show_claim.clone();
         let runtime = FakeRuntime::default();
         let queue = RecordingPlayoutQueue::default();
-        for managed in [true, false] {
-            let operations = coordinator();
-            let work = admitted(
-                &operations,
+        for (acquired, request) in [
+            (
+                &claim,
                 ScanRequest::Library {
                     provider: MediaSourceKind::Local,
                     library_id: 71,
                     deep_scan: true,
                 },
-            );
-            let outcome = if managed {
-                super::execute_scan_work_with_runtime_and_claim(
-                    work,
-                    &runtime,
-                    &queue,
-                    &operations,
-                    Some(&claim),
-                )
-                .await
-            } else {
-                execute_scan_work_with_runtime(work, &runtime, &queue, &operations).await
-            };
-            assert_eq!(outcome, ExecuteScanOutcome::Completed);
+            ),
+            (
+                &show_claim,
+                ScanRequest::Show {
+                    provider: MediaSourceKind::Jellyfin,
+                    library_id: 71,
+                    show_id: 81,
+                    deep_scan: true,
+                },
+            ),
+        ] {
+            for managed in [true, false] {
+                let operations = coordinator();
+                let work = admitted(&operations, request);
+                let outcome = if managed {
+                    super::execute_scan_work_with_runtime_and_claim(
+                        work,
+                        &runtime,
+                        &queue,
+                        &operations,
+                        Some(acquired),
+                    )
+                    .await
+                } else {
+                    execute_scan_work_with_runtime(work, &runtime, &queue, &operations).await
+                };
+                assert_eq!(outcome, ExecuteScanOutcome::Completed);
+            }
         }
         assert_eq!(
             *runtime.claims.lock().expect("claims"),
-            vec![Some(unchanged.clone()), None]
+            vec![
+                Some(unchanged.clone()),
+                None,
+                Some(unchanged_show.clone()),
+                None
+            ]
+        );
+        assert_eq!(
+            *runtime.calls.lock().expect("calls"),
+            [
+                "library:Local:71:true",
+                "library:Local:71:true",
+                "show:Jellyfin:71:81:true",
+                "subtitles:81",
+                "show:Jellyfin:71:81:true",
+                "subtitles:81",
+            ],
+            "managed forwarding preserves targeted identity and post-scan subtitles"
         );
         assert_eq!(
             claim, unchanged,
             "execution must not reconstruct or mutate acquired authority"
+        );
+        assert_eq!(
+            show_claim, unchanged_show,
+            "targeted execution preserves the exact child/parent operation and lease authority"
         );
     }
 

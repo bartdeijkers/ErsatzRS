@@ -35,8 +35,10 @@ pub use persistence::{replace_emby_path_infos, sync_emby_libraries};
 pub use sync::{
     sync_collections_for_media_source, sync_emby_collection_library,
     sync_emby_collection_library_with_progress, sync_emby_movie_library,
-    sync_emby_movie_library_with_progress, sync_emby_show_by_id, sync_emby_show_library,
-    sync_emby_show_library_with_progress, sync_library_by_id, sync_library_by_id_with_options,
+    sync_emby_movie_library_with_progress, sync_emby_show_by_id,
+    sync_emby_show_by_id_with_managed_claim, sync_emby_show_library,
+    sync_emby_show_library_with_progress, sync_library_by_id,
+    sync_library_by_id_with_managed_claim, sync_library_by_id_with_options,
     sync_library_by_id_with_progress,
 };
 

@@ -97,14 +97,22 @@ async fn qualified_source(probe: &str, source: &Path) -> LocalMediaProbe {
 }
 
 async fn claim(pool: &SqlitePool) -> ersatzrs_core::repositories::ManagedLibraryOperationClaim {
+    claim_for(pool, MediaSourceKind::Jellyfin, None).await
+}
+
+async fn claim_for(
+    pool: &SqlitePool,
+    provider: MediaSourceKind,
+    show_id: Option<i64>,
+) -> ersatzrs_core::repositories::ManagedLibraryOperationClaim {
     let repository = SqliteManagedLibraryOperationRepository(pool.clone());
     let operation = repository
         .enqueue_scan(
             ManagedLibraryOperationKind::ManualScan,
             1,
             ManagedLibraryScanSpec {
-                provider: MediaSourceKind::Jellyfin,
-                show_id: None,
+                provider,
+                show_id,
                 deep_scan: true,
             },
             false,
@@ -165,7 +173,7 @@ async fn assert_ordinary_at(
     }
     let (path,state): (String,i64) = sqlx::query_as(
         r#"SELECT f."Path",i."State" FROM "MediaFile" f JOIN "MediaVersion" v ON v."Id"=f."MediaVersionId"
-           JOIN "Movie" m ON m."Id"=v."MovieId" JOIN "MediaItem" i ON i."Id"=m."Id""#,
+           JOIN "MediaItem" i ON i."Id"=COALESCE(v."MovieId",v."EpisodeId",v."OtherVideoId")"#,
     ).fetch_one(pool).await.unwrap();
     assert_eq!(path, fixture::PROVIDER_PATH);
     assert_eq!(state, 0, "mapped provider source must remain available");
@@ -203,15 +211,24 @@ async fn scan_and_close(
 }
 
 async fn assert_report(pool: &SqlitePool, source: &LocalMediaProbe, ids: (i64, i64, i64)) {
+    assert_report_for(pool, source, ids, MediaSourceKind::Jellyfin).await;
+}
+
+async fn assert_report_for(
+    pool: &SqlitePool,
+    source: &LocalMediaProbe,
+    ids: (i64, i64, i64),
+    provider: MediaSourceKind,
+) {
     let mut tx = pool.begin().await.unwrap();
     let report = teletext_source::load(&mut tx, ids.2, ids.0)
         .await
         .unwrap()
-        .expect("managed Jellyfin scan must persist its source-qualified teletext report");
+        .expect("managed provider scan must persist its source-qualified teletext report");
     let SourceTeletextBinding::Bound(binding) = report.binding else {
-        panic!("managed Jellyfin binding")
+        panic!("managed provider binding")
     };
-    assert_eq!(binding.provider, MediaSourceKind::Jellyfin);
+    assert_eq!(binding.provider, provider);
     assert_eq!(binding.media_source_id, 1);
     assert_eq!(
         (
@@ -402,3 +419,6 @@ async fn managed_jellyfin_scan_expired_lease_refuses_leaf_writes() {
     }
     pool.close().await;
 }
+
+#[path = "provider_teletext_scan/actions.rs"]
+mod actions;

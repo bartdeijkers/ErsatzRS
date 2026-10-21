@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'Level 2.5 fixture contracts verified by seven native regressions and strict target lint; finish full remote CI and existing runtime-adoption route'
+current_focus = 'Mapped-provider report/targeted-show component closed; correct exact-SHA browser failures and accepted Next timing/adoption gate'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Current CI correction boundary (2026-10-21): run39584827198 at exact1b95
+retains two red Rust teletext jobs and four Level1.5 Chromium failures (40pass,
+15not run). Native setup/Level2.5 fixture fixes are local0c8/bdab checkpoints;
+accepted Next.1 timing/language and browser database/form/Health assertions
+remain open. Other browser jobs continue. No full-CI claim or new known-red push.
+Canonical provider-scan/identity.json owns exact job logs and next corrections.
+
 Native teletext CI setup follow-up (2026-10-21): pushed1b95c864 proves real
 local Rust hits on both runners (8s), a real web hit and unchanged manifest
 restoration; producer, Test and Next engine now pass. Its1859 Level1.5 workspace
@@ -84,8 +91,9 @@ passes. The original 8192 refusal, exact and one-credit-short budgets, native
 models and publication lifecycle guards remain. Production meters, limits and
 export behavior are unchanged. Strict Clippy passes for the affected native
 integration target. The broader local all-target check hits two compile errors
-in the paused, uncommitted provider fixtures; those files remain untouched and
-are absent from the pushed revision. Full clean-SHA CI remains required.
+in then-uncommitted provider fixtures. The bounded provider checkpoint below
+repairs them and passes affected all-target lint; those changes remain absent
+from remote1b95. Full clean-SHA CI remains required.
 Canonical ci_level25_followup owns source/history, logs and remaining checks.
 Next: finish unaffected run39584827198 jobs and the existing X2/adoption route;
 the prepared two-macOS candidate-only workflow awaits explicit permission.
@@ -113,6 +121,15 @@ owns exact versions/logs. Strict affected all-target Clippy passes; finish stage
 commit the verified security repair. A corrected SHA needs its own full run; do not rerun
 the old SHA as proof of this fix. CI remains stopped while preparing the repair.
 
+Mapped-provider report/targeted-show component is completed. P9A-03 evidence
+and provider-scan/identity.json mapped_provider_actions own the six native and56
+compatibility passes, reused app12/input9, strict all-target lint and preserved
+source/track/lease/cleanup guards. Provider caption playback, remote-only source
+identity and readiness remain separate work; Local-only playback guards stay.
+Next correct retained1b95 browser fixture failures. Accepted Next.1 still fails
+caption outpoints and audio language; candidate.4 proof is not runtime adoption.
+The existing macOS candidate-only workflow awaits permission; no new push.
+
 P9A-03 mapped-Jellyfin movie report/rescan is completed. Canonical
 tmp/phase9-next-local-teletext/provider-scan/identity.json owns the original native
 no-report RED, three actual managed-library native passes,105 affected provider/
@@ -128,12 +145,10 @@ transport/F6 results remain valid in scope. The component was committed/pushed i
 security correction above. Verify all applicable jobs on the corrected exact SHA
 before calling it CI-green.
 
-Next complete the existing P9A-03 mapped-provider report action package: connect
-Emby/Plex declarations, forward genuine claims for targeted shows, and prove the
-remaining movie/episode leaves and refusals with existing tools. Native episode
-and provider playback remain unproven; remote-only sources still need genuine
-acquisition identity. Do not remove Local-only playback guards merely because
-reports now exist. F1 complete-set/dependency qualification found no new codec
+Mapped-provider report actions and targeted-show claim forwarding are closed
+within the component above. Provider caption decoding/playback and remote-only
+source correspondence still require implementation and proof. Keep Local-only
+playback guards until that separate accepted boundary is qualified. F1 complete-set/dependency qualification found no new codec
 loss; actual complete-bank/context editor work stays X3 upstream-wait. Do not
 compensate with new tiny editor variants. F1 steady-call/root undo and earlier
 platform completions remain closed. X1 defer/no DVBViewer/physical Kodi trial
