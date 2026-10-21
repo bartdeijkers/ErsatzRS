@@ -291,12 +291,13 @@ async fn callback_media(
     socket: &mut tokio::net::TcpStream,
     host: &host::NextHost,
     range: Option<&str>,
+    expected: Option<&str>,
 ) {
     use std::fmt::Write as _;
     use tokio::io::AsyncWriteExt as _;
     let response = host
         .media
-        .open(&host.pool, (10, 100, 1), range)
+        .open_bound(&host.pool, (10, 100, 1), range, expected)
         .await
         .unwrap();
     let status = response.status().as_u16();
@@ -343,7 +344,7 @@ async fn callback_connection(
                 let authorized = header(crate::next_engine::media::ACCESS_HEADER)
                     .is_some_and(|value| host.media.authorized(value));
                 if target == "/ffmpeg/next-media/10/100/1" && authorized {
-                    callback_media(&mut socket, &host, header("range")).await;
+                    callback_media(&mut socket, &host, header("range"), header(crate::next_engine::media::SOURCE_BINDING_HEADER)).await;
                     return;
                 }
                 if authorized && target.starts_with("/ffmpeg/next-prepared/") {

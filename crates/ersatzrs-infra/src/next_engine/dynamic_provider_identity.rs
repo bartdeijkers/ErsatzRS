@@ -8,9 +8,10 @@ use crate::db::DbPool;
 
 use super::{protocol::Source, schedule::ScheduledMedia, source::server_url};
 
-/// Return the configured server and provider item identity behind a selected file.
+/// Return the configured server, provider item and selected remote variant identity.
 ///
-/// Emby/Jellyfin addresses can change without updating scanned media revisions.
+/// Emby/Jellyfin addresses and selected variants can change without updating
+/// scanned media revisions.
 /// Plex endpoint failover instead verifies a stable machine identifier; changing
 /// an active URI on that same server must not invalidate a completed artifact.
 /// A resolved local file needs only its owning provider identity; its filesystem
@@ -30,7 +31,7 @@ pub(crate) async fn identity(
         _ => return Err(unavailable()),
     };
     let row = sqlx::query(
-        r#"SELECT l."MediaSourceId",
+        r#"SELECT l."MediaSourceId", f."ProviderMediaSourceId",
             EXISTS(SELECT 1 FROM "LocalLibrary" WHERE "Id"=l."Id") AS "Local",
             EXISTS(SELECT 1 FROM "PlexLibrary" WHERE "Id"=l."Id") AS "Plex",
             EXISTS(SELECT 1 FROM "JellyfinLibrary" WHERE "Id"=l."Id") AS "Jellyfin",
@@ -40,7 +41,7 @@ pub(crate) async fn identity(
         JOIN "MediaVersion" v ON v."Id"=? AND
             (v."MovieId"=m."Id" OR v."EpisodeId"=m."Id" OR v."MusicVideoId"=m."Id"
              OR v."OtherVideoId"=m."Id" OR v."SongId"=m."Id" OR v."ImageId"=m."Id")
-        JOIN "MediaFile" f ON f."MediaVersionId"=v."Id" AND f."Id"=? AND f."Path"=?
+        JOIN "MediaFile" f ON f."MediaVersionId"=v."Id" AND f."Id"=? AND f."Path"=? COLLATE BINARY
         WHERE m."Id"=?"#,
     )
     .bind(media.media_version_id)
@@ -79,7 +80,10 @@ pub(crate) async fn identity(
     } else {
         RemoteMediaSourceKind::Emby
     };
-    remote_identity(pool, source_id, media.item.media_item_id, kind).await
+    let selected: Option<String> = row
+        .try_get("ProviderMediaSourceId")
+        .map_err(|_| unavailable())?;
+    remote_identity(pool, source_id, media.item.media_item_id, kind, selected).await
 }
 
 async fn plex_identity(pool: &DbPool, source_id: i64, file_id: i64) -> Result<Value> {
@@ -106,6 +110,7 @@ async fn remote_identity(
     source_id: i64,
     item_id: i64,
     kind: RemoteMediaSourceKind,
+    selected: Option<String>,
 ) -> Result<Value> {
     let (address_sql, item_sql, name) = match kind {
         RemoteMediaSourceKind::Jellyfin => (
@@ -140,7 +145,20 @@ async fn remote_identity(
     if item.trim().is_empty() || matches!(item.as_str(), "." | "..") {
         return Err(unavailable());
     }
-    Ok(json!({ "kind": name, "source_id": source_id, "address": address, "item_id": item }))
+    let mut identity =
+        json!({ "kind": name, "source_id": source_id, "address": address, "item_id": item });
+    if let Some(selected) = selected {
+        if selected.trim().is_empty() {
+            return Err(unavailable());
+        }
+        // Private hashing input only. Retain the historical NULL binding shape;
+        // a real variant change must invalidate both publication and text cache.
+        identity
+            .as_object_mut()
+            .ok_or_else(unavailable)?
+            .insert("provider_media_source_id".into(), selected.into());
+    }
+    Ok(identity)
 }
 
 fn nonempty(value: Option<String>) -> Result<String> {

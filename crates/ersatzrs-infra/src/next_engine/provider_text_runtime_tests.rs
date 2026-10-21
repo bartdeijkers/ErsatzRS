@@ -333,6 +333,14 @@ async fn real_next_provider_embedded_text_converts_selected_language_with_seek_a
     for kind in RemoteMediaSourceKind::ALL {
         let server = fixture_media_server().await;
         let (pool, locker) = provider_text_pool(&clip, &profile, kind).await;
+        let selected = (kind != RemoteMediaSourceKind::Plex).then_some("native-selected-source");
+        if let Some(id) = selected {
+            sqlx::query(r#"UPDATE "MediaFile" SET "ProviderMediaSourceId"=? WHERE "Id"=1"#)
+                .bind(id)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
         let (path, header, value) = match kind {
             RemoteMediaSourceKind::Plex => {
                 ("/library/parts/11/file.mkv", "X-Plex-Token", "<token>")
@@ -348,9 +356,13 @@ async fn real_next_provider_embedded_text_converts_selected_language_with_seek_a
         };
         let mock = server
             .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
+                let when = when
+                    .method(httpmock::Method::GET)
                     .path(path)
                     .header(header, value);
+                if let Some(id) = selected {
+                    when.query_param("MediaSourceId", id);
+                }
                 let bytes = bytes.clone();
                 then.respond_with(move |request| fixture_range_response(request, &bytes));
             })

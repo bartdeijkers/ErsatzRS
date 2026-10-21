@@ -103,7 +103,22 @@ pub(super) async fn resolve_published(
         return with_persisted_hint(pool, media, local_source(path)).await;
     }
     if let Some(relay) = relay {
-        return with_persisted_hint(pool, media, relay.source(media)?).await;
+        let mut published = relay.source(media)?;
+        if kind != RemoteMediaSourceKind::Plex
+            && selected_provider_source(pool, media, source_id, kind)
+                .await?
+                .is_some()
+        {
+            let resolved = resolve_http(pool, media, source_id, kind, None).await?;
+            if let Source::Http { uri, .. } = resolved {
+                if Url::parse(&uri)
+                    .is_ok_and(|url| url.query_pairs().any(|(key, _)| key == "MediaSourceId"))
+                {
+                    published = relay.source_bound(media, &uri)?;
+                }
+            }
+        }
+        return with_persisted_hint(pool, media, published).await;
     }
     resolve_http(pool, media, source_id, kind, None).await
 }
@@ -187,7 +202,7 @@ pub(super) async fn resolve_http(
             )
             .await?;
             (
-                video_url(&config.address, &item)?,
+                selected_video_url(pool, media, source_id, kind, &config.address, &item).await?,
                 format!(
                     "Authorization: {}",
                     crate::jellyfin::format_jellyfin_auth_header(credential)
@@ -207,7 +222,7 @@ pub(super) async fn resolve_http(
             )
             .await?;
             (
-                video_url(&config.address, &item)?,
+                selected_video_url(pool, media, source_id, kind, &config.address, &item).await?,
                 format!("X-Emby-Token: {credential}"),
             )
         }
@@ -298,6 +313,67 @@ fn video_url(address: &str, item: &str) -> Result<Url> {
     Ok(url)
 }
 
+async fn selected_video_url(
+    pool: &DbPool,
+    media: &ScheduledMedia,
+    source_id: i64,
+    kind: RemoteMediaSourceKind,
+    address: &str,
+    item: &str,
+) -> Result<Url> {
+    let selected = selected_provider_source(pool, media, source_id, kind).await?;
+    let mut url = video_url(address, item)?;
+    if let Some(id) = selected {
+        url.query_pairs_mut().append_pair("MediaSourceId", &id);
+    }
+    // NULL retains ordinary legacy playback. It supplies no exact-source or
+    // caption-readiness authority for the separate finite acquisition adapter.
+    Ok(url)
+}
+
+async fn selected_provider_source(
+    pool: &DbPool,
+    media: &ScheduledMedia,
+    source_id: i64,
+    kind: RemoteMediaSourceKind,
+) -> Result<Option<String>> {
+    // The provider string identifies the selected media variant, not our
+    // integer server ID. Never borrow it from another file or library owner.
+    let selected: Option<Option<String>> = sqlx::query_scalar(
+        r#"SELECT f."ProviderMediaSourceId" FROM "MediaFile" f
+        JOIN "MediaVersion" v ON v."Id"=f."MediaVersionId"
+        JOIN "MediaItem" m ON m."Id"=?
+        JOIN "LibraryPath" p ON p."Id"=m."LibraryPathId"
+        JOIN "Library" l ON l."Id"=p."LibraryId"
+        WHERE f."Id"=? AND v."Id"=? AND f."Path"=? COLLATE BINARY
+          AND l."MediaSourceId"=?
+          AND (v."MovieId"=m."Id" OR v."EpisodeId"=m."Id")
+          AND ((? AND EXISTS(SELECT 1 FROM "JellyfinLibrary" WHERE "Id"=l."Id")
+                   AND EXISTS(SELECT 1 FROM "JellyfinMediaSource" WHERE "Id"=l."MediaSourceId"))
+            OR (? AND EXISTS(SELECT 1 FROM "EmbyLibrary" WHERE "Id"=l."Id")
+                   AND EXISTS(SELECT 1 FROM "EmbyMediaSource" WHERE "Id"=l."MediaSourceId")))
+          AND ((EXISTS(SELECT 1 FROM "LocalLibrary" WHERE "Id"=l."Id"))
+             + (EXISTS(SELECT 1 FROM "PlexLibrary" WHERE "Id"=l."Id"))
+             + (EXISTS(SELECT 1 FROM "JellyfinLibrary" WHERE "Id"=l."Id"))
+             + (EXISTS(SELECT 1 FROM "EmbyLibrary" WHERE "Id"=l."Id")))=1"#,
+    )
+    .bind(media.item.media_item_id)
+    .bind(media.media_file_id)
+    .bind(media.media_version_id)
+    .bind(&media.path)
+    .bind(source_id)
+    .bind(kind == RemoteMediaSourceKind::Jellyfin)
+    .bind(kind == RemoteMediaSourceKind::Emby)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    let selected = selected.ok_or_else(|| unavailable("selected provider file is unavailable"))?;
+    if selected.as_ref().is_some_and(|id| id.trim().is_empty()) {
+        return Err(unavailable("selected provider source is unavailable"));
+    }
+    Ok(selected)
+}
+
 fn local_source(path: String) -> Source {
     Source::Local {
         path,
@@ -326,3 +402,7 @@ fn unavailable(message: &'static str) -> RepositoryError {
 #[cfg(test)]
 #[path = "source_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "source_identity_tests.rs"]
+mod source_identity_tests;

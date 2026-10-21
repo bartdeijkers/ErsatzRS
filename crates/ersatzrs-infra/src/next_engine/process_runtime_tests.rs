@@ -774,6 +774,9 @@ async fn fixture_media_relay(
                     return httpmock::HttpMockResponse::builder().status(401).build();
                 }
                 let range = headers.get("range").map(|v| v.to_str().unwrap().to_owned());
+                let expected = headers
+                    .get(crate::next_engine::media::SOURCE_BINDING_HEADER)
+                    .map(|value| value.to_str().unwrap().to_owned());
                 let host = relay_host.clone();
                 let pool = pool.clone();
                 let runtime = runtime.clone();
@@ -783,7 +786,7 @@ async fn fixture_media_relay(
                     runtime.block_on(async move {
                         let response = host
                             .media
-                            .open(&pool, (10, 100, 1), range.as_deref())
+                            .open_bound(&pool, (10, 100, 1), range.as_deref(), expected.as_deref())
                             .await
                             .unwrap();
                         let mut builder = httpmock::HttpMockResponse::builder()

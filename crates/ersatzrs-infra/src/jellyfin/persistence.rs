@@ -31,7 +31,15 @@ pub(super) async fn upsert_jellyfin_movie(
     let movie_metadata_id = upsert_movie_metadata(&mut tx, item_id, item).await?;
     let version_id =
         ensure_media_version(&mut tx, VersionOwner::Movie(item_id), item, playback).await?;
-    ensure_media_file(&mut tx, version_id, &item.path).await?;
+    ensure_media_file(
+        &mut tx,
+        VersionOwner::Movie(item_id),
+        version_id,
+        &item.path,
+        playback.source_declaration.as_ref(),
+        &playback.streams,
+    )
+    .await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
     crate::metadata::update_metadata_subtitles(
         &mut tx,
@@ -116,7 +124,15 @@ pub(super) async fn upsert_jellyfin_episode(
     let episode_metadata_id = upsert_episode_metadata(&mut tx, item_id, item).await?;
     let version_id =
         ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item, playback).await?;
-    ensure_media_file(&mut tx, version_id, &item.path).await?;
+    ensure_media_file(
+        &mut tx,
+        VersionOwner::Episode(item_id),
+        version_id,
+        &item.path,
+        playback.source_declaration.as_ref(),
+        &playback.streams,
+    )
+    .await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
     // Port of MediaServerTelevisionLibraryScanner.UpdateSubtitles
     // (ErsatzTV.Scanner/Core/Metadata/MediaServerTelevisionLibraryScanner.cs:832):

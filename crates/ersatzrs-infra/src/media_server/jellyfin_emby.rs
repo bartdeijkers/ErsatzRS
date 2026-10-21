@@ -5,7 +5,7 @@
 //! pagination contracts that are identical for both adapters.
 
 use chrono::{DateTime, Duration, Utc};
-use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_core::repositories::{ProviderMediaSourceDeclaration, RepositoryError, Result};
 use ersatzrs_domain::{
     DolbyVisionMetadataState, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink,
     VideoScanKind,
@@ -13,7 +13,6 @@ use ersatzrs_domain::{
 use sqlx::{Row, Transaction};
 
 use crate::db::DbPool;
-use crate::repositories::common::upsert_sql;
 use crate::repositories::SqlxResultExt as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -228,6 +227,20 @@ pub(crate) fn path_hash(path: &str) -> String {
     hash
 }
 
+fn provider_media_file_hash(version_id: i64, path: &str) -> String {
+    use sha2::{Digest as _, Sha256};
+    let mut digest = Sha256::new();
+    digest.update(b"ersatzrs:provider-media-file:v1\0");
+    digest.update(version_id.to_le_bytes());
+    digest.update(path.as_bytes());
+    let mut hash = String::with_capacity(64);
+    for byte in digest.finalize() {
+        use std::fmt::Write as _;
+        write!(hash, "{byte:02x}").expect("writing to String should not fail");
+    }
+    hash
+}
+
 pub(crate) trait VersionMediaItem {
     fn date_created(&self) -> DateTime<Utc>;
 }
@@ -331,22 +344,115 @@ where
 
 pub(crate) async fn ensure_media_file(
     tx: &mut Transaction<'_, crate::db::Db>,
+    owner: VersionOwner,
     version_id: i64,
     path: &str,
+    declaration: Option<&ProviderMediaSourceDeclaration>,
+    streams: &[MediaStream],
 ) -> Result<()> {
-    sqlx::query(upsert_sql!(
-        r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
-           VALUES (?, ?, ?)"#,
-        &[&["PathHash"]],
-    ))
-    .bind(version_id)
-    .bind(path)
-    .bind(path_hash(path))
-    .execute(&mut **tx)
-    .await
-    .repository()?;
+    let (query, item_id) = match owner {
+        VersionOwner::Movie(id) => (
+            r#"SELECT EXISTS(SELECT 1 FROM "MediaVersion" WHERE "Id"=? AND "MovieId"=?
+               AND "EpisodeId" IS NULL AND "MusicVideoId" IS NULL AND "OtherVideoId" IS NULL
+               AND "SongId" IS NULL AND "ImageId" IS NULL AND "RemoteStreamId" IS NULL)"#,
+            id,
+        ),
+        VersionOwner::Episode(id) => (
+            r#"SELECT EXISTS(SELECT 1 FROM "MediaVersion" WHERE "Id"=? AND "EpisodeId"=?
+               AND "MovieId" IS NULL AND "MusicVideoId" IS NULL AND "OtherVideoId" IS NULL
+               AND "SongId" IS NULL AND "ImageId" IS NULL AND "RemoteStreamId" IS NULL)"#,
+            id,
+        ),
+    };
+    let current: bool = sqlx::query_scalar(query)
+        .bind(version_id)
+        .bind(item_id)
+        .fetch_one(&mut **tx)
+        .await
+        .repository()?;
+    if !current {
+        return Err(RepositoryError::Conflict(
+            "provider media file version ownership changed".to_owned(),
+        ));
+    }
+    let hash = provider_media_file_hash(version_id, path);
+    let existing = owned_media_file(tx, version_id, path, &hash).await?;
+    let source_id = declaration
+        .filter(|declaration| {
+            declaration.path == path
+                && !declaration.source_id.trim().is_empty()
+                && super::teletext::declaration_matches(declaration, streams)
+        })
+        .map(|declaration| declaration.source_id.as_str());
+    if let Some(id) = existing {
+        // Retain a legacy row's identity/hash even when a deep scan restores
+        // its path. Never let a global hash conflict move another version's file.
+        sqlx::query(r#"UPDATE "MediaFile" SET "Path"=?,"ProviderMediaSourceId"=? WHERE "Id"=? AND "MediaVersionId"=?"#)
+            .bind(path).bind(source_id).bind(id).bind(version_id)
+            .execute(&mut **tx).await.repository()?;
+    } else {
+        sqlx::query(r#"INSERT INTO "MediaFile" ("MediaVersionId","Path","PathHash","ProviderMediaSourceId") VALUES (?,?,?,?)"#)
+            .bind(version_id).bind(path).bind(hash).bind(source_id)
+            .execute(&mut **tx).await.repository()?;
+    }
     Ok(())
 }
+
+async fn owned_media_file(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    version_id: i64,
+    path: &str,
+    hash: &str,
+) -> Result<Option<i64>> {
+    let foreign_collision: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "MediaFile" WHERE "PathHash"=? AND "MediaVersionId"<>?)"#,
+    )
+    .bind(hash)
+    .bind(version_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if foreign_collision {
+        return Err(RepositoryError::Conflict(
+            "provider media file association changed".to_owned(),
+        ));
+    }
+    let mut ids: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "MediaFile" WHERE "MediaVersionId"=?
+           AND ("PathHash"=? OR "PathHash"=? OR "Path"=? COLLATE BINARY)
+           ORDER BY "Id" LIMIT 2"#,
+    )
+    .bind(version_id)
+    .bind(hash)
+    .bind(path_hash(path))
+    .bind(path)
+    .fetch_all(&mut **tx)
+    .await
+    .repository()?;
+    if ids.is_empty() {
+        // These adapters refresh one selected file per version. A genuine path
+        // move must replace its unique owned locator, not leave the old minimum
+        // file row eligible for playback with a stale provider-source selector.
+        ids = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "MediaFile" WHERE "MediaVersionId"=? ORDER BY "Id" LIMIT 2"#,
+        )
+        .bind(version_id)
+        .fetch_all(&mut **tx)
+        .await
+        .repository()?;
+    }
+    match ids.as_slice() {
+        [] => Ok(None),
+        [id] => Ok(Some(*id)),
+        _ => Err(RepositoryError::Conflict(
+            "provider media file association is ambiguous".to_owned(),
+        )),
+    }
+}
+
+#[cfg(test)]
+#[path = "jellyfin_emby/provider_source_tests.rs"]
+mod provider_source_tests;
 
 pub(crate) async fn replace_streams(
     tx: &mut Transaction<'_, crate::db::Db>,

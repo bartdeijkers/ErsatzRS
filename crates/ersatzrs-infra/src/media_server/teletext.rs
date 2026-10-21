@@ -276,7 +276,7 @@ impl MappedTeletextWrite {
     }
 }
 
-fn declaration_matches(
+pub(super) fn declaration_matches(
     declaration: &ProviderMediaSourceDeclaration,
     streams: &[MediaStream],
 ) -> bool {

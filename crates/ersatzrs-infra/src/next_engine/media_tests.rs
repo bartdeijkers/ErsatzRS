@@ -197,6 +197,20 @@ fn prepared_source_binds_single_use_session_transport_without_seeking() {
 async fn publication_uses_listener_and_capability_without_provider_credentials() {
     for kind in RemoteMediaSourceKind::ALL {
         let (pool, media) = source::tests::fixture(kind).await;
+        // Publication of legacy NULL selections must defer connection and
+        // credential resolution until opening, even while the provider is down.
+        sqlx::query(r#"DELETE FROM "ConfigElement""#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        for table in ["JellyfinConnection", "EmbyConnection", "PlexConnection"] {
+            sqlx::query(crate::db::assert_sql_safe(format!(
+                r#"DELETE FROM "{table}""#
+            )))
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
         let relay = MediaRelay::new();
         assert!(relay.source(&media).is_err());
         relay.configure("0.0.0.0:8409".parse().unwrap()).unwrap();
@@ -216,6 +230,7 @@ async fn publication_uses_listener_and_capability_without_provider_credentials()
         assert_eq!(keep_alive, Some(false));
         assert_eq!(reconnect, Some(true));
         assert_eq!(uri, "http://127.0.0.1:8409/ffmpeg/next-media/10/100/1");
+        assert_eq!(headers.len(), 1, "NULL legacy has no source binding header");
         let (name, value) = headers[0].split_once(": ").unwrap();
         assert_eq!(name, ACCESS_HEADER);
         assert!(relay.authorized(value));

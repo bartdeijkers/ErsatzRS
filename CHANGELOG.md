@@ -960,6 +960,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Retain the selected Jellyfin/Emby media source with its exact scanned file and
+  use it for authenticated Next playback instead of requesting the provider's
+  default variant. Different versions can share a provider path without taking
+  over each other's file identity. Source changes invalidate caption observations,
+  prepared cache identity and stale media requests; existing files without a
+  selector retain ordinary playback.
+
 - Preserve native teletext descriptors and observed page headers during managed
   Jellyfin, Emby and Plex scans of explicitly mapped files, including targeted
   show refresh and Plex Other Video. Bind reports to the current source, stream

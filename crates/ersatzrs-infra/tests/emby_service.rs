@@ -86,6 +86,10 @@ async fn emby_sync_maps_mock_movie_response_to_media_rows() {
     assert_eq!(count(&pool, "Writer").await, 1);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
+    let selected: Option<String> = sqlx::query_scalar(
+        r#"SELECT f."ProviderMediaSourceId" FROM "MediaFile" f JOIN "MediaVersion" v ON v."Id"=f."MediaVersionId" WHERE v."MovieId"=1"#,
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(selected.as_deref(), Some("selected-movie-source"));
     assert_eq!(count(&pool, "MediaStream").await, 4);
     assert_eq!(count(&pool, "MediaChapter").await, 2);
     assert_eq!(count(&pool, "Subtitle").await, 2);
@@ -540,6 +544,8 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
             then.status(200).json_body(json!({
                 "MediaSources": [
                     {
+                        "Id": "selected-episode-source",
+                        "Path": "/srv/media/show/s01e01.mkv",
                         "RunTimeTicks": 1_800_000_000,
                         "MediaStreams": [
                             {
@@ -607,6 +613,10 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
     assert_eq!(count(&pool, "Writer").await, 1);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
+    let selected: Option<String> = sqlx::query_scalar(
+        r#"SELECT f."ProviderMediaSourceId" FROM "MediaFile" f JOIN "MediaVersion" v ON v."Id"=f."MediaVersionId" WHERE v."EpisodeId" IS NOT NULL"#,
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(selected.as_deref(), Some("selected-episode-source"));
     assert_eq!(count(&pool, "MediaStream").await, 4);
     assert_eq!(count(&pool, "MediaChapter").await, 1);
     // Both subtitle streams (text + image) are persisted as Subtitle rows with
@@ -964,6 +974,8 @@ async fn mock_detailed_movie_playback(server: &MockServer) -> Mock<'_> {
             then.status(200).json_body(json!({
                 "MediaSources": [
                     {
+                        "Id": "selected-movie-source",
+                        "Path": "/srv/media/bbb.mp4",
                         "RunTimeTicks": 120_000_000,
                         "MediaStreams": [
                             {

@@ -19,6 +19,8 @@ use super::{connections::PlexConnections, protocol::Source, schedule::ScheduledM
 use crate::{db::DbPool, repositories::SqlxResultExt as _};
 
 pub const ACCESS_HEADER: &str = "x-ersatzrs-next-media";
+/// Opaque source URI fingerprint retained by a selected provider publication.
+pub const SOURCE_BINDING_HEADER: &str = "x-ersatzrs-next-source";
 /// Identifies one admitted Next process, including concurrent browser previews.
 pub const SESSION_HEADER: &str = "x-ersatzrs-next-session";
 /// Integrity of the occurrence carried by a private canvas request.
@@ -108,6 +110,25 @@ impl MediaRelay {
             in_point_ms: None,
             out_point_ms: None,
         })
+    }
+
+    /// Bind a private media grant to one immutable resolved upstream URI.
+    /// The provider selector and credentials remain outside the published wire.
+    /// # Errors
+    /// Returns the existing redacted failure if the listener is unconfigured.
+    pub(super) fn source_bound(
+        &self,
+        media: &ScheduledMedia,
+        upstream_uri: &str,
+    ) -> Result<Source> {
+        let mut source = self.source(media)?;
+        if let Source::Http { headers, .. } = &mut source {
+            headers.push(format!(
+                "{SOURCE_BINDING_HEADER}: {}",
+                source_fingerprint(upstream_uri)
+            ));
+        }
+        Ok(source)
     }
 
     /// Publish one expiring graphics occurrence. Next supplies its process
@@ -426,10 +447,32 @@ impl MediaRelay {
         binding: (i64, i64, i64),
         range: Option<&str>,
     ) -> Result<Response> {
+        self.open_bound(pool, binding, range, None).await
+    }
+
+    /// Open a private binding only while its expected upstream source is current.
+    /// Selected Jellyfin/Emby variants require the opaque fingerprint. A supplied
+    /// fingerprint remains mandatory to match even if the selector is removed.
+    /// # Errors
+    /// Returns a redacted failure for malformed, missing or stale source grants
+    /// and the existing binding, discovery, deadline or transport failures.
+    pub async fn open_bound(
+        &self,
+        pool: &DbPool,
+        binding: (i64, i64, i64),
+        range: Option<&str>,
+        expected: Option<&str>,
+    ) -> Result<Response> {
+        if expected.is_some_and(|value| !valid_source_fingerprint(value)) {
+            return Err(unavailable("media source binding is unavailable"));
+        }
         let deadline = Instant::now() + OPEN_TIMEOUT;
-        timeout_at(deadline, self.open_inner(pool, binding, range, deadline))
-            .await
-            .map_err(|_| unavailable("media open timed out"))?
+        timeout_at(
+            deadline,
+            self.open_inner(pool, binding, range, expected, deadline),
+        )
+        .await
+        .map_err(|_| unavailable("media open timed out"))?
     }
 
     async fn open_inner(
@@ -437,6 +480,7 @@ impl MediaRelay {
         pool: &DbPool,
         binding: (i64, i64, i64),
         range: Option<&str>,
+        expected: Option<&str>,
         deadline: Instant,
     ) -> Result<Response> {
         let (item_id, version_id, file_id) = binding;
@@ -491,6 +535,7 @@ impl MediaRelay {
         let Source::Http { uri, headers, .. } = resolved else {
             return Err(unavailable("HTTP media source is unavailable"));
         };
+        check_source_fingerprint(*kind, &uri, expected)?;
         open_http(self.http_client()?, &uri, &headers, range).await
     }
 
@@ -507,6 +552,53 @@ impl MediaRelay {
             .as_ref()
             .ok_or_else(|| unavailable("media HTTP client unavailable"))
     }
+}
+
+fn source_fingerprint(uri: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"ersatzrs-next-source-uri-v1\0");
+    digest.update(uri.as_bytes());
+    let mut fingerprint = String::with_capacity(64);
+    for byte in digest.finalize() {
+        write!(fingerprint, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    fingerprint
+}
+
+fn valid_source_fingerprint(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn check_source_fingerprint(
+    kind: RemoteMediaSourceKind,
+    uri: &str,
+    expected: Option<&str>,
+) -> Result<()> {
+    let selected = matches!(
+        kind,
+        RemoteMediaSourceKind::Jellyfin | RemoteMediaSourceKind::Emby
+    ) && url::Url::parse(uri)
+        .map_err(|_| unavailable("invalid media URL"))?
+        .query_pairs()
+        .any(|(name, _)| name == "MediaSourceId");
+    let valid = match expected {
+        Some(expected) => {
+            valid_source_fingerprint(expected)
+                && bool::from(
+                    source_fingerprint(uri)
+                        .as_bytes()
+                        .ct_eq(expected.as_bytes()),
+                )
+        }
+        None => !selected,
+    };
+    if !valid {
+        return Err(unavailable("media source binding is unavailable"));
+    }
+    Ok(())
 }
 
 /// Follow media redirects within the open deadline. Credentials are never

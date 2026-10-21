@@ -935,6 +935,42 @@ loss or double producer consumption. Prove accepted combinations with served
 media, decoded captions/pages and audio/timing comparison. Operator-selected
 unsupported combinations are visible in administration, startup and Health.
 
+### Exact provider media source selection
+
+The selected Jellyfin/Emby `MediaSources[].Id` is retained as nullable
+`MediaFile.ProviderMediaSourceId`, separately from the integer server identity.
+The ordinary leaf transaction qualifies the selected declaration against the
+exact file path, complete embedded indexes and version owner. A conflicting
+file/path hash cannot transfer another version's file or source identity. New
+files use version-scoped keys while existing file IDs and hashes remain intact.
+A unique owned file also retains its identity across a genuine path move;
+ambiguous movement refuses rather than leaving an older selectable source.
+The selector's actual-change trigger invalidates only that file's observations;
+no-op writes preserve them. Missing or unqualified declarations store `NULL`.
+
+The authenticated Next media opener reads the selector from the current exact
+item/version/file/path/provider binding and sends it as encoded `MediaSourceId`
+query data. The dynamic provider fingerprint includes this selection so a
+changed source cannot retain an old prepared-caption cache key or promotion
+claim. A private expected-source fingerprint also refuses a changed selected
+source before opening its AV request. [ADR 0127](0127-provider-selected-source-identity.md)
+owns these identity and request-binding rules. Existing rows with `NULL` preserve
+ordinary legacy playback; exact finite
+caption acquisition still requires its own source qualification. The selector
+is a provider declaration, not native track/page evidence or immutable bytes.
+Provider credentials and source selectors remain outside published relay URLs.
+
+This strengthens the item/default-source forwarding in
+`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs` and
+`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Scheduling/PlayoutItemConverter.cs` to meet
+this ADR's exact source correspondence. The
+[Jellyfin stream contract](https://typescript-sdk.jellyfin.org/interfaces/generated-client.VideoApiGetVideoStreamRequest.html)
+and [Emby streaming guidance](https://dev.emby.media/doc/restapi/Video-Streaming.html)
+document variant selection. These references establish protocol intent; native
+provider/runtime and finite-source acquisition acceptance require their separate
+proof. The retained-source, EOF, bounds, cancellation and playback requirements
+above remain unchanged.
+
 ### Channel profiles and shared controls
 
 [ADR 0122](0122-channel-teletext-profiles-themes-and-lua-control.md) supplements

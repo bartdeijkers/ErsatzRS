@@ -8,7 +8,7 @@ use axum::{
 };
 use ersatzrs_infra::{
     db::DbPool,
-    next_engine::media::{MediaRelay, ACCESS_HEADER, SESSION_HEADER},
+    next_engine::media::{MediaRelay, ACCESS_HEADER, SESSION_HEADER, SOURCE_BINDING_HEADER},
 };
 use futures_util::TryStreamExt as _;
 use tokio::io::{AsyncRead, AsyncReadExt as _};
@@ -274,7 +274,14 @@ async fn serve(
     else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    let Ok(upstream) = relay.open(pool, binding, range).await else {
+    let Ok(expected) = headers
+        .get(SOURCE_BINDING_HEADER)
+        .map(|value| value.to_str())
+        .transpose()
+    else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let Ok(upstream) = relay.open_bound(pool, binding, range, expected).await else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     relay_response(upstream)
@@ -500,6 +507,42 @@ mod tests {
         assert_eq!(
             serve(&relay, &pool, (10, 100, 1), &headers).await.status(),
             StatusCode::UNAUTHORIZED
+        );
+        // Untrusted source headers cannot bypass capability authentication.
+        headers.insert(
+            SOURCE_BINDING_HEADER,
+            header::HeaderValue::from_bytes(&[0xff]).unwrap(),
+        );
+        assert_eq!(
+            serve(&relay, &pool, (10, 100, 1), &headers).await.status(),
+            StatusCode::UNAUTHORIZED
+        );
+        relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+        let source = relay
+            .prepared_source(
+                uuid::Uuid::new_v4(),
+                uuid::Uuid::new_v4(),
+                ersatzrs_infra::next_engine::protocol::ProbeHint {
+                    video: Vec::new(),
+                    audio: Vec::new(),
+                    subtitle: Vec::new(),
+                    format_name: None,
+                    duration_ms: None,
+                },
+                false,
+            )
+            .unwrap();
+        let ersatzrs_infra::next_engine::protocol::Source::Http { headers: grant, .. } = source
+        else {
+            panic!("private HTTP grant required");
+        };
+        headers.insert(
+            ACCESS_HEADER,
+            grant[0].split_once(": ").unwrap().1.parse().unwrap(),
+        );
+        assert_eq!(
+            serve(&relay, &pool, (10, 100, 1), &headers).await.status(),
+            StatusCode::BAD_REQUEST
         );
         headers.insert(ACCESS_HEADER, "invalid".parse().unwrap());
         assert_eq!(

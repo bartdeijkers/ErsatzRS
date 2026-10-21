@@ -223,3 +223,252 @@ async fn generated_and_recursive_sources_have_no_provider_identity() {
     }
     assert!(identity(&pool, &media, &empty).await.is_err());
 }
+
+async fn selected_variant(pool: &DbPool, file: i64, selected: Option<&str>) {
+    sqlx::query(r#"UPDATE "MediaFile" SET "ProviderMediaSourceId"=? WHERE "Id"=?"#)
+        .bind(selected)
+        .bind(file)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn selected_remote_variant_is_exact_file_scoped_and_null_keeps_historical_identity() {
+    for kind in [RemoteMediaSourceKind::Emby, RemoteMediaSourceKind::Jellyfin] {
+        let (pool, media) = fixture(kind).await;
+        let original = identity(&pool, &media, &http_source()).await.unwrap();
+        assert_eq!(
+            original,
+            json!({"kind":kind.provider_name().to_lowercase(),"source_id":1,
+            "address":"https://media.example.test/base","item_id":"fixture-item"})
+        );
+        selected_variant(&pool, 2, Some("unrelated-file")).await;
+        assert_eq!(
+            identity(&pool, &media, &http_source()).await.unwrap(),
+            original
+        );
+        selected_variant(&pool, 1, Some("selected-source-a")).await;
+        let first = identity(&pool, &media, &http_source()).await.unwrap();
+        assert_eq!(first["provider_media_source_id"], "selected-source-a");
+        assert_ne!(first, original);
+        selected_variant(&pool, 1, Some("selected-source-b")).await;
+        let second = identity(&pool, &media, &http_source()).await.unwrap();
+        assert_eq!(second["provider_media_source_id"], "selected-source-b");
+        assert_ne!(second, first);
+        selected_variant(&pool, 1, None).await;
+        assert_eq!(
+            identity(&pool, &media, &http_source()).await.unwrap(),
+            original
+        );
+        selected_variant(&pool, 1, Some(" ")).await;
+        let error = identity(&pool, &media, &http_source()).await.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Next provider identity is unavailable: binding unavailable"
+        );
+        pool.close().await;
+    }
+}
+
+async fn caption_snapshot(
+    pool: &DbPool,
+    locker: &ersatzrs_core::locking::EntityLocker,
+    relay: &super::super::media::MediaRelay,
+    start: chrono::DateTime<chrono::Utc>,
+) -> super::super::dynamic_projection::Snapshot {
+    super::super::dynamic_projection::project_snapshot(
+        pool,
+        locker,
+        relay,
+        1,
+        1,
+        start,
+        start + chrono::Duration::seconds(60),
+        &[],
+        Some(1),
+    )
+    .await
+    .unwrap()
+}
+
+async fn cached_caption(
+    cache: &super::super::burn_cache::BurnCache,
+    key: &str,
+    text: &str,
+) -> std::path::PathBuf {
+    cache
+        .prepare_text(
+            key,
+            "srt",
+            text,
+            chrono::Utc::now() + chrono::Duration::minutes(5),
+            tokio::time::Instant::now() + std::time::Duration::from_secs(10),
+            || async { true },
+        )
+        .await
+        .unwrap()
+}
+
+fn assert_private_source_wire(item: &super::super::protocol::PlayoutItem, selector: &str) {
+    let wire = serde_json::to_value(item).unwrap().to_string();
+    assert!(!wire.contains(selector));
+    assert!(!wire.contains("api-key"));
+}
+
+fn assert_source_grant_changed(before: &Source, after: &Source) {
+    use super::super::media::SOURCE_BINDING_HEADER;
+    let (
+        Source::Http {
+            uri: old_uri,
+            headers: old_headers,
+            ..
+        },
+        Source::Http {
+            uri: new_uri,
+            headers: new_headers,
+            ..
+        },
+    ) = (before, after)
+    else {
+        panic!("ordinary remote caption source must use the private HTTP relay")
+    };
+    assert_eq!(old_uri, new_uri, "private binding URL stays stable");
+    let prefix = format!("{SOURCE_BINDING_HEADER}: ");
+    let old = old_headers
+        .iter()
+        .find_map(|value| value.strip_prefix(prefix.as_str()))
+        .unwrap();
+    let new = new_headers
+        .iter()
+        .find_map(|value| value.strip_prefix(prefix.as_str()))
+        .unwrap();
+    assert_eq!(old.len(), 64);
+    assert_eq!(new.len(), 64);
+    assert_ne!(
+        old, new,
+        "the opaque source fingerprint must change with the selected variant"
+    );
+}
+
+async fn embedded_caption_policy(pool: &DbPool) {
+    use ersatzrs_core::repositories::ChannelRepository as _;
+    use ersatzrs_domain::{ChannelSubtitleMode, StreamingEngine};
+
+    let repository = crate::repositories::make_repositories(pool.clone());
+    let mut channel = repository.channel.get_by_number("1").await.unwrap();
+    channel.streaming_engine = StreamingEngine::Next;
+    channel.subtitle_mode = ChannelSubtitleMode::Any;
+    channel.preferred_subtitle_language_code = Some("eng".into());
+    repository.channel.upsert(&channel).await.unwrap();
+    for sql in [
+        r#"UPDATE "Subtitle" SET "IsExtracted"=0,"Path"=NULL WHERE "Id"=1"#,
+        r#"UPDATE "PlayoutItem" SET "MediaVersionId"=100,"VideoStreamIndex"=0,"AudioStreamIndex"=1,"SubtitleStreamIndex"=4"#,
+    ] {
+        sqlx::query(sql).execute(pool).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn selected_remote_variant_invalidates_embedded_text_cache_hits_and_staged_promotion() {
+    use super::super::{
+        burn_cache::{BurnCache, CacheError},
+        media::MediaRelay,
+    };
+    use tokio::{io::AsyncWriteExt as _, time::Instant};
+
+    for kind in [RemoteMediaSourceKind::Emby, RemoteMediaSourceKind::Jellyfin] {
+        let (pool, media) = fixture(kind).await;
+        let locker = ersatzrs_core::locking::EntityLocker::new();
+        embedded_caption_policy(&pool).await;
+        let relay = MediaRelay::new();
+        relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+        selected_variant(&pool, 1, Some("source-a")).await;
+        let before = caption_snapshot(&pool, &locker, &relay, media.item.start).await;
+        let pending = before.projection.pending_burn.as_ref().unwrap();
+        assert_eq!(pending.subtitle.stream_index, 4);
+        assert!(
+            pending.source_text.is_none(),
+            "ordinary embedded text, not teletext readiness"
+        );
+        assert_private_source_wire(&before.projection.item, "source-a");
+        let root = tempfile::tempdir().unwrap();
+        let cache = BurnCache::new(root.path().to_owned());
+        let expiry = chrono::Utc::now() + chrono::Duration::minutes(5);
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        let first = cached_caption(&cache, &before.identity.cache_key, "source-a captions").await;
+
+        selected_variant(&pool, 1, Some("source-b")).await;
+        let after = caption_snapshot(&pool, &locker, &relay, media.item.start).await;
+        assert_ne!(after.identity.descriptor, before.identity.descriptor);
+        assert_ne!(after.identity.cache_key, before.identity.cache_key);
+        assert_source_grant_changed(
+            &pending.source,
+            &after.projection.pending_burn.as_ref().unwrap().source,
+        );
+        assert_private_source_wire(&after.projection.item, "source-b");
+        let hit = cache
+            .prepare_text(
+                &before.identity.cache_key,
+                "srt",
+                "unused",
+                expiry,
+                deadline,
+                || async {
+                    let current = caption_snapshot(&pool, &locker, &relay, media.item.start).await;
+                    current.identity.descriptor == before.identity.descriptor
+                        && current.identity.cache_key == before.identity.cache_key
+                },
+            )
+            .await;
+        assert_eq!(hit.unwrap_err(), CacheError::Stale);
+        // Model the existing real cache boundary: extraction completes, the
+        // selected provider source changes, and validation runs before promotion.
+        let staged = cache
+            .prepare_artifact(
+                &after.identity.cache_key,
+                "srt",
+                expiry,
+                deadline,
+                || async {
+                    let current = caption_snapshot(&pool, &locker, &relay, media.item.start).await;
+                    current.identity.descriptor == after.identity.descriptor
+                        && current.identity.cache_key == after.identity.cache_key
+                },
+                |_path, file| async {
+                    let mut file = tokio::fs::File::from_std(file);
+                    file.write_all(b"source-b captions").await.unwrap();
+                    file.flush().await.unwrap();
+                    selected_variant(&pool, 1, Some("source-c")).await;
+                    Ok(())
+                },
+            )
+            .await;
+        assert_eq!(staged.unwrap_err(), CacheError::Stale);
+        assert!(!root
+            .path()
+            .join(format!("{}.srt", after.identity.cache_key))
+            .exists());
+        assert!(!root
+            .path()
+            .join(format!("{}.json", after.identity.cache_key))
+            .exists());
+        assert!(std::fs::read_dir(root.path()).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".burn-")));
+        let latest = caption_snapshot(&pool, &locker, &relay, media.item.start).await;
+        let fresh = cached_caption(&cache, &latest.identity.cache_key, "source-c captions").await;
+        assert_ne!(fresh, first);
+        assert_eq!(
+            tokio::fs::read_to_string(fresh).await.unwrap(),
+            "source-c captions"
+        );
+        assert_eq!(
+            tokio::fs::read_to_string(first).await.unwrap(),
+            "source-a captions"
+        );
+        pool.close().await;
+    }
+}
