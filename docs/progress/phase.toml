@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 direct leading Main deferred-AP lifecycle completed; next remaining complete-set resource-call/link interchange boundary. Preserve completed components and external deferrals'
+current_focus = 'P9A-04 F1 Public/Global native consumer retarget proof completed; next concrete remaining authored-context or complete-set/dependency boundary from existing F/V/X list. Preserve closed components and external deferrals'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -71,6 +71,20 @@ This current handoff supersedes older next-action prose below. Maintainer
 acceptance, followed by checking all applicable CI gates on the pushed commit.
 Partial checkpoints remain local; no publication is authorized.
 
+F1 native Public↔Global consumer crossing is completed. Canonical
+tmp/phase9-header-c2/resource-set-creation/identity.json,
+consumer_cross_role_native_followup owns independent complete original/final
+factories, Main/Local-to-POP and POP-resource-to-GPOP choices, exact type/offset,
+retained selected banks/catalogues/source/lifecycle, full units/rasters/preview,
+current-TTI replay, byte-exact root undo and separate publication/cold history.
+Missing/mistyped targets and Generated125 shared authority reject atomically.
+The one bundled actual native trial passes; all70 relevant product sources stay
+unchanged. Reuse valid editor/admin/decoder/transport proof without new claims.
+Next select one concrete remaining F3 authored-context or F1 complete-set/
+dependency user boundary from the existing finite list; require a source-positive
+witness and explicit closure before changing code. Do not reopen completed
+selection/attachment/cross-role or compensate external blockers with variants.
+
 F1 direct leading Main deferred-AP call editing is completed within its native
 boundary: complete original/grown/AP-only factories, exact generated selector/FG7
 span and HeaderPosition provenance, call growth/deletion/exact root undo, shared
@@ -81,10 +95,8 @@ authored FG remains mandatory, malformed/extra derived writers reject atomically
 and no generated word gains permission. Existing editor/admin/decoder/transport
 receipts remain valid in scope. Other unqualified Main/Local/default/interleaved
 contexts remain distinct open F1 work; no adjacent small-variant series.
-Next finite F1 action: qualify the remaining complete-set resource-call/link
-editing boundary against its existing full-model native fixture. Close a named
-remaining user action with exact dependencies/protected consumers and separate
-publication/root undo; do not reopen completed selection/attachment components.
+Its next cross-role native proof is now completed by the newer receipt above;
+other unqualified complete-set/dependency boundaries remain in the finite list.
 
 F1 standalone Main-presence creation is now completed within its exact boundary:
 original None/no baseline X26, genuine pinned QTM menu/SaveAs/disk reload,

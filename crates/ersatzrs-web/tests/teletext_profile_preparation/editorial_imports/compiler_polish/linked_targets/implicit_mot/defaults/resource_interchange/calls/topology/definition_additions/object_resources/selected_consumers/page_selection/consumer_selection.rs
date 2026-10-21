@@ -8,6 +8,8 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 };
 #[path = "consumer_selection/actual_admin.rs"]
 mod actual_admin;
+#[path = "consumer_selection/cross_roles.rs"]
+mod cross_roles;
 #[path = "consumer_selection/lifecycle.rs"]
 mod lifecycle;
 #[path = "consumer_selection/source.rs"]
