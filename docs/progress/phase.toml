@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'F5 mapped Linux native Burn/Off and candidate Next Convert HTTP completed; next close remaining mapped Next Burn/Off policy proof'
+current_focus = 'F5 finite mapped native and candidate Next policy components completed; next resolve finite remote-only source acquisition and runtime-adoption prerequisites'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,22 +62,28 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F5 mapped Linux Legacy/Hybrid bitmap Burn/Off and candidate.4 Next Convert
-HTTP components are completed within their named finite-source boundaries.
-P9A-04 and provider-scan/identity.json mapped_caption_playback/mapped_next_delivery
-own exact source/tool/runtime hashes, retained negatives, public captures and
-checkpoint identities. The new bundled Next proof passes all three genuine
-providers with actual authenticated callback, complete889 text, exact source
-clock/copied H264/Dutch AAC and drained session/output/capacity/work. Its capture
-honors the advertised program/fallback discontinuity; strict oracles remain.
-Next finite F5 packet: remaining mapped-provider Next Burn/Off user policies on
-the same retained source, reusing preparation, isolation, transport and F6 proof.
-Do not repeat editor/client chains or count this candidate as accepted adoption.
-Exact1b95 full run39584827198 is terminal:12 success/four failure/one intentional
-Commitlint skip. Fixture failures are fixed locally; accepted Next.1 caption
-outpoint/audio defects remain. Enhanced browser jobs skip all nine tests each.
-The existing macOS candidate-only workflow still awaits permission; no known-red
-push or publication. Full exact-new-SHA CI and native platform/adoption remain.
+F5 finite mapped-provider Linux native Burn/Off and candidate.4 Next
+Convert/Burn/Off components are completed within their named source boundaries.
+P9A-04/provider-scan identity mapped_caption_playback, mapped_next_delivery and
+mapped_next_policies own the32 native captures, three exact Convert clock cases,
+six Burn/Off HTTP cases, pinned inputs, retained negatives and local checkpoints.
+Burn/Off proves selected nld880Hz/H264/AAC and109/0 glyph pixels; Off creates no
+subtitle/cache or preparation requests. Session/output/default2capacity/work
+and provider/listener cleanup pass. Reuse unchanged443 smoke/editor/isolation/F6.
+Next finite F5 step: remote-only finite authenticated source acquisition under
+ADR0121. Bounded inspection confirms no retained-source capability: acquisition
+requires a physical mapping and preparation refuses HTTP. Existing authenticated
+media open/redirect and owned-file patterns are reusable. Jellyfin/Emby drop the
+selected provider source ID after scan; qualify exact selection before acquisition.
+Canonical provider-scan identity remote_only_boundary owns code references and
+closure. Implement one owned finite source for AV/captions, with exact source/
+version, EOF/size/time, cancellation and cleanup guards; do not guess a default.
+Keep native platform/adoption distinct: accepted Next.1 retains real caption
+outpoint/audio defects; candidate.4 is not the production repair. Existing
+macOS candidate-only workflow still awaits permission. No known-red push or
+publication; full exact-new-SHA CI and native platform/adoption remain required.
+Exact1b95 run39584827198 is terminal12 success/four failure/one intentional skip;
+fixture errors are fixed locally and enhanced browser jobs skip all nine each.
 
 Native teletext CI setup follow-up (2026-10-21): pushed1b95c864 proves real
 local Rust hits on both runners (8s), a real web hit and unchanged manifest
@@ -135,9 +141,9 @@ Mapped-provider report/targeted-show component is completed. P9A-03 evidence
 and provider-scan/identity.json mapped_provider_actions own the six native and56
 compatibility passes, reused app12/input9, strict all-target lint and preserved
 source/track/lease/cleanup guards. F5 now closes finite mapped-provider bitmap
-Burn/Off through Legacy/Hybrid and candidate.4 finite Next Convert HTTP in
-P9A-04 mapped_caption_playback/mapped_next_delivery. Remaining Next policies,
-remote-only correspondence and complete readiness remain separate.
+Burn/Off through Legacy/Hybrid and candidate.4 finite Next Convert/Burn/Off HTTP
+in P9A-04 mapped_caption_playback/mapped_next_delivery/mapped_next_policies.
+Remote-only correspondence and complete readiness remain separate.
 The browser fixture corrections are closed. Accepted Next.1 still fails caption
 outpoints and audio language; candidate.4 proof is not runtime adoption.
 The existing macOS candidate-only workflow awaits permission; no new push.
