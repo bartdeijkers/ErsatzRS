@@ -108,7 +108,9 @@ fn workload_policy() -> TeletextChannelDocumentEncodingPolicy {
         ("display_comparison_updates", 33_554_432),
         ("realization_updates", 131_072),
         ("placement_work", 4096),
-        ("assembly_work", 8192),
+        // 3366 original visits + 102 displays * two catalogue passes *
+        // (four definitions + eight commands + twelve reconstruction slots).
+        ("assembly_work", 8262),
         ("ancestry_work", 4096),
         ("collected_commands", 8192),
         ("collected_drcs_references", 1024),
@@ -236,6 +238,44 @@ fn exact_and_short(
         tested.push(name);
     }
     tested
+}
+
+fn previous_assembly_ceiling_rejects(candidate: &EncodedChannelTeletextDocumentCandidate) {
+    use ersatzrs_ffmpeg::teletext::{
+        TeletextAuthoredServiceEncodingFailure, TeletextCompiledDisplayPageEncodingFailure,
+        TeletextComposedMainEncodingError, TeletextMainCompositionFailure,
+        TeletextNormalizedMainProgramFailure,
+    };
+
+    let mut policy = workload_policy();
+    policy.encoding.max_assembly_work = Some(8192);
+    let (result, admitted) = encode_teletext_authored_service_with_work_usage(
+        candidate.encoded().unwrap().declared().clone(),
+        &policy.transmissions,
+        &policy.encoding,
+        Some(deadline()),
+    );
+    let error = result.unwrap_err();
+    assert_eq!(error.display, Some(address(300, 16)));
+    // 101 complete displays use 8181 visits; ten of the final derivation's
+    // eleven remaining credits are admitted before the next two-command scan.
+    assert_eq!(admitted.assembly_work, Some(8191));
+    let TeletextAuthoredServiceEncodingFailure::Compiled(error) = error.reason else {
+        panic!("expected compiled-page assembly refusal");
+    };
+    let TeletextCompiledDisplayPageEncodingFailure::Normalization(error) = error.reason else {
+        panic!("expected normalization assembly refusal");
+    };
+    let TeletextNormalizedMainProgramFailure::Original(error) = error.reason else {
+        panic!("expected original header derivation refusal");
+    };
+    let TeletextComposedMainEncodingError::Composition(error) = *error else {
+        panic!("expected composition header derivation refusal");
+    };
+    assert!(matches!(
+        error.reason,
+        TeletextMainCompositionFailure::ObjectHeaderWorkBudget { maximum: 11 }
+    ));
 }
 
 fn navigation_and_preview(service: &EncodedTeletextAuthoredService, first: u16) {
@@ -538,6 +578,8 @@ async fn hundred_page_numbers_and_subpages_with_shared_resources_follow_finite_n
         navigation_and_preview(prepared.encoded().unwrap(), first);
     }
     let (usage, meter_micros) = measured(&prepared);
+    assert_eq!(usage.assembly_work, Some(8262));
+    previous_assembly_ceiling_rejects(&prepared);
     let cutoffs = exact_and_short(&prepared, usage);
     let started = Instant::now();
     let saved = save(&fixture, prepared).await;

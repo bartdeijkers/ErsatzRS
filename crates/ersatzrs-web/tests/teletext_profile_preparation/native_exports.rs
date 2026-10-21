@@ -146,7 +146,23 @@ async fn assert_receipt(
     for asset in &body.project.assets {
         let bytes = file(&body.files, &asset.name);
         assert_eq!(bytes.len(), asset.bytes);
-        assert_eq!(bytes.len(), asset.unit_count * 46);
+        match &asset.scope {
+            TeletextExportAssetScope::Resource { .. }
+            | TeletextExportAssetScope::Magazine { .. } => {
+                assert!(asset.unit_count > 0);
+                assert_eq!(bytes.len(), asset.unit_count * 46);
+            }
+            TeletextExportAssetScope::DrcsTti { .. }
+            | TeletextExportAssetScope::DrcsTtiSet { .. }
+            | TeletextExportAssetScope::ObjectTtiV1 { .. }
+            | TeletextExportAssetScope::ObjectContextTtiV1 { .. }
+            | TeletextExportAssetScope::ObjectTtiFragmentV1 { .. } => {
+                // Receipt parsing already validates companion identity/ordinal metadata.
+                assert_eq!(asset.unit_count, 0);
+                let tti = parse_teletext_tti(bytes, policy().tti).unwrap();
+                assert!(!tti.records().is_empty());
+            }
+        }
         assert_eq!(hash(bytes), asset.sha256);
     }
     let bytes = write_teletext_export_sidecar(exported.sidecar(), policy().project).unwrap();

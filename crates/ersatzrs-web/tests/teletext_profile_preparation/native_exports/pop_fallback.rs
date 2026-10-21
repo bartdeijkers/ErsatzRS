@@ -166,7 +166,7 @@ fn assert_exported_presentation(body: &TeletextExportReceiptBody) {
     assert!(tti.records().iter().any(|record| matches!(record,
         TeletextTtiRecord::Packet { row:28, designation:0, .. })),
         "standalone TTI lacks the original POP-fallback panel presentation; a faithful editor projection is required without inventing secondary selection");
-    assert_eq!(body.project.editor_profile, "qteletextmaker-1.0-carrier-v5");
+    assert_eq!(body.project.editor_profile, "qteletextmaker-1.0-carrier-v6");
     assert_eq!(
         serde_json::to_value(&mapping.editor_presentation).unwrap(),
         json!({

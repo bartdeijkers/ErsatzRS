@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'CI source-caption setup verified; accepted Next.1 has three exact outpoint negatives; finish unaffected CI and existing candidate-adoption gates'
+current_focus = 'Level 2.5 fixture contracts verified by seven native regressions and strict target lint; finish full remote CI and existing runtime-adoption route'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -75,6 +75,18 @@ AV/audio, cleanup oracle or test selection is weakened. Strict infra all-target
 Clippy and workflow lint pass. Canonical provider-scan/identity.json
 ci_source_proof_followup owns both native runs and preserved negative roots.
 This closes the fixture setup component, not the accepted-runtime defect.
+The Level 2.5 job retained 1824/1826 passes and two stale fixture-contract
+failures. Five native export and two workload regressions now pass (ff9fc47a):
+TTI companions retain zero native units and strict parsing under existing V6;
+raw DVB assets retain exact 46-byte units, hashes and POP presentation. The
+102-display workload measures 8262 assembly credits after full header catalogue
+passes. The original 8192 refusal, exact and one-credit-short budgets, native
+models and publication lifecycle guards remain. Production meters, limits and
+export behavior are unchanged. Strict Clippy passes for the affected native
+integration target. The broader local all-target check hits two compile errors
+in the paused, uncommitted provider fixtures; those files remain untouched and
+are absent from the pushed revision. Full clean-SHA CI remains required.
+Canonical ci_level25_followup owns source/history, logs and remaining checks.
 Next: finish unaffected run39584827198 jobs and the existing X2/adoption route;
 the prepared two-macOS candidate-only workflow awaits explicit permission.
 No production pin or publication changes; parallel provider work is preserved.

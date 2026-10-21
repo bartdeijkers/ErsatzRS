@@ -652,6 +652,8 @@ release section when tagging a release.
   as runtime staging, preserving their identity and health checks.
   Source-caption runtime tests use independent retained evidence directories,
   preserving parallel isolation and the existing exact timing assertions.
+  Native export and workload checks follow the versioned TTI companion and
+  complete object-header work contracts while retaining strict boundaries.
 
 - Require finite agent work packages with explicit closure conditions, scoped
   completion, evidence reuse and separate external blockers, preserving all
