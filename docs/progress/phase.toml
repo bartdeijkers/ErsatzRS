@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — SO5 selection-policy proof closure'
+current_focus = 'p9a-source-inventory — SI1 persistent observed-page readiness'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,29 +62,30 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-output SO5 selection/preference proof closure.
-SO4 is completed within the unpublished Linux candidate.5 scope: actual public
-retained-source Burn preserves exact source/caption/AV clocks and selected out,
-with all cue/clear, Dutch audio, one-acquisition and cleanup oracles intact.
-Canonical provider-scan/identity.json burn_shared_clock_correction preserves
-candidate.4 negative and .5 positive captures, source/lock/package identities,
-pipeline267/267, ordinary SRT Burn/Convert/seek/Off/after-final-cue2/2,
-argv snapshot, strict scoped Clippy/format and static TSDuck19/19 receipts.
-Helper lint-only changes preserve arguments/expectations; reuse actual capture.
-Managed.1 adoption and native platform proof remain their separate owners.
+Current package: p9a-source-inventory SI1, the existing approved observed-page
+body/subcode/charset/region/provenance and persistent-readiness requirement.
+First action: locate the existing scanner/report/readiness boundary and name
+exactly which required observed facts remain absent from durable source state.
+Implement the smallest bounded complete-body/context representation and exact
+source binding needed by that requirement. NotAcquired/HeadersObserved must not
+be upgraded to ready bodies; descriptor/charset guesses grant no readiness.
+Stop when those accepted facts survive SQLite/rescan with explicit incomplete
+state and exact source identity, or a concrete prerequisite is recorded. SI2
+invalidation/version and SI3 format limits remain their existing separate cells;
+no inferred all-container/provider Cartesian product or new general audit.
 
-First action: close only SO5's recorded exact-item/channel/global,
-forced/default/accessibility/Off and explicit-page selection-policy ledger.
-Bind unchanged accepted clauses to the existing exact regression/runtime
-receipts. Name a genuinely missing clause or implementation boundary if any;
-no inferred matrix, new provider/repertoire variant or whole-source audit.
-Stop when each SO5 clause has a scoped valid receipt or one concrete named
-missing proof with an executable correction; close proven cells permanently.
+SO4 candidate.5 clock/outpoint and SO5 existing preference/qualified-page/refusal
+components are complete. Canonical provider-scan/identity.json
+burn_shared_clock_correction and selection_policy_closure_followup retain all
+exact identities, positive/negative results and reuse boundaries. SO5 moves
+Convert's page-qualified rejection before generic Burn; no new manual widget
+or expanded pin tuple follows from the accepted wording. Source-output still
+owns SO1..3; managed adoption/native-RID owners retain their independent gates.
+Closed r1/lifecycle-base/F6 components stay closed without a concrete regression.
 
-Closed r1/lifecycle-base/F6/SO4 components remain closed. Ordinary milestones
-are the sole finite current collection. Preserve parallel changes, historical
-negative evidence and all recorded client/editor/platform/policy deferrals.
-No push/publication; engine-first.
+Ordinary milestones remain the sole finite current collection. Preserve all
+parallel edits and client/editor/platform/policy deferrals. No push/publication;
+engine-first, with all original acceptance unchanged.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

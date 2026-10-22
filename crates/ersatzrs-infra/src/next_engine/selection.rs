@@ -658,6 +658,14 @@ fn project_deferred_subtitle(
     mode: ersatzrs_domain::NextEngineTextSubtitleMode,
     item: &PlayoutItem,
 ) -> Result<(Option<wire::Track>, Option<PendingBurn>)> {
+    // Qualified source pages use project_source_text_subtitle. An ordinary
+    // stream pin/custom selection carries no page authority and must not reach
+    // generic Burn extraction before this same check rejects Convert.
+    if selected_subtitle.is_some_and(|subtitle| subtitle.codec.as_deref() == Some("dvb_teletext")) {
+        return Err(invalid(
+            "source teletext requires finite page-qualified preparation",
+        ));
+    }
     Ok(if provider {
         let selected = selected_subtitle.ok_or_else(|| invalid("provider subtitle changed"))?;
         // A placeholder is never published directly: the existing deferred
@@ -760,11 +768,6 @@ fn subtitle_track(
     source: &wire::Source,
     mode: ersatzrs_domain::NextEngineTextSubtitleMode,
 ) -> Result<wire::Track> {
-    if subtitle.codec.as_deref() == Some("dvb_teletext") {
-        return Err(invalid(
-            "source teletext requires finite page-qualified preparation",
-        ));
-    }
     let embedded = subtitle.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED;
     let burn_embedded_text = embedded
         && !subtitle.is_image()

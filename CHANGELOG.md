@@ -975,6 +975,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Reject unqualified teletext stream selections before Next Burn preparation,
+  matching Convert's existing page-bound refusal. Qualified source captions and
+  ordinary subtitles retain their routes; explicit Off preserves selected AV.
+
 - Provide an opt-in Next candidate that preserves the incoming video clock
   while burning text subtitles after a seek. The qualified retained-source HLS
   route respects the selected video outpoint, exact caption transitions and

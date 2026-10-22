@@ -53,6 +53,82 @@ pub(crate) fn item() -> PlayoutItem {
     }
 }
 
+#[tokio::test]
+async fn unqualified_teletext_pins_fail_before_burn_preparation_and_keep_explicit_off() {
+    use ersatzrs_domain::NextEngineTextSubtitleMode;
+
+    let pool = fixture_pool().await;
+    sqlx::query(r#"UPDATE "MediaStream" SET "Codec"='dvb_teletext' WHERE "Id"=5"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "Subtitle" SET "Codec"='dvb_teletext' WHERE "Id"=1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut selected = item();
+    selected.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: Some(4),
+    });
+    let source = wire::Source::Local {
+        path: "media/fixture.mkv".into(),
+        in_point_ms: None,
+        out_point_ms: None,
+        probe_hint: None,
+    };
+    let resolution = Resolution {
+        width: 320,
+        height: 180,
+        ..Default::default()
+    };
+    for extracted in [false, true] {
+        sqlx::query(r#"UPDATE "Subtitle" SET "IsExtracted"=? WHERE "Id"=1"#)
+            .bind(extracted)
+            .execute(&pool)
+            .await
+            .unwrap();
+        for mode in [
+            NextEngineTextSubtitleMode::Convert,
+            NextEngineTextSubtitleMode::Burn,
+        ] {
+            let channel = Channel {
+                next_engine_text_subtitle_mode: mode,
+                ..Default::default()
+            };
+            match project_deferred_item(
+                &pool,
+                &channel,
+                &selected,
+                100,
+                source.clone(),
+                &resolution,
+            )
+            .await
+            {
+                Err(error) => assert!(error.to_string().contains("page-qualified preparation")),
+                Ok(_) => {
+                    panic!("unqualified teletext pin must not enter generic {mode:?} preparation")
+                }
+            }
+        }
+    }
+    selected
+        .pinned_stream_selection
+        .as_mut()
+        .unwrap()
+        .subtitle_stream_index = None;
+    let projected = project(&pool, &Channel::default(), &selected)
+        .await
+        .unwrap();
+    let tracks = projected.tracks.unwrap();
+    assert!(tracks.subtitle.is_none());
+    assert_eq!(tracks.video.unwrap().stream_index, Some(0));
+    assert_eq!(tracks.audio.unwrap().stream_index, Some(2));
+}
+
 async fn audio_only_fixture(cover: bool, song: bool) -> DbPool {
     let pool = fixture_pool().await;
     sqlx::query(if cover {
