@@ -79,18 +79,40 @@ pub(super) async fn seed(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
 }
 
 pub(crate) async fn install(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
-    use std::os::unix::fs::PermissionsExt as _;
-    let package = root.join("package");
-    tokio::fs::create_dir_all(&package).await.unwrap();
-    let script = package.join("fixture.sh");
-    tokio::fs::write(&script, r#"#!/bin/sh
+    install_with_script(pool, root, SEEKING_PRODUCER).await;
+}
+
+/// A finite one-shot TS producer uses the same source-owned seek contract.
+pub(crate) async fn install_caption_source(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
+    install_with_script(
+        pool,
+        root,
+        r#"#!/bin/sh
+set -eu
+printf '%s\n' "$1" >> ../producer-starts
+printf '%s\n' "$$" > ../producer-pid
+printf '%s\n' "$ERSATZRS_REMOTE_STREAM_SEEK" >> ../producer-seeks
+exec "$FFMPEG_BIN" -v error -nostdin -ss "$ERSATZRS_REMOTE_STREAM_SEEK" -i ../library/movie.ts -map 0 -c copy -f mpegts pipe:1
+"#,
+    )
+    .await;
+}
+
+const SEEKING_PRODUCER: &str = r#"#!/bin/sh
 set -eu
 printf '%s\n' "$1" >> ../producer-starts
 printf '%s\n' "$$" > ../producer-pid
 printf '%s\n' "$$" >> ../producer-pids
 printf '%s\n' "$ERSATZRS_REMOTE_STREAM_SEEK" > ../producer-seek
 exec "$FFMPEG_BIN" -v error -nostdin -re -ss "$ERSATZRS_REMOTE_STREAM_SEEK" -i ../source.mkv -map 0 -c copy -f matroska pipe:1
-"#).await.unwrap();
+"#;
+
+async fn install_with_script(pool: &ersatzrs_infra::db::DbPool, root: &Path, content: &str) {
+    use std::os::unix::fs::PermissionsExt as _;
+    let package = root.join("package");
+    tokio::fs::create_dir_all(&package).await.unwrap();
+    let script = package.join("fixture.sh");
+    tokio::fs::write(&script, content).await.unwrap();
     tokio::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
         .await
         .unwrap();

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — SO3 Next live and one-shot policy'
+current_focus = 'p9a-source-output — SO3 one-shot Copy ownership'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,12 +62,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-output SO3 Next live/one-shot policy route proof.
-Next executable action: use the existing ordinary Next and prepared-source
-fixtures to close the named unsupported live/one-shot refusal and independently
-source-bound prepared-alternative proof, retaining exact timing/audio/ownership
-and cleanup. Reuse valid prepared compatibility receipts; add only the missing
-route join. Stop at that named policy boundary, not full source-output acceptance.
+Current package: p9a-source-output SO3 one-shot Copy ownership.
+Completed component: four ordinary finite/live Burn/Convert exact-selection
+refusals before any producer acquisition, with joined cleanup; ten route controls
+also pass. Next executable action: correct the demonstrated Copy keyframe dry-run
+consumption of the single-use source before its actual consumer (200 then410),
+then finish the preserved Off/independent Burn/Convert ordinary-route cases.
+Retain encoder/profile, exact AV/audio/caption/source clocks and joined ownership;
+no token replay, provider reopening or fabricated Live classification. Canonical
+provider-scan/identity.json source_output_so3_followup owns positives/negatives.
+Stop at the existing SO3 delivery boundary; other completed components stay closed.
 
 SO2 owned observed-page selection/consumer binding is completed within Linux
 x86_64/software FFmpeg9: one producer, opportunistic prefix at most64KiB,
@@ -83,7 +87,7 @@ sources/negatives are preserved outside the active product path. The new upstrea
 heartbeat correction is insufficient in an isolated identical FFmpeg9 build;
 input pacing, output duration and GENPTS hypotheses also fail. No runtime change
 or route repair is claimed. Resume only with a concrete new cause/correction;
-continue the independent existing SO3 policy obligation now. Other SO2 HTTP/RTSP,
+continue the existing SO3 one-shot Copy delivery correction now. Other SO2 HTTP/RTSP,
 consume-once/HLS/Hybrid/carriage and runtime/platform obligations retain their owners.
 
 SO1 public native HLS source-caption integration is completed within Linux

@@ -60,6 +60,14 @@ guide starts only after full independent9A; Phase10 waits forP9B-02.
 '''
 
 [[debt]]
+id          = 'teletext-next-one-shot-copy-preflight'
+adr         = '0100'
+description = 'Preserve ordinary one-shot playback when Next video-copy input-start qualification precedes its actual consuming encoder. Keep one provider acquisition, truthful liveness, the configured profile, exact source/AV/caption clocks and joined cleanup; do not permit single-use grant replay.'
+discovered  = '2026-10-23'
+evidence    = 'p9a-source-output SO3 owns the actual public-route negative: input_start dry-run GET200 consumes the prepared source, then the playback GET410 produces fallback rejected by the strict Dutch-audio oracle. Canonical provider-scan/identity.json source_output_so3_followup retains original candidate, source/runtime identities and copy-preflight-double-claim-negative receipts. Four finite/live caption-refusal route cases are independently closed; this debt concerns successful delivery and is not resolved by those refusals.'
+resolved    = false
+
+[[debt]]
 id          = 'teletext-editorial-resource-diagnostic-identity'
 adr         = '0123'
 description = 'Preserve resource kind/raw hexadecimal page/S1 in imported-resource admin diagnostics. Reuse the existing localized error_resource projection and prove its headed display; do not map raw resource1C0 to ordinary display page448.'

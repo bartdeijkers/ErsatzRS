@@ -22,6 +22,11 @@ mod retained;
 #[path = "next/retained_clock.rs"]
 mod retained_clock;
 
+// Installed POSIX producer fixture; native Windows acceptance remains separate.
+#[cfg(unix)]
+#[path = "next/one_shot.rs"]
+mod one_shot;
+
 type Callbacks = Arc<Mutex<Vec<PlayoutItem>>>;
 type Segments = Vec<(String, Vec<u8>)>;
 const SOURCE_SHA256: &str = "419c4d902c7d49d8e3c45097d935eac81d514fbd621883c7c3ac440b76d44a3c";

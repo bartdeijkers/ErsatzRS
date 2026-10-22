@@ -664,6 +664,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Record the remaining Next one-shot video-copy failure: keyframe preflight can
+  consume the single-use source before playback. Successful delivery remains an
+  acceptance gate; verified caption refusal does not establish playback safety.
+
 - Keep the experimental Next teletext Burn runtime unaccepted after a reproduced
   source-outpoint overrun; stream, selected-audio and storage cleanup checks
   remain separately qualified.
