@@ -11,8 +11,8 @@ Public↔Global and steady-Flash undo are closed. F3 same-page C2 and steady
 mixed-tail headers are closed in scope; P9A-04 owns remaining contexts/proof.
 Mapped provider scans and scoped F5 native/Next, SO4/SO5 components are closed.
 ADR0127 source identity and895af814/e87fde98/6137ac30 retained-input
-components stay closed. SI1 storage/clock, SI2 identity proof and SI3 PES/PMT
-are complete; remaining SI3 and adoption stay open. Milestones own status.
+components stay closed. SI1 storage/clock, SI2 identity and SI3 PES/PMT/initial
+inventory are complete. Milestones own remaining framing/output/adoption gates.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identity/effects/fallback/bounds stay protected. A7/A8/C3, foreign-X26, repertoires/fonts, objects/DRCS/panels and

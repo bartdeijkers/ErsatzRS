@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "source_assembly_epoch_tests.rs"]
+mod source_epoch;
+
 const PID: u16 = 0x100;
 
 fn supplied_pes(packet_count: usize) -> Vec<u8> {

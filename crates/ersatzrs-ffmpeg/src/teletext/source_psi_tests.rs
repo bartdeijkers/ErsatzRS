@@ -7,6 +7,9 @@ use crate::teletext::{
 #[path = "source_psi_shared_tests.rs"]
 mod shared_pmt;
 
+#[path = "source_psi_epoch_tests.rs"]
+mod source_epoch;
+
 const PID: u16 = 0x103;
 
 fn source_pmt(program: u16, version: u8, pcr: u16, pid: u16, descriptors: &[u8]) -> Vec<u8> {

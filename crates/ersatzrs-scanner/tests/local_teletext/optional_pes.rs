@@ -36,7 +36,7 @@ fn with_optional_headers(original: &[u8]) -> Vec<u8> {
     changed
 }
 
-async fn observations(pool: &SqlitePool) -> SourceTeletextObservedPages {
+pub(super) async fn observations(pool: &SqlitePool) -> SourceTeletextObservedPages {
     let (_, version, file) = source_ids(pool).await;
     let stream: i64 = sqlx::query_scalar(
         r#"SELECT "Id" FROM "MediaStream" WHERE "MediaVersionId"=? AND "Codec"='dvb_teletext'"#,

@@ -987,6 +987,8 @@ release section when tagging a release.
   units while rejecting malformed fields outside the fixed header boundary.
   Discover every program on a shared PMT PID with independent versions and
   complete membership checks, retaining ordinary audio/subtitle metadata.
+  Fresh held-source inventory accepts legal initial discontinuity flags without
+  resetting later continuity or treating interior decoder windows as new sources.
 
 - Reject unqualified teletext stream selections before Next Burn preparation,
   matching Convert's existing page-bound refusal. Qualified source captions and

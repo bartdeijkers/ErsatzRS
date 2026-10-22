@@ -21,6 +21,9 @@ fn acquisition(path: &Path) -> LocalTeletextAcquisition {
     }
 }
 
+#[path = "epoch_tests.rs"]
+mod source_epoch;
+
 #[tokio::test]
 async fn held_source_read_keeps_wire_headers_and_exact_current_program() {
     let dir = tempfile::tempdir().unwrap();

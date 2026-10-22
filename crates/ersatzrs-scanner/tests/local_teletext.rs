@@ -25,6 +25,9 @@ mod optional_pes;
 #[path = "local_teletext/shared_pmt.rs"]
 mod shared_pmt;
 
+#[path = "local_teletext/source_epoch.rs"]
+mod source_epoch;
+
 #[allow(
     clippy::disallowed_methods,
     reason = "Explicit opt-in native test runtime and synthetic fixture, never product configuration"
@@ -156,6 +159,14 @@ fn assert_page_capture(observed: &SourceTeletextObservedPages) {
 }
 
 async fn reports(pool: &SqlitePool, files: usize) -> Vec<(i64, SourceTeletextRevision)> {
+    reports_with_packet_count(pool, files, 303).await
+}
+
+async fn reports_with_packet_count(
+    pool: &SqlitePool,
+    files: usize,
+    packet_count: u32,
+) -> Vec<(i64, SourceTeletextRevision)> {
     let parents: Vec<(i64, i64, i64)> = sqlx::query_as(
         r#"SELECT f."Id",f."MediaVersionId",s."Id"
         FROM "MediaFile" f JOIN "MediaStream" s ON s."MediaVersionId"=f."MediaVersionId"
@@ -194,7 +205,7 @@ async fn reports(pool: &SqlitePool, files: usize) -> Vec<(i64, SourceTeletextRev
             .observed_pages
             .headers()
             .expect("native scan must persist actual bounded headers");
-        assert_eq!(headers.packet_count, 303);
+        assert_eq!(headers.packet_count, packet_count);
         assert_eq!(headers.complete_pes, 14);
         assert!(headers.ended_at_eof);
         assert!(!headers.unobserved_prefix);

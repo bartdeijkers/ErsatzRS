@@ -141,6 +141,18 @@ impl SuppliedTeletextHeaderObserver {
         Ok(observer)
     }
 
+    /// Capture pages at the explicitly known first physical packet of this PID.
+    /// The owner must have observed no earlier packet on the PID, including
+    /// adaptation-only packets before PSI became complete. Only the first
+    /// packet's discontinuity is admitted; no clock or readiness is inferred.
+    /// # Errors
+    /// Rejects the same invalid elementary PIDs as [`Self::new`].
+    pub fn new_source_epoch_with_pages(pid: u16) -> Result<Self, TeletextSourceObservationError> {
+        let mut observer = Self::new_with_pages(pid)?;
+        observer.assembler = SuppliedTeletextAssembler::new_source_epoch(pid)?;
+        Ok(observer)
+    }
+
     /// Supply the next complete TS188 packet exactly once.
     /// # Errors
     /// Bounds, transport/PES and header-protection failures permanently fence

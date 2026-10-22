@@ -125,6 +125,7 @@ pub struct SourceTeletextPsiObserver {
     cat: TableSections,
     cat_seen: bool,
     pmts: BTreeMap<u16, SourcePmtDefinitions>,
+    epoch_seen_pids: Option<[u64; 128]>,
 }
 
 #[derive(Default)]
@@ -151,7 +152,21 @@ impl SourceTeletextPsiObserver {
             cat: TableSections::default(),
             cat_seen: false,
             pmts: BTreeMap::new(),
+            epoch_seen_pids: None,
         })
+    }
+
+    /// Observe from an explicitly known source origin, admitting an initial
+    /// discontinuity only on the first physical packet of each PSI PID.
+    /// All packets consume that PID's allowance, even before PAT discovery.
+    /// PAT changes and continuation windows never restore it; the ordinary
+    /// constructor stays strict. This grants no clock or page readiness.
+    /// # Errors
+    /// Rejects the same invalid elementary PIDs as [`Self::new`].
+    pub fn new_source_epoch(pid: u16) -> Result<Self, TeletextPsiError> {
+        let mut observer = Self::new(pid)?;
+        observer.epoch_seen_pids = Some([0; 128]);
+        Ok(observer)
     }
 
     /// Observe one complete packet without changing its bytes.
@@ -258,9 +273,21 @@ impl SourceTeletextPsiObserver {
         }
         let packet = valid_packet(raw)?;
         let pid = u16::from(packet.pid());
+        let first_epoch_packet = if let Some(seen) = &mut self.epoch_seen_pids {
+            let index = usize::from(pid) / 64;
+            let bit = 1_u64 << (pid % 64);
+            let first = seen[index] & bit == 0;
+            seen[index] |= bit;
+            first
+        } else {
+            false
+        };
         match pid {
             0 => {
-                for section in self.pat_assembler.push(&packet)? {
+                for section in self
+                    .pat_assembler
+                    .push_source_epoch_packet(&packet, first_epoch_packet)?
+                {
                     if !current_section(&section, 0)? {
                         continue;
                     }
@@ -282,7 +309,10 @@ impl SourceTeletextPsiObserver {
             }
             1 => {
                 self.cat_seen = true;
-                for section in self.cat_assembler.push(&packet)? {
+                for section in self
+                    .cat_assembler
+                    .push_source_epoch_packet(&packet, first_epoch_packet)?
+                {
                     if !current_section(&section, 1)? {
                         continue;
                     }
@@ -293,7 +323,10 @@ impl SourceTeletextPsiObserver {
             }
             _ => {
                 if let Some(pmt) = self.pmts.get_mut(&pid) {
-                    for section in pmt.assembler.push(&packet)? {
+                    for section in pmt
+                        .assembler
+                        .push_source_epoch_packet(&packet, first_epoch_packet)?
+                    {
                         if !current_section(&section, 2)? {
                             continue;
                         }

@@ -1,7 +1,7 @@
 //! Owned bounded reads from the original held source, outside `SQLite`.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Read as _;
+use std::io::{Read as _, Seek as _};
 use std::path::Path;
 use std::time::Duration;
 
@@ -230,6 +230,32 @@ struct ActiveHeaders {
 }
 
 impl ActiveHeaders {
+    fn new(
+        started_at: u32,
+        ids: &[(i32, u16)],
+        pre_psi_seen: &BTreeSet<i32>,
+    ) -> Result<Self, LocalTeletextHeaderProblem> {
+        let observers = ids
+            .iter()
+            .map(|&(index, pid)| {
+                // Delayed PSI discovery does not restart a previously seen
+                // PID, even if its earlier packet had no payload.
+                let observer = if pre_psi_seen.contains(&index) {
+                    SuppliedTeletextHeaderObserver::new_with_pages(pid)
+                } else {
+                    SuppliedTeletextHeaderObserver::new_source_epoch_with_pages(pid)
+                };
+                observer
+                    .map(|observer| (index, observer))
+                    .map_err(|_| LocalTeletextHeaderProblem::InvalidTransport)
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            started_at,
+            observers,
+        })
+    }
+
     fn push(&mut self, raw: &[u8; 188]) -> Result<(), LocalTeletextHeaderProblem> {
         use LocalTeletextHeaderProblem as Problem;
         for observer in self.observers.values_mut() {
@@ -280,9 +306,14 @@ pub(super) fn read_headers<T>(
     let Some(&(_, first_pid)) = ids.first() else {
         return Err(Problem::IncompletePsi);
     };
-    let mut psi =
-        SourceTeletextPsiObserver::new(first_pid).map_err(|_| Problem::InvalidTransport)?;
     let mut file = acquired.guard.original.as_file();
+    // This owner starts at the held source origin. Never reinterpret an already
+    // consumed handle or an interior decode window as a fresh epoch.
+    if file.stream_position().map_err(|_| Problem::Read)? != 0 {
+        return Err(Problem::InvalidTransport);
+    }
+    let mut psi = SourceTeletextPsiObserver::new_source_epoch(first_pid)
+        .map_err(|_| Problem::InvalidTransport)?;
     let maximum = (acquired.guard.len / 188).min(MAX_SOURCE_OBSERVATION_PACKETS as u64);
     let ended_at_eof = acquired.guard.len <= (MAX_SOURCE_OBSERVATION_PACKETS * 188) as u64;
     if ended_at_eof && !acquired.guard.len.is_multiple_of(188) {
@@ -290,6 +321,7 @@ pub(super) fn read_headers<T>(
     }
     let mut active: Option<ActiveHeaders> = None;
     let mut pre_psi_payload = BTreeSet::new();
+    let mut pre_psi_seen = BTreeSet::new();
     for ordinal in 0..maximum {
         stop.check()?;
         let mut raw = [0; 188];
@@ -297,27 +329,24 @@ pub(super) fn read_headers<T>(
         if raw[0] != 0x47 {
             return Err(Problem::UnsupportedFraming);
         }
-        if active.is_none() && raw[3] & 0x10 != 0 {
+        if active.is_none() {
             let pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
             for &(index, selected) in &ids {
                 if selected == pid {
-                    pre_psi_payload.insert(index);
+                    pre_psi_seen.insert(index);
+                    if raw[3] & 0x10 != 0 {
+                        pre_psi_payload.insert(index);
+                    }
                 }
             }
         }
         psi.push(&raw).map_err(|_| Problem::InvalidTransport)?;
         if active.is_none() && psi.has_complete_current_tables() {
-            active = Some(ActiveHeaders {
-                started_at: u32::try_from(ordinal).map_err(|_| Problem::Capacity)?,
-                observers: ids
-                    .iter()
-                    .map(|&(index, pid)| {
-                        SuppliedTeletextHeaderObserver::new_with_pages(pid)
-                            .map(|observer| (index, observer))
-                            .map_err(|_| Problem::InvalidTransport)
-                    })
-                    .collect::<Result<_, _>>()?,
-            });
+            active = Some(ActiveHeaders::new(
+                u32::try_from(ordinal).map_err(|_| Problem::Capacity)?,
+                &ids,
+                &pre_psi_seen,
+            )?);
         }
         if let Some(active) = &mut active {
             active.push(&raw)?;

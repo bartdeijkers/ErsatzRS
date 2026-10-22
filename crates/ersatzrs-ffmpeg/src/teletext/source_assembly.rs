@@ -78,6 +78,7 @@ pub struct SuppliedTeletextAssembler {
     counter: Option<u8>,
     failure: Option<TeletextAssemblyError>,
     closed: bool,
+    initial_discontinuity_allowed: bool,
 }
 
 impl SuppliedTeletextAssembler {
@@ -97,7 +98,20 @@ impl SuppliedTeletextAssembler {
             counter: None,
             failure: None,
             closed: false,
+            initial_discontinuity_allowed: false,
         })
+    }
+
+    /// Begin at a known source origin for this PID. Only its first physical
+    /// packet may carry an initial discontinuity, including adaptation-only
+    /// packets. Unflagged packets also consume this allowance. Framing, counter,
+    /// PES and all later discontinuity checks remain strict; no clock is reset.
+    /// # Errors
+    /// Rejects the same invalid elementary PIDs as [`Self::new`].
+    pub fn new_source_epoch(pid: u16) -> Result<Self, TeletextAssemblyError> {
+        let mut assembler = Self::new(pid)?;
+        assembler.initial_discontinuity_allowed = true;
+        Ok(assembler)
     }
 
     /// Observe exactly one supplied complete TS188 packet, never searching bytes.
@@ -178,9 +192,11 @@ impl SuppliedTeletextAssembler {
         if raw[3] & 0x30 == 0x30 {
             return Err(TeletextAssemblyError::UnsupportedTransport);
         }
+        let initial = std::mem::replace(&mut self.initial_discontinuity_allowed, false);
         if packet
             .adaptation_field()
             .is_some_and(|field| field.discontinuity_indicator())
+            && !initial
         {
             return Err(TeletextAssemblyError::Discontinuity);
         }
