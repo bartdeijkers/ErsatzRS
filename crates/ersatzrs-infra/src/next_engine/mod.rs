@@ -15,6 +15,7 @@ pub mod coordinator;
 mod credits;
 pub mod diagnostics;
 mod dynamic_host;
+pub use dynamic_host::{DynamicItemRequest, SourceVideoCutSupport};
 mod dynamic_item;
 mod dynamic_projection;
 mod dynamic_provider_identity;

@@ -35,6 +35,7 @@ pub(super) fn generated_video(
     }
     Ok(ProbeHint {
         video: vec![VideoProbeHint {
+            source_frame_cut: None,
             codec: codec.to_owned(),
             width,
             height,
@@ -183,6 +184,7 @@ pub(crate) async fn persisted(
                 let max_cll: Option<i32> = row.try_get("MaxCll").repository()?;
                 let max_fall: Option<i32> = row.try_get("MaxFall").repository()?;
                 hint.video.push(VideoProbeHint {
+                    source_frame_cut: None,
                     codec,
                     width,
                     height,
@@ -374,6 +376,7 @@ fn video(
         .filter(|value| !value.trim().is_empty())
         .ok_or(ProbeHintError)?;
     Ok(VideoProbeHint {
+        source_frame_cut: None,
         codec: codec(stream)?.into(),
         stream_index: index,
         width: positive(stream.width.or(Some(probe.version.width)))?,

@@ -37,12 +37,16 @@ use super::{
 
 pub(super) const CLOCK_POLICY: &str = "complete-source-copyts-selected-video-eof-srt-v2";
 
+mod video_cut;
+pub(super) use video_cut::{PreparedCaption, PreparedVideoCut};
+
 /// Database intent only. This is deliberately neither serialized nor a ready Track.
 pub(crate) struct PendingText {
     descriptor: SourceTeletextCaptionDescriptorRequest,
     pub(super) original_path: String,
     origin: Option<Arc<RetainedOrigin>>,
     retained_route: Option<Source>,
+    burn: bool,
 }
 
 impl PendingText {
@@ -166,6 +170,8 @@ async fn rank_pending(
             original_path: media.path.clone(),
             origin,
             retained_route,
+            burn: channel.next_engine_text_subtitle_mode
+                == ersatzrs_domain::NextEngineTextSubtitleMode::Burn,
         },
     }))
 }
@@ -180,11 +186,12 @@ pub(super) struct Preparation<'a> {
     pub(super) ffmpeg: &'a Path,
     pub(super) ffprobe: &'a Path,
     pub(super) deadline: Instant,
+    pub(super) video_cut: super::SourceVideoCutSupport,
 }
 
 /// Exact finite page preparation, without treating refusal as an ordinary track.
 pub(super) enum PreparedText {
-    Ready(PathBuf),
+    Ready(PreparedCaption),
     Absent(AbsentPage),
 }
 
@@ -362,6 +369,8 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = bool>,
 {
+    let cutoff_source = source.clone();
+    let cutoff_extractor = extractor.clone();
     let checked_source = source.clone();
     let checked_hold = hold.clone();
     let build_hold = hold.clone();
@@ -426,7 +435,11 @@ where
         )
         .await;
     match (prepared, absent_source) {
-        (Ok(path), None) => Ok(PreparedText::Ready(path)),
+        (Ok(path), None) => {
+            let video_cut =
+                video_cut::prepare(cutoff_source, &cutoff_extractor, request, hold).await?;
+            Ok(PreparedText::Ready(PreparedCaption { path, video_cut }))
+        }
         (Err(CacheError::Stale), Some(source)) => {
             source
                 .check_source(request.deadline, hold.clone())

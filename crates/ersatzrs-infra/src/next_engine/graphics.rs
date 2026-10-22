@@ -164,6 +164,7 @@ pub(super) async fn project(
             audio: Vec::new(),
             subtitle: Vec::new(),
             video: vec![protocol::VideoProbeHint {
+                source_frame_cut: None,
                 codec: "ffv1".into(),
                 width,
                 height,

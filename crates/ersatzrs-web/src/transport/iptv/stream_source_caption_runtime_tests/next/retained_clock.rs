@@ -14,16 +14,25 @@ fn expected_args(
     fonts: &Path,
     output: &Path,
     interval: (u64, u64),
+    source_cut: Option<i64>,
 ) -> Vec<String> {
     let (seek, end) = interval;
     assert!(end > seek);
     let seconds = format!("{}.{:03}", seek / 1000, seek % 1000);
     // ADR 0100: this is a fixed oracle for the qualified Next software fixture,
     // not another production command generator or a fallback playback policy.
-    let graph = format!(
+    let mut graph = format!(
         "[0:0]setpts=PTS+round({seconds}/TB),subtitles={}:fontsdir={},setpts=PTS-round({seconds}/TB)[v]",
         sidecar.display(), fonts.display()
     );
+    if let Some(cut) = source_cut {
+        assert_eq!(
+            cut, 827_946,
+            "independently qualified literal incident frame boundary"
+        );
+        let prefix = format!("settb=expr=1/90000,setpts=PTS+round({seconds}/TB),trim=end_pts={cut},setpts=PTS-round({seconds}/TB),");
+        graph = graph.replacen("[0:0]", &format!("[0:0]{prefix}"), 1);
+    }
     let mut args = [
         "-threads",
         "0",
@@ -41,7 +50,11 @@ fn expected_args(
     .map(str::to_owned)
     .to_vec();
     args.push(source.to_str().unwrap().to_owned());
-    args.extend(encoding_args(&graph, end - seek));
+    let mut encoding = encoding_args(&graph, end - seek);
+    if source_cut.is_some() {
+        encoding.retain(|arg| arg != "-shortest");
+    }
+    args.extend(encoding);
     args.push(output.join("live%06d.ts").to_str().unwrap().to_owned());
     args.extend(
         [
@@ -354,17 +367,52 @@ fn filter_prefixes_match(
             .all(|pair| pair[1] - pair[0] == FRAME_TICKS)
 }
 
-fn filter_join(taps: &str, debug: &str, original: &Value, seek: u64) -> FilterJoin {
+fn qualified_filter_prefixes_match(
+    incoming: &[i64],
+    raw: &[i64],
+    output: &[i64],
+    filtered: &[i64],
+    represented: usize,
+    seek_ticks: i64,
+    cut: i64,
+) -> bool {
+    represented > 1
+        && incoming.len() > represented
+        && incoming.len() <= MAX_FRAMES
+        && output.len() == represented
+        && raw == output
+        && filtered.len() == represented
+        && incoming.starts_with(output)
+        && incoming
+            .windows(2)
+            .all(|pair| pair[1] - pair[0] == FRAME_TICKS)
+        && incoming[represented] + seek_ticks == cut
+}
+
+fn filter_join(
+    taps: &str,
+    debug: &str,
+    original: &Value,
+    seek: u64,
+    source_cut: Option<i64>,
+) -> FilterJoin {
     let incoming = filter_frames(taps, "video");
     let caption = filter_frames(taps, "caption");
     let output = filter_frames(taps, "output");
-    assert_eq!(
-        incoming, output,
-        "Burn must retain every incoming timestamp residual"
-    );
-    assert_eq!(caption.len(), incoming.len());
+    if source_cut.is_none() {
+        assert_eq!(
+            incoming, output,
+            "Burn must retain every incoming timestamp residual"
+        );
+    } else {
+        assert!(
+            incoming.starts_with(&output),
+            "cutoff may remove only the original source suffix"
+        );
+    }
+    assert_eq!(caption.len(), output.len());
     let seek_ticks = i64::try_from(seek).unwrap() * 90;
-    for (before, caption) in incoming.iter().zip(&caption) {
+    for (before, caption) in output.iter().zip(&caption) {
         assert_eq!(*caption, *before + seek_ticks);
     }
     assert_eq!(original["streams"][0]["time_base"], "1/90000");
@@ -406,10 +454,15 @@ fn filter_join(taps: &str, debug: &str, original: &Value, seek: u64) -> FilterJo
     assert_eq!(i64::try_from(dup).unwrap(), filtered[0]);
     let represented = encoded.len().checked_sub(dup).unwrap();
     assert!(represented > 1 && incoming.len() > represented);
-    assert!(
-        filter_prefixes_match(&raw, &output, &filtered, represented),
-        "sink/tap clocks must join every delivered frame and the next outpoint witness"
-    );
+    if let Some(cut) = source_cut {
+        assert!(qualified_filter_prefixes_match(&incoming, &raw, &output, &filtered, represented, seek_ticks, cut),
+            "qualified trim must deliver the complete source prefix and retain its excluded pre-trim witness");
+    } else {
+        assert!(
+            filter_prefixes_match(&raw, &output, &filtered, represented),
+            "sink/tap clocks must join every delivered frame and the next outpoint witness"
+        );
+    }
     assert!(filtered
         .iter()
         .take(represented + 1)
@@ -501,6 +554,7 @@ pub(super) async fn check(
     sidecar: &Path,
     root: &Path,
     interval: (u64, u64),
+    source_cut: Option<i64>,
 ) {
     let evidence = root.join("burn-clock");
     tokio::fs::create_dir(&evidence).await.unwrap();
@@ -515,6 +569,7 @@ pub(super) async fn check(
         &ersatzrs_infra::file_system_layout::fonts_cache_folder(),
         &evidence.join("baseline"),
         interval,
+        source_cut,
     );
     reconstruct(tools.0, &base, &evidence.join("baseline"), &bytes).await;
     let taps = reconstruct(
@@ -540,7 +595,7 @@ pub(super) async fn check(
         dup,
         represented,
         encoded,
-    } = filter_join(&taps, &debug, &original, interval.0);
+    } = filter_join(&taps, &debug, &original, interval.0, source_cut);
     let (seek, end) = interval;
     let actual = packets(Path::new(tools.1), &captured, "v:0", true).await;
     let mux_shift = packet_join(&actual, &debug, &encoded);
@@ -557,10 +612,11 @@ pub(super) async fn check(
     );
     let (clear_source, clear_output) = caption_frames(&caption, &counts, &cues, dup);
     let last_source_end = caption[represented - 1] + FRAME_TICKS;
-    let next_source_end = caption[represented] + FRAME_TICKS;
+    let next_source_end = incoming[represented] + i64::try_from(seek).unwrap() * 90 + FRAME_TICKS;
     let out_ticks = i64::try_from(end).unwrap() * 90;
     tokio::fs::write(evidence.join("clock-qualification.json"), serde_json::to_vec_pretty(&json!({
-        "whole_public_baseline_taps_debug_byte_equal":true,
+        "whole_public_baseline_taps_debug_byte_equal":true,"qualified_source_cut_ticks":source_cut,
+        "next_frame_witness_observed_before_trim":source_cut.is_some(),
         "source_seek_ms":seek,"source_out_ms":end,"format_origin_ticks":origin,
         "incoming_ticks":incoming,"caption_ticks":caption,"output_ticks":output,
         "output_frames":encoded.len(),"initial_cfr_duplicates":dup,"dropped_frames":0,
@@ -588,6 +644,7 @@ fn retained_burn_expected_argv_preserves_the_rounded_source_clock() {
         Path::new("FONTS"),
         Path::new("OUTPUT"),
         (2_143, 9_200),
+        None,
     );
     insta::assert_snapshot!("retained_burn_restored_clock_argv", args.join("\n"));
 }
@@ -595,3 +652,16 @@ fn retained_burn_expected_argv_preserves_the_rounded_source_clock() {
 #[cfg(test)]
 #[path = "retained_clock_tests.rs"]
 mod tests;
+
+#[test]
+fn retained_burn_expected_argv_cuts_qualified_source_before_framerate_without_changing_profile() {
+    let args = expected_args(
+        Path::new("SOURCE"),
+        Path::new("SIDECAR"),
+        Path::new("FONTS"),
+        Path::new("OUTPUT"),
+        (2_164, 9_200),
+        Some(827_946),
+    );
+    insta::assert_snapshot!("retained_burn_qualified_cut_argv", args.join("\n"));
+}

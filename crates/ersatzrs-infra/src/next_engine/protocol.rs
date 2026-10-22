@@ -425,6 +425,18 @@ pub struct VideoProbeHint {
     pub has_hdr10_metadata: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rotation: Option<i32>,
+    /// Required only after explicit runtime capability negotiation; never a
+    /// replacement for the source's original outpoint or format duration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_frame_cut: Option<SourceFrameCutHint>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceFrameCutHint {
+    pub version: u8,
+    pub out_point_ms: u64,
+    pub first_excluded_pts_90k: i64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

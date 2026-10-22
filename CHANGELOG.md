@@ -34,7 +34,8 @@ release section when tagging a release.
 - Add owned finite source-video frame-end qualification for subtitle preparation.
   Exact decoded clocks and complete-frame bookends are checked against the selected
   outpoint; uncertain endpoints and native error diagnostics are refused. Runtime
-  integration remains pending.
+  integration is negotiated only with compatible Next candidates; managed-runtime
+  and platform adoption remain separately gated.
 
 - Preserve bounded source teletext page transmissions and their exact body,
   subcode, update and character-context provenance through managed scans and
@@ -986,6 +987,14 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Preserve every complete source-video frame before a selected finite outpoint
+  in compatible Next caption-Burn candidates, including the previously truncated
+  seek2164/out9200 interval. The source-qualified cutoff precedes framerate
+  conversion and preserves the selected encoder, audio, full-source caption
+  cache, exact caption clear and bounded ownership/cleanup. Older callbacks and
+  unqualified observations retain the existing output policy; managed-runtime
+  adoption remains a separate acceptance gate.
 
 - Retain source teletext observations when DVB PES headers carry valid optional
   fields, including DTS and MPEG extensions. Preserve the exact PTS and page

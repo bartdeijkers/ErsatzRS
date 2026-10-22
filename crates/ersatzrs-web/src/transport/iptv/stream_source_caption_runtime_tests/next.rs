@@ -164,7 +164,7 @@ async fn retained_source_with_format(
     source
 }
 
-async fn next_schedule(state: &AppState, item: i64) {
+async fn next_schedule(state: &AppState, item: i64) -> chrono::DateTime<Utc> {
     let mut channel = state.repositories.channel.get_by_number("1").await.unwrap();
     channel.streaming_engine = StreamingEngine::Next;
     channel.streaming_mode = StreamingMode::HttpLiveStreamingSegmenter;
@@ -184,6 +184,7 @@ async fn next_schedule(state: &AppState, item: i64) {
         .bind(item).bind(encode_sql_datetime(start))
         .bind(encode_sql_datetime(start+chrono::Duration::milliseconds(7200)))
         .execute(&state.pool).await.unwrap();
+    start
 }
 
 async fn fetch(client: &reqwest::Client, url: &str, kind: &str) -> Vec<u8> {

@@ -68,3 +68,67 @@ fn retained_clock_join_rejects_missing_delivered_or_next_witness_and_clock_chang
         3
     ));
 }
+
+#[test]
+fn retained_clock_qualified_cut_requires_every_delivered_frame_and_original_next_witness() {
+    let incoming = frames(7);
+    let output = frames(3);
+    let filtered = [5, 6, 7];
+    let seek = 2_164 * 90;
+    let cut = incoming[3] + seek;
+    assert!(qualified_filter_prefixes_match(
+        &incoming, &output, &output, &filtered, 3, seek, cut
+    ));
+    assert!(!qualified_filter_prefixes_match(
+        &incoming[..3],
+        &output,
+        &output,
+        &filtered,
+        3,
+        seek,
+        cut
+    ));
+    assert!(!qualified_filter_prefixes_match(
+        &incoming,
+        &output[..2],
+        &output,
+        &filtered,
+        3,
+        seek,
+        cut
+    ));
+    assert!(!qualified_filter_prefixes_match(
+        &incoming,
+        &output,
+        &output[..2],
+        &filtered,
+        3,
+        seek,
+        cut
+    ));
+    assert!(!qualified_filter_prefixes_match(
+        &incoming,
+        &output,
+        &output,
+        &filtered[..2],
+        3,
+        seek,
+        cut
+    ));
+    assert!(!qualified_filter_prefixes_match(
+        &incoming,
+        &output,
+        &output,
+        &filtered,
+        3,
+        seek,
+        cut + 1
+    ));
+    for index in 0..incoming.len() {
+        let mut changed = incoming.clone();
+        changed[index] += 1;
+        assert!(!qualified_filter_prefixes_match(
+            &changed, &output, &output, &filtered, 3, seek, cut
+        ));
+    }
+}

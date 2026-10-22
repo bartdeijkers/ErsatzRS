@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — SO4 finite outpoint completeness'
+current_focus = 'p9a-source-inventory — SI4 receipt classification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,34 +62,35 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-output SO4, the concrete finite-outpoint omission.
-Next executable action: connect the now-qualified actual decoded source cutoff
-before Next's existing framerate conversion; retain the full-source SRT cache,
-exact occurrence/selected-video identity and final source/publication fences.
-Only a qualified finite cutoff may change shortest policy. Verify the exact
-seek2164/out9200 counterexample and original2143 interval on the ordinary route
-with unchanged source coverage, cue/clear, Dutch audio, transport and cleanup.
-No nicer-seek retry, timing relaxation, provider reread or new source matrix.
+Current package: p9a-source-inventory SI4, the existing receipt-classification
+obligation. Next executable action: join only the already recorded inventory
+leaf receipts and current acquisition/selection routes to their exact readiness
+and platform boundaries; name any concrete uncovered clause and its existing
+owner. Stop when each existing SI4 clause has an explicit verified, missing-proof
+or external-prerequisite disposition. Do not invent new source variants or reopen
+completed components; older historical next-action paragraphs do not govern.
 
-SO4 decoded-cutoff component is completed within Linux preparation scope:
-40 focused reader/process/text/endpoint controls and the actual owned incident-
-source proof pass. Actual decoded pts+duration qualify cutoff827946ticks before
-out828000, exact PID/program/native90k/origin/PSI and held source. Missing
-bookends, native clock conflict, quiet-probe diagnostics, deadline/scope or stale
-source refuse qualification. Shortcount/exit0 never proves natural EOF; bounded
-prefix exhaustion remains explicit unknown, not an accepted source restriction.
-Existing playback is unchanged; candidate/host hookup and its mandatory public
-proof remain open. Canonical provider-scan/identity.json
-burn_shared_clock_correction.finite_outpoint_followup owns all current receipts,
-root-cause trials, original negatives and the exact next integration boundary.
+SO4 seek2164/out9200 and original2143 regression is completed within Linux
+x86_64/software unpublished Next.6. Both ordinary HLS captures preserve176 output
+frames/166 complete source frames, exact889 transitions/clear, Dutch AAC,
+one provider acquisition, grant410 and zero actual work/capacity/storage.
+Both pass19 existing TSDuck structural/clock/continuity controls;2143 remains
+byte-exact to its original success.341 Next tests, eight web controls and the
+native cache/ownership/fallback group pass. Reuse3aacbd09's40 focused controls
+and actual incident-source proof. Runtime negotiation binds the cutoff to the
+same source/video/outpoint before conversion, keeping SRT cache/profile/encoder,
+exact-t and final publication fences. Unqualified observations do not guess an
+endpoint or exclude a source. Canonical provider-scan/identity.json
+burn_shared_clock_correction.finite_outpoint_followup.route_correction owns all
+receipts, scoped reuse, preserved negatives and final closeout.
 
-SI1/2 and SI3 PES/PMT/initial-inventory/M2TS components, SO5 and F6 stay closed
-within their proven scopes. The original successful SO4 interval stays closed;
-the new counterexample owns its exact regression. Reuse unchanged native/public
-transport and fresh-binary smoke evidence. SI4 remains the existing bounded
-receipt-classification task. Ordinary milestones remain the sole completion
-collection. Preserve external deferrals and parallel edits; no push/publication
-or production9B before full independent9A acceptance.
+This closes the named two-interval regression, not all SO4/output/adoption.
+Managed.1, other native RIDs and remaining SO1..3 keep their existing owners.
+SI1/2, SI3 PES/PMT/initial-inventory/M2TS components, SO5 and F6 stay closed.
+Ordinary milestones remain the sole completion collection. Preserve external
+deferrals and parallel edits; no push/publication or production9B before full
+independent9A acceptance.
+
 '''
 
 # Preserved historical handoffs; excluded from progress next.

@@ -28,7 +28,11 @@ enum CaptionScenario {
     Regular,
     Late,
     Untransmitted,
+    Incident,
 }
+
+#[path = "cache/video_cut.rs"]
+mod video_cut;
 
 pub(super) async fn assert_complete_text_preparation(
     pool: &crate::db::DbPool,
@@ -129,6 +133,13 @@ impl Fixture {
             CaptionScenario::Untransmitted => {
                 fixture::source_with_untransmitted_caption(&ffmpeg, root).await
             }
+            CaptionScenario::Incident => {
+                let clip = root.join("caption-source.ts");
+                tokio::fs::copy(runtime_path("ERSATZRS_NEXT_MAPPED_SOURCE"), &clip)
+                    .await
+                    .unwrap();
+                clip
+            }
         };
         let (pool, locker) = prepare_schedule(&clip, false, &text_profile()).await;
         if matches!(scenario, CaptionScenario::Late) {
@@ -210,7 +221,7 @@ impl Fixture {
         })
         .await
         .and_then(|prepared| match prepared {
-            source_teletext::PreparedText::Ready(path) => Ok(path),
+            source_teletext::PreparedText::Ready(caption) => Ok(caption.path),
             source_teletext::PreparedText::Absent(_) => {
                 Err(ersatzrs_core::repositories::RepositoryError::unavailable(
                     "Next source teletext test",
@@ -230,6 +241,42 @@ impl Fixture {
         F: FnOnce() -> Fut,
         Fut: Future<Output = bool>,
     {
+        self.prepare_with_video_cut(
+            before,
+            decoder,
+            crate::next_engine::SourceVideoCutSupport::Unavailable,
+            validate,
+        )
+        .await
+    }
+
+    async fn prepare_with_video_cut<F, Fut>(
+        &self,
+        before: &dynamic_projection::Snapshot,
+        decoder: &Path,
+        video_cut: crate::next_engine::SourceVideoCutSupport,
+        validate: F,
+    ) -> ersatzrs_core::repositories::Result<source_teletext::PreparedText>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = bool>,
+    {
+        self.prepare_with_video_cut_and_probe(before, decoder, &self.ffprobe, video_cut, validate)
+            .await
+    }
+
+    async fn prepare_with_video_cut_and_probe<F, Fut>(
+        &self,
+        before: &dynamic_projection::Snapshot,
+        decoder: &Path,
+        ffprobe: &Path,
+        video_cut: crate::next_engine::SourceVideoCutSupport,
+        validate: F,
+    ) -> ersatzrs_core::repositories::Result<source_teletext::PreparedText>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = bool>,
+    {
         let pending = before.projection.pending_burn.as_ref().unwrap();
         let text = pending.source_text.as_deref().unwrap();
         assert_eq!(text.candidate().request.page.get(), 889);
@@ -238,13 +285,14 @@ impl Fixture {
             &self.locker,
             &self.cache,
             source_teletext::Preparation {
+                video_cut,
                 pending: text,
                 source: &pending.source,
                 video: before.projection.selected_video(),
                 key: &before.identity.cache_key,
                 expires: before.projection.item.finish,
                 ffmpeg: decoder,
-                ffprobe: &self.ffprobe,
+                ffprobe,
                 deadline: Instant::now() + Duration::from_secs(15),
             },
             validate,

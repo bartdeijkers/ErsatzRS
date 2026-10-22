@@ -48,6 +48,30 @@ and first four patches are unchanged; `.5` has a retirement condition and three
 new grouped pipeline regressions. Managed `.1` adoption and required native RID
 acceptance remain separate; neither package nor application publication occurs.
 
+Phase9A SO4 source-boundary candidate (2026-10-22): unpublished `.6` adds
+`finite-video-cut-v1` negotiation on the authenticated dynamic callback. Only
+the consuming runtime advertises it; legacy callbacks receive no new required
+hint. A source-bound decoded cutoff is attached to the exact selected video and
+original finite outpoint after held-source and fresh-publication validation.
+The full-source SRT cache key/content are unchanged; cutoff qualification also
+runs on a cache hit. Unknown bounded observations, including unproved natural
+EOF, retain the existing caption/output policy. Optional decoder/output
+qualification failures can do so only after a fresh held-source check; source,
+stream, cancellation, deadline and cleanup failures retain explicit refusal.
+This grants no new source exclusion or guessed endpoint.
+
+The runtime rejects unsupported versions, ambiguous or changed selected-video
+identity and mismatched original outpoints. A timestamp-only trim precedes
+frame-rate and geometry conversion, retaining the original encoder/profile and
+exact output duration. Only an exact final finite text-Burn pass can omit
+`shortest`; intermediate or audio-shorter passes retain it. A first-excluded
+frame may start beyond the outpoint on a source presentation gap, so its start
+is not constrained to an invented `cut <= outpoint` invariant. Actual decoded
+frame ends, original source association and final fences remain authority.
+The fixed2164/2143 public-route regressions and canonical P9A-04/SO4 evidence
+own candidate verification. Managed `.1` adoption and native platform acceptance
+remain distinct; this amendment authorizes no publication.
+
 UCU-11 update (2026-10-14): the maintainer approves local catch-up through
 v26.11.3. Reviewed released Next0.2.2 corrects HLS cue intervals, timestamp maps
 and WebVTT settings; its unchanged two unpatched runtime regressions still fail.

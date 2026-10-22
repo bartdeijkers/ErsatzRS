@@ -29,6 +29,7 @@ pub(super) struct ProviderRequest<'a> {
     pub now: DateTime<Utc>,
     pub until: DateTime<Utc>,
     pub deadline: Instant,
+    pub video_cut: super::SourceVideoCutSupport,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -286,6 +287,7 @@ impl NextHost {
                 ffmpeg: &request.request.ffmpeg,
                 ffprobe: &request.request.ffprobe,
                 deadline: request.deadline - std::time::Duration::from_secs(6),
+                video_cut: request.video_cut,
             },
             valid,
         ))
@@ -293,8 +295,14 @@ impl NextHost {
         self.validate_provider_origin(before, request, &origin)
             .await?;
         let item = match prepared {
-            super::source_teletext::PreparedText::Ready(path) => {
-                super::dynamic_host::install_prepared_track(projected.item, &path)?
+            super::source_teletext::PreparedText::Ready(caption) => {
+                if let Some(cut) = &caption.video_cut {
+                    cut.check_source().await?;
+                    self.validate_provider_origin(before, request, &origin)
+                        .await?;
+                    cut.install(&mut projected.item)?;
+                }
+                super::dynamic_host::install_prepared_track(projected.item, &caption.path)?
             }
             super::source_teletext::PreparedText::Absent(absent) => {
                 absent.check_source(request.deadline).await?;
@@ -380,6 +388,7 @@ impl NextHost {
                 instance,
                 item_id: binding.playout_item_id,
                 audio: publication.audio,
+                video_cut: super::SourceVideoCutSupport::Unavailable,
                 now: binding.start,
                 until: binding.finish,
                 deadline: Instant::now() + std::time::Duration::from_secs(10),

@@ -8,7 +8,10 @@ use axum::{
 };
 use ersatzrs_infra::{
     db::DbPool,
-    next_engine::media::{MediaRelay, ACCESS_HEADER, SESSION_HEADER, SOURCE_BINDING_HEADER},
+    next_engine::{
+        media::{MediaRelay, ACCESS_HEADER, SESSION_HEADER, SOURCE_BINDING_HEADER},
+        DynamicItemRequest, SourceVideoCutSupport,
+    },
 };
 use futures_util::TryStreamExt as _;
 use tokio::io::{AsyncRead, AsyncReadExt as _};
@@ -174,6 +177,9 @@ pub async fn get_item(
     {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    let Ok(video_cut) = source_video_cut_support(&headers) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
     let Some((number, instance, now, until)) = dynamic_headers(&headers) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
@@ -185,14 +191,46 @@ pub async fn get_item(
         };
         Some(index)
     };
-    match state
+    if let Ok(item) = state
         .next_engine
-        .resolve_dynamic(channel, item, &digest, audio, number, instance, now, until)
+        .resolve_dynamic_with_video_cut(
+            DynamicItemRequest {
+                channel_id: channel,
+                item_id: item,
+                digest: &digest,
+                audio,
+                number,
+                instance,
+                now,
+                until,
+            },
+            video_cut,
+        )
         .await
     {
-        Ok(item) => ([(header::CACHE_CONTROL, "no-store")], axum::Json(item)).into_response(),
-        Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        ([(header::CACHE_CONTROL, "no-store")], axum::Json(item)).into_response()
+    } else {
+        tracing::warn!(
+            channel_id = channel,
+            item_id = item,
+            finite_video_cut_supported = video_cut == SourceVideoCutSupport::Version1,
+            "Next dynamic item resolution failed"
+        );
+        StatusCode::SERVICE_UNAVAILABLE.into_response()
     }
+}
+
+fn source_video_cut_support(headers: &HeaderMap) -> Result<SourceVideoCutSupport, StatusCode> {
+    let mut values = headers.get_all("x-ersatzrs-next-features").iter();
+    let Some(value) = values.next() else {
+        return Ok(SourceVideoCutSupport::Unavailable);
+    };
+    // Exact byte comparison bounds the accepted value without allocating or
+    // interpreting arbitrary feature lists. Duplicate field lines are refused.
+    if values.next().is_some() || value.as_bytes() != b"finite-video-cut-v1" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    Ok(SourceVideoCutSupport::Version1)
 }
 
 fn dynamic_headers(
@@ -394,6 +432,66 @@ mod tests {
         assert!(dynamic_headers(&headers).is_none());
         headers.insert("x-etv-now", "invalid".parse().unwrap());
         assert!(dynamic_headers(&headers).is_none());
+    }
+
+    #[test]
+    fn dynamic_callback_features_preserve_legacy_absence_and_accept_only_version_one() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(
+            source_video_cut_support(&headers),
+            Ok(SourceVideoCutSupport::Unavailable)
+        );
+        headers.insert(
+            "x-ersatzrs-next-features",
+            "finite-video-cut-v1".parse().unwrap(),
+        );
+        assert_eq!(
+            source_video_cut_support(&headers),
+            Ok(SourceVideoCutSupport::Version1)
+        );
+    }
+
+    #[test]
+    fn dynamic_callback_features_refuse_unknown_malformed_and_oversized_values() {
+        for value in [
+            "",
+            "finite-video-cut-v2",
+            "FINITE-VIDEO-CUT-V1",
+            " finite-video-cut-v1",
+            "finite-video-cut-v1 ",
+            "finite-video-cut-v1,finite-video-cut-v1",
+            "finite-video-cut-v1 other",
+            &"x".repeat(1024),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("x-ersatzrs-next-features", value.parse().unwrap());
+            assert_eq!(
+                source_video_cut_support(&headers),
+                Err(StatusCode::BAD_REQUEST),
+                "{value:?}"
+            );
+        }
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-ersatzrs-next-features",
+            axum::http::HeaderValue::from_bytes(&[0xff]).unwrap(),
+        );
+        assert_eq!(
+            source_video_cut_support(&headers),
+            Err(StatusCode::BAD_REQUEST)
+        );
+    }
+
+    #[test]
+    fn dynamic_callback_features_refuse_duplicate_field_lines_even_when_identical() {
+        let mut headers = HeaderMap::new();
+        for value in ["finite-video-cut-v1", "finite-video-cut-v1"] {
+            headers.append("x-ersatzrs-next-features", value.parse().unwrap());
+        }
+        assert_eq!(
+            source_video_cut_support(&headers),
+            Err(StatusCode::BAD_REQUEST)
+        );
     }
 
     #[tokio::test]

@@ -6,6 +6,29 @@ use tokio::time::{timeout_at, Instant};
 
 use super::{dynamic_item, dynamic_projection, host::NextHost, protocol};
 
+/// Runtime-advertised support, never source or publication authority.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SourceVideoCutSupport {
+    /// Legacy callbacks cannot consume a finite-video cutoff.
+    #[default]
+    Unavailable,
+    /// The runtime explicitly understands the version-one cutoff contract.
+    Version1,
+}
+
+/// Existing authenticated dynamic callback values, grouped without new authority.
+#[derive(Clone, Copy)]
+pub struct DynamicItemRequest<'a> {
+    pub channel_id: i64,
+    pub item_id: i64,
+    pub digest: &'a str,
+    pub audio: Option<u32>,
+    pub number: &'a str,
+    pub instance: uuid::Uuid,
+    pub now: DateTime<Utc>,
+    pub until: DateTime<Utc>,
+}
+
 impl NextHost {
     pub(super) async fn project_session_snapshot(
         &self,
@@ -128,30 +151,57 @@ impl NextHost {
         now: DateTime<Utc>,
         until: DateTime<Utc>,
     ) -> Result<protocol::PlayoutItem> {
+        self.resolve_dynamic_with_video_cut(
+            DynamicItemRequest {
+                channel_id,
+                item_id,
+                digest,
+                audio,
+                number,
+                instance,
+                now,
+                until,
+            },
+            SourceVideoCutSupport::Unavailable,
+        )
+        .await
+    }
+
+    /// Resolve the same session-bound callback with explicit runtime support.
+    /// Authentication remains the internal transport's responsibility. Support
+    /// changes no session, publication, source, selected-track or timing checks.
+    /// # Errors
+    /// Returns the same redacted resolution failures as `resolve_dynamic`.
+    pub async fn resolve_dynamic_with_video_cut(
+        &self,
+        callback: DynamicItemRequest<'_>,
+        video_cut: SourceVideoCutSupport,
+    ) -> Result<protocol::PlayoutItem> {
         let deadline = Instant::now() + std::time::Duration::from_secs(30);
         timeout_at(
             deadline,
-            Box::pin(self.resolve_dynamic_inner(
-                channel_id, item_id, digest, audio, number, instance, now, until, deadline,
-            )),
+            Box::pin(self.resolve_dynamic_inner(callback, video_cut, deadline)),
         )
         .await
         .map_err(|_| unavailable("resolution deadline expired"))?
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn resolve_dynamic_inner(
         &self,
-        channel_id: i64,
-        item_id: i64,
-        digest: &str,
-        audio: Option<u32>,
-        number: &str,
-        instance: uuid::Uuid,
-        now: DateTime<Utc>,
-        until: DateTime<Utc>,
+        callback: DynamicItemRequest<'_>,
+        video_cut: SourceVideoCutSupport,
         deadline: Instant,
     ) -> Result<protocol::PlayoutItem> {
+        let DynamicItemRequest {
+            channel_id,
+            item_id,
+            digest,
+            audio,
+            number,
+            instance,
+            now,
+            until,
+        } = callback;
         let audio = audio
             .map(usize::try_from)
             .transpose()
@@ -208,12 +258,13 @@ impl NextHost {
             now,
             until,
             deadline,
+            video_cut,
         };
         if let Some(resolved) = Box::pin(self.resolve_provider_source(&before, &provider)).await? {
             return Ok(resolved);
         }
         Box::pin(self.resolve_concrete(
-            before, &request, item_id, instance, audio, now, until, deadline, true,
+            before, &request, item_id, instance, audio, now, until, deadline, true, video_cut,
         ))
         .await
     }
@@ -233,18 +284,14 @@ impl NextHost {
         until: DateTime<Utc>,
         deadline: Instant,
         include_source_text: bool,
+        video_cut: SourceVideoCutSupport,
     ) -> Result<protocol::PlayoutItem> {
         let digest = &before.identity.descriptor;
-        if before.projection.pending_burn.is_none() {
+        let Some(pending) = before.projection.pending_burn.as_ref() else {
             return self
                 .resolve_ready_item(instance, &before.projection.item, now)
                 .await;
-        }
-        let pending = before
-            .projection
-            .pending_burn
-            .as_ref()
-            .ok_or_else(|| unavailable("subtitle preparation changed"))?;
+        };
         let stream = u32::try_from(pending.subtitle.stream_index)
             .map_err(|_| unavailable("subtitle stream is invalid"))?;
         let validate = || async {
@@ -264,6 +311,7 @@ impl NextHost {
             })
         };
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
+        let mut prepared_video_cut = None;
         let prepared = if let Some(text) = &pending.source_text {
             let prepared = Box::pin(super::source_teletext::prepare(
                 &self.pool,
@@ -278,15 +326,20 @@ impl NextHost {
                     ffmpeg: &request.ffmpeg,
                     ffprobe: &request.ffprobe,
                     deadline: preparation_deadline,
+                    video_cut,
                 },
                 validate,
             ))
             .await?;
             match prepared {
-                super::source_teletext::PreparedText::Ready(path) => Ok(path),
+                super::source_teletext::PreparedText::Ready(caption) => {
+                    prepared_video_cut = caption.video_cut;
+                    Ok(caption.path)
+                }
                 super::source_teletext::PreparedText::Absent(absent) => {
                     return Box::pin(self.resolve_absent_source_page(
                         &before, absent, request, instance, item_id, audio, now, until, deadline,
+                        video_cut,
                     ))
                     .await;
                 }
@@ -326,6 +379,7 @@ impl NextHost {
             until,
             include_source_text,
             &prepared,
+            prepared_video_cut.as_deref(),
         )
         .await
     }
@@ -345,7 +399,11 @@ impl NextHost {
         until: DateTime<Utc>,
         include_source_text: bool,
         prepared: &std::path::Path,
+        video_cut: Option<&super::source_teletext::PreparedVideoCut>,
     ) -> Result<protocol::PlayoutItem> {
+        if let Some(cut) = video_cut {
+            cut.check_source().await?;
+        }
         // Metadata and membership may change while FFmpeg is running. Never
         // attach a completed artifact to a different selection or publication.
         let mut after = self
@@ -368,6 +426,9 @@ impl NextHost {
         after
             .projection
             .publish_graphics(&self.media, Some(instance), now)?;
+        if let Some(cut) = video_cut {
+            cut.install(&mut after.projection.item)?;
+        }
         let item = install_prepared_track(after.projection.item, prepared)?;
         dynamic_item::resolve_at(&item, now)
             .map_err(|_| unavailable("requested item timing is invalid"))
@@ -432,6 +493,7 @@ impl NextHost {
         now: DateTime<Utc>,
         until: DateTime<Utc>,
         deadline: Instant,
+        video_cut: SourceVideoCutSupport,
     ) -> Result<protocol::PlayoutItem> {
         let validate = || async {
             let current = self
@@ -452,7 +514,7 @@ impl NextHost {
         // complete-source absence can enter this ordinary selection path.
         let ordinary_identity = ordinary.identity.clone();
         let item = Box::pin(self.resolve_concrete(
-            ordinary, request, item_id, instance, audio, now, until, deadline, false,
+            ordinary, request, item_id, instance, audio, now, until, deadline, false, video_cut,
         ))
         .await?;
         validate().await?;

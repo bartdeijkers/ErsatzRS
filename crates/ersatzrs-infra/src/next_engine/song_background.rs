@@ -66,6 +66,7 @@ impl SongProjection {
                 audio: Vec::new(),
                 subtitle: Vec::new(),
                 video: vec![protocol::VideoProbeHint {
+                    source_frame_cut: None,
                     codec: "png".into(),
                     width,
                     height,

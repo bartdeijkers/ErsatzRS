@@ -188,6 +188,42 @@ async fn check_retained_burn_delivery(
         })
         .expect("actual authenticated retained Burn caption callback");
     let (sidecar, seek, end, uri, headers) = tracks(item);
+    let cut = item
+        .tracks
+        .as_ref()
+        .unwrap()
+        .video
+        .as_ref()
+        .unwrap()
+        .source
+        .as_ref()
+        .and_then(|source| match source {
+            Source::Http {
+                probe_hint: Some(hint),
+                ..
+            } => hint
+                .video
+                .iter()
+                .find(|video| video.stream_index == 0)
+                .and_then(|video| video.source_frame_cut.clone()),
+            _ => None,
+        });
+    if root.join("fixed-interval.json").exists() {
+        let expected: Value = serde_json::from_slice(
+            &tokio::fs::read(root.join("fixed-interval.json"))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(seek, expected["seek_ms"].as_u64().unwrap());
+        let hint = cut
+            .as_ref()
+            .expect("qualified runtime must receive the source-bound cut");
+        assert_eq!(
+            (hint.version, hint.out_point_ms, hint.first_excluded_pts_90k),
+            (1, 9_200, 827_946)
+        );
+    }
     drop(callbacks);
     let text = tokio::fs::read_to_string(&sidecar).await.unwrap();
     let independent =
@@ -226,6 +262,7 @@ async fn check_retained_burn_delivery(
         &sidecar,
         &root,
         (seek, end),
+        cut.as_ref().map(|hint| hint.first_excluded_pts_90k),
     ))
     .await;
     (uri, headers)
@@ -236,7 +273,10 @@ async fn configure_remote(
     source: &Path,
     ffprobe: &str,
     address: &str,
-) -> Option<mapped_provider_fixture::Provider> {
+) -> (
+    Option<mapped_provider_fixture::Provider>,
+    chrono::DateTime<Utc>,
+) {
     let (item, _, provider) = Box::pin(scan_caption_owner(
         state,
         source.parent().unwrap(),
@@ -271,8 +311,8 @@ async fn configure_remote(
     ] {
         config(state, key, Some(value)).await;
     }
-    next_schedule(state, item).await;
-    provider
+    let start = next_schedule(state, item).await;
+    (provider, start)
 }
 
 async fn configure_burn(state: &AppState) {
@@ -317,6 +357,55 @@ async fn run_with_format(
     policy: NextEngineTextSubtitleMode,
     format: ersatzrs_infra::ffprobe::SourceTeletextPacketFormat,
 ) {
+    run_with_interval(tools, policy, format, None).await;
+}
+
+async fn apply_fixed_interval(
+    state: &mut AppState,
+    root: &Path,
+    start: chrono::DateTime<Utc>,
+    seek: u64,
+) {
+    assert!(matches!(seek, 2_143 | 2_164));
+    let clock = start + chrono::Duration::milliseconds(i64::try_from(seek - 2_000).unwrap());
+    let overlays = root.join("overlays");
+    tokio::fs::create_dir(&overlays).await.unwrap();
+    tokio::fs::write(
+        overlays.join("1.json"),
+        serde_json::to_vec(&json!({"version":ersatzrs_infra::next_engine::protocol::CHANNEL_VERSION,"playout":{"virtual_start":clock}})).unwrap(),
+    )
+    .await
+    .unwrap();
+    tokio::fs::write(
+        root.join("fixed-interval.json"),
+        serde_json::to_vec(&json!({"seek_ms":seek,"out_ms":9_200,"virtual_start":clock})).unwrap(),
+    )
+    .await
+    .unwrap();
+    state.next_engine = Arc::new(
+        NextHost::new(
+            state.pool.clone(),
+            state.application.operations().entity_locker().clone(),
+            root.join("playout"),
+        )
+        .with_config_overlays(overlays),
+    );
+}
+
+fn retained_storage_entries() -> Vec<std::ffi::OsString> {
+    match std::fs::read_dir(file_system_layout::provider_source_storage_folder()) {
+        Ok(entries) => entries.map(|entry| entry.unwrap().file_name()).collect(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => panic!("retained storage cleanup observation: {error}"),
+    }
+}
+
+async fn run_with_interval(
+    tools: [String; 3],
+    policy: NextEngineTextSubtitleMode,
+    format: ersatzrs_infra::ffprobe::SourceTeletextPacketFormat,
+    fixed_seek: Option<u64>,
+) {
     let root = tempfile::tempdir().unwrap().keep();
     println!("retained Next ordinary HTTP evidence: {}", root.display());
     let source = retained_source_with_format(&tools[0], &root.join("library"), format).await;
@@ -328,7 +417,10 @@ async fn run_with_format(
         state.application.operations().entity_locker().clone(),
         root.join("playout"),
     ));
-    let provider = configure_remote(&state, &source, &tools[1], &upstream.url("")).await;
+    let (provider, start) = configure_remote(&state, &source, &tools[1], &upstream.url("")).await;
+    if let Some(seek) = fixed_seek {
+        apply_fixed_interval(&mut state, &root, start, seek).await;
+    }
     if policy == NextEngineTextSubtitleMode::Burn {
         configure_burn(&state).await;
     }
@@ -367,11 +459,7 @@ async fn run_with_format(
     } else {
         None
     };
-    let storage = file_system_layout::provider_source_storage_folder();
-    let entries = std::fs::read_dir(storage)
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name())
-        .collect::<Vec<_>>();
+    let entries = retained_storage_entries();
     let reports: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "SourceTeletextMetadata""#)
         .fetch_one(&state.pool)
         .await
@@ -474,10 +562,33 @@ fn normal_next_remote_only_provider_burns_m2ts_page889_from_retained_http_source
         .build()
         .unwrap()
         .block_on(async {
-            Box::pin(run_with_format(
+            Box::pin(run_with_interval(
                 initialize_source_caption_runtime().await,
                 NextEngineTextSubtitleMode::Burn,
                 ersatzrs_infra::ffprobe::SourceTeletextPacketFormat::M2ts192,
+                Some(2_164),
+            ))
+            .await;
+        });
+}
+
+#[test]
+#[ignore = "requires qualified finite-cut Next candidate, paired TS188/M2TS/889 fixture, FFmpeg9 and isolated storage"]
+fn normal_next_remote_only_provider_burns_m2ts_page889_preserves_original_interval() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    assert!(!file_system_layout::provider_source_storage_folder().exists());
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            Box::pin(run_with_interval(
+                initialize_source_caption_runtime().await,
+                NextEngineTextSubtitleMode::Burn,
+                ersatzrs_infra::ffprobe::SourceTeletextPacketFormat::M2ts192,
+                Some(2_143),
             ))
             .await;
         });
