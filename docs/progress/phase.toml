@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-inventory — SI2 persistent identity and invalidation proof'
+current_focus = 'p9a-source-inventory — SI3 source-format qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-inventory SI2, the existing selected source/version/
-file/stream/page identity, rescan/replacement/missing-file reconciliation proof.
-First action: join the existing SQL selection and actual Local/provider receipts
-to those exact SI2 cells; add a targeted regression only for a demonstrated
-missing required transition. Stop when each named transition has exact persistent
-identity/ordinary-track proof, or its concrete implementation gap is recorded.
-No inferred provider/container cross-product or new general audit.
+Current package: p9a-source-inventory SI3, the recorded source-format boundaries.
+First action: map the existing TS188/single-section-PMT/supplied-PES/strict-source
+framing limits and their retained positive/refusal receipts to unchanged P9A-03
+and ADR0121. Name only a concrete accepted input that lacks required handling;
+classify missing implementation, proof or necessary maintainer restriction
+without inferring an all-provider/container product. Stop with a finite sourced
+classification and its exact next corrective action; do not approve a permanent
+restriction or start a new general standards audit.
+
+SI2 persistent identity/invalidation proof is complete: exact positive version
+selection and physical missing/restored-source joins now pass, closing the final
+two missing cells. Reuse SQLite136/actual Local4/provider6; new SQL1/native1 and
+strict affected lint pass. Canonical provider-scan/identity.json
+source_inventory_identity_followup owns exact receipts and scope.
 
 SI1 bounded capture/persistence implementation is complete with focused136,
 actual Local4/provider6 scans and strict five-crate all-target Clippy. The fresh

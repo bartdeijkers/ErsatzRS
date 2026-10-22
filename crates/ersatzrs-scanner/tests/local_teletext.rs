@@ -16,6 +16,9 @@ use ersatzrs_infra::teletext_source;
 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
 use sqlx::{sqlite::SqlitePoolOptions, Executor as _, SqlitePool};
 
+#[path = "local_teletext/missing_source.rs"]
+mod missing_source;
+
 #[allow(
     clippy::disallowed_methods,
     reason = "Explicit opt-in native test runtime and synthetic fixture, never product configuration"

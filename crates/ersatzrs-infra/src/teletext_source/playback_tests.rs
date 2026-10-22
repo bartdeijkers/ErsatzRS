@@ -312,6 +312,73 @@ async fn candidates_never_fall_back_to_another_item_version_file_or_locator() {
 }
 
 #[tokio::test]
+async fn selected_versions_keep_their_own_reports_and_survive_other_file_deletion() {
+    let fixture = Fixture::new(MediaSourceKind::Local).await;
+    let first = report(MediaSourceKind::Local);
+    fixture.store(&first).await;
+    sqlx::query(r#"INSERT INTO "MediaStream" ("Id","MediaVersionId","Index","Codec","MediaStreamKind","Language","Channels","Default","Forced") VALUES (404,302,4,'dvb_teletext',3,'eng,nld',0,0,1)"#)
+        .execute(&fixture.pool).await.unwrap();
+    let before: Vec<(i64, i64, String, i64, i64)> = sqlx::query_as(
+        r#"SELECT "Id","MediaVersionId","Codec","Default","Forced" FROM "MediaStream" ORDER BY "Id""#,
+    ).fetch_all(&fixture.pool).await.unwrap();
+    let mut second = first.clone();
+    let SourceTeletextBinding::Bound(binding) = &mut second.binding else {
+        unreachable!()
+    };
+    binding.media_version_id = 302;
+    binding.media_file_id = 503;
+    binding.media_stream_id = 404;
+    binding.source_revision = SourceTeletextRevision::new("second-observed-source".into()).unwrap();
+    let mut tx = begin_write(&fixture.pool).await.unwrap();
+    assert!(replace(
+        &mut tx,
+        &fixture.claim,
+        SourceTeletextParents {
+            media_version_id: 302,
+            media_stream_id: 404,
+            media_file_id: 503,
+        },
+        &second
+    )
+    .await
+    .unwrap());
+    tx.commit().await.unwrap();
+    let selected = load_caption_candidates(&fixture.pool, 101, 302, 503, "fixture/other.ts")
+        .await
+        .unwrap();
+    let original = fixture.candidates().await.unwrap();
+    assert!(!selected.is_empty() && selected.len() == original.len());
+    for candidate in &selected {
+        let request = &candidate.request.binding;
+        assert_eq!(
+            (
+                request.media_version_id,
+                request.media_file_id,
+                request.media_stream_id
+            ),
+            (302, 503, 404)
+        );
+        assert_eq!(request.source_revision.as_str(), "second-observed-source");
+    }
+    assert_ne!(selected, original);
+    sqlx::query(r#"DELETE FROM "MediaFile" WHERE "Id"=501"#)
+        .execute(&fixture.pool)
+        .await
+        .unwrap();
+    assert!(fixture.candidates().await.is_err());
+    assert_eq!(
+        load_caption_candidates(&fixture.pool, 101, 302, 503, "fixture/other.ts")
+            .await
+            .unwrap(),
+        selected
+    );
+    let after: Vec<(i64, i64, String, i64, i64)> = sqlx::query_as(
+        r#"SELECT "Id","MediaVersionId","Codec","Default","Forced" FROM "MediaStream" ORDER BY "Id""#,
+    ).fetch_all(&fixture.pool).await.unwrap();
+    assert_eq!(before, after);
+}
+
+#[tokio::test]
 async fn ambiguous_equal_version_owners_and_stale_source_parents_are_rejected() {
     let fixture = Fixture::new(MediaSourceKind::Local).await;
     fixture.store(&report(MediaSourceKind::Local)).await;
