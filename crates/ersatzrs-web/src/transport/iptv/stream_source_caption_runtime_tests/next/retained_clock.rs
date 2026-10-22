@@ -332,6 +332,28 @@ struct FilterJoin {
     encoded: Vec<i64>,
 }
 
+fn filter_prefixes_match(
+    raw: &[i64],
+    output: &[i64],
+    filtered: &[i64],
+    represented: usize,
+) -> bool {
+    // FFmpeg9 logs filter_raw after pulling from the buffersink; showinfo can
+    // process additional lookahead before the recording limit stops that pull.
+    // Join every common timestamp, every delivered frame and the next witness.
+    represented > 1
+        && raw.len() > represented
+        && output.len() > represented
+        && raw.len() == filtered.len()
+        && raw.len() <= MAX_FRAMES
+        && output.len() <= MAX_FRAMES
+        && (raw.starts_with(output) || output.starts_with(raw))
+        && raw.windows(2).all(|pair| pair[1] - pair[0] == FRAME_TICKS)
+        && output
+            .windows(2)
+            .all(|pair| pair[1] - pair[0] == FRAME_TICKS)
+}
+
 fn filter_join(taps: &str, debug: &str, original: &Value, seek: u64) -> FilterJoin {
     let incoming = filter_frames(taps, "video");
     let caption = filter_frames(taps, "caption");
@@ -364,7 +386,9 @@ fn filter_join(taps: &str, debug: &str, original: &Value, seek: u64) -> FilterJo
     let decoded = debug_frames(debug, "[vist#0:0/", "decoder -> pts:", " pts:", "1/90000");
     assert!(decoded.starts_with(&incoming));
     let raw = debug_frames(debug, "[fc#1 ", "filter_raw -> pts:", " pts:", "1/90000");
-    assert!(raw.starts_with(&output));
+    assert!(raw
+        .iter()
+        .all(|pts| source_pts.contains(&(pts + seek_ticks + origin))));
     let filtered = debug_frames(debug, "[fc#1 ", "filter -> pts:", " pts:", "1/25");
     let encoded = debug_frames(
         debug,
@@ -382,9 +406,13 @@ fn filter_join(taps: &str, debug: &str, original: &Value, seek: u64) -> FilterJo
     assert_eq!(i64::try_from(dup).unwrap(), filtered[0]);
     let represented = encoded.len().checked_sub(dup).unwrap();
     assert!(represented > 1 && incoming.len() > represented);
+    assert!(
+        filter_prefixes_match(&raw, &output, &filtered, represented),
+        "sink/tap clocks must join every delivered frame and the next outpoint witness"
+    );
     assert!(filtered
         .iter()
-        .take(represented)
+        .take(represented + 1)
         .enumerate()
         .all(|(n, pts)| *pts == i64::try_from(n + dup).unwrap()));
     FilterJoin {
@@ -563,3 +591,7 @@ fn retained_burn_expected_argv_preserves_the_rounded_source_clock() {
     );
     insta::assert_snapshot!("retained_burn_restored_clock_argv", args.join("\n"));
 }
+
+#[cfg(test)]
+#[path = "retained_clock_tests.rs"]
+mod tests;

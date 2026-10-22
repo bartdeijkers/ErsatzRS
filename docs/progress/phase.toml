@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-inventory — SI1 retained-source clock proof'
+current_focus = 'p9a-source-inventory — SI3 explicit initial-source epoch'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,46 +62,41 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-inventory SI1, retained-source clock proof.
-Next executable action: use the preserved single-CPU candidate.5 public capture
-and exact traces to classify the retained_clock raw/output-prefix rejection.
-Distinguish a product source-clock defect from a test/decoder limitation before
-any correction. Reuse the existing host trial only for a new concrete hypothesis;
-keep timing/completeness/AV/audio/cleanup guards and observation limits intact.
-Stop at strict proof for the named current boundary, or record the exact missing
-capability and move to another existing executable package. No new variants,
-client search or general audit follows from this proof gap.
+Current package: p9a-source-inventory SI3, explicit initial-source epoch.
+Next executable action: qualify the recorded initial-discontinuity refusal on a
+known fresh held source against the existing authored source-epoch mechanisms.
+Name the exact legal initial packet that fails, then reuse the smallest explicit
+source-bound allowance. Preserve strict default readers, later-discontinuity/
+continuity/PSI/clock fences, unknown timestamps, source identity and worker
+ownership. Stop when the legal fresh-source case and affected refusal/cleanup
+controls pass and are locally checkpointed. No implicit counter resets or new
+framing/container matrix; any policy uncertainty stays explicit.
 
-SI3 optional-PES and PMT-definition/PID components are complete. The latter has
-73 affected/34 owned snapshot and cleanup regressions, one actual pinned-probe
-Linux scan/rescan and strict ffmpeg/scanner all-target Clippy. Both reported and
-acquired memberships/versions survive shared-PID source input, preserving exact
-page/body/PTS data and ordinary audio/subtitles with current SQL bindings.
-Canonical provider-scan/identity.json source_inventory_format_followup owns
-receipts, primary references, fixed PSI and all preserved negatives. Authored
-exclusive-PID admission is unchanged; no shared-output rewrite or new clock/
-platform/client/adoption success is claimed. Reuse optional-PES41/native proof.
+SI1 bounded capture/persistence and the required scoped public HLS clock proof
+are complete. The new proof is Linux x86_64/software candidate.5 with per-test
+CPU0 affinity for exact public/baseline/taps/debug byte equality, not runtime
+adoption. Focused3 and actual public route1 retain every source/caption/filter/
+encoder/mux clock, selected889/audio/AV, full glyph/clear and outpoint9.2s checks.
+One upstream fetch, revoked410 grants and zero work/capacity/retained-source
+cleanup pass. Strict web all-target Clippy passes. The actual prefix failure was
+a test assumption about unconsumed lookahead; entire common prefixes and every
+delivered frame plus the next witness remain mandatory. Both old negatives are
+preserved in canonical provider-scan/identity.json source_inventory_readiness_
+followup.clock_prefix_correction; no orphaned old next-action text overrides here.
 
-Other recorded SI3 gaps stay finite: raw188 versus required framing/container
-inputs and initial-discontinuity/generation handling. No permanent exclusion or
-new all-container/provider matrix is accepted. The AFC01/10 teletext restriction
-and each PMT definition's zero section numbers are normative, not implementation
-omissions. Closed components reopen only for a concrete regression.
+SI3 optional-PES and PMT-definition/PID components are complete. Reuse their
+PES41/PSI73/owned34/native scan/lint receipts and exact current SQL/source identity
+checks in source_inventory_format_followup. Other-format/framing qualification
+remains a separate named SI3 gap. The AFC01/10 teletext restriction and each
+PMT definition's zero section numbers are normative; no source-scope waiver or
+shared-PID authored-output rewrite is inferred. Closed components reopen only
+for a concrete regression.
 
 SI2 persistent identity/invalidation proof is complete: exact positive version
 selection and physical missing/restored-source joins now pass, closing the final
 two missing cells. Reuse SQLite136/actual Local4/provider6; new SQL1/native1 and
 strict affected lint pass. Canonical provider-scan/identity.json
 source_inventory_identity_followup owns exact receipts and scope.
-
-SI1 bounded capture/persistence implementation is complete with focused136,
-actual Local4/provider6 scans and strict five-crate all-target Clippy. The fresh
-public HLS clock proof remains open: multi-CPU full-byte nondeterminism and a
-single-CPU raw/output-prefix refusal are retained in canonical provider-scan/
-identity.json source_inventory_readiness_followup. No guard or old SO4 scope is
-weakened; no broader clock success is claimed.
-SI3 format policy remains its separate existing cell. Seven unrelated files,
-shared documentation changes and all original evidence are preserved.
 
 SO4 candidate.5 clock/outpoint and SO5 existing preference/qualified-page/refusal
 components are complete. Canonical provider-scan/identity.json
