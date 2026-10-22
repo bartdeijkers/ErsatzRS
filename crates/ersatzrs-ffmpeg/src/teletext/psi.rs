@@ -416,21 +416,33 @@ impl TableSections {
     }
 
     fn programs(&self, candidate: u16) -> Result<BTreeMap<u16, ProgramPmt>, TeletextPsiError> {
-        self.programs_optional(Some(candidate))
+        Ok(self
+            .program_records(Some(candidate))?
+            .into_iter()
+            .map(|(pid, program)| {
+                (
+                    pid,
+                    ProgramPmt {
+                        program,
+                        assembler: SectionAssembler::default(),
+                        section: None,
+                    },
+                )
+            })
+            .collect())
     }
 
-    pub(super) fn source_programs(&self) -> Result<BTreeMap<u16, ProgramPmt>, TeletextPsiError> {
-        self.programs_optional(None)
+    pub(super) fn source_programs(&self) -> Result<Vec<(u16, u16)>, TeletextPsiError> {
+        self.program_records(None)
     }
 
-    fn programs_optional(
-        &self,
-        candidate: Option<u16>,
-    ) -> Result<BTreeMap<u16, ProgramPmt>, TeletextPsiError> {
+    // H.222.0 2.4.4.5/8: distinct source programs may share a PMT PID.
+    // Authored rewriting still requires its existing exclusive-PID admission.
+    fn program_records(&self, candidate: Option<u16>) -> Result<Vec<(u16, u16)>, TeletextPsiError> {
         let mut programs = BTreeSet::new();
         let mut pids = BTreeSet::new();
-        let mut pmts = BTreeMap::new();
-        let mut network = false;
+        let mut pmts = Vec::new();
+        let mut network = None;
         for section in self.sections.values() {
             let bytes = &section[8..section.len() - 4];
             if bytes.len() % 4 != 0 || bytes.chunks_exact(4).any(|entry| entry[2] & 0xe0 != 0xe0) {
@@ -441,32 +453,27 @@ impl TableSections {
                 if candidate == Some(pid) {
                     return Err(TeletextMultiplexError::PidCollision { pid }.into());
                 }
-                if !pids.insert(pid) {
+                let fresh_pid = pids.insert(pid);
+                if candidate.is_some() && !fresh_pid {
                     return Err(TeletextPsiError::Pat);
                 }
                 match entry {
                     ProgramDescriptor::Network { .. } => {
-                        if network || pid == 0 || pid == 1 || pid == 0x1fff {
+                        if network.is_some() || !fresh_pid || pid == 0 || pid == 1 || pid == 0x1fff
+                        {
                             return Err(TeletextPsiError::Pat);
                         }
-                        network = true;
+                        network = Some(pid);
                     }
                     ProgramDescriptor::Program { program_number, .. } => {
                         validate_pid(pid).map_err(|_| TeletextPsiError::Pat)?;
-                        if !programs.insert(program_number) {
+                        if network == Some(pid) || !programs.insert(program_number) {
                             return Err(TeletextPsiError::Pat);
                         }
                         if programs.len() > MAX_PROGRAMS {
                             return Err(TeletextPsiError::Capacity);
                         }
-                        pmts.insert(
-                            pid,
-                            ProgramPmt {
-                                program: program_number,
-                                assembler: SectionAssembler::default(),
-                                section: None,
-                            },
-                        );
+                        pmts.push((pid, program_number));
                     }
                 }
             }

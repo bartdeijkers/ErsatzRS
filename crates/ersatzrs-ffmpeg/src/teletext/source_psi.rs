@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use mpeg2ts_reader::psi::{pmt::PmtSection, TableSyntaxHeader};
 
 use super::{
-    psi::{current_section, ProgramPmt, TableSections, MAX_DISCOVERY_PACKETS},
+    psi::{current_section, TableSections, MAX_DISCOVERY_PACKETS},
     psi_framing::SectionAssembler,
     signalling::{
         valid_packet, validate_pid, validate_source_descriptor_bytes, validate_source_pmt,
@@ -75,7 +75,7 @@ pub struct ObservedSourcePsi {
     pub pat: ObservedSourcePsiTable,
     /// `None` means no CAT packet was observed, not that the source has no CAT.
     pub cat: Option<ObservedSourcePsiTable>,
-    /// Every advertised non-network program, sorted by PMT PID.
+    /// Every advertised non-network program, sorted by PMT PID then program number.
     pub programs: Vec<ObservedSourceProgram>,
 }
 
@@ -99,8 +99,10 @@ impl ObservedSourcePsi {
 /// A bounded report-only PSI reader for one exact existing elementary PID.
 ///
 /// At most 32,768 packets (6,160,384 supplied bytes) per explicit window, 128 PAT programs and 256
-/// sections of at most 1,024 bytes per PAT/CAT are admitted. PMTs retain the
-/// existing single-section validation boundary. Future table framing/CRC is validated, but future tables
+/// sections of at most 1,024 bytes per PAT/CAT are admitted. Each PMT program
+/// definition has its required section number zero; multiple definitions may
+/// share one physical PID without sharing identity or version state.
+/// Future table framing/CRC is validated, but future tables
 /// never replace current evidence. A new current PAT invalidates all dependent
 /// PMTs, even when entries appear unchanged. New current PMT/CAT versions replace
 /// their prior evidence; same-version contradictions and malformed input fence
@@ -122,7 +124,14 @@ pub struct SourceTeletextPsiObserver {
     cat_assembler: SectionAssembler,
     cat: TableSections,
     cat_seen: bool,
-    pmts: BTreeMap<u16, ProgramPmt>,
+    pmts: BTreeMap<u16, SourcePmtDefinitions>,
+}
+
+#[derive(Default)]
+struct SourcePmtDefinitions {
+    // Framing and continuity belong to the physical PID, not each definition.
+    assembler: SectionAssembler,
+    sections: BTreeMap<u16, Option<Vec<u8>>>,
 }
 
 impl SourceTeletextPsiObserver {
@@ -186,10 +195,9 @@ impl SourceTeletextPsiObserver {
         self.failure.is_none()
             && self.pat.complete()
             && !self.pat_assembler.is_pending()
-            && self
-                .pmts
-                .values()
-                .all(|pmt| pmt.section.is_some() && !pmt.assembler.is_pending())
+            && self.pmts.values().all(|pmt| {
+                pmt.sections.values().all(Option::is_some) && !pmt.assembler.is_pending()
+            })
             && (!self.cat_seen || self.cat.complete() && !self.cat_assembler.is_pending())
     }
 
@@ -203,29 +211,33 @@ impl SourceTeletextPsiObserver {
         if !self.has_complete_current_tables() {
             return Err(TeletextPsiError::Incomplete);
         }
-        let mut programs = Vec::with_capacity(self.pmts.len());
+        let mut programs = Vec::new();
         for (&pmt_pid, pmt) in &self.pmts {
-            let section = pmt.section.as_ref().ok_or(TeletextPsiError::Incomplete)?;
-            // The shared validator already checked the complete record extent.
-            let (_, _, pcr_pid) = validate_source_pmt(section, pmt_pid)?;
-            let parsed = PmtSection::from_bytes(&section[8..section.len() - 4])
-                .map_err(|_| super::TeletextMultiplexError::Pmt)?;
-            let mut streams = Vec::new();
-            for stream in parsed.streams() {
-                streams.push(ObservedSourceElementaryStream {
-                    pid: u16::from(stream.elementary_pid()),
-                    stream_type: u8::from(stream.stream_type()),
-                    descriptors: raw_descriptors(stream.descriptors::<RawDescriptors<'_>>())?,
+            for (&program_number, definition) in &pmt.sections {
+                let section = definition.as_ref().ok_or(TeletextPsiError::Incomplete)?;
+                // The shared validator already checked the complete record extent.
+                let (_, _, pcr_pid) = validate_source_pmt(section, pmt_pid)?;
+                let parsed = PmtSection::from_bytes(&section[8..section.len() - 4])
+                    .map_err(|_| super::TeletextMultiplexError::Pmt)?;
+                let mut streams = Vec::new();
+                for stream in parsed.streams() {
+                    streams.push(ObservedSourceElementaryStream {
+                        pid: u16::from(stream.elementary_pid()),
+                        stream_type: u8::from(stream.stream_type()),
+                        descriptors: raw_descriptors(stream.descriptors::<RawDescriptors<'_>>())?,
+                    });
+                }
+                programs.push(ObservedSourceProgram {
+                    program_number,
+                    pmt_pid,
+                    pcr_pid,
+                    pmt: ObservedSourcePsiTable::new(vec![section.clone()]),
+                    program_descriptors: raw_descriptors(
+                        parsed.descriptors::<RawDescriptors<'_>>(),
+                    )?,
+                    streams,
                 });
             }
-            programs.push(ObservedSourceProgram {
-                program_number: pmt.program,
-                pmt_pid,
-                pcr_pid,
-                pmt: ObservedSourcePsiTable::new(vec![section.clone()]),
-                program_descriptors: raw_descriptors(parsed.descriptors::<RawDescriptors<'_>>())?,
-                streams,
-            });
         }
         Ok(ObservedSourcePsi {
             requested_pid: self.pid,
@@ -258,7 +270,13 @@ impl SourceTeletextPsiObserver {
                         self.pmts.clear();
                     }
                     if self.pat.complete() && self.pmts.is_empty() {
-                        self.pmts = self.pat.source_programs()?;
+                        for (pid, program) in self.pat.source_programs()? {
+                            self.pmts
+                                .entry(pid)
+                                .or_default()
+                                .sections
+                                .insert(program, None);
+                        }
                     }
                 }
             }
@@ -280,16 +298,17 @@ impl SourceTeletextPsiObserver {
                             continue;
                         }
                         let (program, _, _) = validate_source_pmt(&section, pid)?;
-                        if program != pmt.program {
-                            return Err(TeletextPsiError::Program);
-                        }
-                        if let Some(previous) = &pmt.section {
+                        let definition = pmt
+                            .sections
+                            .get_mut(&program)
+                            .ok_or(TeletextPsiError::Program)?;
+                        if let Some(previous) = definition.as_ref() {
                             if section[5] == previous[5] && section != *previous {
                                 return Err(TeletextPsiError::Version);
                             }
                             self.current_tables_changed |= section != *previous;
                         }
-                        pmt.section = Some(section);
+                        *definition = Some(section);
                     }
                 }
             }

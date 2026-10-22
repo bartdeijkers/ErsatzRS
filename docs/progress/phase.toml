@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-inventory — SI3 program-definition/PID qualification'
+current_focus = 'p9a-source-inventory — SI1 retained-source clock proof'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,26 +62,31 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-inventory SI3, program-definition/PID qualification.
-Next executable action: qualify the recorded per-program PMT numbering and
-shared-PMT-PID refusals against primary MPEG semantics and the existing PSI
-fixtures. Name a concrete legal-source rejection before changing it; preserve
-whole-program collection, revision, source-clock and epoch fences. Stop when
-those existing boundaries are classified with exact evidence and any proven
-rejection has its smallest verified correction. No arbitrary new table variants.
+Current package: p9a-source-inventory SI1, retained-source clock proof.
+Next executable action: use the preserved single-CPU candidate.5 public capture
+and exact traces to classify the retained_clock raw/output-prefix rejection.
+Distinguish a product source-clock defect from a test/decoder limitation before
+any correction. Reuse the existing host trial only for a new concrete hypothesis;
+keep timing/completeness/AV/audio/cleanup guards and observation limits intact.
+Stop at strict proof for the named current boundary, or record the exact missing
+capability and move to another existing executable package. No new variants,
+client search or general audit follows from this proof gap.
 
-SI3 optional-PES component is complete: bounded legal optional fields retain raw
-units and exact/absent PTS. Focused41, actual managed Local scan/rescan and strict
-ffmpeg/scanner all-target Clippy pass. The actual source keeps all14 PES payloads,
-PSI/AV bytes, parent identity and ordinary audio/subtitles with joined cleanup.
+SI3 optional-PES and PMT-definition/PID components are complete. The latter has
+73 affected/34 owned snapshot and cleanup regressions, one actual pinned-probe
+Linux scan/rescan and strict ffmpeg/scanner all-target Clippy. Both reported and
+acquired memberships/versions survive shared-PID source input, preserving exact
+page/body/PTS data and ordinary audio/subtitles with current SQL bindings.
 Canonical provider-scan/identity.json source_inventory_format_followup owns
-receipts, primary references and preserved helper/second-claim test negatives.
-No repeated editor/client chain or new clock/platform/adoption claim.
+receipts, primary references, fixed PSI and all preserved negatives. Authored
+exclusive-PID admission is unchanged; no shared-output rewrite or new clock/
+platform/client/adoption success is claimed. Reuse optional-PES41/native proof.
 
-Other recorded SI3 gaps remain finite: raw188 versus required framing/container
-inputs and initial-discontinuity/generation handling. No permanent source
-restriction or new all-container/provider matrix is accepted. The AFC01/10
-teletext constraint is normative; unrelated AV adaptation/payload stays intact.
+Other recorded SI3 gaps stay finite: raw188 versus required framing/container
+inputs and initial-discontinuity/generation handling. No permanent exclusion or
+new all-container/provider matrix is accepted. The AFC01/10 teletext restriction
+and each PMT definition's zero section numbers are normative, not implementation
+omissions. Closed components reopen only for a concrete regression.
 
 SI2 persistent identity/invalidation proof is complete: exact positive version
 selection and physical missing/restored-source joins now pass, closing the final

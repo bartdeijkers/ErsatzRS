@@ -22,6 +22,9 @@ mod missing_source;
 #[path = "local_teletext/optional_pes.rs"]
 mod optional_pes;
 
+#[path = "local_teletext/shared_pmt.rs"]
+mod shared_pmt;
+
 #[allow(
     clippy::disallowed_methods,
     reason = "Explicit opt-in native test runtime and synthetic fixture, never product configuration"
