@@ -16,6 +16,12 @@ const MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
 #[path = "teletext_decode_text/qualification.rs"]
 mod qualification;
 
+#[path = "teletext_decode_text/finite_video_cut.rs"]
+mod finite_video_cut;
+#[path = "teletext_decode_text/video_cut.rs"]
+mod video_cut;
+pub use video_cut::SourceTeletextVideoCutEvidence;
+
 /// Complete finite-source text observation, never a default track selection.
 pub(crate) enum SourceTeletextTextPreparation {
     Ready(SourceTeletextTextArtifact),

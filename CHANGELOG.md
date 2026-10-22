@@ -31,6 +31,11 @@ release section when tagging a release.
 
 ### Added
 
+- Add owned finite source-video frame-end qualification for subtitle preparation.
+  Exact decoded clocks and complete-frame bookends are checked against the selected
+  outpoint; uncertain endpoints and native error diagnostics are refused. Runtime
+  integration remains pending.
+
 - Preserve bounded source teletext page transmissions and their exact body,
   subcode, update and character-context provenance through managed scans and
   SQLite database reopen. Unknown context, incomplete pages and capacity exhaustion

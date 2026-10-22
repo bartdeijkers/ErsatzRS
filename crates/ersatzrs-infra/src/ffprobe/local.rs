@@ -189,6 +189,32 @@ pub(super) async fn capture_retained(
         .map(|output| output.stdout)
 }
 
+/// For an explicitly quiet (`-v error`) probe, diagnostics invalidate stdout
+/// even when the native tool reports success. The existing bounded tail is
+/// sufficient to distinguish no stderr bytes from any stderr; no diagnostic
+/// text or private input is returned on this refusal path.
+pub(super) async fn capture_retained_silent(
+    command: FfprobeCommand,
+    path: PathBuf,
+    deadline: Option<Instant>,
+    retention: Option<ProbeRetention>,
+) -> super::Result<Vec<u8>> {
+    let output = capture_retained_output(
+        command,
+        path.clone(),
+        deadline,
+        retention,
+        StderrCapture::Tail,
+    )
+    .await?;
+    if !output.stderr.is_empty() {
+        return Err(FfprobeError::InvalidOutput {
+            path: path.display().to_string(),
+        });
+    }
+    Ok(output.stdout)
+}
+
 /// Capture successful native-test stdout and complete UTF-8 diagnostics under
 /// the same actual worker, source retention and operation scope as probes.
 /// Stderr is bounded to eight MiB; overflow or invalid UTF-8 fails the whole

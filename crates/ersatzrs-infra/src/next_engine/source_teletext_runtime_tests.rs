@@ -17,6 +17,9 @@ mod provider_source_runtime_tests;
 #[path = "source_teletext_runtime_tests/eof.rs"]
 mod eof;
 
+#[path = "source_teletext_runtime_tests/video_cut.rs"]
+mod video_cut;
+
 // The bounded executable decoder gate intentionally requires Unix permissions.
 #[cfg(unix)]
 #[path = "source_teletext_runtime_tests/replacement.rs"]

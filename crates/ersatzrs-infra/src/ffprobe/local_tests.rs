@@ -238,6 +238,32 @@ mod unix {
     }
 
     #[tokio::test]
+    async fn silent_probe_refuses_successful_stdout_with_any_error_diagnostics() {
+        let scope = LocalProbeCleanupScope::new();
+        for (script, quiet) in [
+            ("printf stdout", true),
+            ("printf error >&2; printf stdout", false),
+            ("head -c 32768 /dev/zero >&2; printf stdout", false),
+        ] {
+            let result = scope
+                .scope(capture_retained_silent(
+                    command(script, &[]),
+                    PathBuf::from("synthetic quiet probe"),
+                    Some(Instant::now() + Duration::from_secs(5)),
+                    None,
+                ))
+                .await;
+            if quiet {
+                assert_eq!(result.unwrap(), b"stdout");
+            } else {
+                assert!(matches!(result, Err(FfprobeError::InvalidOutput { .. })));
+            }
+        }
+        scope.close();
+        scope.wait_cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn successful_diagnostics_retain_complete_stderr_and_stdout_in_the_same_scope() {
         let scope = LocalProbeCleanupScope::new();
         let operation = scope.scope(capture_retained_diagnostics(
