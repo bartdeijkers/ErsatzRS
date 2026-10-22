@@ -982,6 +982,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Retain source teletext observations when DVB PES headers carry valid optional
+  fields, including DTS and MPEG extensions. Preserve the exact PTS and page
+  units while rejecting malformed fields outside the fixed header boundary.
+
 - Reject unqualified teletext stream selections before Next Burn preparation,
   matching Convert's existing page-bound refusal. Qualified source captions and
   ordinary subtitles retain their routes; explicit Off preserves selected AV.

@@ -2,6 +2,9 @@ use super::*;
 
 const ZERO_PTS: [u8; 5] = [0x21, 0, 1, 0, 1];
 
+#[path = "source_pes_optional_tests.rs"]
+mod optional_headers;
+
 fn framed_unit(id: u8, length: u8) -> Vec<u8> {
     let mut bytes = vec![0x5a; 2 + usize::from(length)];
     bytes[..2].copy_from_slice(&[id, length]);
@@ -211,21 +214,6 @@ fn header_requires_start_code_stream_markers_alignment_and_clear_scrambling() {
         let mut bytes = fixture();
         bytes[6] |= ((flags & 4) << 1) | (flags & 3);
         assert!(SuppliedTeletextPes::parse(&bytes).is_ok());
-    }
-}
-
-#[test]
-fn all_other_optional_headers_are_explicitly_unsupported() {
-    for flags in 0_u8..=255 {
-        if matches!(flags, 0 | 0x80) {
-            continue;
-        }
-        let mut bytes = fixture();
-        bytes[7] = flags;
-        assert_eq!(
-            SuppliedTeletextPes::parse(&bytes),
-            Err(TeletextPesError::UnsupportedHeader)
-        );
     }
 }
 

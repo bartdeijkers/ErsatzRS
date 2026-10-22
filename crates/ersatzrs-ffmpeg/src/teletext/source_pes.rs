@@ -1,17 +1,20 @@
 //! Borrowed framing from one explicitly supplied complete DVB teletext PES.
 //!
 //! EN 300 472 sections 4.2–4.4 define the fixed header and data-unit framing.
-//! This supports no optional fields or PTS alone, not every valid MPEG PES
-//! header: DTS, extensions and other optional fields are explicitly unsupported.
+//! Optional MPEG fields must fit inside that fixed header. Their structure is
+//! checked without giving clocks other than PTS any page-timing authority.
+//! Private data, previous-packet CRC and nested pack data remain opaque; this
+//! does not certify their contents or verify a previous packet's checksum.
 //! Unknown units are retained without interpretation. Successful framing is not
 //! full DVB/PSI conformity: signalled DVB teletext streams permit only unit IDs
 //! 0x02/0x03/0xFF. Unknown units cannot certify a stream or usable inventory.
 //! No TS discovery, acquisition, header decoding, source association, clock
 //! unwrapping or page readiness is performed here.
 
-use mpeg2ts_reader::pes::Timestamp;
-
 use super::TeletextTimestamp;
+
+#[path = "source_pes_optional.rs"]
+mod optional;
 
 // Largest multiple of 184 fitting the nonzero 16-bit PES length plus six bytes.
 pub(super) const MAX_PES_BYTES: usize = 65_504;
@@ -32,8 +35,8 @@ pub enum TeletextPesError {
     Alignment,
     #[error("scrambled teletext PES is unsupported")]
     Scrambled,
-    #[error("supplied teletext PES optional header is unsupported")]
-    UnsupportedHeader,
+    #[error("supplied teletext PES optional header structure is invalid")]
+    OptionalHeader,
     #[error("supplied teletext PES header data length must be 36")]
     HeaderDataLength,
     #[error("supplied teletext PES header stuffing is invalid")]
@@ -67,8 +70,8 @@ impl<'a> SuppliedTeletextPes<'a> {
     /// nothing. Stuffing and unknown unit payloads may have any encoded length;
     /// only identifiers 0x02/0x03 require 44 bytes of teletext payload.
     /// # Errors
-    /// Rejects malformed framing, scrambling, invalid PTS or optional fields
-    /// outside the explicitly supported no-PTS/PTS-only header subset.
+    /// Rejects malformed framing, scrambling, invalid timestamp protection or
+    /// optional fields extending beyond the fixed header area.
     pub fn parse(bytes: &'a [u8]) -> Result<Self, TeletextPesError> {
         if bytes.len() < 184 || bytes.len() > MAX_PES_BYTES || !bytes.len().is_multiple_of(184) {
             return Err(TeletextPesError::PacketLength);
@@ -95,22 +98,7 @@ impl<'a> SuppliedTeletextPes<'a> {
         if bytes[8] != 0x24 {
             return Err(TeletextPesError::HeaderDataLength);
         }
-        let (pts, stuffing_start) = match bytes[7] {
-            0 => (None, 9),
-            0x80 => {
-                // The complete fixed header guarantees this exact five-byte
-                // slice before calling the dependency's indexed decoder.
-                let timestamp = Timestamp::from_pts_bytes(&bytes[9..14])
-                    .map_err(|_| TeletextPesError::Timestamp)?;
-                let pts = TeletextTimestamp::new(timestamp.value())
-                    .map_err(|_| TeletextPesError::Timestamp)?;
-                (Some(pts), 14)
-            }
-            _ => return Err(TeletextPesError::UnsupportedHeader),
-        };
-        if bytes[stuffing_start..45].iter().any(|byte| *byte != 0xff) {
-            return Err(TeletextPesError::HeaderStuffing);
-        }
+        let pts = optional::parse(bytes[7], &bytes[9..45])?;
         if !(0x10..=0x1f).contains(&bytes[45]) {
             return Err(TeletextPesError::DataIdentifier);
         }

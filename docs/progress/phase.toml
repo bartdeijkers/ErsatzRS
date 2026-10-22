@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-inventory — SI3 source-format qualification'
+current_focus = 'p9a-source-inventory — SI3 program-definition/PID qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,14 +62,26 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-inventory SI3, the recorded source-format boundaries.
-First action: map the existing TS188/single-section-PMT/supplied-PES/strict-source
-framing limits and their retained positive/refusal receipts to unchanged P9A-03
-and ADR0121. Name only a concrete accepted input that lacks required handling;
-classify missing implementation, proof or necessary maintainer restriction
-without inferring an all-provider/container product. Stop with a finite sourced
-classification and its exact next corrective action; do not approve a permanent
-restriction or start a new general standards audit.
+Current package: p9a-source-inventory SI3, program-definition/PID qualification.
+Next executable action: qualify the recorded per-program PMT numbering and
+shared-PMT-PID refusals against primary MPEG semantics and the existing PSI
+fixtures. Name a concrete legal-source rejection before changing it; preserve
+whole-program collection, revision, source-clock and epoch fences. Stop when
+those existing boundaries are classified with exact evidence and any proven
+rejection has its smallest verified correction. No arbitrary new table variants.
+
+SI3 optional-PES component is complete: bounded legal optional fields retain raw
+units and exact/absent PTS. Focused41, actual managed Local scan/rescan and strict
+ffmpeg/scanner all-target Clippy pass. The actual source keeps all14 PES payloads,
+PSI/AV bytes, parent identity and ordinary audio/subtitles with joined cleanup.
+Canonical provider-scan/identity.json source_inventory_format_followup owns
+receipts, primary references and preserved helper/second-claim test negatives.
+No repeated editor/client chain or new clock/platform/adoption claim.
+
+Other recorded SI3 gaps remain finite: raw188 versus required framing/container
+inputs and initial-discontinuity/generation handling. No permanent source
+restriction or new all-container/provider matrix is accepted. The AFC01/10
+teletext constraint is normative; unrelated AV adaptation/payload stays intact.
 
 SI2 persistent identity/invalidation proof is complete: exact positive version
 selection and physical missing/restored-source joins now pass, closing the final

@@ -19,6 +19,9 @@ use sqlx::{sqlite::SqlitePoolOptions, Executor as _, SqlitePool};
 #[path = "local_teletext/missing_source.rs"]
 mod missing_source;
 
+#[path = "local_teletext/optional_pes.rs"]
+mod optional_pes;
+
 #[allow(
     clippy::disallowed_methods,
     reason = "Explicit opt-in native test runtime and synthetic fixture, never product configuration"

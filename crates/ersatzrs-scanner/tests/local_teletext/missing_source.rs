@@ -117,7 +117,7 @@ async fn assert_ordinary_fallback(pool: &SqlitePool, path: &Path, ids: (i64, i64
     assert_eq!(locker.active_teletext_work(), 0);
 }
 
-async fn source_ids(pool: &SqlitePool) -> (i64, i64, i64) {
+pub(super) async fn source_ids(pool: &SqlitePool) -> (i64, i64, i64) {
     sqlx::query_as(
         r#"SELECT v."OtherVideoId",v."Id",f."Id" FROM "MediaVersion" v JOIN "MediaFile" f ON f."MediaVersionId"=v."Id""#,
     ).fetch_one(pool).await.unwrap()
