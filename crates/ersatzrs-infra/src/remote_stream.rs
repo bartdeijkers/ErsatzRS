@@ -27,12 +27,14 @@ use crate::addons::{
 use crate::db::DbPool;
 
 mod prepared_input;
+mod prepared_teletext;
 #[path = "remote_stream_source_caption.rs"]
 mod source_caption;
 pub use prepared_input::{
     spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput,
     PreparedRemoteStreamTransfer,
 };
+pub use prepared_teletext::{prepare_native_caption_producer, PreparedNativeCaptionPlayback};
 pub use source_caption::SourceCaptionAttachmentError;
 
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
@@ -289,6 +291,8 @@ pub enum RemoteStreamError {
     PreparedRequestTooLarge,
     #[error("prepared remote input producer failed")]
     PreparedProducerFailed,
+    #[error("prepared native source caption selection or consumer is unavailable")]
+    PreparedCaptionUnavailable,
     #[error("prepared remote input descendant termination could not be confirmed")]
     PreparedTerminationUnconfirmed,
     #[error("published interval playback requires a prepared producer input")]

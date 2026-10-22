@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — SO2 bounded live and one-shot captions'
+current_focus = 'p9a-source-output — SO3 Next live and one-shot policy'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,25 +62,29 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-output SO2 native streaming route integration.
-Next executable action: connect playback-owned transient page selection from
-actual retained producer-prefix PSI/PES/header evidence to the existing native
-worker, preserving the same producer, final command and consuming-child owner.
-The native route still skips remote/external captions; finite/local receipts
-cannot qualify endless or one-shot input. Preserve preferences, Off, selected
-audio, ordinary AV fallback and actual admission through joined cleanup.
-Stop only when ordinary live HTTP/RTSP and consume-once output prove exact
-captions/audio before EOF, without producer reopening and with bounded startup/
-cancellation plus completed cleanup. No new client or external maintenance.
+Current package: p9a-source-output SO3 Next live/one-shot policy route proof.
+Next executable action: use the existing ordinary Next and prepared-source
+fixtures to close the named unsupported live/one-shot refusal and independently
+source-bound prepared-alternative proof, retaining exact timing/audio/ownership
+and cleanup. Reuse valid prepared compatibility receipts; add only the missing
+route join. Stop at that named policy boundary, not full source-output acceptance.
 
-SO2 prefix observation/replay component is completed: report-only64KiB metadata,
-actual index2/PID258/program1, strict complete-PES/protected888 headers and
-unchanged full-prefix replay feed one physical pipe:0. Actual888/Dutch660Hz output
-precedes original producer/encoder EOF with ordinary software settings; joined
-kill releases default capacity.13 focused controls and19 existing transport
-checks pass. This is a prerequisite component, not ordinary route acceptance.
-Canonical provider-scan/identity.json native_streaming_lifecycle_followup owns
-the receipt, bounds, remaining product gap and next action.
+SO2 owned observed-page selection/consumer binding is completed within Linux
+x86_64/software FFmpeg9: one producer, opportunistic prefix at most64KiB,
+current PSI/complete PES/header identity, exact final shared-input command,
+ordinary AV fallback and joined cancellation.19 regressions/snapshot, actual
+API888/Dutch660Hz before EOF and19 TSDuck controls pass. The original f9ee21ee
+report-only prefix/replay component remains closed. Canonical provider-scan/
+identity.json native_streaming_lifecycle_followup.route_join_followup owns receipts.
+
+SO2 ordinary Live Burn remains blocked: the candidate FFmpeg consumer stalls
+before the unchanged public-wrapper delivery deadline; Off passes. The candidate
+sources/negatives are preserved outside the active product path. The new upstream
+heartbeat correction is insufficient in an isolated identical FFmpeg9 build;
+input pacing, output duration and GENPTS hypotheses also fail. No runtime change
+or route repair is claimed. Resume only with a concrete new cause/correction;
+continue the independent existing SO3 policy obligation now. Other SO2 HTTP/RTSP,
+consume-once/HLS/Hybrid/carriage and runtime/platform obligations retain their owners.
 
 SO1 public native HLS source-caption integration is completed within Linux
 x86_64/software FFmpeg9: actual ordinary segmenter-Off, segmenter-Burn and

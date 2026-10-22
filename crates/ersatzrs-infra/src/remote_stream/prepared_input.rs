@@ -1,5 +1,6 @@
 //! A bounded startup prefix and its still-owned add-on transfer process.
 
+use futures_util::FutureExt as _;
 use std::path::Path;
 use std::process::ExitStatus;
 use std::sync::{atomic::AtomicU8, Arc};
@@ -43,6 +44,7 @@ fn check_prepared_startup(
 /// Dropping this owner terminates its managed process group/job; prefer `cancel`
 /// to await cleanup when preparation or metadata probing fails.
 pub struct PreparedRemoteStreamInput {
+    pub(super) native_caption_binding: Option<Box<super::prepared_teletext::NativeCaptionBinding>>,
     producer: Option<ManagedAddonChild>,
     stdout: Option<ChildStdout>,
     stderr_task: Option<JoinHandle<String>>,
@@ -105,6 +107,7 @@ impl PreparedRemoteStreamInput {
             deadline,
             cancellation,
             None,
+            PREFIX_BYTES,
         )
         .await
     }
@@ -120,7 +123,25 @@ impl PreparedRemoteStreamInput {
         deadline: tokio::time::Instant,
         cancellation: oneshot::Receiver<()>,
     ) -> Result<Self, RemoteStreamError> {
-        Self::start_inner(command, None, context, deadline, cancellation, None).await
+        Self::start_inner(
+            command,
+            None,
+            context,
+            deadline,
+            cancellation,
+            None,
+            PREFIX_BYTES,
+        )
+        .await
+    }
+
+    pub(super) async fn start_caption_prefix(
+        command: &RemoteStreamCommand,
+        context: RemoteStreamSpawnContext,
+        deadline: tokio::time::Instant,
+        cancellation: oneshot::Receiver<()>,
+    ) -> Result<Self, RemoteStreamError> {
+        Self::start_inner(command, None, context, deadline, cancellation, None, 1).await
     }
 
     /// Start a canvas producer with ownership of its generated files and live
@@ -144,6 +165,7 @@ impl PreparedRemoteStreamInput {
             deadline,
             cancellation,
             Some(PreparedInputDirectory(Some(directory), controllers)),
+            1,
         )
         .await
     }
@@ -155,6 +177,7 @@ impl PreparedRemoteStreamInput {
         deadline: tokio::time::Instant,
         mut cancellation: oneshot::Receiver<()>,
         artifacts: Option<PreparedInputDirectory>,
+        minimum_prefix: usize,
     ) -> Result<Self, RemoteStreamError> {
         let invalid = if request_json.is_some_and(|request| request.len() > MAX_REQUEST_BYTES) {
             Some(RemoteStreamError::PreparedRequestTooLarge)
@@ -204,6 +227,7 @@ impl PreparedRemoteStreamInput {
             .take()
             .map(|stderr| tokio::spawn(read_stderr_tail(stderr)));
         let mut input = Self {
+            native_caption_binding: None,
             producer: Some(producer),
             stdout,
             stderr_task,
@@ -228,7 +252,7 @@ impl PreparedRemoteStreamInput {
             biased;
             _ = &mut cancellation => Err(RemoteStreamError::PreparedCancelled),
             () = tokio::time::sleep_until(deadline) => Err(RemoteStreamError::PreparedTimeout),
-            result = input.read_prefix(request_json, if graphics { 1 } else { PREFIX_BYTES }) => result,
+            result = input.read_prefix(request_json, minimum_prefix) => result,
         };
         let outcome = outcome.and_then(|()| check_prepared_startup(deadline, &mut cancellation));
         if let Err(error) = outcome {
@@ -292,6 +316,43 @@ impl PreparedRemoteStreamInput {
     #[must_use]
     pub fn prefix(&self) -> &[u8] {
         &self.prefix
+    }
+
+    // Opportunistically retain another available chunk, never waiting for a
+    // low-rate live source to fill a minimum prefix or reach EOF.
+    pub(super) fn extend_caption_prefix(&mut self) -> Result<bool, RemoteStreamError> {
+        if self.prefix.len() == PREFIX_BYTES || self.exited.is_some() {
+            return Ok(false);
+        }
+        let mut chunk = [0; 8192];
+        let length = chunk.len().min(PREFIX_BYTES - self.prefix.len());
+        let stdout = self
+            .stdout
+            .as_mut()
+            .ok_or(RemoteStreamError::MissingStdout)?;
+        let Some(read) = stdout.read(&mut chunk[..length]).now_or_never() else {
+            return Ok(false);
+        };
+        let read = read.map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+        self.check_caption_producer_status()?;
+        self.prefix.extend_from_slice(&chunk[..read]);
+        Ok(read != 0)
+    }
+
+    pub(super) fn check_caption_producer_status(&mut self) -> Result<(), RemoteStreamError> {
+        let producer = self
+            .producer
+            .as_mut()
+            .ok_or(RemoteStreamError::PreparedProducerFailed)?;
+        if let Some(status) = producer
+            .try_wait()
+            .map_err(|_| RemoteStreamError::PreparedProducerFailed)?
+        {
+            if !status.success() {
+                return Err(RemoteStreamError::PreparedProducerFailed);
+            }
+        }
+        Ok(())
     }
 
     /// Forward the original bytes to one owned sink with normal backpressure.
@@ -488,6 +549,14 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
     mut prepared: PreparedRemoteStreamInput,
     context: RemoteStreamSpawnContext,
 ) -> Result<RemoteStreamProcess, RemoteStreamError> {
+    if prepared
+        .native_caption_binding
+        .as_ref()
+        .is_some_and(|binding| !binding.matches(command))
+    {
+        prepared.cancel().await?;
+        return Err(RemoteStreamError::PreparedCaptionUnavailable);
+    }
     let consumer =
         spawn_remote_stream_consumer(command, &command.arguments, working_directory, true);
     let (mut consumer, filter_graph_file) = match consumer {
@@ -651,6 +720,25 @@ mod tests {
         assert!(path.join("text.txt").exists());
         prepared.cancel().await.unwrap();
         assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn caption_prefix_admits_one_live_byte_and_never_waits_for_more() {
+        let (command, _) = commands("printf N; while :; do sleep 1; done");
+        let (_sender, receiver) = oneshot::channel();
+        let mut prepared = PreparedRemoteStreamInput::start_caption_prefix(
+            &command,
+            RemoteStreamSpawnContext::probe(),
+            tokio::time::Instant::now() + Duration::from_secs(2),
+            receiver,
+        )
+        .await
+        .unwrap();
+        assert_eq!(prepared.prefix(), b"N");
+        assert!(!prepared.extend_caption_prefix().unwrap());
+        assert_eq!(prepared.prefix(), b"N");
+        prepared.cancel().await.unwrap();
     }
 
     #[cfg(unix)]

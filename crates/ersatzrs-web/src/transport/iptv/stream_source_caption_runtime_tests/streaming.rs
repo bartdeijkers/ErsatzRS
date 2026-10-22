@@ -15,7 +15,7 @@ use ersatzrs_ffmpeg::{
         source_observation::SuppliedTeletextHeaderObserver,
         source_psi::SourceTeletextPsiObserver,
     },
-    DesiredVideoState, FfmpegCommand, InputFile, PipelineRequest,
+    DesiredVideoState, FfmpegCommand, InputFile, PipelineRequest, SourceTeletextInputPlan,
 };
 use ersatzrs_infra::{
     ffprobe::{
@@ -23,8 +23,8 @@ use ersatzrs_infra::{
         FfprobeMediaVersion,
     },
     remote_stream::{
-        spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput, RemoteStreamCommand,
-        RemoteStreamSpawnContext,
+        prepare_native_caption_producer, spawn_ffmpeg_with_prepared_remote_input,
+        PreparedRemoteStreamInput, RemoteStreamCommand, RemoteStreamSpawnContext,
     },
     transcode_capacity::{try_reserve_active_transcode, ActiveTranscodeSlot},
 };
@@ -165,7 +165,11 @@ fn software_desired() -> DesiredVideoState {
     )
 }
 
-fn caption_command(ffmpeg: &str, media: &FfprobeMediaVersion, index: i32) -> FfmpegCommand {
+fn caption_command(
+    ffmpeg: &str,
+    media: &FfprobeMediaVersion,
+    index: i32,
+) -> (FfmpegCommand, SourceTeletextInputPlan) {
     let video = ersatzrs_infra::playback::source_video_stream_from_probe(media)
         .unwrap()
         .unwrap();
@@ -212,7 +216,7 @@ fn caption_command(ffmpeg: &str, media: &FfprobeMediaVersion, index: i32) -> Ffm
             .collect::<Vec<_>>(),
         ["pipe:0"]
     );
-    command
+    (command, plan)
 }
 
 async fn capture_open(reader: &mut (impl AsyncRead + Unpin)) -> std::io::Result<Vec<u8>> {
@@ -378,7 +382,7 @@ async fn prepare_command(
             .await
             .unwrap();
         let (media, index) = observed_media(&prepared, &tools[1], root).await;
-        caption_command(&tools[0], &media, index)
+        caption_command(&tools[0], &media, index).0
     })
     .catch_unwind()
     .await;
@@ -395,7 +399,71 @@ async fn prepare_command(
     }
 }
 
-async fn run() {
+async fn prepare_owned_command(
+    source: &Path,
+    bytes: &[u8],
+    tools: &[String; 3],
+    root: &Path,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+) -> (PreparedRemoteStreamInput, FfmpegCommand) {
+    let mut playback = prepare_native_caption_producer(
+        &producer(source, root),
+        &FfprobeExtractor::new(&tools[1]),
+        RemoteStreamSpawnContext::mpeg_ts("synthetic-shared-caption"),
+        Instant::now() + Duration::from_secs(10),
+        cancellation,
+    )
+    .await
+    .unwrap();
+    let observed = AssertUnwindSafe(async {
+        let prefix = playback.prepared.prefix();
+        assert!(prefix.len() <= 65_536);
+        assert_eq!(prefix, &bytes[..prefix.len()]);
+        tokio::fs::write(root.join("producer-prefix.ts"), prefix)
+            .await
+            .unwrap();
+        observe_prefix(prefix, 258, 1, root);
+        let tracks = playback.tracks();
+        let selected = tracks
+            .subtitles
+            .iter()
+            .find(|subtitle| subtitle.codec.as_deref() == Some("dvb_teletext"))
+            .expect("same producer must supply an observed caption choice");
+        let caption = playback.subtitle_input(selected).unwrap().unwrap();
+        assert_eq!(
+            caption,
+            InputFile::teletext_subtitle(
+                "pipe:0",
+                2,
+                ersatzrs_domain::TeletextPageNumber::new(888).unwrap()
+            )
+        );
+        let (command, plan) = caption_command(
+            &tools[0],
+            playback.probe.as_ref().unwrap(),
+            selected.stream_index,
+        );
+        playback
+            .bind_caption_consumer(&command, Some(&plan))
+            .unwrap();
+        command
+    })
+    .catch_unwind()
+    .await;
+    match observed {
+        Ok(command) => (playback.prepared, command),
+        Err(failure) => {
+            tokio::time::timeout(Duration::from_secs(10), playback.prepared.cancel())
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(!producer_alive(root).await);
+            std::panic::resume_unwind(failure);
+        }
+    }
+}
+
+async fn run(owned_selection: bool) {
     let tools = initialize_source_caption_runtime().await;
     let root = tempfile::tempdir().unwrap().keep();
     println!(
@@ -407,15 +475,19 @@ async fn run() {
     let bytes = tokio::fs::read(&source).await.unwrap();
     assert!(bytes.len() > 65_536);
     let (_cancel, cancellation) = tokio::sync::oneshot::channel();
-    let prepared = PreparedRemoteStreamInput::start_without_request(
-        &producer(&source, &root),
-        RemoteStreamSpawnContext::mpeg_ts("synthetic-shared-caption"),
-        Instant::now() + Duration::from_secs(10),
-        cancellation,
-    )
-    .await
-    .unwrap();
-    let (prepared, command) = prepare_command(prepared, &bytes, &tools, &root).await;
+    let (prepared, command) = if owned_selection {
+        prepare_owned_command(&source, &bytes, &tools, &root, cancellation).await
+    } else {
+        let prepared = PreparedRemoteStreamInput::start_without_request(
+            &producer(&source, &root),
+            RemoteStreamSpawnContext::mpeg_ts("synthetic-shared-caption"),
+            Instant::now() + Duration::from_secs(10),
+            cancellation,
+        )
+        .await
+        .unwrap();
+        prepare_command(prepared, &bytes, &tools, &root).await
+    };
     let output = capture_consumer(prepared, &command, &root).await;
     let actual = pixels(&tools[0], &output, None).await;
     compare_burn(&actual, &expected[0], &expected[1], &expected[2]);
@@ -446,6 +518,7 @@ async fn run() {
             "case":"shared-pipe-source-caption-viability", "producer_invocations":1,
             "page":888,"audio":"nld660","output_before_producer_eof":true,
             "joined_cleanup":true,"active_transcodes":0,"ordinary_route_acceptance":false,
+            "owned_page_selection_and_final_command_binding":owned_selection,
         }),
     );
 }
@@ -461,7 +534,25 @@ fn shared_single_producer_prefix_burns_observed_page888_before_eof() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(Box::pin(run()));
+        .block_on(Box::pin(run(false)));
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        0
+    );
+}
+
+#[test]
+#[ignore = "requires FFmpeg9/libzvbi, Unix managed producer and isolated native app data; owned-selection component only"]
+fn owned_live_producer_selects_observed_page_and_seals_consuming_child() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    assert_eq!(DEFAULT_ACTIVE_TRANSCODE_LIMIT, 2);
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(run(true)));
     assert_eq!(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0
