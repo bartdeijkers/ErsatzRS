@@ -18,6 +18,9 @@ use super::*;
 )]
 mod mapped_provider_fixture;
 
+#[path = "stream_source_caption_runtime_tests/hls.rs"]
+mod hls;
+
 #[path = "stream_source_caption_runtime_tests/next.rs"]
 mod next;
 
@@ -1139,6 +1142,10 @@ async fn finish_hybrid_case(state: &AppState, mode: StreamingMode) {
     if mode != StreamingMode::TransportStreamHybrid {
         return;
     }
+    stop_native_hls(state).await;
+}
+
+async fn stop_native_hls(state: &AppState) {
     // The actual native HLS item worker and final wrapper each use one
     // default slot. Retire the owned session before the next preference/source
     // change; no prior worker may serve that case.

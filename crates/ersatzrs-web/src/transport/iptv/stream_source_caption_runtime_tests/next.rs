@@ -187,7 +187,7 @@ async fn next_schedule(state: &AppState, item: i64) -> chrono::DateTime<Utc> {
     start
 }
 
-async fn fetch(client: &reqwest::Client, url: &str, kind: &str) -> Vec<u8> {
+pub(super) async fn fetch(client: &reqwest::Client, url: &str, kind: &str) -> Vec<u8> {
     let response = client.get(url).send().await.unwrap();
     assert_eq!(
         response.status(),
@@ -203,7 +203,7 @@ async fn fetch(client: &reqwest::Client, url: &str, kind: &str) -> Vec<u8> {
     bytes.to_vec()
 }
 
-fn uris(playlist: &str) -> impl Iterator<Item = &str> {
+pub(super) fn uris(playlist: &str) -> impl Iterator<Item = &str> {
     assert!(playlist.starts_with("#EXTM3U"));
     playlist
         .lines()
