@@ -164,6 +164,99 @@ async fn check_retained_delivery(
     (uri, headers)
 }
 
+async fn check_retained_burn_delivery(
+    callbacks: Callbacks,
+    client: reqwest::Client,
+    public: String,
+    source: PathBuf,
+    root: PathBuf,
+    tools: [String; 3],
+) -> (String, Vec<String>) {
+    let bytes = timeout(
+        Duration::from_secs(35),
+        policies::capture(&client, &public, &root),
+    )
+    .await
+    .expect("complete retained Burn programme before the following fallback discontinuity");
+    let callbacks = callbacks.lock().await;
+    let item = callbacks
+        .iter()
+        .find(|item| {
+            item.tracks
+                .as_ref()
+                .is_some_and(|tracks| tracks.subtitle.is_some())
+        })
+        .expect("actual authenticated retained Burn caption callback");
+    let (sidecar, seek, end, uri, headers) = tracks(item);
+    drop(callbacks);
+    let text = tokio::fs::read_to_string(sidecar).await.unwrap();
+    let independent =
+        tokio::fs::read_to_string(source.parent().unwrap().join("independent-889.srt"))
+            .await
+            .unwrap();
+    assert_eq!(cue_blocks(&text), cue_blocks(&independent));
+    assert!(text.contains("889 FINAL") && !text.contains("ENGLISH PAGE 888"));
+    Box::pin(policies::output(
+        &tools,
+        &root,
+        &bytes,
+        policies::Policy::Burn,
+    ))
+    .await;
+    let captured = root.join("captured.ts");
+    let mut probe = Command::new(&tools[1]);
+    probe
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "json",
+        ])
+        .arg(&captured);
+    let dimensions: Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    assert_eq!(dimensions["streams"][0]["width"], 320);
+    assert_eq!(dimensions["streams"][0]["height"], 180);
+    // Burn changes video payloads, so the existing Convert packet-identity
+    // source-clock oracle cannot establish a Burn source-to-output mapping.
+    // Retain exact selected/cue/output coordinates without claiming that join.
+    let actual = packets(Path::new(&tools[1]), &captured, "v:0", true).await;
+    let video = actual["packets"].as_array().unwrap();
+    let last_end = video
+        .iter()
+        .map(|packet| {
+            let duration = packet["duration"].as_i64().unwrap();
+            assert!(duration > 0);
+            packet["pts"]
+                .as_i64()
+                .unwrap()
+                .checked_add(duration)
+                .unwrap()
+        })
+        .max()
+        .unwrap();
+    tokio::fs::write(
+        root.join("burn-clock-observation.json"),
+        serde_json::to_vec_pretty(&json!({
+            "source_seek_ms":seek,"source_out_ms":end,
+            "independent_cues":cue_blocks(&independent),
+            "first_output_video_pts_ticks":video[0]["pts"],
+            "delivered_video_end_ticks":last_end,
+            "output_video_time_base":actual["streams"][0]["time_base"],
+            "complete_first_programme_captured":true,
+            "sidecar_matches_complete_independent_page889":true,
+            "source_to_output_burn_clock_proven":false
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    (uri, headers)
+}
+
 async fn configure_remote(
     state: &AppState,
     source: &Path,
@@ -208,7 +301,35 @@ async fn configure_remote(
     provider
 }
 
-async fn run(tools: [String; 3]) {
+async fn configure_burn(state: &AppState) {
+    Box::pin(software_profile(state)).await;
+    state
+        .pool
+        .execute(r#"UPDATE "Resolution" SET "Width"=320,"Height"=180 WHERE "Id"=1"#)
+        .await
+        .unwrap();
+    let mut channel = state.repositories.channel.get_by_number("1").await.unwrap();
+    channel.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Burn;
+    state.repositories.channel.upsert(&channel).await.unwrap();
+}
+
+async fn deliver(
+    callbacks: Callbacks,
+    client: reqwest::Client,
+    public: String,
+    source: PathBuf,
+    root: PathBuf,
+    tools: [String; 3],
+    policy: NextEngineTextSubtitleMode,
+) -> (String, Vec<String>) {
+    if policy == NextEngineTextSubtitleMode::Burn {
+        check_retained_burn_delivery(callbacks, client, public, source, root, tools).await
+    } else {
+        check_retained_delivery(callbacks, client, public, source, root, tools).await
+    }
+}
+
+async fn run(tools: [String; 3], policy: NextEngineTextSubtitleMode) {
     let root = tempfile::tempdir().unwrap().keep();
     println!("retained Next ordinary HTTP evidence: {}", root.display());
     let source = retained_source(&tools[0], &root.join("library")).await;
@@ -221,6 +342,9 @@ async fn run(tools: [String; 3]) {
         root.join("playout"),
     ));
     let provider = configure_remote(&state, &source, &tools[1], &upstream.url("")).await;
+    if policy == NextEngineTextSubtitleMode::Burn {
+        configure_burn(&state).await;
+    }
     let observer = Observer::default();
     let internal = Server::start(build_internal_app(state.clone()).layer(
         axum::middleware::from_fn_with_state(observer.clone(), observe),
@@ -235,13 +359,14 @@ async fn run(tools: [String; 3]) {
         .timeout(Duration::from_secs(25))
         .build()
         .unwrap();
-    let assertion = tokio::spawn(check_retained_delivery(
+    let assertion = tokio::spawn(deliver(
         observer.callbacks,
         client.clone(),
         public.url(""),
         source,
         root.clone(),
         tools,
+        policy,
     ))
     .await;
     stop_next(&state).await;
@@ -268,11 +393,13 @@ async fn run(tools: [String; 3]) {
     let count = reads.load(Ordering::SeqCst);
     tokio::fs::write(
         root.join("retained-source-receipt.json"),
-        serde_json::to_vec_pretty(&json!({"upstream_full_responses":count,
+        serde_json::to_vec_pretty(
+            &json!({"policy":format!("{policy:?}"),"upstream_full_responses":count,
             "internal_reads":source_reads,"post_stop_grant_status":stale_grant,
             "source_reports":reports,"storage_entries":entries,
             "active_work":state.application.operations().entity_locker().active_teletext_work(),
-            "active_capacity":active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active}))
+            "active_capacity":active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active}),
+        )
         .unwrap(),
     )
     .await
@@ -316,6 +443,34 @@ fn normal_next_remote_only_provider_uses_retained_http_source_for_public_av_and_
         .build()
         .unwrap()
         .block_on(async {
-            Box::pin(run(initialize_source_caption_runtime().await)).await;
+            Box::pin(run(
+                initialize_source_caption_runtime().await,
+                NextEngineTextSubtitleMode::Convert,
+            ))
+            .await;
+        });
+}
+
+#[test]
+#[ignore = "requires candidate4 via ETV_NEXT_FOLDER, paired retained source/889 SRT, FFmpeg9 and fresh isolated app-data/state/TMPDIR"]
+fn normal_next_remote_only_provider_burns_page889_from_retained_http_source() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    let storage = file_system_layout::provider_source_storage_folder();
+    assert!(
+        !storage.exists(),
+        "runner must isolate the persistent source-storage root"
+    );
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            Box::pin(run(
+                initialize_source_caption_runtime().await,
+                NextEngineTextSubtitleMode::Burn,
+            ))
+            .await;
         });
 }

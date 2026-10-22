@@ -645,6 +645,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Keep the experimental Next teletext Burn runtime unaccepted after a reproduced
+  source-outpoint overrun; stream, selected-audio and storage cleanup checks
+  remain separately qualified.
+
 - Track Phase 9A acceptance through finite, separately closable milestone
   dependencies, with preserved handoff history separate from current work.
 

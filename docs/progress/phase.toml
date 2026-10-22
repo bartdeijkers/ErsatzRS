@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — SO4 retained-source public HLS Burn proof'
+current_focus = 'p9a-source-output — SO4 shared AV-clock and selected source-out correction'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,25 +62,29 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-output, finite cell SO4. The blocked user action is
-ordinary public HLS Burn from a genuinely scanned remote-only retained source.
-Reuse the existing unmapped Jellyfin source and public-Convert fixture; keep
-selected889 pixels/clock, original video, selected Dutch audio, one acquisition,
-source-bound AV consumption and natural reader/worker/storage cleanup exact.
-Only the consumer-mode integration boundary changes. Existing Convert, mapped
-Burn, Off/quota, editor/publication/isolation and localized Health proof stays
-valid within its scope. Stop this mandatory proof at a verified exact-oracle
-result or an attributable concrete blocker; do not multiply providers/variants.
-SI1 body/readiness persistence is a separate source-inventory obligation, not
-a prerequisite to exercising this already scanned fixture.
+Current package: p9a-source-output SO4, the demonstrated candidate.4 Burn
+shared-clock/source-out defect. Public retained-input AV/ownership proof is
+closed: native1/1, static TSDuck19/19, one acquisition, Dutch AAC, selected889,
+range/grant and complete cleanup. Strict web Clippy/format pass; only test-helper
+extraction changed after the actual native run, so that runtime evidence is reused.
+Canonical: tmp/phase9-next-local-teletext/provider-scan/identity.json
+public_hls_burn_followup and retained-public-burn-capture.
 
-The ordinary Phase9A milestones are the sole executable completion collection.
-p9a-r1-cases and lifecycle-base are Complete within their explicit boundaries.
-Their historical next-action prose cannot reopen them. The fixed AB/AE/EB/EE/
-SI/SO cells and typed dependencies define remaining work; unresolved inventory
-classification goes to standards, unused-object optionality to editor-enhanced.
-Respect recorded client/editor/platform/policy deferrals and prerequisites.
-No push/publication. Production9B waits for complete independent9A acceptance.
+First action: locate the existing qualified Next subtitle/input timing path and
+correct video PTS-STARTPTS erasing its0.4164s post-seek residual while keeping
+7057ms duration. The byte-identical captured176frames reach source9.5994 rather
+than selected9.2 (399.4ms excess). Preserve the common AV clock through subtitle
+render and retain the selected source-out fence; any required preroll uses the
+existing input/keyframe mechanism. Keep exact audio/caption/frame/end/cleanup
+oracles and the retained red evidence. Qualify only affected integration bounds
+and necessary compatibility; do not multiply providers, change capacity, drop
+tracks or relax timing. Stop when SO4's selected-out/AV/timing oracles pass with
+its existing one-source/public-route/ownership proof, or an exact prerequisite
+is identified. A local candidate is not managed adoption or native-RID proof.
+
+Closed r1/lifecycle-base/F6 components remain closed; the ordinary milestones
+are the sole finite current collection. Preserve all parallel changes and
+recorded client/editor/platform/policy deferrals. No push/publication; engine-first.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

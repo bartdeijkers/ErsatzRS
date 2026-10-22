@@ -22,7 +22,7 @@ async fn observe_callback(
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Policy {
+pub(super) enum Policy {
     Off,
     Burn,
 }
@@ -62,7 +62,7 @@ fn following_discontinuity(playlist: &str) -> bool {
     false
 }
 
-async fn capture(client: &reqwest::Client, public: &str, root: &Path) -> Vec<u8> {
+pub(super) async fn capture(client: &reqwest::Client, public: &str, root: &Path) -> Vec<u8> {
     let master = fetch(
         client,
         &format!("{public}/iptv/channel/1.m3u8?mode=segmenter"),
@@ -244,7 +244,7 @@ async fn picture(ffmpeg: &str, captured: &Path, policy: Policy) {
     }
 }
 
-async fn output(tools: &[String; 3], root: &Path, bytes: &[u8], policy: Policy) {
+pub(super) async fn output(tools: &[String; 3], root: &Path, bytes: &[u8], policy: Policy) {
     let captured = root.join("captured.ts");
     let mut decode = Command::new(&tools[0]);
     decode
