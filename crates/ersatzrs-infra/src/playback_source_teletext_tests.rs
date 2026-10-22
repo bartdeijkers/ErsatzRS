@@ -39,6 +39,7 @@ fn candidate(page: u16, language: &str, role: u8) -> SourceTeletextCaptionCandid
 
 fn window() -> SourceTeletextDecodeWindowEvidence {
     SourceTeletextDecodeWindowEvidence {
+        format: crate::ffprobe::SourceTeletextPacketFormat::Ts188,
         first_source_packet: 0,
         source_packets: 100,
         decoder_packets: 100,

@@ -304,9 +304,22 @@ async fn deliver(
 }
 
 async fn run(tools: [String; 3], policy: NextEngineTextSubtitleMode) {
+    run_with_format(
+        tools,
+        policy,
+        ersatzrs_infra::ffprobe::SourceTeletextPacketFormat::Ts188,
+    )
+    .await;
+}
+
+async fn run_with_format(
+    tools: [String; 3],
+    policy: NextEngineTextSubtitleMode,
+    format: ersatzrs_infra::ffprobe::SourceTeletextPacketFormat,
+) {
     let root = tempfile::tempdir().unwrap().keep();
     println!("retained Next ordinary HTTP evidence: {}", root.display());
-    let source = retained_source(&tools[0], &root.join("library")).await;
+    let source = retained_source_with_format(&tools[0], &root.join("library"), format).await;
     let reads = Arc::new(AtomicUsize::new(0));
     let upstream = source_provider(&source, reads.clone()).await;
     let mut state = application(&root, &upstream).await;
@@ -444,6 +457,27 @@ fn normal_next_remote_only_provider_burns_page889_from_retained_http_source() {
             Box::pin(run(
                 initialize_source_caption_runtime().await,
                 NextEngineTextSubtitleMode::Burn,
+            ))
+            .await;
+        });
+}
+
+#[test]
+#[ignore = "requires shared-clock Next candidate, paired TS188/M2TS source and889 SRT, FFmpeg9 and isolated storage"]
+fn normal_next_remote_only_provider_burns_m2ts_page889_from_retained_http_source() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    assert!(!file_system_layout::provider_source_storage_folder().exists());
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            Box::pin(run_with_format(
+                initialize_source_caption_runtime().await,
+                NextEngineTextSubtitleMode::Burn,
+                ersatzrs_infra::ffprobe::SourceTeletextPacketFormat::M2ts192,
             ))
             .await;
         });

@@ -50,7 +50,9 @@ fn capture<T>(
     stop: &headers::ReadStop<'_, T>,
 ) -> Result<CompleteTextSnapshot> {
     let len = guard.guard.len;
-    if len == 0 || !len.is_multiple_of(188) {
+    let format = super::source_packet::detect(guard.guard.original.as_file(), len, stop)?;
+    let stride = format.packet_bytes() as u64;
+    if len == 0 || !len.is_multiple_of(stride) {
         return Err(invalid());
     }
     let mut psi = SourceTeletextPsiObserver::new(request.pid).map_err(|_| invalid())?;
@@ -63,19 +65,15 @@ fn capture<T>(
     let mut writer = file
         .as_mut()
         .map(|file| std::io::BufWriter::with_capacity(64 * 1024, file.as_file_mut()));
-    for ordinal in 0..len / 188 {
+    for ordinal in 0..len / stride {
         stop.check_source_guard()?;
         if ordinal > 0 && ordinal.is_multiple_of(MAX_SOURCE_OBSERVATION_PACKETS as u64) {
             psi.begin_continuation_window().map_err(|_| invalid())?;
         }
-        let mut raw = [0; 188];
-        source_window::read_packet(
-            guard.guard.original.as_file(),
-            &mut raw,
-            ordinal * 188,
-            stop,
-        )?;
-        psi.push(&raw).map_err(|_| invalid())?;
+        let frame =
+            super::source_packet::read(guard.guard.original.as_file(), ordinal, format, stop)?;
+        let raw = &frame.packet;
+        psi.push(raw).map_err(|_| invalid())?;
         let pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
         if pid == request.pid && !selected_started {
             // The complete-source policy permits no skipped prefix, repaired
@@ -85,7 +83,7 @@ fn capture<T>(
             }
             selected_started = true;
         }
-        if let TeletextAssemblyEvent::Complete(pes) = assembler.push(&raw).map_err(|_| invalid())? {
+        if let TeletextAssemblyEvent::Complete(pes) = assembler.push(raw).map_err(|_| invalid())? {
             for unit in pes.units().filter_map(|unit| unit.teletext_unit()) {
                 if let TeletextHeaderObservation::Header(header) =
                     observe_dvb_teletext_header(unit).map_err(|_| invalid())?
@@ -95,7 +93,9 @@ fn capture<T>(
             }
         }
         if let Some(writer) = &mut writer {
-            writer.write_all(&raw).map_err(|_| invalid())?;
+            for part in frame.parts() {
+                writer.write_all(part).map_err(|_| invalid())?;
+            }
         }
     }
     stop.check_source_guard()?;

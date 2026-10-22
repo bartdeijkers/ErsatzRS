@@ -58,7 +58,99 @@ fn collector(
 ) -> Option<NativeClockCollector> {
     let origin = parse_source_origin(&serde_json::to_vec(origin).unwrap()).unwrap();
     let trace = parse_source_demux(&serde_json::to_vec(trace).unwrap()).unwrap();
-    NativeClockCollector::new(request, &origin, trace)
+    NativeClockCollector::new(
+        request,
+        &origin,
+        trace,
+        Some(SourceTeletextPacketFormat::Ts188),
+    )
+}
+
+#[test]
+fn m2ts_native_frame_start_mapping_requires_explicit_format_and_one_binding() {
+    let origin = parse_source_origin(&serde_json::to_vec(&origin()).unwrap()).unwrap();
+    let mut metadata = trace();
+    metadata["packets"][0]["pos"] = json!("576");
+    let trace = parse_source_demux(&serde_json::to_vec(&metadata).unwrap()).unwrap();
+    assert!(NativeClockCollector::new(
+        &request(),
+        &origin,
+        trace.clone(),
+        Some(SourceTeletextPacketFormat::Ts188)
+    )
+    .is_none());
+    let known = NativeClockCollector::new(
+        &request(),
+        &origin,
+        trace.clone(),
+        Some(SourceTeletextPacketFormat::M2ts192),
+    )
+    .unwrap();
+    assert_eq!(known.first_source_packet, Some(3));
+    assert!(known.header.is_none()); // A mapped position alone is not raw evidence.
+    let mut pending = NativeClockCollector::new(&request(), &origin, trace, None).unwrap();
+    assert!(pending.format.is_none() && pending.first_source_packet.is_none());
+    let mut null = [0xff; 188];
+    null[..4].copy_from_slice(&[0x47, 0x1f, 0xff, 0x10]);
+    assert!(pending.push(&null).is_err());
+    pending
+        .bind_format(SourceTeletextPacketFormat::M2ts192)
+        .unwrap();
+    assert_eq!(pending.first_source_packet, Some(3));
+    assert!(!pending.mismatched);
+    pending.push(&null).unwrap();
+    assert!(pending.header.is_none());
+    for format in [
+        SourceTeletextPacketFormat::M2ts192,
+        SourceTeletextPacketFormat::Ts188,
+    ] {
+        assert!(pending.bind_format(format).is_err());
+        assert_eq!(pending.first_source_packet, Some(3));
+    }
+}
+
+#[test]
+fn m2ts_native_sync_offset_cannot_replace_frame_start_or_first_global_gates() {
+    let native = parse_source_origin(&serde_json::to_vec(&origin()).unwrap()).unwrap();
+    let mut metadata = trace();
+    metadata["packets"][0]["pos"] = json!("580"); // Inner sync at 3*192+4.
+    let parsed = parse_source_demux(&serde_json::to_vec(&metadata).unwrap()).unwrap();
+    assert!(NativeClockCollector::new(
+        &request(),
+        &native,
+        parsed.clone(),
+        Some(SourceTeletextPacketFormat::M2ts192)
+    )
+    .is_none());
+    let mut pending = NativeClockCollector::new(&request(), &native, parsed, None).unwrap();
+    pending
+        .bind_format(SourceTeletextPacketFormat::M2ts192)
+        .unwrap();
+    assert!(pending.mismatched && pending.first_source_packet.is_none());
+    assert!(pending.header.is_none());
+    assert!(pending
+        .bind_format(SourceTeletextPacketFormat::Ts188)
+        .is_err());
+    for missing in [false, true] {
+        let mut metadata = trace();
+        if missing {
+            metadata["packets"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("pos");
+        } else {
+            metadata["packets"][0] = json!({"stream_index":7,"pos":"576","flags":"___"});
+        }
+        let parsed = parse_source_demux(&serde_json::to_vec(&metadata).unwrap()).unwrap();
+        assert!(NativeClockCollector::new(&request(), &native, parsed.clone(), None).is_none());
+        assert!(NativeClockCollector::new(
+            &request(),
+            &native,
+            parsed,
+            Some(SourceTeletextPacketFormat::M2ts192)
+        )
+        .is_none());
+    }
 }
 
 #[test]

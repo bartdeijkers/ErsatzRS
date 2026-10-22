@@ -23,7 +23,7 @@ pub(crate) use retained_source_reader::{open_retained_source_reader, RetainedSou
 pub use local_cleanup_scope::{LocalProbeCleanupError, LocalProbeCleanupScope};
 pub use local_teletext::{
     LocalMediaProbe, LocalTeletextAcquisition, LocalTeletextHeaderProblem, LocalTeletextHeaders,
-    LocalTeletextSourceGuard, LocalTeletextSourceGuardError,
+    LocalTeletextSourceGuard, LocalTeletextSourceGuardError, SourceTeletextPacketFormat,
 };
 pub use remote_source_snapshot::retain_complete_http_source;
 pub(crate) use remote_source_snapshot::{retain_provider_http_source, RetainedProviderSource};

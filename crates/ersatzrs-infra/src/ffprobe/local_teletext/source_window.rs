@@ -14,17 +14,18 @@ use ersatzrs_ffmpeg::teletext::{
 use sha2::{Digest as _, Sha256};
 use tokio::time::Instant;
 
-use super::{headers, LocalTeletextSourceGuard};
+use super::{headers, source_packet, LocalTeletextSourceGuard, SourceTeletextPacketFormat};
 use crate::ffprobe::{FfprobeError, Result};
 
 const LABEL: &str = "source teletext decode window";
 const PACKET_BYTES: usize = 188;
 
-/// A bounded physical TS188 range, without source ownership or time inference.
+/// A bounded physical packet range with explicit framing, without time authority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceTeletextPacketSpan {
     first_packet: u64,
     packet_count: u32,
+    format: SourceTeletextPacketFormat,
 }
 
 /// Static structural failures; no source bytes, offsets or paths are retained.
@@ -45,17 +46,39 @@ impl SourceTeletextPacketSpan {
         first_packet: u64,
         packet_count: u32,
     ) -> std::result::Result<Self, SourceTeletextPacketSpanError> {
+        Self::new_with_format(
+            first_packet,
+            packet_count,
+            SourceTeletextPacketFormat::Ts188,
+        )
+    }
+
+    /// Check an explicitly framed physical source range. The ordinary constructor
+    /// retains TS188 semantics; neither constructor detects or normalizes bytes.
+    /// # Errors
+    /// Rejects zero/excessive counts and unrepresentable physical byte positions.
+    pub fn new_with_format(
+        first_packet: u64,
+        packet_count: u32,
+        format: SourceTeletextPacketFormat,
+    ) -> std::result::Result<Self, SourceTeletextPacketSpanError> {
         if packet_count == 0 || u64::from(packet_count) > MAX_SOURCE_OBSERVATION_PACKETS as u64 {
             return Err(SourceTeletextPacketSpanError::Count);
         }
         first_packet
             .checked_add(u64::from(packet_count))
-            .and_then(|end| end.checked_mul(PACKET_BYTES as u64))
+            .and_then(|end| end.checked_mul(format.packet_bytes() as u64))
             .ok_or(SourceTeletextPacketSpanError::Offset)?;
         Ok(Self {
             first_packet,
             packet_count,
+            format,
         })
+    }
+
+    #[must_use]
+    pub const fn format(self) -> SourceTeletextPacketFormat {
+        self.format
     }
 
     /// Absolute zero-based ordinal of the first physically inspected packet.
@@ -79,13 +102,13 @@ impl SourceTeletextPacketSpan {
     /// Absolute byte offset of the first inspected packet on the held file.
     #[must_use]
     pub fn byte_offset(self) -> u64 {
-        self.first_packet * PACKET_BYTES as u64
+        self.first_packet * self.format.packet_bytes() as u64
     }
 
     /// Exclusive byte end of the inspected span, before decoder filtering.
     #[must_use]
     pub fn byte_end_exclusive(self) -> u64 {
-        self.end_packet_exclusive() * PACKET_BYTES as u64
+        self.end_packet_exclusive() * self.format.packet_bytes() as u64
     }
 }
 
@@ -99,10 +122,12 @@ impl SourceTeletextPacketSpan {
 /// absent pages or a complete inventory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceTeletextDecodeWindowEvidence {
+    /// Physical framing retained unchanged in the source and decoder snapshot.
+    pub format: SourceTeletextPacketFormat,
     /// Absolute packet ordinal on the original held file, never decoder offset.
     pub first_source_packet: u64,
     /// Physically inspected range is `[first_source_packet, first+source_packets)`.
-    /// Its byte range is exactly those checked ordinals multiplied by 188.
+    /// Its byte range is those checked ordinals multiplied by the format stride.
     pub source_packets: u32,
     /// Complete packets retained in the private decoder snapshot.
     pub decoder_packets: u32,
@@ -234,7 +259,13 @@ async fn capture_owned(
         stop.check_source_guard()?;
         let (original, resolved) = paths;
         super::check_source_guard_paths(&guard, &original, &resolved)?;
-        let span = checked_span(guard.guard.len, window.0)?;
+        // An explicit interior span validates its own declared framing. Earlier
+        // bytes are outside that observation and may not establish its PSI.
+        let format = match window.0 {
+            Some(span) => span.format(),
+            None => source_packet::detect(guard.guard.original.as_file(), guard.guard.len, stop)?,
+        };
+        let span = checked_span(guard.guard.len, window.0, format)?;
         let captured = capture(&guard, pid, program, span, window.1, stop)?;
         stop.check_source_guard()?;
         super::check_source_guard_paths(&guard, &original, &resolved)?;
@@ -248,20 +279,21 @@ async fn capture_owned(
 fn checked_span(
     len: u64,
     requested: Option<SourceTeletextPacketSpan>,
+    format: SourceTeletextPacketFormat,
 ) -> Result<SourceTeletextPacketSpan> {
     if let Some(span) = requested {
-        return (span.byte_end_exclusive() <= len)
+        return (span.format() == format && span.byte_end_exclusive() <= len)
             .then_some(span)
             .ok_or_else(invalid);
     }
-    let maximum_bytes = (MAX_SOURCE_OBSERVATION_PACKETS * PACKET_BYTES) as u64;
-    if len <= maximum_bytes && !len.is_multiple_of(PACKET_BYTES as u64) {
+    let stride = format.packet_bytes();
+    let maximum_bytes = (MAX_SOURCE_OBSERVATION_PACKETS * stride) as u64;
+    if len <= maximum_bytes && !len.is_multiple_of(stride as u64) {
         return Err(invalid());
     }
-    let packets =
-        u32::try_from((len / PACKET_BYTES as u64).min(MAX_SOURCE_OBSERVATION_PACKETS as u64))
-            .map_err(|_| invalid())?;
-    SourceTeletextPacketSpan::new(0, packets).map_err(|_| invalid())
+    let packets = u32::try_from((len / stride as u64).min(MAX_SOURCE_OBSERVATION_PACKETS as u64))
+        .map_err(|_| invalid())?;
+    SourceTeletextPacketSpan::new_with_format(0, packets, format).map_err(|_| invalid())
 }
 
 fn capture<T>(
@@ -274,23 +306,25 @@ fn capture<T>(
 ) -> Result<LocalTeletextSourceWindow> {
     let ended_at_eof = span.byte_end_exclusive() == guard.guard.len;
     let packets = usize::try_from(span.packet_count()).map_err(|_| invalid())?;
+    let format = span.format();
+    let stride = format.packet_bytes();
     let mut psi = SourceTeletextPsiObserver::new(pid).map_err(|_| invalid())?;
     let mut assembler = SuppliedTeletextAssembler::new(pid).map_err(|_| invalid())?;
-    let mut bytes = Vec::with_capacity(packets * PACKET_BYTES);
+    let mut bytes = Vec::with_capacity(packets * stride);
     let mut selected_started = false;
     let mut skipped = 0;
     let mut last_complete = None;
     for ordinal in 0..packets {
         stop.check_source_guard()?;
-        let mut raw = [0; PACKET_BYTES];
-        read_packet(
+        let frame = source_packet::read(
             guard.guard.original.as_file(),
-            &mut raw,
-            span.byte_offset() + (ordinal * PACKET_BYTES) as u64,
+            span.first_packet() + ordinal as u64,
+            format,
             stop,
         )?;
-        psi.push(&raw).map_err(|_| invalid())?;
-        let selected = packet_pid(&raw) == pid;
+        let raw = &frame.packet;
+        psi.push(raw).map_err(|_| invalid())?;
+        let selected = packet_pid(raw) == pid;
         if selected && !selected_started {
             if !psi.has_complete_current_tables() || raw[1] & 0x40 == 0 {
                 skipped += 1;
@@ -298,9 +332,11 @@ fn capture<T>(
             }
             selected_started = true;
         }
-        bytes.extend_from_slice(&raw);
+        for part in frame.parts() {
+            bytes.extend_from_slice(part);
+        }
         if matches!(
-            assembler.push(&raw).map_err(|_| invalid())?,
+            assembler.push(raw).map_err(|_| invalid())?,
             TeletextAssemblyEvent::Complete(_)
         ) {
             last_complete = Some(bytes.len());
@@ -320,21 +356,22 @@ fn capture<T>(
         Err(_) => return Err(invalid()),
     }
     let fingerprint = headers::fingerprint(&observed);
-    validate_decoder_window(&bytes, pid, program_number, fingerprint, stop)?;
+    validate_decoder_window(&bytes, pid, program_number, fingerprint, format, stop)?;
     let selected = observed
         .programs
         .iter()
         .find(|program| program.program_number == program_number)
         .ok_or_else(invalid)?;
     let evidence = SourceTeletextDecodeWindowEvidence {
+        format,
         first_source_packet: span.first_packet(),
         source_packets: u32::try_from(packets).map_err(|_| invalid())?,
-        decoder_packets: u32::try_from(bytes.len() / PACKET_BYTES).map_err(|_| invalid())?,
+        decoder_packets: u32::try_from(bytes.len() / stride).map_err(|_| invalid())?,
         skipped_selected_prefix_packets: skipped,
         trimmed_source_tail_packets: u32::try_from(packets)
             .map_err(|_| invalid())?
             .checked_sub(skipped)
-            .and_then(|count| count.checked_sub(u32::try_from(bytes.len() / PACKET_BYTES).ok()?))
+            .and_then(|count| count.checked_sub(u32::try_from(bytes.len() / stride).ok()?))
             .ok_or_else(invalid)?,
         ended_at_eof,
         decoder_sha256: Sha256::digest(&bytes).into(),
@@ -345,10 +382,14 @@ fn capture<T>(
     };
     let headers = if observe_headers {
         let mut collector = SuppliedTeletextHeaderObserver::new(pid).map_err(|_| invalid())?;
-        for packet in bytes.chunks_exact(PACKET_BYTES) {
+        for packet in bytes.chunks_exact(stride) {
             stop.check_source_guard()?;
             collector
-                .push(packet.try_into().map_err(|_| invalid())?)
+                .push(
+                    packet[format.sync_offset()..]
+                        .try_into()
+                        .map_err(|_| invalid())?,
+                )
                 .map_err(|_| invalid())?;
         }
         Some(collector.finish().map_err(|_| invalid())?)
@@ -388,14 +429,17 @@ fn validate_decoder_window<T>(
     pid: u16,
     program_number: u16,
     fingerprint: [u8; 32],
+    format: SourceTeletextPacketFormat,
     stop: &headers::ReadStop<'_, T>,
 ) -> Result<()> {
     let mut decoder_psi = SourceTeletextPsiObserver::new(pid).map_err(|_| invalid())?;
     let mut decoder_pes = SuppliedTeletextAssembler::new(pid).map_err(|_| invalid())?;
     let mut complete = false;
-    for chunk in bytes.chunks_exact(PACKET_BYTES) {
+    for chunk in bytes.chunks_exact(format.packet_bytes()) {
         stop.check_source_guard()?;
-        let raw: &[u8; PACKET_BYTES] = chunk.try_into().map_err(|_| invalid())?;
+        let raw: &[u8; PACKET_BYTES] = chunk[format.sync_offset()..]
+            .try_into()
+            .map_err(|_| invalid())?;
         decoder_psi.push(raw).map_err(|_| invalid())?;
         complete |= matches!(
             decoder_pes.push(raw).map_err(|_| invalid())?,
@@ -426,35 +470,6 @@ fn validate_program(observed: &ObservedSourcePsi, program_number: u16) -> Result
     let (_, stream) = selected.next().ok_or_else(invalid)?;
     if stream.stream_type != 6 || selected.next().is_some() {
         return Err(invalid());
-    }
-    Ok(())
-}
-
-pub(super) fn read_packet<T>(
-    file: &std::fs::File,
-    raw: &mut [u8; PACKET_BYTES],
-    offset: u64,
-    stop: &headers::ReadStop<'_, T>,
-) -> Result<()> {
-    let mut done = 0;
-    while done < raw.len() {
-        stop.check_source_guard()?;
-        #[cfg(unix)]
-        let result = {
-            use std::os::unix::fs::FileExt as _;
-            file.read_at(&mut raw[done..], offset + done as u64)
-        };
-        #[cfg(windows)]
-        let result = {
-            use std::os::windows::fs::FileExt as _;
-            file.seek_read(&mut raw[done..], offset + done as u64)
-        };
-        match result {
-            Ok(0) => return Err(invalid()),
-            Ok(count) => done += count,
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(_) => return Err(invalid()),
-        }
     }
     Ok(())
 }

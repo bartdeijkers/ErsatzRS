@@ -16,8 +16,8 @@ use super::{
     source_av_origin::{AvOriginCollector, SourceTeletextAvOriginEvidence},
     source_cue::{CueCollector, SourceTeletextCueEvidence, SourceTeletextCueRequest},
     source_native_clock::{NativeClockCollector, SourceTeletextNativeClockEvidence},
-    source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
-    SourceTeletextPacketSpan,
+    source_packet, source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
+    SourceTeletextPacketFormat, SourceTeletextPacketSpan,
 };
 use crate::ffprobe::{
     teletext_decode::SourceTeletextPageDecodeRequest, teletext_demux::NativeSourceDemuxTrace,
@@ -71,9 +71,22 @@ pub struct SourceTeletextContinuousClockEvidence {
     clock: SourceTeletextClockReport,
     source_sha256: [u8; 32],
     first_current_psi_packet: u64,
+    format: SourceTeletextPacketFormat,
+    source_byte_length: u64,
 }
 
 impl SourceTeletextContinuousClockEvidence {
+    #[must_use]
+    pub const fn format(&self) -> SourceTeletextPacketFormat {
+        self.format
+    }
+
+    /// Actual held source byte length, including opaque transport prefixes.
+    #[must_use]
+    pub const fn source_byte_length(&self) -> u64 {
+        self.source_byte_length
+    }
+
     /// Physical source ordinals and unwrapped raw PCR, not media-relative time.
     #[must_use]
     pub const fn clock(&self) -> SourceTeletextClockReport {
@@ -182,7 +195,7 @@ fn native_request(
     cue: Option<SourceTeletextCueRequest>,
 ) -> Option<SourceWalkRequest> {
     let (request, origin, trace) = observed;
-    let native_clock = NativeClockCollector::new(&request, &origin, trace)?;
+    let native_clock = NativeClockCollector::new(&request, &origin, trace, None)?;
     let cue = if let Some(cue) = cue {
         Some(
             CueCollector::new(cue, &origin, native_clock.epoch())?
@@ -240,8 +253,13 @@ fn observe<T>(
         mut cue,
     } = request;
     let len = guard.guard.len;
-    if len == 0 || !len.is_multiple_of(188) {
+    let format = source_packet::detect(guard.guard.original.as_file(), len, stop)?;
+    let stride = format.packet_bytes() as u64;
+    if len == 0 || !len.is_multiple_of(stride) || expected.is_some_and(|e| e.format != format) {
         return Err(invalid());
+    }
+    if let Some(collector) = &mut native_clock {
+        collector.bind_format(format)?;
     }
     let mut psi = SourceTeletextPsiObserver::new(selection.pid).map_err(|_| invalid())?;
     let mut clock =
@@ -255,30 +273,27 @@ fn observe<T>(
     let mut retained_packets = 0_u32;
     let mut first_current_psi_packet = None;
     let mut av = origin.map(AvOriginCollector::new).transpose()?;
-    for ordinal in 0..len / 188 {
+    for ordinal in 0..len / stride {
         stop.check_source_guard()?;
         if ordinal > 0 && ordinal.is_multiple_of(MAX_SOURCE_OBSERVATION_PACKETS as u64) {
             psi.begin_continuation_window().map_err(|_| invalid())?;
         }
-        let mut raw = [0; 188];
-        source_window::read_packet(
-            guard.guard.original.as_file(),
-            &mut raw,
-            ordinal * 188,
-            stop,
-        )?;
-        psi.push(&raw).map_err(|_| invalid())?;
-        let report = clock.push(&raw).map_err(|_| invalid())?;
+        let frame = source_packet::read(guard.guard.original.as_file(), ordinal, format, stop)?;
+        let raw = &frame.packet;
+        psi.push(raw).map_err(|_| invalid())?;
+        let report = clock.push(raw).map_err(|_| invalid())?;
         if let Some(cue) = &mut cue {
-            cue.observe_packet(&raw, ordinal, report)?;
+            cue.observe_packet(raw, ordinal, report)?;
         }
         if let Some(av) = &mut av {
-            av.push(&raw)?;
+            av.push(raw)?;
         }
         if let Some(native_clock) = &mut native_clock {
-            native_clock.push(&raw)?;
+            native_clock.push(raw)?;
         }
-        digest.update(raw);
+        for part in frame.parts() {
+            digest.update(part);
+        }
         if let Some((expected, span, retained_end)) = span {
             if ordinal >= span.first_packet() && ordinal < retained_end {
                 let raw_pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
@@ -287,7 +302,9 @@ fn observe<T>(
                 {
                     skipped_prefix += 1;
                 } else {
-                    decoder_digest.update(raw);
+                    for part in frame.parts() {
+                        decoder_digest.update(part);
+                    }
                     retained_packets += 1;
                 }
             }
@@ -317,6 +334,8 @@ fn observe<T>(
         clock: clock.report().map_err(|_| invalid())?,
         source_sha256: digest.finalize().into(),
         first_current_psi_packet: first_current_psi_packet.ok_or_else(invalid)?,
+        format,
+        source_byte_length: len,
     };
     finish_observations(clock, av, native_clock, cue, &observed)
 }
@@ -360,8 +379,12 @@ fn decoded_span(
     SourceTeletextPacketSpan,
     u64,
 )> {
-    let span = SourceTeletextPacketSpan::new(expected.first_source_packet, expected.source_packets)
-        .map_err(|_| invalid())?;
+    let span = SourceTeletextPacketSpan::new_with_format(
+        expected.first_source_packet,
+        expected.source_packets,
+        expected.format,
+    )
+    .map_err(|_| invalid())?;
     if span.byte_end_exclusive() > source_len
         || u64::from(expected.decoder_packets)
             + u64::from(expected.skipped_selected_prefix_packets)

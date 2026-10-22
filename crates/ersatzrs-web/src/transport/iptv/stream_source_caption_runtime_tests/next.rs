@@ -93,15 +93,43 @@ async fn record_callback(
 }
 
 async fn retained_source(ffmpeg: &str, library: &Path) -> PathBuf {
+    retained_source_with_format(
+        ffmpeg,
+        library,
+        ersatzrs_infra::ffprobe::SourceTeletextPacketFormat::Ts188,
+    )
+    .await
+}
+
+async fn retained_source_with_format(
+    ffmpeg: &str,
+    library: &Path,
+    format: ersatzrs_infra::ffprobe::SourceTeletextPacketFormat,
+) -> PathBuf {
     use std::fmt::Write as _;
 
     let original = input("ERSATZRS_NEXT_MAPPED_SOURCE");
-    let bytes = tokio::fs::read(&original).await.unwrap();
+    let mut bytes = tokio::fs::read(&original).await.unwrap();
     let mut digest = String::with_capacity(64);
     for byte in Sha256::digest(&bytes) {
         write!(digest, "{byte:02x}").unwrap();
     }
     assert_eq!(digest, SOURCE_SHA256);
+    if format == ersatzrs_infra::ffprobe::SourceTeletextPacketFormat::M2ts192 {
+        let wrapped = tokio::fs::read(input("ERSATZRS_NEXT_MAPPED_M2TS_SOURCE"))
+            .await
+            .unwrap();
+        assert_eq!(bytes.len() % 188, 0);
+        assert_eq!(wrapped.len(), bytes.len() / 188 * 192);
+        for (original, frame) in bytes.chunks_exact(188).zip(wrapped.chunks_exact(192)) {
+            assert_eq!(
+                &frame[4..],
+                original,
+                "every original TS packet stays exact"
+            );
+        }
+        bytes = wrapped;
+    }
     tokio::fs::create_dir(library).await.unwrap();
     let source = library.join("movie.ts");
     tokio::fs::write(&source, bytes).await.unwrap();

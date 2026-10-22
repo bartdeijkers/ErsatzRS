@@ -8,7 +8,9 @@ use ersatzrs_ffmpeg::teletext::{
     source_psi::ObservedSourcePsi,
 };
 
-use super::{source_clock::SourceSelection, SourceTeletextAvOriginEvidence};
+use super::{
+    source_clock::SourceSelection, SourceTeletextAvOriginEvidence, SourceTeletextPacketFormat,
+};
 use crate::ffprobe::{
     teletext_decode::SourceTeletextPageDecodeRequest,
     teletext_demux::{NativeSourceDemuxPacket, NativeSourceDemuxTrace},
@@ -85,6 +87,8 @@ pub(super) struct NativeClockCollector {
     observer: SourceAvTimestampObserver,
     header: Option<SourceAvPesHeader>,
     mismatched: bool,
+    format: Option<SourceTeletextPacketFormat>,
+    first_source_packet: Option<u64>,
 }
 
 impl NativeClockCollector {
@@ -92,6 +96,7 @@ impl NativeClockCollector {
         request: &SourceTeletextPageDecodeRequest,
         origin: &NativeSourceOrigin,
         trace: NativeSourceDemuxTrace,
+        format: Option<SourceTeletextPacketFormat>,
     ) -> Option<Self> {
         if origin.format_name() != Some("mpegts") || trace.programs().len() != 1 {
             return None;
@@ -137,12 +142,18 @@ impl NativeClockCollector {
         let first = *trace.packets().first()?;
         if first.is_corrupt() != Some(false)
             || first.is_discard() != Some(false)
-            || first.source_packet().is_none()
+            || first.position().is_none()
             || (first.pts().is_none() && first.dts().is_none())
             || !program.stream_indices().contains(&first.stream_index())
         {
             return None;
         }
+        // A pending source still needs its physical format established inside
+        // the owned walk. Explicit-format construction keeps strict alignment.
+        let first_source_packet = match format {
+            Some(format) => Some(format.source_packet_at(first.position()?)?),
+            None => None,
+        };
         let stream = trace
             .streams()
             .iter()
@@ -184,7 +195,22 @@ impl NativeClockCollector {
             trace,
             header: None,
             mismatched: false,
+            format,
+            first_source_packet,
         })
+    }
+
+    pub(super) fn bind_format(&mut self, format: SourceTeletextPacketFormat) -> Result<()> {
+        if self.format.is_some() {
+            return Err(invalid());
+        }
+        self.format = Some(format);
+        self.first_source_packet = self
+            .first_packet
+            .position()
+            .and_then(|position| format.source_packet_at(position));
+        self.mismatched |= self.first_source_packet.is_none();
+        Ok(())
     }
 
     pub(super) const fn epoch(&self) -> SourceNativeEpoch {
@@ -196,8 +222,14 @@ impl NativeClockCollector {
     }
 
     pub(super) fn push(&mut self, raw: &[u8; 188]) -> Result<()> {
+        if self.format.is_none() {
+            return Err(invalid());
+        }
         if let Some(header) = self.observer.push(raw).map_err(|_| invalid())? {
-            let first = self.first_packet.source_packet().ok_or_else(invalid)?;
+            let Some(first) = self.first_source_packet else {
+                self.mismatched = true;
+                return Ok(());
+            };
             if header.source_pusi_packet < first {
                 self.mismatched = true;
             }

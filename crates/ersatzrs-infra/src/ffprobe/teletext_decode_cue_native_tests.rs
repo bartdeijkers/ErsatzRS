@@ -56,8 +56,24 @@ fn assert_bookends(source: &LaterSource, evidence: &SourceTeletextCueEvidence) {
 #[tokio::test]
 #[ignore = "requires explicit FFmpeg/FFprobe 9 with libzvbi for actual requested-cue page decoding"]
 async fn native_requested_format_cue_locates_and_decodes_later_pages_without_packet_rate_guesses() {
+    Box::pin(requested_format_cue(
+        crate::ffprobe::SourceTeletextPacketFormat::Ts188,
+    ))
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicit FFmpeg/FFprobe 9 with libzvbi for original M2TS source clock and page decoding"]
+async fn native_m2ts_requested_format_cue_retains_original_clock_bytes_and_later_pages() {
+    Box::pin(requested_format_cue(
+        crate::ffprobe::SourceTeletextPacketFormat::M2ts192,
+    ))
+    .await;
+}
+
+async fn requested_format_cue(format: crate::ffprobe::SourceTeletextPacketFormat) {
     let scope = LocalProbeCleanupScope::new();
-    let source = LaterSource::new(&scope).await;
+    let source = Box::pin(framed_source(&scope, format)).await;
     let ordinary = scope
         .scope(source.extractor.extract(&source.path))
         .await
@@ -148,6 +164,34 @@ async fn native_requested_format_cue_locates_and_decodes_later_pages_without_pac
     assert_eq!(locker.active_teletext_work(), 0);
 }
 
+async fn framed_source(
+    scope: &LocalProbeCleanupScope,
+    format: crate::ffprobe::SourceTeletextPacketFormat,
+) -> LaterSource {
+    let mut source = LaterSource::new(scope).await;
+    if format == crate::ffprobe::SourceTeletextPacketFormat::M2ts192 {
+        let wrapped = source
+            .bytes
+            .chunks_exact(PACKET_BYTES)
+            .flat_map(|packet| [0; 4].into_iter().chain(packet.iter().copied()))
+            .collect::<Vec<_>>();
+        std::fs::write(&source.path, &wrapped).unwrap();
+        source.bytes = wrapped;
+        source.span = SourceTeletextPacketSpan::new_with_format(
+            source.span.first_packet(),
+            source.span.packet_count(),
+            format,
+        )
+        .unwrap();
+        let acquired = scope
+            .scope(source.extractor.extract_local_with_teletext(&source.path))
+            .await
+            .unwrap();
+        source.request.binding.source_revision = acquired.teletext.unwrap().revision().clone();
+    }
+    source
+}
+
 async fn assert_changed_tail_rejected(
     source: &LaterSource,
     prepared: &PreparedLocalTeletextSource,
@@ -162,30 +206,39 @@ async fn assert_changed_tail_rejected(
         .unwrap();
     let ordinal = source
         .bytes
-        .chunks_exact(PACKET_BYTES)
+        .chunks_exact(cue.span().format().packet_bytes())
         .enumerate()
         .find(|(i, packet)| {
             u64::try_from(*i).unwrap() >= cue.span().end_packet_exclusive()
-                && packet_pid(packet) == 0x1fff
+                && packet_pid(&packet[cue.span().format().sync_offset()..]) == 0x1fff
         })
         .map(|(i, _)| i)
         .expect("actual nonselected null tail outside decoded cue");
-    let mut changed = source.bytes.clone();
-    changed[ordinal * PACKET_BYTES + 100] ^= 1;
-    std::fs::write(&source.path, changed).unwrap();
-    file.set_times(std::fs::FileTimes::new().set_modified(modified))
-        .unwrap();
-    scope
-        .scope(prepared.check_source(Instant::now() + Duration::from_secs(15), work.hold_work()))
-        .await
-        .unwrap();
-    assert!(matches!(scope.scope(source.extractor.decode_prepared_local_teletext_cue(
-        prepared, cue, Instant::now() + Duration::from_secs(15), work.hold_work(),
-    )).await, Err(SourceTeletextPageDecodeError::SourceChanged)),
-    "unchanged decoder bytes and restored metadata cannot reuse changed full-source cue evidence");
-    std::fs::write(&source.path, &source.bytes).unwrap();
-    file.set_times(std::fs::FileTimes::new().set_modified(modified))
-        .unwrap();
+    let format = cue.span().format();
+    let mut offsets = vec![format.sync_offset() + 100];
+    if format == crate::ffprobe::SourceTeletextPacketFormat::M2ts192 {
+        offsets.push(0); // An opaque prefix outside the cue remains source bytes.
+    }
+    for offset in offsets {
+        let mut changed = source.bytes.clone();
+        changed[ordinal * format.packet_bytes() + offset] ^= 1;
+        std::fs::write(&source.path, changed).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        scope
+            .scope(
+                prepared.check_source(Instant::now() + Duration::from_secs(15), work.hold_work()),
+            )
+            .await
+            .unwrap();
+        assert!(matches!(scope.scope(source.extractor.decode_prepared_local_teletext_cue(
+            prepared, cue, Instant::now() + Duration::from_secs(15), work.hold_work(),
+        )).await, Err(SourceTeletextPageDecodeError::SourceChanged)),
+        "unchanged decoder bytes and restored metadata cannot reuse changed full-source cue evidence");
+        std::fs::write(&source.path, &source.bytes).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+    }
     let mismatched = source.prepare(scope, work, 200, 1).await;
     assert!(matches!(
         scope

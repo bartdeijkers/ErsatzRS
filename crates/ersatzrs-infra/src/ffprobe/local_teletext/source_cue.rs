@@ -254,7 +254,14 @@ impl CueCollector {
             .checked_sub(first)
             .and_then(|count| count.checked_add(1))
             .and_then(|count| u32::try_from(count).ok())
-            .and_then(|count| SourceTeletextPacketSpan::new(first, count).ok());
+            .and_then(|count| {
+                SourceTeletextPacketSpan::new_with_format(
+                    first,
+                    count,
+                    clock.av_origin().clock().format(),
+                )
+                .ok()
+            });
         Ok(span.map(|span| SourceTeletextCueEvidence {
             clock,
             request: self.request,

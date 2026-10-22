@@ -989,6 +989,8 @@ release section when tagging a release.
   complete membership checks, retaining ordinary audio/subtitle metadata.
   Fresh held-source inventory accepts legal initial discontinuity flags without
   resetting later continuity or treating interior decoder windows as new sources.
+  Read M2TS sources without stripping their four-byte packet prefixes: inventory,
+  caption snapshots, source hashes and native clock positions retain exact frames.
 
 - Reject unqualified teletext stream selections before Next Burn preparation,
   matching Convert's existing page-bound refusal. Qualified source captions and
@@ -996,8 +998,9 @@ release section when tagging a release.
 
 - Provide an opt-in Next candidate that preserves the incoming video clock
   while burning text subtitles after a seek. The qualified retained-source HLS
-  route respects the selected video outpoint, exact caption transitions and
-  selected alternate audio; managed-runtime adoption remains separate.
+  interval preserves exact caption transitions and selected alternate audio.
+  Another seek still omits a complete final frame before the video outpoint;
+  correction and managed-runtime adoption remain separate.
 
 - Keep Health results in the selected admin language after a hydrated refresh,
   including recovery from invalid teletext source-storage settings.

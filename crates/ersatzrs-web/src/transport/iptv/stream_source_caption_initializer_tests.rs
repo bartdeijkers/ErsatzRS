@@ -519,7 +519,14 @@ async fn run_initializer() {
         ActiveTranscodeSlot::new_mpeg_ts("synthetic-source-caption-initializer"),
     )
     .unwrap();
-    let reference_source = selected_source(&state, &source, item, version, Duration::ZERO).await;
+    let reference_source = Box::pin(selected_source(
+        &state,
+        &source,
+        item,
+        version,
+        Duration::ZERO,
+    ))
+    .await;
     let reference_request = request(&tools[0], &reference_source, 1, None, true);
     let (reference_command, reference_plan) = reference_request.build().unwrap();
     reference_source
@@ -544,8 +551,14 @@ async fn run_initializer() {
         reference.iter().copied().map(usize::from).sum::<usize>(),
         650
     );
-    let selected =
-        selected_source(&state, &source, item, version, Duration::from_millis(500)).await;
+    let selected = Box::pin(selected_source(
+        &state,
+        &source,
+        item,
+        version,
+        Duration::from_millis(500),
+    ))
+    .await;
     for audio in [1, 3] {
         for buffer in [Some(800), None] {
             verify_policy(

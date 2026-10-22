@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-inventory — SI3 M2TS source-position mapping'
+current_focus = 'p9a-source-output — SO4 finite outpoint completeness'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,42 +62,32 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-inventory SI3, M2TS192 source-position mapping.
-Next executable action: extend the existing owned packet/span/snapshot/clock
-boundaries for the now-qualified192-byte source. Preserve original source and
-decoder bytes, explicit physical positions/full-byte coverage/hash semantics,
-exact PES/AV clocks and current source/worker authority. No prefix stripping with
-false complete-byte claims, remux-derived clock, or new acquisition mechanism.
-Stop when exact M2TS inventory/identity and affected decoder/clock/cleanup
-integration pass alongside strict malformed and standalone188 regressions.
+Current package: p9a-source-output SO4, the concrete finite-outpoint omission.
+Next executable action: use the saved candidate.5 source/filter/encoder/mux
+witnesses and exact seek2164/out9200 argv to correct the demonstrated missing
+complete frame in the existing duration/clock path. TS188 and M2TS yield the same
+175-frame TS hash, so framing corruption is rejected. Stop when this interval
+and the original successful interval preserve every complete source frame before
+the exact outpoint, cue/clear clocks, selected Dutch audio, transport and cleanup.
+No nicer-seek retry, timing tolerance, producer reread or new source matrix.
 
-The framing obligation is concrete: already advertised .mts/.m2ts; TSDuck3.44
-keeps all303 original packets byte-identical inside303 M2TS192 packets and the
-pinned probe keeps all four tracks. The actual Local scan then refuses acquired
-headers (source-framing-native-negative). This closes input-scope uncertainty,
-not support or a full native matrix. Canonical source_inventory_format_followup.
-framing_qualification owns all exact input/probe/negative receipts. No new
-all-container matrix or permanent source exclusion follows.
+SI3 M2TS inventory/snapshot/native-clock component is completed on Linux:
+focused88, final cursor4, actual Local scan/rescan and independent requested-cue
+decoding pass with original prefixes/positions/full-byte hashes and strict188
+refusals. Windows cursor restoration is implemented; native platform acceptance
+remains separately owned. Canonical provider-scan/identity.json
+source_inventory_format_followup.framing_qualification owns receipts, source
+identities, unchanged-byte joins and preserved negatives. The new public Burn
+trial fails only the final strict source-outpoint coverage oracle; its complete
+runtime acceptance is not claimed. Strict affected all-target lint and fresh-binary MPEG-TS/HLS smoke pass;
+final receipts live beside it.
 
-SI3 owned initial-source inventory passes focused94, final affected headers13
-and actual Linux pinned-probe scan/rescan1. Exact body/context/header/PTS/PSI,
-current source bindings, ordinary eng/nld AAC/sidecars and joined cleanup pass.
-Byte-zero and all-PID/pre-PSI physical-seen fences grant no later reset or page/
-clock readiness. Strict ffmpeg/infra/scanner all-target Clippy passes. Default
-decoder/clock/snapshot readers remain strict; new initial-flag playback is outside this scoped claim.
-Canonical provider-scan/identity.json source_inventory_format_followup owns the
-new proof and original/fixture-counter/helper-count negatives. The component is
-closed within its verified inventory scope; original negatives remain retained.
-
-Reuse closed SI1 storage/public-HLS-clock, SI2 persistent identity, SI3 optional
-PES/PMT, SO4/SO5 and F6 receipts within their exact scopes. These components
-reopen only on a concrete regression. Native/platform/client/managed-adoption
-owners retain independent acceptance; unchanged editor/publication/isolation
-chains are not repeated.
-
-Ordinary milestones remain the sole finite current collection. Preserve all
-parallel edits and client/editor/platform/policy deferrals. No push/publication;
-engine-first, with every original acceptance condition unchanged.
+Reuse closed SI1 storage/public-clock, SI2 identity, SI3 PES/PMT/initial-inventory,
+SO5 and F6 evidence within their proven scopes. The original successful SO4
+interval stays closed; the new counterexample owns its exact regression.
+SI4 remains the bounded existing receipt-classification task. Ordinary milestones
+remain the sole finite collection. Preserve external deferrals and parallel edits;
+no push/publication, and no production9B before full independent9A acceptance.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

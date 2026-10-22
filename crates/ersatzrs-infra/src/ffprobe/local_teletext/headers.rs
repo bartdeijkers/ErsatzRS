@@ -22,7 +22,7 @@ use sha2::{Digest as _, Sha256};
 use tokio::sync::oneshot;
 use tokio::time::Instant;
 
-use super::{identities, LocalTeletextAcquisition};
+use super::{identities, source_packet, LocalTeletextAcquisition};
 use crate::ffprobe::local_cleanup_scope::{self, AdmissionError, OwnerGuard};
 use crate::ffprobe::{FfprobeError, LocalProbeCleanupScope};
 
@@ -312,11 +312,15 @@ pub(super) fn read_headers<T>(
     if file.stream_position().map_err(|_| Problem::Read)? != 0 {
         return Err(Problem::InvalidTransport);
     }
+    let format = source_packet::detect(file, acquired.guard.len, stop);
+    stop.check()?;
+    let format = format.map_err(|_| Problem::UnsupportedFraming)?;
+    let stride = format.packet_bytes();
     let mut psi = SourceTeletextPsiObserver::new_source_epoch(first_pid)
         .map_err(|_| Problem::InvalidTransport)?;
-    let maximum = (acquired.guard.len / 188).min(MAX_SOURCE_OBSERVATION_PACKETS as u64);
-    let ended_at_eof = acquired.guard.len <= (MAX_SOURCE_OBSERVATION_PACKETS * 188) as u64;
-    if ended_at_eof && !acquired.guard.len.is_multiple_of(188) {
+    let maximum = (acquired.guard.len / stride as u64).min(MAX_SOURCE_OBSERVATION_PACKETS as u64);
+    let ended_at_eof = acquired.guard.len <= (MAX_SOURCE_OBSERVATION_PACKETS * stride) as u64;
+    if ended_at_eof && !acquired.guard.len.is_multiple_of(stride as u64) {
         return Err(Problem::UnsupportedFraming);
     }
     let mut active: Option<ActiveHeaders> = None;
@@ -324,8 +328,12 @@ pub(super) fn read_headers<T>(
     let mut pre_psi_seen = BTreeSet::new();
     for ordinal in 0..maximum {
         stop.check()?;
-        let mut raw = [0; 188];
-        file.read_exact(&mut raw).map_err(|_| Problem::Read)?;
+        let mut frame = [0; 192];
+        file.read_exact(&mut frame[..stride])
+            .map_err(|_| Problem::Read)?;
+        let raw: [u8; 188] = frame[format.sync_offset()..stride]
+            .try_into()
+            .map_err(|_| Problem::UnsupportedFraming)?;
         if raw[0] != 0x47 {
             return Err(Problem::UnsupportedFraming);
         }

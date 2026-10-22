@@ -2,6 +2,9 @@ use super::*;
 use crate::ffprobe::LocalProbeCleanupScope;
 use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
 
+#[path = "m2ts_tests.rs"]
+mod m2ts;
+
 fn fixture() -> Vec<u8> {
     include_str!("../../../../../ersatzrs-ffmpeg/tests/fixtures/teletext-source-assembly.hex")
         .split_whitespace()

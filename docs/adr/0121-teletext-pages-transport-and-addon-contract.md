@@ -667,13 +667,22 @@ Local adapter now reads only the original held regular file, outside SQLite,
 through a bounded blocking owner registered in the existing cleanup scope. Caller
 loss or an early uncertainty reply cannot release that owner's capacity while the
 worker continues. Successful return joins the worker. Reads admit at most32768
-TS188 packets and1024 successful aggregate header occurrences, under one ten-second
+transport packets and1024 successful aggregate header occurrences, under one ten-second
 cooperative deadline and one-second settlement budget. Uninterruptible filesystem
 calls retain the owner until they actually finish. No-scope calls start no reader.
 Header collection starts only after complete current PSI; a sticky current-table
 change witness rejects the whole read even if the wire tables later return to
 their initial bytes. Source association is rechecked after reading and before the
 ordinary media transaction commits. This still certifies no immutable source bytes.
+The existing source reader distinguishes physical TS188 and M2TS192 frames at
+byte zero without resynchronization or filename guesses. Explicit interior spans
+carry their own framing; the default constructor remains TS188. Parsers receive
+the inner188 bytes, while snapshots, coverage and source/decoder hashes retain
+every original prefix and packet byte. Native byte positions must identify an
+exact physical frame start and corroborate the original PES/AV clock; the opaque
+M2TS prefix grants no clock authority. Detection restores the held file cursor
+on success and failure, so subsequent sequential header reads remain correct on
+Windows as well as Unix. Other positional reads do not promise cursor neutrality.
 A new additive version-1 bounded JSON child stores HeadersObserved under the exact
 existing source report. The applied parent status remains its legacy zero sentinel;
 child presence is decoded explicitly, never as Ready. SQL gates untrusted payload

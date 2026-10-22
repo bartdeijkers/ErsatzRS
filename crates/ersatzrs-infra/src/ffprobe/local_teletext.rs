@@ -34,6 +34,7 @@ mod source_clock;
 mod source_cue;
 mod source_cue_prelude;
 mod source_native_clock;
+mod source_packet;
 mod source_text_snapshot;
 mod source_window;
 
@@ -45,6 +46,7 @@ pub(crate) use source_clock::{observe_native_clock_owned, observe_native_cue_own
 pub use source_cue::{SourceTeletextCueEvidence, SourceTeletextCueRequest};
 pub use source_cue_prelude::SourceTeletextPagePrelude;
 pub use source_native_clock::SourceTeletextNativeClockEvidence;
+pub use source_packet::SourceTeletextPacketFormat;
 pub(crate) use source_text_snapshot::capture_owned as capture_complete_text_source_owned;
 
 pub(crate) use source_window::{
