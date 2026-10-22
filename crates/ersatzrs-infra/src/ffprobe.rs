@@ -16,6 +16,8 @@ pub mod teletext_probe;
 mod local;
 pub(crate) mod local_cleanup_scope;
 mod local_teletext;
+
+mod producer_teletext;
 mod remote_source_snapshot;
 mod retained_source_reader;
 pub(crate) use retained_source_reader::{open_retained_source_reader, RetainedSourceReader};

@@ -31,6 +31,11 @@ release section when tagging a release.
 
 ### Added
 
+- Add bounded teletext metadata inspection of an already-running producer's
+  retained prefix, preserving stream/PID/program identity without another
+  producer read. This report-only component does not yet enable captions on
+  ordinary live or one-shot stream routes.
+
 - Add owned finite source-video frame-end qualification for subtitle preparation.
   Exact decoded clocks and complete-frame bookends are checked against the selected
   outpoint; uncertain endpoints and native error diagnostics are refused. Runtime
