@@ -128,6 +128,7 @@ pub(super) async fn replace_children(
         }
     }
     super::header_codec::replace(tx, id, &observation.observed_pages).await?;
+    super::page_codec::replace(tx, id, &observation.observed_pages).await?;
     Ok(())
 }
 
@@ -157,6 +158,8 @@ pub(super) async fn decode(
     if id <= 0 {
         return Err(invalid("stored metadata identity"));
     }
+    let headers = super::header_codec::load(tx, id).await?;
+    let observed_pages = super::page_codec::load(tx, id, headers).await?;
     let observation = SourceTeletextObservation {
         binding: decode_binding(row, parents)?,
         stream_index: i32::try_from(column::<i64>(row, "StreamIndex")?)
@@ -171,7 +174,7 @@ pub(super) async fn decode(
             column(row, "TrailingUnpairedPairs")?,
         )
         .await?,
-        observed_pages: super::header_codec::load(tx, id).await?,
+        observed_pages,
     };
     validate(&observation)?;
     Ok(observation)

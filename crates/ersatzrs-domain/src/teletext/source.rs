@@ -9,7 +9,9 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use super::{SourceTeletextHeaderWindow, TeletextLanguage, TeletextPageNumber};
+use super::{
+    SourceTeletextHeaderWindow, SourceTeletextPageWindow, TeletextLanguage, TeletextPageNumber,
+};
 use crate::{EntityId, MediaSourceKind};
 
 /// Resource policy for opaque adapter revision text, not a provider protocol limit.
@@ -44,6 +46,8 @@ pub enum SourceTeletextError {
     HeaderOrder,
     #[error("source teletext header observations require a bound source and actual PID")]
     HeaderBinding,
+    #[error("source teletext page capture contains invalid bounds, references or associations")]
+    PageWindow,
 }
 
 /// Opaque adapter-supplied revision; syntax validation establishes no assurance.
@@ -274,6 +278,31 @@ pub enum SourceTeletextObservedPages {
     NotAcquired,
     /// Packet-0 observations only; body, charset and readiness remain unproven.
     HeadersObserved(Box<SourceTeletextHeaderWindow>),
+    /// Bounded source units and acquisition context; not authored/playback authority.
+    PagesObserved {
+        headers: Box<SourceTeletextHeaderWindow>,
+        pages: Box<SourceTeletextPageWindow>,
+    },
+}
+
+impl SourceTeletextObservedPages {
+    /// The actual header observations, without upgrading their acquisition scope.
+    #[must_use]
+    pub fn headers(&self) -> Option<&SourceTeletextHeaderWindow> {
+        match self {
+            Self::NotAcquired => None,
+            Self::HeadersObserved(headers) | Self::PagesObserved { headers, .. } => Some(headers),
+        }
+    }
+
+    /// Retained page/body context only when that separate acquisition occurred.
+    #[must_use]
+    pub fn page_window(&self) -> Option<&SourceTeletextPageWindow> {
+        match self {
+            Self::PagesObserved { pages, .. } => Some(pages),
+            Self::NotAcquired | Self::HeadersObserved(_) => None,
+        }
+    }
 }
 
 /// Independent report-only fields from one supplied stream snapshot.
@@ -352,13 +381,16 @@ impl SourceTeletextObservation {
                 }
             }
         }
-        if let SourceTeletextObservedPages::HeadersObserved(window) = &self.observed_pages {
+        if let Some(window) = self.observed_pages.headers() {
             if !matches!(self.binding, SourceTeletextBinding::Bound(_))
                 || !matches!(self.pid, SourceTeletextPid::Reported(0x20..=0x1ffe))
             {
                 return Err(SourceTeletextError::HeaderBinding);
             }
             window.validate()?;
+            if let Some(pages) = self.observed_pages.page_window() {
+                pages.validate(window)?;
+            }
         }
         Ok(())
     }

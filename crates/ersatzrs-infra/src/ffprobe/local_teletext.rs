@@ -5,6 +5,7 @@
 //! prove transmitted pages. Windows identity inherits `same-file`'s file-index
 //! limitations. The original handle remains held until the caller drops it.
 
+use std::collections::BTreeMap;
 use std::fs::{File, Metadata, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io;
@@ -13,7 +14,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ersatzrs_core::locking::TeletextWorkHold;
-use ersatzrs_domain::teletext::SourceTeletextRevision;
+use ersatzrs_domain::teletext::{SourceTeletextPageWindow, SourceTeletextRevision};
 use same_file::Handle;
 use sha2::{Digest, Sha256};
 use tokio::time::Instant;
@@ -70,6 +71,7 @@ pub struct LocalTeletextAcquisition {
     revision: SourceTeletextRevision,
     guard: LocalFileRevision,
     headers: LocalTeletextHeaders,
+    page_windows: BTreeMap<i32, SourceTeletextPageWindow>,
 }
 
 /// Holds the current local file associated with an already acquired revision.
@@ -234,6 +236,13 @@ fn source_guard_changed() -> FfprobeError {
 }
 
 impl LocalTeletextAcquisition {
+    /// Actual bounded page transmissions/context, never immutable-source or
+    /// runtime selection authority. Missing windows do not prove absent pages.
+    #[must_use]
+    pub fn page_window(&self, stream_index: i32) -> Option<&SourceTeletextPageWindow> {
+        self.page_windows.get(&stream_index)
+    }
+
     /// Actual bounded header observations, separate from the packed descriptor projection.
     #[must_use]
     pub fn headers(&self) -> &LocalTeletextHeaders {
@@ -411,6 +420,7 @@ async fn acquire(
                 headers: LocalTeletextHeaders::NotAcquired(
                     LocalTeletextHeaderProblem::NoManagedScope,
                 ),
+                page_windows: BTreeMap::new(),
             };
             Ok(Some(Arc::new(headers::acquire(acquired, path).await?)))
         }

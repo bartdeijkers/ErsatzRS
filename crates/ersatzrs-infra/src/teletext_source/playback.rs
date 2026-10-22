@@ -14,8 +14,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    SourceTeletextBinding, SourceTeletextObservation, SourceTeletextObservedPages,
-    SourceTeletextPid, TeletextLanguage, TeletextPageNumber,
+    SourceTeletextBinding, SourceTeletextObservation, SourceTeletextPid, TeletextLanguage,
+    TeletextPageNumber,
 };
 use ersatzrs_ffmpeg::teletext::source_descriptors::{
     parse_source_teletext_descriptors, SourceTeletextWireDescriptor,
@@ -316,16 +316,11 @@ fn append_candidates(
     wire_entries: &mut usize,
     mode: DiscoveryMode,
 ) -> Result<()> {
-    let (
-        SourceTeletextBinding::Bound(binding),
-        SourceTeletextPid::Reported(pid),
-        SourceTeletextObservedPages::HeadersObserved(window),
-    ) = (
+    let (SourceTeletextBinding::Bound(binding), SourceTeletextPid::Reported(pid), Some(window)) = (
         &observation.binding,
         observation.pid,
-        &observation.observed_pages,
-    )
-    else {
+        observation.observed_pages.headers(),
+    ) else {
         return Ok(());
     };
     let observed: BTreeSet<_> = window

@@ -258,7 +258,7 @@ async fn assert_mapped_scan(
     probe: &ersatzrs_infra::ffprobe::LocalMediaProbe,
     owner: MediaSourceKind,
 ) -> (i64, i64) {
-    use ersatzrs_domain::{SourceTeletextBinding, SourceTeletextObservedPages};
+    use ersatzrs_domain::SourceTeletextBinding;
     let rows: Vec<(i64, i64, i64, i64, String)> = sqlx::query_as(
         r#"SELECT m."Id",v."Id",f."Id",s."Id",f."Path" FROM "MediaItem" m
            JOIN "LibraryPath" p ON p."Id"=m."LibraryPathId"
@@ -297,13 +297,11 @@ async fn assert_mapped_scan(
     let acquisition = probe.teletext.as_ref().unwrap();
     assert_eq!(&binding.source_revision, acquisition.revision());
     assert_eq!(report.stream_index, 2);
-    let SourceTeletextObservedPages::HeadersObserved(headers) = report.observed_pages else {
-        panic!("actual observed pages are required before selection");
-    };
-    assert_eq!(
-        headers.as_ref(),
-        acquisition.headers().for_stream(2).unwrap()
-    );
+    let headers = report
+        .observed_pages
+        .headers()
+        .expect("actual observed pages are required before selection");
+    assert_eq!(headers, acquisition.headers().for_stream(2).unwrap());
     (*item, *version)
 }
 

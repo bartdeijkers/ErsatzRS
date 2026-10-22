@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-inventory — SI1 persistent observed-page readiness'
+current_focus = 'p9a-source-inventory — SI2 persistent identity and invalidation proof'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,17 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-inventory SI1, the existing approved observed-page
-body/subcode/charset/region/provenance and persistent-readiness requirement.
-First action: locate the existing scanner/report/readiness boundary and name
-exactly which required observed facts remain absent from durable source state.
-Implement the smallest bounded complete-body/context representation and exact
-source binding needed by that requirement. NotAcquired/HeadersObserved must not
-be upgraded to ready bodies; descriptor/charset guesses grant no readiness.
-Stop when those accepted facts survive SQLite/rescan with explicit incomplete
-state and exact source identity, or a concrete prerequisite is recorded. SI2
-invalidation/version and SI3 format limits remain their existing separate cells;
-no inferred all-container/provider Cartesian product or new general audit.
+Current package: p9a-source-inventory SI2, the existing selected source/version/
+file/stream/page identity, rescan/replacement/missing-file reconciliation proof.
+First action: join the existing SQL selection and actual Local/provider receipts
+to those exact SI2 cells; add a targeted regression only for a demonstrated
+missing required transition. Stop when each named transition has exact persistent
+identity/ordinary-track proof, or its concrete implementation gap is recorded.
+No inferred provider/container cross-product or new general audit.
+
+SI1 bounded capture/persistence implementation is complete with focused136,
+actual Local4/provider6 scans and strict five-crate all-target Clippy. The fresh
+public HLS clock proof remains open: multi-CPU full-byte nondeterminism and a
+single-CPU raw/output-prefix refusal are retained in canonical provider-scan/
+identity.json source_inventory_readiness_followup. No guard or old SO4 scope is
+weakened; no broader clock success is claimed.
+SI3 format policy remains its separate existing cell. Seven unrelated files,
+shared documentation changes and all original evidence are preserved.
 
 SO4 candidate.5 clock/outpoint and SO5 existing preference/qualified-page/refusal
 components are complete. Canonical provider-scan/identity.json

@@ -1,5 +1,5 @@
 //! Actual Local scan routes with a pinned probe and redistributable AV/200/888.
-//! Actual bounded header observations still do not establish page bodies or selection.
+//! Bounded header/body/context observations grant no decoded-page selection authority.
 
 use std::path::{Path, PathBuf};
 
@@ -137,6 +137,15 @@ async fn tracks(pool: &SqlitePool, files: usize) -> Vec<Track> {
     rows
 }
 
+fn assert_page_capture(observed: &SourceTeletextObservedPages) {
+    let headers = observed.headers().unwrap();
+    let pages = observed
+        .page_window()
+        .expect("native scan must persist body/context alongside the original header window");
+    pages.validate(headers).unwrap();
+    assert!(!pages.units.is_empty() && !pages.pages.is_empty());
+}
+
 async fn reports(pool: &SqlitePool, files: usize) -> Vec<(i64, SourceTeletextRevision)> {
     let parents: Vec<(i64, i64, i64)> = sqlx::query_as(
         r#"SELECT f."Id",f."MediaVersionId",s."Id"
@@ -172,9 +181,10 @@ async fn reports(pool: &SqlitePool, files: usize) -> Vec<(i64, SourceTeletextRev
         );
         assert_eq!(report.stream_index, 3);
         assert_eq!(report.pid, SourceTeletextPid::Reported(0x103));
-        let SourceTeletextObservedPages::HeadersObserved(headers) = report.observed_pages else {
-            panic!("native scan must persist actual bounded headers");
-        };
+        let headers = report
+            .observed_pages
+            .headers()
+            .expect("native scan must persist actual bounded headers");
         assert_eq!(headers.packet_count, 303);
         assert_eq!(headers.complete_pes, 14);
         assert!(headers.ended_at_eof);
@@ -207,6 +217,7 @@ async fn reports(pool: &SqlitePool, files: usize) -> Vec<(i64, SourceTeletextRev
             ]
         );
         assert_ne!(headers.psi_fingerprint, [0; 32]);
+        assert_page_capture(&report.observed_pages);
         let SourceTeletextDescriptors::Reported {
             entries,
             trailing_unpaired_pairs,

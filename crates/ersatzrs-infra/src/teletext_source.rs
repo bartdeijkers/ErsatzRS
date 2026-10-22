@@ -15,6 +15,7 @@ use crate::repositories::managed_library_operation::claim_is_current;
 mod acquisition;
 mod codec;
 mod header_codec;
+mod page_codec;
 mod parents;
 mod playback;
 

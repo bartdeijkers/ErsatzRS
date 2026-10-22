@@ -22,7 +22,7 @@ pub(super) async fn replace(
         .execute(&mut **tx)
         .await
         .map_err(|_| storage())?;
-    if let SourceTeletextObservedPages::HeadersObserved(window) = observed {
+    if let Some(window) = observed.headers() {
         window
             .validate()
             .map_err(|_| invalid("header window structure"))?;

@@ -578,3 +578,6 @@ async fn source_teletext_corrupt_text_and_scalar_values_fail_without_echoing_rev
 
 #[path = "header_tests.rs"]
 mod headers;
+
+#[path = "page_tests.rs"]
+mod pages;

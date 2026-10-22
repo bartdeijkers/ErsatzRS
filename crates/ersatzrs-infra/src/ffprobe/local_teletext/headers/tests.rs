@@ -17,6 +17,7 @@ fn acquisition(path: &Path) -> LocalTeletextAcquisition {
         revision: guard.revision().unwrap(),
         guard,
         headers: LocalTeletextHeaders::NotAcquired(Problem::NoManagedScope),
+        page_windows: BTreeMap::new(),
     }
 }
 
@@ -32,6 +33,13 @@ async fn held_source_read_keeps_wire_headers_and_exact_current_program() {
     assert_eq!(actual.revision(), &revision);
     assert!(actual.is_current(&path));
     let window = actual.headers().for_stream(2).expect("actual header read");
+    let pages = actual.page_window(2).expect("actual body/context read");
+    pages.validate(window).unwrap();
+    assert_eq!(pages.pages.len(), window.headers.len());
+    assert!(pages
+        .units
+        .iter()
+        .any(|unit| (1..=28).contains(&unit.packet_number)));
     assert_eq!(window.packet_count, 16);
     assert_eq!(window.complete_pes, 7);
     assert!(window.ended_at_eof);

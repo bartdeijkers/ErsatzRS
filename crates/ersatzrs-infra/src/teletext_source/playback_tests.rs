@@ -5,8 +5,8 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{
     ManagedLibraryOperationKind, MediaSourceKind, SourceTeletextBindingIdentity,
     SourceTeletextDescriptors, SourceTeletextHeaderProgram, SourceTeletextHeaderWindow,
-    SourceTeletextObservedHeader, SourceTeletextPrograms, SourceTeletextProvenance,
-    SourceTeletextRevision,
+    SourceTeletextObservedHeader, SourceTeletextObservedPages, SourceTeletextPrograms,
+    SourceTeletextProvenance, SourceTeletextRevision,
 };
 use sqlx::{sqlite::SqlitePoolOptions, Executor as _};
 

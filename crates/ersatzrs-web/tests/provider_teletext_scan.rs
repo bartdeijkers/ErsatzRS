@@ -6,7 +6,7 @@ use ersatzrs_app::ScanRuntime;
 use ersatzrs_core::repositories::{ManagedLibraryOperationRepository, ManagedLibraryScanSpec};
 use ersatzrs_domain::{
     ManagedLibraryOperationKind, MediaSourceKind, MediaStreamKind, SourceTeletextBinding,
-    SourceTeletextDescriptors, SourceTeletextObservedPages, SourceTeletextPid,
+    SourceTeletextDescriptors, SourceTeletextPid,
 };
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, LocalMediaProbe, LocalProbeCleanupScope};
 use ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository;
@@ -264,11 +264,12 @@ async fn assert_report_for(
             .collect::<Vec<_>>(),
         [(0, 200, 1, "eng"), (1, 888, 2, "eng")]
     );
-    let SourceTeletextObservedPages::HeadersObserved(headers) = report.observed_pages else {
-        panic!("real bounded source header window")
-    };
+    let headers = report
+        .observed_pages
+        .headers()
+        .expect("real bounded source header window");
     assert_eq!(
-        headers.as_ref(),
+        headers,
         source
             .teletext
             .as_ref()
@@ -277,6 +278,16 @@ async fn assert_report_for(
             .for_stream(3)
             .unwrap()
     );
+    let pages = report
+        .observed_pages
+        .page_window()
+        .expect("real scan must persist its bounded body/context capture");
+    assert_eq!(
+        Some(pages),
+        source.teletext.as_ref().unwrap().page_window(3)
+    );
+    pages.validate(headers).unwrap();
+    assert!(!pages.units.is_empty() && !pages.pages.is_empty());
     tx.rollback().await.unwrap();
 }
 

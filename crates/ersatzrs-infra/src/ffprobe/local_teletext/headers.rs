@@ -8,6 +8,7 @@ use std::time::Duration;
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_domain::{
     SourceTeletextHeaderProgram, SourceTeletextHeaderWindow, SourceTeletextObservedHeader,
+    SourceTeletextPageWindow, MAX_SOURCE_TELETEXT_CAPTURED_UNITS,
 };
 use ersatzrs_ffmpeg::teletext::{
     source_header::TeletextDataUnitKind,
@@ -97,7 +98,10 @@ pub(super) async fn acquire(
     let source_path = path.to_owned();
     run_owned(path, READ_TIMEOUT, move |stop| {
         acquired.headers = match read_headers(&acquired, &source_path, stop) {
-            Ok(headers) => LocalTeletextHeaders::Observed(headers),
+            Ok(windows) => {
+                acquired.page_windows = windows.pages;
+                LocalTeletextHeaders::Observed(windows.headers)
+            }
             Err(problem) => LocalTeletextHeaders::NotAcquired(problem),
         };
         if stop.cancelled() {
@@ -225,11 +229,48 @@ struct ActiveHeaders {
     observers: BTreeMap<i32, SuppliedTeletextHeaderObserver>,
 }
 
+impl ActiveHeaders {
+    fn push(&mut self, raw: &[u8; 188]) -> Result<(), LocalTeletextHeaderProblem> {
+        use LocalTeletextHeaderProblem as Problem;
+        for observer in self.observers.values_mut() {
+            observer.push(raw).map_err(|_| Problem::InvalidTransport)?;
+        }
+        if self
+            .observers
+            .values()
+            .map(SuppliedTeletextHeaderObserver::retained_page_unit_count)
+            .sum::<usize>()
+            > MAX_SOURCE_TELETEXT_CAPTURED_UNITS
+        {
+            // Fence optional body evidence, preserving already qualified
+            // header observations and the ordinary media scan.
+            for observer in self.observers.values_mut() {
+                observer.discard_page_evidence_for_capacity();
+            }
+        }
+        if self
+            .observers
+            .values()
+            .map(SuppliedTeletextHeaderObserver::retained_header_count)
+            .sum::<usize>()
+            > 1_024
+        {
+            return Err(Problem::Capacity);
+        }
+        Ok(())
+    }
+}
+
+pub(super) struct SourceWindows {
+    pub(super) headers: BTreeMap<i32, SourceTeletextHeaderWindow>,
+    pub(super) pages: BTreeMap<i32, SourceTeletextPageWindow>,
+}
+
 pub(super) fn read_headers<T>(
     acquired: &LocalTeletextAcquisition,
     path: &Path,
     stop: &ReadStop<'_, T>,
-) -> Result<BTreeMap<i32, SourceTeletextHeaderWindow>, LocalTeletextHeaderProblem> {
+) -> Result<SourceWindows, LocalTeletextHeaderProblem> {
     use LocalTeletextHeaderProblem as Problem;
     stop.check()?;
     if !acquired.is_current(path) {
@@ -271,7 +312,7 @@ pub(super) fn read_headers<T>(
                 observers: ids
                     .iter()
                     .map(|&(index, pid)| {
-                        SuppliedTeletextHeaderObserver::new(pid)
+                        SuppliedTeletextHeaderObserver::new_with_pages(pid)
                             .map(|observer| (index, observer))
                             .map_err(|_| Problem::InvalidTransport)
                     })
@@ -279,18 +320,7 @@ pub(super) fn read_headers<T>(
             });
         }
         if let Some(active) = &mut active {
-            for observer in active.observers.values_mut() {
-                observer.push(&raw).map_err(|_| Problem::InvalidTransport)?;
-            }
-            if active
-                .observers
-                .values()
-                .map(SuppliedTeletextHeaderObserver::retained_header_count)
-                .sum::<usize>()
-                > 1_024
-            {
-                return Err(Problem::Capacity);
-            }
+            active.push(&raw)?;
         }
     }
     stop.check()?;
@@ -303,28 +333,55 @@ pub(super) fn read_headers<T>(
     }
     let active = active.ok_or(Problem::IncompletePsi)?;
     let fingerprint = fingerprint(&psi);
-    let mut result = BTreeMap::new();
+    let mut result = SourceWindows {
+        headers: BTreeMap::new(),
+        pages: BTreeMap::new(),
+    };
     let mut total_headers = 0;
     for (index, observer) in active.observers {
         stop.check()?;
-        let window = observer.finish().map_err(|_| Problem::InvalidTransport)?;
-        total_headers += window.headers().len();
+        let observed = observer.finish().map_err(|_| Problem::InvalidTransport)?;
+        total_headers += observed.headers().len();
         if total_headers > 1_024 {
             return Err(Problem::Capacity);
         }
         if let Some(window) = project_window(
             &psi,
-            &window,
+            &observed,
             fingerprint,
             active.started_at,
             u32::try_from(maximum).map_err(|_| Problem::Capacity)?,
             ended_at_eof,
             pre_psi_payload.contains(&index),
         )? {
-            result.insert(index, window);
+            if let Some(pages) = project_pages(&observed, active.started_at, &window)? {
+                result.pages.insert(index, pages);
+            }
+            result.headers.insert(index, window);
         }
     }
     Ok(result)
+}
+
+fn project_pages(
+    observed: &SuppliedTeletextHeaderWindow,
+    started_at: u32,
+    headers: &SourceTeletextHeaderWindow,
+) -> Result<Option<SourceTeletextPageWindow>, LocalTeletextHeaderProblem> {
+    use LocalTeletextHeaderProblem as Problem;
+    let Some(mut pages) = observed.page_observations().cloned() else {
+        return Ok(None);
+    };
+    for unit in &mut pages.units {
+        unit.completion_packet = unit
+            .completion_packet
+            .checked_add(started_at)
+            .ok_or(Problem::Capacity)?;
+    }
+    pages
+        .validate(headers)
+        .map_err(|_| Problem::InvalidTransport)?;
+    Ok(Some(pages))
 }
 
 fn project_window(

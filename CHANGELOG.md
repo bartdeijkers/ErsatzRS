@@ -31,6 +31,13 @@ release section when tagging a release.
 
 ### Added
 
+- Preserve bounded source teletext page transmissions and their exact body,
+  subcode, update and character-context provenance through managed scans and
+  SQLite database reopen. Unknown context, incomplete pages and capacity exhaustion
+  stay explicit; captured data grants no decoded-page or playback authority.
+  Inconsistent stored wire/context facts are rejected without losing the
+  previous snapshot or ordinary audio/subtitle metadata.
+
 - Add shared source storage admission and retained HTTP inputs for provider
   teletext caption preparation. Configurable defaults reserve at most 20 GiB
   total and 8 GiB per source while keeping 2 GiB free. Native-qualified inputs

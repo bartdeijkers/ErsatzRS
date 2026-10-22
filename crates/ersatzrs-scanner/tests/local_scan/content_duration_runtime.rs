@@ -1075,7 +1075,7 @@ async fn local_scanned_content_duration_bounds_native_and_next_handoff() {
             seed_schedule(&pool, root.path(), &scanned).await;
             let locker = EntityLocker::new();
             native(&pool, &locker, &tools, root.path(), &scanned).await;
-            next(&pool, &locker, &tools, root.path(), &scanned).await;
+            Box::pin(next(&pool, &locker, &tools, root.path(), &scanned)).await;
             export(root.path()).await;
         })
         .catch_unwind(),

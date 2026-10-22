@@ -49,8 +49,13 @@ pub fn acquired_observation(
     )
     .map_err(|_| conflict("invalid source teletext projection"))?;
     if let Some(headers) = acquisition.headers().for_stream(stream.stream_index) {
-        observation.observed_pages =
-            SourceTeletextObservedPages::HeadersObserved(Box::new(headers.clone()));
+        observation.observed_pages = match acquisition.page_window(stream.stream_index) {
+            Some(pages) => SourceTeletextObservedPages::PagesObserved {
+                headers: Box::new(headers.clone()),
+                pages: Box::new(pages.clone()),
+            },
+            None => SourceTeletextObservedPages::HeadersObserved(Box::new(headers.clone())),
+        };
         observation
             .validate()
             .map_err(|_| conflict("invalid source teletext header observation"))?;

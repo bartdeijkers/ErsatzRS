@@ -3,7 +3,7 @@ use ersatzrs_domain::{
     SourceTeletextHeaderProgram, SourceTeletextHeaderWindow, SourceTeletextObservedHeader,
 };
 
-fn header_report() -> SourceTeletextObservation {
+pub(super) fn header_report() -> SourceTeletextObservation {
     let mut report = observation(MediaSourceKind::Local);
     report.observed_pages =
         SourceTeletextObservedPages::HeadersObserved(Box::new(SourceTeletextHeaderWindow {

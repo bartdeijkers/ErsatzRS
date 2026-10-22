@@ -79,6 +79,12 @@ impl TeletextHeaderControls {
         self.0 & 4 != 0
     }
 
+    /// Raw C11 transmission mode; true denotes serial page transmission.
+    #[must_use]
+    pub const fn serial_mode(self) -> bool {
+        self.0 & 0x80 != 0
+    }
+
     /// Raw C12/C13/C14 in that order with C12 most significant.
     /// This is not an inferred charset, national subset or language.
     #[must_use]
@@ -220,7 +226,7 @@ fn decode_header(
     })
 }
 
-fn decode_hamming(byte: u8) -> Option<(u8, bool)> {
+pub(super) fn decode_hamming(byte: u8) -> Option<(u8, bool)> {
     (0_u8..16).find_map(|value| {
         let distance = (hamming_8_4(value) ^ byte).count_ones();
         (distance <= 1).then_some((value, distance == 1))

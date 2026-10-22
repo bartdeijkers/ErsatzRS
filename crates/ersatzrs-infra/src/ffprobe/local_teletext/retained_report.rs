@@ -139,11 +139,15 @@ async fn acquire(
         revision,
         guard,
         headers: LocalTeletextHeaders::NotAcquired(LocalTeletextHeaderProblem::NoManagedScope),
+        page_windows: std::collections::BTreeMap::new(),
     };
     headers::run_source_guard_owned(deadline, hold, move |stop| {
         stop.check_source_guard()?;
         acquired.headers = match headers::read_headers(&acquired, source.path(), stop) {
-            Ok(headers) => LocalTeletextHeaders::Observed(headers),
+            Ok(windows) => {
+                acquired.page_windows = windows.pages;
+                LocalTeletextHeaders::Observed(windows.headers)
+            }
             Err(problem) => LocalTeletextHeaders::NotAcquired(problem),
         };
         stop.check_source_guard()?;

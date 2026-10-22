@@ -1,8 +1,11 @@
 //! Bounded header observations from one supplied selected-PID TS188 window.
 //!
 //! This joins the existing strict PES assembler and protected header parser. It
-//! performs no source reads, PSI association, body/charset decoding or selection.
+//! performs no source reads, PSI association, display decoding or selection.
+//! Opt-in capture retains bounded body/context units and their received facts.
 //! A successful finite window never proves complete page inventory or absence.
+
+use ersatzrs_domain::SourceTeletextPageWindow;
 
 use super::{
     source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyError, TeletextAssemblyEvent},
@@ -10,6 +13,7 @@ use super::{
         observe_dvb_teletext_header, SuppliedTeletextHeader, TeletextHeaderError,
         TeletextHeaderObservation,
     },
+    source_pages::{SourceTeletextPageCollector, SourceTeletextUnitPosition},
     TeletextTimestamp,
 };
 
@@ -53,6 +57,7 @@ pub struct SuppliedTeletextHeaderWindow {
     complete_pes: usize,
     unobserved_prefix: bool,
     headers: Vec<SourceTeletextHeaderOccurrence>,
+    page_observations: Option<Box<SourceTeletextPageWindow>>,
 }
 
 impl SuppliedTeletextHeaderWindow {
@@ -83,6 +88,17 @@ impl SuppliedTeletextHeaderWindow {
     pub fn headers(&self) -> &[SourceTeletextHeaderOccurrence] {
         &self.headers
     }
+
+    /// Opt-in raw page/update/context observations, never inferred readiness.
+    #[must_use]
+    pub fn page_observations(&self) -> Option<&SourceTeletextPageWindow> {
+        self.page_observations.as_deref()
+    }
+
+    /// Move captured raw page evidence without copying its retained units.
+    pub fn take_page_observations(&mut self) -> Option<SourceTeletextPageWindow> {
+        self.page_observations.take().map(|pages| *pages)
+    }
 }
 
 /// Owns one bounded assembler and at most 1,024 header occurrences.
@@ -92,6 +108,7 @@ pub struct SuppliedTeletextHeaderObserver {
     assembler: SuppliedTeletextAssembler,
     window: SuppliedTeletextHeaderWindow,
     failure: Option<TeletextSourceObservationError>,
+    pages: Option<Box<SourceTeletextPageCollector>>,
 }
 
 impl SuppliedTeletextHeaderObserver {
@@ -107,9 +124,21 @@ impl SuppliedTeletextHeaderObserver {
                 complete_pes: 0,
                 unobserved_prefix: false,
                 headers: Vec::new(),
+                page_observations: None,
             },
             failure: None,
+            pages: None,
         })
+    }
+
+    /// Begin the same header observation with bounded page capture enabled.
+    /// Page-capacity exhaustion preserves headers and fences only page evidence.
+    /// # Errors
+    /// Rejects the same reserved/null/out-of-range PIDs as [`Self::new`].
+    pub fn new_with_pages(pid: u16) -> Result<Self, TeletextSourceObservationError> {
+        let mut observer = Self::new(pid)?;
+        observer.pages = Some(Box::new(SourceTeletextPageCollector::new()));
+        Ok(observer)
     }
 
     /// Supply the next complete TS188 packet exactly once.
@@ -124,6 +153,7 @@ impl SuppliedTeletextHeaderObserver {
         if let Err(error) = result {
             self.failure = Some(error);
             self.window.headers = Vec::new();
+            self.pages = None;
         }
         result
     }
@@ -133,6 +163,22 @@ impl SuppliedTeletextHeaderObserver {
     #[must_use]
     pub fn retained_header_count(&self) -> usize {
         self.window.headers.len()
+    }
+
+    /// Actual retained page units, for the acquiring caller's aggregate bound.
+    #[must_use]
+    pub fn retained_page_unit_count(&self) -> usize {
+        self.pages
+            .as_deref()
+            .map_or(0, SourceTeletextPageCollector::retained_unit_count)
+    }
+
+    /// Fence page evidence when an acquiring caller's aggregate budget fills.
+    /// Existing header observations and transport validation remain unchanged.
+    pub fn discard_page_evidence_for_capacity(&mut self) {
+        if let Some(pages) = self.pages.as_deref_mut() {
+            pages.discard_for_capacity();
+        }
     }
 
     /// Close the supplied window without declaring EOF or a complete inventory.
@@ -146,6 +192,7 @@ impl SuppliedTeletextHeaderObserver {
             return Err(error);
         }
         self.assembler.finish()?;
+        self.window.page_observations = self.pages.map(|pages| Box::new(pages.finish()));
         Ok(self.window)
     }
 
@@ -162,9 +209,9 @@ impl SuppliedTeletextHeaderObserver {
                     let Some(unit) = unit.teletext_unit() else {
                         continue;
                     };
-                    if let TeletextHeaderObservation::Header(header) =
-                        observe_dvb_teletext_header(unit)?
-                    {
+                    let observation = observe_dvb_teletext_header(unit)?;
+                    let header_ordinal = self.window.headers.len();
+                    if let TeletextHeaderObservation::Header(header) = observation {
                         if self.window.headers.len() == MAX_SOURCE_OBSERVATION_HEADERS {
                             return Err(TeletextSourceObservationError::Headers);
                         }
@@ -175,6 +222,19 @@ impl SuppliedTeletextHeaderObserver {
                             unit_ordinal,
                             pts: pes.pts(),
                         });
+                    }
+                    if let Some(pages) = self.pages.as_deref_mut() {
+                        pages.observe(
+                            unit,
+                            observation,
+                            header_ordinal,
+                            SourceTeletextUnitPosition {
+                                completion_packet,
+                                pes_ordinal: self.window.complete_pes,
+                                unit_ordinal,
+                                pts: pes.pts(),
+                            },
+                        );
                     }
                 }
                 self.window.complete_pes += 1;

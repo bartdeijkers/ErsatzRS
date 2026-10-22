@@ -70,6 +70,7 @@ mod resource_object_program_overlay;
 mod service;
 mod source;
 mod source_headers;
+mod source_pages;
 mod spatial_trace;
 
 pub use attribute_execution::*;
@@ -130,6 +131,7 @@ pub use resource_object_program_overlay::*;
 pub use service::*;
 pub use source::*;
 pub use source_headers::*;
+pub use source_pages::*;
 pub use spatial_trace::*;
 
 #[cfg(test)]

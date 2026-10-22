@@ -13,6 +13,17 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+The SI1 source-inventory component retains bounded transmitted page occurrences,
+raw body/context units and original subcodes/controls/positions alongside the
+existing header observations. Page/magazine declarations preserve their actual
+provenance; absent receiver defaults remain unknown. A separate version-1 child
+uses the same source binding, scan transaction and lease. Loading and writing
+replay the bounded wire receiver to reject inconsistent derived facts. Capacity
+exhaustion clears optional body evidence without promoting headers or altering
+ordinary tracks. Closed baseline acquisition facts are neither decoded display
+completeness nor service/selection/playback authority. Current qualification and
+remaining inventory work belong to `p9a-source-inventory` in the progress records.
+
 Shared native preparation now uses existing configuration and EntityLocker
 admission independently of host/UI state. It releases preparation work before
 playback, rechecks current candidates and filesystem association before opens,
