@@ -3,7 +3,7 @@
   "upstream_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
   "source_archive_sha256": "2b3108b5b5d4d40ae243c6e98ce018f939ac17953dec0383fe664c8e49212742",
   "source_lock_sha256": "3ef515507bbaf4e75043f59ecee515abad16fb4a4be5c2c53f0e7b097dc37fbb",
-  "distribution_version": "0.2.2-4a0b59a-ersatzrs.4",
+  "distribution_version": "0.2.2-4a0b59a-ersatzrs.5",
   "adr": "0117",
   "patches": [
     {
@@ -37,9 +37,17 @@
       "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
       "unpatched_regression": "Accepted managed.1 ordinary Next output loses eng language present in source, before and after authored-wrapper recovery (73918db5); unchanged strict metadata gate fails. Pinned FFmpeg9 controls isolate -map_metadata -1 and complex-filter metadata loss. Pipeline regression fails before this patch; all264 pipeline-library tests pass after it. Reviewed upstream2ed7266d retains the same suppression with no explicit selected-source mapping. Actual candidate runtime/platform/adoption acceptance remains required.",
       "evidence": "docs/progress/milestones.toml (P9A-04/L15-E1,F5); canonical tmp/phase9-next-local-teletext/work.json/standalone_level15_followup/audio_language_followup"
+    },
+    {
+      "file": "0005-preserve-subtitle-burn-input-clock.patch",
+      "sha256": "04793915c118dd26382b8e9f2daacb646a19e7ab7f6c57e867626acc819c7bee",
+      "retire_when": "Unpatched upstream preserves the incoming post-seek AV clock through text-subtitle Burn, including late decoded video start, the original selected source outpoint, exact caption transitions/clear, selected alternate audio and source ownership/cleanup, plus relevant compatibility/platform acceptance. Remove this patch, not the regressions.",
+      "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
+      "unpatched_regression": "Qualified unpublished candidate .4 on the retained remote-only public-HLS Burn flow (fdacaeb5) serves 176 video frames whose exact source-relative interval is 2.559400..9.599400 seconds for requested in=2.143/out=9.200 seconds: 399.4ms beyond the selected source outpoint. The unchanged-argv local reconstruction and separate showinfo/debug_ts derivatives reproduce the entire original 1543480-byte HTTP capture byte-for-byte (SHA256 d3ca281bb1a4d8360b0a259e5cfe3a06965a049046d11f49146b63ddd9230357). The text Burn filter resets video with PTS-STARTPTS after borrowing subtitle source coordinates. This is the retained exact candidate .4 negative, not a fresh upstream capability assessment. The paired rounded shift replacement rendered in the bounded offline trial; successor native/caption/AV/output/platform acceptance remains required.",
+      "evidence": "docs/progress/milestones.toml (P9A-04/F5/SO4); canonical tmp/phase9-next-local-teletext/provider-scan/identity.json public_hls_burn_followup"
     }
   ],
-  "publication": "Unpublished Phase9A F5 source-out and selected-audio-metadata candidate only. Managed runtime adoption, compatibility/platform acceptance and package publication are separate gates; no publication authorized.",
+  "publication": "Unpublished Phase9A F5 source-out, selected-audio-metadata and text-subtitle Burn input-clock candidate only. Managed runtime adoption, compatibility/platform acceptance and package publication are separate gates; no publication authorized.",
   "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/4a0b59a66bef93b908e5eb2086847418492e2555",
   "windows_companions_sha256": {
     "libvpl.dll": "3c439318d55285631aaea66b1d3701d4dba19e6c679561bebb71ace9ed521a08",

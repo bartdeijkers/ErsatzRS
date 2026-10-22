@@ -33,6 +33,21 @@ was located. This is a local compatibility candidate, not accepted managed
 adoption, optimized package/native platform acceptance or publication. The
 production manifest remains `.1`; every patch retains its retirement condition.
 
+Phase9A F5/SO4 candidate (2026-10-22): unpublished `.5` additionally replaces
+text-subtitle Burn's `PTS-STARTPTS` reset with paired rounded seek-tick offsets.
+It temporarily borrows subtitle source coordinates and then restores every
+incoming post-seek video timestamp, preserving the shared AV residual and the
+original selected source outpoint. The retained `.4` public-HLS capture proves
+399.4ms source-end extension. The actual `.5` public route passes exact frame,
+caption, outpoint, selected Dutch audio, one-acquisition and cleanup oracles;
+whole-TS-identical logging derivatives bind diagnostics to delivered bytes.
+Canonical evidence is P9A-04/SO4 `provider-scan/identity.json`
+`burn_shared_clock_correction`. This closes the named Linux candidate correction;
+ordinary compatibility receipts are recorded there separately. The source/lock
+and first four patches are unchanged; `.5` has a retirement condition and three
+new grouped pipeline regressions. Managed `.1` adoption and required native RID
+acceptance remain separate; neither package nor application publication occurs.
+
 UCU-11 update (2026-10-14): the maintainer approves local catch-up through
 v26.11.3. Reviewed released Next0.2.2 corrects HLS cue intervals, timestamp maps
 and WebVTT settings; its unchanged two unpatched runtime regressions still fail.

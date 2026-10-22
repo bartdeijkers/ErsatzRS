@@ -975,6 +975,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Provide an opt-in Next candidate that preserves the incoming video clock
+  while burning text subtitles after a seek. The qualified retained-source HLS
+  route respects the selected video outpoint, exact caption transitions and
+  selected alternate audio; managed-runtime adoption remains separate.
+
 - Keep Health results in the selected admin language after a hydrated refresh,
   including recovery from invalid teletext source-storage settings.
 

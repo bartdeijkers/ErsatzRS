@@ -272,7 +272,7 @@ resolved    = true
 [[debt]]
 id          = 'teletext-next-burn-shared-clock-source-out'
 adr         = '0121'
-description = 'Preserve the common post-input-seek AV clock through Next teletext Burn and enforce the selected source outpoint without losing captions, selected audio, source ownership or bounded cleanup.'
+description = 'Qualify the demonstrated unpublished Next candidate Burn shared-clock/source-out repair without losing captions, selected audio, source ownership or bounded cleanup; accepted runtime adoption is separately owned.'
 discovered  = '2026-10-22'
-evidence    = 'p9a-source-output SO4 owns canonical provider-scan/identity.json public_hls_burn_followup and retained-public-burn-capture. The actual Linux candidate.4 public HLS Burn proves selected889, Dutch AAC, one authenticated provider acquisition, range reads and complete cleanup; static TSDuck19/19 passes. Byte-identical original/reconstructed/two-derivative captures prove exact176-frame source clock and final caption clear, but source video ends9.5994 instead of selected9.2 (35946ticks/399.4ms excess). PTS-STARTPTS removes the actual0.4164s video residual while retaining the requested duration. This scoped unadopted-runtime defect remains open; no native-platform, accepted-runtime or full-engine acceptance follows.'
-resolved    = false
+evidence    = 'p9a-source-output SO4 candidate component is completed: canonical provider-scan/identity.json burn_shared_clock_correction records the original399.4ms candidate.4 negative and actual candidate.5 public HLS success. Paired rounded shifts preserve every incoming timestamp; whole-public/baseline/taps/debug TS identity, exact889 cue/clear and source-frame coverage prove source end9.1994 <= selected9.2 with next9.2394 outside. Dutch AAC, one provider acquisition, revoked range grant and zero active work/capacity/charged source storage pass; pipeline267/267, argv snapshot, TSDuck19/19 and strict scoped lint pass. This resolves the named unpublished Linux candidate defect only; managed.1 adoption, compatibility and native platform owners retain their independent requirements.'
+resolved    = true

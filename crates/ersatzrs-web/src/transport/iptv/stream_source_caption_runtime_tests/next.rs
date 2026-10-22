@@ -19,6 +19,9 @@ mod policies;
 #[path = "next/retained.rs"]
 mod retained;
 
+#[path = "next/retained_clock.rs"]
+mod retained_clock;
+
 type Callbacks = Arc<Mutex<Vec<PlayoutItem>>>;
 type Segments = Vec<(String, Vec<u8>)>;
 const SOURCE_SHA256: &str = "419c4d902c7d49d8e3c45097d935eac81d514fbd621883c7c3ac440b76d44a3c";
@@ -31,7 +34,12 @@ fn input(name: &str) -> PathBuf {
     PathBuf::from(std::env::var_os(name).expect("set retained mapped Next proof inputs"))
 }
 
-async fn tool(mut command: Command) -> Vec<u8> {
+async fn tool(command: Command) -> Vec<u8> {
+    tool_with_stderr(command, 128 * 1024).await.0
+}
+
+async fn tool_with_stderr(mut command: Command, stderr_limit: u64) -> (Vec<u8>, String) {
+    assert!(stderr_limit <= 1024 * 1024);
     let errors = tempfile::NamedTempFile::new().unwrap();
     command
         .stdin(Stdio::null())
@@ -51,13 +59,10 @@ async fn tool(mut command: Command) -> Vec<u8> {
         panic!("mapped Next fixture process timed out");
     };
     assert!(bytes.len() <= 128 * 1024);
-    assert!(std::fs::metadata(errors.path()).unwrap().len() <= 128 * 1024);
-    assert!(
-        status.success(),
-        "{}",
-        std::fs::read_to_string(errors.path()).unwrap()
-    );
-    bytes
+    assert!(std::fs::metadata(errors.path()).unwrap().len() <= stderr_limit);
+    let stderr = std::fs::read_to_string(errors.path()).unwrap();
+    assert!(status.success(), "{}", stderr);
+    (bytes, stderr)
 }
 
 async fn record_callback(

@@ -144,7 +144,7 @@ async fn check_retained_delivery(
         .expect("actual authenticated caption callback");
     let (sidecar, seek, end, uri, headers) = tracks(item);
     drop(callbacks);
-    let text = tokio::fs::read_to_string(sidecar).await.unwrap();
+    let text = tokio::fs::read_to_string(&sidecar).await.unwrap();
     let mut decode = Command::new(&tools[0]);
     decode
         .args(["-v", "error", "-nostdin", "-xerror", "-i"])
@@ -189,7 +189,7 @@ async fn check_retained_burn_delivery(
         .expect("actual authenticated retained Burn caption callback");
     let (sidecar, seek, end, uri, headers) = tracks(item);
     drop(callbacks);
-    let text = tokio::fs::read_to_string(sidecar).await.unwrap();
+    let text = tokio::fs::read_to_string(&sidecar).await.unwrap();
     let independent =
         tokio::fs::read_to_string(source.parent().unwrap().join("independent-889.srt"))
             .await
@@ -220,40 +220,14 @@ async fn check_retained_burn_delivery(
     let dimensions: Value = serde_json::from_slice(&tool(probe).await).unwrap();
     assert_eq!(dimensions["streams"][0]["width"], 320);
     assert_eq!(dimensions["streams"][0]["height"], 180);
-    // Burn changes video payloads, so the existing Convert packet-identity
-    // source-clock oracle cannot establish a Burn source-to-output mapping.
-    // Retain exact selected/cue/output coordinates without claiming that join.
-    let actual = packets(Path::new(&tools[1]), &captured, "v:0", true).await;
-    let video = actual["packets"].as_array().unwrap();
-    let last_end = video
-        .iter()
-        .map(|packet| {
-            let duration = packet["duration"].as_i64().unwrap();
-            assert!(duration > 0);
-            packet["pts"]
-                .as_i64()
-                .unwrap()
-                .checked_add(duration)
-                .unwrap()
-        })
-        .max()
-        .unwrap();
-    tokio::fs::write(
-        root.join("burn-clock-observation.json"),
-        serde_json::to_vec_pretty(&json!({
-            "source_seek_ms":seek,"source_out_ms":end,
-            "independent_cues":cue_blocks(&independent),
-            "first_output_video_pts_ticks":video[0]["pts"],
-            "delivered_video_end_ticks":last_end,
-            "output_video_time_base":actual["streams"][0]["time_base"],
-            "complete_first_programme_captured":true,
-            "sidecar_matches_complete_independent_page889":true,
-            "source_to_output_burn_clock_proven":false
-        }))
-        .unwrap(),
-    )
-    .await
-    .unwrap();
+    Box::pin(retained_clock::check(
+        (&tools[0], &tools[1]),
+        &source,
+        &sidecar,
+        &root,
+        (seek, end),
+    ))
+    .await;
     (uri, headers)
 }
 
@@ -452,7 +426,7 @@ fn normal_next_remote_only_provider_uses_retained_http_source_for_public_av_and_
 }
 
 #[test]
-#[ignore = "requires candidate4 via ETV_NEXT_FOLDER, paired retained source/889 SRT, FFmpeg9 and fresh isolated app-data/state/TMPDIR"]
+#[ignore = "requires qualified shared-clock Next/FFmpeg candidate via ETV_NEXT_FOLDER, paired source/889 SRT and fresh isolated app-data/state/TMPDIR"]
 fn normal_next_remote_only_provider_burns_page889_from_retained_http_source() {
     let _guard = active_transcode_test_guard_for_tests();
     reset_active_transcode_state_for_tests();

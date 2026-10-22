@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — SO4 shared AV-clock and selected source-out correction'
+current_focus = 'p9a-source-output — SO5 selection-policy proof closure'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,29 +62,29 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-output SO4, the demonstrated candidate.4 Burn
-shared-clock/source-out defect. Public retained-input AV/ownership proof is
-closed: native1/1, static TSDuck19/19, one acquisition, Dutch AAC, selected889,
-range/grant and complete cleanup. Strict web Clippy/format pass; only test-helper
-extraction changed after the actual native run, so that runtime evidence is reused.
-Canonical: tmp/phase9-next-local-teletext/provider-scan/identity.json
-public_hls_burn_followup and retained-public-burn-capture.
+Current package: p9a-source-output SO5 selection/preference proof closure.
+SO4 is completed within the unpublished Linux candidate.5 scope: actual public
+retained-source Burn preserves exact source/caption/AV clocks and selected out,
+with all cue/clear, Dutch audio, one-acquisition and cleanup oracles intact.
+Canonical provider-scan/identity.json burn_shared_clock_correction preserves
+candidate.4 negative and .5 positive captures, source/lock/package identities,
+pipeline267/267, ordinary SRT Burn/Convert/seek/Off/after-final-cue2/2,
+argv snapshot, strict scoped Clippy/format and static TSDuck19/19 receipts.
+Helper lint-only changes preserve arguments/expectations; reuse actual capture.
+Managed.1 adoption and native platform proof remain their separate owners.
 
-First action: locate the existing qualified Next subtitle/input timing path and
-correct video PTS-STARTPTS erasing its0.4164s post-seek residual while keeping
-7057ms duration. The byte-identical captured176frames reach source9.5994 rather
-than selected9.2 (399.4ms excess). Preserve the common AV clock through subtitle
-render and retain the selected source-out fence; any required preroll uses the
-existing input/keyframe mechanism. Keep exact audio/caption/frame/end/cleanup
-oracles and the retained red evidence. Qualify only affected integration bounds
-and necessary compatibility; do not multiply providers, change capacity, drop
-tracks or relax timing. Stop when SO4's selected-out/AV/timing oracles pass with
-its existing one-source/public-route/ownership proof, or an exact prerequisite
-is identified. A local candidate is not managed adoption or native-RID proof.
+First action: close only SO5's recorded exact-item/channel/global,
+forced/default/accessibility/Off and explicit-page selection-policy ledger.
+Bind unchanged accepted clauses to the existing exact regression/runtime
+receipts. Name a genuinely missing clause or implementation boundary if any;
+no inferred matrix, new provider/repertoire variant or whole-source audit.
+Stop when each SO5 clause has a scoped valid receipt or one concrete named
+missing proof with an executable correction; close proven cells permanently.
 
-Closed r1/lifecycle-base/F6 components remain closed; the ordinary milestones
-are the sole finite current collection. Preserve all parallel changes and
-recorded client/editor/platform/policy deferrals. No push/publication; engine-first.
+Closed r1/lifecycle-base/F6/SO4 components remain closed. Ordinary milestones
+are the sole finite current collection. Preserve parallel changes, historical
+negative evidence and all recorded client/editor/platform/policy deferrals.
+No push/publication; engine-first.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
