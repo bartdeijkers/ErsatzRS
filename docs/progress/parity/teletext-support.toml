@@ -9,10 +9,10 @@ F2 metadata/zones/version and scoped F1 Main/Base-prefix, position undo,
 charset, V30/V31 DRCS attachment/undo, created banks, leading AP/calls,
 Public↔Global and steady-Flash undo are closed. F3 same-page C2 and steady
 mixed-tail headers are closed in scope; P9A-04 owns remaining contexts/proof.
-Scoped F5/provider, SO4/SO5 and ADR0127 retained-input components are closed;
-895af814/e87fde98/6137ac30 keep their scopes. SI1/2 and SI3 PES/PMT/initial
-inventory/M2TS clocks remain closed. SO4's2164/2143 correction is closed on
-Linux Next.6/software; milestones own SI4/output/adoption.
+Scoped F5/provider, SO4/SO5 and ADR0127 retained inputs remain closed;
+895af814/e87fde98/6137ac30 keep their scopes. SI1..4 inventory is complete.
+SO4's2164/2143 correction is closed on Linux Next.6/software.
+Runtime gates P9A-03; output/adoption retain their owners.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identity/effects/fallback/bounds stay protected. A7/A8/C3, foreign-X26, repertoires/fonts, objects/DRCS/panels and

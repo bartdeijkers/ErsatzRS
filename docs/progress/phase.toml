@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-inventory — SI4 receipt classification'
+current_focus = 'p9a-source-output — SO1 public native HLS captions'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-inventory SI4, the existing receipt-classification
-obligation. Next executable action: join only the already recorded inventory
-leaf receipts and current acquisition/selection routes to their exact readiness
-and platform boundaries; name any concrete uncovered clause and its existing
-owner. Stop when each existing SI4 clause has an explicit verified, missing-proof
-or external-prerequisite disposition. Do not invent new source variants or reopen
-completed components; older historical next-action paragraphs do not govern.
+Current package: p9a-source-output SO1 public native HLS source-caption proof.
+Next executable action: use the existing disposable host/fixture to qualify the
+ordinary native segmenter/direct HLS route, exact selected-page caption policy
+and selected alternate audio, or the accepted explicit unsupported-copy refusal.
+Hybrid internal HLS-item-worker plus MPEG-TS wrapper evidence is reused only
+within its existing boundary. Stop when the actual public native route passes
+its existing source/page/AV/audio/transport and bounded-owner/cleanup oracles;
+correct only a concrete blocking defect. No new client search or source matrix.
+
+Source inventory SI1..4 is completed: SI4 joins advertised/observed distinctions,
+alias/page identity, typed raw/context persistence and actual Local/provider
+scan, rescan, missing/restored and version-selection receipts. Existing source
+hashes and original test cases confirm valid reuse; no new product or test run
+is claimed. P9A-03 retains its open P9A-02 runtime/platform dependency.
+Canonical provider-scan/identity.json source_inventory_closure_followup owns the
+clause map. Source output and runtime/native adoption keep their own gates.
 
 SO4 seek2164/out9200 and original2143 regression is completed within Linux
 x86_64/software unpublished Next.6. Both ordinary HLS captures preserve176 output
