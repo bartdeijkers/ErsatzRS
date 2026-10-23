@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — fixed independent base glyph correspondence'
+current_focus = 'p9a-platform-safety — corrected Linux runtime package qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,44 +62,32 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-base fixed independent base glyph correspondence.
-Next executable action: one bounded capability trial of the already pinned
-independent imager's existing base decoder on the original fixed AB1..5 failed
-fields. Preserve exact glyph/context/fallback/source oracles and old negatives;
-no new repertoire, full-client search, rejected C3 retry or external repair.
-Stop at complete exact correspondence for those fields or a concrete missing
-capability/premise. If insufficient, continue separately owned executable
-platform/runtime work rather than another glyph-variant series.
+Current package: p9a-platform-safety PS1 corrected Linuxx64 runtime package.
+Next executable action: qualify the corrected SO2 archive and DebianBookworm
+boundary using the existing runtime package/compatibility workflow. Bind exact
+source, patches, source/license/dependency provenance and decoder/runtime bytes.
+Stop at the named Linux archive/Bookworm proof or the exact missing build/runtime
+prerequisite. Do not resume deferredWindows, nativeARM/macOS or managed adoption;
+no publication or new general Health/client/glyph experiment.
 
-AB2 scalar/context bindings are completed. Canonical
-authored_unicode_eligibility_followup.namespace_completion owns48 focused and1116
-teletext passes, two application contexts through explicit publication/reopen,
-exact169/300/Greek94/eight-spelling reuse and strict affected lint. Independent
-bindings80/96 and original-spacing34/90 agree; all actual paints are source-font
-exact, while16 alpha and56 original spacing expectations remain failed. Unicode
-alias/source qualification does not waive those required glyph correspondences.
+Fixed AB1..4 independent glyph/context obligations are completed. Canonical
+provider-scan/identity.json authored_base_imager_correspondence_followup owns the
+unchanged imager0.2.0/2b0125b7 actual renderer/source proof: national30/30,
+alpha24/24, original spacing90/90, Cyrillicbreve/pound30/30 and multiplication6/6.
+Literal sources and basic fallback stay exact across1/1.5/2.5, with/withoutX28.
+All198 actual paints equal their pinned source fonts;190 exact field/glyph
+expectations pass. The initial Latinunderscore tuple assumption is retained and
+corrected from original X26mode10/data5F, without changed scalar/glyph/wire.
 
-AB1 eligibility/conversion component is completed: eight original national
-positions have native scalar mappings; legacy single-cellTL has no guessed
-modern-lira/private-use alias. Canonical authored_unicode_eligibility_followup.national_completion owns seven
-focused controls, the three-context application
-export/import/preview/explicit-publication/restart proof and preserved distinctions.
-The original raw169/native300 and previous eight-page fixtures remain exact.
-Correct independent correspondence at the five Romanian/Serbian slots remains
-mandatory, with all original/new scalar negatives retained. Pinned QTM keymap
-facts do not claim a new actual keyboard/editor or stream trial. Enhanced
-national-conversion operands and other native/client/platform owners are unchanged.
-
-AB3..5 attribution is completed for the original45 observations. All actual
-masks match pinned stock source/font, while product masks match the pinnedMIT
-source. Ukrainianyi has six exact glyph correspondences despite scalar aliases;
-the other39 observations prove concrete stock capability defects in breve/pound,
-Greek multiplication, header nationalisation and explicit secondary selection.
-All45 original scalar negatives remain; correct independent decoding requires a
-changed capable decoder. Canonical authored_ab3_attribution_followup and
-authored_ab4_ab5_attribution_followup own proof and exact reuse. No external
-maintenance, unchanged replay or client search follows.
-
+AB5 is externally capability-blocked: six raw header# cells paint Englishpound;
+two explicit secondary01 German5B cells paint PolishstrokedZ. Pinned imager
+nationalises row0 like the body and mis-splits the seven-bit secondary charset.
+Both already qualified stock0.2.42 and imager0.2.0 lack correct AB5 decoding.
+Resume only when those exact independent capabilities demonstrably change; no
+unchanged replay, external decoder repair or new client search. All old scalar
+and glyph negatives remain, not normalized. Source mappings/publication AB1/2
+and AB3..5 attribution stay closed; full-client/editor/native gates retain
+existing owners. X1 deferral/X3 upstream wait are unchanged.
 
 AB6 original separated-margin font attribution/equivalence is completed:
 all three observed stock masks match their pinned stock font; all three product
@@ -176,7 +164,7 @@ retains max15 and all16 unplaced/reset witnesses.1773 affected teletext tests,
 18 focused controls and strict Clippy pass. Canonical provider-scan/identity.json
 authored_deferred_source_prefix_followup owns negatives and the bounded source
 correction. This closes source diagnosis, not a publication escape or stream
-repair. The only current action is the existing SO2 ordinary Live Burn action above.
+repair. The current package at the start of next_steps supersedes this historical follow-up.
 
 AE5 explicit Main/child prefix admission is completed: original domain/factory
 reds and retained16-call bytes show that a child write hid its invoking Main
@@ -186,7 +174,7 @@ facts and a lower bound1. Full-factory15/native/fallback and independent1.5/2.5
 fields pass;1771 affected tests pass. Canonical provider-scan/identity.json
 authored_main_child_prefix_followup owns native/source/work proof and final lint.
 No default/nested/unpositioned clock or full admission is inferred. The only
-current action is the existing SO2 ordinary Live Burn action above.
+current package at the start of next_steps supersedes this historical follow-up.
 
 AE5 same-emitter definite-run admission is completed: domain and complete factory
 reds prove that an unpositioned colour write hid sixteen successive empty calls.
