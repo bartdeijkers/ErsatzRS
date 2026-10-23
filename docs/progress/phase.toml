@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety — corrected Linux runtime package qualification'
+current_focus = 'p9a-source-output — exact remaining route/adoption boundary'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-platform-safety PS1 corrected Linuxx64 runtime package.
-Next executable action: qualify the corrected SO2 archive and DebianBookworm
-boundary using the existing runtime package/compatibility workflow. Bind exact
-source, patches, source/license/dependency provenance and decoder/runtime bytes.
-Stop at the named Linux archive/Bookworm proof or the exact missing build/runtime
-prerequisite. Do not resume deferredWindows, nativeARM/macOS or managed adoption;
-no publication or new general Health/client/glyph experiment.
+Current package: p9a-source-output exact remaining SO2/SO3 route/adoption boundary.
+Next executable action: resolve only the owner's imprecise otherSO2..3 wording
+against ADR0121 and canonical ordinary-route/source receipts. Name each actual
+unaccepted product enablement or adoption prerequisite and its exact owner.
+Stop at the matched existing clause/receipt and finite remaining blocker list;
+no new variant, general audit or trial without an unmatched mandatory cell.
+
+PS1 corrected Linux package/Bookworm component is completed. Canonical
+scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
+FFmpeg80e3502c, unchangedffprobe3e0a8c01, exact source/patch/dependency/license
+provenance, existing layout/safe extraction and wrong-pin refusal. Pinned
+Bookworm3783cc01/glibc2.36 passes actual graphics/twoAV1 encoders/SVG/twelveWebP
+cases and sparsePGS400frames/16s/Dutch879.94Hz; decoder options remain available.
+All affected processes/container are joined/removed. This is one unpublished
+incremental Linux archive, not a rewritten four-RID manifest or managed adoption.
+No nativeWindows/ARM/macOS/hardware proof is inferred.
 
 Fixed AB1..4 independent glyph/context obligations are completed. Canonical
 provider-scan/identity.json authored_base_imager_correspondence_followup owns the
@@ -104,7 +113,7 @@ known-open1/pending15 in both original and physical output. It does not supply a
 total same-cell opening/reset order or an empty-object lifetime certificate.
 Canonical authored_cross_emitter_followup retains this bounded observation;
 no guessed order, publication restriction or source modification follows.
-SO2 scheduler recovery/Linux candidate compatibility stay closed; package/native
+SO2 scheduler recovery/Linux native and Bookworm package components stay closed; other native
 RID/Health/adoption and route enablement retain their existing owners.
 
 AE5 A7 source/type/interleaving conformance is completed within model/native and
@@ -364,8 +373,8 @@ original arguments. A grouped app-directory collision is retained separately.
 Canonical scheduler_recovery_followup owns the exact candidate identities and
 receipts. Earlier pacing/duration/GENPTS/heartbeat negatives remain valid.
 The four unadopted route sources are preserved outside the active product path;
-this does not enable them on published uncorrected FFmpeg2.0.6. Corrected package,
-compatibility/platform qualification, managed adoption and remaining SO2 cells
+this does not enable them on published uncorrected FFmpeg2.0.6. The corrected local Linux package/Bookworm component is completed above. Other
+platform qualification, managed adoption and remaining SO2 cells
 retain their existing owners. SO3 delivery components stay closed.
 
 SO1 public native HLS source-caption integration is completed within Linux
