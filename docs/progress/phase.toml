@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-enhanced — AE2/AE3 resource contention'
+current_focus = 'p9a-author-enhanced — AE1 intended fallback proof'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,14 +62,25 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-enhanced AE2/AE3 resource/resource contention.
-Next executable action: qualify the existing original two-resource and repeated-
-resource witnesses against A7/13.2 display priority and C2. Use the existing complete
-factory and actual_resource_words_settle_each_repeat_but_never_cross_instances
-source; distinguish valid contention from forbidden Active overlap or effects
-that never paint a display cell. Preserve full identities/effects/native/fallback
-and negative oracles. Do not rank resource pages by storage order, repeat client
-candidates or repair an external decoder.
+Current package: p9a-author-enhanced AE1 intended Level1/1.5 fallback proof.
+Next executable action: qualify the existing22 wrong-level responses for physical
+00/10/0E/0F under work.json physical_spacing_followup against their exact original
+Base and applicable1/1.5 enhancement intent. Reuse the completed enhanced/editor/
+delivery proofs; do not substitute2.5 display responses for base expectations.
+Resolve only the existing fallback obligations or an attributable defect, then
+close this packet. No new repertoire/editor/client variants.
+
+AE2/AE3 original well-positioned resource witnesses are completed:11 cases show
+A7 Passive priority, mixed/complementary attributes, direct/nested same-definition
+repeats and located forbidden-overlap refusal, without a new resource clock.
+Full models/roots/effects/fallback and unchanged resource payloads pass. Nine
+actual carousel captures pass pinned independent1.5/2.5 cells/counts, including
+actual S1=5 execution with no character write. Seven focused controls and strict
+Clippy pass; unchanged b18eace4 production and1756 regressions are reused.
+Canonical provider-scan/identity.json authored_resource_contention_followup owns
+exact inputs, negative guards and proof. AE4 owns default/dependency joins; AE5
+retains full A7/A8/C3 and unpositioned/inherited conformance. No client retry,
+external decoder maintenance or new product behavior is claimed.
 
 AE2 Main/resource context is completed in the complete factory/carousel boundary:
 coherent B7 acquisition supplies only authenticated resource-before-display order.
@@ -90,8 +101,8 @@ instances. Wrong aliases and ambiguous nested roots refuse; default/resource
 uncertainties remain.1753 affected teletext regressions and29 focused controls
 (including two pinned independent1.5/2.5 cases) pass; three wrong colour goldens
 fail. Canonical provider-scan/identity.json authored_repeated_order_followup owns
-receipts and the bounded scope. AE2 and non-Local/ambiguous AE3 remain with the
-same owner; no new editor/stream/client/platform acceptance is claimed.
+receipts and the bounded scope. AE4/AE5 retain default/dependency and unpositioned/
+inherited conformance; no new editor/stream/client/platform acceptance is claimed.
 
 A2 supported resource-file/current-draft admin actions are completed within the
 joined boundary. Real multipart Router probes carry the closed EE1 and complete

@@ -699,3 +699,6 @@ mod standalone_national;
 
 #[path = "authored_service_tests/object_page_selection.rs"]
 mod object_page_selection;
+
+#[path = "authored_service_tests/resource_contention.rs"]
+mod resource_contention;
