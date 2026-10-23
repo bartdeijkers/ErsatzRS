@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-standards — S1 original conversion exclusions'
+current_focus = 'p9a-standards — S2/S3 inventory-to-receipt join'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,20 +62,19 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-standards S1 original conversion exclusions.
-Completed within Linux x86_64/software unpublished Next.7: SO3 ordinary one-shot
-Copy-Off preserves original coded AV/Dutch audio with one producer/GET200;
-immutable published prepared Burn/Convert preserves source-bound captions,
-positive seek, exact Convert clocks/outpoint and joined default-capacity cleanup.
-Three ordinary public-route cases,57 TSDuck checks,11 route controls and final
-strict affected lint pass. Original unqualified script-clock negative is retained,
-not compensated. Canonical provider-scan/identity.json source_output_so3_followup
-owns the completed component receipts and its candidate/platform limits.
-Next executable action: classify only existing AB1/AB2 Unicode conversion
-exclusions against original context/glyph rules using the retained normative
-mapping and qualification receipts. Stop when S1 names source-supported
-eligibility or exact ambiguity/rejection and the existing proof owner for each
-fixed exclusion. No new variants, general audit or blocked-platform substitute.
+Current package: p9a-standards S2/S3 accepted inventory-to-receipt join.
+Completed SO3 candidate delivery remains closed at c830f6c3 within its recorded
+Linux/software scope. S1 fixed conversion-exclusion classification is complete:
+all nine national slots and the existing supplementary/Greek groups have exact
+original/raw/Unicode/carrier distinctions and primary remaining proof owners.
+Canonical provider-scan/identity.json case_reconciliation_followup.standards_s1
+retains source equality, original norm tables and reused qualification receipts.
+AB1/AB2 product/scalar/native-fallback evidence remains open at author-base;
+classification creates no permanent restriction or receiver/editor acceptance.
+Next executable action: join only S2 Table4/A7/A8/C3 feature inventories to the
+existing AB7/AE5 receipts and S3 fitting-set/deferredAP/resource-context exclusions
+to EB2/EE1..3. Stop when each existing clause has a qualified receipt or an exact
+named missing mandatory action/owner. No fresh variants or general scope audit.
 
 SO2 owned observed-page selection/consumer binding is completed within Linux
 x86_64/software FFmpeg9: one producer, opportunistic prefix at most64KiB,
@@ -91,7 +90,7 @@ sources/negatives are preserved outside the active product path. The new upstrea
 heartbeat correction is insufficient in an isolated identical FFmpeg9 build;
 input pacing, output duration and GENPTS hypotheses also fail. No runtime change
 or route repair is claimed. Resume only with a concrete new cause/correction;
-SO3 delivery components stay closed; the current executable action is S1 above.
+SO3 delivery components stay closed; the current executable action is S2/S3 above.
 Other SO2 HTTP/RTSP,
 consume-once/HLS/Hybrid/carriage and runtime/platform obligations retain their owners.
 
