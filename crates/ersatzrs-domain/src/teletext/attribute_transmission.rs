@@ -26,6 +26,7 @@ pub struct TeletextAttributeTransmissionEvidence {
     original: TeletextSpatialTrace,
     words: Vec<Option<usize>>,
     same_page_words: Option<Vec<Option<usize>>>,
+    resources_before_page: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -99,6 +100,7 @@ impl TeletextAttributeTransmissionEvidence {
             original: original.clone(),
             words,
             same_page_words: None,
+            resources_before_page: false,
         })
     }
 
@@ -159,6 +161,35 @@ impl TeletextAttributeTransmissionEvidence {
         &self.original == original
     }
 
+    /// Bind the producer's coherent resource-before-display acquisition (B.7).
+    /// The caller must authenticate this boundary in the actual service producer.
+    /// Only already-witnessed original resource words and explicit same-page
+    /// Local words become comparable. This grants no ordering between resources,
+    /// default roots, missing words or unretained generated commands.
+    #[must_use]
+    pub fn with_resources_before_page(mut self) -> Self {
+        // An unused producer capability must not change the immutable original.
+        let resource = self
+            .original
+            .events()
+            .iter()
+            .enumerate()
+            .any(|(index, event)| {
+                self.words[index].is_some()
+                    && event
+                        .source()
+                        .object
+                        .is_some_and(|target| target.resource().is_some())
+                    && matches!(event.root_source(), TeletextSpatialRootSource::Local { .. })
+            });
+        self.resources_before_page = resource
+            && self
+                .same_page_words
+                .as_ref()
+                .is_some_and(|words| words.iter().any(Option::is_some));
+        self
+    }
+
     /// Compare original Enhancement writers within their exact emitter, or
     /// across explicitly witnessed native same-page coordinates. Base/default
     /// writers and arbitrary resource/storage order never gain time priority.
@@ -172,6 +203,29 @@ impl TeletextAttributeTransmissionEvidence {
         let current = self.event(current)?;
         let first = self.original.events()[incoming];
         let second = self.original.events()[current];
+        if self.resources_before_page {
+            let page = self.same_page_words.as_ref();
+            let scope = |index: usize| {
+                let event = self.original.events()[index];
+                if !matches!(event.root_source(), TeletextSpatialRootSource::Local { .. }) {
+                    return None;
+                }
+                if event
+                    .source()
+                    .object
+                    .is_some_and(|target| target.resource().is_some())
+                {
+                    self.words[index].map(|_| false)
+                } else {
+                    page.and_then(|words| words[index]).map(|_| true)
+                }
+            };
+            if let (Some(first), Some(second)) = (scope(incoming), scope(current)) {
+                if first != second {
+                    return Some(first.cmp(&second));
+                }
+            }
+        }
         if first.invocation() != second.invocation()
             || first.source().object != second.source().object
         {

@@ -54,6 +54,8 @@ pub(super) struct TeletextCompileContext<'a, 'service> {
     // Only the whole declared-service factory can realize implicit MOT roots.
     // Standalone composed/normalized callers retain selected-link enforcement.
     pub declared_foreign_defaults: bool,
+    // The declared-service producer acquires resources before display pages (B.7).
+    pub resources_before_page: bool,
     maximum_display_updates: Option<usize>,
     remaining_display_updates: Option<usize>,
     maximum_glyph_comparison_work: Option<usize>,
@@ -116,6 +118,7 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
             resources,
             deadline,
             declared_foreign_defaults: false,
+            resources_before_page: false,
             maximum_display_updates,
             remaining_display_updates: maximum_display_updates,
             maximum_glyph_comparison_work: None,
@@ -141,6 +144,7 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         budget: &TeletextAuthoredServiceEncodingBudget,
     ) -> Self {
         let mut context = Self::new(resources, deadline, budget.max_display_updates);
+        context.resources_before_page = resources.is_some();
         context.maximum_glyph_comparison_work = budget.max_glyph_comparison_work;
         context.remaining_glyph_comparison_work = budget.max_glyph_comparison_work;
         context.maximum_display_comparison_updates = budget.max_display_comparison_updates;

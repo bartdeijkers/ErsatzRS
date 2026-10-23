@@ -92,13 +92,17 @@ pub(in crate::teletext) fn prepare(
                     witnesses.insert(witness.position.event_ordinal, witness);
                 }
             }
-            let positions: Vec<_> = witnesses.values().map(|witness| witness.position).collect();
-            let page_positions = if local {
+            let mut positions: Vec<_> =
+                witnesses.values().map(|witness| witness.position).collect();
+            if context.resources_before_page {
+                append_resource_positions(&composition, &encoded, &mut positions, context)?;
+            }
+            let page_positions = if local || context.resources_before_page {
                 absolute_page_positions(&composition, &encoded, &witnesses)?
             } else {
                 Vec::new()
             };
-            let evidence = TeletextAttributeTransmissionEvidence::new_with_same_page_order(
+            let mut evidence = TeletextAttributeTransmissionEvidence::new_with_same_page_order(
                 composition.spatial_trace(),
                 &positions,
                 &page_positions,
@@ -109,6 +113,9 @@ pub(in crate::teletext) fn prepare(
                 location: None,
                 reason: reason.into(),
             })?;
+            if context.resources_before_page {
+                evidence = evidence.with_resources_before_page();
+            }
             composition = composition.with_transmission_context(
                 service,
                 &evidence,
@@ -126,6 +133,49 @@ pub(in crate::teletext) fn prepare(
         }
     }
     Ok((composition, witnesses.into_values().collect()))
+}
+
+fn append_resource_positions(
+    composition: &TeletextMainComposition,
+    encoded: &EncodedTeletextLocalObjectProgram,
+    positions: &mut Vec<TeletextAttributeTransmissionPosition>,
+    context: &TeletextCompileContext<'_, '_>,
+) -> Result<(), TeletextComposedMainEncodingError> {
+    let Some(resources) = context.resources else {
+        return Ok(());
+    };
+    let trace = composition.spatial_trace();
+    for (event_ordinal, &event) in trace.events().iter().enumerate() {
+        if event
+            .source()
+            .object
+            .is_none_or(|target| target.resource().is_none())
+            || !local_definition::root_in_prefix(composition, encoded, event.root_source())
+        {
+            continue;
+        }
+        let word = resources
+            .word(trace, event, event_ordinal)
+            .map_err(|reason| TeletextMainCompositionError {
+                owner: composition.owner(),
+                location: event.source().object.map(|identity| {
+                    TeletextMainCompositionSource::Object {
+                        identity,
+                        command: event.source().command,
+                    }
+                }),
+                reason: reason.into(),
+            })?;
+        if let Some(word) = word {
+            positions.push(TeletextAttributeTransmissionPosition {
+                event_ordinal,
+                source: event.source(),
+                invocation: event.invocation(),
+                word,
+            });
+        }
+    }
+    Ok(())
 }
 
 fn absolute_page_positions(

@@ -812,7 +812,9 @@ semantic words, including compatibility insertions. Repeated definition calls
 retain distinct instances. An explicit checked table may additionally order
 Main and original Local definitions with unambiguous roots within their one X26
 page, using actual absolute native words. Repeated roots share the exact original
-definition coordinates; equal words confer no instance chronology. Unavailable resource words, separate pages
+definition coordinates; equal words confer no instance chronology. Coherent
+service acquisition additionally binds original resource words before retained
+Local page words, as described below. Unavailable resource words, separate resource pages
 and ambiguous repeated-definition comparisons remain unknown. Consuming that
 evidence updates only actual attributes, display
 and colour, leaving original targets and retained glyph/DRCS/geometry unchanged.
@@ -972,6 +974,16 @@ those uncertainties. The candidate does not establish update history, served del
 or host publication. Independent decoding must distinguish the original
 decoder deficiency from the receipted test-only correction; both preserve the
 normative authored-service fixture and positive expected cells.
+The complete-service factory may additionally consume the existing producer's
+resource-before-display acquisition boundary (Annex B.7). Its private compile
+context authenticates original resource identities/bodies/words and retained
+display words before the original and physical passes. Prefix settlement admits
+only resource invocations actually present in the packed prefix; final resource
+and full original/physical checks remain mandatory. The domain evidence compares
+only these two authenticated groups, not different resource pages, default roots
+or unretained generated commands. Standalone compilers retain unknown order.
+Do not attach an unused capability to an otherwise identical authored original.
+No uploaded timestamp, catalogue/storage order or serialized authority is added.
 Complete service delivery planning now reuses the same bounded carousel,
 packetizer and output-epoch machinery. Order acquisition as M29, MOT, DRCS,
 object pages, then displays (Annex B.3/B.7). Repeating identical complete resource
@@ -1354,6 +1366,8 @@ acquire no same-page authority. Rebuild the shared immutable attribute/display/
 colour result and require complete original/physical equivalence. Standalone
 analysis and unsupported cross-instance comparisons stay pending; source ordinals,
 pointers and definition storage order alone do not certify transmission order.
+The complete-service resource-before-display boundary above is separate from
+same-page word order and preserves that restriction for resource/resource ties.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

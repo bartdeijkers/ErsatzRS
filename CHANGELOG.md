@@ -998,6 +998,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Encode Main header context with original POP/GPOP objects using the existing
+  coherent resource-before-display acquisition order. Preserve original object
+  identities, complete fallback packets and strict standalone validation.
+
 - Preserve native teletext colour order when one original Local object is
   invoked on separate rows. Both instances keep one exact definition and the
   Level 1/1.5 fallback; ambiguous or foreign word mappings remain rejected.

@@ -257,6 +257,41 @@ fn same_page_transmission_nested_repeats_have_no_ambiguous_root_authority() {
 }
 
 #[test]
+fn coherent_resource_acquisition_requires_both_actual_coordinate_spaces() {
+    let resource = TeletextResourceIdentity::new(
+        TeletextResourceKind::Pop,
+        TeletextRawDataPageNumber::new(2, 0xa0).unwrap(),
+        TeletextResourceSubpageIndex::new(0).unwrap(),
+    )
+    .unwrap();
+    let target = TeletextObjectIdentity::public(resource, TeletextObjectId::new(65534)).unwrap();
+    let trace = trace(target, true);
+    let ordinary = positions(&trace);
+    let page = &ordinary[..1];
+    let exact = TeletextAttributeTransmissionEvidence::new_with_same_page_order(
+        &trace, &ordinary, page, 32,
+    )
+    .unwrap();
+    let main = attribute(&trace, 0);
+    let first = attribute(&trace, 2);
+    let second = attribute(&trace, 5);
+    assert_eq!(exact.compare(first, main), None);
+    let coherent = exact.with_resources_before_page();
+    assert_eq!(coherent.compare(first, main), Some(Ordering::Less));
+    assert_eq!(coherent.compare(main, first), Some(Ordering::Greater));
+    assert_eq!(coherent.compare(first, second), None);
+    let no_page = TeletextAttributeTransmissionEvidence::new(&trace, &ordinary, 32)
+        .unwrap()
+        .with_resources_before_page();
+    assert_eq!(no_page.compare(first, main), None);
+    let no_resource =
+        TeletextAttributeTransmissionEvidence::new_with_same_page_order(&trace, page, page, 32)
+            .unwrap()
+            .with_resources_before_page();
+    assert_eq!(no_resource.compare(first, main), None);
+}
+
+#[test]
 fn same_page_transmission_resource_coordinates_remain_ineligible() {
     let resource = TeletextResourceIdentity::new(
         TeletextResourceKind::Pop,

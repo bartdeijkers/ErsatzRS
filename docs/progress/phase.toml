@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-enhanced — AE2 resource-order qualification'
+current_focus = 'p9a-author-enhanced — AE2/AE3 resource contention'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,25 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-enhanced AE2 resource-order qualification.
-Next executable action: qualify the existing Main/Active colour-order witness
-when the Active definition lives in a selected POP/GPOP resource, using the
-existing complete factory, original source/native correspondence and C.2/B.3
-expectations. Establish the exact missing transmission authority or a demonstrated
-native defect before correction. Do not infer cross-page chronology from resource
-storage order, reopen completed Local repetition or repair an external decoder.
+Current package: p9a-author-enhanced AE2/AE3 resource/resource contention.
+Next executable action: qualify the existing original two-resource and repeated-
+resource witnesses against A7/13.2 display priority and C2. Use the existing complete
+factory and actual_resource_words_settle_each_repeat_but_never_cross_instances
+source; distinguish valid contention from forbidden Active overlap or effects
+that never paint a display cell. Preserve full identities/effects/native/fallback
+and negative oracles. Do not rank resource pages by storage order, repeat client
+candidates or repair an external decoder.
+
+AE2 Main/resource context is completed in the complete factory/carousel boundary:
+coherent B7 acquisition supplies only authenticated resource-before-display order.
+POP/GPOP original bodies, full source, header/tail, observable second invocation,
+actual native words and all base packets pass.1756 affected regressions and32
+identity regressions are green. Independent pinned imager1.5/2.5 agrees with all
+fixed fields. Stock0.2.42 supplies only partial POP evidence and negative GPOP
+routing evidence; no suitable-client claim follows. The unused-capability identity
+regression and all earlier negatives remain in provider-scan/identity.json
+authored_resource_order_followup. Standalone, default/generated and unrelated
+resource-page order stay strict; no editor/HTTP/platform replay or acceptance.
 
 AE3 distinct-root Local repetition is completed: a real complete-factory red at
 Main3 is corrected by binding both instances to one original native definition.

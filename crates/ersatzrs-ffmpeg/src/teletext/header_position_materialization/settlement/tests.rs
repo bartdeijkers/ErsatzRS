@@ -390,4 +390,5 @@ fn c2_prefix_keeps_final_208_word_capacity_authoritative() {
     }
 }
 
+mod resource_order;
 mod same_page;

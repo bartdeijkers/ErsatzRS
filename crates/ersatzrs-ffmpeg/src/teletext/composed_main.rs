@@ -192,12 +192,15 @@ fn compile_composed_with_policy(
         )?
     };
     super::header_position_materialization::settlement::verify(&composition, &encoded, &prefix)?;
-    let transmission = transmission_evidence(
+    let mut transmission = transmission_evidence(
         &composition,
         &encoded,
         composition_budget.collection.max_commands,
         context.resources,
     )?;
+    if context.resources_before_page {
+        transmission = transmission.with_resources_before_page();
+    }
     let composition = composition.with_transmission_context(
         service,
         &transmission,
@@ -537,7 +540,7 @@ pub(super) fn compile_physical_with_context(
         packing_budget,
         Some(composition.colour_context().row_colours()[0]),
     )?;
-    let evidence = physical_transmission_evidence(
+    let mut evidence = physical_transmission_evidence(
         &replay,
         &encoded,
         replay_budget.max_commands,
@@ -549,6 +552,9 @@ pub(super) fn compile_physical_with_context(
             augmented,
         },
     )?;
+    if context.resources_before_page {
+        evidence = evidence.with_resources_before_page();
+    }
     let replay = replay.with_transmission_context(
         service,
         composition,

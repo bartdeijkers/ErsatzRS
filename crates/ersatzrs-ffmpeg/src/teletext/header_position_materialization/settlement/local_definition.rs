@@ -90,7 +90,7 @@ pub(super) fn witnesses(
     Ok(witnesses)
 }
 
-fn root_in_prefix(
+pub(super) fn root_in_prefix(
     composition: &TeletextMainComposition,
     encoded: &EncodedTeletextLocalObjectProgram,
     root: TeletextSpatialRootSource,
