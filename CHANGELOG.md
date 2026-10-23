@@ -999,10 +999,11 @@ release section when tagging a release.
 ### Fixed
 
 - Preserve native teletext fallback cells for qualified Romanian, Polish,
-  Serbian/Croatian/Slovenian and Latvian/Lithuanian text. Encode assigned spacing
-  accents in Latin, Cyrillic and Greek contexts without optional object banks,
-  keeping literal combining input, different diacritics and unqualified aliases
-  distinct.
+  Serbian/Croatian/Slovenian and Latvian/Lithuanian text and the Greek numeral
+  sign. Support standard filled rectangles and native supplementary alpha in
+  their declared character sets, retaining established Latin G2 spelling.
+  Encode assigned spacing accents without optional object banks; keep original
+  text, explicit G0/G2 spellings and distinct script/diacritic identities.
 
 - Compile an Adaptive teletext object over the right half of an inherited
   double-width character without a false unresolved-display error. Preserve

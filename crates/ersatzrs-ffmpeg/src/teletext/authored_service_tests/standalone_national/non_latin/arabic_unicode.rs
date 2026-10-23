@@ -350,7 +350,7 @@ fn native_arabic_unknown_and_whole_seen_forms_fail_at_original_cell() {
         // Whole isolated/final Seen-family letters require their tail cell.
         // They must not collapse to a one-cell initial/medial body alias.
         for character in concat!(
-            "ا\u{301}\u{651}\u{e620}😀■",
+            "ا\u{301}\u{651}\u{e620}😀",
             "\u{feb1}\u{feb2}\u{feb5}\u{feb6}",
             "\u{feb9}\u{feba}\u{febd}\u{febe}"
         )

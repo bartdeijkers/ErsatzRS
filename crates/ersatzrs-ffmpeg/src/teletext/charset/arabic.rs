@@ -8,15 +8,15 @@
 //! license to collapse an isolated/final whole letter into its one-cell body.
 use super::Character;
 
-// Columns2..7, in printed row order. The final rectangle is still raw-coded:
-// neither an arbitrary black-square scalar nor stock decoder PUA is its alias.
+// Columns2..7, in printed row order. The common G0/7F filled rectangle
+// retains its explicit scalar alias; no stock Arabic PUA is borrowed.
 const G0: [&str; 6] = [
     " !\"£$%\u{fe73}\u{fef1})(*+،-./",
     "0123456789:؛>=<؟",
     "\u{fe94}\u{fe80}\u{fe92}\u{fe8f}\u{fe98}\u{fe95}\u{fe8e}\u{fe8d}\u{fe91}\u{fe93}\u{fe97}\u{fe9b}\u{fe9f}\u{fea3}\u{fea7}\u{fea9}",
     "\u{feab}\u{fead}\u{feaf}\u{feb3}\u{feb7}\u{febb}\u{febf}\u{fec3}\u{fec7}\u{fecb}\u{fecf}\u{fe9c}\u{fea0}\u{fea4}\u{fea8}#",
     "ـ\u{fed3}\u{fed7}\u{fedb}\u{fedf}\u{fee3}\u{fee7}\u{feeb}\u{feed}\u{fef0}\u{fef3}\u{fe99}\u{fe9d}\u{fea1}\u{fea5}\u{fef4}",
-    "\u{feef}\u{fecc}\u{fed0}\u{fed4}\u{fed1}\u{fed8}\u{fed5}\u{fed9}\u{fee0}\u{fedd}\u{fee4}\u{fee1}\u{fee8}\u{fee5}\u{fefb}",
+    "\u{feef}\u{fecc}\u{fed0}\u{fed4}\u{fed1}\u{fed8}\u{fed5}\u{fed9}\u{fee0}\u{fedd}\u{fee4}\u{fee1}\u{fee8}\u{fee5}\u{fefb}■",
 ];
 
 // Table45 column4 contains standalone Latin letters, not diacritical marks.
@@ -83,17 +83,20 @@ mod tests {
 
     #[test]
     fn complete_explicit_columns_keep_unique_scalar_identity_and_inverse_bounds() {
-        for columns in [&G0, &G2] {
+        for (columns, count) in [(&G0, 96), (&G2, 95)] {
             assert_eq!(
                 columns
                     .iter()
                     .map(|text| text.chars().count())
                     .sum::<usize>(),
-                95
+                count
             );
             let mut unique = std::collections::BTreeSet::new();
             for (column, text) in columns.iter().enumerate() {
-                assert_eq!(text.chars().count(), if column == 5 { 15 } else { 16 });
+                assert_eq!(
+                    text.chars().count(),
+                    if column == 5 && count == 95 { 15 } else { 16 }
+                );
                 for (row, character) in text.chars().enumerate() {
                     let code = u8::try_from(0x20 + column * 16 + row).unwrap();
                     assert!(unique.insert(character));
@@ -101,7 +104,11 @@ mod tests {
                     assert_eq!(decode(columns, code), Some(character));
                 }
             }
-            for code in (0..0x20).chain(0x7f..=0xff) {
+            assert_eq!(
+                decode(columns, 0x7f),
+                if count == 96 { Some('■') } else { None }
+            );
+            for code in (0..0x20).chain(0x80..=0xff) {
                 assert_eq!(decode(columns, code), None);
             }
         }

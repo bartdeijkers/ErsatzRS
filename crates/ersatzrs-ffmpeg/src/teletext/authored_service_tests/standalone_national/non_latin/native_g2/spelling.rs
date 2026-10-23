@@ -69,6 +69,10 @@ fn native_base_spelling_retains_exact_g2_words_fallback_text_and_original_role()
         (0x01, '¦', 0x7c, 0x10),
         (0x01, '@', 0x2a, 0x10),
         (0x01, 'Á', 0x41, 0x12),
+        (0x01, '■', 0x7f, 0x0f),
+        (0x01, '■', 0x7f, 0x10),
+        (0x37, '■', 0x7f, 0x0f),
+        (0x37, 'α', 0x58, 0x0f),
     ] {
         let charset = if primary == 0x01 { 0 } else { primary };
         let input = native_operation(primary, scalar, code, charset, mode);
@@ -158,6 +162,7 @@ fn native_base_spelling_rejects_wrong_meaning_and_foreign_charset_without_normal
         (0x20, '$', 0x23, 0x20),
         (0x20, '$', 0x24, 0x37),
         (0x37, 'e', 0x24, 0x20),
+        (0x20, '■', 0x7f, 0x20),
     ] {
         let error = encode_teletext_authored_service(
             native(primary, scalar, code, charset),
@@ -167,7 +172,7 @@ fn native_base_spelling_rejects_wrong_meaning_and_foreign_charset_without_normal
         .unwrap_err();
         assert!(format!("{error:?}").contains("BaseTextSpelling"));
     }
-    for (scalar, code) in [('$', 0x24), ('|', 0x7c), ('*', 0x2a), ('■', 0x7f)] {
+    for (scalar, code) in [('$', 0x24), ('|', 0x7c), ('*', 0x2a)] {
         let error = encode_teletext_authored_service(
             native_operation(0x01, scalar, code, 0, 0x10),
             &[],
@@ -199,6 +204,10 @@ fn native_base_spelling_emit_qualified_decoder_units() {
         (0x01, '¦', 0x7c, 0x10),
         (0x01, '@', 0x2a, 0x10),
         (0x01, 'Á', 0x41, 0x12),
+        (0x01, '■', 0x7f, 0x0f),
+        (0x01, '■', 0x7f, 0x10),
+        (0x37, '■', 0x7f, 0x0f),
+        (0x37, 'α', 0x58, 0x0f),
     ] {
         let charset = if primary == 0x01 { 0 } else { primary };
         let encoded = encode_teletext_authored_service(

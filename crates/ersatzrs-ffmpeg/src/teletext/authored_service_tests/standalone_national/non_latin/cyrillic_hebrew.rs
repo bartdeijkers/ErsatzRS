@@ -253,10 +253,10 @@ fn native_cyrillic_hebrew_repertoires_preserve_originals_wire_pixels_and_namespa
 #[test]
 fn native_cyrillic_hebrew_reject_wrong_namespace_and_unknown_aliases_at_exact_cell() {
     for (primary, first, unknowns) in [
-        (0x20, 'А', "AЍйїא😀́■"),
-        (0x24, 'А', "AЍїא&😀́■"),
-        (0x25, 'А', "AЍыא&😀́■"),
-        (0x55, 'א', "аαï_😀́■"),
+        (0x20, 'А', "AЍйїא😀́"),
+        (0x24, 'А', "AЍїא&😀́"),
+        (0x25, 'А', "AЍыא&😀́"),
+        (0x55, 'א', "аαï_😀́"),
     ] {
         for character in unknowns.chars() {
             let mut input = draft(primary);

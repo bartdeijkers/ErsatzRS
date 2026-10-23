@@ -156,7 +156,7 @@ pub(super) fn encode_without_national_subset(character: char) -> Option<Characte
 
 /// Assigned Greek G0 Unicode positions from EN300706 Table42. This preserves
 /// literal scalars; it neither composes strings nor borrows a Latin namespace.
-/// The numeral-sign alias and rectangle remain raw-coded, not guessed Unicode.
+/// The numeral sign and filled rectangle retain their explicit native identities.
 pub(super) fn encode_greek_g0(character: char) -> Option<Character> {
     let scalar = u32::from(character);
     let code = match character {
@@ -165,12 +165,14 @@ pub(super) fn encode_greek_g0(character: char) -> Option<Character> {
         '»' => 0x3e,
         'ΐ' => 0x40,
         'Α'..='Ρ' => 0x41 + scalar - u32::from('Α'),
+        '\u{0374}' => 0x52,
         'Σ'..='Ω' => 0x53 + scalar - u32::from('Σ'),
         'Ϊ'..='Ϋ' => 0x5a + scalar - u32::from('Ϊ'),
         'ά'..='ί' => 0x5c + scalar - u32::from('ά'),
         'ΰ' => 0x60,
         'α'..='ω' => 0x61 + scalar - u32::from('α'),
         'ϊ'..='ώ' => 0x7a + scalar - u32::from('ϊ'),
+        '■' => 0x7f,
         _ => return None,
     };
     Some(Character {
@@ -200,7 +202,9 @@ pub(super) fn encode_cyrillic_hebrew_g0(
         }
         _ => return None,
     };
-    let code = if character == 'ы' && pair == TeletextCharsetPair::Cyrillic2Cyrillic
+    let code = if character == '■' {
+        0x7f
+    } else if character == 'ы' && pair == TeletextCharsetPair::Cyrillic2Cyrillic
         || character == 'ї' && pair == TeletextCharsetPair::Cyrillic3Cyrillic
     {
         0x26
@@ -251,7 +255,7 @@ fn native_g2_groups(pair: TeletextCharsetPair) -> Option<[(u8, &'static str); 6]
             (0x20, "\0¡¢£$¥\0§\0‘“«←↑→↓"),
             (0x30, "°±²³×µ¶·÷’”»¼½¾¿"),
             SPACING_ACCENTS,
-            (0x50, "—¹®©™♪₠‰\0Łłß⅛⅜⅝⅞"),
+            (0x50, "—¹®©™♪₠‰αŁłß⅛⅜⅝⅞"),
             (0x60, "DEFGIJKLNQRSUVWZ"),
             (0x70, "defgijklnqrsuvwz"),
         ],
@@ -259,9 +263,9 @@ fn native_g2_groups(pair: TeletextCharsetPair) -> Option<[(u8, &'static str); 6]
             (0x20, "\0ab£ehi§:‘“k←↑→↓"),
             (0x30, "°±²³×mnp÷’”t¼½¾x"),
             SPACING_ACCENTS,
-            (0x50, "?¹®©™♪₠‰\0ΊΎΏ⅛⅜⅝⅞"),
+            (0x50, "?¹®©™♪₠‰αΊΎΏ⅛⅜⅝⅞"),
             (0x60, "CDFGJLQRSUVWYZΆΉ"),
-            (0x70, "cdfgjlqrsuvwyzΈ\0"),
+            (0x70, "cdfgjlqrsuvwyzΈ■"),
         ],
         _ => return None,
     })
@@ -293,6 +297,11 @@ pub(super) fn decode_generated_replacement(
             }
         }
         return None;
+    }
+    // The assigned G0/7F rectangle is common to the primary sets. This
+    // must not apply to G2: Cyrillic7F is z and Arabic7F is unmarked.
+    if mode == 0x10 && code == 0x7f {
+        return Some('■');
     }
     if pair == TeletextCharsetPair::ArabicArabic && mode == 0x10 && code == 0x2a {
         return Some('@');
@@ -326,7 +335,7 @@ pub(super) fn decode_generated_replacement(
 /// Meaning of an explicitly retained Base spelling, without requiring the
 /// canonical forward encoder to choose that same spelling. Table35's X26 G0
 /// differs from ASCII at24/7C, and clause12.3.4 replaces2A with@ in mode10.
-/// The rectangle at7F has no qualified Unicode alias in this conversion.
+/// G0/7F retains the standard filled-rectangle alias without national substitution.
 pub(super) fn decode_base_text_spelling(
     mode: u8,
     code: u8,
@@ -340,6 +349,7 @@ pub(super) fn decode_base_text_spelling(
             0x24 => '¤',
             0x2a => '@',
             0x7c => '¦',
+            0x7f => '■',
             0x20..=0x7e => char::from(code),
             _ => return None,
         });
@@ -350,6 +360,7 @@ pub(super) fn decode_base_text_spelling(
 fn encode_hebrew_g0(character: char) -> Option<Character> {
     let code = match character {
         '£' => 0x23,
+        '■' => 0x7f,
         '#' => 0x5f,
         ' '..='Z' => u8::try_from(u32::from(character)).ok()?,
         '←' => 0x5b,

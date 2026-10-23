@@ -27,7 +27,7 @@ fn literal_greek_headline_encodes_at_native_g0_without_optional_banks() {
 
 fn original_greek_points() -> Vec<(char, u8)> {
     // Literal Unicode intervals and independent Table42 column ordering. The
-    // unqualified numeral-sign alias52 and rectangle7F are not guessed scalars.
+    // retained94-point fixture omits the separately qualified AB2 sign52/rectangle7F.
     let mut points: Vec<_> = (0x20..=0x3f)
         .map(|code| {
             (
@@ -248,7 +248,7 @@ fn native_greek_scalar_matrix_and_local_x26_preserve_preview_originals_and_fallb
 #[test]
 fn greek_namespace_rejects_cross_script_unknown_aliases_and_decomposed_input_at_exact_cell() {
     // Ά is a qualified Greek G2 character, separately covered by native_g2.
-    for character in ['A', 'Æ', '\u{374}', '\u{384}', '■', '\u{301}', 'א', '😀'] {
+    for character in ['A', 'Æ', '\u{384}', '\u{301}', 'א', '😀'] {
         let mut input = draft(0x37);
         input.base.pages[0].rows = rows(&format!("Α{character}"));
         let original = declare(input);

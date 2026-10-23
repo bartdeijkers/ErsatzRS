@@ -215,8 +215,8 @@ fn raster(composition: &TeletextMainComposition) -> TeletextRaster {
 
 fn points(primary: u8) -> Vec<(char, u8)> {
     // Table41/43 column order, including only independently qualified aliases.
-    // This retained matrix excludes column4 (separately qualified in AB2),
-    // rectangle7F and the alpha-like58. Greek34 is
+    // The retained matrix excludes AB2-qualified column4/58/Greek7F; its
+    // original wire remains a reuse control. Greek34 is
     // multiplication;3F is Latin lowercase x, not an alias for that symbol.
     let groups = if primary == 0x37 {
         [
@@ -399,7 +399,7 @@ fn native_g2_full_qualified_matrix_and_local_restore_keep_fallback_and_original_
 fn native_g2_unknown_aliases_remain_located_errors_without_latin_substitution() {
     for primary in [0x20, 0x24, 0x25, 0x37] {
         let first = if primary == 0x37 { 'Α' } else { 'Б' };
-        for character in ['Æ', '¤', 'ɑ', '■', '\u{301}', 'א', '😀'] {
+        for character in ['Æ', '¤', 'ɑ', '\u{301}', 'א', '😀'] {
             let original = original(primary, &format!("{first}{character}"));
             let before = original.clone();
             let failure =

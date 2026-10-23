@@ -7,6 +7,9 @@ mod supplementary;
 #[path = "native_editor/national.rs"]
 mod national;
 
+#[path = "native_editor/supplementary_symbols.rs"]
+mod supplementary_symbols;
+
 #[path = "native_editor/arabic_g0.rs"]
 mod arabic_g0;
 

@@ -9,6 +9,9 @@ mod base_charset;
 #[path = "standalone_national/unicode_eligibility.rs"]
 mod unicode_eligibility;
 
+#[path = "standalone_national/supplementary_eligibility.rs"]
+mod supplementary_eligibility;
+
 use super::*;
 use serde_json::{json, Value};
 

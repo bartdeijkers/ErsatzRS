@@ -15,13 +15,13 @@ const NATIONAL_CASES: [(u8, char, u8); 8] = [
     (0x1f, 'ă', 0x7d),
 ];
 
-fn text(primary: u8, value: &str) -> TeletextDeclaredService {
+pub(super) fn text(primary: u8, value: &str) -> TeletextDeclaredService {
     let mut source = draft(primary);
     source.base.pages[0].rows = rows(value);
     declare(source)
 }
 
-fn check_preview(source: &TeletextDeclaredService) {
+pub(super) fn check_preview(source: &TeletextDeclaredService) {
     let composition = compose_teletext_main_program(
         source.semantic(),
         owner(0),
@@ -217,12 +217,15 @@ fn spacing_accent_inverse_keeps_combining_input_and_unqualified_slots_distinct()
         }
         assert_eq!(charset::decode_base_text_spelling(0x0f, 0x40, pair), None);
         if pair != TeletextCharsetPair::LatinLatin {
-            assert_eq!(charset::decode_base_text_spelling(0x0f, 0x58, pair), None);
+            assert_eq!(
+                charset::decode_base_text_spelling(0x0f, 0x58, pair),
+                Some('α')
+            );
         }
     }
     assert_eq!(
         charset::decode_base_text_spelling(0x0f, 0x7f, TeletextCharsetPair::GreekGreek),
-        None
+        Some('■')
     );
     for pair in [
         TeletextCharsetPair::Cyrillic1Cyrillic,

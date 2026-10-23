@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — remaining AB2 supplementary/Greek qualification'
+current_focus = 'p9a-author-base — fixed independent base glyph correspondence'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-base remaining AB2 supplementary/Greek qualification.
-Next executable action: resolve only the original ambiguous G2-58/7F and
-GreekG0-52 scalar/native definitions and the three retained spacing-slot
-correspondences49/4B/4C. Use the existing normative/native/source records and
-preserve raw identity, source context and explicit located rejection. Stop at
-source-supported correspondence or an exact missing assignment/capability;
-no inferred alias, additional repertoire/editor variant or decoder maintenance.
+Current package: p9a-author-base fixed independent base glyph correspondence.
+Next executable action: one bounded capability trial of the already pinned
+independent imager's existing base decoder on the original fixed AB1..5 failed
+fields. Preserve exact glyph/context/fallback/source oracles and old negatives;
+no new repertoire, full-client search, rejected C3 retry or external repair.
+Stop at complete exact correspondence for those fields or a concrete missing
+capability/premise. If insufficient, continue separately owned executable
+platform/runtime work rather than another glyph-variant series.
+
+AB2 scalar/context bindings are completed. Canonical
+authored_unicode_eligibility_followup.namespace_completion owns48 focused and1116
+teletext passes, two application contexts through explicit publication/reopen,
+exact169/300/Greek94/eight-spelling reuse and strict affected lint. Independent
+bindings80/96 and original-spacing34/90 agree; all actual paints are source-font
+exact, while16 alpha and56 original spacing expectations remain failed. Unicode
+alias/source qualification does not waive those required glyph correspondences.
 
 AB1 eligibility/conversion component is completed: eight original national
 positions have native scalar mappings; legacy single-cellTL has no guessed
@@ -91,11 +100,6 @@ changed capable decoder. Canonical authored_ab3_attribution_followup and
 authored_ab4_ab5_attribution_followup own proof and exact reuse. No external
 maintenance, unchanged replay or client search follows.
 
-AB2 assigned spacing-accent authoring remains completed within source/wire/preview:
-fifteen spacing forms, five contexts, no optional banks. Its original406/468 stock
-agreements and62 exact negatives remain unchanged; the named three spacing-slot
-correspondences and ambiguous definitions above stay open at AB2. No repeated
-editor or client chain is commissioned for these unchanged cases.
 
 AB6 original separated-margin font attribution/equivalence is completed:
 all three observed stock masks match their pinned stock font; all three product
