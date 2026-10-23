@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-enhanced — AE5 cross-emitter opening order'
+current_focus = 'p9a-author-base — AB1/AB2 Unicode eligibility qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,18 +62,31 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-enhanced AE5 cross-emitter opening order.
-Next executable action: qualify the original CrossEmitterOrder witness in
-teletext/display_geometry_successive_count_tests.rs against the existing
-AnnexA8 source-order/native-factory contract. The blocked action is certifying
-successive-opening bounds when multiple writing object emitters participate.
-Resolve that exact source-order gap with the smallest supported correction and
-original positive/negative factory evidence. Do not invent an endpoint for
-NoDirectAddress objects or repeat closed editor/client variants. An unresolved
-normative premise must be recorded exactly, not silently converted to acceptance.
-SO2 scheduler recovery and affected Linux runtime compatibility are closed within
-their candidate boundaries. Package/native-RID/Health/adoption and production route
-enablement remain at existing owners; preserve the120minute Windows deferral.
+Current package: p9a-author-base AB1/AB2 Unicode eligibility qualification.
+Next executable action: qualify the existing nine national scalar positions and
+named G2 combining/ambiguous aliases from the finite AB1/AB2 list using their
+pinned source/native-fallback records. Preserve raw-coded identities and located
+unsupported errors; do not infer a Unicode alias from an equal-looking glyph or
+add new repertoire/editor variants. Stop at source-supported eligibility or the
+exact unresolved assignment premise for these named positions.
+
+AB6 original separated-margin font attribution/equivalence is completed:
+all three observed stock masks match their pinned stock font; all three product
+expectations match the pinned MIT import/current embedded masks. G.2 and existing
+ADR0123 permit non-DRCS font appearance choices. Original21 functional observations,
+nine held/source equalities and all three strict pixel differences are preserved;
+no cross-font pixel equality or other-glyph equivalence is claimed. Immutable
+import and the current64-pattern/both-spacings product test pass. Canonical
+level15-held-mosaics/identity.json font_equivalence_followup owns the closure.
+
+AE5 CrossEmitterOrder remains a named source-order qualification gap. The exact
+original full-factory witness preserves lower-bound1/all17 pending points and
+known-open1/pending15 in both original and physical output. It does not supply a
+total same-cell opening/reset order or an empty-object lifetime certificate.
+Canonical authored_cross_emitter_followup retains this bounded observation;
+no guessed order, publication restriction or source modification follows.
+SO2 scheduler recovery/Linux candidate compatibility stay closed; package/native
+RID/Health/adoption and route enablement retain their existing owners.
 
 AE5 A7 source/type/interleaving conformance is completed within model/native and
 independent-field boundaries. Ten focused controls cover seven positive full
