@@ -998,6 +998,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve the native teletext fallback for Romanian currency/circumflex-I and
+  Latvian/Lithuanian e-cedilla text. Encode assigned spacing accents in Latin,
+  Cyrillic and Greek contexts without optional object banks, keeping literal
+  combining input and unqualified aliases distinct.
+
 - Compile an Adaptive teletext object over the right half of an inherited
   double-width character without a false unresolved-display error. Preserve
   both lower fragments, the complete object definition and Level 1/1.5 fallback.

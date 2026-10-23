@@ -23,9 +23,9 @@ const NATIONAL: [&str; 13] = [
     "#ńą\0ŚŁćóężśłź",
     "\0ğİŞÖÇÜĞışöçü",
     "#ËČĆŽ\0Šëčćž\0š",
-    "#\0ŢÂŞ\0\0ıţâş\0î",
+    "#¤ŢÂŞ\0Îıţâş\0î",
     "#õŠÄÖŽÜÕšäöžü",
-    "#$Šė\0Žčūšąųžį",
+    "#$ŠėȩŽčūšąųžį",
 ];
 
 /// Table32 aliases select the actual Table36 subset, never only header bits.
@@ -48,9 +48,14 @@ pub(super) const fn unicode_national_subset(primary: TeletextPageCharsetDesignat
     })
 }
 
-const LATIN_G2: [(u8, &str); 7] = [
+// Spacing forms of the assigned Table37/41/43 column4 marks, not Unicode
+// combining input. Position40 is unmarked and remains unqualified.
+const SPACING_ACCENTS: (u8, &str) = (0x41, "ˋˊˆ˜ˉ˘˙¨ˌ˚¸_˝˛ˇ");
+
+const LATIN_G2: [(u8, &str); 8] = [
     (0x20, "\u{a0}¡¢£$¥#§¤‘“«←↑→↓"),
     (0x30, "°±²³×µ¶·÷’”»¼½¾¿"),
+    SPACING_ACCENTS,
     (0x50, "—¹®©™♪₠‰ɑ"),
     (0x5c, "⅛⅜⅝⅞"),
     (0x60, "\u{2126}ÆÐªĦ"),
@@ -217,7 +222,7 @@ pub(super) fn encode_arabic_g0(character: char) -> Option<Character> {
     arabic::encode_g0(character)
 }
 
-/// Qualified standalone Table41/43/45 symbols and letters, not column4 combining
+/// Qualified standalone Table41/43/45 symbols, letters and spacing marks, not combining
 /// marks, prohibited positions, rectangle aliases or a borrowed Latin table.
 pub(super) fn encode_native_g2(character: char, pair: TeletextCharsetPair) -> Option<Character> {
     if pair == TeletextCharsetPair::ArabicArabic {
@@ -238,13 +243,14 @@ pub(super) fn encode_native_g2(character: char, pair: TeletextCharsetPair) -> Op
     None
 }
 
-fn native_g2_groups(pair: TeletextCharsetPair) -> Option<[(u8, &'static str); 5]> {
+fn native_g2_groups(pair: TeletextCharsetPair) -> Option<[(u8, &'static str); 6]> {
     Some(match pair {
         TeletextCharsetPair::Cyrillic1Cyrillic
         | TeletextCharsetPair::Cyrillic2Cyrillic
         | TeletextCharsetPair::Cyrillic3Cyrillic => [
             (0x20, "\0¡¢£$¥\0§\0‘“«←↑→↓"),
             (0x30, "°±²³×µ¶·÷’”»¼½¾¿"),
+            SPACING_ACCENTS,
             (0x50, "—¹®©™♪₠‰\0Łłß⅛⅜⅝⅞"),
             (0x60, "DEFGIJKLNQRSUVWZ"),
             (0x70, "defgijklnqrsuvwz"),
@@ -252,6 +258,7 @@ fn native_g2_groups(pair: TeletextCharsetPair) -> Option<[(u8, &'static str); 5]
         TeletextCharsetPair::GreekGreek => [
             (0x20, "\0ab£ehi§:‘“k←↑→↓"),
             (0x30, "°±²³×mnp÷’”t¼½¾x"),
+            SPACING_ACCENTS,
             (0x50, "?¹®©™♪₠‰\0ΊΎΏ⅛⅜⅝⅞"),
             (0x60, "CDFGJLQRSUVWYZΆΉ"),
             (0x70, "cdfgjlqrsuvwyzΈ\0"),

@@ -215,7 +215,8 @@ fn raster(composition: &TeletextMainComposition) -> TeletextRaster {
 
 fn points(primary: u8) -> Vec<(char, u8)> {
     // Table41/43 column order, including only independently qualified aliases.
-    // Marks40..4F, rectangle7F and the alpha-like58 stay coded-only. Greek34 is
+    // This retained matrix excludes column4 (separately qualified in AB2),
+    // rectangle7F and the alpha-like58. Greek34 is
     // multiplication;3F is Latin lowercase x, not an alias for that symbol.
     let groups = if primary == 0x37 {
         [

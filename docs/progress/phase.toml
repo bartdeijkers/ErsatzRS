@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — AB1/AB2 Unicode eligibility qualification'
+current_focus = 'p9a-author-base — AB3 fixed independent character attribution'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,23 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-base AB1/AB2 Unicode eligibility qualification.
-Next executable action: qualify the existing nine national scalar positions and
-named G2 combining/ambiguous aliases from the finite AB1/AB2 list using their
-pinned source/native-fallback records. Preserve raw-coded identities and located
-unsupported errors; do not infer a Unicode alias from an equal-looking glyph or
-add new repertoire/editor variants. Stop at source-supported eligibility or the
-exact unresolved assignment premise for these named positions.
+Current package: p9a-author-base AB3 fixed independent character attribution.
+Next executable action: qualify the existing six Cyrillic/Hebrew mismatches
+24/4A,24/6A,25/4A,25/6A,25/26,55/23 using their retained36 failures and pinned
+normative/native font/code sources. Stop at exact correspondence or a concrete
+product/tool capability attribution; no new variants, editor chains or decoder
+repairs. Preserve the original scalar and fallback oracles.
+
+AB1/AB2 native conversions and assigned spacing-accent authoring are completed
+within the source/wire/preview boundary: three national positions and fifteen
+spacing forms, five contexts, no optional banks. Canonical provider-scan/identity.json
+authored_unicode_eligibility_followup owns1113 passing teletext regressions,
+five final preview/fixture tests and exact reuse of raw169/native300 fixtures.
+The independent stock decoder retains406/468 agreements and62 exact disagreements;
+AB1/AB2 retain the six unresolved national aliases, RomanianI correspondence,
+three spacing-slot correspondences and existing ambiguous/composite assignments.
+These results do not claim all independent glyph correspondence or editor/client
+acceptance. No further adjacent variant precedes the closed component checkpoint.
 
 AB6 original separated-margin font attribution/equivalence is completed:
 all three observed stock masks match their pinned stock font; all three product

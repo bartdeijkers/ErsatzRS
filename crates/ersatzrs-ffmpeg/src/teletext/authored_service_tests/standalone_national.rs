@@ -6,6 +6,9 @@ mod non_latin;
 #[path = "standalone_national/base_charset.rs"]
 mod base_charset;
 
+#[path = "standalone_national/unicode_eligibility.rs"]
+mod unicode_eligibility;
+
 use super::*;
 use serde_json::{json, Value};
 
