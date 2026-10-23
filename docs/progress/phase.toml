@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — SO2 ordinary Live Burn delivery'
+current_focus = 'p9a-platform-safety — corrected Linux runtime compatibility'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,16 +62,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-source-output SO2 ordinary Live Burn delivery.
-Next executable action: inspect the retained ordinary-route consumer stall and
-current producer/wrapper ownership to identify a concrete new blocking await or
-source/consumer fault. Use provider-scan/identity.json native_streaming_lifecycle_
-followup.route_join_followup and its runtime-live/runtime-owned receipts. A new
-native trial requires a new supported hypothesis; do not rerun unchanged failed
-pacing/duration/GENPTS/heartbeat candidates, expand timeouts, reopen the producer
-or maintain an external decoder. Stop at a bounded, evidenced cause/correction
-and ordinary Off/Burn delivery/AV/audio/cleanup proof, or an exact missing
-capability/access prerequisite. Existing Off/selection/F6 receipts remain closed.
+Current package: p9a-platform-safety corrected Linux runtime compatibility.
+Next executable action: run the existing Linux sparse/caption runtime
+compatibility gates against the exact SO2 scheduler-revert candidate, with the
+existing source/output, selected-audio and cleanup oracles. Close only the named
+Linux candidate compatibility component. Canonical provider-scan/identity.json
+native_streaming_lifecycle_followup.route_join_followup.scheduler_recovery_followup
+owns the cause, source commit, native route and regression receipts. Preserve
+Windows120minute deferral, native ARM/macOS prerequisites and separate managed
+adoption. No package publication, production route enablement or repeated
+unchanged client/decoder investigation is authorized. Off/selection/F6 stay closed.
 
 AE5 A7 source/type/interleaving conformance is completed within model/native and
 independent-field boundaries. Ten focused controls cover seven positive full
@@ -317,15 +317,22 @@ API888/Dutch660Hz before EOF and19 TSDuck controls pass. The original f9ee21ee
 report-only prefix/replay component remains closed. Canonical provider-scan/
 identity.json native_streaming_lifecycle_followup.route_join_followup owns receipts.
 
-SO2 ordinary Live Burn remains blocked: the candidate FFmpeg consumer stalls
-before the unchanged public-wrapper delivery deadline; Off passes. The candidate
-sources/negatives are preserved outside the active product path. The new upstream
-heartbeat correction is insufficient in an isolated identical FFmpeg9 build;
-input pacing, output duration and GENPTS hypotheses also fail. No runtime change
-or route repair is claimed. Resume only with a concrete new cause/correction;
-SO3 delivery components stay closed; the current executable action is named above.
-Other SO2 HTTP/RTSP,
-consume-once/HLS/Hybrid/carriage and runtime/platform obligations retain their owners.
+SO2 scheduler cause/correction and ordinary-route candidate proof are completed
+within Linux x86_64/software scope. An unchoked teletext decoder was stranded
+with760 overflow packets; video232/audio446 stayed buffered. The exact upstream
+FFmpeg revert43284b61 removes that decoder-overflow mechanism. Runtime source
+checkpoint b434264 and its exact FFmpeg9 candidate pass the original identical
+source/argv and ordinary Off/Burn request proof: exact888/200/plain pixels,
+Dutch660Hz, one producer/request, unchanged generation and defaultcapacity2
+cleanup. Direct/Off/Burn each pass19 existing TSDuck controls. The permanent
+owned regression now covers unpaced input; the paced companion retains its
+original arguments. A grouped app-directory collision is retained separately.
+Canonical scheduler_recovery_followup owns the exact candidate identities and
+receipts. Earlier pacing/duration/GENPTS/heartbeat negatives remain valid.
+The four unadopted route sources are preserved outside the active product path;
+this does not enable them on published uncorrected FFmpeg2.0.6. Corrected package,
+compatibility/platform qualification, managed adoption and remaining SO2 cells
+retain their existing owners. SO3 delivery components stay closed.
 
 SO1 public native HLS source-caption integration is completed within Linux
 x86_64/software FFmpeg9: actual ordinary segmenter-Off, segmenter-Burn and

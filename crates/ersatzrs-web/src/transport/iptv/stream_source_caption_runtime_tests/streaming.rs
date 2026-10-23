@@ -169,6 +169,7 @@ fn caption_command(
     ffmpeg: &str,
     media: &FfprobeMediaVersion,
     index: i32,
+    allow_readrate: bool,
 ) -> (FfmpegCommand, SourceTeletextInputPlan) {
     let video = ersatzrs_infra::playback::source_video_stream_from_probe(media)
         .unwrap()
@@ -182,7 +183,12 @@ fn caption_command(
         .find(|stream| stream.language.as_deref() == Some("nld"))
         .expect("retained prefix must identify actual Dutch alternate audio");
     assert_eq!(dutch.index, 3);
-    let mut request = PipelineRequest::new(InputFile::video("pipe:0"), software_desired())
+    let input = if allow_readrate {
+        InputFile::video("pipe:0")
+    } else {
+        InputFile::video("pipe:0").without_readrate()
+    };
+    let mut request = PipelineRequest::new(input, software_desired())
         .with_source_video_stream(video)
         .with_source_audio_streams(audio);
     request.inputs[1] = request.inputs[1].clone().with_stream_index(3);
@@ -382,7 +388,7 @@ async fn prepare_command(
             .await
             .unwrap();
         let (media, index) = observed_media(&prepared, &tools[1], root).await;
-        caption_command(&tools[0], &media, index).0
+        caption_command(&tools[0], &media, index, true).0
     })
     .catch_unwind()
     .await;
@@ -442,7 +448,9 @@ async fn prepare_owned_command(
             &tools[0],
             playback.probe.as_ref().unwrap(),
             selected.stream_index,
+            false,
         );
+        assert!(!command.arguments.iter().any(|arg| arg == "-readrate"));
         playback
             .bind_caption_consumer(&command, Some(&plan))
             .unwrap();
@@ -519,6 +527,7 @@ async fn run(owned_selection: bool) {
             "page":888,"audio":"nld660","output_before_producer_eof":true,
             "joined_cleanup":true,"active_transcodes":0,"ordinary_route_acceptance":false,
             "owned_page_selection_and_final_command_binding":owned_selection,
+            "input_readrate":!owned_selection,
         }),
     );
 }
@@ -543,6 +552,8 @@ fn shared_single_producer_prefix_burns_observed_page888_before_eof() {
 
 #[test]
 #[ignore = "requires FFmpeg9/libzvbi, Unix managed producer and isolated native app data; owned-selection component only"]
+// An unpaced producer with a held-open tail exposed a stranded decoder overflow
+// queue in FFmpeg n9.0. Reuse the exact raster/audio/clock and cleanup oracles.
 fn owned_live_producer_selects_observed_page_and_seals_consuming_child() {
     let _guard = active_transcode_test_guard_for_tests();
     reset_active_transcode_state_for_tests();
