@@ -702,3 +702,6 @@ mod object_page_selection;
 
 #[path = "authored_service_tests/resource_contention.rs"]
 mod resource_contention;
+
+#[path = "authored_service_tests/empty_admission.rs"]
+mod empty_admission;

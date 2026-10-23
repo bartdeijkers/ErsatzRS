@@ -778,7 +778,13 @@ coordinates are not placed on the selected display. Keep row/column tuple order;
 a fixed-width linear rank aliases out-of-display coordinates. Unplaced visual
 area diagnostics remain independent. Empty objects without a direct endpoint
 and backwards endpoints retain explicit pending facts, not guessed intervals
-or a full-admission certificate.
+or a full-admission certificate. In the validated typed trace, nonnegative
+origin modifiers and relative coordinates ensure every direct endpoint is at
+or after its caller; backwards relative AP is rejected under A.4. Thus the
+EndBeforeStart guard is defensive, not a missing valid typed case. A total of
+at most fifteen actual instances independently proves the simultaneous bound
+without assigning an endpoint to a non-addressing object. More-than-fifteen
+mixed services still require their unresolved lifetime proof.
 Supplied-program spatial replay shares the existing two-pass walker without
 rerunning Base composition. It retains physical Local main ordinals and full
 body identities/instances; the service entry retains its original sparse default
