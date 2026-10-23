@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — AB3 fixed independent character attribution'
+current_focus = 'p9a-author-base — AB4/AB5 fixed source and context attribution'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,12 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-base AB3 fixed independent character attribution.
-Next executable action: qualify the existing six Cyrillic/Hebrew mismatches
-24/4A,24/6A,25/4A,25/6A,25/26,55/23 using their retained36 failures and pinned
-normative/native font/code sources. Stop at exact correspondence or a concrete
-product/tool capability attribution; no new variants, editor chains or decoder
-repairs. Preserve the original scalar and fallback oracles.
+Current package: p9a-author-base AB4/AB5 fixed source and context attribution.
+Next executable action: qualify only the retained four GreekG2 multiplication
+and five physical-header/explicit-German-secondary mismatches from the existing
+AB4/AB5 receipts. Inspect their actual source/code/context before deciding on a
+product correction. Stop at exact correspondence or a concrete product/tool
+capability attribution; preserve scalar/context/fallback oracles. No new repertoire,
+editor/client variant, candidate search or external decoder maintenance.
+
+AB3 six-slot attribution is completed:36 actual glyph renders bind exactly to
+pinned stock source/font and current pinnedMIT product masks. Ukrainianyi has six
+exact glyph correspondences despite distinct scalar aliases. The other30 renders
+prove wrong grave-I/pound glyphs in the stockdecoder at five fixed slots. Correct
+independent decoding there is now a concrete external capability blocker, not an
+unknown product defect. Resume only when a changed capable decoder is available;
+all36 original scalar negatives remain. Canonical authored_ab3_attribution_followup
+owns this boundary. No further adjacent variant precedes its local checkpoint.
 
 AB1/AB2 native conversions and assigned spacing-accent authoring are completed
 within the source/wire/preview boundary: three national positions and fifteen
