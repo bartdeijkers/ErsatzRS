@@ -9,9 +9,9 @@ use std::mem::size_of;
 
 use super::{
     TeletextColumnOperation, TeletextDisplayGeometryError, TeletextDisplayGeometryFailure,
-    TeletextEnhancementCommand, TeletextEnhancementSource, TeletextPageAddress,
-    TeletextSpatialEvent, TeletextSpatialInvocationId, TeletextSpatialRootSource,
-    TeletextSpatialTrace,
+    TeletextEffectiveProgramSource, TeletextEnhancementCommand, TeletextEnhancementSource,
+    TeletextPageAddress, TeletextSpatialEvent, TeletextSpatialInvocationId,
+    TeletextSpatialRootSource, TeletextSpatialTrace,
 };
 
 /// Reason the original action cannot establish a definite successive run.
@@ -82,7 +82,8 @@ impl TeletextObjectSuccessiveCount {
     /// Maximum proven positioned run. With one emitter, potential resets split
     /// known runs at their exact original ordinal. Otherwise unpositioned resets
     /// disable the combined lower-bound claim and mixed-source ties break runs
-    /// conservatively. All uncertainty remains in `pending()`.
+    /// conservatively. An explicit Main prefix before every reset's root call
+    /// can retain its own lower bound. All uncertainty remains in `pending()`.
     #[must_use]
     pub const fn maximum_known_successive(&self) -> usize {
         self.maximum_known_successive
@@ -104,7 +105,8 @@ pub(super) fn successive_work(events: usize, _instances: usize) -> Option<usize>
     events
         .checked_mul(levels as usize + 1)?
         .checked_mul(2)?
-        .checked_add(events.checked_mul(4)?)
+        // Two additional linear group passes qualify explicit Main prefixes.
+        .checked_add(events.checked_mul(6)?)
 }
 
 #[derive(Clone, Copy)]
@@ -206,7 +208,13 @@ pub(super) fn count_successive_objects(
                 item.event_ordinal,
             )
         });
-        scan_groups(owner, &actions, &mut pending, !unknown_reset)?
+        scan_groups(
+            owner,
+            &actions,
+            &mut pending,
+            !unknown_reset,
+            original.original_program_source() == &TeletextEffectiveProgramSource::Local,
+        )?
     };
     pending.sort_unstable_by_key(TeletextSuccessiveOpenPending::event_ordinal);
     Ok(TeletextObjectSuccessiveCount {
@@ -267,6 +275,7 @@ fn scan_groups(
     actions: &[PositionedAction],
     pending: &mut Vec<TeletextSuccessiveOpenPending>,
     known_resets: bool,
+    explicit_main: bool,
 ) -> Result<usize, TeletextDisplayGeometryError> {
     let (mut start, mut run, mut maximum) = (0, 0, 0);
     while start < actions.len() {
@@ -283,6 +292,9 @@ fn scan_groups(
                 .iter()
                 .any(|item| matches!(item.kind, ActionKind::Write))
         {
+            if known_resets && explicit_main {
+                maximum = maximum.max(main_prefix_before_resets(owner, group)?);
+            }
             run = 0;
             for item in group {
                 pending.push(TeletextSuccessiveOpenPending {
@@ -316,6 +328,47 @@ fn scan_groups(
         start = finish;
     }
     Ok(maximum)
+}
+
+fn main_prefix_before_resets(
+    owner: TeletextPageAddress,
+    group: &[PositionedAction],
+) -> Result<usize, TeletextDisplayGeometryError> {
+    let mut first_reset_root = usize::MAX;
+    for item in group {
+        match item.kind {
+            ActionKind::Open(_) if item.event.invocation().is_some() => return Ok(0),
+            ActionKind::Open(_) => {}
+            ActionKind::Write => {
+                let TeletextSpatialRootSource::Local { command } = item.event.root_source() else {
+                    return Ok(0);
+                };
+                first_reset_root = first_reset_root.min(command);
+            }
+        }
+    }
+    // EN300706 12.3.3 executes the body at invocation. A descendant cannot
+    // reset Main before its own root call; its opening itself is included.
+    // This proves only a prefix, never relative order between other emitters.
+    let mut count = 0;
+    for item in group {
+        match item.kind {
+            ActionKind::Open(child) if item.event.source().command <= first_reset_root => {
+                count += 1;
+                if count > 15 {
+                    return Err(opening_error(
+                        owner,
+                        item.event,
+                        child,
+                        item.position,
+                        count,
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(count)
 }
 
 fn raw_rank((row, column): (u16, u16)) -> u32 {

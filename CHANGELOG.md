@@ -1003,6 +1003,8 @@ release section when tagging a release.
   intervals and source-located validation errors.
   A colour instruction can no longer hide sixteen successive object openings
   in the same source; uncertain cross-source ordering remains explicit.
+  A later child-object write also cannot hide its invoking Main call from
+  the limit.
 
 - Encode Main header context with original POP/GPOP objects using the existing
   coherent resource-before-display acquisition order. Preserve original object

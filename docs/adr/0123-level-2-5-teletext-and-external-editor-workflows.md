@@ -793,6 +793,15 @@ cell to a plane write or certify an uncertain reset as an actual write.
 Mixed-emitter actions retain the existing scan-order/C2 uncertainty. The linear
 single-emitter scan replaces the bounded sort/scan; it adds no work queue or
 external timeline authority.
+At one positioned mixed-emitter tie, an explicit Main-only opening prefix can
+also precede every possible reset's original Local root. Under section 12.3.3,
+an object's body executes at invocation, so that root opening itself precedes
+its descendant write. This is a causal bound, not a new cross-emitter clock.
+Use only original Local roots and Main openings; defaults, nested openings and
+unpositioned potential resets retain uncertainty. Earlier-root writers prevent
+an unsupported prefix claim. Keep all mixed-source witnesses after deriving a
+safe lower bound; no complete reset/display or admission certificate follows.
+The two linear group passes share the existing checked work/storage fence.
 Supplied-program spatial replay shares the existing two-pass walker without
 rerunning Base composition. It retains physical Local main ordinals and full
 body identities/instances; the service entry retains its original sparse default

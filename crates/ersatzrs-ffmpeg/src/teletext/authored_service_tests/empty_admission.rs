@@ -138,10 +138,24 @@ fn whole_factory_plane_colour_cannot_hide_sixteen_same_source_opens() {
     }
 }
 
-fn assert_successive_refusal(source: &TeletextDeclaredService, command: usize) {
+pub(super) fn assert_successive_refusal(
+    source: &TeletextDeclaredService,
+    command: usize,
+) -> TeletextDisplayGeometryError {
     let original = source.clone();
     let result =
         encode_teletext_authored_service(source.clone(), &transmissions(source), &limits());
+    if let (Ok(encoded), Some(directory)) = (
+        &result,
+        crate::locator::first_non_empty_env(&[
+            "ERSATZRS_TELETEXT_TEST_SUCCESSIVE_PREFIX_FIXTURE_DIR",
+        ]),
+    ) {
+        let mut units = encoded.pages()[0].data_units().to_vec();
+        units.push(super::super::packets::terminator(2));
+        std::fs::write(std::path::Path::new(&directory).join("unexpected.json"),
+            serde_json::to_vec(&serde_json::json!({"page":512,"subcode":0,"units":units.iter().map(|u|u.to_vec()).collect::<Vec<_>>()})).unwrap()).unwrap();
+    }
     assert!(
         result.is_err(),
         "A8(3): complete factory admitted16 successive same-source opens"
@@ -182,4 +196,5 @@ fn assert_successive_refusal(source: &TeletextDeclaredService, command: usize) {
     );
     assert_eq!(error.invocation.unwrap().get(), 15);
     assert_eq!(source, &original);
+    error
 }

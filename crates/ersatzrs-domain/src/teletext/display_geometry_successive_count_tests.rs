@@ -246,31 +246,83 @@ fn plane_colour_writes_remain_potential_resets_without_an_invented_cell() {
 }
 
 #[test]
-fn cross_emitter_same_position_write_keeps_original_order_witnesses_pending() {
+fn child_write_cannot_hide_the_sixteenth_main_open_that_invokes_it() {
     let empty = local(0);
     let writer = local(1);
     let mut commands = vec![set(1, 8)];
     commands.extend([invoke(empty, TeletextObjectType::Passive, None); 15]);
     commands.push(invoke(writer, TeletextObjectType::Active, None));
-    let geometry = result(&fixture(
+    let input = fixture(
         None,
         commands,
         vec![
             definition(empty, TeletextObjectType::Passive, vec![]),
             definition(writer, TeletextObjectType::Active, vec![glyph(0)]),
         ],
-    ))
-    .unwrap();
-    let pending = geometry.successive_open_count().pending();
-    assert_eq!(pending.len(), 17);
-    assert!(pending.iter().all(|witness| {
-        witness.reason() == TeletextSuccessiveOpenPendingReason::CrossEmitterOrder
-            && witness.position() == (1, 8)
-    }));
-    assert_eq!(pending[0].location().object, None);
-    assert_eq!(pending[0].location().command, 1);
-    assert_eq!(pending[16].location().object, Some(writer));
-    assert_eq!(pending[16].invocation().unwrap().get(), 15);
+    );
+    let original = (
+        input.base.clone(),
+        input.spatial.clone(),
+        input.glyphs.clone(),
+    );
+    let observed = result(&input);
+    assert!(
+        observed.is_err(),
+        "A8(3): a child reset hid its own sixteenth Main opening"
+    );
+    let error = observed.unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextDisplayGeometryFailure::TooManySuccessiveObjectOpens {
+            count: 16,
+            maximum: 15
+        }
+    );
+    assert_eq!(error.position, Some((1, 8)));
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 16
+        })
+    );
+    assert_eq!(
+        error.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 16 })
+    );
+    assert_eq!(error.invocation.unwrap().get(), 15);
+    assert_eq!((input.base, input.spatial, input.glyphs), original);
+}
+
+#[test]
+fn earlier_child_writer_keeps_mixed_order_pending_instead_of_forcing_a_run() {
+    let empty = local(0);
+    let writer = local(1);
+    let mut commands = vec![set(1, 8), invoke(writer, TeletextObjectType::Active, None)];
+    commands.extend([invoke(empty, TeletextObjectType::Passive, None); 15]);
+    let input = fixture(
+        None,
+        commands,
+        vec![
+            definition(empty, TeletextObjectType::Passive, vec![]),
+            definition(writer, TeletextObjectType::Active, vec![glyph(0)]),
+        ],
+    );
+    let geometry = result(&input).unwrap();
+    let count = geometry.successive_open_count();
+    assert_eq!(count.maximum_known_successive(), 1);
+    assert_eq!(count.pending().len(), 17);
+    assert!(count.pending().iter().all(|p| p.reason()
+        == TeletextSuccessiveOpenPendingReason::CrossEmitterOrder
+        && p.position() == (1, 8)));
+    let reset = &count.pending()[1];
+    assert_eq!(reset.location().object, Some(writer));
+    assert_eq!(reset.location().command, 0);
+    assert_eq!(
+        reset.root_source(),
+        TeletextSpatialRootSource::Local { command: 1 }
+    );
+    assert_eq!(reset.invocation().unwrap().get(), 0);
 }
 
 #[test]

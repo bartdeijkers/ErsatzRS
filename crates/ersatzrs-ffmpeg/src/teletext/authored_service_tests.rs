@@ -705,3 +705,6 @@ mod resource_contention;
 
 #[path = "authored_service_tests/empty_admission.rs"]
 mod empty_admission;
+
+#[path = "authored_service_tests/successive_ancestry.rs"]
+mod successive_ancestry;
