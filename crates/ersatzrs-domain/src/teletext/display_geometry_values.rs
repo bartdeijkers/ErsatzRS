@@ -179,6 +179,8 @@ pub enum TeletextObjectIntervalPending {
 
 /// Inclusive Annex A.8 RAW scan interval, not a visual rectangle or proof of
 /// overlap admissibility. The start is caller AP BEFORE invocation offset.
+/// Known original endpoints count even when their coordinates are not placed
+/// on the selected display; this does not certify a visual written area.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextObjectAddressInterval {
     Known {

@@ -612,9 +612,9 @@ fn wide_nested_coordinates_are_nonplacement_not_clamped_or_dropped() {
     );
     assert_eq!(
         region.interval(),
-        TeletextObjectAddressInterval::Pending {
-            reason: TeletextObjectIntervalPending::OutsideDisplay,
-            endpoint: Some((165, 369)),
+        TeletextObjectAddressInterval::Known {
+            start: (118, 259),
+            finish: (165, 369),
         }
     );
     assert_eq!(geometry.direct_writes(region.instance().id()).len(), 1);

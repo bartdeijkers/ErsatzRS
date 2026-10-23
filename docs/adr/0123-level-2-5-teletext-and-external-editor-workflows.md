@@ -773,6 +773,12 @@ execution while preserving declarations. Any physical augmented program must
 pass that same collection against its actual catalogue; direct lowerer counts
 cannot replace it. Open/successive-object and word/resource admission remain
 separate. Service admission remains the owner of the whole-display type limit.
+A.8(2) counts known original caller/last-own-address intervals even when their
+coordinates are not placed on the selected display. Keep row/column tuple order;
+a fixed-width linear rank aliases out-of-display coordinates. Unplaced visual
+area diagnostics remain independent. Empty objects without a direct endpoint
+and backwards endpoints retain explicit pending facts, not guessed intervals
+or a full-admission certificate.
 Supplied-program spatial replay shares the existing two-pass walker without
 rerunning Base composition. It retains physical Local main ordinals and full
 body identities/instances; the service entry retains its original sparse default

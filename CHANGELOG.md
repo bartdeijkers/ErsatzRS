@@ -998,6 +998,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Enforce teletext's limit of 15 simultaneously open objects even when their
+  known source coordinates fall outside the visible page. Preserve valid
+  intervals and source-located validation errors.
+
 - Encode Main header context with original POP/GPOP objects using the existing
   coherent resource-before-display acquisition order. Preserve original object
   identities, complete fallback packets and strict standalone validation.

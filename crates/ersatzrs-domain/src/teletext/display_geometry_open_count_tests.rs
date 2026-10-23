@@ -302,7 +302,111 @@ fn pending_interval_is_retained_and_cannot_hide_sixteen_known_intervals() {
 }
 
 #[test]
-fn parent_interval_uses_last_own_address_and_summary_retains_outside_pending() {
+fn out_of_display_endpoints_still_count_toward_all_type_open_limit() {
+    let target = local(0);
+    let make = |count| {
+        let mut commands = vec![invoke(target, TeletextObjectType::Passive, Some((23, 71))); count];
+        if count > 15 {
+            // An original Main write separates successive opens. This isolates
+            // A.8(2) from A.8(3), without inventing a visible write in the object.
+            commands.insert(
+                15,
+                TeletextEnhancementCommand::AtColumn {
+                    column: 8,
+                    operation: TeletextColumnOperation::Foreground {
+                        colour: TeletextColourReference::WHITE,
+                    },
+                },
+            );
+        }
+        fixture(
+            None,
+            commands,
+            vec![definition(
+                target,
+                TeletextObjectType::Passive,
+                vec![set(24, 0), glyph(0)],
+            )],
+        )
+    };
+    let input = make(15);
+    let geometry = resolve(&input);
+    assert_eq!(geometry.object_open_count().maximum_known_open(), 15);
+    for region in geometry.object_regions() {
+        assert_eq!(
+            region.interval(),
+            TeletextObjectAddressInterval::Known {
+                start: (0, 0),
+                finish: (47, 71),
+            }
+        );
+        assert_eq!(region.written_area(), None);
+        assert_eq!(
+            region.area_pending(),
+            Some(TeletextObjectAreaPending::UnplacedAddress)
+        );
+    }
+    let invalid = make(16);
+    let original = (
+        invalid.base.clone(),
+        invalid.spatial.clone(),
+        invalid.glyphs.clone(),
+    );
+    assert_sixteenth(&failure(&invalid), 16, 15, (0, 8));
+    assert_eq!((invalid.base, invalid.spatial, invalid.glyphs), original);
+}
+
+#[test]
+fn unplaced_endpoints_keep_row_column_order_without_linear_rank_aliases() {
+    let target = local(0);
+    let mut commands = vec![invoke(target, TeletextObjectType::Passive, Some((0, 56))); 15];
+    commands.push(set(2, 0));
+    commands.push(TeletextEnhancementCommand::AtColumn {
+        column: 0,
+        operation: TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::WHITE,
+        },
+    });
+    commands.push(invoke(target, TeletextObjectType::Passive, None));
+    let input = fixture(
+        None,
+        commands,
+        vec![definition(
+            target,
+            TeletextObjectType::Passive,
+            vec![set(1, 24), glyph(24)],
+        )],
+    );
+    let geometry = resolve(&input);
+    let count = geometry.object_open_count();
+    assert_eq!(
+        (
+            count.known_intervals(),
+            count.pending_intervals(),
+            count.maximum_known_open()
+        ),
+        (16, 0, 15)
+    );
+    for region in &geometry.object_regions()[..15] {
+        assert_eq!(
+            region.interval(),
+            TeletextObjectAddressInterval::Known {
+                start: (0, 0),
+                finish: (1, 80),
+            }
+        );
+    }
+    assert_eq!(
+        geometry.object_regions()[15].interval(),
+        TeletextObjectAddressInterval::Known {
+            start: (2, 0),
+            finish: (3, 24),
+        }
+    );
+}
+
+#[test]
+fn parent_interval_uses_last_own_address_and_summary_counts_unplaced_endpoint() {
     let parent = local(0xffff);
     let child = local(0x0100);
     let outside = local(0);
@@ -339,7 +443,7 @@ fn parent_interval_uses_last_own_address_and_summary_retains_outside_pending() {
             count.pending_intervals(),
             count.maximum_known_open()
         ),
-        (2, 1, 2)
+        (3, 0, 3)
     );
     assert_eq!(
         geometry.object_regions()[0].interval(),
@@ -357,9 +461,9 @@ fn parent_interval_uses_last_own_address_and_summary_retains_outside_pending() {
     );
     assert_eq!(
         geometry.object_regions()[2].interval(),
-        TeletextObjectAddressInterval::Pending {
-            reason: TeletextObjectIntervalPending::OutsideDisplay,
-            endpoint: Some((48, 79))
+        TeletextObjectAddressInterval::Known {
+            start: (1, 8),
+            finish: (48, 79)
         }
     );
     let empty = resolve(&fixture(None, vec![], vec![]));

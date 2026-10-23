@@ -38,7 +38,7 @@ impl TeletextObjectOpenCount {
 
 #[derive(Debug, Clone, Copy)]
 struct Endpoint {
-    rank: u32,
+    position: (u16, u16),
     end: bool,
     instance: usize,
 }
@@ -86,12 +86,12 @@ pub(super) fn count_open_objects(
         if let TeletextObjectAddressInterval::Known { start, finish } = region.interval() {
             let instance = region.instance().id().get();
             endpoints.push(Endpoint {
-                rank: raw_rank(start),
+                position: start,
                 end: false,
                 instance,
             });
             endpoints.push(Endpoint {
-                rank: raw_rank(finish),
+                position: finish,
                 end: true,
                 instance,
             });
@@ -99,7 +99,7 @@ pub(super) fn count_open_objects(
     }
     // Starts precede ends at the same raw cell: intervals are INCLUSIVE. Instance
     // IDs stabilize diagnostics, never invent physical transmission ordering.
-    endpoints.sort_unstable_by_key(|point| (point.rank, point.end, point.instance));
+    endpoints.sort_unstable_by_key(|point| (point.position, point.end, point.instance));
     let (mut open, mut maximum_known_open) = (0, 0);
     for endpoint in endpoints {
         if endpoint.end {
@@ -130,10 +130,4 @@ pub(super) fn count_open_objects(
         pending_intervals: regions.len() - known_intervals,
         maximum_known_open,
     })
-}
-
-fn raw_rank((row, column): (u16, u16)) -> u32 {
-    // Known geometry intervals have raw row<=24/column<=71. Widen first;
-    // arithmetic also remains safe for the complete u16 input range.
-    u32::from(row) * 72 + u32::from(column)
 }

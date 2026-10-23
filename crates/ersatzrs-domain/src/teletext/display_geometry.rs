@@ -715,12 +715,9 @@ fn address_interval(
         };
     };
     let finish = fact_position(last);
-    if start.0 > 24 || start.1 > 71 || finish.0 > 24 || finish.1 > 71 {
-        return Pending {
-            reason: TeletextObjectIntervalPending::OutsideDisplay,
-            endpoint: Some(finish),
-        };
-    }
+    // Annex A.8(2) counts all objects, whether or not they affect a screen
+    // location. A known original address remains an endpoint when unplaced;
+    // visual placement and written-area readiness are separate facts.
     if finish < start {
         return Pending {
             reason: TeletextObjectIntervalPending::EndBeforeStart,

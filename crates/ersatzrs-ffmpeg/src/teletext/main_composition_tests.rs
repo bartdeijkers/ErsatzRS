@@ -2297,6 +2297,67 @@ fn original_geometry_counts_all_object_types_and_rejects_sixteenth_with_call_pro
     assert_eq!(invalid, before);
 }
 
+#[test]
+fn original_out_of_display_objects_cannot_escape_simultaneous_admission() {
+    let target = local(0);
+    let make = |count| {
+        let mut commands = vec![
+            TeletextEnhancementCommand::InvokeObject {
+                target,
+                object_type: TeletextObjectType::Passive,
+                offset: Some(TeletextObjectOffset::new(23, 71).unwrap()),
+            };
+            count
+        ];
+        if count > 15 {
+            commands.insert(15, colour(8, 7));
+        }
+        let mut fixture = Fixture::new(vec![text(1, 8, "é")], Some(commands));
+        fixture.objects.push(definition(
+            target,
+            TeletextObjectType::Passive,
+            vec![position(24, 0), g0(0)],
+        ));
+        fixture.build()
+    };
+    let invalid = make(16);
+    let before = invalid.clone();
+    let result = compose_teletext_main_program(&invalid, owner(), budget());
+    assert!(
+        result.is_err(),
+        "A8(2): sixteen original open objects were admitted"
+    );
+    let rejected = result.unwrap_err();
+    assert_eq!(
+        rejected.location,
+        Some(TeletextMainCompositionSource::OriginalPage { command: 16 })
+    );
+    let TeletextMainCompositionFailure::DisplayGeometry(error) = rejected.reason else {
+        panic!("out-of-display objects require source-located A8(2) rejection");
+    };
+    assert_eq!(error.invocation.unwrap().get(), 15);
+    assert_eq!(error.position, Some((0, 8)));
+    assert_eq!(
+        error.reason,
+        TeletextDisplayGeometryFailure::TooManyOpenObjects {
+            count: 16,
+            maximum: 15
+        }
+    );
+    assert_eq!(invalid, before);
+    let valid = make(15);
+    let before = valid.clone();
+    let plan = compose(&valid);
+    assert_eq!(
+        plan.display_geometry()
+            .object_open_count()
+            .maximum_known_open(),
+        15
+    );
+    assert_eq!(plan.spatial_trace().invocations().len(), 15);
+    assert_eq!(valid, before);
+}
+
 fn colour(column: u8, value: u8) -> TeletextEnhancementCommand {
     at(
         column,
