@@ -714,3 +714,6 @@ mod adaptive_nonorigin;
 
 #[path = "authored_service_tests/size_conformance.rs"]
 mod size_conformance;
+
+#[path = "authored_service_tests/a7_conformance.rs"]
+mod a7_conformance;

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-enhanced — AE5 original admission/C3 conformance'
+current_focus = 'p9a-source-output — SO2 ordinary Live Burn delivery'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,14 +62,37 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-enhanced AE5 original admission/C3 conformance.
-Next executable action: qualify the existing A8(2) mixed-greater-than-fifteen
-NoDirectAddress lifetime gap. Use original non-addressing object definitions,
-caller AP/offset, termination and the pinned standard's last-own-address rule;
-reuse the closed <=15-total and known-endpoint controls. Stop at a supported
-source-bound lifetime rule with original full-factory/native evidence, or an
-exact missing maintainer decision/capability. Do not invent endpoints, ignore
-empty invocations, relax admission, or add new source variants without necessity.
+Current package: p9a-source-output SO2 ordinary Live Burn delivery.
+Next executable action: inspect the retained ordinary-route consumer stall and
+current producer/wrapper ownership to identify a concrete new blocking await or
+source/consumer fault. Use provider-scan/identity.json native_streaming_lifecycle_
+followup.route_join_followup and its runtime-live/runtime-owned receipts. A new
+native trial requires a new supported hypothesis; do not rerun unchanged failed
+pacing/duration/GENPTS/heartbeat candidates, expand timeouts, reopen the producer
+or maintain an external decoder. Stop at a bounded, evidenced cause/correction
+and ordinary Off/Burn delivery/AV/audio/cleanup proof, or an exact missing
+capability/access prerequisite. Existing Off/selection/F6 receipts remain closed.
+
+AE5 A7 source/type/interleaving conformance is completed within model/native and
+independent-field boundaries. Ten focused controls cover seven positive full
+factories and eight original refusals. Four disjoint Active attribute types
+combine; all-type overlap keeps Passive priority in both call orders; allowed
+Active/Passive/unchanged-Adaptive/mixed interleaving retains exact scopes. Each
+same-type Active group conflict and any changed Adaptive interleaving group
+keeps its located original refusal. All native calls/definitions, original IDs/
+roots and Base packets survive. Pinned imager passes45 fixed cell/attribute
+observations over1/1.5/2.5; final native files remain byte-exact. Existing raw
+address/panel/compound masks and resource/default/nested receipts supply the
+other A7 clauses;1774 prior regressions remain valid with production unchanged.
+Canonical provider-scan/identity.json authored_a7_conformance_followup owns the
+clause map and hashes. Receiver/navigation/platform gates keep their owners.
+
+A8(2) mixed>15 NoDirectAddress remains a normative interpretation prerequisite:
+initial AP and coded termination are not a proven last explicitly addressed
+position. This reuses the already recorded8b38282a classification, not new proof.
+No endpoint, source rewrite or publication restriction was introduced. Resume
+only with an authoritative/source-supported lifetime rule; an interim restriction
+would need explicit maintainer approval and cannot close the final requirement.
 
 AE5 C3 factory source/size proof is completed: the original double-size conflict
 keeps requestedDS but effectiveDH in both full models, exact Main source/root6,
@@ -107,7 +130,7 @@ retains max15 and all16 unplaced/reset witnesses.1773 affected teletext tests,
 18 focused controls and strict Clippy pass. Canonical provider-scan/identity.json
 authored_deferred_source_prefix_followup owns negatives and the bounded source
 correction. This closes source diagnosis, not a publication escape or stream
-repair. The only current action is the existing A8(2) lifetime qualification above.
+repair. The only current action is the existing SO2 ordinary Live Burn action above.
 
 AE5 explicit Main/child prefix admission is completed: original domain/factory
 reds and retained16-call bytes show that a child write hid its invoking Main
@@ -117,7 +140,7 @@ facts and a lower bound1. Full-factory15/native/fallback and independent1.5/2.5
 fields pass;1771 affected tests pass. Canonical provider-scan/identity.json
 authored_main_child_prefix_followup owns native/source/work proof and final lint.
 No default/nested/unpositioned clock or full admission is inferred. The only
-current action is the existing A8(2) lifetime qualification above.
+current action is the existing SO2 ordinary Live Burn action above.
 
 AE5 same-emitter definite-run admission is completed: domain and complete factory
 reds prove that an unpositioned colour write hid sixteen successive empty calls.
