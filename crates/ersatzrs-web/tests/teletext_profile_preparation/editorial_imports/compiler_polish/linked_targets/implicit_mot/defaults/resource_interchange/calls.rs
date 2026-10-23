@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "calls/actual_editor.rs"]
 mod actual_editor;
+#[path = "calls/complete_set.rs"]
+mod complete_set;
 #[path = "calls/context_scalars.rs"]
 mod context_scalars;
 #[path = "calls/lifecycle.rs"]

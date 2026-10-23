@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-editor-enhanced — EE3 complete resource-set action'
+current_focus = 'p9a-admin-enhanced — A2 supported enhanced workflow join'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,11 +62,27 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-editor-enhanced EE3 complete resource-set action.
-Next executable action: join the existing fitting complete-catalogue editor and
-native receipts to EE3's one atomic multi-document concept, protected graph,
-shared preview/reexport/root undo and separate publication/cold-reopen stop.
-Correct only an attributable missing integration boundary; no new variant queue.
+Current package: p9a-admin-enhanced A2 supported enhanced workflow join.
+Next executable action: join the closed EE1/EE3 resource-file actions and existing
+creation/selection/announcement controls to their actual authenticated admin,
+localized shared-validation and headed receipts. Reuse unchanged bodies and
+current valid receipts; run only a demonstrably missing affected integration.
+Keep unresolved retirement policy with its existing owner, not a new UI variant.
+
+EE3 internal complete-set correspondence is completed: two fitting resource
+context documents edit a GPOP-to-POP call origin and its shared Passive glyph
+in one atomic concept. The complete four-definition catalogue includes an
+uninvoked protected definition, all three consumers and defaults. Independent
+native model/units/positions, unchanged complete display/fallback packets,
+preview, every re-exported file, explicit publication/cold reopen and exact
+root-document undo/republication pass. A malformed second document refuses the
+whole set. Every fresh export snapshots the current complete catalogue; undo
+changes only its two editable root words. The discarded frozen-sibling export
+expectation and compiler/lint corrections remain in canonical provider-scan/
+identity.json editor_complete_set_followup. Final focused native proof and strict
+Clippy pass; this is new internal proof, not new product/runtime/client behavior.
+EE1..3 internal actions are closed; final editor capacity/aggregate and deferred
+optionality remain with their existing owners. No adjacent variants follow.
 
 EE1 complete context correspondence is completed: trusted Main6/Local5 boundaries
 and native marker relocation preserve full original Local identities, all five

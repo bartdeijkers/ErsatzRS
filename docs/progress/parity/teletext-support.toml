@@ -5,7 +5,7 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
 summary    = '''
 ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
-EB1/EB2/A1/EE1 closed in scope; proof with owners.
+EB1/EB2/A1/EE1..3 closed in scope; proof with owners.
 F2 metadata/zones/version and scoped F1 Main/Base-prefix, position undo,
 charset, V30/V31 DRCS attachment/undo, created banks, leading AP/calls,
 Public↔Global and steady-Flash undo are closed. F3 same-page C2 and steady
