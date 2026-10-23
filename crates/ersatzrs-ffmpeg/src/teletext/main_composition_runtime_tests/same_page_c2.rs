@@ -176,6 +176,26 @@ pub(super) fn assert_same_page_source_order(
 
 #[tokio::test]
 #[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn repeated_same_page_active_c2_order_decodes_with_pinned_independent_teletextimager() {
+    let mut repeated = main();
+    repeated.extend([position(1, 8), invoke(65534, TeletextObjectType::Active)]);
+    let case = encoded_case_with_encoding(
+        "repeated_same_page_main_active_c2",
+        rows(),
+        repeated,
+        definitions(),
+        &[
+            cell(0, 9, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0]),
+            cell(0, 10, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, 4, 0]),
+            cell(1, 8, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 4, 0]),
+        ],
+        MainEncoding::Normalized,
+    );
+    assert_contextual_decoding(vec![case], "ERSATZRS_TELETEXT_TEST_REPEATED_C2_FIXTURE").await;
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
 async fn same_page_main_active_c2_order_decodes_with_pinned_independent_teletextimager() {
     let source = source();
     let normalized = normalized(&source);

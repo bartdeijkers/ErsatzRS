@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-enhanced — AE2/AE3 original resource-order qualification'
+current_focus = 'p9a-author-enhanced — AE2 resource-order qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-enhanced AE2/AE3 original resource-order qualification.
-Next executable action: use the existing header-c2 cross_emitter_c2_qualification
-factory/limits and accepted C.2 expectations to qualify competing POP/GPOP writers
-and repeated instances of an original physical definition. Establish exact source/
-priority/full-effect/native/fallback evidence or an attributable defect before
-correction; do not reopen completed same-page Main/unique-Local C.2 or repair an
-external decoder. This is the existing authored-order gap, not a new variant queue.
+Current package: p9a-author-enhanced AE2 resource-order qualification.
+Next executable action: qualify the existing Main/Active colour-order witness
+when the Active definition lives in a selected POP/GPOP resource, using the
+existing complete factory, original source/native correspondence and C.2/B.3
+expectations. Establish the exact missing transmission authority or a demonstrated
+native defect before correction. Do not infer cross-page chronology from resource
+storage order, reopen completed Local repetition or repair an external decoder.
+
+AE3 distinct-root Local repetition is completed: a real complete-factory red at
+Main3 is corrected by binding both instances to one original native definition.
+Original roots1/5, FG3/4 Hamming words, original/physical FG4 and all base packets
+are retained. Explicit evidence compares shared words equally; it does not rank
+instances. Wrong aliases and ambiguous nested roots refuse; default/resource
+uncertainties remain.1753 affected teletext regressions and29 focused controls
+(including two pinned independent1.5/2.5 cases) pass; three wrong colour goldens
+fail. Canonical provider-scan/identity.json authored_repeated_order_followup owns
+receipts and the bounded scope. AE2 and non-Local/ambiguous AE3 remain with the
+same owner; no new editor/stream/client/platform acceptance is claimed.
 
 A2 supported resource-file/current-draft admin actions are completed within the
 joined boundary. Real multipart Router probes carry the closed EE1 and complete

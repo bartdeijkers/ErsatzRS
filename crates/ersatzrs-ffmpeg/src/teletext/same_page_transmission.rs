@@ -23,15 +23,17 @@ pub(in crate::teletext) fn eligible_events(trace: &TeletextSpatialTrace) -> Vec<
     }
     let mut counts = BTreeMap::new();
     for call in trace.invocations() {
-        *counts.entry(call.target()).or_insert(0_usize) += 1;
+        if let TeletextSpatialRootSource::Local { command } = call.root_source() {
+            *counts.entry((call.target(), command)).or_insert(0_usize) += 1;
+        }
     }
     trace
         .events()
         .iter()
         .map(|event| {
-            if !matches!(event.root_source(), TeletextSpatialRootSource::Local { .. }) {
+            let TeletextSpatialRootSource::Local { command } = event.root_source() else {
                 return false;
-            }
+            };
             match (event.source().object, event.invocation()) {
                 (None, None) => true,
                 (Some(target), Some(id)) => {
@@ -42,7 +44,7 @@ pub(in crate::teletext) fn eligible_events(trace: &TeletextSpatialTrace) -> Vec<
                                 && call.target() == target
                                 && call.root_source() == event.root_source()
                         })
-                        && counts.get(&target) == Some(&1)
+                        && counts.get(&(target, command)) == Some(&1)
                 }
                 _ => false,
             }

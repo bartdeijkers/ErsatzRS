@@ -165,14 +165,34 @@ fn same_page_transmission_rejects_corrupt_missing_duplicate_and_inconsistent_coo
 }
 
 #[test]
-fn same_page_transmission_repeated_targets_and_resource_coordinates_remain_ineligible() {
+fn same_page_transmission_repeated_targets_share_only_exact_definition_words() {
     let repeated = trace(local(65534), true);
     let ordinary = positions(&repeated);
+    let page = page_positions(&ordinary);
+    let exact = TeletextAttributeTransmissionEvidence::new_with_same_page_order(
+        &repeated, &ordinary, &page, 32,
+    )
+    .unwrap();
+    for ordinal in [2, 5] {
+        assert_eq!(
+            exact.compare(attribute(&repeated, ordinal), attribute(&repeated, 0)),
+            Some(Ordering::Greater)
+        );
+    }
+    assert_eq!(
+        exact.compare(attribute(&repeated, 2), attribute(&repeated, 5)),
+        Some(Ordering::Equal),
+        "one physical definition does not establish an instance chronology"
+    );
+    let mut relocated_repeat = page;
+    for position in &mut relocated_repeat[3..] {
+        position.word += 20;
+    }
     assert!(
         TeletextAttributeTransmissionEvidence::new_with_same_page_order(
             &repeated,
             &ordinary,
-            &page_positions(&ordinary),
+            &relocated_repeat,
             32
         )
         .is_err()
@@ -182,6 +202,62 @@ fn same_page_transmission_repeated_targets_and_resource_coordinates_remain_ineli
         legacy.compare(attribute(&repeated, 2), attribute(&repeated, 5)),
         None
     );
+}
+
+#[test]
+fn same_page_transmission_nested_repeats_have_no_ambiguous_root_authority() {
+    let target = local(65534);
+    let outer = local(65533);
+    let mut definitions = vec![definition(
+        target,
+        TeletextObjectType::Passive,
+        vec![foreground(0, 3), foreground(0, 4)],
+    )];
+    definitions.push(definition(
+        outer,
+        TeletextObjectType::Active,
+        vec![
+            invoke(target, TeletextObjectType::Passive, None),
+            invoke(target, TeletextObjectType::Passive, None),
+        ],
+    ));
+    let catalog = TeletextEnhancementObjectCatalog::new(
+        definitions,
+        TeletextObjectCatalogBudget {
+            max_objects: 4,
+            max_commands: 32,
+        },
+    )
+    .unwrap();
+    let trace = resolve_teletext_spatial_program(
+        owner(),
+        &TeletextEnhancementProgram::new(vec![
+            foreground(8, 1),
+            invoke(outer, TeletextObjectType::Active, None),
+        ])
+        .unwrap(),
+        &catalog,
+        TeletextSpatialTraceBudget {
+            max_events: 32,
+            max_invocations: 4,
+        },
+    )
+    .unwrap();
+    let ordinary = positions(&trace);
+    assert!(TeletextAttributeTransmissionEvidence::new(&trace, &ordinary, 32).is_ok());
+    assert!(
+        TeletextAttributeTransmissionEvidence::new_with_same_page_order(
+            &trace,
+            &ordinary,
+            &page_positions(&ordinary),
+            32
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn same_page_transmission_resource_coordinates_remain_ineligible() {
     let resource = TeletextResourceIdentity::new(
         TeletextResourceKind::Pop,
         TeletextRawDataPageNumber::new(2, 0xa0).unwrap(),

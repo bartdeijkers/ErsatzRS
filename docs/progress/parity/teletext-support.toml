@@ -8,9 +8,9 @@ ADR0123: neither1/1.5 nor2.5 accepted; P9A-04 owns L15/F/V/X.
 EB1/EB2/EE1..3/A1 and supported A2 closed.
 F2 metadata/zones/version and scoped F1 Main/Base-prefix, position undo,
 charset, V30/V31 DRCS attachment/undo, created banks, leading AP/calls,
-Public↔Global and steady-Flash undo are closed. F3 same-page C2 and steady
-mixed-tail headers are closed in scope; P9A-04 owns remaining contexts/proof.
-Scoped F5/provider, SO4/SO5 and ADR0127 retained inputs remain closed;
+Public↔Global and steady-Flash undo are closed. F3 same-page C2, distinct-root Local repetition and steady mixed-tail headers
+are closed in scope; P9A-04 owns remaining proof.
+Scoped F5/provider, SO4/SO5 and ADR0127 inputs stay closed;
 895af814/e87fde98/6137ac30 keep their scopes. SI1..4 inventory is complete.
 SO4's2164/2143 correction is closed on Linux Next.6/software.
 Runtime gates P9A-03; output/adoption retain their owners.

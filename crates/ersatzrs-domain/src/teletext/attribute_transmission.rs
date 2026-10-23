@@ -105,11 +105,14 @@ impl TeletextAttributeTransmissionEvidence {
     /// Add actual absolute words from one explicit Local page's native packing.
     /// Ordinary positions retain their emitter-relative meaning. Every page
     /// entry must also be an ordinary witnessed event, with an exact Local root,
-    /// owner and unambiguous instance. The native producer must authenticate
+    /// owner and unambiguous root. Repeated Local instances share only their
+    /// exact original definition words, never an inferred instance chronology.
+    /// The native producer must authenticate
     /// these coordinates; this constructor does not authenticate packet bytes.
     /// # Errors
     /// Rejects oversized combined storage, foreign/default/resource sources,
-    /// repeated object instances, missing ordinary witnesses and duplicate words.
+    /// ambiguous roots, missing ordinary witnesses, aliased definition origins
+    /// and words attributed to different original commands.
     pub fn new_with_same_page_order(
         original: &TeletextSpatialTrace,
         positions: &[TeletextAttributeTransmissionPosition],
@@ -130,7 +133,7 @@ impl TeletextAttributeTransmissionEvidence {
         let eligible = same_page_events(original);
         let mut origins = BTreeMap::new();
         let mut words = vec![None; original.events().len()];
-        let mut used = BTreeSet::new();
+        let mut used = BTreeMap::new();
         for position in page_positions {
             let ordinal = position.event_ordinal;
             let event = original.events().get(ordinal);
@@ -140,7 +143,9 @@ impl TeletextAttributeTransmissionEvidence {
                 || !eligible[ordinal]
                 || !same_origin(position, result.words[ordinal], &mut origins)
                 || words[ordinal].replace(position.word).is_some()
-                || !used.insert(position.word)
+                || used
+                    .insert(position.word, position.source)
+                    .is_some_and(|previous| previous != position.source)
             {
                 return Err(TeletextAttributeTransmissionError::Correspondence { event: ordinal });
             }
@@ -241,12 +246,16 @@ fn same_page_storage(
             original
                 .invocations()
                 .len()
-                .checked_mul(std::mem::size_of::<(super::TeletextObjectIdentity, usize)>())
+                .checked_mul(std::mem::size_of::<(
+                    super::TeletextObjectIdentity,
+                    usize,
+                    usize,
+                )>())
                 .and_then(|other| bytes.checked_add(other))
         })
         .and_then(|bytes| {
             page_count
-                .checked_mul(std::mem::size_of::<(usize, usize)>())
+                .checked_mul(std::mem::size_of::<(usize, TeletextEnhancementSource)>())
                 .and_then(|other| bytes.checked_add(other))
         })
 }
@@ -260,15 +269,17 @@ fn same_page_events(original: &TeletextSpatialTrace) -> Vec<bool> {
     }
     let mut counts = BTreeMap::new();
     for call in original.invocations() {
-        *counts.entry(call.target()).or_insert(0_usize) += 1;
+        if let TeletextSpatialRootSource::Local { command } = call.root_source() {
+            *counts.entry((call.target(), command)).or_insert(0_usize) += 1;
+        }
     }
     original
         .events()
         .iter()
         .map(|event| {
-            if !matches!(event.root_source(), TeletextSpatialRootSource::Local { .. }) {
+            let TeletextSpatialRootSource::Local { command } = event.root_source() else {
                 return false;
-            }
+            };
             match (event.source().object, event.invocation()) {
                 (None, None) => true,
                 (Some(target), Some(id)) => {
@@ -282,7 +293,7 @@ fn same_page_events(original: &TeletextSpatialTrace) -> Vec<bool> {
                                     && invocation.target() == target
                                     && invocation.root_source() == event.root_source()
                             })
-                        && counts.get(&target) == Some(&1)
+                        && counts.get(&(target, command)) == Some(&1)
                 }
                 _ => false,
             }
@@ -293,16 +304,16 @@ fn same_page_events(original: &TeletextSpatialTrace) -> Vec<bool> {
 fn same_origin(
     position: &TeletextAttributeTransmissionPosition,
     ordinary: Option<usize>,
-    origins: &mut BTreeMap<usize, usize>,
+    origins: &mut BTreeMap<super::TeletextObjectIdentity, usize>,
 ) -> bool {
     let Some(origin) = ordinary.and_then(|word| position.word.checked_sub(word)) else {
         return false;
     };
-    let Some(invocation) = position.invocation else {
+    let Some(target) = position.source.object else {
         return origin == 0;
     };
     origins
-        .insert(invocation.get(), origin)
+        .insert(target, origin)
         .is_none_or(|previous| previous == origin)
 }
 
