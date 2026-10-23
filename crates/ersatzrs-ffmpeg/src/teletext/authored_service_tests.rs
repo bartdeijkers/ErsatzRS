@@ -711,3 +711,6 @@ mod successive_ancestry;
 
 #[path = "authored_service_tests/adaptive_nonorigin.rs"]
 mod adaptive_nonorigin;
+
+#[path = "authored_service_tests/size_conformance.rs"]
+mod size_conformance;
