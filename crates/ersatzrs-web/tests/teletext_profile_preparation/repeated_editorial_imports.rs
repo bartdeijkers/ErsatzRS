@@ -340,7 +340,7 @@ async fn replace_and_undo(
     undone
 }
 
-fn two_subpages(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn two_subpages(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = authoring_metadata::response(theme, page, subcode);
     let second = authoring_metadata::response(theme, page, subcode + 1);
     for key in ["pages", "page_enhancements", "mot_selections"] {
@@ -487,7 +487,7 @@ async fn version_one_repeated_subset_import_keeps_an_earlier_owner_and_authentic
     assert_unchanged_latest(&fixture, &latest, 3).await;
 }
 
-fn two_subpage_policy(
+pub(super) fn two_subpage_policy(
 ) -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy {
     let mut policy = channel_documents::policy();
     policy.entry = Some(channel_documents::address(124, 32));

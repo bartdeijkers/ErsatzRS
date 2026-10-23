@@ -5,6 +5,9 @@ use super::local_object_glyphs::actual_editor as qtm;
 use super::*;
 use serde_json::{json, Value};
 
+#[path = "standalone_base/complete_set.rs"]
+mod complete_set;
+
 #[path = "standalone_base/national_editor.rs"]
 mod national_editor;
 

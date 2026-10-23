@@ -219,6 +219,25 @@ pub(in super::super) fn inputs_for_layout(
     layout: [u8; 3],
     edit: impl FnOnce() -> Value,
 ) -> Value {
+    inputs_for_address(
+        directory,
+        name,
+        flow,
+        layout,
+        channel_documents::address(124, 32),
+        edit,
+    )
+}
+
+/// Select one authenticated document from the same complete exported set.
+pub(in super::super) fn inputs_for_address(
+    directory: &Path,
+    name: &str,
+    flow: &Flow,
+    layout: [u8; 3],
+    owner: ersatzrs_domain::TeletextPageAddress,
+    edit: impl FnOnce() -> Value,
+) -> Value {
     let [left, right, target] = layout;
     let total_columns = 40 + usize::from(left) + usize::from(right);
     assert!(
@@ -238,7 +257,7 @@ pub(in super::super) fn inputs_for_layout(
         .project
         .pages
         .iter()
-        .find(|page| page.page.page == 124 && page.page.subcode == 32)
+        .find(|page| page.page.page == owner.page.get() && page.page.subcode == owner.subcode.get())
         .unwrap();
     let edit = edit();
     let consumer_visual_columns = edit.get("consumer_visual_columns").map_or_else(

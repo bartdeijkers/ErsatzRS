@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-editor-base — EB2 complete base-set editor flow'
+current_focus = 'p9a-editor-base — EB1 direct Arabic G0 editor qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,19 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-editor-base EB2 actual complete-base-set proof.
-Completed standards S1/S2/S3: original fixed conversions, full accepted feature
-inventory and Table4/A7/A8/C3, plus exact editor actions/owners, are classified.
-Canonical provider-scan/identity.json case_reconciliation_followup.standards_s2_s3
-retains source/receipt pins and all original p9a-01 clause-owner links. AB7 and
-AE5 inventory traces are closed; actual conformance remains with author-base/
-enhanced. EE2 positions share EE1/EE3, without a separate variant queue.
-Next executable action: qualify the existing plain two-subpage base fixture and
-complete native export/import/controller path, then one bundled pinned QTM save
-of the supported set with exact original subcodes, page/navigation and sidecar.
-Stop at shared preview, unpublished-concept fence, explicit publication and cold
-reopen with unchanged package/other channel. Reuse existing per-document editor,
-subset/cumulative union, publication and unrelated stream/client/F6 evidence.
+Current package: p9a-editor-base EB1 direct ArabicG0 actual-editor proof.
+Next executable action: qualify the already named direct ArabicG0 source/context
+against the pinned QTM path, distinct from completed generatedG2 edits in47/57.
+Use one bundled eligible save/import/preview/publication/reopen action with exact
+identities and located refusal; stop there. No extra character variant queue.
+
+EB2 complete plain-base-set interchange is completed: actual headed pinned
+QTM1.0 saves124/32,124/33,125/32, followed by one complete-set concept,
+shared preview, separate explicit publication, exact reexport and cold reopen.
+Raw subcodes/navigation/sidecar, package and other channel remain unchanged.
+Native regression, actual editor run, strict focused lint and formatting pass;
+three saved-window images were inspected. Canonical provider-scan/identity.json
+editor_base_set_followup owns pins, receipts and test-only future-boxing reuse.
+No production/runtime change or new stream/client/platform claim.
+
+Completed standards S1/S2/S3 and AB7/AE5 inventory trace stay closed in
+case_reconciliation_followup.standards_s2_s3; actual conformance remains with
+author-base/enhanced. EE2 shares EE1/EE3 without a separate variant queue.
 
 SO2 owned observed-page selection/consumer binding is completed within Linux
 x86_64/software FFmpeg9: one producer, opportunistic prefix at most64KiB,
