@@ -1,0 +1,451 @@
+--- a/crates/ffpipeline/src/input.rs
++++ b/crates/ffpipeline/src/input.rs
+@@ -220,6 +220,8 @@
+ 
+ #[derive(Clone, Debug, Default)]
+ pub struct HttpInputOptions {
++    /// Bounded initial media burst before a realtime consuming pass.
++    pub initial_burst: Option<Duration>,
+     pub headers: Vec<String>,
+     pub user_agent: Option<String>,
+     pub timeout_us: Option<u64>,
+@@ -261,6 +263,12 @@
+ impl HttpInputSource {
+     fn base_args(&self) -> ArgVec {
+         let mut args: ArgVec = Vec::new();
++        if let Some(burst) = self.options.initial_burst {
++            args.extend(args![
++                "-readrate_initial_burst",
++                burst.as_secs_f64().to_string()
++            ]);
++        }
+ 
+         if self.options.reconnect {
+             args.extend(args![
+@@ -676,3 +684,25 @@
+ }
+ 
+ pub type WatermarkLocation = GraphicsLocation;
++
++#[cfg(test)]
++mod single_use_pacing_tests {
++    use super::*;
++
++    #[test]
++    fn single_use_initial_burst_preserves_default_and_exact_input_argument_order() {
++        let mut source = HttpInputSource {
++            uri: "http://localhost/owned".into(),
++            options: Default::default(),
++        };
++        assert_eq!(
++            source.args_for_input().join(" "),
++            "-protocol_whitelist file,http,https,tcp,tls,crypto"
++        );
++        source.options.initial_burst = Some(Duration::from_secs(44));
++        assert_eq!(
++            source.args_for_input().join(" "),
++            "-readrate_initial_burst 44 -protocol_whitelist file,http,https,tcp,tls,crypto"
++        );
++    }
++}
+--- a/crates/ffpipeline/src/copy_decision.rs
++++ b/crates/ffpipeline/src/copy_decision.rs
+@@ -39,6 +39,8 @@
+     ContainerWithoutPts,
+     /// Copy drops video until a keyframe.
+     NoKeyframes,
++    /// No consuming probe is allowed and the retained prefix could not qualify the start.
++    InputStartUnverified,
+     /// Copy would drop video until the first keyframe and shorten the timeline. A transcode
+     /// holds the first picture.
+     StartsBetweenKeyframes,
+@@ -61,6 +63,9 @@
+             CopyBlocker::GeneratedSource => f.write_str("generated (lavfi) source"),
+             CopyBlocker::ContainerWithoutPts => f.write_str("avi container"),
+             CopyBlocker::NoKeyframes => f.write_str("no keyframes where playback starts"),
++            CopyBlocker::InputStartUnverified => {
++                f.write_str("single-use input start is unqualified")
++            }
+             CopyBlocker::StartsBetweenKeyframes => f.write_str("starts between keyframes"),
+             CopyBlocker::FrameRateMismatch { source, target } => {
+                 write!(f, "frame rate {source} is not {target}")
+--- a/crates/ersatztv-channel/src/channel_session.rs
++++ b/crates/ersatztv-channel/src/channel_session.rs
+@@ -10,7 +10,8 @@
+ use ersatztv_core::{READY_FILE_NAME, empty_folder};
+ use ersatztv_playout::playout::{
+     AudioHint, GraphicsLayerKind, PeriodicClock, PlayoutItem, PlayoutItemSource, PlayoutItemTracks,
+-    ProbeHint, SubtitleHint, TrackSelection, VideoHint, WatermarkLocation, WatermarkTiming,
++    ProbeHint, SingleUseInputHint, SubtitleHint, TrackSelection, VideoHint, WatermarkLocation,
++    WatermarkTiming,
+ };
+ use ersatztv_playout::template::expand_template;
+ use ffpipeline::copy_decision::{CopyBlocker, CopyDecision};
+@@ -543,13 +544,13 @@
+         let subtitle_source_is_video_source =
+             subtitle_source.as_ref().is_some_and(|s| s == &video_source);
+ 
+-        let audio_input_source = self.playout_source_to_input_source(audio_source.clone())?;
+-        let video_input_source = if audio_source_is_video_source {
++        let mut audio_input_source = self.playout_source_to_input_source(audio_source.clone())?;
++        let mut video_input_source = if audio_source_is_video_source {
+             audio_input_source.clone()
+         } else {
+             self.playout_source_to_input_source(video_source.clone())?
+         };
+-        let subtitle_input_source = if subtitle_source_is_video_source {
++        let mut subtitle_input_source = if subtitle_source_is_video_source {
+             Some(video_input_source.clone())
+         } else {
+             subtitle_source
+@@ -630,6 +631,25 @@
+         // consider an item to be live if any of its sources are live;
+         // live sources can never seek or work ahead
+         let is_live = source_is_live(&video_source) || source_is_live(&audio_source);
++        let single_use_video = source_single_use(&video_source)?;
++        let single_use_audio = source_single_use(&audio_source)?;
++        // A consume-once owner cannot be reopened for a work-ahead chunk.
++        // This changes neither finite/live classification nor the selected profile.
++        let finite_single_use =
++            !is_live && (single_use_video.is_some() || single_use_audio.is_some());
++        if finite_single_use && !realtime {
++            // Keep the ordinary work-ahead startup burst, then pace the same
++            // process instead of ending a chunk and reopening its one-use input.
++            for input in [&mut audio_input_source, &mut video_input_source] {
++                if let InputSource::Http(http) = input {
++                    http.options.initial_burst = Some(WORK_AHEAD_LIMIT);
++                }
++            }
++            if subtitle_source_is_video_source {
++                subtitle_input_source = Some(video_input_source.clone());
++            }
++        }
++        let realtime = realtime || finite_single_use;
+ 
+         let (audio, video) = stream_output_settings(&self.channel_config.normalization);
+         let output_settings = OutputSettings {
+@@ -773,6 +793,7 @@
+                 start_at_zero,
+                 realtime,
+                 &video_source,
++                single_use_video,
+             )
+             .await
+         } else {
+@@ -987,6 +1008,7 @@
+         start_at_zero: bool,
+         realtime: bool,
+         video_source: &PlayoutItemSource,
++        single_use: Option<&SingleUseInputHint>,
+     ) -> Option<(OffsetDateTime, bool)> {
+         let resume = self.copy_resume.take().filter(|r| {
+             !start_at_zero && r.item_id == current_item.id && r.at == self.transcoded_until
+@@ -1022,14 +1044,18 @@
+             input_settings.video_input.probe_result.path.clone(),
+             video_index,
+         );
+-        if target.is_zero()
+-            && resume.is_none()
+-            && let Some(blocker) =
+-                input_start_blocker(&mut self.input_starts, &locator, key.clone(), current_item)
+-                    .await
+-        {
+-            input_settings.video_copy_blockers.push(blocker);
+-            return None;
++        if target.is_zero() && resume.is_none() {
++            let blocker = match single_use {
++                Some(hint) => single_use_copy_blocker(hint, video_index),
++                None => {
++                    input_start_blocker(&mut self.input_starts, &locator, key.clone(), current_item)
++                        .await
++                }
++            };
++            if let Some(blocker) = blocker {
++                input_settings.video_copy_blockers.push(blocker);
++                return None;
++            }
+         }
+ 
+         let mut request = CopySeekRequest {
+@@ -1242,6 +1268,7 @@
+                 Ok(InputSource::Http(HttpInputSource {
+                     uri: expanded_uri,
+                     options: HttpInputOptions {
++                        initial_burst: None,
+                         headers: expanded_headers,
+                         user_agent: expanded_ua,
+                         timeout_us,
+@@ -1305,15 +1332,12 @@
+ 
+         // live content never seeks. limit it to the remaining schedule interval
+         // so pipeline duration and graphics timing end at the same point.
+-        if is_live {
+-            return TimingResult {
+-                in_point: Duration::ZERO,
+-                out_point: Duration::from_millis(
+-                    (item_finish - effective_now).whole_milliseconds().max(0) as u64,
+-                ),
+-                finish: item_finish,
+-                is_complete: true,
+-            };
++        if is_live
++            || source
++                .probe_hint()
++                .is_some_and(|hint| hint.single_use.is_some())
++        {
++            return streaming_source_timing(current_item, effective_now);
+         }
+ 
+         let progress_ms = if start_at_zero {
+@@ -1494,6 +1518,10 @@
+         header_map.insert(
+             HeaderName::from_static("x-ersatzrs-next-features"),
+             HeaderValue::from_static("finite-video-cut-v1"),
++        );
++        header_map.insert(
++            HeaderName::from_static("x-ersatzrs-next-single-use"),
++            HeaderValue::from_static("1"),
+         );
+ 
+         let policy = RetryPolicy::new(*timeout_us, *retry_budget_ms, *retry_backoff_ms);
+@@ -1796,6 +1824,7 @@
+                 source: Some(PlayoutItemSource::Lavfi {
+                     params: String::from("anullsrc=channel_layout=stereo:sample_rate=48000"),
+                     probe_hint: Some(ProbeHint {
++                        single_use: None,
+                         video: Vec::new(),
+                         audio: vec![AudioHint {
+                             stream_index: 0,
+@@ -1816,6 +1845,7 @@
+                         size.width, size.height
+                     ),
+                     probe_hint: Some(ProbeHint {
++                        single_use: None,
+                         video: vec![VideoHint {
+                             frame_rate: Some(frame_rate),
+                             ..VideoHint::new(
+@@ -1847,6 +1877,7 @@
+             in_point_ms: None,
+             out_point_ms: None,
+             probe_hint: Some(ProbeHint {
++                single_use: None,
+                 video: Vec::new(),
+                 audio: Vec::new(),
+                 subtitle: vec![SubtitleHint {
+@@ -2022,6 +2053,64 @@
+     }
+ }
+ 
++fn streaming_source_timing(item: &PlayoutItem, now: OffsetDateTime) -> TimingResult {
++    TimingResult {
++        in_point: Duration::ZERO,
++        out_point: Duration::from_millis((item.finish - now).whole_milliseconds().max(0) as u64),
++        finish: item.finish,
++        is_complete: true,
++    }
++}
++
++fn source_single_use(
++    source: &PlayoutItemSource,
++) -> Result<Option<&SingleUseInputHint>, ChannelError> {
++    let Some(hint) = source.probe_hint() else {
++        return Ok(None);
++    };
++    let Some(single_use) = hint.single_use.as_ref() else {
++        return Ok(None);
++    };
++    if single_use.version != 1
++        || !matches!(
++            source,
++            PlayoutItemSource::Http {
++                in_point_ms: None | Some(0),
++                ..
++            }
++        )
++        || single_use.first_video_packets.iter().any(|packet| {
++            hint.video
++                .iter()
++                .filter(|v| v.stream_index == packet.stream_index)
++                .count()
++                != 1
++                || single_use
++                    .first_video_packets
++                    .iter()
++                    .filter(|other| other.stream_index == packet.stream_index)
++                    .count()
++                    != 1
++        })
++    {
++        return Err(ChannelError::ProbeHintFailure);
++    }
++    Ok(Some(single_use))
++}
++
++fn single_use_copy_blocker(hint: &SingleUseInputHint, video_index: u32) -> Option<CopyBlocker> {
++    match hint
++        .first_video_packets
++        .iter()
++        .find(|p| p.stream_index == video_index)
++        .map(|p| p.is_keyframe)
++    {
++        Some(true) => None,
++        Some(false) => Some(CopyBlocker::StartsBetweenKeyframes),
++        None => Some(CopyBlocker::InputStartUnverified),
++    }
++}
++
+ fn source_is_live(source: &PlayoutItemSource) -> bool {
+     matches!(
+         source,
+@@ -2145,6 +2234,100 @@
+     use ffpipeline::output_format::OutputFormat;
+     use serde_json::json;
+     use time::macros::datetime;
++
++    fn single_use_fixture() -> PlayoutItemSource {
++        serde_json::from_value(json!({
++            "source_type":"http", "uri":"http://127.0.0.1:1/never-opened",
++            "is_live":false,"probe_hint":{
++                "video":[{"codec":"h264","width":320,"height":180,"pix_fmt":"yuv420p","stream_index":0}],
++                "audio":[],"subtitle":[],"format_name":"mpegts",
++                "single_use":{"version":1,"first_video_packets":[{"stream_index":0,"is_keyframe":true}]}
++            }
++        })).unwrap()
++    }
++
++    #[test]
++    fn single_use_start_uses_only_actual_selected_video_qualification() {
++        let mut source = single_use_fixture();
++        assert!(!source_is_live(&source), "finite transport remains finite");
++        let hint = source_single_use(&source).unwrap().unwrap();
++        assert_eq!(single_use_copy_blocker(hint, 0), None);
++        assert_eq!(
++            single_use_copy_blocker(hint, 3),
++            Some(CopyBlocker::InputStartUnverified)
++        );
++        let PlayoutItemSource::Http {
++            probe_hint: Some(hint),
++            ..
++        } = &mut source
++        else {
++            panic!()
++        };
++        hint.single_use.as_mut().unwrap().first_video_packets[0].is_keyframe = false;
++        assert_eq!(
++            single_use_copy_blocker(source_single_use(&source).unwrap().unwrap(), 0),
++            Some(CopyBlocker::StartsBetweenKeyframes)
++        );
++    }
++
++    #[test]
++    fn single_use_start_rejects_wrong_version_seek_and_ambiguous_identity() {
++        for case in 0..5 {
++            let mut source = single_use_fixture();
++            let PlayoutItemSource::Http {
++                probe_hint: Some(hint),
++                in_point_ms,
++                ..
++            } = &mut source
++            else {
++                panic!()
++            };
++            match case {
++                0 => hint.single_use.as_mut().unwrap().version = 2,
++                1 => *in_point_ms = Some(1),
++                2 => {
++                    hint.single_use.as_mut().unwrap().first_video_packets.push(
++                        ersatztv_playout::playout::SingleUseVideoStart {
++                            stream_index: 7,
++                            is_keyframe: true,
++                        },
++                    );
++                }
++                3 => hint.video.push(hint.video[0].clone()),
++                4 => {
++                    let duplicate =
++                        hint.single_use.as_ref().unwrap().first_video_packets[0].clone();
++                    hint.single_use
++                        .as_mut()
++                        .unwrap()
++                        .first_video_packets
++                        .push(duplicate);
++                }
++                _ => unreachable!(),
++            }
++            assert!(source_single_use(&source).is_err(), "case {case}");
++        }
++        let source = single_use_fixture();
++        let mut value = serde_json::to_value(source).unwrap();
++        value["probe_hint"]["single_use"]["unknown"] = json!(true);
++        assert!(serde_json::from_value::<PlayoutItemSource>(value).is_err());
++    }
++
++    #[test]
++    fn single_use_finite_interval_is_not_reopened_at_work_ahead_limit() {
++        let start = datetime!(2026-01-01 12:00 UTC);
++        let mut item = source_cut_fixture().0;
++        item.start = start;
++        item.finish = start + time::Duration::seconds(80);
++        let timing = streaming_source_timing(&item, start + time::Duration::seconds(3));
++        assert_eq!(timing.in_point, Duration::ZERO);
++        assert_eq!(timing.out_point, Duration::from_secs(77));
++        assert!(timing.is_complete);
++        assert_eq!(timing.finish, item.finish);
++        let source = single_use_fixture();
++        assert!(!source_is_live(&source));
++        assert!(source_single_use(&source).unwrap().is_some());
++    }
+ 
+     fn source_cut_fixture() -> (PlayoutItem, PlayoutItemSource) {
+         let start = datetime!(2026-01-01 12:00 UTC);
+--- a/crates/ersatztv-playout/src/playout.rs
++++ b/crates/ersatztv-playout/src/playout.rs
+@@ -303,6 +303,8 @@
+ 
+ #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+ pub struct ProbeHint {
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub single_use: Option<SingleUseInputHint>,
+     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub video: Vec<VideoHint>,
+     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+@@ -311,6 +313,21 @@
+     pub subtitle: Vec<SubtitleHint>,
+     pub format_name: Option<String>,
+     pub duration_ms: Option<u64>,
++}
++
++/// Required only after single-use-input-v1 negotiation with the callback host.
++#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
++#[serde(deny_unknown_fields)]
++pub struct SingleUseInputHint {
++    pub version: u8,
++    pub first_video_packets: Vec<SingleUseVideoStart>,
++}
++
++#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
++#[serde(deny_unknown_fields)]
++pub struct SingleUseVideoStart {
++    pub stream_index: u32,
++    pub is_keyframe: bool,
+ }
+ 
+ #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+--- a/crates/ersatztv-playout-generator/src/generate.rs
++++ b/crates/ersatztv-playout-generator/src/generate.rs
+@@ -250,6 +250,7 @@
+                     in_point_ms: *in_point_ms,
+                     out_point_ms: *out_point_ms,
+                     probe_hint: Some(ProbeHint {
++                        single_use: None,
+                         audio,
+                         video,
+                         subtitle,
+@@ -268,6 +269,7 @@
+                                 "anullsrc=channel_layout=stereo:sample_rate=48000",
+                             ),
+                             probe_hint: Some(ProbeHint {
++                                single_use: None,
+                                 video: Vec::new(),
+                                 audio: vec![AudioHint {
+                                     stream_index: 0,

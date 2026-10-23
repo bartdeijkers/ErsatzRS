@@ -998,6 +998,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Prevent a qualifying Next candidate from consuming a one-shot producer during
+  Copy keyframe preflight. Use facts from its already-owned prefix with explicit
+  runtime negotiation, preserve one consuming pass and joined cleanup, and retain
+  source-bound captions through the existing published prepared-media workflow.
+  Managed-runtime adoption remains separately gated.
+
 - Preserve every complete source-video frame before a selected finite outpoint
   in compatible Next caption-Burn candidates, including the previously truncated
   seek2164/out9200 interval. The source-qualified cutoff precedes framerate

@@ -387,11 +387,31 @@ pub enum Source {
 /// Official Next metadata for an input that must not be consumed by probing.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ProbeHint {
+    /// Negotiated consume-once transport, not whole-source readiness or duration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub single_use: Option<SingleUseInputHint>,
     pub video: Vec<VideoProbeHint>,
     pub audio: Vec<AudioProbeHint>,
     pub subtitle: Vec<SubtitleProbeHint>,
     pub format_name: Option<String>,
     pub duration_ms: Option<u64>,
+}
+
+/// Fresh first-packet observations for the very same owned producer transfer.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SingleUseInputHint {
+    pub version: u8,
+    /// Missing video indexes remain unqualified; false means a leading non-keyframe.
+    pub first_video_packets: Vec<SingleUseVideoStart>,
+}
+
+/// One observed first video packet, indexed in the fresh consuming stream.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SingleUseVideoStart {
+    pub stream_index: u32,
+    pub is_keyframe: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

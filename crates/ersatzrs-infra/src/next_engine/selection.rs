@@ -734,6 +734,7 @@ pub(crate) fn silent_audio(duration_ms: u64) -> wire::Track {
         source: Some(wire::Source::Lavfi {
             params: "anullsrc=channel_layout=stereo:sample_rate=48000".to_owned(),
             probe_hint: Some(wire::ProbeHint {
+                single_use: None,
                 video: Vec::new(),
                 subtitle: Vec::new(),
                 format_name: Some("mpegts".to_owned()),

@@ -367,9 +367,9 @@ impl NextHost {
             .await;
         }
         if let Some(context) = snapshot.producer_remote.take() {
-            return Box::pin(
-                self.resolve_producer(snapshot, context, request, instance, audio, now, deadline),
-            )
+            return Box::pin(self.resolve_producer(
+                snapshot, context, request, instance, audio, now, deadline, false,
+            ))
             .await;
         }
         Box::pin(self.prepare_fallback_tracks(

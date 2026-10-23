@@ -34,6 +34,7 @@ pub(super) fn generated_video(
         return Err(invalid());
     }
     Ok(ProbeHint {
+        single_use: None,
         video: vec![VideoProbeHint {
             source_frame_cut: None,
             codec: codec.to_owned(),
@@ -96,6 +97,7 @@ pub(crate) async fn persisted(
     let image: Option<i64> = version.try_get("ImageId").repository()?;
     let scan_kind: i64 = version.try_get("VideoScanKind").repository()?;
     let mut hint = ProbeHint {
+        single_use: None,
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),
@@ -250,6 +252,7 @@ pub fn retained(
         return Err(ProbeHintError);
     }
     let mut hint = ProbeHint {
+        single_use: None,
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),
@@ -299,6 +302,7 @@ pub fn producer(probe: &FfprobeMediaVersion) -> Result<ProbeHint, ProbeHintError
         .filter(|name| !name.trim().is_empty())
         .ok_or(ProbeHintError)?;
     let mut hint = ProbeHint {
+        single_use: None,
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),

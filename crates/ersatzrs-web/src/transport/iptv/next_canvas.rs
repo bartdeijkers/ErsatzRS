@@ -155,6 +155,7 @@ mod tests {
             .canvas_source(
                 &binding,
                 ProbeHint {
+                    single_use: None,
                     video: Vec::new(),
                     audio: Vec::new(),
                     subtitle: Vec::new(),

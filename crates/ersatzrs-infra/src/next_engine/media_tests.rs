@@ -22,6 +22,7 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
         expires: start + chrono::TimeDelta::minutes(6),
     };
     let hint = ProbeHint {
+        single_use: None,
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),
@@ -159,6 +160,7 @@ fn prepared_source_binds_single_use_session_transport_without_seeking() {
     let instance = Uuid::new_v4();
     let transfer = Uuid::new_v4();
     let hint = super::super::protocol::ProbeHint {
+        single_use: None,
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),

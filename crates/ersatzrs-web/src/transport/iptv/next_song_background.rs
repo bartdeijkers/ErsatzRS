@@ -115,6 +115,7 @@ mod tests {
 
     fn hint() -> ProbeHint {
         ProbeHint {
+            single_use: None,
             video: Vec::new(),
             audio: Vec::new(),
             subtitle: Vec::new(),

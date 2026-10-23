@@ -64,8 +64,8 @@ id          = 'teletext-next-one-shot-copy-preflight'
 adr         = '0100'
 description = 'Preserve ordinary one-shot playback when Next video-copy input-start qualification precedes its actual consuming encoder. Keep one provider acquisition, truthful liveness, the configured profile, exact source/AV/caption clocks and joined cleanup; do not permit single-use grant replay.'
 discovered  = '2026-10-23'
-evidence    = 'p9a-source-output SO3 owns the actual public-route negative: input_start dry-run GET200 consumes the prepared source, then the playback GET410 produces fallback rejected by the strict Dutch-audio oracle. Canonical provider-scan/identity.json source_output_so3_followup retains original candidate, source/runtime identities and copy-preflight-double-claim-negative receipts. Four finite/live caption-refusal route cases are independently closed; this debt concerns successful delivery and is not resolved by those refusals.'
-resolved    = false
+evidence    = 'p9a-source-output SO3 records the completed Linux/software unpublished.7 ownership correction: one producer/GET200, coded-video PTS-DTS and Dutch AAC identity, ordinary Off plus immutable published prepared Burn/Convert, exact Convert cues/outpoint, joined default-capacity cleanup and57 TSDuck checks. Typed negotiation/prefix guards,360 Next,15 host and11 route controls pass. Canonical provider-scan/identity.json source_output_so3_followup.copy_implementation_followup retains original double-claim and unqualified script-clock negatives. Scope is the verified candidate component; managed adoption/native RIDs remain owned by their existing milestones. Arbitrary seek-script clocks are not certified.'
+resolved    = true
 
 [[debt]]
 id          = 'teletext-editorial-resource-diagnostic-identity'

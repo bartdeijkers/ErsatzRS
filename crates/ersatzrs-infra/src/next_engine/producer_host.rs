@@ -1,5 +1,11 @@
 //! Session-owned ordinary installed producers; no independent probe or script fallback.
 use chrono::{DateTime, Utc};
+use std::collections::BTreeMap;
+type ProducerTiming = (
+    std::time::Duration,
+    RemoteStreamLiveness,
+    BTreeMap<u32, bool>,
+);
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::RemoteStreamLiveness;
 use tokio::{sync::oneshot, time::Instant};
@@ -33,6 +39,7 @@ impl NextHost {
         audio: Option<usize>,
         now: DateTime<Utc>,
         deadline: Instant,
+        single_use: bool,
     ) -> Result<protocol::PlayoutItem> {
         let (image, subtitle) =
             producer_subtitles(&before.projection, &context.media.path, now, deadline).await?;
@@ -48,15 +55,7 @@ impl NextHost {
             .get(&instance)
             .map(|context| context.transfers.clone())
             .ok_or_else(unavailable)?;
-        let binding = TransferBinding {
-            media_item_id: context.media.item.media_item_id,
-            playout_item_id: context.media.item.id,
-            media_version_id: context.media.media_version_id,
-            media_file_id: context.media.media_file_id,
-            publication: before.identity.descriptor.clone(),
-            start: before.projection.item.start,
-            finish: before.projection.item.finish,
-        };
+        let binding = producer_binding(&before, &context);
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
         let preparation = ProducerPreparation {
             pool: self.pool.clone(),
@@ -67,6 +66,7 @@ impl NextHost {
             max_height: context.max_height,
             seek,
             deadline: preparation_deadline,
+            single_use,
         };
         let (timing_tx, timing_rx) = oneshot::channel();
         let ready = Box::pin(transfers.prepare(
@@ -82,9 +82,15 @@ impl NextHost {
             id: Some(ready.id),
         };
         let result = async {
-            let (remaining_seek, liveness) = timing_rx.await.map_err(|_| unavailable())?;
-            let source =
-                self.producer_source(instance, ready.id, &ready.probe, liveness, remaining_seek)?;
+            let (remaining_seek, liveness, starts) = timing_rx.await.map_err(|_| unavailable())?;
+            let source = self.producer_source(
+                instance,
+                ready.id,
+                &ready.probe,
+                liveness,
+                remaining_seek,
+                single_use.then_some(starts),
+            )?;
             let subtitle = if let Some(selected) = image.as_ref() {
                 Some(producer_images::project(
                     selected,
@@ -162,8 +168,23 @@ impl NextHost {
         probe: &crate::ffprobe::FfprobeMediaVersion,
         liveness: RemoteStreamLiveness,
         remaining_seek: std::time::Duration,
+        starts: Option<BTreeMap<u32, bool>>,
     ) -> Result<protocol::Source> {
-        let hint = super::probe_hint::producer(probe).map_err(|_| unavailable())?;
+        let mut hint = super::probe_hint::producer(probe).map_err(|_| unavailable())?;
+        hint.single_use = starts
+            .filter(|_| !hint.video.is_empty())
+            .map(|first_video_packets| protocol::SingleUseInputHint {
+                version: 1,
+                first_video_packets: first_video_packets
+                    .into_iter()
+                    .map(
+                        |(stream_index, is_keyframe)| protocol::SingleUseVideoStart {
+                            stream_index,
+                            is_keyframe,
+                        },
+                    )
+                    .collect(),
+            });
         let mut source = self.media.prepared_source(
             instance,
             id,
@@ -178,6 +199,18 @@ impl NextHost {
                 Some(u64::try_from(remaining_seek.as_millis()).map_err(|_| unavailable())?);
         }
         Ok(source)
+    }
+}
+
+fn producer_binding(before: &Snapshot, context: &ProducerContext) -> TransferBinding {
+    TransferBinding {
+        media_item_id: context.media.item.media_item_id,
+        playout_item_id: context.media.item.id,
+        media_version_id: context.media.media_version_id,
+        media_file_id: context.media.media_file_id,
+        publication: before.identity.descriptor.clone(),
+        start: before.projection.item.start,
+        finish: before.projection.item.finish,
     }
 }
 
@@ -293,13 +326,14 @@ struct ProducerPreparation {
     max_height: Option<u32>,
     seek: std::time::Duration,
     deadline: Instant,
+    single_use: bool,
 }
 
 impl ProducerPreparation {
     async fn run(
         self,
         mut cancellation: oneshot::Receiver<()>,
-        timing: oneshot::Sender<(std::time::Duration, RemoteStreamLiveness)>,
+        timing: oneshot::Sender<ProducerTiming>,
     ) -> std::result::Result<PreparedTransferMedia, RemoteStreamError> {
         let runtime = crate::addons::AddonRuntimeContext {
             ffmpeg_path: Some(self.ffmpeg.clone()),
@@ -350,10 +384,17 @@ impl ProducerPreparation {
             result=&mut startup=>result?,
         };
         let extractor = FfprobeExtractor::new(self.ffprobe);
-        let probe = probe_owned(&extractor, &input, self.deadline, &mut cancellation).await;
+        let probe = probe_owned(
+            &extractor,
+            &input,
+            self.deadline,
+            &mut cancellation,
+            self.single_use,
+        )
+        .await;
         match probe {
-            Ok(probe) => {
-                let _ = timing.send((remaining, stream.liveness));
+            Ok((probe, starts)) => {
+                let _ = timing.send((remaining, stream.liveness, starts));
                 Ok(PreparedTransferMedia { input, probe })
             }
             Err(error) => {
@@ -369,10 +410,24 @@ async fn probe_owned(
     input: &PreparedRemoteStreamInput,
     deadline: Instant,
     cancellation: &mut oneshot::Receiver<()>,
-) -> std::result::Result<crate::ffprobe::FfprobeMediaVersion, RemoteStreamError> {
+    single_use: bool,
+) -> std::result::Result<
+    (crate::ffprobe::FfprobeMediaVersion, BTreeMap<u32, bool>),
+    RemoteStreamError,
+> {
     let (cancel, receiver) = oneshot::channel();
-    let operation =
-        extractor.extract_producer_prefix_cancellable(input.prefix(), deadline, receiver);
+    let operation = async {
+        if single_use {
+            extractor
+                .extract_producer_start_cancellable(input.prefix(), deadline, receiver)
+                .await
+        } else {
+            extractor
+                .extract_producer_prefix_cancellable(input.prefix(), deadline, receiver)
+                .await
+                .map(|probe| (probe, BTreeMap::new()))
+        }
+    };
     tokio::pin!(operation);
     tokio::select! {
         biased;

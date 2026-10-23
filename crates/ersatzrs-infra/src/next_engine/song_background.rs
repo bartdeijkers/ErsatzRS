@@ -61,6 +61,7 @@ impl SongProjection {
                 mode: channel.song_video_mode,
             },
             hint: protocol::ProbeHint {
+                single_use: None,
                 format_name: Some("png_pipe".into()),
                 duration_ms: Some(duration_ms),
                 audio: Vec::new(),
@@ -150,6 +151,7 @@ mod tests {
                 mode: ChannelSongVideoMode::Default,
             },
             hint: protocol::ProbeHint {
+                single_use: None,
                 video: Vec::new(),
                 audio: Vec::new(),
                 subtitle: Vec::new(),

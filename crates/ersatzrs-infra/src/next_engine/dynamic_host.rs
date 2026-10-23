@@ -16,6 +16,14 @@ pub enum SourceVideoCutSupport {
     Version1,
 }
 
+/// Explicit runtime features; these never grant source or publication authority.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SourceRuntimeSupport {
+    pub video_cut: SourceVideoCutSupport,
+    /// Version-one consume-once timing and first-packet contract.
+    pub single_use: bool,
+}
+
 /// Existing authenticated dynamic callback values, grouped without new authority.
 #[derive(Clone, Copy)]
 pub struct DynamicItemRequest<'a> {
@@ -177,10 +185,28 @@ impl NextHost {
         callback: DynamicItemRequest<'_>,
         video_cut: SourceVideoCutSupport,
     ) -> Result<protocol::PlayoutItem> {
+        self.resolve_dynamic_with_source_support(
+            callback,
+            SourceRuntimeSupport {
+                video_cut,
+                single_use: false,
+            },
+        )
+        .await
+    }
+
+    /// Resolve an authenticated callback with the explicitly negotiated source contracts.
+    /// # Errors
+    /// Preserves all ordinary source, publication, session and cleanup failures.
+    pub async fn resolve_dynamic_with_source_support(
+        &self,
+        callback: DynamicItemRequest<'_>,
+        support: SourceRuntimeSupport,
+    ) -> Result<protocol::PlayoutItem> {
         let deadline = Instant::now() + std::time::Duration::from_secs(30);
         timeout_at(
             deadline,
-            Box::pin(self.resolve_dynamic_inner(callback, video_cut, deadline)),
+            Box::pin(self.resolve_dynamic_inner(callback, support, deadline)),
         )
         .await
         .map_err(|_| unavailable("resolution deadline expired"))?
@@ -189,9 +215,10 @@ impl NextHost {
     async fn resolve_dynamic_inner(
         &self,
         callback: DynamicItemRequest<'_>,
-        video_cut: SourceVideoCutSupport,
+        support: SourceRuntimeSupport,
         deadline: Instant,
     ) -> Result<protocol::PlayoutItem> {
+        let video_cut = support.video_cut;
         let DynamicItemRequest {
             channel_id,
             item_id,
@@ -245,9 +272,16 @@ impl NextHost {
             .await;
         }
         if let Some(producer) = before.producer_remote.take() {
-            return Box::pin(
-                self.resolve_producer(before, producer, &request, instance, audio, now, deadline),
-            )
+            return Box::pin(self.resolve_producer(
+                before,
+                producer,
+                &request,
+                instance,
+                audio,
+                now,
+                deadline,
+                support.single_use,
+            ))
             .await;
         }
         let provider = super::provider_source_host::ProviderRequest {

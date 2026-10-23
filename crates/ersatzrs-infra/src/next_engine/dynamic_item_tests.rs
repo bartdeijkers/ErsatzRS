@@ -90,6 +90,7 @@ fn generated_silence_and_explicit_subtitles_off_remain_valid() {
     tracks.audio.as_mut().unwrap().source = Some(Source::Lavfi {
         params: "anullsrc=channel_layout=stereo:sample_rate=48000".into(),
         probe_hint: Some(ProbeHint {
+            single_use: None,
             video: Vec::new(),
             subtitle: Vec::new(),
             format_name: Some("mpegts".into()),

@@ -3,7 +3,7 @@
   "upstream_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
   "source_archive_sha256": "2b3108b5b5d4d40ae243c6e98ce018f939ac17953dec0383fe664c8e49212742",
   "source_lock_sha256": "3ef515507bbaf4e75043f59ecee515abad16fb4a4be5c2c53f0e7b097dc37fbb",
-  "distribution_version": "0.2.2-4a0b59a-ersatzrs.6",
+  "distribution_version": "0.2.2-4a0b59a-ersatzrs.7",
   "adr": "0117",
   "patches": [
     {
@@ -53,9 +53,17 @@
       "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
       "unpatched_regression": "Unpublished candidate .5 fails the strict ordinary retained M2TS Burn interval seek2164/out9200: source end9.1594 misses the next complete frame ending9.1994. Removing shortest alone overruns the previously successful2143 interval. The retained equal-argv TS188 reconstruction is byte-identical, rejecting framing corruption. FFmpeg9 shortest compares rounded frame ends before encoding; the source-qualified pre-framerate cutoff candidate preserves exact output duration while disabling shortest only for that final qualified finite pass. Successor runtime and adoption acceptance remain separate.",
       "evidence": "docs/progress/milestones.toml (P9A-04/F5/SO4); canonical tmp/phase9-next-local-teletext/provider-scan/identity.json burn_shared_clock_correction.finite_outpoint_followup"
+    },
+    {
+      "file": "0007-preserve-single-use-copy-input.patch",
+      "sha256": "9fce17b677da81f210773669365c8bc1c789766a5618c2300781e20e58188f50",
+      "retire_when": "Unpatched upstream passes ordinary single-use Copy Off/Convert and selected independent Burn caption delivery without consuming probes, provider reopening or weakened source/AV/audio/caption clocks, and preserves unknown-start fallback, truthful finite timing, long-interval ownership and joined cleanup. Remove this patch, not the tests.",
+      "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
+      "unpatched_regression": "Released0.2.2 and candidate.6 open the same one-use prepared URI for input_start framecrc (GET200) before actual playback (GET410), replacing ordinary Copy Off with fallback rejected by the Dutch-audio oracle. Refreshed main74253c2c retains the same copy-preflight boundary. Candidate.7 qualifies the first video packet using the host-owned prefix, preserves the configured copy decision and admits the original owner once for the complete selected interval. Linux/software candidate.7 actual ordinary Copy Off and published immutable prepared Burn/Convert pass one-acquisition/default-capacity cleanup, exact Convert cue/source-clock and coded AV/Dutch-audio checks, plus57 static TSDuck controls. Original unqualified seek-script sidecar clock negative is retained; arbitrary producer clocks are not certified. Managed and native-platform acceptance remains separate.",
+      "evidence": "docs/progress/milestones.toml (p9a-source-output SO3); canonical tmp/phase9-next-local-teletext/provider-scan/identity.json source_output_so3_followup"
     }
   ],
-  "publication": "Unpublished Phase9A F5 source-out, selected-audio metadata, Burn clock and negotiated source-frame cutoff candidate only. Managed runtime adoption, compatibility/platform acceptance and package publication remain separate gates; no publication authorized.",
+  "publication": "Unpublished Phase9A source-output candidate only, including negotiated single-use input timing/qualification. Managed runtime adoption, compatibility/platform acceptance and publication remain separate gates; no publication authorized.",
   "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/4a0b59a66bef93b908e5eb2086847418492e2555",
   "windows_companions_sha256": {
     "libvpl.dll": "3c439318d55285631aaea66b1d3701d4dba19e6c679561bebb71ace9ed521a08",

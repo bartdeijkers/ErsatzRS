@@ -10,7 +10,7 @@ use ersatzrs_infra::{
     db::DbPool,
     next_engine::{
         media::{MediaRelay, ACCESS_HEADER, SESSION_HEADER, SOURCE_BINDING_HEADER},
-        DynamicItemRequest, SourceVideoCutSupport,
+        DynamicItemRequest, SourceRuntimeSupport, SourceVideoCutSupport,
     },
 };
 use futures_util::TryStreamExt as _;
@@ -180,6 +180,9 @@ pub async fn get_item(
     let Ok(video_cut) = source_video_cut_support(&headers) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
+    let Ok(single_use) = single_use_support(&headers) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
     let Some((number, instance, now, until)) = dynamic_headers(&headers) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
@@ -193,7 +196,7 @@ pub async fn get_item(
     };
     if let Ok(item) = state
         .next_engine
-        .resolve_dynamic_with_video_cut(
+        .resolve_dynamic_with_source_support(
             DynamicItemRequest {
                 channel_id: channel,
                 item_id: item,
@@ -204,7 +207,10 @@ pub async fn get_item(
                 now,
                 until,
             },
-            video_cut,
+            SourceRuntimeSupport {
+                video_cut,
+                single_use,
+            },
         )
         .await
     {
@@ -218,6 +224,17 @@ pub async fn get_item(
         );
         StatusCode::SERVICE_UNAVAILABLE.into_response()
     }
+}
+
+fn single_use_support(headers: &HeaderMap) -> Result<bool, StatusCode> {
+    let mut values = headers.get_all("x-ersatzrs-next-single-use").iter();
+    let Some(value) = values.next() else {
+        return Ok(false);
+    };
+    if values.next().is_some() || value.as_bytes() != b"1" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    Ok(true)
 }
 
 fn source_video_cut_support(headers: &HeaderMap) -> Result<SourceVideoCutSupport, StatusCode> {
@@ -353,6 +370,21 @@ fn relay_response(upstream: reqwest::Response) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_use_capability_is_explicit_and_rejects_ambiguous_headers() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(single_use_support(&headers), Ok(false));
+        headers.insert("x-ersatzrs-next-single-use", "1".parse().unwrap());
+        assert_eq!(single_use_support(&headers), Ok(true));
+        for value in ["0", "2", "1,1", "1 ", ""] {
+            headers.insert("x-ersatzrs-next-single-use", value.parse().unwrap());
+            assert_eq!(single_use_support(&headers), Err(StatusCode::BAD_REQUEST));
+        }
+        headers.insert("x-ersatzrs-next-single-use", "1".parse().unwrap());
+        headers.append("x-ersatzrs-next-single-use", "1".parse().unwrap());
+        assert_eq!(single_use_support(&headers), Err(StatusCode::BAD_REQUEST));
+    }
 
     #[test]
     fn prepared_requests_refuse_head_and_seeks_before_claiming() {
@@ -558,6 +590,7 @@ mod tests {
                 uuid::Uuid::new_v4(),
                 uuid::Uuid::new_v4(),
                 ProbeHint {
+                    single_use: None,
                     video: Vec::new(),
                     audio: Vec::new(),
                     subtitle: Vec::new(),
@@ -621,6 +654,7 @@ mod tests {
                 uuid::Uuid::new_v4(),
                 uuid::Uuid::new_v4(),
                 ersatzrs_infra::next_engine::protocol::ProbeHint {
+                    single_use: None,
                     video: Vec::new(),
                     audio: Vec::new(),
                     subtitle: Vec::new(),

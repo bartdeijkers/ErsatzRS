@@ -72,6 +72,37 @@ The fixed2164/2143 public-route regressions and canonical P9A-04/SO4 evidence
 own candidate verification. Managed `.1` adoption and native platform acceptance
 remain distinct; this amendment authorizes no publication.
 
+Phase9A SO3 single-use candidate (2026-10-23): unpublished `.7` corrects a
+separate ordinary video-copy ownership defect. Next's input-start keyframe dry-run
+claims the prepared producer URI before playback, which then receives410. The
+callback host can now collect first-video-packet flags in its existing probe of
+the same at-most64KiB replay prefix; no provider or running pipe is reopened.
+Only a consuming runtime advertising `x-ersatzrs-next-single-use: 1` receives the
+version-one `single_use` hint. A typed list preserves numeric stream identities
+through internally tagged source decoding; duplicate/unknown indexes, unsupported
+versions and source seeks are refused. Legacy callbacks receive no new required
+data and keep their existing policy; neither request headers nor prefix facts
+replace final source, publication, selected-track or process ownership checks.
+
+The runtime uses those exact selected-video facts in its existing Copy decision,
+without opening the transfer for a dry-run. A leading non-keyframe or unknown
+start keeps an explicit Copy blocker and the existing profile-controlled encode
+fallback; neither case gains invented keyframe or whole-source readiness.
+A consume-once primary starts at its already-selected producer position and is
+not split into work-ahead chunks that would need another read. Finite stays
+finite; independent sidecar coordinates and the configured profile are retained.
+The same pass keeps the ordinary bounded work-ahead startup burst before
+realtime pacing; it does not trade the existing startup deadline for a slower
+first pass. Shared AV/caption inputs retain one physical reader.
+SO3 records actual ordinary Copy-Off and immutable published prepared Burn/Convert
+proof within Linux x86_64/software candidate `.7`, with exact Convert cues,
+coded-AV/Dutch-audio identity and joined cleanup. An original-file SRT is not a
+certified temporal match for arbitrary seek-producing scripts: the preserved
+199ms mismatch rejects that unqualified fixture without weakening clocks. The
+supported caption alternative retains the existing prepared-artifact publication
+and identity lifecycle. Managed adoption, native platform acceptance and
+publication remain separate; none is authorized by this candidate record.
+
 UCU-11 update (2026-10-14): the maintainer approves local catch-up through
 v26.11.3. Reviewed released Next0.2.2 corrects HLS cue intervals, timestamp maps
 and WebVTT settings; its unchanged two unpatched runtime regressions still fail.

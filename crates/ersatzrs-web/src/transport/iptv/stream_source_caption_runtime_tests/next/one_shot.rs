@@ -3,7 +3,7 @@
 use super::*;
 use crate::transport::iptv::next_media::routed_runtime_tests::fixture;
 
-async fn install_source(state: &AppState, root: &Path, item: i64, version: i64) -> i64 {
+pub(super) async fn install_source(state: &AppState, root: &Path, item: i64, version: i64) -> i64 {
     fixture::install_caption_source(&state.pool, root).await;
     sqlx::query(
         r#"INSERT INTO "RemoteStream" ("Id","AddonId","ProviderId","Url","Liveness","IsLive")

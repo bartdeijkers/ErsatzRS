@@ -159,6 +159,7 @@ pub(super) async fn project(
             ..CanvasBinding::new(channel.id, media, expires)
         },
         hint: protocol::ProbeHint {
+            single_use: None,
             format_name: Some("nut".into()),
             duration_ms: None,
             audio: Vec::new(),

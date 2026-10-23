@@ -156,6 +156,7 @@ async fn source_admission_rejects_missing_duplicate_or_invalid_capabilities_befo
             instance,
             source,
             ProbeHint {
+                single_use: None,
                 video: Vec::new(),
                 audio: Vec::new(),
                 subtitle: Vec::new(),

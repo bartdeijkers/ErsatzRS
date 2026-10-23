@@ -17,6 +17,7 @@ mod local;
 pub(crate) mod local_cleanup_scope;
 mod local_teletext;
 
+mod producer_start;
 mod producer_teletext;
 mod remote_source_snapshot;
 mod retained_source_reader;
@@ -281,6 +282,20 @@ impl FfprobeExtractor {
         deadline: tokio::time::Instant,
         cancellation: tokio::sync::oneshot::Receiver<()>,
     ) -> Result<FfprobeMediaVersion> {
+        let (status, stdout, stderr) = self
+            .extract_prefix_output(prefix, retained, false, deadline, cancellation)
+            .await?;
+        finish_remote_ffprobe(status, "published interval media", &stdout, &stderr, None)
+    }
+
+    async fn extract_prefix_output(
+        &self,
+        prefix: &[u8],
+        retained: bool,
+        packets: bool,
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<(ExitStatus, Vec<u8>, String)> {
         use std::io::Write as _;
         let label = "published interval media";
         if prefix.is_empty() || prefix.len() > 64 * 1024 {
@@ -302,6 +317,13 @@ impl FfprobeExtractor {
         if retained {
             args.extend(["-f".into(), "nut".into()]);
         }
+        if packets {
+            args.extend([
+                "-show_packets".into(),
+                "-show_entries".into(),
+                "stream:format:packet=stream_index,flags".into(),
+            ]);
+        }
         args.extend([
             "-show_streams".into(),
             "-show_format".into(),
@@ -310,7 +332,7 @@ impl FfprobeExtractor {
             "-i".into(),
             file.path().to_string_lossy().into_owned(),
         ]);
-        self.run_remote_probe(None, args, None, deadline, cancellation)
+        self.run_owned_probe_output(label, None, args, None, deadline, cancellation)
             .await
     }
 

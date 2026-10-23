@@ -16,6 +16,7 @@ fn apply_prepared_http_options(command: &mut Command, address: std::net::SocketA
     let relay = MediaRelay::new();
     relay.configure(address).unwrap();
     let hint = ProbeHint {
+        single_use: None,
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),

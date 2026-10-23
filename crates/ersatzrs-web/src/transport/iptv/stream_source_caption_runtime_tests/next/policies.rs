@@ -33,7 +33,7 @@ impl Policy {
     }
 }
 
-async fn schedule(state: &AppState, item: i64, policy: Policy) {
+pub(super) async fn schedule(state: &AppState, item: i64, policy: Policy) {
     Box::pin(software_profile(state)).await;
     state
         .pool
