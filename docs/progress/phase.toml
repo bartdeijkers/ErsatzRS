@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-standards — S2/S3 inventory-to-receipt join'
+current_focus = 'p9a-editor-base — EB2 complete base-set editor flow'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,19 +62,19 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-standards S2/S3 accepted inventory-to-receipt join.
-Completed SO3 candidate delivery remains closed at c830f6c3 within its recorded
-Linux/software scope. S1 fixed conversion-exclusion classification is complete:
-all nine national slots and the existing supplementary/Greek groups have exact
-original/raw/Unicode/carrier distinctions and primary remaining proof owners.
-Canonical provider-scan/identity.json case_reconciliation_followup.standards_s1
-retains source equality, original norm tables and reused qualification receipts.
-AB1/AB2 product/scalar/native-fallback evidence remains open at author-base;
-classification creates no permanent restriction or receiver/editor acceptance.
-Next executable action: join only S2 Table4/A7/A8/C3 feature inventories to the
-existing AB7/AE5 receipts and S3 fitting-set/deferredAP/resource-context exclusions
-to EB2/EE1..3. Stop when each existing clause has a qualified receipt or an exact
-named missing mandatory action/owner. No fresh variants or general scope audit.
+Current package: p9a-editor-base EB2 actual complete-base-set proof.
+Completed standards S1/S2/S3: original fixed conversions, full accepted feature
+inventory and Table4/A7/A8/C3, plus exact editor actions/owners, are classified.
+Canonical provider-scan/identity.json case_reconciliation_followup.standards_s2_s3
+retains source/receipt pins and all original p9a-01 clause-owner links. AB7 and
+AE5 inventory traces are closed; actual conformance remains with author-base/
+enhanced. EE2 positions share EE1/EE3, without a separate variant queue.
+Next executable action: qualify the existing plain two-subpage base fixture and
+complete native export/import/controller path, then one bundled pinned QTM save
+of the supported set with exact original subcodes, page/navigation and sidecar.
+Stop at shared preview, unpublished-concept fence, explicit publication and cold
+reopen with unchanged package/other channel. Reuse existing per-document editor,
+subset/cumulative union, publication and unrelated stream/client/F6 evidence.
 
 SO2 owned observed-page selection/consumer binding is completed within Linux
 x86_64/software FFmpeg9: one producer, opportunistic prefix at most64KiB,
@@ -90,7 +90,7 @@ sources/negatives are preserved outside the active product path. The new upstrea
 heartbeat correction is insufficient in an isolated identical FFmpeg9 build;
 input pacing, output duration and GENPTS hypotheses also fail. No runtime change
 or route repair is claimed. Resume only with a concrete new cause/correction;
-SO3 delivery components stay closed; the current executable action is S2/S3 above.
+SO3 delivery components stay closed; the current executable action is EB2 above.
 Other SO2 HTTP/RTSP,
 consume-once/HLS/Hybrid/carriage and runtime/platform obligations retain their owners.
 
