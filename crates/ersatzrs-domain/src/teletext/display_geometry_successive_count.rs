@@ -79,9 +79,10 @@ pub struct TeletextObjectSuccessiveCount {
 }
 
 impl TeletextObjectSuccessiveCount {
-    /// Maximum proven positioned run. An unpositioned potential reset disables
-    /// the combined lower-bound claim entirely; equal-cell mixed-source reset
-    /// groups break runs conservatively. All uncertainty remains in `pending()`.
+    /// Maximum proven positioned run. With one emitter, potential resets split
+    /// known runs at their exact original ordinal. Otherwise unpositioned resets
+    /// disable the combined lower-bound claim and mixed-source ties break runs
+    /// conservatively. All uncertainty remains in `pending()`.
     #[must_use]
     pub const fn maximum_known_successive(&self) -> usize {
         self.maximum_known_successive
@@ -158,8 +159,19 @@ pub(super) fn count_successive_objects(
     // Reserve the already-fenced upper bound so growth never exceeds storage.
     let mut pending = Vec::with_capacity(events.len());
     let mut unknown_reset = false;
+    let mut first_emitter = None;
+    let mut mixed_emitters = false;
     for (event_ordinal, &event) in events.iter().enumerate() {
-        match action(event) {
+        let current = action(event);
+        if !matches!(current, Action::None) {
+            let emitter = event.invocation();
+            if let Some(first) = first_emitter {
+                mixed_emitters |= first != emitter;
+            } else {
+                first_emitter = Some(emitter);
+            }
+        }
+        match current {
             Action::None => {}
             Action::Positioned { kind, position } => {
                 actions.push(PositionedAction {
@@ -180,21 +192,74 @@ pub(super) fn count_successive_objects(
             }
         }
     }
-    // Only within one emitter does ordinal establish exact command order.
-    // Other keys stabilize diagnostics without assigning physical tie priority.
-    actions.sort_unstable_by_key(|item| {
-        (
-            raw_rank(item.position),
-            item.event.invocation().map_or(0, |id| id.get() + 1),
-            item.event_ordinal,
-        )
-    });
-    let maximum_known_successive = scan_groups(owner, &actions, &mut pending, !unknown_reset)?;
+    let maximum_known_successive = if unknown_reset && !mixed_emitters {
+        // Every relevant action belongs to one actual emitter. Its original
+        // ordinal is exact without assigning a screen cell to a plane write.
+        // This linear scan replaces, rather than extends, the fenced sort/scan.
+        scan_single_emitter(owner, events)?
+    } else {
+        // Other keys stabilize diagnostics without assigning physical tie priority.
+        actions.sort_unstable_by_key(|item| {
+            (
+                raw_rank(item.position),
+                item.event.invocation().map_or(0, |id| id.get() + 1),
+                item.event_ordinal,
+            )
+        });
+        scan_groups(owner, &actions, &mut pending, !unknown_reset)?
+    };
     pending.sort_unstable_by_key(TeletextSuccessiveOpenPending::event_ordinal);
     Ok(TeletextObjectSuccessiveCount {
         maximum_known_successive,
         pending,
     })
+}
+
+fn scan_single_emitter(
+    owner: TeletextPageAddress,
+    events: &[TeletextSpatialEvent],
+) -> Result<usize, TeletextDisplayGeometryError> {
+    let (mut run, mut maximum) = (0, 0);
+    for &event in events {
+        match action(event) {
+            Action::Positioned {
+                kind: ActionKind::Open(child),
+                position,
+            } => {
+                run += 1;
+                maximum = maximum.max(run);
+                if run > 15 {
+                    return Err(opening_error(owner, event, child, position, run));
+                }
+            }
+            // A possible reset is only a conservative run barrier. Keeping its
+            // pending witness does not certify it as an actual display write.
+            Action::Positioned {
+                kind: ActionKind::Write,
+                ..
+            }
+            | Action::Pending(_) => run = 0,
+            Action::None => {}
+        }
+    }
+    Ok(maximum)
+}
+
+fn opening_error(
+    owner: TeletextPageAddress,
+    event: TeletextSpatialEvent,
+    child: TeletextSpatialInvocationId,
+    position: (u16, u16),
+    count: usize,
+) -> TeletextDisplayGeometryError {
+    TeletextDisplayGeometryError {
+        owner,
+        position: Some(position),
+        location: Some(event.source()),
+        root_source: Some(event.root_source()),
+        invocation: Some(child),
+        reason: TeletextDisplayGeometryFailure::TooManySuccessiveObjectOpens { count, maximum: 15 },
+    }
 }
 
 fn scan_groups(
@@ -235,18 +300,13 @@ fn scan_groups(
                         run += 1;
                         maximum = maximum.max(run);
                         if run > 15 {
-                            return Err(TeletextDisplayGeometryError {
+                            return Err(opening_error(
                                 owner,
-                                position: Some(item.position),
-                                location: Some(item.event.source()),
-                                root_source: Some(item.event.root_source()),
-                                invocation: Some(child),
-                                reason:
-                                    TeletextDisplayGeometryFailure::TooManySuccessiveObjectOpens {
-                                        count: run,
-                                        maximum: 15,
-                                    },
-                            });
+                                item.event,
+                                child,
+                                item.position,
+                                run,
+                            ));
                         }
                     }
                     ActionKind::Open(_) => {}

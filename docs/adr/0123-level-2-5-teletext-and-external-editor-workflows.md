@@ -785,6 +785,14 @@ EndBeforeStart guard is defensive, not a missing valid typed case. A total of
 at most fifteen actual instances independently proves the simultaneous bound
 without assigning an endpoint to a non-addressing object. More-than-fifteen
 mixed services still require their unresolved lifetime proof.
+For A.8(3), an unpositioned possible reset cannot erase a definite run before
+or after it in the same actual emitter. When every relevant action shares that
+emitter, use original command ordinals and retain possible resets as conservative
+barriers with their original pending witnesses. This does not assign a display
+cell to a plane write or certify an uncertain reset as an actual write.
+Mixed-emitter actions retain the existing scan-order/C2 uncertainty. The linear
+single-emitter scan replaces the bounded sort/scan; it adds no work queue or
+external timeline authority.
 Supplied-program spatial replay shares the existing two-pass walker without
 rerunning Base composition. It retains physical Local main ordinals and full
 body identities/instances; the service entry retains its original sparse default

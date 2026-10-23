@@ -2,6 +2,13 @@
 use super::*;
 
 fn fixture(count: usize) -> (TeletextDeclaredService, TeletextObjectIdentity) {
+    fixture_with_reset(count, None)
+}
+
+fn fixture_with_reset(
+    count: usize,
+    reset_before: Option<bool>,
+) -> (TeletextDeclaredService, TeletextObjectIdentity) {
     let identity = TeletextObjectIdentity::local(owner(0), TeletextObjectId::new(65534));
     let mut draft = input();
     draft.objects.push(TeletextEnhancementObjectDefinition {
@@ -9,17 +16,23 @@ fn fixture(count: usize) -> (TeletextDeclaredService, TeletextObjectIdentity) {
         object_type: TeletextObjectType::Passive,
         program: TeletextEnhancementProgram::new(vec![]).unwrap(),
     });
-    draft.pages[0].local_program = Some(
-        TeletextEnhancementProgram::new(vec![
-            TeletextEnhancementCommand::InvokeObject {
-                target: identity,
-                object_type: TeletextObjectType::Passive,
-                offset: None,
-            };
-            count
-        ])
-        .unwrap(),
-    );
+    let mut commands = vec![
+        TeletextEnhancementCommand::InvokeObject {
+            target: identity,
+            object_type: TeletextObjectType::Passive,
+            offset: None,
+        };
+        count
+    ];
+    if let Some(before) = reset_before {
+        commands.insert(
+            if before { 0 } else { count },
+            TeletextEnhancementCommand::SetScreenColour {
+                colour: TeletextColourReference::BLACK,
+            },
+        );
+    }
+    draft.pages[0].local_program = Some(TeletextEnhancementProgram::new(commands).unwrap());
     (declared(draft), identity)
 }
 
@@ -114,9 +127,26 @@ fn whole_factory_retains_fifteen_empty_calls_without_inventing_intervals() {
 #[test]
 fn whole_factory_sixteenth_empty_call_retains_original_successive_open_rejection() {
     let (source, _) = fixture(16);
-    let error =
-        encode_teletext_authored_service(source.clone(), &transmissions(&source), &limits())
-            .unwrap_err();
+    assert_successive_refusal(&source, 15);
+}
+
+#[test]
+fn whole_factory_plane_colour_cannot_hide_sixteen_same_source_opens() {
+    for before in [false, true] {
+        let (source, _) = fixture_with_reset(16, Some(before));
+        assert_successive_refusal(&source, if before { 16 } else { 15 });
+    }
+}
+
+fn assert_successive_refusal(source: &TeletextDeclaredService, command: usize) {
+    let original = source.clone();
+    let result =
+        encode_teletext_authored_service(source.clone(), &transmissions(source), &limits());
+    assert!(
+        result.is_err(),
+        "A8(3): complete factory admitted16 successive same-source opens"
+    );
+    let error = result.unwrap_err();
     let Failure::Compiled(error) = error.reason else {
         panic!("explicit Main must retain the compiled-display failure")
     };
@@ -143,14 +173,13 @@ fn whole_factory_sixteenth_empty_call_retains_original_successive_open_rejection
         error.location,
         Some(TeletextEnhancementSource {
             object: None,
-            command: 15
+            command
         })
     );
     assert_eq!(
         error.root_source,
-        Some(TeletextSpatialRootSource::Local { command: 15 })
+        Some(TeletextSpatialRootSource::Local { command })
     );
     assert_eq!(error.invocation.unwrap().get(), 15);
-    let (expected, _) = fixture(16);
-    assert_eq!(source, expected);
+    assert_eq!(source, &original);
 }

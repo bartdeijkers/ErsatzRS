@@ -1001,6 +1001,8 @@ release section when tagging a release.
 - Enforce teletext's limit of 15 simultaneously open objects even when their
   known source coordinates fall outside the visible page. Preserve valid
   intervals and source-located validation errors.
+  A colour instruction can no longer hide sixteen successive object openings
+  in the same source; uncertain cross-source ordering remains explicit.
 
 - Encode Main header context with original POP/GPOP objects using the existing
   coherent resource-before-display acquisition order. Preserve original object

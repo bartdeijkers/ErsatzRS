@@ -95,8 +95,9 @@ pub enum TeletextDisplayGeometryFailure {
 /// display writes use
 /// raw scan order. Original ordinal resolves same-position order only within
 /// one emitter; mixed-emitter reset ties conservatively break known runs.
-/// Plane-colour and unpositioned potential resets disable the combined lower-
-/// bound claim and retain original pending witnesses.
+/// Plane-colour and unpositioned potential resets split known runs only when
+/// all relevant actions share one emitter's exact original order. Otherwise the
+/// combined lower-bound claim is disabled. Original pending witnesses remain.
 /// # Errors
 /// Rejects budgets/storage arithmetic, owner mismatch, or inconsistent original
 /// inputs, own addresses crossing raw areas, or sixteen known open

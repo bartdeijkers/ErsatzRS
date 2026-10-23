@@ -151,6 +151,65 @@ fn a_strictly_later_write_cannot_reset_sixteen_earlier_openings() {
 }
 
 #[test]
+fn same_emitter_potential_reset_does_not_hide_a_definite_sixteenth_opening() {
+    let target = local(0);
+    for writer in [
+        TeletextEnhancementCommand::SetScreenColour {
+            colour: TeletextColourReference::BLACK,
+        },
+        TeletextEnhancementCommand::SetRowColour {
+            row: 0,
+            colour: TeletextColourReference::BLACK,
+            following_rows: false,
+        },
+        TeletextEnhancementCommand::AtColumn {
+            column: 0,
+            operation: TeletextColumnOperation::Foreground {
+                colour: TeletextColourReference::WHITE,
+            },
+        },
+    ] {
+        for before in [false, true] {
+            let mut commands = vec![invoke(target, TeletextObjectType::Passive, None); 16];
+            commands.insert(if before { 0 } else { 16 }, writer);
+            let input = fixture(
+                None,
+                commands,
+                vec![definition(target, TeletextObjectType::Passive, vec![])],
+            );
+            let original = (
+                input.base.clone(),
+                input.spatial.clone(),
+                input.glyphs.clone(),
+            );
+            let observed = result(&input);
+            assert!(
+                observed.is_err(),
+                "A8(3): same-emitter reset hid16 definite opens; before={before}"
+            );
+            let failure = observed.unwrap_err();
+            assert_eq!(
+                failure.reason,
+                TeletextDisplayGeometryFailure::TooManySuccessiveObjectOpens {
+                    count: 16,
+                    maximum: 15
+                }
+            );
+            assert_eq!(
+                failure.location,
+                Some(TeletextEnhancementSource {
+                    object: None,
+                    command: if before { 16 } else { 15 }
+                })
+            );
+            assert_eq!(failure.position, Some((0, 0)));
+            assert_eq!(failure.invocation.unwrap().get(), 15);
+            assert_eq!((input.base, input.spatial, input.glyphs), original);
+        }
+    }
+}
+
+#[test]
 fn plane_colour_writes_remain_potential_resets_without_an_invented_cell() {
     let target = local(0);
     for writer in [
@@ -174,7 +233,9 @@ fn plane_colour_writes_remain_potential_resets_without_an_invented_cell() {
         ))
         .unwrap();
         let count = geometry.successive_open_count();
-        assert_eq!(count.maximum_known_successive(), 0);
+        // The two definite runs of fifteen remain provable without assuming
+        // that this potential reset actually writes any addressed cell.
+        assert_eq!(count.maximum_known_successive(), 15);
         assert_eq!(count.pending().len(), 1);
         assert_eq!(count.pending()[0].location().command, 16);
         assert_eq!(
