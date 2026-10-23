@@ -1297,6 +1297,13 @@ boundaries and ambiguous inherited Adaptive non-origin sizing remain located
 pending evidence. The interchange reference owns the precise API and decoder
 limitations. This does not accept glyph rasterization, full A.7/A.8 admission,
 physical equivalence, suitable-client display, editor workflow or publication.
+The known inherited double-width right-half case is now resolved under C.3(2,4):
+without the Adaptive object's own explicit display attributes, retain the earlier
+lower origin and its attributes across both halves. Keep the obscured candidate,
+its requested size and original attribute/source/root/instance provenance;
+do not invent a normal-size replacement or drop its native definition. Explicit
+object display attributes keep their existing override path. Other inherited
+non-origin and physical-order uncertainties remain separate, located diagnostics.
 A consumed diagnostic raster now uses that exact unpublished composition's
 original glyph identities, fragments, DRCS records and selected colour planes.
 Pinned MIT font bitmap data supplies twelve-by-ten masks without an external

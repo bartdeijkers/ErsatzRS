@@ -762,13 +762,7 @@ impl<'a> Builder<'a> {
             self.output.origins[index].attributes = pool;
             self.output.origins[index].requested = self.size(candidate_state, index)?;
             if cell.hidden && !(lower_hidden && explicit_display) {
-                if !execution.private
-                    && execution.coverage[cell.at].is_some_and(|origin| {
-                        self.input.layers.candidates()[self.output.origins[origin].candidate]
-                            .priority()
-                            < TeletextGlyphPriority::Adaptive
-                    })
-                {
+                if lower_hidden && !self.inherited_double_width_right(cell.at) {
                     self.origin_pending(
                         index,
                         TeletextDisplayPendingReason::InheritedAdaptiveNonOrigin,
@@ -793,6 +787,13 @@ impl<'a> Builder<'a> {
             self.paint(index, cell.at, candidate_state, &mut execution.coverage)?;
         }
         Ok(())
+    }
+    fn inherited_double_width_right(&self, at: usize) -> bool {
+        // C.3(2,4): without an explicit object size, an already occupied right
+        // half keeps its earlier lower origin and that origin's attributes.
+        // Keep the candidate/provenance as obscured, not as an unknown overlay.
+        self.shared[at]
+            .is_some_and(|cell| cell.fragment == TeletextDisplayFragment::DoubleWidthRight)
     }
     fn inherited_non_origin(&self, at: usize) -> bool {
         let enlarged = self.shared[at].is_some_and(|cell| {

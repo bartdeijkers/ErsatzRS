@@ -998,6 +998,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Compile an Adaptive teletext object over the right half of an inherited
+  double-width character without a false unresolved-display error. Preserve
+  both lower fragments, the complete object definition and Level 1/1.5 fallback.
+
 - Enforce teletext's limit of 15 simultaneously open objects even when their
   known source coordinates fall outside the visible page. Preserve valid
   intervals and source-located validation errors.

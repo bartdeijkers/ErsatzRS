@@ -708,3 +708,6 @@ mod empty_admission;
 
 #[path = "authored_service_tests/successive_ancestry.rs"]
 mod successive_ancestry;
+
+#[path = "authored_service_tests/adaptive_nonorigin.rs"]
+mod adaptive_nonorigin;

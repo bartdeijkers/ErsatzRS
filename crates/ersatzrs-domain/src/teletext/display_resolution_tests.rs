@@ -581,7 +581,7 @@ fn side_panel_display_order_is_visual_left_main_right_and_never_raw_address_orde
 }
 
 #[test]
-fn adaptive_nonorigin_inherited_size_retains_located_uncertainty_instead_of_guessing_clipping() {
+fn adaptive_inherited_width_preserves_the_lower_right_fragment_and_original_candidate() {
     let adaptive = local(0xffff);
     let service = service(
         vec![
@@ -599,6 +599,7 @@ fn adaptive_nonorigin_inherited_size_retains_located_uncertainty_instead_of_gues
         )],
     );
     let fixture = Fixture::new(blank(), &service);
+    let original = fixture.original.clone();
     let result = resolve(&fixture);
     let index = fixture
         .layers
@@ -612,29 +613,40 @@ fn adaptive_nonorigin_inherited_size_retains_located_uncertainty_instead_of_gues
                 })
         })
         .unwrap();
-    let pending = result
-        .pending()
-        .iter()
-        .find(|pending| pending.candidate_index() == Some(index))
-        .unwrap();
-    assert_eq!(
-        pending.reason(),
-        TeletextDisplayPendingReason::InheritedAdaptiveNonOrigin
+    assert!(
+        result.pending().is_empty(),
+        "C3: known lower width is not an unresolved overlay"
     );
-    assert_eq!(pending.position(), (1, 9));
+    let left = result.cell(1, 8).unwrap();
+    let right = result.cell(1, 9).unwrap();
+    assert_eq!(left.origin(), right.origin());
+    assert_eq!(left.fragment(), TeletextDisplayFragment::DoubleWidthLeft);
+    assert_eq!(right.fragment(), TeletextDisplayFragment::DoubleWidthRight);
+    assert_eq!(right.attributes().foreground().value().unwrap().get(), 1);
+    assert_eq!(right.attributes().double_width().value(), Some(true));
+    let origin = &result.origins()[index];
+    assert_eq!(origin.visual_position(), Some((1, 9)));
     assert_eq!(
-        pending.location(),
+        origin.requested_size(),
+        Some(TeletextDisplaySize::DoubleWidth)
+    );
+    assert_eq!(origin.effective_size(), None);
+    assert_eq!(origin.pending(), None);
+    assert_eq!(origin.obscured_by(), right.origin());
+    let candidate = fixture.layers.candidates()[origin.candidate_index()];
+    assert_eq!(
+        candidate.source(),
         Some(TeletextEnhancementSource {
             object: Some(adaptive),
             command: 1
         })
     );
     assert_eq!(
-        pending.root_source(),
+        candidate.root_source(),
         Some(TeletextSpatialRootSource::Local { command: 5 })
     );
     assert_eq!(
-        pending.invocation().map(TeletextSpatialInvocationId::get),
+        candidate.invocation().map(TeletextSpatialInvocationId::get),
         Some(0)
     );
     let attributes = result.origin_attributes(index).unwrap();
@@ -644,6 +656,7 @@ fn adaptive_nonorigin_inherited_size_retains_located_uncertainty_instead_of_gues
         if location == TeletextEnhancementSource { object: Some(adaptive), command: 0 }
             && root_source == TeletextSpatialRootSource::Local { command: 5 }
             && instance.get() == 0));
+    assert_eq!(fixture.original, original);
 }
 
 #[test]
