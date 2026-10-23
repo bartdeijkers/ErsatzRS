@@ -431,17 +431,47 @@ pub(in crate::host) fn reconcile_project_with_position_scope(
             limits,
             deadline,
         );
-        if let Ok(scalar) = scalar {
-            result.operands.extend(scalar);
-        } else {
-            let mapped = mapping(group[0], project, original)?;
-            result.programs.push(program_with_positions(
-                &mapped, &body, original, scope, limits, deadline,
-            )?);
+        match scalar {
+            Ok(scalar) => result.operands.extend(scalar),
+            Err(scalar_error) => {
+                let mapped = mapping(group[0], project, original)?;
+                result.programs.push(
+                    program_with_positions(&mapped, &body, original, scope, limits, deadline)
+                        .map_err(|error| retain_scalar_position(error, &scalar_error))?,
+                );
+            }
         }
     }
     Ok(result)
 }
+
+/// An unsupported structural interpretation must not erase a known refused
+/// scalar word in this same resource group. Preserve the final failure kind,
+/// all existing locations, parser causes and deadline failures.
+fn retain_scalar_position(
+    mut error: super::NativeTeletextEditorialTtiError,
+    scalar: &super::NativeTeletextEditorialTtiError,
+) -> super::NativeTeletextEditorialTtiError {
+    if error.failure == Failure::Structure
+        && error.row.is_none()
+        && error.column.is_none()
+        && error.designation.is_none()
+        && error.cause.is_none()
+        && scalar.failure == Failure::Packet
+        && error.resource == scalar.resource
+        && error.page == scalar.page
+        && error.subcode == scalar.subcode
+    {
+        error.row = scalar.row;
+        error.column = scalar.column;
+        error.designation = scalar.designation;
+    }
+    error
+}
+
+#[cfg(test)]
+#[path = "project/diagnostics_tests.rs"]
+mod diagnostics_tests;
 
 pub(in crate::host) fn authorize_programs(
     project: &TeletextExportProject,

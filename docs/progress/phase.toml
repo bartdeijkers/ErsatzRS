@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-admin-enhanced — A2 supported enhanced workflow join'
+current_focus = 'p9a-author-enhanced — AE2/AE3 original resource-order qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,12 +62,29 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-admin-enhanced A2 supported enhanced workflow join.
-Next executable action: join the closed EE1/EE3 resource-file actions and existing
-creation/selection/announcement controls to their actual authenticated admin,
-localized shared-validation and headed receipts. Reuse unchanged bodies and
-current valid receipts; run only a demonstrably missing affected integration.
-Keep unresolved retirement policy with its existing owner, not a new UI variant.
+Current package: p9a-author-enhanced AE2/AE3 original resource-order qualification.
+Next executable action: use the existing header-c2 cross_emitter_c2_qualification
+factory/limits and accepted C.2 expectations to qualify competing POP/GPOP writers
+and repeated instances of an original physical definition. Establish exact source/
+priority/full-effect/native/fallback evidence or an attributable defect before
+correction; do not reopen completed same-page Main/unique-Local C.2 or repair an
+external decoder. This is the existing authored-order gap, not a new variant queue.
+
+A2 supported resource-file/current-draft admin actions are completed within the
+joined boundary. Real multipart Router probes carry the closed EE1 and complete
+EE3 concepts to exact native previews; foreign/stale/invalid inputs preserve
+publication and stored source/profile/package/Night state. A demonstrated
+structural-fallback diagnostic loss is corrected without changing admission:
+retain the actual refused scalar packet coordinates only for an otherwise
+unlocated same-resource structural refusal. Deadlines, existing coordinates,
+causes and error kinds remain unchanged. Actual SSR renders show native resource
+2C0 and26,7.45 resource controls pass, with the final2 repeated after an equivalent
+borrow correction; strict affected Clippy passes.22 shared bodies,12 form/API/CSS
+files and104 strings in9cultures match the actual headed sources. Reuse the
+common4+4 browser matrix and four scoped enhanced pairs, not a fresh full-current
+browser run. Canonical provider-scan/identity.json admin_enhanced_join_followup
+owns exact receipts and negatives. A2 retirement reporting remains dependent on
+its existing retirement owner; no substitute UI variant follows.
 
 EE3 internal complete-set correspondence is completed: two fitting resource
 context documents edit a GPOP-to-POP call origin and its shared Passive glyph

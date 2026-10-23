@@ -998,6 +998,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve specific packet positions when rejecting teletext resource edits
+  after alternative validation fails. Admin feedback retains the resource and
+  offending word without changing validation or publication safeguards.
+
 - Preserve original Local-object references when importing a Main charset change
   around generated Base characters. Complete native context validation now
   handles retained Local definitions and pointer relocation during repacking,

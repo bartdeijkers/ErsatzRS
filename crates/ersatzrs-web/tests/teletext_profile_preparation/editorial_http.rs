@@ -197,7 +197,7 @@ fn multipart(request: &NativeTeletextEditorialImportRequest, channel: i64) -> Ve
     body
 }
 
-async fn import_response(
+pub(super) async fn import_response(
     fixture: &Fixture,
     request: &NativeTeletextEditorialImportRequest,
     channel: i64,
@@ -209,6 +209,19 @@ async fn import_response(
         multipart(request, channel),
     )
     .await
+}
+
+pub(super) async fn rendered(fixture: &Fixture, uri: &str) -> String {
+    assert!(uri.starts_with("/channels/"));
+    let response = build_app(fixture.state.clone())
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let bytes = axum::body::to_bytes(response.into_body(), 2 * 1024 * 1024)
+        .await
+        .unwrap();
+    String::from_utf8(bytes.to_vec()).unwrap()
 }
 
 #[tokio::test]

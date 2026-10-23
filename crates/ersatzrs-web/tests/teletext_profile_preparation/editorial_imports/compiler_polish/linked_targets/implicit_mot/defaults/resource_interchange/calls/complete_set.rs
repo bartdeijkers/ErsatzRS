@@ -1,6 +1,8 @@
 //! EE3: two existing editor actions share one complete retained resource graph.
 use super::*;
 
+#[path = "complete_set/admin.rs"]
+mod admin;
 #[path = "complete_set/lifecycle.rs"]
 mod lifecycle;
 

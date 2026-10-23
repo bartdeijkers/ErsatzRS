@@ -2,6 +2,8 @@
 use super::*;
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService};
 
+#[path = "complete_context/admin.rs"]
+mod admin;
 #[path = "complete_context/checks.rs"]
 mod checks;
 #[path = "complete_context/editor.rs"]
