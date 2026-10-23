@@ -97,6 +97,26 @@ pub(super) fn assign(
                         merge(&mut target[cursor + words.len()], state);
                     }
                 }
+                Atom::LocalCall {
+                    words,
+                    definition,
+                    main_words,
+                } => {
+                    if uploaded
+                        .get(cursor..cursor + words.len())
+                        .is_some_and(|call| {
+                            model::relocated_call(
+                                words,
+                                *definition,
+                                *main_words,
+                                uploaded.len(),
+                                call,
+                            )
+                        })
+                    {
+                        merge(&mut target[cursor + words.len()], state);
+                    }
+                }
                 Atom::Scalar {
                     column,
                     expected,

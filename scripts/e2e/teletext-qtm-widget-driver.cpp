@@ -110,6 +110,7 @@ struct DriverContext {
     bool createMain = false;
     bool createMainGeneratedBase = false;
     int mainContextDesignation = -1;
+    bool completeMainContext = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -149,7 +150,8 @@ static DriverContext driverContext() {
     const bool foreground = mode == "single-page-foreground";
     const bool createMainGeneratedBase = mode == "single-page-create-main-generated-base";
     const bool createMain = mode == "single-page-create-main" || createMainGeneratedBase;
-    const int mainContextDesignation = mode == "single-page-main-context-greek" ? 0x37
+    const bool completeMainContext = mode == "single-page-complete-main-context-greek";
+    const int mainContextDesignation = mode == "single-page-main-context-greek" || completeMainContext ? 0x37
         : mode == "single-page-main-context-latin" ? 0 : -1;
     const bool glyphStructure = mode == "single-page-local-glyph-structure";
     const bool mixedGlyphStructure = mode == "single-page-local-mixed-glyph-structure";
@@ -339,7 +341,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing, createMain, createMainGeneratedBase, mainContextDesignation};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2, nativeG0, nativeUnicode, baseSpacing, createMain, createMainGeneratedBase, mainContextDesignation, completeMainContext};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -2708,13 +2710,14 @@ static void editAbsentMain(QMainWindow *main, const DriverContext &context) {
     savedGlyphStructure = final;
     std::printf("QTM actual absent Main: retained generated-Base words=%d; AP2/8, FG18@8, G0Q81@8, FG7@9, termination7; full %zu-row model checked\n", first, final.size());
 }
-// Only the two fixed Main context trials consume these native-export literals.
+// Only the fixed Main context trials consume these native-export literals.
 // The controller binds both arrays to its immutable ready/input/target files.
-static std::vector<StructureTriplet> mainContextTriplets(const char *name) {
+static std::vector<StructureTriplet> mainContextTriplets(const char *name, bool complete = false) {
     const auto raw = qgetenv(name);
-    if (raw.isEmpty() || raw.size() > 64) qFatal("Fixed Main context native words absent or oversized");
+    if (raw.isEmpty() || raw.size() > (complete ? 1455 : 64)) qFatal("Fixed Main context native words absent or oversized");
     const auto fields = raw.split(',');
-    if (fields.size() != 5 && fields.size() != 7) qFatal("Fixed Main context native word count differs");
+    if (complete ? (fields.size() < 8 || fields.size() > 208)
+        : (fields.size() != 5 && fields.size() != 7)) qFatal("Fixed Main context native word count differs");
     std::vector<StructureTriplet> result;
     for (const auto &field : fields) {
         bool valid = false;
@@ -2785,15 +2788,39 @@ static void mainContextDataDown(QDockWidget *dock, QTableView *table,
 static void editMainContext(QMainWindow *main, const DriverContext &context) {
     if ((context.mainContextDesignation != 55 && context.mainContextDesignation != 0)
         || main->isWindowModified()) qFatal("Fixed Main context requires its pristine native input");
-    auto expected = mainContextOriginal();
+    auto expected = context.completeMainContext
+        ? mainContextTriplets("ERSATZRS_QTM_CONTEXT_BEFORE_WORDS", true) : mainContextOriginal();
     auto final = expected;
-    final[1][2] = context.mainContextDesignation;
-    if (context.mainContextDesignation == 55) final[4][2] = 55;
-    else {
-        final.erase(final.begin() + 4);
-        final.erase(final.begin() + 2);
+    std::vector<int> edits;
+    if (context.completeMainContext) {
+        final = mainContextTriplets("ERSATZRS_QTM_CONTEXT_AFTER_WORDS", true);
+        if (final.size() != expected.size() || expected.back() != StructureTriplet{63,31,5})
+            qFatal("Complete Main context requires exact fitting original/final Local sequence");
+        int boundary = -1;
+        for (int row = 0; row < int(expected.size()); ++row) {
+            if (expected[row] == StructureTriplet{63,31,6}) {
+                if (boundary >= 0) qFatal("Complete Main context has ambiguous boundary");
+                boundary = row;
+            }
+            if (expected[row] == final[row]) continue;
+            if (expected[row][1] != 8 || expected[row][2] != 87
+                || final[row] != StructureTriplet{expected[row][0],8,55})
+                qFatal("Complete Main context changes a foreign word");
+            edits.push_back(row);
+        }
+        if (edits.size() != 2 || expected[edits[0]][0] != 0 || expected[edits[1]][0] != 8
+            || edits[1] >= boundary || boundary + 2 >= int(expected.size())
+            || expected[boundary + 1][1] != 0x17)
+            qFatal("Complete Main context setter/restore/Local definition witness differs");
+    } else {
+        final[1][2] = context.mainContextDesignation;
+        if (context.mainContextDesignation == 55) final[4][2] = 55;
+        else {
+            final.erase(final.begin() + 4);
+            final.erase(final.begin() + 2);
+        }
     }
-    if (mainContextTriplets("ERSATZRS_QTM_CONTEXT_AFTER_WORDS") != final)
+    if (mainContextTriplets("ERSATZRS_QTM_CONTEXT_AFTER_WORDS", context.completeMainContext) != final)
         qFatal("Fixed Main context target does not match its exact dependency change");
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual Main context dock absent");
@@ -2808,7 +2835,7 @@ static void editMainContext(QMainWindow *main, const DriverContext &context) {
     structureCheck(table->model(), expected);
     if (!dock->grab().save(QString("/work/") + context.captureName("main-context-before")))
         qFatal("Actual Main context baseline capture failed");
-    structureSelect(table, 1);
+    structureSelect(table, context.completeMainContext ? edits.front() : 1);
     QCheckBox *raw = nullptr;
     for (auto candidate : dock->findChildren<QCheckBox *>()) {
         if (!candidate->isVisible() || !candidate->isEnabled() || candidate->text() != "Raw values") continue;
@@ -2818,16 +2845,20 @@ static void editMainContext(QMainWindow *main, const DriverContext &context) {
     if (!raw || raw->isChecked()) qFatal("Actual Main context must start with cooked controls");
     QTest::mouseClick(raw, Qt::LeftButton, Qt::NoModifier, QPoint(8, raw->rect().center().y()));
     if (!raw->isChecked()) qFatal("Actual Main context Raw values click did not select raw controls");
-    mainContextDataDown(dock, table, context, expected, 1, context.mainContextDesignation);
-    if (context.mainContextDesignation == 55) mainContextDataDown(dock, table, context, expected, 4, 55);
-    else {
-        // Delete only the two generated context words, in descending order.
-        // QTM's actual single-row Delete preserves the glyph and all Main words.
-        for (int row : {4,2}) {
-            structureSelect(table, row);
-            structureButton(dock, "Delete");
-            expected.erase(expected.begin() + row);
-            structureCheck(table->model(), expected);
+    if (context.completeMainContext) {
+        for (int row : edits) mainContextDataDown(dock, table, context, expected, row, 55);
+    } else {
+        mainContextDataDown(dock, table, context, expected, 1, context.mainContextDesignation);
+        if (context.mainContextDesignation == 55) mainContextDataDown(dock, table, context, expected, 4, 55);
+        else {
+            // Delete only the two generated context words, in descending order.
+            // QTM's actual single-row Delete preserves the glyph and all Main words.
+            for (int row : {4,2}) {
+                structureSelect(table, row);
+                structureButton(dock, "Delete");
+                expected.erase(expected.begin() + row);
+                structureCheck(table->model(), expected);
+            }
         }
     }
     structureCheck(table->model(), final);
@@ -2839,6 +2870,7 @@ static void editMainContext(QMainWindow *main, const DriverContext &context) {
         context.mainContextDesignation, final.size());
 }
 static int mainContextSavedRows(const DriverContext &context) {
+    if (context.completeMainContext) return int(savedGlyphStructure.size());
     return context.mainContextDesignation >= 0 ? (context.mainContextDesignation == 55 ? 7 : 5)
         : (context.createMainGeneratedBase ? 7 : 5);
 }

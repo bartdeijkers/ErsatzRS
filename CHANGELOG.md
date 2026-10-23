@@ -998,6 +998,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve original Local-object references when importing a Main charset change
+  around generated Base characters. Complete native context validation now
+  handles retained Local definitions and pointer relocation during repacking,
+  while preserving protected objects, fallback, exact root undo and explicit
+  publication safeguards.
+
 - Correct the teletext reference to describe the operational export, concept
   import, validation, preview and explicit-publication workflow for admin users
   and agents. Preserve the distinction between completed editor actions and

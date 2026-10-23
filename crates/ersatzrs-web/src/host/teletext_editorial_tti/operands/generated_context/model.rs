@@ -5,10 +5,11 @@ use super::{
 };
 use ersatzrs_domain::{
     TeletextEnhancementCharsetDesignation, TeletextEnhancementCommand, TeletextEnhancementPosition,
+    TeletextObjectIdentity, TeletextObjectOffset, TeletextObjectScope, TeletextObjectType,
 };
 use ersatzrs_ffmpeg::teletext::{
-    TeletextBaseCellCommandKind as Kind, TeletextCompiledCommandPosition,
-    TeletextMainCompositionSource as Source,
+    EncodedTeletextLocalObjectProgram, TeletextBaseCellCommandKind as Kind,
+    TeletextCompiledCommandPosition, TeletextMainCompositionSource as Source,
 };
 use std::time::Instant;
 
@@ -29,7 +30,6 @@ pub(super) fn build<'a>(
         .and_then(|page| page.local_program.as_ref())
         .ok_or_else(|| located_word(location, 0))?;
     if native.owner() != owner
-        || !native.definition_positions().is_empty()
         || words.len() > CAPACITY
         || native.main_triplet_count() != words.len()
         || native.command_positions().len() > CAPACITY
@@ -37,7 +37,15 @@ pub(super) fn build<'a>(
     {
         return Err(located_word(location, 0));
     }
-    let positions = native.command_positions();
+    let all_positions = native.command_positions();
+    let main_end = all_positions.partition_point(|position| position.semantic_word() < words.len());
+    if all_positions[main_end..]
+        .iter()
+        .any(|position| position.first_word() < words.len())
+    {
+        return Err(located_word(location, 0));
+    }
+    let positions = &all_positions[..main_end];
     coverage(positions, words.len(), location, deadline)?;
     let mut result = Vec::new();
     let mut seen = vec![false; original.commands().len()];
@@ -57,21 +65,26 @@ pub(super) fn build<'a>(
                 {
                     return Err(located_word(location, position.first_word()));
                 }
-                let atom = if let TeletextEnhancementCommand::AtColumn { column, operation } =
-                    *expected
-                {
-                    if body.len() == 1 && operand(column, operation, body[0], body[0]).is_some() {
+                let atom = match *expected {
+                    TeletextEnhancementCommand::AtColumn { column, operation }
+                        if body.len() == 1
+                            && operand(column, operation, body[0], body[0]).is_some() =>
+                    {
                         Atom::Scalar {
                             command,
                             column,
                             expected: operation,
                             before: body[0],
                         }
-                    } else {
-                        Atom::Fixed(body)
                     }
-                } else {
-                    Atom::Fixed(body)
+                    TeletextEnhancementCommand::InvokeObject {
+                        target,
+                        object_type,
+                        offset,
+                    } if target.scope() == TeletextObjectScope::Local => {
+                        local_call(native, body, target, object_type, offset, location)?
+                    }
+                    _ => Atom::Fixed(body),
                 };
                 result.push(atom);
                 cursor += 1;
@@ -103,6 +116,77 @@ pub(super) fn build<'a>(
         }
     }
     Ok(result)
+}
+
+fn local_call<'a>(
+    native: &EncodedTeletextLocalObjectProgram,
+    body: &'a [u32],
+    target: TeletextObjectIdentity,
+    object_type: TeletextObjectType,
+    offset: Option<TeletextObjectOffset>,
+    location: Location,
+) -> Result<Atom<'a>> {
+    let fail = || located_word(location, 0);
+    let definition = native
+        .definition_positions()
+        .iter()
+        .find(|definition| definition.target() == target && definition.object_type() == object_type)
+        .ok_or_else(fail)?;
+    let number = u32::from(definition.object_number());
+    let kind = match object_type {
+        TeletextObjectType::Active => 1,
+        TeletextObjectType::Adaptive => 2,
+        TeletextObjectType::Passive => 3,
+    };
+    let invocation = (0x28 | (number >> 7)) | ((0x10 | kind) << 6) | ((number & 127) << 11);
+    if body.len() != 1 + usize::from(offset.is_some())
+        || body.last() != Some(&invocation)
+        || usize::from(definition.absolute_index()) <= native.main_triplet_count()
+    {
+        return Err(fail());
+    }
+    if let Some(offset) = offset {
+        let origin =
+            (40 + u32::from(offset.row())) | (16 << 6) | (u32::from(offset.column()) << 11);
+        if body[0] != origin {
+            return Err(fail());
+        }
+    }
+    Ok(Atom::LocalCall {
+        words: body,
+        definition: definition.absolute_index(),
+        main_words: native.main_triplet_count(),
+    })
+}
+
+/// Main repacking moves every immutable Local marker by the same amount.
+/// Only its native pointer bits may differ; complete re-encoding remains final.
+pub(super) fn relocated_call(
+    words: &[u32],
+    definition: u8,
+    old_main: usize,
+    new_main: usize,
+    uploaded: &[u32],
+) -> bool {
+    let Some((&before, prefix)) = words.split_last() else {
+        return false;
+    };
+    let Some((&after, uploaded_prefix)) = uploaded.split_last() else {
+        return false;
+    };
+    let Some(index) = usize::from(definition)
+        .checked_add(new_main)
+        .and_then(|index| index.checked_sub(old_main))
+        .filter(|index| *index < CAPACITY && *index > new_main)
+    else {
+        return false;
+    };
+    let number = (index / 13) * 16 + index % 13;
+    let Ok(number) = u32::try_from(number) else {
+        return false;
+    };
+    let expected = (before & !(1 | (127 << 11))) | (number >> 7) | ((number & 127) << 11);
+    prefix == uploaded_prefix && after == expected
 }
 
 fn coverage(

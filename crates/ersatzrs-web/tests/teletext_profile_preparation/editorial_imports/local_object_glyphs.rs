@@ -98,7 +98,7 @@ fn response(theme: &str, page: u16, subcode: u16, family: Family, permission: Pe
     value
 }
 
-fn free(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn free(theme: &str, page: u16, subcode: u16) -> Value {
     response(theme, page, subcode, Family::G0, Permission::Free)
 }
 fn zone(theme: &str, page: u16, subcode: u16) -> Value {

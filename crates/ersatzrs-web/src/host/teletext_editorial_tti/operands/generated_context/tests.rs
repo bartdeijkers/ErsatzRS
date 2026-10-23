@@ -207,3 +207,81 @@ fn generated_context_checks_deadline_and_raw_bounds_before_alignment_storage() {
     );
     assert!(words(&Page::default(), location(), expired).is_err());
 }
+
+#[test]
+fn local_context_requires_complete_data5_final_and_preserves_main_data6_boundary() {
+    let final_marker = 63 | (31 << 6) | (5 << 11);
+    let mut packet = [final_marker; 13];
+    packet[..4].copy_from_slice(&[charset(0, 0x57), 14335, 0x8de8, 0x20cc0]);
+    assert_eq!(
+        terminated_words(&indexed(&[packet]), final_marker, location(), deadline()).unwrap(),
+        packet[..4]
+    );
+    // A standalone Main still requires data7; Local presence is source-owned.
+    assert!(words(&indexed(&[packet]), location(), deadline()).is_err());
+    let mut trailing = packet;
+    trailing[5] = 0;
+    assert!(terminated_words(&indexed(&[trailing]), final_marker, location(), deadline()).is_err());
+    assert!(terminated_words(
+        &indexed(&[packet, [final_marker; 13]]),
+        final_marker,
+        location(),
+        deadline()
+    )
+    .is_err());
+    assert!(terminated_words(
+        &indexed(&[[14335; 13]]),
+        final_marker,
+        location(),
+        deadline()
+    )
+    .is_err());
+}
+
+#[test]
+fn local_context_relocation_keeps_origin_type_scope_and_exact_native_marker() {
+    // Fixed passive Local calls.14->12 crosses an X26 designation boundary;
+    // 103->105 moves pointer7/C to8/1, including its high address bit.
+    for (index, old_main, new_main, before, after) in [
+        (14, 5, 3, 0x8ce8, 0x64e8),
+        (12, 4, 6, 0x64e8, 0x8ce8),
+        (103, 20, 22, 0x3e4e8, 0xce9),
+    ] {
+        let original = [0x10428, before];
+        let edited = [0x10428, after];
+        assert!(model::relocated_call(
+            &original, index, old_main, new_main, &edited
+        ));
+        for forged in [
+            [0x10429, after],
+            [0x10428, after ^ 0x40],
+            [0x10428, after ^ 8],
+            [0x10428, after ^ (1 << 11)],
+        ] {
+            assert!(!model::relocated_call(
+                &original, index, old_main, new_main, &forged
+            ));
+        }
+    }
+    assert!(!model::relocated_call(
+        &[0x8ce8],
+        14,
+        5,
+        usize::MAX,
+        &[0x64e8]
+    ));
+    assert!(!model::relocated_call(&[0x8ce8], 1, 5, 0, &[0x64e8]));
+    assert!(!model::relocated_call(&[0x8ce8], 208, 5, 5, &[0x64e8]));
+    assert!(!model::relocated_call(&[], 14, 5, 3, &[0x64e8]));
+    assert!(!model::relocated_call(&[0x8ce8], 14, 5, 3, &[]));
+}
+
+#[test]
+fn local_pointer_relocation_alone_never_grants_a_context_edit() {
+    let atoms = [Atom::LocalCall {
+        words: &[0x8ce8],
+        definition: 14,
+        main_words: 1,
+    }];
+    assert!(alignment::assign(&atoms, &[0x8ce8], location(), deadline()).is_err());
+}

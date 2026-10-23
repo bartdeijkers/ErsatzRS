@@ -19,6 +19,11 @@ const FINAL: u32 = 63 | (31 << 6) | (7 << 11);
 
 enum Atom<'a> {
     Fixed(&'a [u32]),
+    LocalCall {
+        words: &'a [u32],
+        definition: u8,
+        main_words: usize,
+    },
     Scalar {
         command: usize,
         column: u8,
@@ -42,8 +47,8 @@ pub(super) fn reconcile(
 ) -> Result<TeletextEditorialChanges> {
     location.check_deadline(deadline)?;
     check_packets(service, owner, baseline, location, deadline)?;
-    let old = words(baseline, location, deadline)?;
-    let uploaded = words(edited, location, deadline)?;
+    let old = main_words(service, owner, baseline, location, deadline)?;
+    let uploaded = main_words(service, owner, edited, location, deadline)?;
     let atoms = model::build(service, owner, &old, location, deadline)?;
     let assigned = alignment::assign(&atoms, &uploaded, location, deadline)?;
     changes(owner, &atoms, &assigned, location, deadline)
@@ -58,13 +63,46 @@ pub(super) fn requires_exact(
     location: Location,
     deadline: Instant,
 ) -> Result<bool> {
-    let old = words(baseline, location, deadline)?;
+    let old = main_words(service, owner, baseline, location, deadline)?;
     let atoms = model::build(service, owner, &old, location, deadline)?;
     Ok(atoms.iter().any(|atom| matches!(atom, Atom::Glyph { .. })))
 }
 
 /// Read complete canonical X26, with no requirement for Local definitions.
 fn words(page: &Page<'_>, location: Location, deadline: Instant) -> Result<Vec<u32>> {
+    terminated_words(page, FINAL, location, deadline)
+}
+
+fn main_words(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    page: &Page<'_>,
+    location: Location,
+    deadline: Instant,
+) -> Result<Vec<u32>> {
+    location.check_deadline(deadline)?;
+    let native = compiled_program(service, owner).ok_or_else(|| located_word(location, 0))?;
+    if native.definition_positions().is_empty() {
+        return words(page, location, deadline);
+    }
+    // The trusted encoder terminates Main with data6 and the complete local
+    // sequence with data5. Locals remain immutable and final validation still
+    // compares every uploaded packet against the complete native rebuild.
+    let mut words = terminated_words(page, 63 | (31 << 6) | (5 << 11), location, deadline)?;
+    let main_end = words
+        .iter()
+        .position(|word| *word == 63 | (31 << 6) | (6 << 11))
+        .ok_or_else(|| located_word(location, 0))?;
+    words.truncate(main_end);
+    Ok(words)
+}
+
+fn terminated_words(
+    page: &Page<'_>,
+    final_marker: u32,
+    location: Location,
+    deadline: Instant,
+) -> Result<Vec<u32>> {
     location.check_deadline(deadline)?;
     let mut result = Vec::new();
     let mut absent = false;
@@ -85,11 +123,11 @@ fn words(page: &Page<'_>, location: Location, deadline: Instant) -> Result<Vec<u
     }
     let end = result
         .iter()
-        .position(|word| *word == FINAL)
+        .position(|word| *word == final_marker)
         .ok_or_else(|| located_word(location, 0))?;
     if result.len() > CAPACITY
         || result.len() != (end + 1).div_ceil(13) * 13
-        || result[end..].iter().any(|word| *word != FINAL)
+        || result[end..].iter().any(|word| *word != final_marker)
     {
         return Err(located_word(location, end));
     }

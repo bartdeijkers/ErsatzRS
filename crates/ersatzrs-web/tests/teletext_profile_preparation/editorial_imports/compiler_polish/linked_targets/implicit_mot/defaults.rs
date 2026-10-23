@@ -7,6 +7,9 @@ mod checks;
 #[path = "defaults/fixture.rs"]
 mod seed;
 
+#[path = "defaults/complete_context.rs"]
+mod complete_context;
+
 #[path = "defaults/resource_interchange.rs"]
 mod resource_interchange;
 
