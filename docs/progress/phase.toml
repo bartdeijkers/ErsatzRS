@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — remaining AB1/AB2 scalar eligibility'
+current_focus = 'p9a-author-base — remaining AB2 supplementary/Greek qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,13 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-base remaining AB1/AB2 scalar eligibility.
-Next executable action: qualify only the six remaining national positions
-Polish5B,Turkish23,Serbian5D/7D,Romanian5D/7D and the original ambiguous
-supplementary/Greek aliases58/7F/GreekG0-52 from their existing fixed source
-records. Preserve raw-coded identities and explicit located rejection. Stop at
-source-supported scalar eligibility or the exact missing assignment premise;
-no inferred Unicode alias, source restriction or additional repertoire variant.
+Current package: p9a-author-base remaining AB2 supplementary/Greek qualification.
+Next executable action: resolve only the original ambiguous G2-58/7F and
+GreekG0-52 scalar/native definitions and the three retained spacing-slot
+correspondences49/4B/4C. Use the existing normative/native/source records and
+preserve raw identity, source context and explicit located rejection. Stop at
+source-supported correspondence or an exact missing assignment/capability;
+no inferred alias, additional repertoire/editor variant or decoder maintenance.
+
+AB1 eligibility/conversion component is completed: eight original national
+positions have native scalar mappings; legacy single-cellTL has no guessed
+modern-lira/private-use alias. Canonical authored_unicode_eligibility_followup.national_completion owns seven
+focused controls, the three-context application
+export/import/preview/explicit-publication/restart proof and preserved distinctions.
+The original raw169/native300 and previous eight-page fixtures remain exact.
+Correct independent correspondence at the five Romanian/Serbian slots remains
+mandatory, with all original/new scalar negatives retained. Pinned QTM keymap
+facts do not claim a new actual keyboard/editor or stream trial. Enhanced
+national-conversion operands and other native/client/platform owners are unchanged.
 
 AB3..5 attribution is completed for the original45 observations. All actual
 masks match pinned stock source/font, while product masks match the pinnedMIT
@@ -80,16 +91,11 @@ changed capable decoder. Canonical authored_ab3_attribution_followup and
 authored_ab4_ab5_attribution_followup own proof and exact reuse. No external
 maintenance, unchanged replay or client search follows.
 
-AB1/AB2 native conversions and assigned spacing-accent authoring are completed
-within the source/wire/preview boundary: three national positions and fifteen
-spacing forms, five contexts, no optional banks. Canonical provider-scan/identity.json
-authored_unicode_eligibility_followup owns1113 passing teletext regressions,
-five final preview/fixture tests and exact reuse of raw169/native300 fixtures.
-The independent stock decoder retains406/468 agreements and62 exact disagreements;
-AB1/AB2 retain the six unresolved national aliases, RomanianI correspondence,
-three spacing-slot correspondences and existing ambiguous/composite assignments.
-These results do not claim all independent glyph correspondence or editor/client
-acceptance.
+AB2 assigned spacing-accent authoring remains completed within source/wire/preview:
+fifteen spacing forms, five contexts, no optional banks. Its original406/468 stock
+agreements and62 exact negatives remain unchanged; the named three spacing-slot
+correspondences and ambiguous definitions above stay open at AB2. No repeated
+editor or client chain is commissioned for these unchanged cases.
 
 AB6 original separated-margin font attribution/equivalence is completed:
 all three observed stock masks match their pinned stock font; all three product

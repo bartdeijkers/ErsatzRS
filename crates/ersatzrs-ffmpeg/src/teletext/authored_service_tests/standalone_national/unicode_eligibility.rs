@@ -2,6 +2,18 @@
 use super::*;
 
 const ACCENTS: &str = "ˋˊˆ˜ˉ˘˙¨ˌ˚¸_˝˛ˇ";
+// Table36 identities, corroborated by the pinned editor's explicit keymap.
+// Polish5B is the rendered strokedZ, not its dottedZ keyboard substitution.
+const NATIONAL_CASES: [(u8, char, u8); 8] = [
+    (0x1f, '¤', 0x24),
+    (0x1f, 'Î', 0x5e),
+    (0x23, 'ȩ', 0x5c),
+    (0x08, 'Ƶ', 0x5b),
+    (0x1d, 'Đ', 0x5d),
+    (0x1d, 'đ', 0x7d),
+    (0x1f, 'Ă', 0x5d),
+    (0x1f, 'ă', 0x7d),
+];
 
 fn text(primary: u8, value: &str) -> TeletextDeclaredService {
     let mut source = draft(primary);
@@ -41,21 +53,26 @@ fn check_preview(source: &TeletextDeclaredService) {
 #[test]
 fn qualified_national_aliases_keep_native_fallback_and_need_no_enhancements() {
     let mut wrong = Vec::new();
-    for (primary, scalar, code) in [(0x1f, '¤', 0x24), (0x1f, 'Î', 0x5e), (0x23, 'ȩ', 0x5c)] {
+    for (primary, scalar, code) in NATIONAL_CASES {
         let source = text(primary, &scalar.to_string());
-        check_preview(&source);
         let service = source.semantic();
         let layout =
-            layout::compile_for_service_composition(service, &service.base().pages[0]).unwrap();
+            match layout::compile_for_service_composition(service, &service.base().pages[0]) {
+                Ok(layout) => layout,
+                Err(error) => {
+                    wrong.push(format!("{primary:02x}/{scalar}: {error:?}"));
+                    continue;
+                }
+            };
         if layout.rows[1][8] != code || !layout.base_glyphs().is_empty() {
-            wrong.push((
-                primary,
-                scalar,
+            wrong.push(format!(
+                "{primary:02x}/{scalar}: byte{:02x},{} enhancements",
                 layout.rows[1][8],
-                layout.base_glyphs().len(),
+                layout.base_glyphs().len()
             ));
             continue;
         }
+        check_preview(&source);
         let encoded = encode_teletext_authored_service(source.clone(), &[], &limits()).unwrap();
         assert_eq!(encoded.declared(), &source);
         assert!(encoded.compiler_drcs_resources().is_empty());
@@ -156,7 +173,7 @@ fn assigned_spacing_accents_keep_context_and_literal_blank_base_fallback() {
     if let Some(path) =
         crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_UNICODE_ELIGIBILITY_FIXTURE"])
     {
-        for (primary, scalar) in [(0x1f, '¤'), (0x1f, 'Î'), (0x23, 'ȩ')] {
+        for (primary, scalar, _) in NATIONAL_CASES {
             let encoded = encode_teletext_authored_service(
                 text(primary, &scalar.to_string()),
                 &[],
@@ -228,4 +245,53 @@ fn spacing_accent_inverse_keeps_combining_input_and_unqualified_slots_distinct()
         );
     }
     assert!(charset::encode_native_g2('ˋ', TeletextCharsetPair::ArabicArabic).is_none());
+}
+
+#[test]
+fn national_aliases_preserve_diacritics_eth_and_legacy_lira_distinctions() {
+    for (primary, scalar, fallback, mode, code) in [
+        (0x08, 'Ż', b'Z', 0x17, b'Z'),
+        (0x1d, 'Ð', b' ', 0x0f, 0x62),
+        (0x1d, 'ð', b' ', 0x0f, 0x73),
+        (0x1f, 'Ǎ', b'A', 0x1f, b'A'),
+        (0x1f, 'ǎ', b'a', 0x1f, b'a'),
+    ] {
+        let source = text(primary, &scalar.to_string());
+        let service = source.semantic();
+        let layout =
+            layout::compile_for_service_composition(service, &service.base().pages[0]).unwrap();
+        assert_eq!(layout.rows[1][8], fallback);
+        assert_eq!(layout.base_glyphs().len(), 1);
+        let expected = if mode == 0x0f {
+            TeletextColumnOperation::G2 {
+                code: TeletextGlyphCode::new(code).unwrap(),
+            }
+        } else {
+            TeletextColumnOperation::G0Diacritic {
+                code: TeletextGlyphCode::new(code).unwrap(),
+                diacritic: TeletextDiacriticIndex::new(mode & 15).unwrap(),
+            }
+        };
+        assert_eq!(
+            TeletextColumnOperation::from(&layout.base_glyphs()[0]),
+            expected
+        );
+        let encoded = encode_teletext_authored_service(source.clone(), &[], &limits()).unwrap();
+        assert_eq!(encoded.declared(), &source);
+    }
+    let source = text(0x16, "₺");
+    let error = encode_teletext_authored_service(source.clone(), &[], &limits()).unwrap_err();
+    assert!(matches!(&error.reason,Failure::Layout(error)
+        if matches!(error.as_ref(),TeletextEncodingError::Character {address,row:1,column:8,codepoint}
+            if *address==owner(0) && *codepoint==0x20ba)));
+    assert_eq!(
+        source.semantic().base().pages[0].rows[0].runs[0].content,
+        TeletextRunContent::Text { text: "₺".into() }
+    );
+    let source = text(0x16, "TL");
+    let service = source.semantic();
+    let layout =
+        layout::compile_for_service_composition(service, &service.base().pages[0]).unwrap();
+    assert_eq!(&layout.rows[1][8..10], b"TL");
+    assert!(layout.base_glyphs().is_empty());
 }

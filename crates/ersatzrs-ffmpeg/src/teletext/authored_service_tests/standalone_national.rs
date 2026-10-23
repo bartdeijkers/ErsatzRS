@@ -165,7 +165,8 @@ fn romanian_unicode_replacements_keep_original_intent_and_overlay_guards() {
         Err(TeletextEncodingError::NationalOption { .. })
     ));
     let layout = layout::compile_for_service_composition(service, page).unwrap();
-    assert_eq!(&layout.rows[1][8..13], b"A  ea");
+    // The qualified breve-a retains its original native7D fallback cell.
+    assert_eq!(&layout.rows[1][8..13], b"A  e}");
     let replacements: Vec<_> = layout
         .base_glyphs()
         .iter()
@@ -184,10 +185,6 @@ fn romanian_unicode_replacements_keep_original_intent_and_overlay_guards() {
             TeletextColumnOperation::G0Diacritic {
                 code: TeletextGlyphCode::new(b'e').unwrap(),
                 diacritic: TeletextDiacriticIndex::new(2).unwrap()
-            },
-            TeletextColumnOperation::G0Diacritic {
-                code: TeletextGlyphCode::new(b'a').unwrap(),
-                diacritic: TeletextDiacriticIndex::new(6).unwrap()
             },
         ]
     );

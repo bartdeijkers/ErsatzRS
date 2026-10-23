@@ -4,6 +4,9 @@ use super::*;
 #[path = "native_editor/supplementary.rs"]
 mod supplementary;
 
+#[path = "native_editor/national.rs"]
+mod national;
+
 #[path = "native_editor/arabic_g0.rs"]
 mod arabic_g0;
 
