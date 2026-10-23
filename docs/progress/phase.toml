@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — AB4/AB5 fixed source and context attribution'
+current_focus = 'p9a-author-base — remaining AB1/AB2 scalar eligibility'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,22 +62,23 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-base AB4/AB5 fixed source and context attribution.
-Next executable action: qualify only the retained four GreekG2 multiplication
-and five physical-header/explicit-German-secondary mismatches from the existing
-AB4/AB5 receipts. Inspect their actual source/code/context before deciding on a
-product correction. Stop at exact correspondence or a concrete product/tool
-capability attribution; preserve scalar/context/fallback oracles. No new repertoire,
-editor/client variant, candidate search or external decoder maintenance.
+Current package: p9a-author-base remaining AB1/AB2 scalar eligibility.
+Next executable action: qualify only the six remaining national positions
+Polish5B,Turkish23,Serbian5D/7D,Romanian5D/7D and the original ambiguous
+supplementary/Greek aliases58/7F/GreekG0-52 from their existing fixed source
+records. Preserve raw-coded identities and explicit located rejection. Stop at
+source-supported scalar eligibility or the exact missing assignment premise;
+no inferred Unicode alias, source restriction or additional repertoire variant.
 
-AB3 six-slot attribution is completed:36 actual glyph renders bind exactly to
-pinned stock source/font and current pinnedMIT product masks. Ukrainianyi has six
-exact glyph correspondences despite distinct scalar aliases. The other30 renders
-prove wrong grave-I/pound glyphs in the stockdecoder at five fixed slots. Correct
-independent decoding there is now a concrete external capability blocker, not an
-unknown product defect. Resume only when a changed capable decoder is available;
-all36 original scalar negatives remain. Canonical authored_ab3_attribution_followup
-owns this boundary. No further adjacent variant precedes its local checkpoint.
+AB3..5 attribution is completed for the original45 observations. All actual
+masks match pinned stock source/font, while product masks match the pinnedMIT
+source. Ukrainianyi has six exact glyph correspondences despite scalar aliases;
+the other39 observations prove concrete stock capability defects in breve/pound,
+Greek multiplication, header nationalisation and explicit secondary selection.
+All45 original scalar negatives remain; correct independent decoding requires a
+changed capable decoder. Canonical authored_ab3_attribution_followup and
+authored_ab4_ab5_attribution_followup own proof and exact reuse. No external
+maintenance, unchanged replay or client search follows.
 
 AB1/AB2 native conversions and assigned spacing-accent authoring are completed
 within the source/wire/preview boundary: three national positions and fifteen
@@ -88,7 +89,7 @@ The independent stock decoder retains406/468 agreements and62 exact disagreement
 AB1/AB2 retain the six unresolved national aliases, RomanianI correspondence,
 three spacing-slot correspondences and existing ambiguous/composite assignments.
 These results do not claim all independent glyph correspondence or editor/client
-acceptance. No further adjacent variant precedes the closed component checkpoint.
+acceptance.
 
 AB6 original separated-margin font attribution/equivalence is completed:
 all three observed stock masks match their pinned stock font; all three product
