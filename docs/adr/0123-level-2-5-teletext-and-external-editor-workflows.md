@@ -802,6 +802,16 @@ unpositioned potential resets retain uncertainty. Earlier-root writers prevent
 an unsupported prefix claim. Keep all mixed-source witnesses after deriving a
 safe lower bound; no complete reset/display or admission certificate follows.
 The two linear group passes share the existing checked work/storage fence.
+For one actual writing object in an explicit Local program, its non-writing
+activating ancestors necessarily open before its first action. Retain that
+initial count through the object's original command runs; a later unplaced
+write cannot erase an already definite opening prefix. Require every potential
+write to belong to that same invocation and every ancestor call AP to be known.
+Potential resets and unplaced openings remain conservative barriers with their
+unchanged pending witnesses. Defaults, multiple writing instances and unresolved
+cross-emitter chronology receive no inferred order. The checked work fence
+includes the linear writer/selected-emitter scans and decreasing ancestor walk;
+no extra queue, guessed endpoint or complete-admission authority is introduced.
 Supplied-program spatial replay shares the existing two-pass walker without
 rerunning Base composition. It retains physical Local main ordinals and full
 body identities/instances; the service entry retains its original sparse default

@@ -138,9 +138,8 @@ fn whole_factory_plane_colour_cannot_hide_sixteen_same_source_opens() {
     }
 }
 
-pub(super) fn assert_successive_refusal(
+pub(super) fn original_successive_refusal(
     source: &TeletextDeclaredService,
-    command: usize,
 ) -> TeletextDisplayGeometryError {
     let original = source.clone();
     let result =
@@ -167,8 +166,9 @@ pub(super) fn assert_successive_refusal(
     let TeletextCompiledDisplayPageEncodingFailure::Normalization(error) = error.reason else {
         panic!("the original source must fail during normalization")
     };
-    let TeletextNormalizedMainProgramFailure::Original(error) = error.reason else {
-        panic!("no physical candidate can bypass original admission")
+    let error = match error.reason {
+        TeletextNormalizedMainProgramFailure::Original(error) => error,
+        other => panic!("original admission was not retained: {other:?}"),
     };
     let TeletextComposedMainEncodingError::Composition(error) = *error else {
         panic!("the original complete composition must retain its located refusal")
@@ -183,6 +183,15 @@ pub(super) fn assert_successive_refusal(
             maximum: 15
         }
     );
+    assert_eq!(source, &original);
+    error
+}
+
+pub(super) fn assert_successive_refusal(
+    source: &TeletextDeclaredService,
+    command: usize,
+) -> TeletextDisplayGeometryError {
+    let error = original_successive_refusal(source);
     assert_eq!(
         error.location,
         Some(TeletextEnhancementSource {
@@ -195,6 +204,5 @@ pub(super) fn assert_successive_refusal(
         Some(TeletextSpatialRootSource::Local { command })
     );
     assert_eq!(error.invocation.unwrap().get(), 15);
-    assert_eq!(source, &original);
     error
 }

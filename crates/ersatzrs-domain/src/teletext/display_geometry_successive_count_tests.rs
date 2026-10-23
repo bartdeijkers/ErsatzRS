@@ -381,24 +381,69 @@ fn positioned_child_writes_between_calls_preserve_valid_successive_admission() {
     assert!(geometry.successive_open_count().pending().is_empty());
 }
 
-#[test]
-fn out_of_plane_potential_write_is_pending_rather_than_an_assumed_absence() {
+fn deferred_write_fixture(before: usize, tail: bool) -> Fixture {
     let parent = local(0);
     let child = local(1);
-    let mut body = vec![invoke(child, TeletextObjectType::Passive, None); 15];
-    body.extend([set(24, 0), glyph(0)]);
-    body.extend([invoke(child, TeletextObjectType::Passive, None); 15]);
-    let geometry = result(&fixture(
+    let mut body = vec![invoke(child, TeletextObjectType::Passive, None); before];
+    if tail {
+        body.extend([set(24, 0), glyph(0)]);
+        body.extend([invoke(child, TeletextObjectType::Passive, None); 15]);
+    }
+    fixture(
         None,
         vec![invoke(parent, TeletextObjectType::Active, Some((1, 0)))],
         vec![
             definition(parent, TeletextObjectType::Active, body),
             definition(child, TeletextObjectType::Passive, vec![]),
         ],
-    ))
-    .unwrap();
+    )
+}
+
+#[test]
+fn later_out_of_plane_write_cannot_erase_existing_ancestor_opening_prefix() {
+    for tail in [false, true] {
+        let input = deferred_write_fixture(15, tail);
+        let original = (
+            input.base.clone(),
+            input.spatial.clone(),
+            input.glyphs.clone(),
+        );
+        let observed = result(&input);
+        assert!(
+            observed.is_err(),
+            "A8(3): later out-of-plane write hid the unchanged16-opening prefix; tail={tail}"
+        );
+        let error = observed.unwrap_err();
+        assert_eq!(
+            error.reason,
+            TeletextDisplayGeometryFailure::TooManySuccessiveObjectOpens {
+                count: 16,
+                maximum: 15
+            }
+        );
+        assert_eq!(error.position, Some((1, 0)));
+        assert_eq!(
+            error.location,
+            Some(TeletextEnhancementSource {
+                object: Some(local(0)),
+                command: 14
+            })
+        );
+        assert_eq!(
+            error.root_source,
+            Some(TeletextSpatialRootSource::Local { command: 0 })
+        );
+        assert_eq!(error.invocation.unwrap().get(), 15);
+        assert_eq!((input.base, input.spatial, input.glyphs), original);
+    }
+}
+
+#[test]
+fn shorter_ancestor_prefix_keeps_later_unplaced_reset_and_openings_pending() {
+    let parent = local(0);
+    let geometry = result(&deferred_write_fixture(14, true)).unwrap();
     let count = geometry.successive_open_count();
-    assert_eq!(count.maximum_known_successive(), 0);
+    assert_eq!(count.maximum_known_successive(), 15);
     assert_eq!(count.pending().len(), 16);
     assert_eq!(
         count
@@ -420,7 +465,7 @@ fn out_of_plane_potential_write_is_pending_rather_than_an_assumed_absence() {
         .unwrap();
     assert_eq!(pending.position(), (25, 0));
     assert_eq!(pending.location().object, Some(parent));
-    assert_eq!(pending.location().command, 16);
+    assert_eq!(pending.location().command, 15);
     assert_eq!(pending.invocation().unwrap().get(), 0);
     assert_eq!(
         pending.reason(),

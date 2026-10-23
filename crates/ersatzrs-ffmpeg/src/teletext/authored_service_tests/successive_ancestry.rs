@@ -137,3 +137,71 @@ fn export(page: &EncodedTeletextPage) {
             ]}]
     })).unwrap()).unwrap();
 }
+
+fn deferred_object_fixture(tail: bool) -> (TeletextDeclaredService, TeletextObjectIdentity) {
+    let mut draft = input();
+    let parent = TeletextObjectIdentity::local(owner(0), TeletextObjectId::new(65534));
+    let child = TeletextObjectIdentity::local(owner(0), TeletextObjectId::new(65535));
+    let call = TeletextEnhancementCommand::InvokeObject {
+        target: child,
+        object_type: TeletextObjectType::Passive,
+        offset: None,
+    };
+    let mut body = vec![call; 15];
+    if tail {
+        body.extend([
+            TeletextEnhancementCommand::SetPosition {
+                position: TeletextEnhancementPosition::new(24, 0).unwrap(),
+            },
+            TeletextEnhancementCommand::AtColumn {
+                column: 0,
+                operation: TeletextColumnOperation::G0 {
+                    code: TeletextGlyphCode::new(b'A').unwrap(),
+                },
+            },
+        ]);
+        body.extend([call; 15]);
+    }
+    draft.objects.extend([
+        TeletextEnhancementObjectDefinition {
+            identity: parent,
+            object_type: TeletextObjectType::Active,
+            program: TeletextEnhancementProgram::new(body).unwrap(),
+        },
+        TeletextEnhancementObjectDefinition {
+            identity: child,
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![]).unwrap(),
+        },
+    ]);
+    draft.pages[0].local_program = Some(
+        TeletextEnhancementProgram::new(vec![TeletextEnhancementCommand::InvokeObject {
+            target: parent,
+            object_type: TeletextObjectType::Active,
+            offset: Some(TeletextObjectOffset::new(1, 0).unwrap()),
+        }])
+        .unwrap(),
+    );
+    (declared(draft), parent)
+}
+
+#[test]
+fn whole_factory_later_unplaced_write_cannot_erase_ancestor_prefix_refusal() {
+    for tail in [false, true] {
+        let (source, parent) = deferred_object_fixture(tail);
+        let error = super::empty_admission::original_successive_refusal(&source);
+        assert_eq!(
+            error.location,
+            Some(TeletextEnhancementSource {
+                object: Some(parent),
+                command: 14
+            })
+        );
+        assert_eq!(
+            error.root_source,
+            Some(TeletextSpatialRootSource::Local { command: 0 })
+        );
+        assert_eq!(error.invocation.unwrap().get(), 15);
+        assert_eq!(error.position, Some((1, 0)));
+    }
+}

@@ -83,7 +83,9 @@ impl TeletextObjectSuccessiveCount {
     /// known runs at their exact original ordinal. Otherwise unpositioned resets
     /// disable the combined lower-bound claim and mixed-source ties break runs
     /// conservatively. An explicit Main prefix before every reset's root call
-    /// can retain its own lower bound. All uncertainty remains in `pending()`.
+    /// can retain its own lower bound. With one writing object, its activating
+    /// non-writing ancestors also bound its original runs. All uncertainty
+    /// remains in `pending()`.
     #[must_use]
     pub const fn maximum_known_successive(&self) -> usize {
         self.maximum_known_successive
@@ -100,13 +102,15 @@ pub(super) fn successive_storage_bytes(events: usize, _instances: usize) -> Opti
         .checked_add(events.checked_mul(size_of::<TeletextSuccessiveOpenPending>())?)
 }
 
-pub(super) fn successive_work(events: usize, _instances: usize) -> Option<usize> {
+pub(super) fn successive_work(events: usize, instances: usize) -> Option<usize> {
     let levels = usize::BITS - events.leading_zeros();
     events
         .checked_mul(levels as usize + 1)?
         .checked_mul(2)?
-        // Two additional linear group passes qualify explicit Main prefixes.
-        .checked_add(events.checked_mul(6)?)
+        // Group prefix passes plus one writer pass and one selected-emitter
+        // scan; the strictly decreasing ancestor walk visits at most instances.
+        .checked_add(events.checked_mul(8)?)?
+        .checked_add(instances)
 }
 
 #[derive(Clone, Copy)]
@@ -198,7 +202,7 @@ pub(super) fn count_successive_objects(
         // Every relevant action belongs to one actual emitter. Its original
         // ordinal is exact without assigning a screen cell to a plane write.
         // This linear scan replaces, rather than extends, the fenced sort/scan.
-        scan_single_emitter(owner, events)?
+        scan_single_emitter(owner, events, first_emitter.flatten(), 0)?
     } else {
         // Other keys stabilize diagnostics without assigning physical tie priority.
         actions.sort_unstable_by_key(|item| {
@@ -216,6 +220,8 @@ pub(super) fn count_successive_objects(
             original.original_program_source() == &TeletextEffectiveProgramSource::Local,
         )?
     };
+    let maximum_known_successive =
+        maximum_known_successive.max(object_emitter_bound(owner, original)?);
     pending.sort_unstable_by_key(TeletextSuccessiveOpenPending::event_ordinal);
     Ok(TeletextObjectSuccessiveCount {
         maximum_known_successive,
@@ -226,9 +232,14 @@ pub(super) fn count_successive_objects(
 fn scan_single_emitter(
     owner: TeletextPageAddress,
     events: &[TeletextSpatialEvent],
+    emitter: Option<TeletextSpatialInvocationId>,
+    initial: usize,
 ) -> Result<usize, TeletextDisplayGeometryError> {
-    let (mut run, mut maximum) = (0, 0);
+    let (mut run, mut maximum) = (initial, initial);
     for &event in events {
+        if event.invocation() != emitter {
+            continue;
+        }
         match action(event) {
             Action::Positioned {
                 kind: ActionKind::Open(child),
@@ -251,6 +262,86 @@ fn scan_single_emitter(
         }
     }
     Ok(maximum)
+}
+
+fn object_emitter_bound(
+    owner: TeletextPageAddress,
+    original: &TeletextSpatialTrace,
+) -> Result<usize, TeletextDisplayGeometryError> {
+    if original.original_program_source() != &TeletextEffectiveProgramSource::Local {
+        return Ok(0);
+    }
+    let Some(writer) = sole_object_writer(original.events()) else {
+        return Ok(0);
+    };
+    let Some(initial) = ancestor_open_count(original, writer) else {
+        return Ok(0);
+    };
+    if initial > 15 {
+        if let Some(event) = original
+            .events()
+            .iter()
+            .find(|event| event.called_invocation() == Some(writer))
+        {
+            let position = event.absolute_before();
+            return Err(opening_error(
+                owner,
+                *event,
+                writer,
+                (position.row(), position.column()),
+                initial,
+            ));
+        }
+        return Ok(0);
+    }
+    // Every possible write belongs to this actual instance. Its mandatory
+    // activating ancestors precede its first action; other emitters cannot
+    // reset the known run. No preorder-as-screen-order inference is required.
+    scan_single_emitter(owner, original.events(), Some(writer), initial)
+}
+
+fn sole_object_writer(events: &[TeletextSpatialEvent]) -> Option<TeletextSpatialInvocationId> {
+    let mut writer = None;
+    for &event in events {
+        if matches!(
+            action(event),
+            Action::Positioned {
+                kind: ActionKind::Write,
+                ..
+            } | Action::Pending(TeletextSuccessiveOpenPendingReason::UnpositionedPotentialReset)
+        ) {
+            let emitter = event.invocation()?;
+            if writer.is_some_and(|previous| previous != emitter) {
+                return None;
+            }
+            writer = Some(emitter);
+        }
+    }
+    writer
+}
+
+fn ancestor_open_count(
+    original: &TeletextSpatialTrace,
+    writer: TeletextSpatialInvocationId,
+) -> Option<usize> {
+    let mut next = Some(writer);
+    let mut count = 0_usize;
+    while let Some(id) = next {
+        let call = original.invocations().get(id.get())?;
+        let position = call.caller_position();
+        if position.row() > 24
+            || position.column() > 71
+            || !matches!(call.root_source(), TeletextSpatialRootSource::Local { .. })
+        {
+            return None;
+        }
+        count = count.checked_add(1)?;
+        next = call.parent();
+        if next.is_some_and(|parent| parent.get() >= id.get()) {
+            return None;
+        }
+    }
+    Some(count)
 }
 
 fn opening_error(

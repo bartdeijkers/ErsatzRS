@@ -1005,6 +1005,8 @@ release section when tagging a release.
   in the same source; uncertain cross-source ordering remains explicit.
   A later child-object write also cannot hide its invoking Main call from
   the limit.
+  Preserve a known opening prefix inside that child even when a later write
+  falls outside the page, retaining its original source-located refusal.
 
 - Encode Main header context with original POP/GPOP objects using the existing
   coherent resource-before-display acquisition order. Preserve original object
