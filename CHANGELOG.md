@@ -998,6 +998,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Correct the teletext reference to describe the operational export, concept
+  import, validation, preview and explicit-publication workflow for admin users
+  and agents. Preserve the distinction between completed editor actions and
+  remaining engine, client and platform acceptance.
+
 - Prevent a qualifying Next candidate from consuming a one-shot producer during
   Copy keyframe preflight. Use facts from its already-owned prefix with explicit
   runtime negotiation, preserve one consuming pass and joined cleanup, and retain

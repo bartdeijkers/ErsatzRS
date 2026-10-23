@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-admin-base — A1 localized file/editor action join'
+current_focus = 'p9a-editor-enhanced — EE1 complete context-factory qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,12 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-admin-base A1 localized file/editor action join.
-Next executable action: join completed EB1/EB2 to the existing localized
-file/export/concept/shared-preview/explicit-publication action receipts.
-Qualify that exact join before implementation; execute only a missing mandatory
-admin boundary if identified. Stop at A1's existing localized action and
-agent-file workflow obligation; no extra editor/repertoire variant queue.
+Current package: p9a-editor-enhanced EE1 complete context-factory qualification.
+Next executable action: qualify one existing complete original/final
+Main/Local/default/generated-Base context factory against the recorded
+nonempty-definition/source-classification guard. Establish an attributable
+refusal before correction; retain original identities/provenance/full effects,
+exact native units/fallback, concept/preview/reexport/root undo/publication.
+Use existing fixtures and tools; no external editor/decoder maintenance.
+
+A1 base admin/agent-file action join is completed:14 shared route/control/action
+bodies and27 strings across9 cultures remain exact to the genuine headed source;
+the sole wrapper delta inserts enhanced forms owned by A2. Original4 Chromium
+and4 Firefox JS/no-JS/light/dark/all9-culture receipts join closed EB1/EB2.
+The existing reference now correctly exposes its operational transfer contract,
+retaining historical negatives. No UI/runtime change or new all-current browser
+run. Canonical provider-scan/identity.json admin_base_join_followup owns pins
+and the bounded source/receipt join; required parent dependencies stay open.
 
 EB1 direct ArabicG0 cell editing is completed for47/57: actual pinned headed
 QTM1.0 native code H changes physical G0/47 to48 while original X26/G2 sentinels

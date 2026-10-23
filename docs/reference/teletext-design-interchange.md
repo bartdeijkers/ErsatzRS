@@ -2,12 +2,19 @@
 
 ## Delivery state
 
-The external TTI/sidecar workflow is not an operational import/export interface.
-Static profiles, immutable original designs, native previews and separate explicit
-publication are connected; full authored Level 2.5/fallback, editable concepts,
-editor roundtrips and complete client acceptance remain open. P9A-04 owns current
-implementation evidence and remaining acceptance. This reference describes file
-contracts and implemented typed primitives, not a new editor or CLI release.
+Channel teletext administration provides receipt-bound TTI/sidecar export,
+edited-concept import, shared-model preview and separate explicit publication.
+The [receipt-bound native concept import](#receipt-bound-native-concept-import)
+section defines the operational file, validation and preview contract for both
+admin forms and agents. Import saves an unpublished concept; it does not request
+or select broadcast output. Installed packages and original sources remain
+immutable, and protected changes reject through the shared native validator.
+
+These implemented actions do not establish complete authored Level 2.5/fallback,
+editor-capacity, suitable-client or platform acceptance. P9A-04 in
+`docs/progress/milestones.toml` owns the exact completed components, retained
+negative evidence and remaining requirements. Historical implementation sections
+below retain their original proof boundaries.
 
 The domain provides checked colour references/RGB, editable CLUT2/3 and monochrome
 DRCS bitmap/slot/subtable values. Strict V2 wire conversion feeds supplied service
@@ -50,10 +57,12 @@ The validated producer source exposes these immutable declarations beside exact
 original response bytes. Original revisions revalidate them on reload without
 invoking packages. The host's existing complete selection supplies installation,
 package and profile identity; producer or uploaded metadata cannot replace it.
-Captured metadata does not change `policy_version: 1, kind: original_only` or
-make an original editable. Native sidecar/file mapping and export confirmation are implemented as an
-internal host seam. Edited-concept validation and the full editor roundtrip remain
-open. P9A-04 owns verification and the next concrete integration step.
+Captured metadata alone does not change `policy_version: 1, kind: original_only`
+or make an original editable. Receipt-bound export and edited-concept import
+preserve that original and validate edits against its captured permissions.
+The versioned sidecar, exact file mapping, validation failures, preview and
+separate publication are defined in
+[receipt-bound native concept import](#receipt-bound-native-concept-import).
 
 ## Resource identity and DRCS lookup
 
@@ -5925,7 +5934,7 @@ exact channel/design/revision/digest and observed current head to
 set; `export_page` plus four-digit hexadecimal `export_subcode` selects a display.
 The standard ZIP contains exact TTI/DVB files and `project.ersatzrs.json`; no
 package runs and accepted output is unchanged. ZIP uses the workspace's existing
-zip8 dependency with stored entries, without a new archive implementation.
+ZIP dependency with stored entries, without a new archive implementation.
 
 Import posts multipart to `/admin-api/teletext/design/import?channel_id=<id>`:
 text `channel_id`, `name`, `expected_design_head`, one `sidecar` file and repeated
@@ -5959,13 +5968,14 @@ head, inspect located validation errors, reload the saved immutable revision for
 preview, and request publication explicitly only after review. Installed packages
 are never edited by import; template changes require the addon-version workflow.
 
-Current gaps are explicit: this connection accepts changed base rows, refuses
+The first adapter's historical boundary accepted changed base rows, refused
 unchanged imports, recursive overlays and protected enhancement/header/navigation
-edits, and keeps PS exact against its authenticated versioned carrier. Preserved DVB resource
-assets do not yet prove QTeletextMaker dependency loading. Enhanced resources,
+edits, and kept PS exact against its authenticated versioned carrier. Preserved
+DVB resource assets did not establish QTeletextMaker dependency loading. Enhanced resources,
 objects, DRCS, side-panel editing and the complete pinned editor roundtrip remain
-required. These are pending implementation/evidence, not accepted permanent
-restrictions. A separate pinned QTeletextMaker1.0 trial now opens a real native export with an
+required for full acceptance; P9A-04 records later component completions and
+remaining obligations. This initial boundary is not a permanent restriction.
+A separate pinned QTeletextMaker1.0 trial opens a real native export with an
 exposed X11 window, edits main row2/column8 through actual widgets and saves through
 Save As. Compiler-owned four-left/twelve-right geometry supplies the editor input
 offset; independently parsed saved cells verify the target before publication.
@@ -5980,8 +5990,9 @@ copies X28 before control bits, and `setControlBit` overwrites the shared
 rejects at page124/subcode32/row28/designation0 and proves old output remains.
 This retained legacy counterexample is never masked or repaired. The v2 carrier
 now passes separate actual equal/independent NOS trials while retaining native
-header controls and old concepts. Other charset/resource/editor-set requirements
-remain open; no header-encoding change or reduced authored target is accepted.
+header controls and old concepts. The original trial did not establish complete
+charset/resource/editor-set coverage; P9A-04 records subsequent results.
+No header-encoding change or reduced authored target is accepted.
 
 [Replay instructions](../../scripts/e2e/README.md#replay-the-pinned-editor-against-a-native-export)
 provide the structured file/validation/preview workflow for maintainers and agents.
