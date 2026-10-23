@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-editor-base — EB1 direct Arabic G0 editor qualification'
+current_focus = 'p9a-admin-base — A1 localized file/editor action join'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,11 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-editor-base EB1 direct ArabicG0 actual-editor proof.
-Next executable action: qualify the already named direct ArabicG0 source/context
-against the pinned QTM path, distinct from completed generatedG2 edits in47/57.
-Use one bundled eligible save/import/preview/publication/reopen action with exact
-identities and located refusal; stop there. No extra character variant queue.
+Current package: p9a-admin-base A1 localized file/editor action join.
+Next executable action: join completed EB1/EB2 to the existing localized
+file/export/concept/shared-preview/explicit-publication action receipts.
+Qualify that exact join before implementation; execute only a missing mandatory
+admin boundary if identified. Stop at A1's existing localized action and
+agent-file workflow obligation; no extra editor/repertoire variant queue.
+
+EB1 direct ArabicG0 cell editing is completed for47/57: actual pinned headed
+QTM1.0 native code H changes physical G0/47 to48 while original X26/G2 sentinels
+stay unchanged. Native3 controls and real saves/concept/preview/reexport,
+explicit publication/two cold reopens pass. The driver now targets the actual
+modal X11 window; both original inputs save, first byte-identical. Global-pointer
+and fixed-DPI focus negatives remain. Arabic Unicode keymapping is unsupported,
+not claimed; no editor/product repair or new stream/client/platform acceptance.
+Canonical provider-scan/identity.json editor_arabic_g0_followup owns proof.
+EB1/EB2 actions are closed; required author-base acceptance retains its owner.
 
 EB2 complete plain-base-set interchange is completed: actual headed pinned
 QTM1.0 saves124/32,124/33,125/32, followed by one complete-set concept,

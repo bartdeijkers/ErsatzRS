@@ -178,13 +178,16 @@ static DriverContext driverContext() {
     const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology || fragmentCall || firstDefinitionPosition || interiorDefinitionRow;
     const bool generatedBaseG2 = mode == "single-page-base-g2";
     const bool mainG2 = mode == "single-page-main-g2" || generatedBaseG2;
-    const bool nativeG0 = mode == "single-page-native-g0";
+    const bool arabicG0 = mode == "single-page-arabic-g0";
+    const bool nativeG0 = mode == "single-page-native-g0" || arabicG0;
     const bool baseSpacing = mode == "single-page-base-spacing"
         || mode == "single-page-enhanced-spacing";
     if (nativeG0 != qEnvironmentVariableIsSet("ERSATZRS_QTM_NATIVE_G0_UNICODE"))
         qFatal("Native G0 input requires exactly the fixed native trial");
     const int nativeUnicode = nativeG0 ? boundedDecimal("ERSATZRS_QTM_NATIVE_G0_UNICODE", 0xffff) : 0;
-    if (nativeG0 && nativeUnicode != 0x0409 && nativeUnicode != 0x0416
+    if (arabicG0 && nativeUnicode != 0x48)
+        qFatal("Arabic G0 trial requires the fixed native code H, not Unicode remapping");
+    if (nativeG0 && !arabicG0 && nativeUnicode != 0x0409 && nativeUnicode != 0x0416
         && nativeUnicode != 0x0406 && nativeUnicode != 0x05d0)
         qFatal("Native G0 trial supports only the four qualified keyboard inputs");
     const bool extendedGlyph = mode == "single-page-local-extended-glyph" || mainG2;
@@ -2935,9 +2938,12 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
                 // QtTest's direct widget click can leave the native modal
                 // window behind QGraphicsView. Send a real X11 pointer click
                 // to the visible input, keeping the observed-focus guard.
-                const QPoint target = name->mapToGlobal(name->rect().center());
+                // Let X11 translate from this actual modal window rather
+                // than using Qt's cached global position after a WSLg move.
+                const QPoint target = name->mapTo(dialog, name->rect().center());
                 QProcess pointer;
-                pointer.start("/usr/bin/xdotool", {"mousemove",
+                pointer.start("/usr/bin/xdotool", {"mousemove", "--window",
+                    QString::number(static_cast<qulonglong>(dialog->winId())),
                     QString::number(target.x()), QString::number(target.y()), "click", "1"});
                 if (!pointer.waitForFinished(3000)) {
                     pointer.kill();

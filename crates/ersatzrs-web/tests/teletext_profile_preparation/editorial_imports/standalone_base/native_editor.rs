@@ -4,6 +4,9 @@ use super::*;
 #[path = "native_editor/supplementary.rs"]
 mod supplementary;
 
+#[path = "native_editor/arabic_g0.rs"]
+mod arabic_g0;
+
 #[derive(Clone, Copy)]
 struct Context {
     name: &'static str,
@@ -164,6 +167,27 @@ fn assert_preview(before: &TeletextRaster, after: &TeletextRaster) {
 }
 
 async fn run(context: Context, editor: Option<&Path>) {
+    Box::pin(run_with_publication(context, editor, false)).await;
+}
+
+fn original_x26_records(flow: &Flow) -> usize {
+    parse_teletext_tti(
+        &flow.exported[0]
+            .files()
+            .iter()
+            .find(|file| file.name == "page-124-0020.tti")
+            .unwrap()
+            .bytes,
+        policy().tti,
+    )
+    .unwrap()
+    .records()
+    .iter()
+    .filter(|record| matches!(record, TeletextTtiRecord::Packet { row: 26, .. }))
+    .count()
+}
+
+async fn run_with_publication(context: Context, editor: Option<&Path>, publish: bool) {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
         context.response,
         Fixture::new_persistent().await,
@@ -225,16 +249,33 @@ async fn run(context: Context, editor: Option<&Path>) {
     );
     assert_original_pointers_with_width(&fixture, &flow, 480).await;
     assert!(fixture.playout.try_recv().is_err());
+    if publish {
+        let accepted = publish_and_accept(&fixture, &flow, &concept).await;
+        assert_eq!(
+            external_editor_probe::preview_page(accepted.service(), 124),
+            preview
+        );
+        assert_retained_storage(&fixture, &flow).await;
+        fixture = fixture.reopen().await;
+        generations::assert_same_output_width(&recover(&fixture, 1).await, &accepted, 480);
+        generations::assert_same_output_width(&recover(&fixture, 2).await, &flow.accepted[1], 480);
+        national_editor::assert_files(
+            drcs_bitmap::reexport(&fixture, &concept).await.files(),
+            &expected.files,
+        );
+    }
     if let Some(directory) = editor {
         qtm::json_new(
             directory,
             "success.json",
             &json!({
-                "scope":"Actual pinned headed Level1.5 native G0 input, concept import/shared preview/reexport/SQLite reopen only; accepted channels unchanged, explicit publication gate reused, no new stream/client claim",
+                "scope":"Actual pinned headed Level1.5 native G0 input, concept import/shared preview/reexport/SQLite reopen; explicit publication only when requested, no new stream/client claim",
+                "explicit_publication_and_cold_recovery":publish,
                 "context":context.name,"primary":context.primary,"header_national_option":context.primary&7,
                 "headline":context.headline,"sentinels":context.sentinels,"from":context.from,"to":context.to,"typed":context.typed,
-                "row":1,"column":8,"resource_assets":0,"main_words":0,"other_records_preserved":true,
-                "originals_metadata_config_receipts_and_channels_preserved":true,"unchanged_pixels_outside_cell":true,
+                "row":1,"column":8,"resource_assets":0,"original_x26_records":original_x26_records(&flow),"other_records_preserved":true,
+                "originals_metadata_config_receipts_and_channels_preserved_before_publication":true,
+                "other_channel_preserved_after_publication":publish,"unchanged_pixels_outside_cell":true,
                 "editor":"QTeletextMaker1.0/cac2167/af7cb","design_id":concept.head().id,"revision":concept.head().revision
             }),
         );
