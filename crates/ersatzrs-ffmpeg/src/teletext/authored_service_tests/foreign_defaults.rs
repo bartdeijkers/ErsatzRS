@@ -348,7 +348,9 @@ fn assert_latin_cell(page: &EncodedTeletextNormalizedMainProgram, row: u8, colum
             .candidate_index();
         assert!(
             matches!(intent.records()[index].glyph(), Some(TeletextGlyphIdentity::G0 { glyph })
-            if glyph.repertoire() == TeletextG0Repertoire::Latin && glyph.code() == code)
+            if glyph.repertoire() == TeletextG0Repertoire::Latin && glyph.code() == code),
+            "row={row}, column={column}, expected={code}, actual={:?}",
+            intent.records()[index].glyph()
         );
     }
 }
@@ -440,7 +442,7 @@ fn global_target(page: u8) -> TeletextObjectIdentity {
     .unwrap()
 }
 
-fn sparse_fixture() -> TeletextDeclaredService {
+fn sparse_fixture(nested: bool, compatibility: bool) -> TeletextDeclaredService {
     let mut draft = input();
     let mut selected_pop = object(20, b'Z');
     selected_pop.identity = selected();
@@ -476,6 +478,11 @@ fn sparse_fixture() -> TeletextDeclaredService {
                 .collect(),
         )
         .unwrap();
+    }
+    if nested {
+        selected_global.object_type = TeletextObjectType::Passive;
+        nested::add_dependency(&mut global, selected());
+        nested::add_dependency(&mut second_pop, global_target(0xb1));
     }
     draft
         .objects
@@ -524,6 +531,10 @@ fn sparse_fixture() -> TeletextDeclaredService {
             content: TeletextRunContent::Text { text: "£Z".into() },
         }],
     });
+    if !compatibility {
+        draft.base.pages[1].rows.last_mut().unwrap().runs[0].content =
+            TeletextRunContent::Text { text: "ZZ".into() };
+    }
     declare_with_mot(draft, sparse_mot(defaults))
 }
 
@@ -577,7 +588,7 @@ fn sparse_mot(
 
 #[test]
 fn foreign_sparse_global_and_repeated_public_owner_keep_distinct_slots_and_selectors() {
-    let declared = sparse_fixture();
+    let declared = sparse_fixture(false, true);
     let original = declared.clone();
     let (source, _) = declared.semantic().effective_program(owner(1)).unwrap();
     assert_eq!(
@@ -673,3 +684,6 @@ fn foreign_default_materialization_refuses_original_work_and_catalog_limits_atom
 
 #[path = "foreign_defaults/decoder.rs"]
 mod decoder;
+
+#[path = "foreign_defaults/nested.rs"]
+mod nested;

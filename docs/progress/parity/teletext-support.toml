@@ -8,8 +8,8 @@ ADR0123:1/1.5/2.5 open; P9A-04 owns L15/F/V/X.
 EB1/2,EE1..3,A1 and scoped A2 closed.
 F2 metadata/zones/version and scoped F1 Main/Base-prefix, position undo,
 charset, V30/V31 DRCS attachment/undo, created banks, leading AP/calls,
-Public↔Global and steady-Flash undo are closed. F3 C2/Local repeats, coherent Main/resources, A7 witnesses and spacing
-fallback/tails are closed in scope; P9A-04 owns remaining proof.
+Public↔Global and steady-Flash undo are closed. F3 C2/Local repeats, Main/resources, A7, spacing fallback and foreign-default
+joins/tails are closed in scope; P9A-04 owns remaining proof.
 Scoped F5/provider, SO4/SO5 and ADR0127 inputs stay closed;
 895af814/e87fde98/6137ac30 keep their scopes. SI1..4 inventory is complete.
 SO4's2164/2143 correction is closed on Linux Next.6/software.
