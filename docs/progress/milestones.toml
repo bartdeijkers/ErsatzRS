@@ -16654,7 +16654,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-platform-safety'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete the independent applicable platform Health output matrix'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-source-output', 'p9a-macos-artifacts', 'p9a-native-arm', 'p9a-native-macos', 'p9a-windows-package']
 acceptance = '''
@@ -16664,7 +16664,7 @@ Smallest necessary work: Reconcile and close independently executable named plat
 Testable stop condition: Every r1-named applicable independent safety/provenance cell passes or is explicitly owned by the exact still-open native/artifact package; package completion requires all cells within this owner proven, not merely categorized.
 '''
 evidence = '''
-Status: Not started; completion waits for the listed source-output/native/artifact prerequisites. Exact remaining proof: PS1 consume exact six-RID source/build/license/dependency/decoder probe qualification from the artifact/native owners; PS2 join the accepted source/output/failure contracts from source-output to truthful optional/operator Health and ordinary subtitle/alternate-audio safety. No additional independent Linux/Windows Health experiment is concretely established by the current record.
+Status: In progress; completion waits for the listed source-output/native/artifact prerequisites. Completed independent component: the exact corrected SO2 FFmpeg9 Linux x86_64 candidate passes the existing native sparse-PGS/alternate-audio, SVG and animated-WebP compatibility gates. Canonical provider-scan/identity.json native_streaming_lifecycle_followup.route_join_followup.scheduler_recovery_followup.linux_compatibility owns exact scripts/runtime/source/object hashes, scoped reuse and results. This closes affected Linux candidate playback compatibility after the concrete scheduler change, not package provenance, other RIDs, managed adoption or the full Health/output join. Exact remaining proof: PS1 consume exact six-RID source/build/license/dependency/decoder probe qualification from the artifact/native owners; PS2 join the accepted source/output/failure contracts from source-output to truthful optional/operator Health and ordinary subtitle/alternate-audio safety. No additional general Linux/Windows Health experiment is concretely established by the current record.
 Reuse/closed: P9A-02 bounded decoder/operator nine-culture Health, manager/startup/enabled-channel/nativeWindows receipts, exact Linux/nativeWindows configuration-precedence/playback/cleanup scopes and completed6137 localized refresh. Crossbuild, QEMU, interop, native runtime and current package remain separate claims.
 Missing proof/stop: Every PS1/PS2 applicable clause has the exact completed primary receipt and accurate persisted Health/runtime identity; no missing native artifact/environment or deferred120minute Windows-package proof is replaced by local success. Managed adoption is a separate owner after this join, not a new duplicate test matrix.
 '''

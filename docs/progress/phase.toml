@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety — corrected Linux runtime compatibility'
+current_focus = 'p9a-author-enhanced — AE5 cross-emitter opening order'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,16 +62,18 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-platform-safety corrected Linux runtime compatibility.
-Next executable action: run the existing Linux sparse/caption runtime
-compatibility gates against the exact SO2 scheduler-revert candidate, with the
-existing source/output, selected-audio and cleanup oracles. Close only the named
-Linux candidate compatibility component. Canonical provider-scan/identity.json
-native_streaming_lifecycle_followup.route_join_followup.scheduler_recovery_followup
-owns the cause, source commit, native route and regression receipts. Preserve
-Windows120minute deferral, native ARM/macOS prerequisites and separate managed
-adoption. No package publication, production route enablement or repeated
-unchanged client/decoder investigation is authorized. Off/selection/F6 stay closed.
+Current package: p9a-author-enhanced AE5 cross-emitter opening order.
+Next executable action: qualify the original CrossEmitterOrder witness in
+teletext/display_geometry_successive_count_tests.rs against the existing
+AnnexA8 source-order/native-factory contract. The blocked action is certifying
+successive-opening bounds when multiple writing object emitters participate.
+Resolve that exact source-order gap with the smallest supported correction and
+original positive/negative factory evidence. Do not invent an endpoint for
+NoDirectAddress objects or repeat closed editor/client variants. An unresolved
+normative premise must be recorded exactly, not silently converted to acceptance.
+SO2 scheduler recovery and affected Linux runtime compatibility are closed within
+their candidate boundaries. Package/native-RID/Health/adoption and production route
+enablement remain at existing owners; preserve the120minute Windows deferral.
 
 AE5 A7 source/type/interleaving conformance is completed within model/native and
 independent-field boundaries. Ten focused controls cover seven positive full
