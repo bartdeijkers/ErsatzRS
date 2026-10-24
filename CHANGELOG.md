@@ -664,6 +664,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Prepare reviewed Next 0.2.3 rs.4 source candidates for both macOS
+  architectures with exact compiler, lockfile and package provenance checks,
+  retaining the accepted production runtime and upstream baseline.
+
 - Record the remaining Next one-shot video-copy failure: keyframe preflight can
   consume the single-use source before playback. Successful delivery remains an
   acceptance gate; verified caption refusal does not establish playback safety.

@@ -25,6 +25,7 @@ on:
           - scripts/release/next-patches/v0.2.1/manifest.json
           - scripts/release/next-patches/v0.2.2/manifest.json
           - scripts/release/next-patches/v0.2.2/manifest-sourceout-candidate.json
+          - scripts/release/next-patches/v0.2.3/manifest-mpp-fallback-candidate.json
 
 permissions:
   contents: read
@@ -54,7 +55,27 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Select the reviewed compiler
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          spec = importlib.util.spec_from_file_location("prepare", "scripts/release/prepare-next-source.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          review = module.reviewed_manifest(os.environ["NEXT_REVIEW_MANIFEST"])
+          compiler = review.get("rust_toolchain", "1.97.1")
+          if compiler not in {"1.97.1", "1.99.0"}:
+              raise ValueError("Next candidate compiler requires an explicit workflow review")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"NEXT_RUST_TOOLCHAIN={compiler}\n")
+          PY
       - uses: dtolnay/rust-toolchain@1.97.1
+        if: env.NEXT_RUST_TOOLCHAIN == '1.97.1'
+        with:
+          targets: ${{ matrix.target }}
+      - uses: dtolnay/rust-toolchain@1.99.0
+        if: env.NEXT_RUST_TOOLCHAIN == '1.99.0'
         with:
           targets: ${{ matrix.target }}
       - name: Check source and package guards
@@ -82,7 +103,7 @@ jobs:
           set -euo pipefail
           ETV_VERSION=$(python3 -c 'import json; print(json.load(open("ersatzrs-source.json"))["distribution_version"])')
           export ETV_VERSION
-          cargo +1.97.1 build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel
+          cargo "+$NEXT_RUST_TOOLCHAIN" build --locked --release --package ersatztv-channel --target "$NEXT_TARGET"
           python3 -c 'import hashlib,json; assert hashlib.sha256(open("Cargo.lock","rb").read()).hexdigest() == json.load(open("ersatzrs-source.json"))["cargo_lock_sha256"]'
           mkdir ../next-payload
           cp "target/$NEXT_TARGET/release/ersatztv-channel" LICENSE ../next-payload/
@@ -98,7 +119,7 @@ jobs:
         run: |
           python3 scripts/release/package-next-source.py --payload next-payload \
             --source-provenance .next-source/ersatzrs-source.json --rid "$NEXT_RID" \
-            --output packages --rustc "$(rustc +1.97.1 --version)" --manifest "$NEXT_REVIEW_MANIFEST"
+            --output packages --rustc "$(rustc "+$NEXT_RUST_TOOLCHAIN" --version)" --manifest "$NEXT_REVIEW_MANIFEST"
       - uses: actions/upload-artifact@v4
         with:
           name: next-source-candidate-${{ matrix.rid }}

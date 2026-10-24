@@ -1,0 +1,57 @@
+{
+  "upstream_repository": "ErsatzTV/next",
+  "upstream_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+  "source_archive_sha256": "746842f4b1fd1d15d3d0a5b01a11efa971c4cecdd466223a64be2237ddf61dbd",
+  "source_lock_sha256": "164069dedea697b103bfa3b45968a42881f152090b498bcbe89f6eb9bc9cc66e",
+  "distribution_version": "0.2.3-54c6cb9-ersatzrs.3",
+  "rust_toolchain": "1.99.0",
+  "adr": "0128",
+  "patches": [
+    {
+      "file": "0001-bound-live-rtsp-shortest-buffer.patch",
+      "sha256": "591244c915ca42ff09b332be731751454c88edd3f84bed304c6a231c0aab2aee",
+      "retire_when": "Unpatched upstream passes the existing live RTSP startup and EOF/handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "unpatched_regression": "Official released v0.2.3 fails the unchanged actual live HTTP/RTSP source-clock readiness regression (33.601s); source retains the default shortest queue for this path. Existing minimal patch applies cleanly; patched candidate acceptance is pending.",
+      "evidence": "docs/progress/milestones.toml (ucu-12)"
+    },
+    {
+      "file": "0002-repeat-programme-images.patch",
+      "sha256": "0c4e9cafa2436d2846ae3d306560b29e6c59b85d2d759fc977a3e7c78d873176",
+      "retire_when": "Unpatched upstream passes static WebP and complete finite/infinite GIF/WebP seek, repeat, cancellation and schedule-boundary handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "unpatched_regression": "Official released v0.2.3 fails unchanged scheduled WebP picture/silent-audio acceptance (1.153s, 52 unexpected bright pixels with subtitles off). Existing minimal patch applies cleanly; patched candidate acceptance is pending.",
+      "evidence": "docs/progress/milestones.toml (ucu-12)"
+    },
+    {
+      "file": "0003-update-worker-security-lock.patch",
+      "sha256": "50807a9d63a226b9366546e5f6288a18acced7d3ddc52291f38e212430679e13",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "retire_when": "Remove when the adopted unpatched upstream worker passes the same six-target advisory/yanked-crate gate and affected source/runtime acceptance without this patch. Preserve the tests and exact source/lock verification.",
+      "unpatched_regression": "Pinned Next0.2.3 worker fails unchanged advisories policy on all six supported targets: Rustls0.23.40, webpki0.103.13, Tokio1.52.1 and yanked ChaCha20.10.0. Current upstream848acba6 retains those versions. Minimal correction updates these four plus Rustls-required aws-lc1.18 backend/build dependencies; unsupported upstream binaries are excluded from the worker graph, not ignored by policy.",
+      "evidence": "docs/progress/milestones.toml (ucu-12); worker-audit-before.log and worker-audit-after.log"
+    },
+    {
+      "file": "0004-private-mpp-driver-readiness.patch",
+      "sha256": "a8ad711c4ac17283bb027fecf974e8419ad6f6e459a08d695b811bc0224b5712",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "retire_when": "Remove when the adopted upstream privately loads its verified ARM64 MPP companion and passes actual bundled-library/no-device fallback, positive native capability and complete ownership/provenance acceptance without this patch. Retain the tests.",
+      "unpatched_regression": "Released Next0.2.3 loads bare librockchip_mpp.so.1 and treats mpp_check_support_format (compiled codec enumeration) as driver readiness. A bundled library would falsely advertise RKMPP on ordinary ARM64 systems; context create/init/destroy and private owned loading are required by accepted ADR0128.",
+      "evidence": "docs/progress/milestones.toml (ucu-12); ADR0128"
+    }
+  ],
+  "publication": "Unpublished UCU-12 MPP source candidate; ARM64 companion payload/build acceptance still pending; no push, CI, managed adoption or publication authorized",
+  "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+  "windows_companions_sha256": {
+    "libvpl.dll": "d08c89d30705315a783ae59dbb21bf66a045f3a968d101190ac577baaa5b1b6b",
+    "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677"
+  },
+  "patched_lock_sha256": "ee57ea769a6da5bf30f31219acfb4d8ae673129652274637c4f6758206db134d",
+  "linux_arm64_companions_sha256": {
+    "librockchip_mpp.so.1": "9a7bf791e3c3206a21c79d3c4121d590e297abce98a8c8c19f9012ba83483412",
+    "librockchip_mpp-LICENSE-Apache-2.0.txt": "ed57d96d27be775b22f9571d3724ef84e0d0b8f24b805ec7f87a32189de19a9c",
+    "librockchip_mpp-LICENSE-MIT.txt": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
+    "librockchip_mpp-README.txt": "d2abb2750659d7336d54a522e613bdfe407a54ead4bcf8a3143527654add51a2",
+    "librockchip_mpp-rk_mpi.h": "96dbae7d90e91baaac38821fc06c74a327cac888007841fe5937798259193646"
+  }
+}

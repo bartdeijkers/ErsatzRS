@@ -2,7 +2,7 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.3)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
+adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125', '0128']
 summary    = """
 UCU-00–11 are Complete: all236 rows through v26.11.3 are accepted.
 The authoritative current baseline is docs/automation/parity-baseline.md. Native, stored engine/profile choices
@@ -306,6 +306,14 @@ description = 'Native application acceptance for Next playback, JavaScript audio
 discovered  = '2026-10-01'
 resolved    = false
 evidence    = 'The maintainer explicitly approved ARM/macOS acceptance debt on 2026-10-01 so UCU-09 may close after its remaining gates. This applies to ADRs 0095/0096/0098 and does not claim those targets passed, alter supported platforms, waive Linux x64 or Windows x64 application checks, or replace the separate approved GPU-validation debt. UCU-09 owns current platform evidence.'
+
+[[debt]]
+id          = 'ucu-12-hardware-acceptance'
+description = 'Native UCU-12 hardware acceptance remains unverified for Rockchip RKMPP/RGA, Intel QSV HDR, AMD VAAPI and macOS VideoToolbox captions.'
+discovered  = '2026-10-24'
+resolved    = false
+adr         = '0128'
+evidence    = 'The maintainer explicitly approved this bounded unverified hardware acceptance debt on 2026-10-24. It does not claim hardware passed or waive builds, software, checksum, source/provenance, no-device fallback or other acceptance requirements. Close each path only with exact candidate identity and native decoded behavior on the corresponding hardware/driver; cross-builds, emulation and another GPU do not qualify it. UCU-12 owns available evidence and the remaining non-deferred gates.'
 
 [[debt]]
 id          = 'ucu-optional-next-engine-integration'
