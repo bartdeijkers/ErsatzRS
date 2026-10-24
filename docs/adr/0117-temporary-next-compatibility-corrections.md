@@ -17,6 +17,28 @@ CI and verified publication. It does not claim completed runtime acceptance.
 Partial — accepted corrections are implemented; approved platform/hardware
 obligations and independent upstream patch retirement remain open.
 
+UCU-12 local security maintenance candidate (2026-10-24): fixed Next0.2.3
+source54c6cb9 retains vulnerable/yanked dependencies in the distributed worker.
+The unchanged advisory policy fails on the worker graph for all six supported
+targets. Candidate `.2` retains the two independently required compatibility
+patches and adds one lockfile-only correction: Rustls0.23.46,
+rustls-webpki0.103.16, Tokio1.53.3 and non-yanked ChaCha20.10.2, with Rustls's
+required existing aws-lc backend1.18 dependencies. No provider, feature, runtime
+API or application dependency is replaced. Read-only review of upstream848acba6
+finds no equivalent locked versions; the fixed UCU-12 source/cutoff is retained.
+Quick-XML and the fallback root bundle belong to upstream binaries/platforms
+outside the shipped six-platform worker graph; the broader audit negative is
+retained rather than represented as a clean upstream-workspace audit.
+
+The source manifest retains the original archive and original lock hashes and
+pins the exact post-patch lock separately. Preparation checks both boundaries;
+packaging requires the resulting build-lock identity. An unpatched control
+still uses the original lock, and older manifests still reject lock changes.
+There are no new advisory ignores or platform waivers. Exact source/patch,
+before/after audit, tool guards and candidate qualifications belong to `ucu-12`
+in `docs/progress/milestones.toml`. This is local maintenance under the active
+goal; it does not inherit UCU-09/10/11 push, CI or publication authorization.
+
 Phase9A L15-E1/F5 candidate (2026-10-19): the accepted Next runtime drops
 selected audio-language metadata under `-map_metadata -1`; complex filtering
 also prevents ordinary automatic stream metadata copying. The additional

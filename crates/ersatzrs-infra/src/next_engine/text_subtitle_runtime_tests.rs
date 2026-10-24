@@ -13,7 +13,11 @@ async fn generate_text_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
     generate_text_clip_with_cues(ffmpeg, folder, CUES).await
 }
 
-async fn generate_text_clip_with_cues(ffmpeg: &Path, folder: &Path, cues: &str) -> PathBuf {
+pub(super) async fn generate_text_clip_with_cues(
+    ffmpeg: &Path,
+    folder: &Path,
+    cues: &str,
+) -> PathBuf {
     let source = folder.join("source.mkv");
     generate_clip(ffmpeg, &source).await;
     let subtitle = folder.join("fixture.nl.srt");
@@ -113,7 +117,7 @@ async fn prepare_automatic_text_tracks(
     assert_eq!(updated.rows_affected(), 1);
 }
 
-async fn assert_text_video_and_audio(ffmpeg: &Path, segment: &Path, burned: bool) {
+pub(super) async fn assert_text_video_and_audio(ffmpeg: &Path, segment: &Path, burned: bool) {
     let mut video = Command::new(ffmpeg);
     video
         .args(["-v", "error", "-nostdin", "-i"])

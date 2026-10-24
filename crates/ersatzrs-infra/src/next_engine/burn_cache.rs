@@ -17,7 +17,8 @@ use tokio::{sync::Mutex, time::Instant};
 
 use super::{burn_subtitles, protocol::Source};
 
-const VERSION: u32 = 1;
+// Version 1 artifacts may contain unsanitized embedded ASS headers.
+const VERSION: u32 = 2;
 const MAX_ARTIFACT_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_CACHE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_MANIFEST_BYTES: u64 = 2048;
@@ -277,11 +278,11 @@ impl BurnCache {
             .prefix(".burn-")
             .tempfile_in(&self.root)
             .map_err(|_| CacheError::Storage)?;
-        build(
-            pending.path().to_owned(),
-            pending.reopen().map_err(|_| CacheError::Storage)?,
-        )
-        .await?;
+        let file = pending.reopen().map_err(|_| CacheError::Storage)?;
+        // Keep path cleanup ownership without holding a destination handle:
+        // sanitation replaces this pending file atomically on Windows too.
+        let pending = pending.into_temp_path();
+        build(pending.to_path_buf(), file).await?;
         if !tokio::time::timeout_at(deadline, validate())
             .await
             .map_err(|_| CacheError::Deadline)?
@@ -289,11 +290,14 @@ impl BurnCache {
             return Err(CacheError::Stale);
         }
         check_deadline(deadline)?;
-        let bytes = pending
-            .as_file()
-            .metadata()
-            .map_err(|_| CacheError::Storage)?
-            .len();
+        // Sanitation may atomically replace the pending path. Inspect and sync
+        // that completed file rather than the original tempfile's old handle.
+        let completed = std::fs::File::options()
+            .read(true)
+            .write(true)
+            .open(&pending)
+            .map_err(|_| CacheError::Storage)?;
+        let bytes = completed.metadata().map_err(|_| CacheError::Storage)?.len();
         if bytes == 0 || bytes > MAX_ARTIFACT_BYTES {
             return Err(CacheError::Storage);
         }
@@ -308,10 +312,8 @@ impl BurnCache {
         };
         commit(deadline, move || {
             let _guard = guard;
-            pending
-                .as_file()
-                .sync_all()
-                .map_err(|_| CacheError::Storage)?;
+            completed.sync_all().map_err(|_| CacheError::Storage)?;
+            drop(completed);
             check_deadline(deadline)?;
             pending
                 .persist(&promoted)

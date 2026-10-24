@@ -250,6 +250,37 @@ async fn dolby_vision_profiles_survive_persisted_and_producer_hints() {
 }
 
 #[tokio::test]
+async fn stored_hdr10_absence_remains_unknown_while_positive_evidence_reaches_next() {
+    let pool = super::super::selection::tests::fixture_pool().await;
+    for (mastering, cll, fall) in [
+        (None, None, None),
+        (Some("mastering-display"), None, None),
+        (None, Some(1000), None),
+        (None, None, Some(400)),
+    ] {
+        sqlx::query(r#"UPDATE "MediaStream" SET "MasteringDisplay"=?,"MaxCll"=?,"MaxFall"=? WHERE "MediaVersionId"=100 AND "Index"=0"#)
+            .bind(mastering).bind(cll).bind(fall).execute(&pool).await.unwrap();
+        let hint = persisted(&pool, 100).await.unwrap().unwrap();
+        assert_eq!(
+            hint.video[0].has_hdr10_metadata,
+            (mastering.is_some() || cll.is_some() || fall.is_some()).then_some(true)
+        );
+        let json = serde_json::to_value(hint).unwrap();
+        assert_ne!(
+            json["video"][0].get("has_hdr10_metadata"),
+            Some(&serde_json::json!(false))
+        );
+    }
+    // Fresh frame/stream inspection can still positively establish absence.
+    let mut probe = metadata();
+    probe.streams[0].max_cll = None;
+    assert_eq!(
+        retained(&probe, 1000).unwrap().video[0].has_hdr10_metadata,
+        Some(false)
+    );
+}
+
+#[tokio::test]
 async fn persisted_hint_preserves_all_selectable_tracks_and_refuses_incomplete_metadata() {
     let pool = super::super::selection::tests::fixture_pool().await;
     let hint = persisted(&pool, 100).await.unwrap().unwrap();

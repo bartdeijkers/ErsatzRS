@@ -1,0 +1,42 @@
+{
+  "upstream_repository": "ErsatzTV/next",
+  "upstream_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+  "source_archive_sha256": "746842f4b1fd1d15d3d0a5b01a11efa971c4cecdd466223a64be2237ddf61dbd",
+  "source_lock_sha256": "164069dedea697b103bfa3b45968a42881f152090b498bcbe89f6eb9bc9cc66e",
+  "distribution_version": "0.2.3-54c6cb9-ersatzrs.2",
+  "rust_toolchain": "1.99.0",
+  "adr": "0117",
+  "patches": [
+    {
+      "file": "0001-bound-live-rtsp-shortest-buffer.patch",
+      "sha256": "591244c915ca42ff09b332be731751454c88edd3f84bed304c6a231c0aab2aee",
+      "retire_when": "Unpatched upstream passes the existing live RTSP startup and EOF/handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "unpatched_regression": "Official released v0.2.3 fails the unchanged actual live HTTP/RTSP source-clock readiness regression (33.601s); source retains the default shortest queue for this path. Existing minimal patch applies cleanly; patched candidate acceptance is pending.",
+      "evidence": "docs/progress/milestones.toml (ucu-12)"
+    },
+    {
+      "file": "0002-repeat-programme-images.patch",
+      "sha256": "0c4e9cafa2436d2846ae3d306560b29e6c59b85d2d759fc977a3e7c78d873176",
+      "retire_when": "Unpatched upstream passes static WebP and complete finite/infinite GIF/WebP seek, repeat, cancellation and schedule-boundary handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "unpatched_regression": "Official released v0.2.3 fails unchanged scheduled WebP picture/silent-audio acceptance (1.153s, 52 unexpected bright pixels with subtitles off). Existing minimal patch applies cleanly; patched candidate acceptance is pending.",
+      "evidence": "docs/progress/milestones.toml (ucu-12)"
+    },
+    {
+      "file": "0003-update-worker-security-lock.patch",
+      "sha256": "50807a9d63a226b9366546e5f6288a18acced7d3ddc52291f38e212430679e13",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "retire_when": "Remove when the adopted unpatched upstream worker passes the same six-target advisory/yanked-crate gate and affected source/runtime acceptance without this patch. Preserve the tests and exact source/lock verification.",
+      "unpatched_regression": "Pinned Next0.2.3 worker fails unchanged advisories policy on all six supported targets: Rustls0.23.40, webpki0.103.13, Tokio1.52.1 and yanked ChaCha20.10.0. Current upstream848acba6 retains those versions. Minimal correction updates these four plus Rustls-required aws-lc1.18 backend/build dependencies; unsupported upstream binaries are excluded from the worker graph, not ignored by policy.",
+      "evidence": "docs/progress/milestones.toml (ucu-12); worker-audit-before.log and worker-audit-after.log"
+    }
+  ],
+  "publication": "Unpublished UCU-12 security candidate; no push, CI, managed adoption or publication authorized",
+  "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+  "windows_companions_sha256": {
+    "libvpl.dll": "d08c89d30705315a783ae59dbb21bf66a045f3a968d101190ac577baaa5b1b6b",
+    "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677"
+  },
+  "patched_lock_sha256": "ee57ea769a6da5bf30f31219acfb4d8ae673129652274637c4f6758206db134d"
+}

@@ -41,6 +41,13 @@ FROM scratch AS next-armv7-source-export
 COPY --from=next-armv7-builder /next/ /
 
 FROM next-official AS next-artifacts
+RUN set -eu; \
+    mkdir -p /next-layout/next; \
+    cp -a /next/. /next-layout/next/; \
+    for next_payload in /next-layout/next/*; do \
+        case "${next_payload##*/}" in LICENSE|origin.json) continue ;; esac; \
+        mv "$next_payload" /next-layout/; \
+    done
 FROM scratch AS next-artifacts-export
 COPY --from=next-artifacts /next/ /
 
@@ -177,8 +184,7 @@ FROM runtime-base AS runtime
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
-COPY --from=next-artifacts /next/ersatztv-channel /usr/local/bin/ersatztv-channel
-COPY --from=next-artifacts /next/LICENSE /next/origin.json /usr/local/bin/next/
+COPY --from=next-artifacts /next-layout/ /usr/local/bin/
 # cargo-leptos already copies the assets-dir (public/) contents into the top
 # level of target/site alongside pkg/, so target/site is the single merged
 # admin-UI directory; ship only that, not a separate public/ copy.

@@ -3,6 +3,63 @@ import { DatabaseSync } from 'node:sqlite';
 
 const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
+// Row250: expose incomplete filesystem repair through the existing Health flow.
+for (const javaScriptEnabled of [true, false]) {
+  for (const isDarkMode of [true, false]) {
+    test(`subtitle cache repair health (JavaScript ${javaScriptEnabled}, dark ${isDarkMode})`, async ({ browser, baseURL }, testInfo) => {
+      test.skip(!databasePath, 'Requires the disposable E2E database.');
+      const database = new DatabaseSync(databasePath!);
+      database.exec('PRAGMA busy_timeout=10000;');
+      const key = 'ffmpeg.subtitle_cache_nul_repair_pending';
+      const original = database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?').get(key) as { Value: string } | undefined;
+      const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 320, height: 800 } });
+      const write = (value: string) => database.prepare('INSERT OR REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, value);
+      try {
+        const page = await context.newPage();
+        const errors: string[] = [];
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+        for (const [language, refresh, message] of [
+          ['en-us', 'Refresh', 'Subtitle cache repair has not finished. Some cached subtitles may not display. Automatic cache maintenance will retry. If this warning persists, check write access to the subtitle cache and available disk space.'],
+          ['nl', 'Vernieuwen', 'Het herstellen van de ondertitelcache is nog niet afgerond. Sommige ondertitels in de cache worden mogelijk niet weergegeven. Het automatische cacheonderhoud probeert het opnieuw. Blijft deze waarschuwing staan, controleer dan de schrijftoegang tot de ondertitelcache en de beschikbare schijfruimte.'],
+        ]) {
+          write('true');
+          expect((await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: String(isDarkMode), language }, maxRedirects: 0 })).status()).toBe(303);
+          expect((await page.request.post('/admin-api/system/health/refresh', { maxRedirects: 0 })).status()).toBe(303);
+          await page.goto('/system/health');
+          if (javaScriptEnabled) await hydrated(page);
+          const row = page.getByRole('row').filter({ hasText: message });
+          await expect(row).toBeVisible();
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true);
+          const stored = () => {
+            const snapshot = database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?').get('health.results') as { Value: string };
+            return (JSON.parse(snapshot.Value) as { title: string; status: string }[]).find(result => result.title === 'Subtitle Cleanup');
+          };
+          expect(stored()?.status).toBe('Warning');
+          await row.screenshot({ path: testInfo.outputPath(`subtitle-cache-health-${language}.png`) });
+          write('false');
+          const refreshed = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes(
+            javaScriptEnabled ? '/admin-api/refresh_health_snapshot' : '/admin-api/system/health/refresh',
+          ));
+          await page.getByRole('button', { name: refresh, exact: true }).click();
+          expect((await refreshed).status()).toBe(javaScriptEnabled ? 200 : 303);
+          await expect(row).not.toBeVisible();
+          expect(stored()?.status).toBe('Pass');
+          expect(database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?').get(key)).toEqual({ Value: 'false' });
+        }
+        expect(errors).toEqual([]);
+      } finally {
+        if (original) write(original.Value);
+        else database.prepare('DELETE FROM "ConfigElement" WHERE "Key"=?').run(key);
+        await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+        await context.request.post('/admin-api/system/health/refresh', { maxRedirects: 0 });
+        database.close();
+        await context.close();
+      }
+    });
+  }
+}
+
 async function hydrated(page: Page): Promise<void> {
   await page.waitForFunction(
     () => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,

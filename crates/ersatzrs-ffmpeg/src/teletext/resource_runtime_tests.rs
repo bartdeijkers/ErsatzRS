@@ -4,6 +4,7 @@
 
 use ersatzrs_domain::*;
 
+use super::authored_service_tests::drcs_mot as mot;
 use super::packets::{data_unit, hamming_24_18, terminator};
 use super::*;
 
@@ -12,59 +13,6 @@ fn resource(kind: TeletextResourceKind, s1: u8) -> TeletextResourceIdentity {
         kind,
         TeletextRawDataPageNumber::new(8, 0xa0).unwrap(),
         TeletextResourceSubpageIndex::new(s1).unwrap(),
-    )
-    .unwrap()
-}
-
-fn unused() -> TeletextX27LinkTarget {
-    TeletextX27LinkTarget::Unspecified {
-        magazine: TeletextX27Magazine::new(8).unwrap(),
-    }
-}
-
-pub(super) fn mot(table: TeletextResourceIdentity, normal: bool) -> TeletextMotLevel25Declaration {
-    let object = TeletextMotObjectLink::new(
-        unused(),
-        TeletextMotSubpageExtent::new(0).unwrap(),
-        false,
-        TeletextMotFallback::new(0).unwrap(),
-        [TeletextMotDefaultObject::NoObject { raw_number: 0 }; 2],
-    );
-    let inactive =
-        TeletextMotDrcsLink::new(unused(), TeletextMotSubpageExtent::new(0).unwrap(), false);
-    let selected = TeletextMotDrcsLink::new(
-        TeletextX27LinkTarget::Page { page: table.page() },
-        TeletextMotSubpageExtent::new(table.logical_subpage().get()).unwrap(),
-        false,
-    );
-    let association = TeletextMotAssociationSelection::new(
-        !normal,
-        normal.then(|| TeletextMotPublicLinkIndex::new(1).unwrap()),
-    );
-    let mut public = [inactive; 7];
-    if normal {
-        public[0] = selected;
-    }
-    TeletextMotLevel25Declaration::new(
-        TeletextResourceIdentity::new(
-            TeletextResourceKind::Mot,
-            TeletextRawDataPageNumber::new(2, 0xfe).unwrap(),
-            TeletextResourceSubpageIndex::ZERO,
-        )
-        .unwrap(),
-        vec![TeletextMotPageAssociation::new(
-            0,
-            TeletextMotAssociationSelection::new(false, None),
-            association,
-        )],
-        TeletextMotLevel25Links::new(
-            object,
-            [object; 7],
-            if normal { inactive } else { selected },
-            public,
-            TeletextMotEnhancementCounts::new(1, 0, table.logical_subpage().get() + 1),
-        )
-        .unwrap(),
     )
     .unwrap()
 }

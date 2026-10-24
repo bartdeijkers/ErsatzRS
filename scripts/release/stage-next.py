@@ -23,6 +23,7 @@ DOWNLOAD_BASE = f"https://github.com/{DISTRIBUTION_REPOSITORY}/releases/download
 PINNED_REVISION = MANIFEST["upstream_revision"]
 SOURCE_ARCHIVE_SHA256 = MANIFEST["source_archive_sha256"]
 SOURCE_LOCK_SHA256 = MANIFEST["source_lock_sha256"]
+PREPARED_LOCK_SHA256 = MANIFEST.get("patched_lock_sha256", SOURCE_LOCK_SHA256)
 PATCHED_DISTRIBUTION_VERSION = MANIFEST["distribution_version"]
 PINNED_PATCHES = [{"file": p["file"], "sha256": p["sha256"]} for p in MANIFEST["patches"]]
 TARGETS = {rid: package["target"] for rid, package in MANIFEST["runtime_packages"].items()}
@@ -31,6 +32,13 @@ PINNED_HASHES = MANIFEST["artifact_sha256"]
 
 BINARIES = ("ersatztv-channel",)
 WINDOWS_COMPANIONS = ("libvpl.dll", "libvpl-LICENSE.txt")
+ARM64_COMPANIONS = {
+    "librockchip_mpp.so.1",
+    "librockchip_mpp-LICENSE-Apache-2.0.txt",
+    "librockchip_mpp-LICENSE-MIT.txt",
+    "librockchip_mpp-README.txt",
+    "librockchip_mpp-rk_mpi.h",
+}
 MAX_ARCHIVE = 128 * 1024 * 1024
 
 
@@ -88,11 +96,37 @@ def select_asset(metadata, rid):
     return asset, match[2], asset["name"][:-len(suffix)]
 
 
+def arm64_companion_payload(rid):
+    required = rid == "linux-arm64" and (
+        "linux_arm64_companions_sha256" in MANIFEST
+        or any(p["file"] == "0004-private-mpp-driver-readiness.patch" for p in PINNED_PATCHES)
+    )
+    if not required:
+        return None
+    companions = MANIFEST.get("linux_arm64_companions_sha256")
+    if not isinstance(companions, dict) or companions.keys() != ARM64_COMPANIONS:
+        raise ValueError("Next ARM64 requires exactly the declared MPP library and notices")
+    declared = MANIFEST.get("runtime_packages", {}).get(rid, {})
+    hashes, sizes = declared.get("payload_sha256", {}), declared.get("payload_bytes", {})
+    names = {"ersatztv-channel", "LICENSE"} | ARM64_COMPANIONS
+    if not isinstance(hashes, dict) or not isinstance(sizes, dict) or hashes.keys() != names or sizes.keys() != names:
+        raise ValueError("Next ARM64 requires exact payload hashes and sizes")
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in hashes.values()):
+        raise ValueError("Next ARM64 payload requires exact SHA-256 values")
+    if any(type(value) is not int or not 0 < value <= MAX_ARCHIVE for value in sizes.values()):
+        raise ValueError("Next ARM64 payload requires bounded positive sizes")
+    if any(hashes[name] != digest for name, digest in companions.items()):
+        raise ValueError("Next ARM64 companion pins differ from the declared payload")
+    return declared
+
+
 def read_binaries(payload, rid, root, extra_names=()):
     names = [n + (".exe" if rid == "win-x64" else "") for n in BINARIES]
     result = {}
     if rid == "win-x64":
         names.extend(WINDOWS_COMPANIONS)
+    if arm64_companion_payload(rid) is not None:
+        names.extend(sorted(ARM64_COMPANIONS))
     names.extend(extra_names)
     if rid == "win-x64":
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
@@ -122,14 +156,26 @@ def verify_patched_payload(files, rid):
         "kind": "patched-source-build", "repository": REPOSITORY,
         "source_revision": PINNED_REVISION, "rid": rid, "target": TARGETS[rid],
         "source_archive_sha256": SOURCE_ARCHIVE_SHA256,
-        "cargo_lock_sha256": SOURCE_LOCK_SHA256,
+        "cargo_lock_sha256": PREPARED_LOCK_SHA256,
         "distribution_version": PATCHED_DISTRIBUTION_VERSION, "patches": PINNED_PATCHES,
     }
     if any(origin.get(key) != value for key, value in expected.items()):
         raise ValueError("Next source/patch provenance differs from the accepted snapshot")
+    compiler = MANIFEST.get("rust_toolchain")
+    if compiler is not None and (
+        not isinstance(compiler, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", compiler)
+        or not origin.get("rustc", "").startswith(f"rustc {compiler} ")
+    ):
+        raise ValueError("Next compiler provenance differs from the accepted snapshot")
     payload = {name: data for name, data in files.items() if name != "origin.json"}
     if origin.get("payload_sha256") != {name: hashlib.sha256(data).hexdigest() for name, data in payload.items()}:
         raise ValueError("Next payload SHA-256 mismatch")
+    declared = arm64_companion_payload(rid)
+    if declared is not None and (
+        origin["payload_sha256"] != declared["payload_sha256"]
+        or {name: len(data) for name, data in payload.items()} != declared["payload_bytes"]
+    ):
+        raise ValueError("Next ARM64 payload differs from declared hashes or sizes")
     if hashlib.sha256(files["LICENSE"]).hexdigest() != PINNED_HASHES["LICENSE"]:
         raise ValueError("Next license SHA-256 mismatch")
     return origin

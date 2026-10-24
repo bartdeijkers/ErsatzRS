@@ -516,6 +516,13 @@ which additionally writes a JUnit report so per-test durations are available as
 a build artifact. Neither the local nor the CI selection runs doctests; only
 `./run.sh test-closeout` adds them.
 
+After a failed workspace run and focused recovery, use
+`./run.sh test-closeout --doctests-only` (Windows:
+`.\run.cmd test-closeout --doctests-only`) to execute the remaining doctest
+component. This does not run unit/integration tests or claim a complete closeout.
+Link the original run, focused recovery and doctest results when reusing
+unaffected evidence; repeat any checks invalidated by the correction.
+
 The closeout deliberately uses the sole supported SQLite graph. Historical
 dual-backend feature combinations are not part of current development or
 release acceptance.
@@ -743,6 +750,12 @@ several releases. Two distinct failure modes:
    with that WASM. The dev recipe `cargo leptos build` then `cargo run --bin`
    works only because the binary defaults agree; prefer `./run.sh dev`
    (`cargo leptos watch`) or `./run.sh serve`, which keep them in lockstep.
+   Debug cargo-leptos 0.3.6 also enables `--cfg erase_components` for both
+   sides. A plain Cargo server lacks that flag: pairing it with the erased
+   frontend can load every asset successfully and still fail on missing
+   hydration marker nodes. Match component-erasure settings as well as source,
+   features and server-function hash keys when assembling native candidates.
+   The asset-presence gate does not replace an actual hydrated interaction.
 2. **File-hashing mismatch ("wasm checksum mismatch").** cargo-leptos can hash
    `/pkg` asset filenames (writing `site/pkg/hash.txt`). If the WASM build and
    the running binary disagree about hashing, the server emits
@@ -843,11 +856,13 @@ See the disk-space note in
 
 Release archive staging requires Python 3.12 and access to the exact public
 Next distribution selected by the canonical shared manifest,
-`scripts/release/next-patches/manifest.json`. The local UCU-11 integration now
-pins [Next v0.2.2](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-4a0b59a-ersatzrs.1)
-in `bartdeijkers/ErsatzRS-next`; integrated Linux/Windows adoption and required
-local acceptance pass. The six verified source builds retain both temporary corrections
-under ADR 0117. Each archive records source, lockfile, patch and payload hashes.
+`scripts/release/next-patches/manifest.json`. The UCU-12 managed pin selects
+[Next v0.2.3 rs.4](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-54c6cb9-ersatzrs.4)
+in `bartdeijkers/ErsatzRS-next`. All six existing archives are published and
+checksum-verified. They retain five reviewed compatibility/security inputs
+under ADRs 0117 and 0128. Each archive records source, original/prepared lock,
+patch and payload hashes. Application adoption acceptance is tracked separately
+in the UCU-12 milestone; publication alone does not establish it.
 The dependency assets are publicly downloadable without credentials. Package
 staging verifies the pinned checksums and provenance; it never rebuilds Next.
 `scripts/release/stage-next.py --rid <rid> --output <stage>/next` stages the
@@ -857,6 +872,11 @@ root beside ErsatzRS, retaining only license/provenance in `next/`.
 Windows packages also require `libvpl.dll` and `libvpl-LICENSE.txt` from the
 same verified Next archive beside `ersatztv-channel.exe` at the package root.
 Missing or invalid companions fail staging before the destination is published.
+Linux ARM64 also stages the private `librockchip_mpp.so.1`, both licence texts,
+README and API header from the same archive. Exact hashes, sizes and complete
+inventory are required. The worker loads this owned library and checks real
+codec readiness; unavailable hardware falls back to software. Native Rockchip
+hardware acceptance remains explicitly unverified.
 It checks archive and license SHA-256 values pinned in source and records
 the selected asset, full pinned source revision and license hash. Staging rejects
 an artifact whose revision differs from the canonical manifest's
@@ -865,7 +885,7 @@ Review upstream changes, validate the selected runtime and update the pin.
 Application releases still require their own acceptance and green exact-SHA CI;
 dependency publication needs its explicit maintainer authorization. Missing artifacts, invalid checksums or missing
 licenses fail packaging. A new accepted snapshot requires new pinned hashes.
-All six supported RIDs use the same reviewed source and two patches. Source and
+All six supported RIDs use the same reviewed source and five patch inputs. Source and
 lockfile hashes are pinned alongside the archive hashes; altered provenance
 fails staging. Reproduction instructions are below. The former unmodified
 ARMv7 source helper remains available for future patch retirement, but refuses
@@ -883,7 +903,7 @@ archive hashes remain fixed. Before a Docker build, stage the snapshot on the
 host using the exact current tag (not a mutable upstream release):
 
 ```sh
-gh release download next-4a0b59a-ersatzrs.1 \
+gh release download next-54c6cb9-ersatzrs.4 \
   --repo bartdeijkers/ErsatzRS-next --dir .next-snapshot
 ```
 

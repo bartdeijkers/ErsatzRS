@@ -31,6 +31,29 @@ pub(super) struct Origin {
 }
 
 impl Origin {
+    pub(super) async fn assert_canvas_region(&self) {
+        let captured = self.captured.lock().await;
+        let captured = captured.as_ref().expect("actual Next canvas request");
+        let url = reqwest::Url::parse(&format!("{}{}", self.base, captured.path)).unwrap();
+        assert_eq!(url.path(), "/ffmpeg/next-canvas");
+        let binding: ersatzrs_infra::next_engine::canvas::CanvasBinding = serde_json::from_str(
+            &url.query_pairs()
+                .find(|(name, _)| name == "binding")
+                .unwrap()
+                .1,
+        )
+        .unwrap();
+        assert_eq!(
+            binding.region,
+            Some(ersatzrs_ffmpeg::CanvasRegion {
+                x: 304,
+                y: 164,
+                width: 16,
+                height: 16,
+            })
+        );
+    }
+
     pub(super) fn image_url(&self) -> String {
         format!("{}/image.ppm", self.base)
     }

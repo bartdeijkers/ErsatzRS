@@ -92,7 +92,7 @@ fn original(normal: bool) -> (TeletextDeclaredService, TeletextResourceIdentity)
         );
     }
     let semantic = TeletextSemanticService::new(draft, semantic_budget()).unwrap();
-    let mot = super::resource_runtime_tests::mot(identity, normal);
+    let mot = fixtures::drcs_mot(identity, normal);
     let selections = semantic
         .base()
         .pages

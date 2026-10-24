@@ -112,8 +112,13 @@ switch ($Command) {
     }
     'test-closeout' {
         Test-TargetSize
+        if ($CommandArgs.Count -eq 1 -and $CommandArgs[0] -eq '--doctests-only') {
+            Write-Host 'Running only the workspace doctest component; unit/integration evidence is separate.'
+            cargo test --workspace --doc
+            exit $LASTEXITCODE
+        }
         if ($CommandArgs.Count -ne 0) {
-            Write-Error 'usage: .\run.ps1 test-closeout'
+            Write-Error 'usage: .\run.ps1 test-closeout [--doctests-only]'
             exit 2
         }
         if (-not (Get-Command cargo-nextest -ErrorAction SilentlyContinue)) {

@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.6";
+pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.7";
 pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.2";
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -245,6 +245,8 @@ pub enum GraphicsLayerKind {
 /// A single image/video overlay, always visible unless periodic timing is set.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Watermark {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<CanvasLayout>,
     pub source: Source,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<GraphicsLayerKind>,
@@ -263,6 +265,20 @@ pub struct Watermark {
     pub vertical_margin_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub opacity_percent: Option<f64>,
+}
+
+/// Upstream playout0.0.7 canvas placement; media layers never emit this field.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum CanvasLayout {
+    FullFrame,
+    Region { origin: CanvasPosition },
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct CanvasPosition {
+    pub x: u32,
+    pub y: u32,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

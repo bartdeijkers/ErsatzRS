@@ -407,6 +407,11 @@ async fn run_cleanup_loops(
     tasks
         .run("cache_cleanup", async {
             if loop_due(pool, "cache_cleanup", CACHE_CLEANUP_INTERVAL, now).await? {
+                crate::subtitle_cache_nul::repair_once(
+                    pool,
+                    &crate::file_system_layout::subtitle_cache_folder(),
+                )
+                .await?;
                 report.cache_cleanup =
                     clean_caches(cache_config, &channel_guide_keepers(pool).await?).await?;
                 record_loop_run(pool, "cache_cleanup", now).await?;

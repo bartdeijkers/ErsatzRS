@@ -28,7 +28,7 @@ fn subtitle_style_preserves_explicit_values_and_accepts_older_configs() {
 fn probe_hint_publication_uses_upstream_schema_version() {
     assert_eq!(
         PLAYOUT_VERSION,
-        "https://ersatztv.org/playout/version/0.0.6"
+        "https://ersatztv.org/playout/version/0.0.7"
     );
 }
 

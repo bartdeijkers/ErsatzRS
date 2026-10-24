@@ -11,6 +11,9 @@ use super::super::schedule::ScheduledMedia;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CanvasBinding {
+    /// Fixed output rectangle, covered by the same occurrence signature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<ersatzrs_ffmpeg::CanvasRegion>,
     /// Transient preview/fallback sources are issued for one process only.
     /// Persisted manifests use the active process header when this is absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,6 +43,7 @@ impl CanvasBinding {
     #[must_use]
     pub fn new(channel: i64, media: &ScheduledMedia, expires: DateTime<Utc>) -> Self {
         Self {
+            region: None,
             session: None,
             playout_start: None,
             video_stream_index: None,
@@ -81,6 +85,7 @@ impl CanvasBinding {
                     session: self.session,
                     playout_start: self.playout_start,
                     video_stream_index: self.video_stream_index,
+                    region: self.region,
                     ..Self::new(channel, media, self.expires)
                 }
     }

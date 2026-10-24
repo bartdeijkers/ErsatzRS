@@ -29,6 +29,13 @@ WINDOWS_COMPANIONS = {
     "libvpl.dll": "ab22b28f67f5b443d0e022b797675314d650669374247766ea91373e2c67a8e7",
     "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677",
 }
+ARM64_COMPANIONS = {
+    "librockchip_mpp.so.1",
+    "librockchip_mpp-LICENSE-Apache-2.0.txt",
+    "librockchip_mpp-LICENSE-MIT.txt",
+    "librockchip_mpp-README.txt",
+    "librockchip_mpp-rk_mpi.h",
+}
 
 
 def sha(path):
@@ -41,22 +48,35 @@ def package(payload, source_provenance, rid, output, rustc, manifest_path=prepar
     expected = {
         "source_revision": manifest["upstream_revision"],
         "source_archive_sha256": manifest["source_archive_sha256"],
-        "cargo_lock_sha256": manifest["source_lock_sha256"],
+        "cargo_lock_sha256": manifest.get("patched_lock_sha256", manifest["source_lock_sha256"]),
         "distribution_version": manifest["distribution_version"],
         "patches": [{"file": p["file"], "sha256": p["sha256"]} for p in manifest["patches"]],
     }
     if source != expected:
         raise ValueError("Next source provenance differs from the reviewed manifest")
-    if not rustc.startswith("rustc 1.97.1 "):
-        raise ValueError("Next source builds require Rust 1.97.1")
+    toolchain = manifest.get("rust_toolchain", "1.97.1")
+    if not rustc.startswith(f"rustc {toolchain} "):
+        raise ValueError(f"Next source builds require Rust {toolchain}")
     payload, output = Path(payload), Path(output)
     binary = "ersatztv-channel.exe" if rid == "win-x64" else "ersatztv-channel"
     files = [binary, "LICENSE"] + (list(WINDOWS_COMPANIONS) if rid == "win-x64" else [])
+    arm64_companions = {}
+    if rid == "linux-arm64" and (
+        "linux_arm64_companions_sha256" in manifest
+        or any(p["file"] == "0004-private-mpp-driver-readiness.patch" for p in manifest["patches"])
+    ):
+        arm64_companions = manifest.get("linux_arm64_companions_sha256")
+        if not isinstance(arm64_companions, dict) or arm64_companions.keys() != ARM64_COMPANIONS:
+            raise ValueError("Next ARM64 companions must name exactly the reviewed MPP library and notices")
+        files.extend(sorted(arm64_companions))
     for name in files:
         if not (payload / name).is_file() or (payload / name).is_symlink():
             raise ValueError(f"Missing or unsafe Next payload: {name}")
     if sha(payload / "LICENSE") != LICENSE_SHA256:
         raise ValueError("Next license checksum mismatch")
+    for name, digest in arm64_companions.items():
+        if sha(payload / name) != digest:
+            raise ValueError(f"Next ARM64 companion checksum mismatch: {name}")
     if rid == "win-x64":
         companions = manifest.get("windows_companions_sha256", WINDOWS_COMPANIONS)
         if not isinstance(companions, dict) or companions.keys() != WINDOWS_COMPANIONS.keys():

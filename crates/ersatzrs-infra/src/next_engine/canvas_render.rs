@@ -5,8 +5,8 @@ use std::{collections::BTreeMap, time::Duration};
 use chrono::Timelike as _;
 use ersatzrs_domain::{MediaStream, MediaStreamKind, MediaVersion, ScalingBehavior};
 use ersatzrs_ffmpeg::{
-    build_canvas_command, CanvasRenderRequest, FrameSize, GraphicsPipelineOverlay, InputKind,
-    WatermarkOpacityClock,
+    build_canvas_command, build_canvas_region_command, CanvasRenderRequest, FrameSize,
+    GraphicsPipelineOverlay, InputKind, WatermarkOpacityClock,
 };
 use tokio::{sync::oneshot, time::Instant};
 
@@ -87,14 +87,18 @@ pub(super) async fn prepare(
         })
         .collect();
     overlays.append(&mut artifacts.overlays);
-    let command = build_canvas_command(CanvasRenderRequest {
+    let request = CanvasRenderRequest {
         resolution: context.frame_size,
         content_size: context.square_pixel_frame_size,
         frame_rate: timing.graphics_frame_rate(),
         duration: session.timeline.duration,
         opacity_clock: opacity_clock(&session, &timing),
         overlays,
-    });
+    };
+    let command = match session.region {
+        Some(region) => build_canvas_region_command(request, region),
+        None => build_canvas_command(request),
+    };
     let Ok(command) = command else {
         artifacts.shutdown().await;
         return Err(RemoteStreamError::PreparedProducerFailed);
@@ -121,7 +125,7 @@ pub(super) async fn prepare(
     .await?;
     Ok(PreparedTransferMedia {
         input,
-        probe: output_metadata(&context, session.timeline.duration, &timing),
+        probe: output_metadata(&context, session.region, session.timeline.duration, &timing),
     })
 }
 
@@ -232,14 +236,18 @@ fn opacity_clock(session: &CanvasSession, timing: &CanvasRequest) -> WatermarkOp
 // Known encoder output, not a consuming ffprobe operation on this one-shot stream.
 fn output_metadata(
     context: &PlaybackGraphicsRenderContext,
+    region: Option<ersatzrs_ffmpeg::CanvasRegion>,
     duration: Duration,
     timing: &CanvasRequest,
 ) -> FfprobeMediaVersion {
+    let frame = region.map_or(context.frame_size, |region| {
+        FrameSize::new(region.width, region.height)
+    });
     FfprobeMediaVersion {
         version: MediaVersion {
             duration: chrono::TimeDelta::from_std(duration).unwrap_or_default(),
-            width: i32::try_from(context.frame_size.width).unwrap_or_default(),
-            height: i32::try_from(context.frame_size.height).unwrap_or_default(),
+            width: i32::try_from(frame.width).unwrap_or_default(),
+            height: i32::try_from(frame.height).unwrap_or_default(),
             r_frame_rate: Some(timing.frame_rate().to_owned()),
             sample_aspect_ratio: Some("1:1".into()),
             ..MediaVersion::default()

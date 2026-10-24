@@ -51,6 +51,55 @@ async fn fixture() -> (NextHost, Uuid, CanvasBinding, tempfile::TempDir) {
 }
 
 #[tokio::test]
+async fn canvas_region_stays_fixed_after_profile_shrink_and_rejects_invalid_bounds() {
+    let (host, instance, mut binding, _root) = fixture().await;
+    let timing = canvas_timing();
+    let region = ersatzrs_ffmpeg::CanvasRegion {
+        x: 2,
+        y: 2,
+        width: 16,
+        height: 8,
+    };
+    binding.region = Some(region);
+    let session = host
+        .canvas_session(instance, &binding, &timing)
+        .await
+        .unwrap();
+    assert_eq!(session.region, Some(region));
+    for bad in [
+        ersatzrs_ffmpeg::CanvasRegion { width: 0, ..region },
+        ersatzrs_ffmpeg::CanvasRegion {
+            x: u32::MAX,
+            ..region
+        },
+        ersatzrs_ffmpeg::CanvasRegion {
+            width: u32::MAX,
+            ..region
+        },
+    ] {
+        binding.region = Some(bad);
+        assert!(host
+            .canvas_session(instance, &binding, &timing)
+            .await
+            .is_err());
+    }
+    binding.region = Some(region);
+    sqlx::query(r#"UPDATE "Resolution" SET "Width"=8"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    let session = host
+        .canvas_session(instance, &binding, &timing)
+        .await
+        .unwrap();
+    assert_eq!(
+        session.region,
+        Some(region),
+        "profile edits cannot change signed output geometry"
+    );
+}
+
+#[tokio::test]
 async fn canvas_session_requires_current_item_and_exact_active_process() {
     let (host, instance, binding, _root) = fixture().await;
     let first = host

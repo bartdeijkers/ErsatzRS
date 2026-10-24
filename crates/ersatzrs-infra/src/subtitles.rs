@@ -49,6 +49,7 @@ use crate::file_system_layout::{
 };
 use crate::metadata::subtitle_kind;
 use crate::repositories::common::encode_datetime;
+use crate::subtitle_cache_nul::{self, StripResult};
 
 /// Image-subtitle codecs that cannot be extracted as text. Mirrors
 /// `Subtitle.IsImage` (`Subtitle.cs`) and the filters in
@@ -1469,15 +1470,19 @@ async fn extract_subtitles(
     input_path: &str,
     ffmpeg_path: &str,
 ) -> Result<()> {
-    let to_extract = subtitles_to_extract(pool, media_item_id, &subtitle_cache_folder()).await?;
+    let cache = subtitle_cache_folder();
+    let to_extract = subtitles_to_extract(pool, media_item_id, &cache).await?;
 
     if to_extract.is_empty() {
         return Ok(());
     }
+    let Some(_lease) = extraction_cache_lease(&cache).await else {
+        return Ok(());
+    };
 
     // Ensure output directories exist and delete any stale output.
     for sub in &to_extract {
-        let full = subtitle_cache_folder().join(&sub.relative_output);
+        let full = cache.join(&sub.relative_output);
         if let Some(parent) = full.parent() {
             if let Err(error) = tokio::fs::create_dir_all(parent).await {
                 tracing::error!(%error, "failed to create subtitle cache directory");
@@ -1499,17 +1504,25 @@ async fn extract_subtitles(
     };
 
     if output.status.success() {
+        let mut extracted = 0;
         for sub in &to_extract {
+            if !matches!(
+                subtitle_cache_nul::strip_or_delete(&cache.join(&sub.relative_output)).await,
+                StripResult::Unchanged | StripResult::Stripped
+            ) {
+                continue;
+            }
             sqlx::query(r#"UPDATE "Subtitle" SET "IsExtracted" = 1, "Path" = ? WHERE "Id" = ?"#)
                 .bind(sub.relative_output.to_string_lossy().into_owned())
                 .bind(sub.id)
                 .execute(pool)
                 .await
                 .repository()?;
+            extracted += 1;
         }
         tracing::debug!(
             media_item_id,
-            count = to_extract.len(),
+            count = extracted,
             "successfully extracted subtitles"
         );
     } else {
@@ -1521,6 +1534,21 @@ async fn extract_subtitles(
     }
 
     Ok(())
+}
+
+async fn extraction_cache_lease(cache: &Path) -> Option<std::fs::File> {
+    let result = async {
+        tokio::fs::create_dir_all(cache).await?;
+        subtitle_cache_nul::cache_lease(cache, false)
+    }
+    .await;
+    match result {
+        Ok(lease) => lease,
+        Err(error) => {
+            tracing::warn!(kind=?error.kind(), "subtitle extraction cache unavailable");
+            None
+        }
+    }
 }
 
 /// Extract this media item's font attachments. Ports `ExtractFonts`. ffmpeg exits

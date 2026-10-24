@@ -482,6 +482,23 @@ pub fn canvas_overlay_filter(
     filter
 }
 
+pub(crate) fn canvas_region_overlay_filter(
+    watermark: &WatermarkOverlay,
+    resolution: FrameSize,
+    content: FrameSize,
+    region: crate::CanvasRegion,
+) -> String {
+    let (x, y) = watermark_overlay_coordinates(watermark, resolution, content);
+    let x = x.replace('W', &resolution.width.to_string());
+    let y = y.replace('H', &resolution.height.to_string());
+    let mut filter = format!(
+        "overlay=x=({x})-{}:y=({y})-{}:format=rgb",
+        region.x, region.y
+    );
+    append_overlay_timing_options(&mut filter, watermark);
+    filter
+}
+
 #[must_use]
 pub fn watermark_overlay_cuda_filter(
     watermark: &WatermarkOverlay,
@@ -514,6 +531,15 @@ fn watermark_overlay_position(
     resolution: FrameSize,
     square_pixel_frame_size: FrameSize,
 ) -> String {
+    let (x, y) = watermark_overlay_coordinates(watermark, resolution, square_pixel_frame_size);
+    format!("x={x}:y={y}")
+}
+
+fn watermark_overlay_coordinates(
+    watermark: &WatermarkOverlay,
+    resolution: FrameSize,
+    square_pixel_frame_size: FrameSize,
+) -> (String, String) {
     let (horizontal_margin, vertical_margin) = if watermark.place_within_source_content {
         source_content_margins(watermark, resolution, square_pixel_frame_size)
     } else {
@@ -521,17 +547,18 @@ fn watermark_overlay_position(
     };
 
     match watermark.location {
-        WatermarkLocation::BottomLeft => format!("x={horizontal_margin}:y=H-h-{vertical_margin}"),
-        WatermarkLocation::TopLeft => format!("x={horizontal_margin}:y={vertical_margin}"),
-        WatermarkLocation::TopRight => format!("x=W-w-{horizontal_margin}:y={vertical_margin}"),
-        WatermarkLocation::TopMiddle => format!("x=(W-w)/2:y={vertical_margin}"),
-        WatermarkLocation::RightMiddle => format!("x=W-w-{horizontal_margin}:y=(H-h)/2"),
-        WatermarkLocation::BottomMiddle => format!("x=(W-w)/2:y=H-h-{vertical_margin}"),
-        WatermarkLocation::LeftMiddle => format!("x={horizontal_margin}:y=(H-h)/2"),
-        WatermarkLocation::MiddleCenter => "x=(W-w)/2:y=(H-h)/2".to_owned(),
-        WatermarkLocation::BottomRight => {
-            format!("x=W-w-{horizontal_margin}:y=H-h-{vertical_margin}")
-        }
+        WatermarkLocation::BottomLeft => (horizontal_margin, format!("H-h-{vertical_margin}")),
+        WatermarkLocation::TopLeft => (horizontal_margin, vertical_margin),
+        WatermarkLocation::TopRight => (format!("W-w-{horizontal_margin}"), vertical_margin),
+        WatermarkLocation::TopMiddle => ("(W-w)/2".into(), vertical_margin),
+        WatermarkLocation::RightMiddle => (format!("W-w-{horizontal_margin}"), "(H-h)/2".into()),
+        WatermarkLocation::BottomMiddle => ("(W-w)/2".into(), format!("H-h-{vertical_margin}")),
+        WatermarkLocation::LeftMiddle => (horizontal_margin, "(H-h)/2".into()),
+        WatermarkLocation::MiddleCenter => ("(W-w)/2".into(), "(H-h)/2".into()),
+        WatermarkLocation::BottomRight => (
+            format!("W-w-{horizontal_margin}"),
+            format!("H-h-{vertical_margin}"),
+        ),
     }
 }
 

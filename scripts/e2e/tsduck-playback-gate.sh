@@ -383,7 +383,7 @@ SQL
         "$((i + 1))" "$(date -u -d "@$ifin" '+%Y-%m-%d %H:%M:%S')" "$clip" "$out_hms" "$(date -u -d "@$istart" '+%Y-%m-%d %H:%M:%S')"
     done
     cat <<SQL
-UPDATE "Channel" SET "StreamingMode"=5,"IdleBehavior"=0,"PlayoutMode"=0,"IsEnabled"=1 WHERE "Id"=$chid;
+UPDATE "Channel" SET "StreamingEngine"=0,"StreamingMode"=5,"IdleBehavior"=0,"PlayoutMode"=0,"IsEnabled"=1 WHERE "Id"=$chid;
 COMMIT;
 SQL
   } | sqlite3 "$db" || die "seeding failed"
@@ -420,9 +420,14 @@ mode_gate() {
   }
   trap cleanup EXIT
 
-  info "building ersatzrs-web…"
-  ( cd "$REPO_ROOT" && cargo build --bin ersatzrs-web ) || die "cargo build failed"
-  local bin; bin="$(resolve_target_dir)/debug/ersatzrs-web"
+  local bin="${ERSATZRS_TSDUCK_SERVER_BIN:-}"
+  if [ -n "$bin" ]; then
+    info "using explicitly selected ersatzrs-web candidate"
+  else
+    info "building ersatzrs-web…"
+    ( cd "$REPO_ROOT" && cargo build --bin ersatzrs-web ) || die "cargo build failed"
+    bin="$(resolve_target_dir)/debug/ersatzrs-web"
+  fi
   [ -x "$bin" ] || die "server binary not found at $bin"
 
   local server_db server_home

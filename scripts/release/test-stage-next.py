@@ -67,6 +67,8 @@ class AcceptedSourceTests(unittest.TestCase):
         self.assertEqual(module.PINNED_REVISION, manifest['upstream_revision'])
         self.assertEqual(module.SOURCE_ARCHIVE_SHA256, manifest['source_archive_sha256'])
         self.assertEqual(module.SOURCE_LOCK_SHA256, manifest['source_lock_sha256'])
+        self.assertEqual(module.PREPARED_LOCK_SHA256,
+                         manifest.get('patched_lock_sha256', manifest['source_lock_sha256']))
         self.assertEqual(module.PATCHED_DISTRIBUTION_VERSION, manifest['distribution_version'])
         self.assertEqual(module.PINNED_PATCHES,
                          [{key: item[key] for key in ('file', 'sha256')} for item in manifest['patches']])
@@ -79,9 +81,15 @@ class AcceptedSourceTests(unittest.TestCase):
 class StageNextTests(unittest.TestCase):
     def setUp(self):
         # Keep the official-artifact path covered for ADR 0116 patch retirement.
-        official = patch.object(module, "PATCHED_DISTRIBUTION_VERSION", None)
-        official.start()
-        self.addCleanup(official.stop)
+        legacy = copy.deepcopy(module.MANIFEST)
+        legacy.pop("linux_arm64_companions_sha256", None)
+        legacy.pop("patched_lock_sha256", None)
+        legacy["patches"] = []
+        for name, value in (("PATCHED_DISTRIBUTION_VERSION", None), ("MANIFEST", legacy),
+                            ("PINNED_PATCHES", []), ("PREPARED_LOCK_SHA256", module.SOURCE_LOCK_SHA256)):
+            official = patch.object(module, name, value)
+            official.start()
+            self.addCleanup(official.stop)
         original = module.PINNED_HASHES.copy()
         self.addCleanup(lambda: (module.PINNED_HASHES.clear(), module.PINNED_HASHES.update(original)))
         module.PINNED_HASHES["LICENSE"] = hashlib.sha256(b"MIT License\nSynthetic copyright notice\n").hexdigest()
@@ -324,20 +332,25 @@ class PatchedSnapshotTests(unittest.TestCase):
             mock = patch.object(module, name, value)
             mock.start()
             self.addCleanup(mock.stop)
+        if "linux_arm64_companions_sha256" in module.MANIFEST:
+            self.configure_mpp_review(prepared_lock=module.PREPARED_LOCK_SHA256)
 
     def archive(self, rid, defect=None):
         binary = "ersatztv-channel.exe" if rid == "win-x64" else "ersatztv-channel"
         files = {binary: b"fixture binary", "LICENSE": b"fixture license"}
+        if rid == "linux-arm64":
+            files.update(getattr(self, "mpp_files", {}))
         if rid == "win-x64":
             files.update({name: b"fixture companion" for name in module.WINDOWS_COMPANIONS})
         origin = {
             "kind": "patched-source-build", "repository": module.REPOSITORY,
             "source_revision": module.PINNED_REVISION, "rid": rid, "target": module.TARGETS[rid],
             "source_archive_sha256": module.SOURCE_ARCHIVE_SHA256,
-            "cargo_lock_sha256": module.SOURCE_LOCK_SHA256,
+            "cargo_lock_sha256": module.PREPARED_LOCK_SHA256,
             "distribution_version": module.PATCHED_DISTRIBUTION_VERSION,
             "patches": module.PINNED_PATCHES,
             "payload_sha256": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
+            "rustc": f"rustc {module.MANIFEST.get('rust_toolchain', '1.97.1')} (fixture)",
         }
         if defect in ("patches", "source_revision", "cargo_lock_sha256", "rid", "target"):
             origin[defect] = "unreviewed"
@@ -348,6 +361,14 @@ class PatchedSnapshotTests(unittest.TestCase):
             origin["payload_sha256"]["LICENSE"] = hashlib.sha256(files["LICENSE"]).hexdigest()
         elif defect == "missing-companion":
             del files["libvpl.dll"]
+        elif defect == "original-lock":
+            origin["cargo_lock_sha256"] = module.SOURCE_LOCK_SHA256
+        elif defect == "compiler":
+            origin["rustc"] = "rustc 1.97.1 (unreviewed)"
+        elif defect == "mpp-missing":
+            del files[self.mpp_defect]
+        elif defect == "mpp-tampered":
+            files[self.mpp_defect] = b"changed companion"
         files["origin.json"] = json.dumps(origin).encode()
         prefix = f"ersatzrs-next-{module.PATCHED_DISTRIBUTION_VERSION}-{rid}"
         buffer = io.BytesIO()
@@ -370,6 +391,100 @@ class PatchedSnapshotTests(unittest.TestCase):
         data = buffer.getvalue()
         module.PINNED_HASHES[name] = hashlib.sha256(data).hexdigest()
         return data
+
+    def configure_mpp_review(self, prepared_lock="e" * 64):
+        self.mpp_files = {name: ("fixture " + name).encode() for name in module.ARM64_COMPANIONS}
+        payload = {"ersatztv-channel": b"fixture binary", "LICENSE": b"fixture license", **self.mpp_files}
+        manifest = copy.deepcopy(module.MANIFEST)
+        manifest["rust_toolchain"] = "1.99.0"
+        manifest["linux_arm64_companions_sha256"] = {
+            name: hashlib.sha256(data).hexdigest() for name, data in self.mpp_files.items()
+        }
+        manifest["runtime_packages"]["linux-arm64"] = {
+            "payload_sha256": {name: hashlib.sha256(data).hexdigest() for name, data in payload.items()},
+            "payload_bytes": {name: len(data) for name, data in payload.items()},
+        }
+        patches = [p for p in module.PINNED_PATCHES if p["file"] != "0004-private-mpp-driver-readiness.patch"]
+        patches.append({"file": "0004-private-mpp-driver-readiness.patch", "sha256": "b" * 64})
+        for name, value in (("MANIFEST", manifest), ("PREPARED_LOCK_SHA256", prepared_lock),
+                            ("PINNED_PATCHES", patches)):
+            mock = patch.object(module, name, value)
+            mock.start()
+            self.addCleanup(mock.stop)
+        return manifest
+
+    def test_prepared_lock_and_exact_compiler_are_required(self):
+        self.configure_mpp_review()
+        for defect in ("original-lock", "compiler"):
+            with self.subTest(defect=defect):
+                data = self.archive("linux-x64", defect)
+                with self.assertRaisesRegex(ValueError, "provenance"):
+                    module.stage_patched_snapshot("linux-x64", self.root / "next", fetch=lambda url, limit: data)
+                self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_private_mpp_stages_exact_library_notices_and_prepared_lock(self):
+        self.configure_mpp_review()
+        data = self.archive("linux-arm64")
+        out = self.root / "next"
+        module.stage_patched_snapshot("linux-arm64", out, fetch=lambda url, limit: data)
+        self.assertEqual({p.name for p in out.iterdir()},
+                         {"ersatztv-channel", "LICENSE", "origin.json"} | module.ARM64_COMPANIONS)
+        for name, value in self.mpp_files.items():
+            self.assertEqual((out / name).read_bytes(), value)
+        origin = json.loads((out / "origin.json").read_text())
+        self.assertEqual(origin["cargo_lock_sha256"], "e" * 64)
+        self.assertEqual(origin["payload_sha256"],
+                         module.MANIFEST["runtime_packages"]["linux-arm64"]["payload_sha256"])
+
+    def test_private_mpp_patch_cannot_omit_or_expand_companion_inventory(self):
+        manifest = self.configure_mpp_review()
+        data = self.archive("linux-arm64")
+        for defect in ("absent", "missing", "extra"):
+            with self.subTest(defect=defect):
+                changed = copy.deepcopy(manifest)
+                if defect == "absent":
+                    del changed["linux_arm64_companions_sha256"]
+                elif defect == "missing":
+                    del changed["linux_arm64_companions_sha256"]["librockchip_mpp.so.1"]
+                else:
+                    changed["linux_arm64_companions_sha256"]["undeclared.so"] = "f" * 64
+                with patch.object(module, "MANIFEST", changed), self.assertRaisesRegex(ValueError, "ARM64"):
+                    module.stage_patched_snapshot("linux-arm64", self.root / "next", fetch=lambda url, limit: data)
+                self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_every_missing_or_tampered_mpp_companion_is_refused(self):
+        self.configure_mpp_review()
+        for name in module.ARM64_COMPANIONS:
+            for defect in ("mpp-missing", "mpp-tampered"):
+                with self.subTest(companion=name, defect=defect):
+                    self.mpp_defect = name
+                    data = self.archive("linux-arm64", defect)
+                    with self.assertRaises(ValueError):
+                        module.stage_patched_snapshot("linux-arm64", self.root / "next", fetch=lambda url, limit: data)
+                    self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_mpp_payload_hash_size_and_inventory_must_match_manifest(self):
+        manifest = self.configure_mpp_review()
+        data = self.archive("linux-arm64")
+        for defect in ("hash", "size", "boolean-size", "missing-size", "extra-payload"):
+            with self.subTest(defect=defect):
+                changed = copy.deepcopy(manifest)
+                declared = changed["runtime_packages"]["linux-arm64"]
+                if defect == "hash":
+                    declared["payload_sha256"]["librockchip_mpp.so.1"] = "f" * 64
+                    changed["linux_arm64_companions_sha256"]["librockchip_mpp.so.1"] = "f" * 64
+                elif defect == "size":
+                    declared["payload_bytes"]["librockchip_mpp.so.1"] += 1
+                elif defect == "boolean-size":
+                    declared["payload_bytes"]["librockchip_mpp.so.1"] = True
+                elif defect == "missing-size":
+                    del declared["payload_bytes"]["librockchip_mpp.so.1"]
+                else:
+                    declared["payload_sha256"]["undeclared.so"] = "f" * 64
+                    declared["payload_bytes"]["undeclared.so"] = 12
+                with patch.object(module, "MANIFEST", changed), self.assertRaisesRegex(ValueError, "ARM64"):
+                    module.stage_patched_snapshot("linux-arm64", self.root / "next", fetch=lambda url, limit: data)
+                self.assertEqual(list(self.root.iterdir()), [])
 
     def test_all_six_platforms_preserve_patch_and_payload_identity(self):
         for rid in module.PLATFORMS:

@@ -65,6 +65,66 @@ fn empty_link() -> TeletextMotObjectLink {
         [TeletextMotDefaultObject::NoObject { raw_number: 77 }; 2],
     )
 }
+// Pure wire fixture shared by portable tests and opt-in decoder calibration.
+fn drcs_unused_target() -> TeletextX27LinkTarget {
+    TeletextX27LinkTarget::Unspecified {
+        magazine: TeletextX27Magazine::new(8).unwrap(),
+    }
+}
+
+pub(super) fn drcs_mot(
+    table: TeletextResourceIdentity,
+    normal: bool,
+) -> TeletextMotLevel25Declaration {
+    let object = TeletextMotObjectLink::new(
+        drcs_unused_target(),
+        TeletextMotSubpageExtent::new(0).unwrap(),
+        false,
+        TeletextMotFallback::new(0).unwrap(),
+        [TeletextMotDefaultObject::NoObject { raw_number: 0 }; 2],
+    );
+    let inactive = TeletextMotDrcsLink::new(
+        drcs_unused_target(),
+        TeletextMotSubpageExtent::new(0).unwrap(),
+        false,
+    );
+    let selected = TeletextMotDrcsLink::new(
+        TeletextX27LinkTarget::Page { page: table.page() },
+        TeletextMotSubpageExtent::new(table.logical_subpage().get()).unwrap(),
+        false,
+    );
+    let association = TeletextMotAssociationSelection::new(
+        !normal,
+        normal.then(|| TeletextMotPublicLinkIndex::new(1).unwrap()),
+    );
+    let mut public = [inactive; 7];
+    if normal {
+        public[0] = selected;
+    }
+    TeletextMotLevel25Declaration::new(
+        TeletextResourceIdentity::new(
+            TeletextResourceKind::Mot,
+            TeletextRawDataPageNumber::new(2, 0xfe).unwrap(),
+            TeletextResourceSubpageIndex::ZERO,
+        )
+        .unwrap(),
+        vec![TeletextMotPageAssociation::new(
+            0,
+            TeletextMotAssociationSelection::new(false, None),
+            association,
+        )],
+        TeletextMotLevel25Links::new(
+            object,
+            [object; 7],
+            if normal { inactive } else { selected },
+            public,
+            TeletextMotEnhancementCounts::new(1, 0, table.logical_subpage().get() + 1),
+        )
+        .unwrap(),
+    )
+    .unwrap()
+}
+
 fn mot() -> TeletextMotLevel25Declaration {
     mot_with_type(TeletextObjectType::Passive)
 }

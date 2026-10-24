@@ -595,6 +595,53 @@ ORDER BY "Id" DESC LIMIT 1;
     expect(runtimeErrors).toEqual([]);
   });
 
+  for (const dark of [false, true]) {
+    test(`provider Media Info preserves unknown HDR and refreshed positive evidence (dark ${dark})`, async ({ page }, info) => {
+      const runtimeErrors = watchRuntimeErrors(page);
+      const seed = seedMediaBrowserActions(info);
+      const source = seed.mediaSourceId + 1000;
+      const library = source + 1, libraryPath = source + 2, movie = source + 3;
+      sqlite(`
+        PRAGMA foreign_keys=ON;
+        INSERT INTO "MediaSource" ("Id") VALUES (${source});
+        INSERT INTO "PlexMediaSource" ("Id","ClientIdentifier") VALUES (${source},'synthetic-hdr-provider');
+        INSERT INTO "Library" ("Id","MediaSourceId","Name","MediaKind") VALUES (${library},${source},'Provider HDR fixture',1);
+        INSERT INTO "PlexLibrary" ("Id","ShouldSyncItems") VALUES (${library},0);
+        INSERT INTO "LibraryPath" ("Id","LibraryId","Path") VALUES (${libraryPath},${library},'provider-only');
+        INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (${movie},${libraryPath},3);
+        INSERT INTO "Movie" ("Id") VALUES (${movie});
+        INSERT INTO "PlexMovie" ("Id","Key","Etag") VALUES (${movie},'fixture','same');
+        INSERT INTO "MovieMetadata" ("Id","MovieId","Title","MetadataKind","DateAdded","DateUpdated")
+          VALUES (${movie},${movie},'Provider HDR fixture',0,'2026-10-24','2026-10-24');
+        INSERT INTO "MediaVersion" ("Id","MovieId","DateAdded","DateUpdated","Duration","Height","Width","VideoScanKind")
+          VALUES (${movie},${movie},'2026-10-24','2026-10-24','00:01:00',180,320,0);
+        INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES (${movie},${movie},'provider-only/fixture.mkv','provider-hdr-${info.project.name}-${dark}');
+        INSERT INTO "MediaStream" ("MediaVersionId","Index","MediaStreamKind","Codec","ColorTransfer","Channels","Default","Forced")
+          VALUES (${movie},0,1,'hevc','smpte2084',0,0,0);
+      `);
+      try {
+        await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0 });
+        for (const light of [null, 1000]) {
+          sqlite(`UPDATE "MediaStream" SET "MaxCll"=${light === null ? 'NULL' : light} WHERE "MediaVersionId"=${movie};`);
+          await gotoHydrated(page, `/media/movies/${movie}`);
+          await page.getByRole('button', { name: /^show media info$/i }).click();
+          const modal = page.getByRole('heading', { name: 'Provider HDR fixture', level: 2 }).locator('..');
+          await expect(modal.locator('pre')).toContainText('smpte2084');
+          const body = JSON.parse(await modal.locator('pre').innerText());
+          expect(body.LibraryKind).toBe('PlexLibrary');
+          if (light === null) {
+            expect(body.Streams[0]).not.toHaveProperty('HasHdr10Metadata');
+            await page.screenshot({ path: info.outputPath(`provider-hdr-unknown-${dark ? 'dark' : 'light'}.png`), fullPage: true });
+          } else expect(body.Streams[0].HasHdr10Metadata).toBe(true);
+          await modal.getByRole('button', { name: /^close$/i }).click();
+        }
+        expect(runtimeErrors).toEqual([]);
+      } finally {
+        sqlite(`PRAGMA foreign_keys=ON; DELETE FROM "MediaItem" WHERE "Id"=${movie}; DELETE FROM "Library" WHERE "Id"=${library}; DELETE FROM "MediaSource" WHERE "Id"=${source};`);
+      }
+    });
+  }
+
   test('artist detail collection action and preview images hydrate', async ({ page }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
     const seed = seedMediaBrowserActions(testInfo);

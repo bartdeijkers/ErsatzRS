@@ -2,9 +2,12 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.3)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
+adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125', '0128', '0129']
 summary    = """
 UCU-00–11 are Complete: all236 rows through v26.11.3 are accepted.
+UCU-12 is In progress for rows237–254/v26.11.4. Its milestone owns verified
+components, the finite completion list and decisions. Triage is not acceptance.
+Current evidence: ucu-12.
 The authoritative current baseline is docs/automation/parity-baseline.md. Native, stored engine/profile choices
 and international audio/subtitle behavior remain supported. UCU-10 is delivered
 through PR105 on remote main 32c12793. Run 38623973857 passes every non-browser
@@ -308,6 +311,14 @@ resolved    = false
 evidence    = 'The maintainer explicitly approved ARM/macOS acceptance debt on 2026-10-01 so UCU-09 may close after its remaining gates. This applies to ADRs 0095/0096/0098 and does not claim those targets passed, alter supported platforms, waive Linux x64 or Windows x64 application checks, or replace the separate approved GPU-validation debt. UCU-09 owns current platform evidence.'
 
 [[debt]]
+id          = 'ucu-12-hardware-acceptance'
+description = 'Native UCU-12 hardware acceptance remains unverified for Rockchip RKMPP/RGA, Intel QSV HDR, AMD VAAPI and macOS VideoToolbox captions.'
+discovered  = '2026-10-24'
+resolved    = false
+adr         = '0128'
+evidence    = 'The maintainer explicitly approved this bounded unverified hardware acceptance debt on 2026-10-24. It does not claim hardware passed or waive builds, software, checksum, source/provenance, no-device fallback or other acceptance requirements. Close each path only with exact candidate identity and native decoded behavior on the corresponding hardware/driver; cross-builds, emulation and another GPU do not qualify it. UCU-12 owns available evidence and the remaining non-deferred gates.'
+
+[[debt]]
 id          = 'ucu-optional-next-engine-integration'
 description = 'Implement Next as an optional second engine alongside the native pipeline: persisted selection, package/runtime integration, supervised process and configuration exchange, health/troubleshooting, and verified playback with subtitle/audio handling and recovery on the supported platforms.'
 discovered  = '2026-09-22'
@@ -434,3 +445,19 @@ discovered = '2026-10-14'
 resolved = true
 adr = '0125'
 evidence = 'ADR0125 is Accepted and locally implemented. UCU-10 owns the fully passing dependency audit,370 affected Linux checks,336 native Windows checks plus corrected104 YAML checks,101 focused Linux YAML checks,6043 workspace closeout/doctests and strict workspace/affected core lint. Native file/import behavior and portable database fixtures are corrected without disabling tests. Final matched build/bundle, six headed browser cases, parity, three lifecycle HTTP smokes, Native87 and Next83 TSDuck checks and strict complete-frame capture decoding pass. Next distribution/adoption is resolved; approved hardware/platform debt remains unverified.'
+
+[[debt]]
+id = 'ucu12-ffmpeg-9-and-private-rockchip-runtime'
+description = 'Complete row246 common subtitle-heartbeat, VideoToolbox caption and ARM64 RKMPP/RKRGA runtime requirements, including private Next MPP identity and actual driver-readiness fallback.'
+discovered = '2026-10-24'
+resolved = false
+adr = '0128'
+evidence = 'ADR0128 is Accepted. Milestone ucu-12 owns the published2.0.6 heartbeat negative, four verified FFmpeg2.0.7 software/archive kits, six Next rs.4 kits and actual ARM64 no-device decoded fallback. Both approved dependency publications are complete:25 Next and10 FFmpeg assets match anonymous downloads; all four non-Mac package CI checks pass in40117309596 onaa14713e. Local published pins,45 Python checks,26 composed manager checks and9 actual bundle-layout cases pass. Linux ordinary public cold startup/managed restart, decoded Native/Next playback,30 affected headed cases, bundle and179 Native/Next TSDuck checks pass. Windows combined public adoption also passes; all four existing current-Tokio Windows playback cases, structural gates and doctest execution pass. The original workspace nextest run is terminal:8209 passes plus six environment-contaminated mock failures, all six recovered without a source change. All8215 selected cases therefore have passing composed evidence;502 existing manual/ignored skips remain. Available local gates are complete; this is not single-run green CI. Native macOS FFmpeg build/software evidence remains deferred and unverified under ucu-12-macos-build-deferral; no Mac retry until explicit maintainer resume. Application/main push, application CI, Docker publication and application release remain separate. Approved hardware debt stays explicitly unverified under ucu-12-hardware-acceptance.'
+
+[[debt]]
+id = 'ucu-12-macos-build-deferral'
+description = 'Complete native macOS FFmpeg candidate builds and package/software acceptance after the maintainer resumes them.'
+discovered = '2026-10-24'
+resolved = false
+adr = '0128'
+evidence = 'The maintainer explicitly directed skipping macOS builds until further instruction. Both UCU12 candidate branches have no running/queued jobs. Last ARM64 run40115372297 is terminal failure; prior construction and component results remain valid only in their documented scope. No further Mac build/retry is permitted until explicit maintainer resume. This defers work, keeps acceptance unverified and does not waive requirements, drop supported targets or expand hardware debt. Milestone ucu-12 owns exact evidence and the finite completion list.'

@@ -328,6 +328,7 @@ pub(crate) fn physical_input_options(
         .any(|owner| owner.source_key() == input.source_key())
     {
         options.extend(source_teletext_caption_input_options(inputs, input));
+        options.extend(selected_subtitle_canvas_input_options(inputs, input));
     }
     options
 }
@@ -358,6 +359,28 @@ pub(crate) fn selected_bitmap_burn_input(inputs: &[InputFile]) -> Option<&InputF
             && subtitle.is_image_based_subtitle
             && subtitle.subtitle_method == Some(crate::SubtitleMethod::Burn)
     })
+}
+
+fn selected_subtitle_canvas_input_options(inputs: &[InputFile], owner: &InputFile) -> Vec<String> {
+    let Some(subtitle) = selected_bitmap_burn_input(inputs) else {
+        return Vec::new();
+    };
+    if subtitle.source_key() != owner.source_key() {
+        return Vec::new();
+    }
+    let Some(crate::SubtitleImageFormat::Pgs) = subtitle.subtitle_image_format else {
+        return Vec::new();
+    };
+    let Some(stream) = subtitle.streams.first() else {
+        return Vec::new();
+    };
+    // Next0.2.3 unknown_pgs_canvas_size: do not scale a video-sized transparent
+    // canvas on every 4K frame before the first PGS presentation arrives.
+    // Bind to the actual source stream and the first owning physical demuxer.
+    vec![
+        format!("-canvas_size:{}", stream.index),
+        "1920x1080".to_owned(),
+    ]
 }
 
 fn source_teletext_caption_input_options(inputs: &[InputFile], owner: &InputFile) -> Vec<String> {

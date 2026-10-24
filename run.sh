@@ -133,8 +133,12 @@ case "$cmd" in
     # direct cargo-test command.
     check_target_size
     shift || true
+    if [[ $# -eq 1 && "$1" == "--doctests-only" ]]; then
+      echo "Running only the workspace doctest component; unit/integration evidence is separate."
+      exec cargo test --workspace --doc
+    fi
     if [[ $# -ne 0 ]]; then
-      echo "usage: $0 test-closeout" >&2
+      echo "usage: $0 test-closeout [--doctests-only]" >&2
       exit 2
     fi
     if ! command -v cargo-nextest >/dev/null 2>&1; then

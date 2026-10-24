@@ -262,6 +262,108 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     }
   });
 
+  for (const language of ['en-us', 'nl']) {
+    for (const dark of [false, true]) {
+      for (const javaScriptEnabled of [true, false]) {
+        test(`channel preview time input explains invalid values (${language}, dark ${dark}, JavaScript ${javaScriptEnabled})`, async ({ page, browser, baseURL }, info) => {
+          const channelId = id + 500;
+          sql(`INSERT INTO "Channel" (
+            "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
+            "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
+            "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg"
+          ) VALUES (${channelId},'00000000-0000-0000-0000-000000935501','935501',935501,'Time input fixture',
+            'ErsatzRS',${id},4,0,0,0,0,0,0,0,0,1,1);`);
+          const context = javaScriptEnabled ? undefined : await browser.newContext({ baseURL, javaScriptEnabled: false });
+          const target = context ? await context.newPage() : page;
+          await target.setViewportSize({ width: 320, height: 900 });
+          const errors: string[] = [];
+          target.on('pageerror', error => errors.push(error.message));
+          let submissions = 0;
+          await target.route(/\/(?:admin-api\/troubleshoot\/playback\/start|api\/troubleshoot\/playback\/previews)(?:\?|$)/, route => {
+            submissions++;
+            return route.fulfill({ status: 400, contentType: 'application/json', body: '{"code":"configuration"}' });
+          });
+          try {
+            await target.request.post('/admin-api/settings/ui/save', {
+              form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
+            });
+            await target.goto(`/system/troubleshooting/playback?channel=${channelId}`);
+            if (javaScriptEnabled) await target.waitForFunction(() =>
+              (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+            const input = target.locator('input[name="start"]');
+            const initial = await input.inputValue();
+            expect(Date.now() - Date.parse(`${initial}Z`)).toBeGreaterThanOrEqual(-60_000);
+            expect(Date.now() - Date.parse(`${initial}Z`)).toBeLessThan(180_000);
+            await expect(input).toHaveAttribute('required', '');
+            const help = target.locator('[data-preview-time-help]');
+            await expect(help).toContainText('UTC');
+            await expect(help).toContainText(language === 'nl' ? 'kanaalplanning' : "channel's playout");
+            await input.fill('');
+            await target.getByRole('button', { name: language === 'nl' ? 'Afspelen' : 'Play', exact: true }).click();
+            expect(submissions).toBe(0);
+            expect(await input.evaluate((field: HTMLInputElement) => field.validity.valid)).toBe(false);
+            if (javaScriptEnabled) {
+              await expect(input).toHaveAttribute('aria-invalid', 'true');
+              await expect(target.locator('[data-preview-time-error]')).toHaveText(language === 'nl'
+                ? 'Datum en tijd zijn verplicht.' : 'Date and time are required.');
+              // Text-entry fallback uses the same localized parse feedback.
+              await input.evaluate((field: HTMLInputElement) => {
+                field.type = 'text'; field.value = 'not-a-date';
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+              });
+              await expect(target.locator('[data-preview-time-error]')).toHaveText(language === 'nl'
+                ? 'Kies een geldige datum en tijd in UTC.' : 'Choose a valid date and time in UTC.');
+              await target.getByRole('button', { name: language === 'nl' ? 'Afspelen' : 'Play', exact: true }).click();
+              expect(submissions).toBe(0);
+              expect(await target.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+              if (language === 'nl') await target.screenshot({ path: info.outputPath(`time-input-${dark ? 'dark' : 'light'}.png`), fullPage: true });
+              await input.evaluate((field: HTMLInputElement) => { field.type = 'datetime-local'; });
+            }
+            await input.fill(initial);
+            if (javaScriptEnabled) {
+              await expect(input).toHaveAttribute('aria-invalid', 'false');
+              await expect(target.locator('[data-preview-time-error]')).toBeHidden();
+            }
+            expect(await input.evaluate((field: HTMLInputElement) => field.validity.valid)).toBe(true);
+            expect(submissions).toBe(0);
+            expect(errors).toEqual([]);
+          } finally {
+            if (context) await context.close();
+            sql(`DELETE FROM "Channel" WHERE "Id"=${channelId};`);
+          }
+        });
+      }
+    }
+  }
+
+  test('channel Stop bypasses invalid time validation and confirms cleanup', async ({ page }) => {
+    const channelId = id + 500;
+    sql(`INSERT INTO "Channel" (
+      "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
+      "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
+      "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg"
+    ) VALUES (${channelId},'00000000-0000-0000-0000-000000935501','935501',935501,'Time input fixture',
+      'ErsatzRS',${id},4,0,0,0,0,0,0,0,0,1,1);
+    INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","Seed") VALUES (${channelId},${channelId},1,0);
+    INSERT INTO "PlayoutItem" ("Id","DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint","MediaItemId","OutPoint","PlayoutId","Start")
+      VALUES (${channelId},0,0,'2026-10-02 12:00:32',0,'00:00:00',${seekId},'00:00:32',${channelId},'2026-10-02 12:00:00');`);
+    try {
+      await page.goto(`/system/troubleshooting/playback?channel=${channelId}`);
+      await page.locator('select[name="streamingEngine"]').selectOption('Legacy');
+      await page.locator('input[name="start"]').fill('2026-10-02T12:00');
+      await page.locator('[data-preview-play]').click();
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', 'running');
+      await expect(page.locator('[data-preview-play-reason]')).toContainText('already running');
+      await page.locator('input[name="start"]').fill('');
+      await expect(page.locator('input[name="start"]')).toHaveAttribute('aria-invalid', 'true');
+      await page.locator('[data-preview-stop]').click();
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', /^(cancelled|completed)$/);
+      const owned = await page.locator('form[data-playback-troubleshooting]').getAttribute('data-preview-id');
+      expect((await (await page.request.get(`/api/troubleshoot/playback/previews/${owned}`)).json()).cleanup_confirmed).toBe(true);
+      await expect(page.locator('[data-preview-play-reason]')).toBeHidden();
+    } finally { sql(`DELETE FROM "Playout" WHERE "Id"=${channelId}; DELETE FROM "Channel" WHERE "Id"=${channelId};`); }
+  });
+
   test('ordinary channel preview keeps its default live-edge start in the first displayed frame', async ({ page }, info) => {
     const start = new Date(Date.now() - 2_000).toISOString().replace('T', ' ').replace('Z', '');
     const finish = new Date(Date.now() + 30_000).toISOString().replace('T', ' ').replace('Z', '');
@@ -583,9 +685,12 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       const oldId = await page.locator('form[data-playback-troubleshooting]').getAttribute('data-preview-id');
       expect(oldId).toMatch(/^[a-f0-9-]{36}$/);
       await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeDisabled();
+      await expect(page.locator('[data-preview-play-reason]')).toContainText('already running');
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toHaveAttribute('aria-describedby', 'preview-play-reason');
       await page.locator('[data-preview-stop]').click();
       await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', 'cancelled');
       await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+      await expect(page.locator('[data-preview-play-reason]')).toBeHidden();
       const old = await (await page.request.get(`/api/troubleshoot/playback/previews/${oldId}`)).json();
       expect(old.cleanup_confirmed).toBe(true);
       expect(old.ready).toBe(false);

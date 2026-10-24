@@ -12,14 +12,25 @@ fn config(root: &Path) -> NextRuntimeManagerConfig {
 }
 
 fn synthetic(rid: &str) -> (Manifest, BTreeMap<String, Vec<u8>>) {
-    let mut manifest = Manifest::accepted().unwrap();
-    let files: BTreeMap<_, _> = payload_names(rid)
+    synthetic_manifest(Manifest::accepted().unwrap(), rid)
+}
+
+fn synthetic_manifest(mut manifest: Manifest, rid: &str) -> (Manifest, BTreeMap<String, Vec<u8>>) {
+    let files: BTreeMap<_, _> = manifest
+        .payload_names(rid)
+        .unwrap()
         .into_iter()
         .map(|name| {
             let bytes = format!("bounded synthetic {name}\n").into_bytes();
             (name, bytes)
         })
         .collect();
+    if rid == "linux-arm64" {
+        for (name, hash) in &mut manifest.linux_arm64_companions_sha256 {
+            *hash = digest(&files[name]);
+        }
+    }
+    let prepared_lock = manifest.prepared_lock_sha256().to_owned();
     let package = manifest.runtime_packages.get_mut(rid).unwrap();
     package.payload_sha256 = files
         .iter()
@@ -33,7 +44,7 @@ fn synthetic(rid: &str) -> (Manifest, BTreeMap<String, Vec<u8>>) {
         "kind": "patched-source-build", "repository": manifest.upstream_repository,
         "source_revision": manifest.upstream_revision,
         "source_archive_sha256": manifest.source_archive_sha256,
-        "cargo_lock_sha256": manifest.source_lock_sha256,
+        "cargo_lock_sha256": prepared_lock,
         "distribution_version": manifest.distribution_version,
         "rid": rid, "target": package.target,
         "patches": manifest.patches.iter().map(|p| serde_json::json!({"file":p.file,"sha256":p.sha256})).collect::<Vec<_>>(),
@@ -146,10 +157,16 @@ fn managed_next_manifest_maps_six_exact_packages_and_retains_patch_identity() {
     }
     let value: serde_json::Value = serde_json::from_str(MANIFEST).unwrap();
     for patch in value["patches"].as_array().unwrap() {
-        assert!(patch["retire_when"]
-            .as_str()
-            .unwrap()
-            .contains("Remove this patch, not the tests"));
+        let retirement = patch["retire_when"].as_str().unwrap();
+        assert!(retirement.contains("upstream") && retirement.contains("pass"));
+        assert!([
+            "Remove this patch, not the tests",
+            "Preserve the tests",
+            "Retain the tests",
+            "Preserve the regression",
+        ]
+        .iter()
+        .any(|condition| retirement.contains(condition)));
     }
 }
 
@@ -175,6 +192,35 @@ fn managed_next_archive_guards_reject_malformed_members_even_with_matching_archi
             archive_files(&manifest, "linux-x64", &archive),
             Err(NextRuntimeError::Identity)
         ));
+    }
+}
+
+/// Exercise reviewed real archives without executing another target's binary.
+#[test]
+#[ignore = "requires NEXT_CANDIDATE_PACKAGES with reviewed manifest.json and its archives"]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "manual package acceptance supplies its reviewed fixture directory explicitly"
+)]
+fn managed_next_candidate_packages_install_and_relocate_with_exact_identity() {
+    let directory = PathBuf::from(std::env::var_os("NEXT_CANDIDATE_PACKAGES").unwrap());
+    let manifest: Manifest =
+        serde_json::from_slice(&fs::read(directory.join("manifest.json")).unwrap()).unwrap();
+    assert!(!manifest.runtime_packages.is_empty());
+    let root = tempfile::tempdir().unwrap();
+    for rid in manifest.runtime_packages.keys() {
+        let package = manifest.package(rid).unwrap();
+        let bytes = fs::read(directory.join(&package.asset)).unwrap();
+        let installed = install(root.path(), &manifest, rid, &bytes).unwrap();
+        validate_folder(&manifest, rid, &installed.folder, false).unwrap();
+        let relocated = root.path().join(format!("relocated-{rid}"));
+        fs::rename(&installed.folder, &relocated).unwrap();
+        validate_folder(&manifest, rid, &relocated, false).unwrap();
+        let files = archive_files(&manifest, rid, &bytes).unwrap();
+        let bundled = root.path().join(format!("bundle-{rid}"));
+        write_folder(&bundled, &files, true);
+        validate_folder(&manifest, rid, &bundled, true).unwrap();
+        eprintln!("verified real candidate archive, managed relocation and bundle: {rid}");
     }
 }
 
@@ -212,6 +258,107 @@ fn managed_next_windows_companions_and_origin_are_verified_without_running_execu
             verify_files(&manifest, "win-x64", &changed),
             Err(NextRuntimeError::Identity)
         );
+    }
+}
+
+#[test]
+fn managed_next_arm64_private_companions_require_complete_pinned_payloads() {
+    let rid = "linux-arm64";
+    let mut manifest = Manifest::accepted().unwrap();
+    manifest
+        .patches
+        .retain(|patch| patch.file != "0004-private-mpp-driver-readiness.patch");
+    manifest.patches.push(Patch {
+        file: "0004-private-mpp-driver-readiness.patch".to_owned(),
+        sha256: "1".repeat(64),
+    });
+    manifest.linux_arm64_companions_sha256.clear();
+    assert!(matches!(
+        manifest.package(rid),
+        Err(NextRuntimeError::Manifest)
+    ));
+    manifest.linux_arm64_companions_sha256 = ARM64_COMPANIONS
+        .into_iter()
+        .map(|name| (name.to_owned(), String::new()))
+        .collect();
+    let (mut manifest, files) = synthetic_manifest(manifest, rid);
+    let archive = good_archive(&mut manifest, rid, &files);
+    assert!(archive_files(&manifest, rid, &archive).is_ok());
+    let root = tempfile::tempdir().unwrap();
+    write_folder(root.path(), &files, true);
+    validate_folder(&manifest, rid, root.path(), true).unwrap();
+
+    for name in ARM64_COMPANIONS {
+        for missing in [false, true] {
+            let mut changed = files.clone();
+            if missing {
+                changed.remove(name);
+            } else {
+                changed.get_mut(name).unwrap()[0] ^= 1;
+            }
+            // Re-pin the archive, so rejection must inspect its actual members.
+            let archive = good_archive(&mut manifest, rid, &changed);
+            assert_eq!(
+                archive_files(&manifest, rid, &archive).err(),
+                Some(NextRuntimeError::Identity),
+                "{name}: missing={missing}"
+            );
+        }
+    }
+    let mut incomplete = manifest.clone();
+    incomplete
+        .linux_arm64_companions_sha256
+        .remove(ARM64_COMPANIONS[0]);
+    assert!(matches!(
+        incomplete.package(rid),
+        Err(NextRuntimeError::Manifest)
+    ));
+    let mut extra = manifest.clone();
+    extra
+        .linux_arm64_companions_sha256
+        .insert("unreviewed.so".to_owned(), "0".repeat(64));
+    assert!(matches!(
+        extra.package(rid),
+        Err(NextRuntimeError::Manifest)
+    ));
+    manifest
+        .linux_arm64_companions_sha256
+        .insert(ARM64_COMPANIONS[0].to_owned(), "0".repeat(64));
+    assert!(matches!(
+        manifest.package(rid),
+        Err(NextRuntimeError::Manifest)
+    ));
+}
+
+#[test]
+fn managed_next_prepared_lock_pin_rejects_an_unpatched_origin() {
+    for rid in [
+        "linux-x64",
+        "linux-arm64",
+        "linux-arm",
+        "osx-x64",
+        "osx-arm64",
+        "win-x64",
+    ] {
+        let mut manifest = Manifest::accepted().unwrap();
+        manifest.patched_lock_sha256 = Some("1".repeat(64));
+        let (manifest, mut files) = synthetic_manifest(manifest, rid);
+        verify_files(&manifest, rid, &files).unwrap();
+        let mut origin: serde_json::Value = serde_json::from_slice(&files["origin.json"]).unwrap();
+        origin["cargo_lock_sha256"] = serde_json::json!(manifest.source_lock_sha256);
+        files.insert(
+            "origin.json".to_owned(),
+            serde_json::to_vec(&origin).unwrap(),
+        );
+        assert_eq!(
+            verify_files(&manifest, rid, &files),
+            Err(NextRuntimeError::Identity)
+        );
+        let mut legacy = Manifest::accepted().unwrap();
+        legacy.patched_lock_sha256 = None;
+        let (legacy, files) = synthetic_manifest(legacy, rid);
+        assert!(legacy.patched_lock_sha256.is_none());
+        verify_files(&legacy, rid, &files).unwrap();
     }
 }
 

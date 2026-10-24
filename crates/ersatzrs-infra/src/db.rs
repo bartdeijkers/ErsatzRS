@@ -857,10 +857,10 @@ async fn ensure_default_channel(pool: &DbPool, ffmpeg_profile_id: i64) -> Result
     sqlx::query(
         r#"INSERT INTO "Channel" (
             "UniqueId", "Number", "SortNumber", "Name", "Group", "FFmpegProfileId",
-            "StreamingMode", "StreamSelectorMode", "SubtitleMode",
+            "StreamingEngine", "StreamingMode", "StreamSelectorMode", "SubtitleMode",
             "MusicVideoCreditsMode", "SongVideoMode", "PlayoutSource",
             "PlayoutMode", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)"#,
+           ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)"#,
     )
     .bind(Uuid::new_v4().to_string())
     .bind(DEFAULT_CHANNEL_NUMBER)
@@ -1592,6 +1592,31 @@ mod tests {
         assert_eq!(config_rows["xmltv.days_to_build"], "2");
         assert_eq!(config_rows["xmltv.time_zone"], "Local");
         assert_eq!(config_rows["xmltv.block_behavior"], "SplitTimeEvenly");
+    }
+
+    #[tokio::test]
+    async fn first_channel_defaults_to_next_but_existing_native_survives_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let url = format!("sqlite:{}", directory.path().join("defaults.db").display());
+        let pool = init(&url).await.unwrap();
+        initialize_media_server_database(&pool).await.unwrap();
+        let initial: (i64, String, i64, i64, i64) = sqlx::query_as(
+            r#"SELECT "Id","UniqueId","StreamingEngine","StreamingMode","FFmpegProfileId" FROM "Channel""#,
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!((initial.2, initial.3), (1, 5));
+        sqlx::query(r#"UPDATE "Channel" SET "StreamingEngine"=0 WHERE "Id"=?"#)
+            .bind(initial.0)
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        let pool = init(&url).await.unwrap();
+        assert!(!initialize_media_server_database(&pool).await.unwrap());
+        let retained: (i64, String, i64, i64, i64) = sqlx::query_as(
+            r#"SELECT "Id","UniqueId","StreamingEngine","StreamingMode","FFmpegProfileId" FROM "Channel""#,
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(retained, (initial.0, initial.1, 0, initial.3, initial.4));
+        pool.close().await;
     }
 
     #[tokio::test]

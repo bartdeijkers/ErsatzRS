@@ -23,6 +23,7 @@ use super::{
 /// Owned rendering inputs. No scheduler lock survives this snapshot, and no
 /// producer has started yet. Deliberately no Debug because media paths are private.
 pub struct CanvasSession {
+    pub region: Option<ersatzrs_ffmpeg::CanvasRegion>,
     pub request: NextStart,
     pub started_at: DateTime<Utc>,
     pub video_stream_index: Option<i32>,
@@ -129,6 +130,9 @@ impl NextHost {
     ) -> Result<CanvasSession> {
         let timeline = binding.timeline(timing).map_err(|_| unavailable())?;
         let session = self.occurrence_session(instance, binding).await?;
+        if let Some(region) = binding.region {
+            region.validate().map_err(|_| unavailable())?;
+        }
         let (graphics, watermarks) = if let Some(preview) = &session.troubleshooting {
             let offset = timeline.now - timeline.content_start;
             (
@@ -175,6 +179,7 @@ impl NextHost {
             return Err(unavailable());
         }
         Ok(CanvasSession {
+            region: binding.region,
             video_stream_index: binding.video_stream_index,
             request: session.request,
             started_at: session.started_at,

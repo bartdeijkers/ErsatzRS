@@ -540,6 +540,8 @@ async fn load_admin_media_streams(
         let kind = row.try_get("MediaStreamKind").repository()?;
         let channels: i64 = row.try_get("Channels").repository()?;
         let bits_per_raw_sample: i64 = row.try_get("BitsPerRawSample").repository()?;
+        let has_hdr10_metadata: bool = row.try_get("HasHdr10Metadata").repository()?;
+        let dv_profile: Option<i64> = row.try_get("DolbyVisionProfile").repository()?;
         let mut stream = AdminMediaInfoStream {
             index: Some(index),
             kind,
@@ -557,11 +559,9 @@ async fn load_admin_media_streams(
             color_space: row.try_get("ColorSpace").repository()?,
             color_transfer: row.try_get("ColorTransfer").repository()?,
             color_primaries: row.try_get("ColorPrimaries").repository()?,
-            dv_profile: (kind == 1)
-                .then_some(row.try_get("DolbyVisionProfile").repository()?)
-                .flatten(),
-            has_hdr10_metadata: (kind == 1)
-                .then_some(row.try_get::<bool, _>("HasHdr10Metadata").repository()?),
+            dv_profile: dv_profile.filter(|_| kind == 1),
+            has_hdr10_metadata: (kind == 1 && (is_local_library || has_hdr10_metadata))
+                .then_some(has_hdr10_metadata),
             rotation: row.try_get("Rotation").repository()?,
             bits_per_raw_sample: (bits_per_raw_sample > 0).then_some(bits_per_raw_sample),
             mime_type: row.try_get("MimeType").repository()?,
@@ -2312,7 +2312,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn media_info_hdr_metadata_is_video_only_and_preserves_false() {
+    async fn media_info_hdr_metadata_preserves_provider_unknown_and_local_false() {
         let pool = test_pool().await;
         seed_remote_stream_detail(&pool).await;
         sqlx::query(
@@ -2340,6 +2340,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(streams[0].dv_profile, None);
+        assert_eq!(streams[0].has_hdr10_metadata, None);
+        let streams = load_admin_media_streams(&pool, 22, &[], true)
+            .await
+            .unwrap();
         assert_eq!(streams[0].has_hdr10_metadata, Some(false));
     }
 

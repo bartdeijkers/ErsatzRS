@@ -135,6 +135,7 @@ mod tests {
         let start = chrono::Utc::now();
         let binding = CanvasBinding {
             playout_start: None,
+            region: None,
             video_stream_index: None,
             session: Some(uuid::Uuid::new_v4()),
             channel: 1,

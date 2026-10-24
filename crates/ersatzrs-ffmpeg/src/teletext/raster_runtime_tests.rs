@@ -115,7 +115,7 @@ fn wire_units(
     let table = &service.drcs().subtables()[0];
     let normal = table.identity().kind() == TeletextResourceKind::Drcs;
     let counter = TeletextResourceUpdateCounter::new(1).unwrap();
-    let declaration = crate::teletext::resource_runtime_tests::mot(table.identity(), normal);
+    let declaration = crate::teletext::authored_service_tests::drcs_mot(table.identity(), normal);
     let mot = encode_teletext_mot_page(
         &declaration,
         &[[None; 2]; 8],

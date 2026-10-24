@@ -1005,6 +1005,7 @@ clock breaks are already gated by the `pcr-leap` check.
 | `MAX_PCR_JITTER_US` | `8000` | jitter ceiling (µs) when strict |
 | `CAPTURE_SECONDS` | `20` | per‑pipeline capture window |
 | `ITEM_SECONDS` | `8` | gate playout: seconds per clip |
+| `ERSATZRS_TSDUCK_SERVER_BIN` | unset | Explicit existing server candidate; skips building. Record its source and checksum before use; this does not verify source or bundle identity. |
 
 ## Ad‑hoc TSDuck
 

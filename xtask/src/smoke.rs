@@ -781,6 +781,12 @@ fn seed_streaming_fixture(
                     (SELECT "FFmpegProfileId" FROM "Channel" WHERE "Id"=?))"#,
                     [channel_id],
                 )?;
+            } else {
+                // Native proof must not inherit the fresh-install Next default.
+                conn.execute(
+                    r#"UPDATE "Channel" SET "StreamingEngine"=0 WHERE "Id"=?"#,
+                    [channel_id],
+                )?;
             }
             conn.execute_batch("COMMIT")?;
             Ok(())

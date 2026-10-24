@@ -5,50 +5,10 @@
 
 use super::*;
 
-fn segment(output: &mut Vec<u8>, second: u32, kind: u8, payload: &[u8]) {
-    output.extend_from_slice(b"PG");
-    for _ in 0..2 {
-        output.extend_from_slice(&(second * 90_000).to_be_bytes());
-    }
-    output.push(kind);
-    output.extend_from_slice(&u16::try_from(payload.len()).unwrap().to_be_bytes());
-    output.extend_from_slice(payload);
-}
+use super::late_pgs::pgs;
 
 fn bitmap_subtitles(x: u16) -> Vec<u8> {
-    let mut output = Vec::new();
-    // Independent epochs each second keep the fixture seekable at any live join.
-    for second in 0_u16..60 {
-        let mut presentation = Vec::new();
-        presentation.extend_from_slice(&320_u16.to_be_bytes());
-        presentation.extend_from_slice(&180_u16.to_be_bytes());
-        presentation.push(0x30); // 25 fps.
-        presentation.extend_from_slice(&second.to_be_bytes());
-        presentation.extend_from_slice(&[0x80, 0, 0, 1, 0, 0, 0, 0]);
-        presentation.extend_from_slice(&x.to_be_bytes());
-        presentation.extend_from_slice(&140_u16.to_be_bytes());
-        segment(&mut output, second.into(), 0x16, &presentation);
-        let mut window = vec![1, 0];
-        for value in [x, 140, 60, 24] {
-            window.extend_from_slice(&value.to_be_bytes());
-        }
-        segment(&mut output, second.into(), 0x17, &window);
-        // Palette 0: transparent background and opaque neutral white (YCbCr).
-        segment(
-            &mut output,
-            second.into(),
-            0x14,
-            &[0, 0, 0, 16, 128, 128, 0, 1, 235, 128, 128, 255],
-        );
-        // Object 0, complete sequence, 124-byte data including dimensions.
-        let mut object = vec![0, 0, 0, 0xc0, 0, 0, 124, 0, 60, 0, 24];
-        for _ in 0..24 {
-            object.extend_from_slice(&[0, 0xbc, 1, 0, 0]); // 60 white pixels, end of row.
-        }
-        segment(&mut output, second.into(), 0x15, &object);
-        segment(&mut output, second.into(), 0x80, &[]);
-    }
-    output
+    pgs::rectangles([320, 180], [x, 140], 0..60)
 }
 
 pub(super) async fn generate_bitmap_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {

@@ -22,6 +22,14 @@ const MAX_ORIGIN: u64 = 64 * 1024;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_mins(1);
 const LOCK_TIMEOUT: Duration = Duration::from_secs(30);
 const MANIFEST: &str = include_str!("../../../../scripts/release/next-patches/manifest.json");
+// Cross-target package inventories are checked on every host, not executed here.
+const ARM64_COMPANIONS: [&str; 5] = [
+    "librockchip_mpp-LICENSE-Apache-2.0.txt",
+    "librockchip_mpp-LICENSE-MIT.txt",
+    "librockchip_mpp-README.txt",
+    "librockchip_mpp-rk_mpi.h",
+    "librockchip_mpp.so.1",
+];
 static RESOLVED: RwLock<Option<NextRuntimeAcquisition>> = RwLock::new(None);
 
 /// Accepted executable location and acquisition diagnostics. Paths must not be logged.
@@ -140,6 +148,10 @@ struct Manifest {
     upstream_revision: String,
     source_archive_sha256: String,
     source_lock_sha256: String,
+    #[serde(default)]
+    patched_lock_sha256: Option<String>,
+    #[serde(default)]
+    linux_arm64_companions_sha256: BTreeMap<String, String>,
     distribution_version: String,
     distribution_repository: String,
     distribution_tag: String,
@@ -158,7 +170,7 @@ impl Manifest {
             .runtime_packages
             .get(rid)
             .ok_or(NextRuntimeError::Platform)?;
-        let names = payload_names(rid);
+        let names = self.payload_names(rid)?;
         if package.payload_sha256.keys().ne(names.iter())
             || package.payload_bytes.keys().ne(names.iter())
             || package
@@ -180,7 +192,47 @@ impl Manifest {
         {
             return Err(NextRuntimeError::Manifest);
         }
+        if rid == "linux-arm64"
+            && self
+                .linux_arm64_companions_sha256
+                .iter()
+                .any(|(name, hash)| package.payload_sha256.get(name) != Some(hash))
+        {
+            return Err(NextRuntimeError::Manifest);
+        }
         Ok(package)
+    }
+
+    fn payload_names(&self, rid: &str) -> Result<Vec<String>, NextRuntimeError> {
+        let mut names = payload_names(rid);
+        if rid == "linux-arm64"
+            && self.linux_arm64_companions_sha256.is_empty()
+            && self
+                .patches
+                .iter()
+                .any(|patch| patch.file == "0004-private-mpp-driver-readiness.patch")
+        {
+            return Err(NextRuntimeError::Manifest);
+        }
+        if rid == "linux-arm64" && !self.linux_arm64_companions_sha256.is_empty() {
+            if self
+                .linux_arm64_companions_sha256
+                .keys()
+                .map(String::as_str)
+                .ne(ARM64_COMPANIONS)
+            {
+                return Err(NextRuntimeError::Manifest);
+            }
+            names.extend(self.linux_arm64_companions_sha256.keys().cloned());
+            names.sort();
+        }
+        Ok(names)
+    }
+
+    fn prepared_lock_sha256(&self) -> &str {
+        self.patched_lock_sha256
+            .as_deref()
+            .unwrap_or(&self.source_lock_sha256)
     }
 
     fn download_base(&self) -> String {
@@ -260,7 +312,7 @@ fn verify_files(
             "source_archive_sha256",
             manifest.source_archive_sha256.as_str(),
         ),
-        ("cargo_lock_sha256", manifest.source_lock_sha256.as_str()),
+        ("cargo_lock_sha256", manifest.prepared_lock_sha256()),
         (
             "distribution_version",
             manifest.distribution_version.as_str(),

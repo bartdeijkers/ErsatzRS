@@ -408,16 +408,47 @@ async fn run_real_preview(mode: remote_runtime::Mode) {
 }
 
 async fn run_real_preview_selected(mode: remote_runtime::Mode, custom: bool) {
-    run_real_preview_configured(mode, custom, false).await;
+    run_real_preview_configured(mode, custom, CanvasMode::None).await;
 }
 
 #[tokio::test]
 #[ignore = "requires official Next and FFmpeg; decoded private HTTP canvas preview"]
 async fn real_next_canvas_preview_composites_alpha_preserves_tracks_and_revokes_callback() {
-    run_real_preview_configured(remote_runtime::Mode::Local, false, true).await;
+    run_real_preview_configured(remote_runtime::Mode::Local, false, CanvasMode::FullFrame).await;
 }
 
-async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, canvas: bool) {
+#[tokio::test]
+#[ignore = "requires official Next023 and FFmpeg; decoded signed regional canvas"]
+async fn real_next_regional_canvas_preserves_placement_tracks_and_callback_revocation() {
+    run_real_preview_configured(remote_runtime::Mode::Local, false, CanvasMode::Region).await;
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CanvasMode {
+    None,
+    FullFrame,
+    Region,
+}
+
+impl CanvasMode {
+    async fn install(self, fixture: &Fixture, query: &mut PlaybackPreviewQuery) {
+        match self {
+            CanvasMode::None => {}
+            CanvasMode::FullFrame => canvas_runtime::install(fixture, query).await,
+            CanvasMode::Region => canvas_runtime::install_region(fixture, query).await,
+        }
+    }
+
+    async fn assert_frames(self, ffmpeg: &FsPath, playlist: &FsPath) {
+        match self {
+            CanvasMode::None => {}
+            CanvasMode::FullFrame => canvas_runtime::assert_composite(ffmpeg, playlist).await,
+            CanvasMode::Region => canvas_runtime::assert_region(ffmpeg, playlist).await,
+        }
+    }
+}
+
+async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, canvas: CanvasMode) {
     let fixture = Fixture::new().await;
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -425,7 +456,7 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
     let mut paths = fixture.paths();
     paths.executable = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let clip = fixture.root.path().join("fixture.mkv");
-    generate_clip(&ffmpeg, &clip, canvas).await;
+    generate_clip(&ffmpeg, &clip, canvas != CanvasMode::None).await;
     let subtitle = fixture.root.path().join("fixture.nl.srt");
     tokio::fs::write(
         &subtitle,
@@ -455,10 +486,8 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
     query.seek_seconds = Some(1);
     query.subtitle_id = Some(2);
     let _selector = custom.then(|| configure_runtime_selector(&mut query));
-    if canvas {
-        canvas_runtime::install(&fixture, &mut query).await;
-    }
-    let origin = if mode == remote_runtime::Mode::Local && !canvas {
+    canvas.install(&fixture, &mut query).await;
+    let origin = if mode == remote_runtime::Mode::Local && canvas == CanvasMode::None {
         None
     } else {
         Some(remote_runtime::Origin::start(&fixture, mode).await)
@@ -483,7 +512,7 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
         .await
         .unwrap()
         .contains("#EXT-X-ENDLIST"));
-    if mode == remote_runtime::Mode::Local && !custom && !canvas {
+    if mode == remote_runtime::Mode::Local && !custom && canvas == CanvasMode::None {
         // The real five-second sought output finishes below Next's four-
         // segment threshold. Reaped final output must still become playable.
         assert!(!paths.output.join(".ready").exists());
@@ -494,9 +523,7 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
         .unwrap()
         .is_some());
     assert_decoded_tracks(&ffmpeg, &playlist).await;
-    if canvas {
-        canvas_runtime::assert_composite(&ffmpeg, &playlist).await;
-    }
+    canvas.assert_frames(&ffmpeg, &playlist).await;
     let log = tokio::fs::read_to_string(paths.output.join("logs.txt"))
         .await
         .unwrap();
@@ -509,6 +536,9 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
         .await
         .is_some_and(|speed| speed > 0.0));
     if let Some(origin) = origin {
+        if canvas == CanvasMode::Region {
+            origin.assert_canvas_region().await;
+        }
         origin.verify_revoked_and_stop().await;
     }
     remote_runtime::verify_producer(mode, fixture.root.path()).await;

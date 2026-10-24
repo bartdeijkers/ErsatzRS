@@ -43,6 +43,46 @@ async fn assets(fixture: &Fixture) -> (PathBuf, PathBuf, PathBuf) {
     (image, motion, ass)
 }
 
+pub(super) async fn install_region(fixture: &Fixture, query: &mut PlaybackPreviewQuery) {
+    use ersatzrs_core::repositories::WatermarkRepository as _;
+    let path = fixture.root.path().join("regional.ppm");
+    let mut ppm = b"P6\n16 16\n255\n".to_vec();
+    ppm.extend([255, 0, 0].repeat(16 * 16));
+    tokio::fs::write(&path, ppm).await.unwrap();
+    let id = fixture
+        .state
+        .repositories
+        .watermark
+        .save_admin(&ersatzrs_domain::ChannelWatermark {
+            name: "Synthetic regional watermark".into(),
+            mode: ersatzrs_domain::ChannelWatermarkMode::OpacityExpression,
+            image: Some(path.to_str().unwrap().into()),
+            size: ersatzrs_domain::WatermarkSize::ActualSize,
+            opacity_expression: Some("0.5+0.25*sin(content_seconds)".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    query.watermark.push(id);
+}
+
+pub(super) async fn assert_region(ffmpeg: &FsPath, playlist: &FsPath) {
+    let first = frame(ffmpeg, playlist, "0").await;
+    let later = frame(ffmpeg, playlist, "3").await;
+    for image in [&first, &later] {
+        assert_blue(pixel(image, 280, 155));
+        let center = pixel(image, 312, 172);
+        assert!(
+            center[0] > 40 && center[0] < 220 && center[1] < 40 && center[2] > 30,
+            "regional red alpha at original bottom-right position: {center:?}"
+        );
+    }
+    assert!(
+        pixel(&first, 312, 172)[0].abs_diff(pixel(&later, 312, 172)[0]) > 35,
+        "regional opacity must retain the sought programme clock"
+    );
+}
+
 pub(super) async fn install(fixture: &Fixture, query: &mut PlaybackPreviewQuery) {
     let (image, motion, ass) = assets(fixture).await;
     let font = test_manifest_dir!().join("../../assets/fonts/Roboto-Regular.ttf");

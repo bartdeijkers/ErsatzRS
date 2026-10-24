@@ -1422,6 +1422,86 @@ fn software_pipeline_overlays_image_subtitle_from_source_stream() {
 }
 
 #[test]
+fn pgs_burn_initial_canvas_is_scoped_to_its_shared_source_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(
+        InputFile::image_subtitle("/media/movie.mkv", SubtitleMethod::Burn)
+            .with_subtitle_codec("hdmv_pgs_subtitle")
+            .with_stream_index(3),
+    );
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments;
+    insta::assert_snapshot!(args.join(" "));
+    assert_eq!(args.iter().filter(|arg| *arg == "-i").count(), 1);
+    assert!(
+        args.iter().position(|arg| arg == "-canvas_size:3").unwrap()
+            < args.iter().position(|arg| arg == "-i").unwrap()
+    );
+    assert!(args.iter().any(|arg| arg.contains("[0:3]scale=")));
+}
+
+#[test]
+fn pgs_canvas_hint_follows_selected_burn_source_and_current_stream_index() {
+    use ersatzrs_ffmpeg::CommandGenerator;
+    for intel in [false, true] {
+        for codec in ["pgssub", " HDMV_PGS_SUBTITLE "] {
+            let input = InputFile::image_subtitle("/media/movie.mkv", SubtitleMethod::Burn)
+                .with_stream_index(2)
+                .with_subtitle_codec(codec)
+                .with_stream_index(3);
+            let inputs = [
+                InputFile::video("/media/movie.mkv"),
+                InputFile::audio("/media/movie.mkv"),
+                input,
+            ];
+            let args = CommandGenerator::generate_arguments(&inputs, &[], intel);
+            assert_eq!(
+                args.iter().filter(|arg| *arg == "-canvas_size:3").count(),
+                1
+            );
+            assert!(
+                args.iter().position(|arg| arg == "-canvas_size:3").unwrap()
+                    < args.iter().position(|arg| arg == "-i").unwrap()
+            );
+        }
+    }
+    let subtitle = InputFile::image_subtitle("/media/captions.sup", SubtitleMethod::Burn)
+        .with_subtitle_codec("pgssub")
+        .with_stream_index(0);
+    let inputs = [InputFile::video("/media/movie.mkv"), subtitle];
+    let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+    let first = args.iter().position(|arg| arg == "-i").unwrap();
+    let hint = args.iter().position(|arg| arg == "-canvas_size:0").unwrap();
+    let second = args.iter().rposition(|arg| arg == "-i").unwrap();
+    assert!(first < hint && hint < second);
+}
+
+#[test]
+fn pgs_canvas_hint_does_not_change_other_codecs_copy_or_unselected_inputs() {
+    use ersatzrs_ffmpeg::CommandGenerator;
+    for (codec, method) in [
+        ("dvdsub", SubtitleMethod::Burn),
+        ("dvb_subtitle", SubtitleMethod::Burn),
+        ("pgssub", SubtitleMethod::Copy),
+        ("pgssub", SubtitleMethod::Convert),
+    ] {
+        let inputs = [
+            InputFile::video("main.mkv"),
+            InputFile::image_subtitle("main.mkv", method).with_subtitle_codec(codec),
+        ];
+        let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+        assert!(!args.iter().any(|arg| arg.starts_with("-canvas_size")));
+    }
+    let inputs = [
+        InputFile::video("main.mkv"),
+        InputFile::image_subtitle("main.mkv", SubtitleMethod::Burn),
+        InputFile::image_subtitle("main.mkv", SubtitleMethod::Burn).with_subtitle_codec("pgssub"),
+    ];
+    let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+    assert!(!args.iter().any(|arg| arg.starts_with("-canvas_size")));
+}
+
+#[test]
 fn software_pipeline_overlays_exact_source_teletext_caption_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     request.inputs.push(InputFile::teletext_subtitle(
