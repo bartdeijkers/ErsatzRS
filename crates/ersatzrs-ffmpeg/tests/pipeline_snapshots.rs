@@ -1855,7 +1855,9 @@ fn nvenc_pipeline_keeps_nvenc_encode_on_encoder_only_build_snapshot() {
     // filter kernels (no `--enable-cuda-nvcc`/`--enable-cuda-llvm`). Hardware
     // decode and the software-frame CUDA upload are both gated off so no CUDA
     // filter is emitted, while the encoder stays h264_nvenc.
-    let desired = DesiredVideoState::h264_1080p();
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.video_preset = Some("p5".to_owned());
+    desired.video_tune = Some("hq".to_owned());
     let mut report = capability_report_for_tests();
     report.filters.remove("scale_cuda");
     report.filters.remove("yadif_cuda");
@@ -1871,6 +1873,8 @@ fn nvenc_pipeline_keeps_nvenc_encode_on_encoder_only_build_snapshot() {
     let arguments = command.arguments.join(" ");
 
     assert!(arguments.contains("-codec:v h264_nvenc"));
+    assert!(arguments.contains("-preset:v p5"));
+    assert!(arguments.contains("-tune:v hq"));
     assert!(arguments.contains("-hwaccel none -c:v h264"));
     assert!(!arguments.contains("-hwaccel cuda"));
     assert!(!arguments.contains("scale_cuda"));
@@ -6100,7 +6104,11 @@ fn an_unproven_cuda_graph_demotes_nvenc_to_software() {
         "",
         GraphFailureKind::CudaInterop,
     ));
-    let request = hdr_nvenc_request(report);
+    // Match the fresh-install profile: hardware encoder controls must not
+    // reach libx264 when the functional graph probe refuses NVENC.
+    let mut request = hdr_nvenc_request(report);
+    request.desired.video_preset = Some("p5".to_owned());
+    request.desired.video_tune = Some("hq".to_owned());
 
     let args = NvencPipelineBuilder
         .build(request.clone())
@@ -6112,6 +6120,9 @@ fn an_unproven_cuda_graph_demotes_nvenc_to_software() {
     assert!(!args.contains("scale_cuda"), "got: {args}");
     assert!(!args.contains("hwupload_cuda"), "got: {args}");
     assert!(!args.contains("-init_hw_device cuda"), "got: {args}");
+    assert!(args.contains("-codec:v libx264"), "got: {args}");
+    assert!(args.contains("-preset:v veryfast"), "got: {args}");
+    assert!(!args.contains("-tune:v"), "got: {args}");
     insta::assert_snapshot!(args);
 }
 

@@ -1039,6 +1039,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Use software encoder controls when a refused hardware backend falls back to
+  CPU encoding, so an NVENC profile's `p5` preset cannot prevent libx264 previews
+  from starting. Preserve hardware controls when only filtering falls back and
+  leave saved profiles unchanged.
+
 - Supply isolated app data and the verified published-package inventory to Next
   CI runtime cases, serialize their shared report path, and retain existing
   session and FFmpeg diagnostics. Generate the literal-clock fixture for finite-cut

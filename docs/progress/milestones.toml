@@ -34428,7 +34428,16 @@ controls under pinned QEMU Bookworm. Their receipts are rs5-arm64/evidence/resul
 and rs5-armv7/evidence/result.json under the same next023 root. ARM64's five
 private MPP companions remain exact; unchanged transcode fallback evidence is
 reused only within that scope, without native hardware claims. Native Windows
-qualification, macOS builds/software and managed adoption remain pending.
+rs.5 also passes all eight timing controls and the same three unchanged actual
+caption cases (7.063/6.562/3.610s), version/startup and archive verification.
+Its qualified Tokio1.53.3 application test executable is reused after confirming
+the selected source/oracles are unchanged; no application rebuild is claimed.
+The genuine installed Python interpreter supplies a temporary hash-identical
+python3.exe in the owned test environment, with no global alias change.
+All four non-Mac source candidates are complete within this scope; macOS
+builds/software, six-RID adoption and separate publication remain pending.
+Windows receipt: tmp/ucu12/next023/rs5-windows/windows-candidate-proof.json;
+its app-caption-result.json owns the three native application logs.
 Published rs.4 and the production manifest are unchanged. Candidate receipt:
 tmp/ucu12/next023/rs5-linux64/evidence/result.json; original retained failure
 artifact: adoption-published/ci-teletext15-failure/.
@@ -34456,10 +34465,60 @@ instead of discarding this diagnostic evidence. Strict affected infrastructure
 all-target lint passes; no production runtime correction is inferred for PGS.
 Evidence: tmp/ucu12/adoption-published/ci-next-input-recovery/.
 
+Next-only CI recovery40134839105 is green on exact checkpoint
+56938c956cf82b56d269b82bc4ab32ae61af47c7. Job121005240588 passes all451 selected
+tests (1190.611s, five slow,3417 outside the selection), followed by both actual
+Next HTTP/lifecycle and Hybrid/Convert smoke checks. This closes the failed
+Next job and its input/report-ownership correction. The original late-PGS
+negative remains retained without an inferred cause. Other jobs were skipped
+by the focused mode; this is not a full corrected-SHA CI claim.
+
+Original general Chromium job120984547971 fails only the error-slate and real
+H.264/AAC preview cases. Retained traces reveal libx264 receiving NVENC preset
+p5 after the CUDA graph probe times out. The shared generator now selects
+software encoder controls only when hardware encoding actually becomes
+software; software filtering with a retained NVENC encoder keeps p5/hq.
+Saved profiles, target codec/bitrate/resolution and international track choices
+are unchanged. The new input on the existing regression reproduces the exact
+invalid argv before correction. All237 existing pipeline snapshots now pass
+(0.351s), including the strengthened filter-only sentinel; strict affected
+all-target lint passes. Only its reviewed p5/hq input snapshot changes.
+
+Both unchanged headed Chromium cases pass (21.7s) against the corrected owned
+host. An exact-probe-only disposable fixture supplies the unavailable-CUDA
+condition; every actual encoding command executes the checksum-verified
+published FFmpeg2.0.7 binary. Actual commands are libx264/veryfast while saved
+profiles remain Nvenc/p5. No product wrapper is introduced. The complete
+existing Native TSDuck gate then passes93/93 checks across legacy/hybrid TS
+and segmenter/direct HLS with that same denied-NVENC profile. English/NL
+desktop/mobile warning screenshots and actual hydration are verified. An
+invalid QSV fixture trial and unsuccessful post-teardown capture are retained
+and excluded from passing claims; the lifecycle-owning gate supplies the proof.
+
+Native host0e0f1e37 is built through cargo-leptos server-only. That command
+cleared generated frontend files; only verified frontend content from the
+original immutable dcd9f036 CI artifact is restored, without restoring or
+relabelling its old server. Unchanged frontend inputs and the actual headed
+hydration checks bind this reuse. The original general Firefox job passes;
+Teletext1.5 Chromium subsequently fails and remains under separate bounded
+failed-case triage. The original CI is not cancelled or restarted.
+
+The existing browser recovery mechanism now accepts the bounded
+browser_case_set=channel-preview, selecting only these two cases per browser.
+Default recovery retains all three existing specs/current15 cases rather than
+dropping newer tests to its obsolete11-case count. All33 selector/workflow
+guards and scoped actionlint pass. Corrected two-case Chromium CI is the next
+authorized checkpoint action. Primary receipts:
+tmp/ucu12/ci-recovery/chromium-general-40128284373/ and
+tmp/ucu12/adoption-published/application-ci.json. Target maintenance removes
+only inactive web-crate outputs under the60GiB policy (34.1GiB); dependencies,
+running processes, prior artifacts and unrelated changes are preserved.
+
 Finite completion list (row237–254 acceptance remains pending):
 Missing functionality/source disposition:
-- Restore Next's original copied-caption source outpoint using the demonstrated
-  minimal compatibility correction above; qualify before managed adoption.
+- Adopt Next's qualified copied-caption correction after its remaining native
+  package gates and separately authorized publication. The four non-Mac
+  candidates above are completed; published rs.4 is unchanged.
   Implemented
   canvas/signed placement(row237), runtime protocol/rebuild/fallback/late-PGS
   changes(rows238/240/241/249/251/253), external-audio projection/repair(row245),
@@ -34474,11 +34533,9 @@ Missing functionality/source disposition:
   build/software/archive/publication and six-RID Next publication proof above.
   This does not qualify unavailable hardware or deferred Mac FFmpeg kits.
 Missing mandatory evidence:
-1. Recover only failed/affected runtime CI checks: require passing corrected
-   Next CI with the retained startup negative explicit; complete copied-caption runtime
-   packages/adoption and affected CI. The six recovered Next input cases,
-   two finite-cut cases, Linux copied-caption candidate's eight source/three
-   actual playback controls and corrected-source JWT audit are complete.
+1. Complete copied-caption runtime packages/adoption and affected Teletext CI.
+   Corrected Next CI, the two finite-cut fixture cases, all four non-Mac
+   caption candidates and the JWT audit are complete within their stated scope.
    Preserve the original CI and unaffected results; partial recovery is never
    a full new-SHA CI claim. ucu-12-ci-runtime-recovery owns this blocker.
 2. Complete native macOS FFmpeg kits/software acceptance, dependent application
@@ -34486,7 +34543,9 @@ Missing mandatory evidence:
    correction on macOS before its six-RID adoption; published rs.4 predates it.
    This work is deferred, not waived. Do not broaden earlier ARM/macOS
    application debt to new gaps or publish a mixed-source replacement.
-3. Complete outstanding browser CI and its failed-case recovery, then final
+3. Pass only the corrected preview browser cases in CI and diagnose/recover
+   the newly failed Teletext1.5 Chromium cases while other original jobs finish.
+   Then final
    ordered row dispositions/baseline advancement only after every required
    acceptance item is satisfied and the Mac deferral is resolved; retain accepted
    baseline row236/v26.11.3 until whole-window acceptance. Runtime/media and
@@ -34500,7 +34559,10 @@ External prerequisites/authority:
   RKMPP/RGA, Intel QSV HDR, AMD VAAPI and macOS VideoToolbox captions as explicit
   unverified debt. Earlier approved platform/hardware debt keeps its original
   bounded scope. Nothing here marks those paths verified.
-- Both dependency publications are complete. Subsequent explicit approval
+- The original rs.4/FFmpeg2.0.7 dependency publications are complete; the new
+  rs.5 replacement still requires separate publication authorization after
+  qualification.
+  Subsequent explicit approval
   authorizes the feature-branch push and application CI described above;
   main merge, application release and Docker publication remain separate. Preserve unrelated processes, dirty files,
   frozen evidence and shared caches. Do not extend the v26.11.4 cutoff.

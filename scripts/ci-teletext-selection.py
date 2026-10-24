@@ -7,6 +7,7 @@ tests whose individual names do not contain 'teletext'.
 """
 
 import argparse
+import re
 
 
 TELETEXT = r"teletext|drcs|zvbi|tti_"
@@ -25,6 +26,13 @@ ENHANCED_SPECS = (
     "teletext-resource-bank-flow",
     "teletext-resource-diagnostics",
     "teletext-retained-bank",
+)
+RECOVERY_SPECS = (
+    "block-preview.spec.ts", "teletext-authoring-flow.spec.ts", "teletext-editor-flow.spec.ts",
+)
+PREVIEW_RECOVERY_CASES = (
+    "shows the real transcode error when decoded preview video is an error slate",
+    "plays a real H.264/AAC preview derivative through Hls.js",
 )
 
 
@@ -54,14 +62,31 @@ def browser_filter(suite):
     return rf"(^|/)(?!(?:{'|'.join(ENHANCED_SPECS)})\.spec\.ts$){teletext}"
 
 
+def browser_recovery_args(case_set):
+    if case_set == "fixtures":
+        return list(RECOVERY_SPECS)
+    if case_set == "channel-preview":
+        return ["channel-watch.spec.ts", "--grep",
+                "(?:" + "|".join(re.escape(case) for case in PREVIEW_RECOVERY_CASES) + ")$"]
+    raise ValueError("unknown browser recovery case set")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("kind", choices=("rust", "browser"))
-    parser.add_argument("suite", choices=("general", "1.5", "2.5", "all", "next"))
+    parser.add_argument("kind", choices=("rust", "browser", "browser-recovery"))
+    parser.add_argument("suite", choices=("general", "1.5", "2.5", "all", "next",
+                                          "fixtures", "channel-preview"))
     parser.add_argument("--next-runtime", action="store_true")
     args = parser.parse_args()
     if args.kind == "browser" and args.suite not in ("general", "1.5", "2.5"):
         parser.error("browser selection requires general, 1.5 or 2.5")
+    if args.kind == "browser-recovery":
+        if args.suite not in ("fixtures", "channel-preview") or args.next_runtime:
+            parser.error("browser recovery requires fixtures or channel-preview without --next-runtime")
+        print("\n".join(browser_recovery_args(args.suite)))
+        return
+    if args.kind == "rust" and args.suite in ("fixtures", "channel-preview"):
+        parser.error("browser recovery case sets cannot select Rust tests")
     print(rust_filter(args.suite, args.next_runtime) if args.kind == "rust" else browser_filter(args.suite))
 
 

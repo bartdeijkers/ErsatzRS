@@ -74,7 +74,7 @@ on:
           - '1.5'
           - '2.5'
       browser_only:
-        description: Run the 11 cases in the three failed-fixture specs in selected browsers (partial CI; incompatible with other focused modes)
+        description: Run the bounded recovery case set in selected browsers (partial CI; incompatible with other focused modes)
         type: choice
         required: false
         default: none
@@ -83,6 +83,14 @@ on:
           - chromium
           - firefox
           - both
+      browser_case_set:
+        description: Bounded browser recovery cases (channel-preview requires browser_only)
+        type: choice
+        required: false
+        default: fixtures
+        options:
+          - fixtures
+          - channel-preview
       reset_target_dir:
         description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
         type: boolean
@@ -97,7 +105,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}', inputs.browser_only) || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set == 'channel-preview' && '-channel-preview' || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -143,7 +151,7 @@ jobs:
       skip: ${{ steps.duplicate.outputs.skip }}
     steps:
       - name: Reject mixed audit mode
-        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
+        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures')) }}
         run: |
           echo "::error::audit_only cannot be combined with another focused CI mode"
           exit 1
@@ -267,6 +275,7 @@ jobs:
           NEXT_ONLY: ${{ inputs.next_engine_only }}
           TELETEXT_ONLY: ${{ inputs.teletext_only }}
           BROWSER_ONLY: ${{ inputs.browser_only }}
+          BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
         run: |
           python3 - <<'PYCODE'
           import os
@@ -274,6 +283,11 @@ jobs:
           modes += [os.environ[key] not in ('', 'none') for key in ('TELETEXT_ONLY', 'BROWSER_ONLY')]
           if sum(modes) > 1:
               raise SystemExit('Focused CI modes are mutually exclusive')
+          case_set = os.environ['BROWSER_CASE_SET']
+          if case_set not in ('fixtures', 'channel-preview'):
+              raise SystemExit('Unknown browser recovery case set')
+          if case_set != 'fixtures' and os.environ['BROWSER_ONLY'] in ('', 'none'):
+              raise SystemExit('Browser recovery case set requires browser_only')
           PYCODE
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -740,6 +754,7 @@ jobs:
           BROWSER_ONLY: ${{ inputs.browser_only }}
           BROWSER_PROJECT: ${{ matrix.project }}
           BROWSER_SUITE: ${{ matrix.suite }}
+          BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
         run: |
           export ErsatzRS_FFMPEG__PATH="$FFMPEG_PATH"
           export ErsatzRS_FFPROBE__PATH="$FFPROBE_PATH"
@@ -747,7 +762,9 @@ jobs:
           export PATH="$ffmpeg_bin_dir:$PATH"
           playwright_args=(--project="$BROWSER_PROJECT")
           if [[ -n "$BROWSER_ONLY" && "$BROWSER_ONLY" != 'none' ]]; then
-            playwright_args+=(block-preview.spec.ts teletext-authoring-flow.spec.ts teletext-editor-flow.spec.ts)
+            recovery_args="$(python3 scripts/ci-teletext-selection.py browser-recovery "$BROWSER_CASE_SET")"
+            mapfile -t selected_cases <<< "$recovery_args"
+            playwright_args+=("${selected_cases[@]}")
           else
             playwright_args+=("$(python3 scripts/ci-teletext-selection.py browser "$BROWSER_SUITE")")
           fi

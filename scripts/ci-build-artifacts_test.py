@@ -11,6 +11,7 @@ import re
 from types import SimpleNamespace
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -428,7 +429,7 @@ class FocusedAuditSelection(unittest.TestCase):
 
     def scheduled(self, **selected):
         inputs = dict(audit_only=False, test_only=False, next_engine_only=False,
-                      teletext_only="none", browser_only="none")
+                      teletext_only="none", browser_only="none", browser_case_set="fixtures")
         inputs.update(selected)
         scheduled = set()
         for name, body in self.jobs.items():
@@ -457,6 +458,9 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertEqual(self.scheduled(test_only=True), {"build", "test"})
         self.assertEqual(self.scheduled(next_engine_only=True), {"build", "next_engine"})
         self.assertEqual(self.scheduled(browser_only="both"), {"build", "hydration"})
+        for browser in ("chromium", "firefox", "both"):
+            self.assertEqual(self.scheduled(browser_only=browser, browser_case_set="channel-preview"),
+                             {"build", "hydration"})
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
@@ -466,12 +470,37 @@ class FocusedAuditSelection(unittest.TestCase):
         step = self.workflow.split("- name: Reject mixed audit mode\n", 1)[1]
         expression = step.splitlines()[0].strip().removeprefix("if: ")
         base = dict(audit_only=True, test_only=False, next_engine_only=False,
-                    teletext_only="none", browser_only="none")
+                    teletext_only="none", browser_only="none", browser_case_set="fixtures")
         self.assertFalse(self.evaluate(expression, base, SimpleNamespace()))
         for key, value in (("test_only", True), ("next_engine_only", True),
-                           ("teletext_only", "all"), ("browser_only", "both")):
+                           ("teletext_only", "all"), ("browser_only", "both"),
+                           ("browser_case_set", "channel-preview")):
             with self.subTest(mode=key):
                 self.assertTrue(self.evaluate(expression, dict(base, **{key: value}), SimpleNamespace()))
+
+    def test_browser_case_sets_are_bounded_and_cannot_mix_focused_modes(self):
+        step = self.jobs["build"].split("      - name: Validate dispatch mode\n", 1)[1]
+        code = re.search(r"python3 - <<'PYCODE'\n(.*?)^          PYCODE$", step, re.S | re.M)[1]
+        code = "\n".join(line[10:] for line in code.splitlines())
+        base = dict(os.environ, TEST_ONLY="false", NEXT_ONLY="false", TELETEXT_ONLY="none",
+                    BROWSER_ONLY="none", BROWSER_CASE_SET="fixtures")
+        cases = [({}, True), ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview"}, True),
+                 ({"BROWSER_CASE_SET": "channel-preview"}, False),
+                 ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "unknown"}, False),
+                 ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview", "NEXT_ONLY": "true"}, False),
+                 ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "channel-preview", "TEST_ONLY": "true"}, False),
+                 ({"BROWSER_ONLY": "both", "BROWSER_CASE_SET": "channel-preview", "TELETEXT_ONLY": "all"}, False)]
+        for changes, valid in cases:
+            with self.subTest(changes=changes):
+                result = subprocess.run([sys.executable, "-c", code], env=dict(base, **changes),
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode == 0, valid, result.stderr)
+
+    def test_browser_case_set_keeps_distinct_recovery_concurrency(self):
+        self.assertIn("inputs.browser_case_set == 'channel-preview' && '-channel-preview' || ''", self.workflow)
+        self.assertIn('recovery_args="$(python3 scripts/ci-teletext-selection.py browser-recovery "$BROWSER_CASE_SET")"',
+                      self.jobs["hydration"])
+        self.assertIn('playwright_args+=("${selected_cases[@]}")', self.jobs["hydration"])
 
     def next_step_run(self, name):
         step = self.jobs["next_engine"].split(f"      - name: {name}\n", 1)[1]

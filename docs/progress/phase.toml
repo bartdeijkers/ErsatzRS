@@ -219,10 +219,17 @@ artifact build and general Rust tests. Its runtime jobs expose missing test
 inputs and a genuine copied-caption source-outpoint defect. Both finite-cut
 fixture cases now pass unchanged; six Next input cases also recover. The one
 late-PGS startup negative is retained; its focused diagnostic repeat passes
-the unchanged30s deadline and actual picture/audio/caption checks. Corrected
-Next CI remains required. Isolated rs.5 caption candidate passes eight
-source and three unchanged actual playback controls; package/adoption and
-affected CI remain open. Preserve the original run and unaffected
+the unchanged30s deadline and actual picture/audio/caption checks. Next-only
+CI40134839105 is green on56938c95:451 tests and both actual smokes pass.
+All four non-Mac rs.5 caption packages pass scoped qualification, including
+eight controls/three actual cases on each of Linux and native Windows;
+Mac qualification/adoption and separate publication remain open.
+General Chromium exposes libx264 receiving a retained NVENC p5 preset after
+graph denial. The shared encoder-demotion correction passes237 snapshots,
+both unchanged headed cases and93 Native TSDuck checks under deliberate CUDA
+denial, plus strict affected lint. Two-case Chromium CI is ready for the
+authorized checkpoint. Original general Firefox passes; newly failed
+Teletext1.5 Chromium needs bounded triage. Preserve the original run and unaffected
 evidence; partial recovery is not full new-SHA acceptance. No main merge,
 release, Docker publication or Mac build is authorized. Milestone ucu-12 and
 ucu-12-ci-runtime-recovery own this bounded package.

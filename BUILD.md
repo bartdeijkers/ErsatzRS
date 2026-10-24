@@ -445,26 +445,30 @@ repeat any checks invalidated by the correction. This focused run cannot suppres
 a later full run through Preflight and does not establish full green CI or
 satisfy the exact-candidate release gate above.
 
-### Retry the failed browser fixtures on a corrected revision
+### Retry the failed browser cases on a corrected revision
 
-Use the bounded recovery mode to run all 11 cases per selected browser in the
-Block preview, teletext authoring and editor specs. Run complete serial groups
+Use the default bounded recovery mode to run all 15 current cases per selected
+browser in the Block preview, teletext authoring and editor specs. Run complete serial groups
 so failures are rechecked with their predecessors and any followers that did not
 run after the original failure, including both TCP publication cases.
 
 ```bash
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f browser_only=both
 # Use browser_only=chromium or browser_only=firefox to recover just one project.
+# Retry only the error-slate and real H.264/AAC preview cases:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
+  -f browser_only=chromium -f browser_case_set=channel-preview
 ```
 
 This runs the selected browser jobs with the existing matched Leptos build,
-pinned runtime staging and isolated application runner. `both` runs 22 cases
+pinned runtime staging and isolated application runner. The default `fixtures`
+case set with `both` runs 30 cases; `channel-preview` runs two per selected browser
 through the existing matrix with `max-parallel: 1`, preserving serial execution
 and avoiding resource contention between browser projects. Normal CI runs all
 six general/1.5/2.5 browser jobs. The `CI (Browser recovery)` title identifies
 partial evidence and cannot suppress full CI through Preflight. Its
 browser-specific
-concurrency group preserves other running gates. On a shared host, wait for an
+concurrency group preserves other running gates and case sets. On a shared host, wait for an
 existing job of the same project to release its port before starting recovery.
 Combining this mode with `test_only`,
 `next_engine_only` or `teletext_only` fails before checkout or building.

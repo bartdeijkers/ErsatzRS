@@ -4,6 +4,8 @@
 import importlib.util
 from pathlib import Path
 import re
+import subprocess
+import sys
 import unittest
 
 
@@ -43,6 +45,33 @@ class BrowserOwnership(unittest.TestCase):
             with self.subTest(spec=name):
                 self.assertTrue(path.is_file())
                 self.assertEqual(owners(path.as_posix()), ["2.5"])
+
+
+class BrowserRecovery(unittest.TestCase):
+    def test_existing_fixture_selection_is_unchanged(self):
+        self.assertEqual(selection.browser_recovery_args("fixtures"), [
+            "block-preview.spec.ts", "teletext-authoring-flow.spec.ts", "teletext-editor-flow.spec.ts",
+        ])
+
+    def test_preview_selection_matches_only_the_two_complete_case_names(self):
+        args = selection.browser_recovery_args("channel-preview")
+        self.assertEqual(args[:2], ["channel-watch.spec.ts", "--grep"])
+        self.assertEqual(len(args), 3)
+        for name in selection.PREVIEW_RECOVERY_CASES:
+            self.assertIsNotNone(re.search(args[2], f"chromium channel preview modal and watch route {name}"))
+            self.assertIsNone(re.search(args[2], f"{name} unrelated suffix"))
+        self.assertIsNone(re.search(args[2], "plays a real Hx264/AAC preview derivative through Hls.js"))
+        self.assertIsNone(re.search(args[2], "Next converted captions are authenticated and toggle real browser cues"))
+
+    def test_cli_refuses_unknown_and_mixed_selections_without_output(self):
+        for args in (("browser-recovery", "unknown"), ("browser-recovery", "general"),
+                     ("rust", "channel-preview"), ("browser", "channel-preview"),
+                     ("browser-recovery", "channel-preview", "--next-runtime")):
+            with self.subTest(args=args):
+                result = subprocess.run([sys.executable, str(ROOT / "scripts/ci-teletext-selection.py"), *args],
+                                        text=True, capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
 
 
 if __name__ == "__main__":
