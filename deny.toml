@@ -5,13 +5,6 @@ ignore = [
   # Transitive through Leptos 0.7/tachys/either_of. No safe upstream upgrade is
   # available yet; revisit when Leptos moves off paste.
   "RUSTSEC-2024-0436",
-  # Marvin Attack timing sidechannel in `rsa`, bundled by jsonwebtoken's
-  # `rust_crypto` provider. ErsatzRS signs and verifies IPTV JWTs only with
-  # HS256 shared secrets, rejects other algorithms before verification, and
-  # never constructs or uses an RSA private key, so the vulnerable operation
-  # is unreachable. No upstream patch or HMAC-only provider feature exists;
-  # revisit when either becomes available.
-  "RUSTSEC-2023-0071",
   # Transitive through Leptos 0.8 proc macros (leptos_macro,
   # leptos_router_macro, reactive_stores_macro, rstml/syn_derive). No safe
   # upstream upgrade is available yet; revisit when Leptos migrates away from
@@ -80,7 +73,7 @@ reason = "Leptos/server_fn still transitively depend on gloo-net 0.6 while the w
 [[bans.skip]]
 name = "windows-sys"
 version = "=0.52.0"
-reason = "Still pulled in transitively by ring 0.17 via jsonwebtoken/rustls; the rest of the graph is on windows-sys 0.61."
+reason = "Still pulled in transitively by ring 0.17 via rustls; the rest of the graph is on windows-sys 0.61."
 
 [sources]
 unknown-registry = "deny"

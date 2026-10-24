@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'UCU-12 — available local acceptance complete; macOS deferred'
+current_focus = 'UCU-12 — focused CI dependency-audit recovery; macOS deferred'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -205,8 +205,18 @@ Native macOS FFmpeg/software/dependent application evidence stays deferred and
 unverified until explicit maintainer resume. UCU-12 remains In progress and its
 accepted baseline stays row236/v26.11.3. Milestone ucu-12 owns exact receipts and
 the finite remaining list; no whole-workspace or unchanged runtime rerun needed.
-UCU10/11 remain Complete. No UCU12 application/main push, application CI or
-Docker publication is authorized; dependency authority is bounded as above.
+UCU10/11 remain Complete. Subsequent explicit approval authorizes feature push
+and application CI: dcd9f036 is pushed and run40128284373 is live with caches
+preserved. Its first five fast/source checks pass, but Cargo deny identifies
+RUSTSEC-2026-0387 through JWT's RustCrypto backend. A native-web-only supported
+AWS-LC backend correction removes that graph and the obsolete RSA exception;
+local audit passes without a new ignore/licence exception. Focused Linux/Windows
+auth proof now passes20 cases on each platform, including native Windows C
+compilation and independent token compatibility/negative checks. Strict affected
+lint,23 workflow/artifact guards and actionlint pass. Only corrected-source
+CI-audit recovery remains pending. Preserve the original live run and unaffected
+evidence; the recovery is partial CI, not full new-SHA acceptance. No main merge, release, Docker publication or Mac
+build is authorized. Milestone ucu-12 and ucu-12-ci-jwt-backend own this blocker.
 
 Current package: p9a-source-output exact remaining SO2/SO3 route/adoption boundary.
 Next executable action: resolve only the owner's imprecise otherSO2..3 wording

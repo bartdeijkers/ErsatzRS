@@ -7,6 +7,8 @@ from contextlib import redirect_stdout
 import io
 import json
 import os
+import re
+from types import SimpleNamespace
 from pathlib import Path
 import subprocess
 import tarfile
@@ -402,6 +404,74 @@ time.sleep(20)
         with self.assertRaises(ValueError):
             artifacts.publish_local(archive, SHA, "rust", "occupied-rust", cache)
         self.assertEqual({path.name: path.read_bytes() for path in (cache / "occupied").iterdir()}, occupied_before)
+
+
+class FocusedAuditSelection(unittest.TestCase):
+    """Evaluate actual job conditions, including implicit successful-needs gates."""
+
+    def setUp(self):
+        self.workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text()
+        jobs = self.workflow.split("\njobs:\n", 1)[1]
+        parts = re.split(r"^  ([a-z_]+):\n", jobs, flags=re.M)
+        self.jobs = dict(zip(parts[1::2], parts[2::2]))
+
+    @staticmethod
+    def evaluate(expression, inputs, needs):
+        expression = expression.removeprefix("${{").removesuffix("}}").strip()
+        expression = re.sub(r"!(?!=)", " not ", expression)
+        expression = expression.replace("&&", " and ").replace("||", " or ")
+        return bool(eval(expression.strip(), {"__builtins__": {}}, {
+            "inputs": SimpleNamespace(**inputs), "needs": needs,
+            "github": SimpleNamespace(event_name="workflow_dispatch"),
+            "always": lambda: True, "cancelled": lambda: False, "true": True,
+        }))
+
+    def scheduled(self, **selected):
+        inputs = dict(audit_only=False, test_only=False, next_engine_only=False,
+                      teletext_only="none", browser_only="none")
+        inputs.update(selected)
+        scheduled = set()
+        for name, body in self.jobs.items():
+            condition = re.search(r"^    if: (.+)$", body, re.M)
+            condition = condition[1] if condition else "true"
+            dependencies = re.search(r"^    needs: (.+)$", body, re.M)
+            dependencies = [x.strip() for x in dependencies[1].strip("[]").split(",")] if dependencies else []
+            if "always()" not in condition and any(x not in scheduled for x in dependencies):
+                continue
+            needs = SimpleNamespace(**{
+                key: SimpleNamespace(result="success" if key in scheduled else "skipped",
+                                     outputs=SimpleNamespace(skip="false"))
+                for key in self.jobs
+            })
+            if self.evaluate(condition, inputs, needs):
+                scheduled.add(name)
+        return scheduled
+
+    def test_default_manual_run_keeps_every_job(self):
+        self.assertEqual(self.scheduled(), set(self.jobs))
+
+    def test_audit_recovery_runs_only_preflight_format_and_audit(self):
+        self.assertEqual(self.scheduled(audit_only=True), {"preflight", "fmt", "deny"})
+
+    def test_existing_focused_modes_keep_their_job_ownership(self):
+        self.assertEqual(self.scheduled(test_only=True), {"build", "test"})
+        self.assertEqual(self.scheduled(next_engine_only=True), {"build", "next_engine"})
+        self.assertEqual(self.scheduled(browser_only="both"), {"build", "hydration"})
+
+    def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
+        self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
+        self.assertIn("&& run.display_title !== 'CI (Audit only)'", self.workflow)
+
+    def test_mixed_audit_modes_are_explicitly_rejected(self):
+        step = self.workflow.split("- name: Reject mixed audit mode\n", 1)[1]
+        expression = step.splitlines()[0].strip().removeprefix("if: ")
+        base = dict(audit_only=True, test_only=False, next_engine_only=False,
+                    teletext_only="none", browser_only="none")
+        self.assertFalse(self.evaluate(expression, base, SimpleNamespace()))
+        for key, value in (("test_only", True), ("next_engine_only", True),
+                           ("teletext_only", "all"), ("browser_only", "both")):
+            with self.subTest(mode=key):
+                self.assertTrue(self.evaluate(expression, dict(base, **{key: value}), SimpleNamespace()))
 
 
 if __name__ == "__main__":

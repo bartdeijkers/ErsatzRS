@@ -461,3 +461,10 @@ discovered = '2026-10-24'
 resolved = false
 adr = '0128'
 evidence = 'The maintainer explicitly directed skipping macOS builds until further instruction. Both UCU12 candidate branches have no running/queued jobs. Last ARM64 run40115372297 is terminal failure; prior construction and component results remain valid only in their documented scope. No further Mac build/retry is permitted until explicit maintainer resume. This defers work, keeps acceptance unverified and does not waive requirements, drop supported targets or expand hardware debt. Milestone ucu-12 owns exact evidence and the finite completion list.'
+
+[[debt]]
+id = 'ucu-12-ci-jwt-backend'
+description = 'Restore the dependency audit after RUSTSEC-2026-0387 without an ignore, while preserving the existing HS256-only token contract on the supported native web backend.'
+discovered = '2026-10-24'
+resolved = false
+evidence = 'Application CI40128284373 on pushed dcd9f036 fails Cargo deny through crypto-bigint0.5.5 and JWT11.1 RustCrypto. The supported native-web AWS-LC feature removes the vulnerable graph and obsolete RSA exception; local audit passes all categories. All20 focused independent-token, negative-auth and router cases pass on each of Linux and native Windows, including normal Windows C/MSVC/NASM compilation. Strict affected web lint,23 workflow/artifact safeguards and actionlint pass. Only corrected-source audit-only CI remains pending; full original CI continues independently. Milestone ucu-12 owns exact evidence, source and recovery scope. Other platform proof is not inferred; Mac builds stay deferred and hardware debt is unchanged.'

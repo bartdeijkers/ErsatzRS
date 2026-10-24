@@ -34346,6 +34346,60 @@ build/retry, application push/CI/merge/release or Docker publication follows
 from this local completion. The source checkpoint is local and separate from
 exact-commit CI and whole-window acceptance.
 
+Subsequent maintainer authorization covers pushing feat/ucu-12 and application
+CI, without main merge, releases, Docker publication or macOS builds. Exact
+checkpointdcd9f0368d6ac55792efe4fd107e4d450eec6d6f is pushed and existing
+workflow run40128284373 is dispatched once with preserved caches. Preflight,
+format, documentation, strict Clippy and commit lint pass. The shared artifact
+producer remains live; no replacement full run or cancellation is started.
+Cargo deny job120974428571 finds newly indexed RUSTSEC-2026-0387 through
+crypto-bigint0.5.5/elliptic-curve/p256/p384/jsonwebtoken11.1.0. This contradicts
+any current all-green audit claim; earlier source/runtime checks keep their
+original scope and advisory database identity.
+
+The smallest supported correction selects JWT11.1's first-party aws_lc_rs
+backend only in the native web dependency. Claims, HS256-only enforcement,
+keys, token transport, crate boundaries and public APIs stay unchanged. The
+resolved lock removes crypto-bigint/RSA/the unused RustCrypto curve graph and
+adds aws-lc-rs1.18.2/aws-lc-sys0.46.0. The obsolete RSA ignore is removed;
+no new ignore or licence exception is added. Local cargo deny now passes all
+four categories (jwt-backend-deny.log). Independent fixed HMAC token bytes,
+wrong-key/signature rejection and HS384 refusal extend the existing auth tests;
+Linux and native Windows focused auth/router runs own the affected proof.
+Windows' normal MSVC/NASM AWS-LC compilation passes; auth execution is pending.
+No macOS build or unverified platform claim is inferred. Unchanged FFmpeg/Next
+packages and their media/hardware proofs are not rebuilt or repeated.
+
+A demonstrated workflow gap prevents retrying only the audit on a corrected
+SHA: existing modes cover Rust/Next/teletext/browser recovery only. The minimal
+audit_only input reuses preflight/format/audit jobs, isolates concurrency,
+rejects mixed modes and excludes audit-only success from full-run deduplication.
+Twenty-three existing/artifact-selection guards pass, including actual job
+conditions for normal and focused modes; actionlint passes. This remains
+partial CI, never evidence of a full green run. Source correction, affected
+local checks and audit-only CI completion are pending; all accepted Mac/hardware
+limitations remain. Primary evidence: tmp/ucu12/adoption-published/
+{application-ci.json,ci-deny-failure.log,jwt-backend-deny.log,jwt-backend/}.
+
+JWT correction local acceptance is complete: Linux13 token cases pass
+(75cfe099-b3f7-4cc2-8eda-2506baad4364), followed by all7 actual router-boundary
+cases (85d77d76-abb3-4c21-8ead-94dbf71eaddb). Native Windows passes the same20
+cases, including normal AWS-LC C/assembly compilation with existing MSVC/NASM
+and no bypasses. The fixed independent HS256 bytes, wrong-key/signature
+rejection, HS384 denial, channel scope and real router admission boundaries
+pass on both available native platforms. Windows source snapshots still match
+Cargo.lock731c8d95 and the two tested web inputs. Strict affected web/all-target
+Clippy passes; all23 artifact/workflow guards, final actionlint, formatting and
+progress validation pass. No full Rust/browser/media matrix is repeated.
+New dependency/native-build proof is not inferred for untested targets; macOS
+builds remain deferred. Source, command and native-output receipts are under
+adoption-published/{jwt-backend/,windows/jwt-backend-*}.
+
+The source correction is ready for an authorized feature-branch push and one
+audit-only recovery run. Its success must be recorded with exact SHA/run scope;
+keep the original40128284373 run alive and retain its unaffected results. The
+pending CI-audit acceptance remains explicit until the real job passes.
+
 Finite completion list (row237–254 acceptance remains pending):
 Missing functionality/source disposition:
 - No additional product correction is currently demonstrated. Implemented
@@ -34362,14 +34416,20 @@ Missing functionality/source disposition:
   build/software/archive/publication and six-RID Next publication proof above.
   This does not qualify unavailable hardware or deferred Mac FFmpeg kits.
 Missing mandatory evidence:
-1. Complete native macOS FFmpeg kits/software acceptance, dependent application
+1. Pass the failed dependency audit on the corrected source through the
+   existing workflow audit-only recovery. Affected Linux/Windows auth, native
+   build, strict web lint and workflow safeguards are complete above. Preserve the live
+   original CI run and each unaffected result; never report partial recovery
+   as a full new-SHA CI run. ucu-12-ci-jwt-backend owns this concrete blocker.
+2. Complete native macOS FFmpeg kits/software acceptance, dependent application
    proof and six-RID FFmpeg distribution. This work is deferred, not waived.
    Six-RID Next kits already pass scoped native package requirements and are
    published. Do not broaden earlier ARM/macOS application debt to new gaps.
-2. Final ordered row dispositions/baseline advancement only after every required
+3. Final ordered row dispositions/baseline advancement only after every required
    acceptance item is satisfied and the Mac deferral is resolved; retain accepted
-   baseline row236/v26.11.3 until whole-window acceptance. All available current-
-   pin local gates are complete above; do not repeat unchanged completed proof.
+   baseline row236/v26.11.3 until whole-window acceptance. Runtime/media and
+   pre-correction local gates retain their scoped proof; only item1 owns the
+   newly affected backend checks. Do not repeat unchanged completed proof.
 External prerequisites/authority:
 - Maintainer instruction: no Mac build/retry until explicit resume. Closure
   requires that resume plus passing missing native package/software proof;
@@ -34378,9 +34438,9 @@ External prerequisites/authority:
   RKMPP/RGA, Intel QSV HDR, AMD VAAPI and macOS VideoToolbox captions as explicit
   unverified debt. Earlier approved platform/hardware debt keeps its original
   bounded scope. Nothing here marks those paths verified.
-- Both dependency publication approvals are fulfilled above. No application/
-  main push, application CI, merge, application release or Docker publication
-  is authorized by those approvals. Preserve unrelated processes, dirty files,
+- Both dependency publications are complete. Subsequent explicit approval
+  authorizes the feature-branch push and application CI described above;
+  main merge, application release and Docker publication remain separate. Preserve unrelated processes, dirty files,
   frozen evidence and shared caches. Do not extend the v26.11.4 cutoff.
 """
 

@@ -123,6 +123,23 @@ separate hosted shards. Cargo tools are prepared in the build job; execution
 jobs use its verified nextest/helper executables. The full test selection remains
 intact. Hosted execution remains an explicit fallback rather than the default.
 
+For a dependency-audit correction, use the existing workflow's focused mode:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -F audit_only=true
+```
+
+This runs preflight, format/source-policy/workflow-selection safeguards and
+`cargo deny check`. Its independent concurrency group preserves full CI already
+running on that branch. Mixed focused modes are rejected, and an audit-only
+success never proves full CI or skips a later full gate. Reuse unaffected
+evidence and separately recheck behavior affected by the dependency correction.
+
+Native JWT cryptography statically links AWS-LC through `aws-lc-rs`. A C/C++
+compiler is required; Windows x64 builds also use NASM. The selected non-FIPS
+backend does not change the application's HS256-only token contract. See the
+[upstream build requirements](https://aws.github.io/aws-lc-rs/requirements/index.html).
+
 Two self-hosted runners share one physical machine. Each runner runs its jobs
 serially in its own workspace, so sharing build output across that runner's
 jobs loses no wall-clock parallelism; the two runners do run jobs at the same

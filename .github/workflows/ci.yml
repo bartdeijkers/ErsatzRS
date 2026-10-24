@@ -1,5 +1,5 @@
 name: CI
-run-name: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
+run-name: ${{ inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
 
 on:
   pull_request:
@@ -53,6 +53,11 @@ on:
         type: boolean
         required: false
         default: false
+      audit_only:
+        description: Run dependency audit only (does not establish full CI acceptance; incompatible with other focused modes)
+        type: boolean
+        required: false
+        default: false
       next_engine_only:
         description: Run only the Next engine job (does not establish full CI acceptance; incompatible with test_only)
         type: boolean
@@ -92,7 +97,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}', inputs.browser_only) || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}', inputs.browser_only) || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -130,13 +135,18 @@ jobs:
   # queue time to save a duplicate that is comparatively rare.
   preflight:
     name: Preflight
-    if: ${{ !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    if: ${{ inputs.audit_only || (!inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none')) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
     outputs:
       skip: ${{ steps.duplicate.outputs.skip }}
     steps:
+      - name: Reject mixed audit mode
+        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
+        run: |
+          echo "::error::audit_only cannot be combined with another focused CI mode"
+          exit 1
       - id: duplicate
         uses: actions/github-script@v9
         with:
@@ -161,7 +171,8 @@ jobs:
                 && run.display_title !== 'CI (Test only)'
                 && run.display_title !== 'CI (Next engine only)'
                 && run.display_title !== 'CI (Teletext only)'
-                && run.display_title !== 'CI (Browser recovery)',
+                && run.display_title !== 'CI (Browser recovery)'
+                && run.display_title !== 'CI (Audit only)',
             );
             core.setOutput('skip', proven.length > 0 ? 'true' : 'false');
             if (proven.length > 0) {
@@ -182,6 +193,9 @@ jobs:
           fetch-depth: 0 # Compare new Clippy allows with the PR base or push predecessor.
       - uses: dtolnay/rust-toolchain@1.97.1
       - run: cargo fmt --all -- --check
+      - name: Focused audit selection safeguards
+        if: ${{ inputs.audit_only }}
+        run: python3 scripts/ci-build-artifacts_test.py
       - name: New Clippy allow policy
         env:
           CLIPPY_ALLOW_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
@@ -198,6 +212,7 @@ jobs:
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
     needs: fmt
+    if: ${{ !inputs.audit_only }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -227,7 +242,7 @@ jobs:
   build:
     name: Build CI artifacts
     needs: [preflight, fmt]
-    if: ${{ always() && !cancelled() && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
+    if: ${{ always() && !cancelled() && !inputs.audit_only && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     timeout-minutes: 120
     outputs:
@@ -751,7 +766,7 @@ jobs:
     name: Commit lint
     needs: fmt
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: ${{ !inputs.audit_only && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') }}
     permissions:
       contents: read
       pull-requests: read
@@ -799,7 +814,7 @@ jobs:
   docs:
     name: Documentation links
     needs: preflight
-    if: needs.preflight.outputs.skip != 'true'
+    if: ${{ !inputs.audit_only && needs.preflight.outputs.skip != 'true' }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7

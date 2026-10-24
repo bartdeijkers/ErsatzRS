@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Security
 
+- Use JWT 11's supported AWS-LC backend to remove the vulnerable RustCrypto
+  dependency reported by RUSTSEC-2026-0387, and remove the obsolete RSA advisory
+  exception. Preserve HS256-only validation and existing token compatibility.
+
 - Update the application Tokio runtime to 1.53.3, resolving I/O-safety advisory
   [RUSTSEC-2026-0386](https://rustsec.org/advisories/RUSTSEC-2026-0386.html)
   without changing dependency features or audit policy.
@@ -672,6 +676,10 @@ release section when tagging a release.
   generation and executable checksums in the troubleshooting report.
 
 ### Changed
+
+- Add an audit-only CI recovery mode with an independent concurrency group.
+  It reruns dependency checks and their fast workflow safeguards without
+  cancelling a full run or treating partial success as full CI acceptance.
 
 - Select the verified ErsatzRS-ffmpeg 2.0.7 package line for managed-runtime
   fallback and pinned runtime CI jobs. Retain existing operator pin behavior;
