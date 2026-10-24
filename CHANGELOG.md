@@ -1039,6 +1039,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Supply isolated app data and the verified published-package inventory to Next
+  CI runtime cases, serialize their shared report path, and retain existing
+  session and FFmpeg diagnostics. Generate the literal-clock fixture for finite-cut
+  tests when no explicit incident input is supplied, retaining the exact
+  cutoff, cache, stale-source and installation-fence assertions.
+
 - Stage security-patched Next packages using their prepared lockfile identity,
   and verify the private ARM64 MPP library and all four companion notices
   against exact payload hashes and sizes. Reject missing or modified companions

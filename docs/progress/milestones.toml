@@ -34395,14 +34395,72 @@ New dependency/native-build proof is not inferred for untested targets; macOS
 builds remain deferred. Source, command and native-output receipts are under
 adoption-published/{jwt-backend/,windows/jwt-backend-*}.
 
-The source correction is ready for an authorized feature-branch push and one
-audit-only recovery run. Its success must be recorded with exact SHA/run scope;
-keep the original40128284373 run alive and retain its unaffected results. The
-pending CI-audit acceptance remains explicit until the real job passes.
+The source correction is pushed as 8e215cb91ba68dae521de40f799f9400927729ea.
+Audit-only recovery 40131122101 passes Preflight, Format and Cargo deny on that
+exact SHA; all other jobs are deliberately skipped. This closes the JWT audit
+blocker, not full corrected-source CI acceptance. Original 40128284373 remains
+running; its shared artifact build, general Rust Test and Teletext2.5 jobs pass.
+General Chromium subsequently fails; its exact failed-case triage is active
+while general Firefox continues. No full CI restart or cancellation is issued.
+
+The original Teletext 1.5 job 120984547910 passes its workspace selection but
+fails five of 17 real runtime cases. Two require an unstaged external mapped
+incident input. The existing generated unclosed-caption fixture has the same
+independently checked frame clock and now supplies the default while preserving
+the explicit incident-file override. Both unchanged finite-cut/cache cases pass
+(48bc2712-f248-42ab-ba00-cb35c2d09ec0), including the literal 827946-tick cut,
+unproven-EOF refusal, source/installation fences and immutable SRT cache.
+
+The other three failures are a real Next copied-caption outpoint defect:
+ordinary SRT, late-observed page889 and unclosed-final-caption output extend
+the final cue past the original 9200ms source trim. Coded video, Dutch AAC and
+all earlier cues match exactly; no tolerance or oracle is changed. Existing
+Phase9A correction 0003 is reused byte-for-byte as the isolated 023 candidate's
+0006, with its independent retirement criterion. Current upstream file blob
+e8b3bd8806ca5eba61f92cc1761180ff306f1f9d still contains the faulty shifted end.
+The exact six-patch rs.5 Linux candidate passes all eight source-timing tests
+and all three unchanged actual playback cases (36180be5-0b85-4e3d-a59d-20224fdd876e,
+9.203s). Checksum-verified official 023 separately reproduces the same exact
+ordinary-SRT final-end extension (a6e95dda-b3d9-415e-8729-eceb5c0c652a); its
+negative is retained. ARM64 and ARMv7 optimized packages use the same source,
+lock and patch manifest; both pass exact version/startup and eight source-timing
+controls under pinned QEMU Bookworm. Their receipts are rs5-arm64/evidence/result.json
+and rs5-armv7/evidence/result.json under the same next023 root. ARM64's five
+private MPP companions remain exact; unchanged transcode fallback evidence is
+reused only within that scope, without native hardware claims. Native Windows
+qualification, macOS builds/software and managed adoption remain pending.
+Published rs.4 and the production manifest are unchanged. Candidate receipt:
+tmp/ucu12/next023/rs5-linux64/evidence/result.json; original retained failure
+artifact: adoption-published/ci-teletext15-failure/.
+
+Next-engine job 120984547916 passes 444 of 451 cases. The seven failures require
+missing owned APP_DATA_DIR or the existing reviewed package inventory. Workflow
+setup now creates/exports contained app data and stages all six already-published
+archives through the existing verified reader before exporting that inventory.
+No test is excluded and no Mac build/execution is introduced. All 25 workflow
+guards and actionlint pass. Actual seven-case recovery runs without rebuilding
+and passes six cases: all six-package install/relocate/bundle, QSV fallback,
+repaired Jellyfin audio, unknown HDR, live refresh and Native/Next NUL captions.
+Run 0e7a2011-0626-4136-96dd-2fa08aac9465 retains one newly exposed late-PGS
+startup-deadline failure (35.403s) rather than claiming green. Its unchanged
+30s admission deadline and picture/audio/caption oracles remain required.
+One focused diagnostic repeat passes unchanged (b18badac-0b4c-489c-a8ed-382365c908aa):
+Burn readiness 20.623s, Off 2.418s, actual early/late picture/Dutch audio/captions
+and cleanup. The original failure remains unexplained, not attributed to CPU.
+This is composed seven-case recovery, not one green seven-case run. A separate
+confirmed fixture ownership defect makes all channel1 cases share
+APP_DATA_DIR/ffmpeg-reports/.in-flight-1.log; parallel cleanup can delete another
+case's report. Only the Next job is serialized, retaining all cases/deadlines.
+Its existing artifact collector now preserves generated session/FFmpeg logs
+instead of discarding this diagnostic evidence. Strict affected infrastructure
+all-target lint passes; no production runtime correction is inferred for PGS.
+Evidence: tmp/ucu12/adoption-published/ci-next-input-recovery/.
 
 Finite completion list (row237–254 acceptance remains pending):
 Missing functionality/source disposition:
-- No additional product correction is currently demonstrated. Implemented
+- Restore Next's original copied-caption source outpoint using the demonstrated
+  minimal compatibility correction above; qualify before managed adoption.
+  Implemented
   canvas/signed placement(row237), runtime protocol/rebuild/fallback/late-PGS
   changes(rows238/240/241/249/251/253), external-audio projection/repair(row245),
   provider HDR projection/repair(row247), localized time-input/Stop(row248),
@@ -34416,20 +34474,24 @@ Missing functionality/source disposition:
   build/software/archive/publication and six-RID Next publication proof above.
   This does not qualify unavailable hardware or deferred Mac FFmpeg kits.
 Missing mandatory evidence:
-1. Pass the failed dependency audit on the corrected source through the
-   existing workflow audit-only recovery. Affected Linux/Windows auth, native
-   build, strict web lint and workflow safeguards are complete above. Preserve the live
-   original CI run and each unaffected result; never report partial recovery
-   as a full new-SHA CI run. ucu-12-ci-jwt-backend owns this concrete blocker.
+1. Recover only failed/affected runtime CI checks: require passing corrected
+   Next CI with the retained startup negative explicit; complete copied-caption runtime
+   packages/adoption and affected CI. The six recovered Next input cases,
+   two finite-cut cases, Linux copied-caption candidate's eight source/three
+   actual playback controls and corrected-source JWT audit are complete.
+   Preserve the original CI and unaffected results; partial recovery is never
+   a full new-SHA CI claim. ucu-12-ci-runtime-recovery owns this blocker.
 2. Complete native macOS FFmpeg kits/software acceptance, dependent application
-   proof and six-RID FFmpeg distribution. This work is deferred, not waived.
-   Six-RID Next kits already pass scoped native package requirements and are
-   published. Do not broaden earlier ARM/macOS application debt to new gaps.
-3. Final ordered row dispositions/baseline advancement only after every required
+   proof and six-RID FFmpeg distribution. Qualify the new copied-caption Next
+   correction on macOS before its six-RID adoption; published rs.4 predates it.
+   This work is deferred, not waived. Do not broaden earlier ARM/macOS
+   application debt to new gaps or publish a mixed-source replacement.
+3. Complete outstanding browser CI and its failed-case recovery, then final
+   ordered row dispositions/baseline advancement only after every required
    acceptance item is satisfied and the Mac deferral is resolved; retain accepted
    baseline row236/v26.11.3 until whole-window acceptance. Runtime/media and
-   pre-correction local gates retain their scoped proof; only item1 owns the
-   newly affected backend checks. Do not repeat unchanged completed proof.
+   pre-correction local gates retain their scoped proof; item1 owns the
+   demonstrated runtime recovery. Do not repeat unchanged completed proof.
 External prerequisites/authority:
 - Maintainer instruction: no Mac build/retry until explicit resume. Closure
   requires that resume plus passing missing native package/software proof;

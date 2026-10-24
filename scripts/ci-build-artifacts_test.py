@@ -473,6 +473,80 @@ class FocusedAuditSelection(unittest.TestCase):
             with self.subTest(mode=key):
                 self.assertTrue(self.evaluate(expression, dict(base, **{key: value}), SimpleNamespace()))
 
+    def next_step_run(self, name):
+        step = self.jobs["next_engine"].split(f"      - name: {name}\n", 1)[1]
+        step = step.split("\n      - ", 1)[0]
+        return "\n".join(line[10:] for line in step.split("        run: |\n", 1)[1].splitlines())
+
+    def test_next_runtime_preparation_exports_existing_contained_app_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / "tools"
+            tools.mkdir()
+            git = tools / "git"
+            git.write_text("#!/bin/sh\nprintf 'synthetic-ci-sha\\n'\n")
+            git.chmod(0o755)
+            env_file = root / "github.env"
+            env = dict(os.environ, RUNNER_TEMP=str(root / "runtime"), GITHUB_RUN_ID="fixture",
+                       GITHUB_RUN_ATTEMPT="1", GITHUB_ENV=str(env_file),
+                       CARGO_TARGET_DIR=str(root / "synthetic-target"), PATH=f"{tools}:{os.environ['PATH']}")
+            subprocess.run(["bash", "-eu", "-c", self.next_step_run("Prepare isolated runtime and diagnostics")],
+                           cwd=root, env=env, check=True)
+            values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
+            data = Path(values["ERSATZRS_APP_DATA_DIR"])
+            self.assertTrue(data.is_dir())
+            self.assertTrue(data.is_relative_to(root / "runtime"))
+            self.assertEqual(data.parent, Path(values["TMPDIR"]))
+
+    def test_next_inventory_verifies_every_declared_package_before_export(self):
+        run = self.next_step_run("Stage Next and validated FFmpeg runtime")
+        code = re.search(r"python3 - <<'PYCODE'[^\n]*\n(.*?)^PYCODE$", run, re.S | re.M)[1]
+        rids = ("linux-x64", "linux-arm64", "linux-arm", "win-x64", "osx-x64", "osx-arm64")
+        manifest = {"runtime_packages": {rid: {"asset": f"reviewed-{rid}.archive"} for rid in rids}}
+        for refused in (None, "osx-arm64"):
+            with self.subTest(refused=refused), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest_path = root / "recipe/next-patches/manifest.json"
+                manifest_path.parent.mkdir(parents=True)
+                manifest_path.write_text(json.dumps(manifest))
+                fetched, verified = [], []
+
+                def fetch(url, limit):
+                    fetched.append(url.rsplit("/", 1)[1])
+                    return fetched[-1].encode()
+
+                def verify(rid, output, archive):
+                    if rid == refused:
+                        raise ValueError("synthetic reviewed-package verification refusal")
+                    self.assertEqual(archive.read_bytes(), manifest["runtime_packages"][rid]["asset"].encode())
+                    verified.append(rid)
+                    output.mkdir()
+
+                stage = SimpleNamespace(__file__=str(root / "recipe/stage-next.py"), MANIFEST=manifest,
+                                        DOWNLOAD_BASE="https://example.invalid/reviewed", MAX_ARCHIVE=1024,
+                                        download=fetch, stage_patched_snapshot=verify)
+                spec = SimpleNamespace(loader=SimpleNamespace(exec_module=lambda _: None))
+                env_file = root / "github.env"
+                with patch.dict(os.environ, TMPDIR=str(root), GITHUB_ENV=str(env_file)), \
+                     patch("importlib.util.spec_from_file_location", return_value=spec), \
+                     patch("importlib.util.module_from_spec", return_value=stage):
+                    if refused:
+                        with self.assertRaisesRegex(ValueError, "verification refusal"):
+                            exec(code, {})
+                        self.assertFalse(env_file.exists(), "refused inventory must not be published")
+                        continue
+                    exec(code, {})
+                self.assertEqual(set(verified), set(rids))
+                self.assertEqual(len(fetched), len(rids))
+                values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
+                packages = Path(values["NEXT_CANDIDATE_PACKAGES"])
+                self.assertEqual((packages / "manifest.json").read_bytes(), manifest_path.read_bytes())
+                self.assertEqual({p.name for p in packages.iterdir()},
+                                 {"manifest.json", *(p["asset"] for p in manifest["runtime_packages"].values())})
+                self.assertEqual(Path(values["ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE"]),
+                                 packages / manifest["runtime_packages"]["linux-x64"]["asset"])
+                self.assertEqual(Path(values["ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST"]), manifest_path)
+
 
 if __name__ == "__main__":
     unittest.main()

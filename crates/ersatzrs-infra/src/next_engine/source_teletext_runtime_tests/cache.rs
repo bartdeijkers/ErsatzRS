@@ -133,13 +133,7 @@ impl Fixture {
             CaptionScenario::Untransmitted => {
                 fixture::source_with_untransmitted_caption(&ffmpeg, root).await
             }
-            CaptionScenario::Incident => {
-                let clip = root.join("caption-source.ts");
-                tokio::fs::copy(runtime_path("ERSATZRS_NEXT_MAPPED_SOURCE"), &clip)
-                    .await
-                    .unwrap();
-                clip
-            }
+            CaptionScenario::Incident => fixture::finite_video_cut_source(&ffmpeg, root).await,
         };
         let (pool, locker) = prepare_schedule(&clip, false, &text_profile()).await;
         if matches!(scenario, CaptionScenario::Late) {

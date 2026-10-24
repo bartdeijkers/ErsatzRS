@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'UCU-12 — focused CI dependency-audit recovery; macOS deferred'
+current_focus = 'UCU-12 — focused CI runtime recovery; macOS deferred'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -213,10 +213,19 @@ AWS-LC backend correction removes that graph and the obsolete RSA exception;
 local audit passes without a new ignore/licence exception. Focused Linux/Windows
 auth proof now passes20 cases on each platform, including native Windows C
 compilation and independent token compatibility/negative checks. Strict affected
-lint,23 workflow/artifact guards and actionlint pass. Only corrected-source
-CI-audit recovery remains pending. Preserve the original live run and unaffected
-evidence; the recovery is partial CI, not full new-SHA acceptance. No main merge, release, Docker publication or Mac
-build is authorized. Milestone ucu-12 and ucu-12-ci-jwt-backend own this blocker.
+lint,23 workflow/artifact guards and actionlint pass. Audit-only CI40131122101
+passes on exact8e215cb9, closing that blocker. Original CI also passes the shared
+artifact build and general Rust tests. Its runtime jobs expose missing test
+inputs and a genuine copied-caption source-outpoint defect. Both finite-cut
+fixture cases now pass unchanged; six Next input cases also recover. The one
+late-PGS startup negative is retained; its focused diagnostic repeat passes
+the unchanged30s deadline and actual picture/audio/caption checks. Corrected
+Next CI remains required. Isolated rs.5 caption candidate passes eight
+source and three unchanged actual playback controls; package/adoption and
+affected CI remain open. Preserve the original run and unaffected
+evidence; partial recovery is not full new-SHA acceptance. No main merge,
+release, Docker publication or Mac build is authorized. Milestone ucu-12 and
+ucu-12-ci-runtime-recovery own this bounded package.
 
 Current package: p9a-source-output exact remaining SO2/SO3 route/adoption boundary.
 Next executable action: resolve only the owner's imprecise otherSO2..3 wording

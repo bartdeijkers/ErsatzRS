@@ -452,7 +452,8 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
-      NEXTEST_TEST_THREADS: "4"
+      # Runtime fixtures share channel1's report path in this owned app-data root.
+      NEXTEST_TEST_THREADS: "1"
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.7
     steps:
       - uses: actions/checkout@v7
@@ -480,27 +481,35 @@ jobs:
         run: |
           mkdir -p ci-artifacts/next-engine
           runtime_tmp="$RUNNER_TEMP/next-engine-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          mkdir -p "$runtime_tmp"
+          mkdir -p "$runtime_tmp/app-data"
           echo "TMPDIR=$runtime_tmp" >> "$GITHUB_ENV"
+          echo "ERSATZRS_APP_DATA_DIR=$runtime_tmp/app-data" >> "$GITHUB_ENV"
           git rev-parse HEAD > ci-artifacts/next-engine/ersatzrs-sha.txt
           rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
       - name: Stage Next and validated FFmpeg runtime
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Retain the same pinned archive for the real acquisition/health test.
+          # Retain every reviewed archive for inventory and real acquisition/health tests.
           python3 - <<'PYCODE' | tee ci-artifacts/next-engine/next-runtime.log
-          import importlib.util, os, pathlib
+          import importlib.util, os, pathlib, shutil
           spec = importlib.util.spec_from_file_location('stage_next', 'scripts/release/stage-next.py')
           stage = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(stage)
+          manifest = pathlib.Path(stage.__file__).resolve().parent / 'next-patches/manifest.json'
+          packages = pathlib.Path(os.environ['TMPDIR']) / 'next-packages'
+          packages.mkdir()
+          shutil.copyfile(manifest, packages / 'manifest.json')
+          for rid, package in sorted(stage.MANIFEST['runtime_packages'].items()):
+              archive = packages / package['asset']
+              archive.write_bytes(stage.download(f'{stage.DOWNLOAD_BASE}/{archive.name}', stage.MAX_ARCHIVE))
+              output = pathlib.Path(os.environ['TMPDIR']) / ('next' if rid == 'linux-x64' else f'next-verified-{rid}')
+              stage.stage_patched_snapshot(rid, output, archive)
           asset = stage.MANIFEST['runtime_packages']['linux-x64']['asset']
-          archive = pathlib.Path(os.environ['TMPDIR']) / asset
-          archive.write_bytes(stage.download(f'{stage.DOWNLOAD_BASE}/{asset}', stage.MAX_ARCHIVE))
           with open(os.environ['GITHUB_ENV'], 'a') as env:
-              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE={archive}\n')
-              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST={pathlib.Path("scripts/release/next-patches/manifest.json").resolve()}\n')
-          stage.stage_patched_snapshot('linux-x64', pathlib.Path(os.environ['TMPDIR']) / 'next', archive)
+              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE={packages / asset}\n')
+              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST={manifest}\n')
+              env.write(f'NEXT_CANDIDATE_PACKAGES={packages}\n')
           PYCODE
           cp "$TMPDIR/next/origin.json" ci-artifacts/next-engine/next-origin.json
           sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/next-engine/next-sha256.txt
@@ -531,8 +540,15 @@ jobs:
               report = root / 'ci/junit.xml'
               if report.is_file():
                   shutil.copyfile(report, destination / 'junit.xml')
-          for index, log in enumerate(pathlib.Path(os.environ.get('TMPDIR', os.environ['RUNNER_TEMP'])).glob('ersatzrs-smoke-*/ersatzrs-web-smoke.log')):
+          runtime = pathlib.Path(os.environ.get('TMPDIR', os.environ['RUNNER_TEMP']))
+          for index, log in enumerate(runtime.glob('ersatzrs-smoke-*/ersatzrs-web-smoke.log')):
               shutil.copyfile(log, destination / f'host-{index}.log')
+          for index, log in enumerate(sorted(runtime.glob('.tmp*/session.log'))):
+              shutil.copyfile(log, destination / f'runtime-session-{index}.log')
+          if data := os.environ.get('ERSATZRS_APP_DATA_DIR'):
+              reports = pathlib.Path(data) / 'ffmpeg-reports'
+              if reports.is_dir():
+                  shutil.copytree(reports, destination / 'ffmpeg-reports', dirs_exist_ok=True)
           PYCODE
       - name: Upload Next diagnostics
         if: always()

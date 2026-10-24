@@ -17,6 +17,21 @@ CI and verified publication. It does not claim completed runtime acceptance.
 Partial — accepted corrections are implemented; approved platform/hardware
 obligations and independent upstream patch retirement remain open.
 
+UCU-12 CI caption-maintenance candidate (2026-10-24): released Next023 and
+published rs.4 retain the copied-caption original-outpoint defect already
+corrected in the separate Phase9A candidate. The unchanged ordinary-SRT,
+late-observed Teletext and unclosed-final-caption tests reproduce extension
+past the original9200ms trim; earlier cues and coded AV match. Reuse the exact
+reviewed022 correction as023 patch0006, preserving independent sidecar origins,
+both keyframe-landing directions and partial-pass edges. Current upstream
+file blob e8b3bd8806ca5eba61f92cc1761180ff306f1f9d retains the faulty block.
+The isolated rs.5 Linux candidate passes eight source controls and all three
+unchanged actual playback cases. The checksum-verified official023 control
+retains the exact ordinary-SRT negative. UCU-12 owns identities and receipts.
+This closes that Linux candidate component; published rs.4, production pins,
+other native qualification and separate publication authority are unchanged.
+No macOS build or platform waiver is inferred.
+
 UCU-12 local security maintenance candidate (2026-10-24): fixed Next0.2.3
 source54c6cb9 retains vulnerable/yanked dependencies in the distributed worker.
 The unchanged advisory policy fails on the worker graph for all six supported

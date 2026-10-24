@@ -456,15 +456,23 @@ evidence = 'ADR0128 is Accepted. Milestone ucu-12 owns the published2.0.6 heartb
 
 [[debt]]
 id = 'ucu-12-macos-build-deferral'
-description = 'Complete native macOS FFmpeg candidate builds and package/software acceptance after the maintainer resumes them.'
+description = 'Complete native macOS FFmpeg and corrected Next candidate builds and package/software acceptance after the maintainer resumes them.'
 discovered = '2026-10-24'
 resolved = false
 adr = '0128'
-evidence = 'The maintainer explicitly directed skipping macOS builds until further instruction. Both UCU12 candidate branches have no running/queued jobs. Last ARM64 run40115372297 is terminal failure; prior construction and component results remain valid only in their documented scope. No further Mac build/retry is permitted until explicit maintainer resume. This defers work, keeps acceptance unverified and does not waive requirements, drop supported targets or expand hardware debt. Milestone ucu-12 owns exact evidence and the finite completion list.'
+evidence = 'The maintainer explicitly directed skipping macOS builds until further instruction. Both UCU12 candidate branches have no running/queued jobs. Last ARM64 run40115372297 is terminal failure; prior construction and component results remain valid only in their documented scope. The newly demonstrated copied-caption correction also needs native Mac Next build/software qualification before replacing published rs.4; non-Mac candidate evidence does not satisfy it. No further Mac build/retry is permitted until explicit maintainer resume. This defers work, keeps acceptance unverified and does not waive requirements, drop supported targets or expand hardware debt. Milestone ucu-12 owns exact evidence and the finite completion list.'
 
 [[debt]]
 id = 'ucu-12-ci-jwt-backend'
 description = 'Restore the dependency audit after RUSTSEC-2026-0387 without an ignore, while preserving the existing HS256-only token contract on the supported native web backend.'
 discovered = '2026-10-24'
+resolved = true
+evidence = 'Audit-only CI40131122101 passes Preflight, Format and Cargo deny on exact8e215cb91ba68dae521de40f799f9400927729ea, closing the RUSTSEC-2026-0387 blocker without an ignore or licence exception. The supported native-web AWS-LC backend removes the vulnerable graph and obsolete RSA exception. All20 independent-token, negative-auth and router cases pass on each of Linux/native Windows, including normal Windows C/MSVC/NASM compilation; strict affected lint and23 workflow safeguards pass. Original CI40128284373 continues separately. This focused recovery is not a full corrected-SHA CI claim. Milestone ucu-12 owns exact receipts; other platform proof is not inferred and Mac/hardware limitations stay unchanged.'
+
+[[debt]]
+id = 'ucu-12-ci-runtime-recovery'
+description = 'Recover the demonstrated CI runtime fixture-input gaps and preserve original caption source outpoints through Next copy-seek alignment.'
+discovered = '2026-10-24'
 resolved = false
-evidence = 'Application CI40128284373 on pushed dcd9f036 fails Cargo deny through crypto-bigint0.5.5 and JWT11.1 RustCrypto. The supported native-web AWS-LC feature removes the vulnerable graph and obsolete RSA exception; local audit passes all categories. All20 focused independent-token, negative-auth and router cases pass on each of Linux and native Windows, including normal Windows C/MSVC/NASM compilation. Strict affected web lint,23 workflow/artifact safeguards and actionlint pass. Only corrected-source audit-only CI remains pending; full original CI continues independently. Milestone ucu-12 owns exact evidence, source and recovery scope. Other platform proof is not inferred; Mac builds stay deferred and hardware debt is unchanged.'
+adr = '0117'
+evidence = 'Original application CI40128284373 passes general Rust, Teletext2.5 and the shared artifact producer; Teletext1.5 fails two unstaged incident-input cases plus three final-caption trim cases. Both fixture cases now pass with unchanged literal cut/cache/source fences. Next-engine fails seven input-dependent cases after 444 passes; contained app data and verified public inventory setup is corrected with 25 passing workflow guards. All seven have composed passing recovery: late-PGS initially fails, then passes the unchanged 30s deadline in one diagnostic trial. The original negative is retained without an inferred cause. Confirmed shared report-file ownership is corrected by serializing the Next job and retaining its existing diagnostics. Isolated Next023 rs.5 passes eight source timing and three unchanged actual playback controls on Linux; official023 reproduces the exact ordinary-SRT negative. ARM64/ARMv7 packages also pass version/startup and eight source controls each under QEMU, without native hardware claims. Remaining native qualification, adoption and affected CI remain open. Published rs.4 and production pins stay unchanged. Milestone ucu-12 owns the finite completion list and receipts. Mac builds remain deferred; hardware debt stays unverified.'
