@@ -52,6 +52,19 @@ impl std::fmt::Debug for SourceCaptionRetention {
 }
 
 impl SourceCaptionRetention {
+    pub(super) fn playback_capacity_only(capacity: ActiveTranscodeReservation) -> Self {
+        Self {
+            source: None,
+            bitmap: None,
+            capacity,
+            reaped: false,
+        }
+    }
+
+    pub(super) fn retain_until_restart(&self) {
+        self.capacity.retain_until_restart();
+    }
+
     pub(super) fn confirm_reaped(&mut self) {
         self.reaped = true;
     }

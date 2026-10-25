@@ -1393,6 +1393,26 @@ async fn serve_channel_stream_admitted_inner(
         }
         match result {
             Ok(mut playback) => {
+                if let Some(reservation) = &interval_reservation {
+                    if playback
+                        .prepared
+                        .retain_playback_capacity(reservation.clone())
+                        .is_err()
+                    {
+                        if !cancel_retained_startup(
+                            Some(playback.prepared),
+                            Some(reservation),
+                            Some(&mut external_subtitle_owner),
+                            &[],
+                            None,
+                        )
+                        .await
+                        {
+                            work_hold.retain_until_restart();
+                        }
+                        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    }
+                }
                 playback.video_input = playback.video_input.clone().without_readrate();
                 source_audio_streams = source_producer::observed_audio_or_fallback(
                     &source_audio_streams,
@@ -10331,12 +10351,14 @@ mod tests {
         let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
         let ffprobe = ersatzrs_ffmpeg::ffprobe_path();
         let root = tempfile::tempdir().expect("private null-audio fixture");
-        let proof = std::panic::AssertUnwindSafe(native_null_audio_runtime_proof(
-            &ffmpeg,
-            &ffprobe,
-            root.path(),
-        ))
-        .catch_unwind()
+        let proof = Box::pin(
+            std::panic::AssertUnwindSafe(native_null_audio_runtime_proof(
+                &ffmpeg,
+                &ffprobe,
+                root.path(),
+            ))
+            .catch_unwind(),
+        )
         .await;
         if let Err(panic) = proof {
             eprintln!(

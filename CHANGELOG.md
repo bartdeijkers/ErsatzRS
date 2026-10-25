@@ -48,9 +48,9 @@ release section when tagging a release.
 - Add bounded, playback-owned teletext inspection and observed-page selection
   for an already-running producer. Native MPEG-TS caption Burn supports Live
   add-ons and advertised HTTP/RTSP sources, including live HLS, through one held
-  producer, preserving selected audio, source timestamps, ordinary Off playback
-  and joined cancellation. Other source/output combinations retain their
-  acceptance gates.
+  producer, preserving selected audio, source ownership, ordinary Off playback
+  and joined cancellation. Exact Live teletext timestamp preservation and other
+  source/output combinations retain their acceptance gates.
 
 - Add owned finite source-video frame-end qualification for subtitle preparation.
   Exact decoded clocks and complete-frame bookends are checked against the selected
@@ -1053,6 +1053,10 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Keep Native Live playback capacity attached to its prepared source and actual
+  consumer until cleanup finishes, including failed consumer startup and abandoned
+  preparation. Unconfirmed cleanup retains admission until restart.
 
 - Restore live HLS input by preserving normal playlist and segment endings.
   Native playback resumes after a raw source ends, retaining selected captions

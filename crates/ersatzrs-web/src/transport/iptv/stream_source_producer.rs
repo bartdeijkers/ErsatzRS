@@ -1,50 +1,18 @@
 //! One admitted producer owner for retained intervals or observed live input.
 
 use ersatzrs_core::repositories::Result;
-use ersatzrs_domain::{RemoteStreamLiveness, SourceTeletextCaptionDelivery};
 use ersatzrs_ffmpeg::{FfmpegCommand, InputFile, SourceTeletextInputPlan};
 use ersatzrs_infra::{
     db::DbPool,
     playback::{transient::TransientPlaybackTracks, PlaybackSubtitle},
     published_interval_source::RetainedIntervalPlayback,
-    remote_stream::{
-        PreparedNativeCaptionPlayback, PreparedRemoteStreamInput, RemoteStreamCommand,
-        RemoteStreamError, RemoteStreamSource, ResolvedRemoteStream,
-    },
+    remote_stream::{PreparedNativeCaptionPlayback, PreparedRemoteStreamInput, RemoteStreamError},
 };
 
-pub(super) async fn live_command(
-    pool: &DbPool,
-    media_item_id: i64,
-    media_version_id: i64,
-    stream: Option<&ResolvedRemoteStream>,
-) -> Result<Option<RemoteStreamCommand>> {
-    let Some(stream) = stream.filter(|stream| stream.liveness == RemoteStreamLiveness::Live) else {
-        return Ok(None);
-    };
-    match &stream.source {
-        RemoteStreamSource::Addon(command) => {
-            if !ersatzrs_infra::ffmpeg_config::use_embedded_subtitles(pool).await? {
-                return Ok(None);
-            }
-            Ok(Some(
-                command
-                    .with_playback_seek(RemoteStreamLiveness::Live, std::time::Duration::ZERO)
-                    .0,
-            ))
-        }
-        RemoteStreamSource::Url(_) => {
-            ersatzrs_infra::remote_stream::native_live_url_caption_producer(
-                pool,
-                media_item_id,
-                media_version_id,
-                stream,
-            )
-            .await
-        }
-        _ => Ok(None),
-    }
-}
+pub(super) use ersatzrs_infra::remote_stream::{
+    native_live_caption_command as live_command, native_live_caption_policy as selection_policy,
+    pinned_native_caption_subtitle as pinned_subtitle,
+};
 
 pub(super) enum PreparedSourcePlayback {
     Retained(Box<RetainedIntervalPlayback>),
@@ -83,31 +51,11 @@ impl PreparedSourcePlayback {
         let Self::Streaming(playback) = self else {
             return Ok(None);
         };
-        let mut tracks = playback.tracks();
-        if !tracks
-            .subtitles
-            .iter()
-            .any(|subtitle| subtitle.codec.as_deref() == Some("dvb_teletext"))
-        {
-            tracing::warn!(channel_id, "live source teletext caption evidence is unavailable; retaining the same producer for ordinary AV playback");
-        }
-
-        let delivery =
-            ersatzrs_infra::source_teletext_delivery::load_channel_source_teletext_delivery(
-                pool, channel_id,
-            )
-            .await?;
-        if delivery == SourceTeletextCaptionDelivery::DvbSubtitles {
-            let before = tracks.subtitles.len();
-            tracks
-                .subtitles
-                .retain(|subtitle| subtitle.codec.as_deref() != Some("dvb_teletext"));
-            if before != tracks.subtitles.len() {
-                tracing::warn!(channel_id, "live source teletext bitmap carriage is unavailable; retaining ordinary playback candidates without converting to Burn");
-            }
-        }
-        Ok(Some(tracks))
+        ersatzrs_infra::remote_stream::native_live_caption_tracks(playback, pool, channel_id)
+            .await
+            .map(Some)
     }
+
     pub(super) fn subtitle_input(
         &mut self,
         subtitle: &PlaybackSubtitle,
@@ -126,36 +74,6 @@ impl PreparedSourcePlayback {
             Self::Streaming(playback) => playback.bind_caption_consumer(command, plan),
             Self::Retained(_) => Ok(()),
         }
-    }
-}
-
-pub(super) fn selection_policy(
-    mode: ersatzrs_domain::StreamingMode,
-) -> ersatzrs_infra::playback::transient::TrackSelectionPolicy {
-    ersatzrs_infra::playback::transient::TrackSelectionPolicy {
-        mode,
-        engine: ersatzrs_infra::playback::SubtitleSelectionEngine::Native,
-        media_server: false,
-        // The producer has already removed raw text and unqualified teletext.
-        prepare_embedded_text: true,
-    }
-}
-
-/// A raw stream-index pin cannot choose between multiple qualified page rows.
-pub(super) fn pinned_subtitle(
-    tracks: &TransientPlaybackTracks,
-    stream_index: i32,
-) -> Result<PlaybackSubtitle> {
-    let mut candidates = tracks
-        .subtitles
-        .iter()
-        .filter(|subtitle| subtitle.stream_index == stream_index);
-    match (candidates.next(), candidates.next()) {
-        (Some(subtitle), None) => Ok(subtitle.clone()),
-        _ => Err(ersatzrs_core::repositories::RepositoryError::Unavailable {
-            operation: "live source subtitle selection",
-            message: "pinned track is absent or ambiguous in the observed producer".into(),
-        }),
     }
 }
 

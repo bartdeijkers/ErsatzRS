@@ -45,6 +45,7 @@ fn check_prepared_startup(
 /// to await cleanup when preparation or metadata probing fails.
 pub struct PreparedRemoteStreamInput {
     pub(super) native_caption_binding: Option<Box<super::prepared_teletext::NativeCaptionBinding>>,
+    playback_capacity: Option<super::source_caption::SourceCaptionRetention>,
     producer: Option<ManagedAddonChild>,
     stdout: Option<ChildStdout>,
     stderr_task: Option<JoinHandle<String>>,
@@ -86,6 +87,27 @@ impl std::fmt::Debug for PreparedRemoteStreamInput {
 }
 
 impl PreparedRemoteStreamInput {
+    /// Retain an existing playback reservation until actual producer/consumer
+    /// cleanup, including cancellation, abandoned input and failed spawn.
+    ///
+    /// The caller retains admission while preparing this input, then attaches it
+    /// before yielding ownership. This grants neither new admission nor source,
+    /// page or clock authority. Unconfirmed cleanup quarantines the reservation.
+    ///
+    /// # Errors
+    /// Rejects a second attachment without replacing the existing owner.
+    pub fn retain_playback_capacity(
+        &mut self,
+        capacity: crate::transcode_capacity::ActiveTranscodeReservation,
+    ) -> Result<(), RemoteStreamError> {
+        if self.playback_capacity.is_some() {
+            return Err(RemoteStreamError::PreparedCaptionUnavailable);
+        }
+        self.playback_capacity =
+            Some(super::source_caption::SourceCaptionRetention::playback_capacity_only(capacity));
+        Ok(())
+    }
+
     /// Start one producer, send bounded JSON on stdin, and retain at most 64 KiB.
     /// The original deadline covers request writing, prefix reads and short EOF
     /// process completion. Signal cancellation and await this future.
@@ -228,6 +250,7 @@ impl PreparedRemoteStreamInput {
             .map(|stderr| tokio::spawn(read_stderr_tail(stderr)));
         let mut input = Self {
             native_caption_binding: None,
+            playback_capacity: None,
             producer: Some(producer),
             stdout,
             stderr_task,
@@ -396,12 +419,16 @@ impl PreparedRemoteStreamInput {
             diagnostics,
         );
         let directory = self.temporary_directory.take();
+        let mut capacity = self.playback_capacity.take();
         let task = tokio::spawn(async move {
             if !producer_task.await {
                 return Err(RemoteStreamError::PreparedTerminationUnconfirmed);
             }
             if let Some(directory) = directory {
                 directory.remove_after_reap().await;
+            }
+            if let Some(capacity) = &mut capacity {
+                capacity.confirm_reaped();
             }
             if result.load(std::sync::atomic::Ordering::Acquire) == 2 {
                 Err(RemoteStreamError::PreparedProducerFailed)
@@ -427,6 +454,7 @@ impl PreparedRemoteStreamInput {
             self.stderr_task.take(),
             self.temporary_directory.take(),
             self.exited.is_some(),
+            self.playback_capacity.take(),
         )
         .await
     }
@@ -488,7 +516,8 @@ impl Drop for PreparedRemoteStreamInput {
         let producer = self.producer.take();
         let stderr = self.stderr_task.take();
         let directory = self.temporary_directory.take();
-        if producer.is_none() && stderr.is_none() && directory.is_none() {
+        let capacity = self.playback_capacity.take();
+        if producer.is_none() && stderr.is_none() && directory.is_none() && capacity.is_none() {
             return;
         }
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
@@ -497,6 +526,7 @@ impl Drop for PreparedRemoteStreamInput {
                 stderr,
                 directory,
                 self.exited.is_some(),
+                capacity,
             ));
         } else {
             if let Some(stderr) = stderr {
@@ -514,6 +544,7 @@ async fn cleanup_prepared_input(
     stderr: Option<JoinHandle<String>>,
     directory: Option<PreparedInputDirectory>,
     already_reaped: bool,
+    mut capacity: Option<super::source_caption::SourceCaptionRetention>,
 ) -> Result<(), RemoteStreamError> {
     let reaped = if already_reaped {
         true
@@ -529,6 +560,9 @@ async fn cleanup_prepared_input(
     if reaped {
         if let Some(directory) = directory {
             directory.remove_after_reap().await;
+        }
+        if let Some(capacity) = &mut capacity {
+            capacity.confirm_reaped();
         }
         Ok(())
     } else {
@@ -571,12 +605,20 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
         consumer.stdin.take(),
         prepared.diagnostics.take(),
     ) else {
-        let _ = consumer.kill().await;
+        if consumer.kill().await.is_err() {
+            if let Some(capacity) = &prepared.playback_capacity {
+                capacity.retain_until_restart();
+            }
+        }
         prepared.cancel().await?;
         return Err(RemoteStreamError::PreparedProducerFailed);
     };
     let Some(producer) = prepared.producer.take() else {
-        let _ = consumer.kill().await;
+        if consumer.kill().await.is_err() {
+            if let Some(capacity) = &prepared.playback_capacity {
+                capacity.retain_until_restart();
+            }
+        }
         prepared.cancel().await?;
         return Err(RemoteStreamError::PreparedProducerFailed);
     };
@@ -610,7 +652,7 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
         child: consumer,
         consumer_command: super::source_caption::ConsumerCommandSeal(command.clone()),
         filter_graph_file,
-        source_caption: None,
+        source_caption: prepared.playback_capacity.take(),
         producer_pipe: Some(RemoteStreamProducerPipe {
             cancel: Some(cancel),
             task: Some(task),
@@ -927,7 +969,164 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
+    #[allow(
+        clippy::await_holding_lock,
+        reason = "The process-global capacity test lock covers actual native cleanup before failed-spawn admission is released"
+    )]
+    async fn prepared_capacity_failed_consumer_spawn_reaps_before_releasing_admission() {
+        use crate::transcode_capacity::{
+            active_transcode_snapshot, active_transcode_test_guard_for_tests,
+            reset_active_transcode_state_for_tests, try_reserve_active_transcode,
+            ActiveTranscodeSlot,
+        };
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let (producer, mut consumer) =
+            commands("cat >/dev/null; head -c 70000 /dev/zero; exec sleep 30");
+        let (_sender, receiver) = oneshot::channel();
+        let mut prepared = PreparedRemoteStreamInput::start(
+            &producer,
+            b"{}",
+            RemoteStreamSpawnContext::probe(),
+            tokio::time::Instant::now() + Duration::from_secs(15),
+            receiver,
+        )
+        .await
+        .unwrap();
+        let pid = i32::try_from(prepared.producer.as_ref().unwrap().id().unwrap()).unwrap();
+        let directory = prepared
+            .temporary_directory
+            .as_ref()
+            .unwrap()
+            .0
+            .as_ref()
+            .unwrap()
+            .path()
+            .to_owned();
+        let reservation =
+            try_reserve_active_transcode(1, ActiveTranscodeSlot::new_mpeg_ts("failed-consumer"))
+                .unwrap();
+        prepared
+            .retain_playback_capacity(reservation.clone())
+            .unwrap();
+        drop(reservation);
+        assert_eq!(active_transcode_snapshot(1).active, 1);
+        consumer.executable = directory
+            .join("missing-consumer")
+            .to_string_lossy()
+            .into_owned();
+        assert!(matches!(
+            spawn_ffmpeg_with_prepared_remote_input(
+                &consumer,
+                None,
+                prepared,
+                RemoteStreamSpawnContext::probe()
+            )
+            .await,
+            Err(RemoteStreamError::Spawn(_))
+        ));
+        assert!(!directory.exists());
+        assert_eq!(
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None),
+            Err(nix::errno::Errno::ESRCH)
+        );
+        assert_eq!(active_transcode_snapshot(1).active, 0);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[allow(
+        clippy::await_holding_lock,
+        reason = "The process-global capacity test lock must serialize native child lifetimes through joined cleanup"
+    )]
+    async fn prepared_live_capacity_follows_consumer_reap_and_quarantines_abandonment() {
+        use crate::transcode_capacity::{
+            active_transcode_snapshot, active_transcode_test_guard_for_tests,
+            reset_active_transcode_state_for_tests, try_reserve_active_transcode,
+            ActiveTranscodeSlot,
+        };
+        let _guard = active_transcode_test_guard_for_tests();
+        for abandon in [false, true] {
+            reset_active_transcode_state_for_tests();
+            let (producer, consumer) =
+                commands("cat >/dev/null; head -c 70000 /dev/zero; exec sleep 30");
+            let (_sender, receiver) = oneshot::channel();
+            let mut prepared = PreparedRemoteStreamInput::start(
+                &producer,
+                b"{}",
+                RemoteStreamSpawnContext::probe(),
+                tokio::time::Instant::now() + Duration::from_secs(15),
+                receiver,
+            )
+            .await
+            .unwrap();
+            let producer_pid =
+                i32::try_from(prepared.producer.as_ref().unwrap().id().unwrap()).unwrap();
+            let directory = prepared
+                .temporary_directory
+                .as_ref()
+                .unwrap()
+                .0
+                .as_ref()
+                .unwrap()
+                .path()
+                .to_owned();
+            let reservation = try_reserve_active_transcode(
+                1,
+                ActiveTranscodeSlot::new_mpeg_ts("prepared-consumer"),
+            )
+            .unwrap();
+            prepared
+                .retain_playback_capacity(reservation.clone())
+                .unwrap();
+            drop(reservation);
+            let mut process = spawn_ffmpeg_with_prepared_remote_input(
+                &consumer,
+                None,
+                prepared,
+                RemoteStreamSpawnContext::probe(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(active_transcode_snapshot(1).active, 1);
+            let consumer_pid = i32::try_from(process.id().unwrap()).unwrap();
+            if !abandon {
+                process.kill().await.unwrap();
+            }
+            drop(process);
+            // Abandonment cannot claim that either child has finished.
+            assert_eq!(active_transcode_snapshot(1).active, i32::from(abandon));
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while directory.exists()
+                    || [producer_pid, consumer_pid].iter().any(|pid| {
+                        nix::sys::signal::kill(nix::unistd::Pid::from_raw(*pid), None)
+                            != Err(nix::errno::Errno::ESRCH)
+                    })
+                {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(active_transcode_snapshot(1).active, i32::from(abandon));
+        }
+        reset_active_transcode_state_for_tests();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[allow(
+        clippy::await_holding_lock,
+        reason = "The process-global capacity test lock must serialize native child lifetimes through joined cleanup"
+    )]
     async fn prepared_input_cancel_and_drop_reap_before_removing_private_directory() {
+        use crate::transcode_capacity::{
+            active_transcode_snapshot, active_transcode_test_guard_for_tests,
+            reset_active_transcode_state_for_tests, try_reserve_active_transcode,
+            ActiveTranscodeSlot,
+        };
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
         for explicit_cancel in [false, true] {
             let (producer, _) = commands(
                 "cat >/dev/null; printf fixture > \"$TMPDIR/source.info.json\"; head -c 70000 /dev/zero; while :; do :; done",
@@ -953,13 +1152,32 @@ mod tests {
                 .path()
                 .to_path_buf();
             assert!(directory.join("source.info.json").exists());
+            let mut prepared = prepared;
+            let reservation =
+                try_reserve_active_transcode(1, ActiveTranscodeSlot::new_mpeg_ts("prepared-live"))
+                    .unwrap();
+            prepared
+                .retain_playback_capacity(reservation.clone())
+                .unwrap();
+            assert!(prepared
+                .retain_playback_capacity(reservation.clone())
+                .is_err());
+            drop(reservation);
+            assert_eq!(active_transcode_snapshot(1).active, 1);
             if explicit_cancel {
                 prepared.cancel().await.unwrap();
             } else {
                 drop(prepared);
+                // Drop schedules cleanup; it cannot release admission itself.
+                assert_eq!(active_transcode_snapshot(1).active, 1);
+                assert!(try_reserve_active_transcode(
+                    1,
+                    ActiveTranscodeSlot::new_mpeg_ts("next-live")
+                )
+                .is_none());
             }
             tokio::time::timeout(Duration::from_secs(2), async {
-                while directory.exists() {
+                while directory.exists() || active_transcode_snapshot(1).active != 0 {
                     tokio::time::sleep(Duration::from_millis(5)).await;
                 }
             })

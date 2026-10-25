@@ -26,11 +26,16 @@ use crate::addons::{
 };
 use crate::db::DbPool;
 
+mod live_caption_source;
 mod live_caption_url;
 mod prepared_input;
 mod prepared_teletext;
 #[path = "remote_stream_source_caption.rs"]
 mod source_caption;
+pub use live_caption_source::{
+    native_live_caption_command, native_live_caption_policy, native_live_caption_tracks,
+    pinned_native_caption_subtitle,
+};
 pub use live_caption_url::native_live_url_caption_producer;
 pub use prepared_input::{
     spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput,
@@ -340,16 +345,16 @@ impl RemoteStreamProcess {
     /// the consumer accepted a partial input. A cancelled wait retains cleanup.
     pub async fn wait(&mut self) -> std::io::Result<ExitStatus> {
         let result = self.child.wait().await;
-        if result.is_ok() {
-            if let Some(source) = &mut self.source_caption {
-                source.confirm_reaped();
-            }
-        }
         let prepared_result = self
             .producer_pipe
             .as_ref()
             .and_then(|pipe| pipe.prepared_result.clone());
         self.shutdown_producer().await?;
+        if result.is_ok() {
+            if let Some(source) = &mut self.source_caption {
+                source.confirm_reaped();
+            }
+        }
         if prepared_result
             .is_some_and(|result| result.load(std::sync::atomic::Ordering::Acquire) == 2)
         {
@@ -367,12 +372,12 @@ impl RemoteStreamProcess {
     pub async fn kill(&mut self) -> std::io::Result<()> {
         self.cancel_producer();
         let result = self.child.kill().await;
+        self.shutdown_producer().await?;
         if result.is_ok() {
             if let Some(source) = &mut self.source_caption {
                 source.confirm_reaped();
             }
         }
-        self.shutdown_producer().await?;
         result
     }
 

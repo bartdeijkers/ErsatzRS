@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — qualify Native Live HLS source-caption output'
+current_focus = 'p9a-source-output — preserve original Live source-caption timestamps'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -157,15 +157,38 @@ segmenter-Off/Burn/direct-Burn receipt, exact original source/test body,
 888/200/plain raster,nld660Hz,joined cleanup and57 transport passes. Earlier
 SO1 and unrelated source/lint/editor/client evidence retain their scope.
 
-Current package: p9a-source-output Native HLS/Live source-caption boundary.
-SO2-HLS input/EOF is completed with29focused/152transport controls, strict lint
-and fresh-host smoke. Use current ordinary HLS/source helpers to qualify this
-existing ADR0121 row/lifecycle intersection: selected888 Burn must use bounded
-streaming input, preserve Dutch audio and join actual cleanup without awaiting
-whole Live extraction or switching engines. Close this package only on actual
-qualified Live Burn delivery and unchanged Off/cleanup; visible refusal closes
-only explicitly unsupported copy/output cases. MPEG-TS Live and Native HLS Off
-EOF evidence retain their scopes; no Cartesian variant queue is commissioned.
+Current package: p9a-source-output original Live source-caption clock.
+The prepared playback-capacity component is independently verified: actual
+producer/consumer cleanup owns existing admission after preparation, including
+failed spawn and cancellation/Drop; uncertainty quarantines until restart. The
+ordinary Native MPEGTS Live caller attaches that same reservation before later
+selection/spawn. Three Unix native process controls and existing HTTP/EOF route
+Off/Burn/Dutch660Hz/defaultcapacity2/cleanup tests pass. Shared observed-track
+selection is an unchanged move to infra. Current strict infra/web lint and format pass;76 static transport
+controls pass (57new/19byte-identical reuse). Its local checkpoint follows; canonical native-hls-caption/qualification.json records SHA,
+unchanged foreign baseline and remaining uncommitted HLS files.
+
+Native HLS candidate4 proved888 versus200/plain/audio/cleanup, but the bounded
+MPEGTS EOF compatibility trial exposed a source-clock gap, not an accepted HLS
+fix. Default FFmpeg fix_teletext_pts=1 rewrites original PES timestamps before
+copyts remux; a second demux pass depends on packet ordering. Original raw-PTS
+caption onset is frame20 (default source decode19), old routed5, sparse candidate14.
+AV/reentry clocks remain exact, so a changed sample is no repair. The100ms mux
+candidate is retained as an exact negative patch and removed from the producer;
+HLS wiring remains uncommitted. Existing source/image/ownership/transport proofs
+retain only their actual scopes; no exact Live source-clock claim follows.
+
+Next qualify original-PTS input and consumer policy on the same sources, using
+existing MPEGTS fix_teletext_pts0 and HLS child-format controls without extra
+source consumption. Direct/HLS options differ; RTSP parser default0 is currently
+source inspection only. Require raw-PES equality and source-derived onset/clear,
+same-response reentry cues, AV/audio and actual cleanup. No cap/timeout increase,
+favorable seek/sample, ordinary-playback damage, permanent source exclusion or
+unbounded decoder maintenance. Record a precise runtime capability/maintainer
+prerequisite if these existing mechanisms cannot supply a safe policy. The
+canonical receipt owns exact inputs/options/negatives and the bounded next action.
+Preserve all ten foreign edits. No push/publication or Cartesian variant queue.
+
 The separate120minute full Windows-package trial remains maintainer-deferred;
 its explicit resumption question is pending and does not block this independent
 work. AE5 normative, AB5/C3 formatter, native/Mac, X1/X3 and policy prerequisites
