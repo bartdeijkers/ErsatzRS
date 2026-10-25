@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety PS1 — current Windows worker artifact qualification'
+current_focus = 'p9a-author-enhanced AE5 — original cross-emitter source-order qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -118,16 +118,26 @@ and original strict oracles. Finite workers exit normally; six containers are
 absent. This is QEMU/software/artifact proof, not native ARM or source-output
 route acceptance; those exact required proofs retain their primary owner.
 
-Current package: p9a-platform-safety PS1 current Windows worker artifact.
-Next executable action: qualify existing native toolchain/recipe availability,
-then build/package only the current023 ten-patch Windows worker and run its
-existing affected source/software guards if available. Stop at that worker
-artifact component; do not start the separate deferred120minute application-
-package trial. Keep native application/Health, macOS artifacts/execution,
-physical ARM and explicit managed adoption at their existing owners. If toolchain
-access is absent, record that concrete prerequisite and select an independent
-existing item; no substitute variants, publication or production pin changes.
-X1 deferral/X3 upstream wait remain unchanged.
+PS1 current023 Windows bare-worker artifact component is completed. Canonical
+next023_source_output_followup.windows_worker_artifact owns exact native MSVC
+source/compiler/lock/ten-patch/VPL/package pins,54+14 native source controls,
+synthetic FFmpeg207 discovery and zero owned remaining processes. Original rs.6
+payload hashes remain exact. Available non-Mac worker artifact components are
+closed within their explicit source/startup/software scopes. The separate full
+current Windows application-package trial remains deferred with120minutes
+reserved; native ARM/Mac, missing Mac artifacts, final Health and explicit managed
+adoption retain their existing owners. No publication/production pin changed.
+
+Current package: p9a-author-enhanced AE5 original CrossEmitterOrder witness.
+Next executable action: use the existing original17-action source/native trace
+and primary A8(2)/12.3.3 rules to determine whether an exact same-cell opening/
+reset lifetime order is supported. Keep original IDs,lower-bound1/pending17 and
+known-open1/pending15 facts; no guessed endpoint or storage/emitter clock.
+Stop at either a sourced complete-factory/native-order qualification of that
+original witness or an exact missing normative/maintainer decision and resume
+condition. Only a demonstrated defect permits a product change; no new variant,
+external decoder repair, client retry or relaxed admission. Other completed
+components remain closed. X1 deferral/X3 upstream wait remain unchanged.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
