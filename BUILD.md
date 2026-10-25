@@ -232,7 +232,43 @@ Focused dispatch builds only the required products: Rust for `test_only` or
 for the other `teletext_only` modes or full
 CI. The same-SHA failed-job rerun reuses its successful producer artifact; a new
 revision needs a new verified build. Artifacts expire after seven days, after
-which the producer must run again. No cross-revision artifact reuse is allowed.
+which the producer must run again unless an exact retained local artifact is
+available. Ordinary CI requires exact source identity. The explicitly selected
+focused-recovery exception below permits only an unchanged runtime/test/config
+tree with a small allowlist of CI orchestration and progress-document changes.
+
+### Reuse verified artifacts for focused recovery
+
+On the self-hosted machine, `reuse_artifacts` accepts a JSON object keyed by
+`rust` and/or `web`. Each reference must supply the original 40-character
+`source_sha`, immutable `cache_key`, archive `sha256`, exact `toolchain` string
+and all four recorded `build_flags`: `RUSTFLAGS`, `CARGO_PROFILE_TEST_DEBUG`,
+`LEPTOS_OUTPUT_NAME` and `LEPTOS_HASH_FILES`. Pass the JSON as an input value;
+the workflow passes it to Python through `CI_REUSE_ARTIFACTS`, never as shell
+source. Use the existing `teletext_only=1.5-rust` or `browser_only` selection to
+recover the affected jobs without another artifact compilation.
+
+The artifact provider only checks out source and verifies the pinned local
+archives. It runs no Cargo commands, tool installation, target reset, artifact
+publication or cache pruning. Missing/corrupt archives fail closed; no rebuild
+or alternative download starts. Consumers recheck archive hashes, the complete
+file inventory and permissions, host/libc, toolchain, flags and original source
+identity. The producer SHA stays in `build.json`; logs distinguish it from the
+execution SHA. The helper rejects any changed runtime, test, dependency or
+configuration input and permits only its explicit CI/docs path allowlist.
+
+Empty local web-build environment values remain empty in the evidence; their
+effective output name and hashing settings come from the identical producer
+Cargo metadata. They must still match the expected `ersatzrs-web`, unhashed
+Leptos bundle. Rust artifacts require the CI test-debug setting. Existing
+locally qualified server/site components may be packaged once with truthful
+component and build evidence; a warm cache or an old server with newer frontend
+files alone does not establish a reusable matched build. Keep the referenced
+immutable local cache group until all consumers finish.
+
+Reuse is restricted to one explicit focused mode, self-hosted execution and no
+target reset. Normal full CI and its exact-SHA rules remain unchanged; these
+scoped results never imply a fresh full-CI result for the execution commit.
 
 The smoke runner accepts an explicitly selected server without rebuilding:
 

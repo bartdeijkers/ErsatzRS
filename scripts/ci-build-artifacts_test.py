@@ -113,6 +113,96 @@ class BuildArtifacts(unittest.TestCase):
             artifacts.restore(archive, output, SHA, None, "rust")
         self.assertEqual(marker.read_text(), "keep")
 
+    def reference(self, root, archive, kind):
+        manifest = json.loads((root / "build.json").read_text())
+        return {"source_sha": SHA, "cache_key": f"original-producer-{kind}",
+                "sha256": artifacts.digest(archive), "toolchain": manifest["toolchain"],
+                "build_flags": manifest["build_flags"]}
+
+    def test_reuse_keeps_original_source_and_refuses_corrupt_or_missing_cache(self):
+        with patch.dict(os.environ, {key: "0" if key == "CARGO_PROFILE_TEST_DEBUG" else ""
+                                     for key in artifacts.BUILD_FLAG_KEYS}):
+            root, archive = self.fixture()
+        reference = self.reference(root, archive, "rust")
+        cache = self.base / "cache"
+        artifacts.publish_local(archive, SHA, "rust", reference["cache_key"], cache)
+        output = self.base / "copied.tar.gz"
+        with patch.object(artifacts, "verify_source_equivalence", return_value=["BUILD.md"]):
+            result = artifacts.reuse_local(output, "b" * 40, "rust", reference, cache)
+            self.assertEqual(result["rust_source_sha"], SHA)
+            self.assertEqual(result["rust_equivalent_execution_sha"], "b" * 40)
+            restored = self.base / "reused"
+            artifacts.restore(output, restored, "b" * 40, None, "rust", reference)
+            self.assertEqual(json.loads((restored / "build.json").read_text())["source_sha"], SHA)
+            output.write_bytes(b"corrupt")
+            with self.assertRaisesRegex(ValueError, "archive SHA256"):
+                artifacts.restore(output, self.base / "refused", "b" * 40, None, "rust", reference)
+            self.assertFalse((self.base / "refused").exists())
+            entry = artifacts.local_entry(cache, reference["cache_key"])[1]
+            entry.write_bytes(b"corrupt")
+            with self.assertRaisesRegex(ValueError, "cache hash mismatch"):
+                artifacts.reuse_local(output, "b" * 40, "rust", reference, cache)
+            entry.unlink()
+            with self.assertRaisesRegex(ValueError, "unavailable; no rebuild"):
+                artifacts.reuse_local(output, "b" * 40, "rust", reference, cache)
+
+    def test_reuse_requires_pinned_toolchain_flags_and_truthful_web_defaults(self):
+        with patch.dict(os.environ, {key: "" for key in artifacts.BUILD_FLAG_KEYS}):
+            root, archive = self.fixture("web")
+        reference = self.reference(root, archive, "web")
+        manifest = json.loads((root / "build.json").read_text())
+        cargo = '[package.metadata.leptos]\noutput-name="ersatzrs-web"\nhash-files=false\n'
+        with patch.object(artifacts.subprocess, "check_output", side_effect=lambda cmd, **_: cargo if cmd[0] == "git" else "rustc fixture\n"):
+            artifacts.verify(root, "b" * 40, "web", reference)
+            self.assertTrue(all(value == "" for value in reference["build_flags"].values()))
+            for key, value in (("toolchain", "rustc different"), ("build_flags", dict(reference["build_flags"], RUSTFLAGS="unsafe-change"))):
+                changed = dict(reference, **{key: value})
+                with self.assertRaisesRegex(ValueError, "compiler/build flags"):
+                    artifacts.verify(root, "b" * 40, "web", changed)
+            with patch.object(artifacts.subprocess, "check_output", return_value="rustc another\n"), \
+                 self.assertRaisesRegex(ValueError, "execution toolchain"):
+                artifacts.verify(root, "b" * 40, "web", reference)
+            with patch.object(artifacts.subprocess, "check_output", side_effect=lambda cmd, **_: cargo.replace("false", "true") if cmd[0] == "git" else "rustc fixture\n"), \
+                 self.assertRaisesRegex(ValueError, "Leptos output"):
+                artifacts.verify(root, "b" * 40, "web", reference)
+            with self.assertRaisesRegex(ValueError, "native/test flags"):
+                artifacts.verify_reuse_options(manifest, reference, "rust")
+
+    def test_reuse_reference_rejects_incomplete_wrong_kind_and_unsafe_values(self):
+        root, archive = self.fixture()
+        reference = self.reference(root, archive, "rust")
+        self.assertEqual(artifacts.reuse_reference(json.dumps({"rust": reference}), "rust"), reference)
+        bad = [dict(reference, source_sha="main"), dict(reference, sha256="short"),
+               dict(reference, cache_key="../escape-rust"), dict(reference, cache_key="wrong-web"),
+               dict(reference, toolchain="rustc fixture\nINJECT=1"), dict(reference, build_flags={})]
+        for item in bad:
+            with self.subTest(reference=item), self.assertRaises(ValueError):
+                artifacts.reuse_reference(json.dumps({"rust": item}), "rust")
+        with self.assertRaisesRegex(ValueError, "missing required"):
+            artifacts.reuse_reference(json.dumps({"rust": reference}), "web")
+
+    def test_source_reuse_allows_only_explicit_ci_docs_and_fetches_only_missing_commit(self):
+        for changed in ("crates/ersatzrs-infra/src/lib.rs", "Cargo.lock", ".cargo/config.toml",
+                        "tests/e2e/channels.spec.ts", "scripts/release/next-patches/manifest.json",
+                        "docs/arbitrary.md"):
+            with self.subTest(path=changed), \
+                 patch.object(artifacts.subprocess, "run", return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(artifacts.subprocess, "check_output", side_effect=[(changed + "\0").encode(), b""]):
+                with self.assertRaisesRegex(ValueError, "source inputs changed"):
+                    artifacts.verify_source_equivalence(SHA, "b" * 40)
+        with patch.object(artifacts.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as command, \
+             patch.object(artifacts.subprocess, "check_output", side_effect=[b"BUILD.md\0", b".github/workflows/ci.yml\0"]):
+            self.assertEqual(artifacts.verify_source_equivalence(SHA, "b" * 40), [".github/workflows/ci.yml", "BUILD.md"])
+            self.assertEqual(command.call_count, 1)
+        with patch.object(artifacts.subprocess, "run", side_effect=[SimpleNamespace(returncode=1), SimpleNamespace(returncode=0)]) as command, \
+             patch.object(artifacts.subprocess, "check_output", return_value=b""):
+            artifacts.verify_source_equivalence(SHA, "b" * 40)
+            self.assertEqual(command.call_args_list[1].args[0], ["git", "fetch", "--no-tags", "--depth=1", "origin", SHA])
+        with patch.object(artifacts.subprocess, "run", return_value=SimpleNamespace(returncode=0)), \
+             patch.object(artifacts.subprocess, "check_output", side_effect=[b"", b"Cargo.toml\0"]), \
+             self.assertRaisesRegex(ValueError, "source inputs changed"):
+            artifacts.verify_source_equivalence(SHA, SHA)
+
     def test_browser_wrapper_uses_verified_bundle_without_any_build_tools(self):
         root, _ = self.fixture("web")
         server = root / "bin/ersatzrs-web"
@@ -417,19 +507,20 @@ class FocusedAuditSelection(unittest.TestCase):
         self.jobs = dict(zip(parts[1::2], parts[2::2]))
 
     @staticmethod
-    def evaluate(expression, inputs, needs):
+    def evaluate(expression, inputs, needs, env=None):
         expression = expression.removeprefix("${{").removesuffix("}}").strip()
         expression = re.sub(r"!(?!=)", " not ", expression)
         expression = expression.replace("&&", " and ").replace("||", " or ")
         return bool(eval(expression.strip(), {"__builtins__": {}}, {
             "inputs": SimpleNamespace(**inputs), "needs": needs,
             "github": SimpleNamespace(event_name="workflow_dispatch"),
-            "always": lambda: True, "cancelled": lambda: False, "true": True,
+            "always": lambda: True, "cancelled": lambda: False, "true": True, "false": False,
+            "env": env or SimpleNamespace(),
         }))
 
     def scheduled(self, **selected):
         inputs = dict(audit_only=False, test_only=False, next_engine_only=False,
-                      teletext_only="none", browser_only="none", browser_case_set="fixtures")
+                      teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="")
         inputs.update(selected)
         scheduled = set()
         for name, body in self.jobs.items():
@@ -471,7 +562,7 @@ class FocusedAuditSelection(unittest.TestCase):
 
     def test_rust_level15_recovery_excludes_web_build_and_browsers(self):
         self.assertEqual(self.scheduled(teletext_only="1.5-rust"), {"build", "teletext"})
-        inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="1.5-rust")
+        inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="1.5-rust", reuse_artifacts="")
         for key, expected in (("BUILD_RUST", True), ("BUILD_WEB", False)):
             expression = re.search(rf"^      {key}: (.+)$", self.jobs["build"], re.M)[1]
             self.assertEqual(self.evaluate(expression, inputs, SimpleNamespace()), expected)
@@ -497,12 +588,12 @@ class FocusedAuditSelection(unittest.TestCase):
         step = self.workflow.split("- name: Reject mixed audit mode\n", 1)[1]
         expression = step.splitlines()[0].strip().removeprefix("if: ")
         base = dict(audit_only=True, test_only=False, next_engine_only=False,
-                    teletext_only="none", browser_only="none", browser_case_set="fixtures")
+                    teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="")
         self.assertFalse(self.evaluate(expression, base, SimpleNamespace()))
         for key, value in (("test_only", True), ("next_engine_only", True),
                            ("teletext_only", "all"), ("browser_only", "both"),
                            ("browser_case_set", "channel-preview"), ("browser_case_set", "teletext-1.5"),
-                           ("browser_case_set", "teletext-runtime"), ("teletext_only", "1.5-rust")):
+                           ("browser_case_set", "teletext-runtime"), ("teletext_only", "1.5-rust"), ("reuse_artifacts", "{}")):
             with self.subTest(mode=key):
                 self.assertTrue(self.evaluate(expression, dict(base, **{key: value}), SimpleNamespace()))
 
@@ -511,7 +602,8 @@ class FocusedAuditSelection(unittest.TestCase):
         code = re.search(r"python3 - <<'PYCODE'\n(.*?)^          PYCODE$", step, re.S | re.M)[1]
         code = "\n".join(line[10:] for line in code.splitlines())
         base = dict(os.environ, TEST_ONLY="false", NEXT_ONLY="false", TELETEXT_ONLY="none",
-                    BROWSER_ONLY="none", BROWSER_CASE_SET="fixtures")
+                    BROWSER_ONLY="none", BROWSER_CASE_SET="fixtures", REUSE_ARTIFACTS="",
+                    RUNNER_POOL="self-hosted", RESET_TARGET_DIR="false")
         cases = [({}, True), ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview"}, True),
                  ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5"}, True),
                  ({"BROWSER_ONLY": "both", "BROWSER_CASE_SET": "teletext-runtime"}, True),
@@ -536,6 +628,52 @@ class FocusedAuditSelection(unittest.TestCase):
                 result = subprocess.run([sys.executable, "-c", code], env=dict(base, **changes),
                                         text=True, capture_output=True)
                 self.assertEqual(result.returncode == 0, valid, result.stderr)
+
+        for changes, valid in (
+            ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust"}, True),
+            ({"REUSE_ARTIFACTS": "{}", "BROWSER_ONLY": "both", "BROWSER_CASE_SET": "teletext-runtime"}, True),
+            ({"REUSE_ARTIFACTS": "{}"}, False),
+            ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust", "RUNNER_POOL": "github-hosted"}, False),
+            ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust", "RESET_TARGET_DIR": "true"}, False),
+            ({"REUSE_ARTIFACTS": "not-json", "TELETEXT_ONLY": "1.5-rust"}, False),
+            ({"REUSE_ARTIFACTS": "[]", "TELETEXT_ONLY": "1.5-rust"}, False),
+        ):
+            with self.subTest(reuse=changes):
+                result = subprocess.run([sys.executable, "-c", code], env=dict(base, **changes),
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode == 0, valid, result.stderr)
+
+    def test_reuse_provider_never_builds_installs_resets_uploads_or_prunes(self):
+        for mode in ({"teletext_only": "1.5-rust"}, {"browser_only": "both", "browser_case_set": "teletext-runtime"}):
+            inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="none",
+                          runner="self-hosted", reset_target_dir=False, reuse_artifacts='{"explicit":"reference"}')
+            inputs.update(mode)
+            build_env = {}
+            for key in ("BUILD_RUST", "BUILD_WEB"):
+                expression = re.search(rf"^      {key}: (.+)$", self.jobs["build"], re.M)[1]
+                build_env[key] = str(self.evaluate(expression, inputs, SimpleNamespace())).lower()
+            self.assertEqual(build_env, {"BUILD_RUST": "false", "BUILD_WEB": "false"})
+            steps = re.split(r"^      - ", self.jobs["build"], flags=re.M)[1:]
+            active = []
+            for step in steps:
+                condition = re.search(r"^        if: (.+)$", step, re.M)
+                if not condition or self.evaluate(condition[1], inputs, SimpleNamespace(), SimpleNamespace(**build_env)):
+                    active.append(step.splitlines()[0])
+            self.assertEqual(active, ["name: Validate dispatch mode", "uses: actions/checkout@v7", "name: Reuse verified CI artifacts"])
+        self.assertIn("CI_REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}", self.workflow)
+        self.assertIn("REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}", self.jobs["build"])
+
+    def test_reuse_has_no_download_fallback_and_has_an_honest_job_name(self):
+        self.assertIn("name: ${{ inputs.reuse_artifacts && 'Verify reused CI artifacts' || 'Build CI artifacts' }}",
+                      self.jobs["build"])
+        for job in ("test", "next_engine", "teletext", "hydration"):
+            download = self.jobs[job].split("uses: actions/download-artifact@v8\n", 1)[1]
+            condition = re.search(r"^        if: (.+)$", download, re.M)[1]
+            for reference in ("", '{"explicit":"reference"}'):
+                for hit in ("true", "false", ""):
+                    expression = condition.replace("steps.local_artifact.outputs.hit", repr(hit))
+                    enabled = self.evaluate(expression, {"reuse_artifacts": reference}, SimpleNamespace())
+                    self.assertEqual(enabled, not reference and hit != "true", (job, reference, hit))
 
     def test_browser_case_set_keeps_distinct_recovery_concurrency(self):
         self.assertIn("inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || ''", self.workflow)

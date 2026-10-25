@@ -32869,6 +32869,13 @@ TSDuck for affected transport. Keep changelog, documentation and exact pins
 current. Push, CI, merge and dependency/application publication need separate
 UCU12 authorization. After accepted delivery, clean only inactive owned caches,
 worktrees and local branches, retaining tested artifacts and primary evidence.
+Delivery-scope amendment2026-10-25: the maintainer now limits remaining work
+to required CI and source push/merge into remote/main, providing the accepted
+UCU-12 base for subsequent Phase9 work. No further application/dependency
+release, release build/publication, Phase9 implementation or UCU14 catch-up is
+part of this closeout. Defer post-delivery workspace cleanup under this narrower
+scope; preserve tested artifacts, evidence and caches. Required acceptance and
+explicit unverified hardware/macOS debt remain unchanged.
 """
 evidence = """
 Source identity component complete: tag v26.11.4 peels to
@@ -34662,6 +34669,53 @@ workspace formatting pass. Existing prerequisite skips and all assertions
 remain unchanged. The original complete Firefox recovery40174546124 continues;
 the next authorized source checkpoint requires only affected CI recovery.
 
+Checkpoint5a2d8460359af6c3269b18028ecde5423de1ab76 is committed and pushed to
+feat/ucu-12 after Linux/native Windows adoption passes. Focused Next
+CI40178558343 is in progress; Level1.5 Rust-only CI40178560686 is queued on
+the same SHA. The original full Firefox recovery40174546124 remains live.
+The11-case-per-browser recovery is prepared but not dispatched while that
+Firefox job owns the shared recovery port. No full CI, main merge, additional
+runtime release or Mac build is started.
+
+Complete Level1.5 Firefox recovery40174546124 is terminal green on bc69eb66:
+57 passed,7 existing skips, zero unexpected/flaky in3685.229s. The retained
+seven skips cover six Chromium-only/native-fixture lifecycle proofs and the
+separately owned external-client prerequisite; no Firefox runtime playback is
+inferred. Artifact12594190559 matches SHA256753e7b862500bef9e30ee7ea380f31d1cdccf57e1c0786c417b1c7ccbebd71f2;
+its JSON and compressed primary evidence are preserved under
+tmp/ucu12/ci-recovery/firefox-15-40128284373/. This closes the missing complete
+Firefox job after the original runner disconnection. The now-free recovery
+port permits focused browser CI40179586608 on5a2d8460:11 selected cases per
+browser against the adopted rs.6 pin; Next40178558343 and Level1.5 Rust40178560686
+continue on that same source. No full CI or unaffected browser rerun occurs.
+
+The maintainer identifies redundant artifact preparation across those focused
+runs as unacceptable inefficiency. Cancelled40178560686 and40179586608 are
+terminal and must not be redispatched with the old rebuilding path. Preserve
+furthest Rust producer40178558343. Reuse its immutable artifact and the already
+qualified local matched web bundle through the existing artifact helper;
+retain original producer identities, checksums, host/toolchain/flag checks and
+fail-closed CI/docs-only source equivalence. The remaining focused checks must
+consume those verified artifacts without repeating compilation. This concrete
+CI blocker owns the current package; no application/runtime feature work or
+new release is authorized.
+
+CI reuse correction is complete locally:34 artifact/workflow guards,8 selector
+checks, actionlint and actual qualified web-cache validation pass. The existing
+136444222-byte matched web archive retains producer5a2d8460 and digest
+03df77a7f29ec55290953baa14216c1ccc3b8fad6396d993277d7970d4f248b4.
+Its helper binaries come from preserved CI40178558343 on that source; the
+server/WASM are the already-qualified cbfe01c9/beb561e6 pair above. Recorded
+local web environment flags remain honestly empty, resolved against the
+unchanged Leptos output-name/hash-files configuration. Reuse validates original
+SHA, complete inventory/digest, host, exact compiler and flags, plus a strict
+allowlist of CI/progress-only differences to the execution commit. Runtime,
+test and configuration changes reject reuse. Verification jobs execute no
+Cargo, installation, target reset, cache pruning or upload; missing bytes fail
+without compilation or artifact-download fallback. The normal build path is
+unchanged. No release is built or published. References and proof remain in
+tmp/ucu12/ci-recovery/artifact-reuse/.
+
 Missing functionality/source disposition:
 - Complete managed adoption of Next's published copied-caption and selected-audio
   corrections on the four non-Mac platforms. macOS retains original rs.4 under
@@ -34693,10 +34747,10 @@ Missing mandatory evidence:
    without these checks. Published macOS rs.4 predates the caption/audio fixes;
    retain its true per-platform version/source/checksums when adopting the four
    qualified rs.6 packages. This does not claim a uniform six-platform build.
-3. Corrected preview CI is green and Chromium serial followers have composed
-   passing recovery. Retry only the missing complete Level1.5 Firefox check
-   after runner disconnection. Complete affected CI for the adopted Next
-   correction when its replacement is qualified/published. Reuse the now-green
+3. Corrected preview CI and complete Level1.5 Firefox recovery are green;
+   Chromium serial followers have composed passing recovery. Complete only
+   the currently running/queued affected CI for adopted rs.6: Next, Level1.5
+   Rust and the11-case-per-browser source-caption/runtime recovery. Reuse the now-green
    Level2.5 browser jobs and other unaffected results.
    Then final
    ordered row dispositions/baseline advancement only after every required

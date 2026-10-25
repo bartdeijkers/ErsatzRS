@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 from contextlib import suppress
 
 
@@ -26,6 +27,15 @@ REQUIRED = {
 }
 LOCAL_GROUP_MARKER = ".ersatzrs-ci-artifacts"
 LOCAL_GROUP_OWNER = b"ersatzrs-ci-artifacts-group-v1\n"
+BUILD_FLAG_KEYS = ("RUSTFLAGS", "CARGO_PROFILE_TEST_DEBUG", "LEPTOS_OUTPUT_NAME", "LEPTOS_HASH_FILES")
+# Explicit recovery-only edits that cannot change compiled/runtime inputs.
+# Everything else, including tests, runtime pins and Cargo configuration, fails closed.
+REUSE_SOURCE_EXCEPTIONS = {
+    ".github/workflows/ci.yml", "scripts/ci-build-artifacts.py", "scripts/ci-build-artifacts_test.py",
+    "scripts/ci-teletext-selection.py", "scripts/ci-teletext-selection_test.py",
+    "BUILD.md", "CHANGELOG.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
+    "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
+}
 
 
 def digest(path):
@@ -72,9 +82,10 @@ def pack(root, archive, sha, kind):
         handle.add(root, arcname=".", recursive=True)
 
 
-def verify(root, sha, kind):
+def verify(root, sha, kind, reference=None):
     manifest = json.loads((root / "build.json").read_text())
-    if manifest.get("schema_version") != 1 or manifest.get("source_sha") != sha or manifest.get("kind") != kind:
+    producer = reference["source_sha"] if reference else sha
+    if manifest.get("schema_version") != 1 or manifest.get("source_sha") != producer or manifest.get("kind") != kind:
         raise ValueError("CI build manifest has the wrong schema or source SHA")
     if manifest.get("host") != host():
         raise ValueError("CI build and execution platform/libc differ")
@@ -90,9 +101,13 @@ def verify(root, sha, kind):
         if bool(path.stat().st_mode & 0o111) != expected["executable"]:
             raise ValueError(f"CI build product permission mismatch: {name}")
     check_required(root, kind)
+    if reference:
+        verify_reuse_options(manifest, reference, kind)
 
 
-def restore(archive, root, sha, env_file, kind):
+def restore(archive, root, sha, env_file, kind, reference=None):
+    if reference and digest(archive) != reference["sha256"]:
+        raise ValueError("reused CI artifact archive SHA256 differs")
     if root.exists():
         raise ValueError("CI build destination already exists; refusing stale files")
     root.mkdir(parents=True)
@@ -107,7 +122,7 @@ def restore(archive, root, sha, env_file, kind):
                     raise ValueError("duplicate CI build archive member")
                 seen.add(path.as_posix())
             handle.extractall(root, filter="data")
-        verify(root, sha, kind)
+        verify(root, sha, kind, reference)
         if env_file:
             values = {
                 "CI_BUILD_DIR": root,
@@ -128,6 +143,82 @@ def restore(archive, root, sha, env_file, kind):
     except Exception:
         shutil.rmtree(root)
         raise
+
+
+def reuse_reference(value, kind):
+    references = json.loads(value)
+    if not isinstance(references, dict) or not references or set(references) - set(REQUIRED):
+        raise ValueError("reuse references must name only Rust and/or web artifacts")
+    for item_kind, item in references.items():
+        keys = {"source_sha", "cache_key", "sha256", "toolchain", "build_flags"}
+        if not isinstance(item, dict) or set(item) != keys:
+            raise ValueError("incomplete CI artifact reuse reference")
+        if not isinstance(item["source_sha"], str) or not re.fullmatch(r"[0-9a-f]{40}", item["source_sha"]):
+            raise ValueError("reuse requires an exact producer SHA")
+        if not isinstance(item["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]):
+            raise ValueError("reuse requires an exact archive SHA256")
+        if not isinstance(item["cache_key"], str) or local_entry(Path("."), item["cache_key"])[2] != item_kind:
+            raise ValueError("reuse cache key has the wrong artifact kind")
+        if not isinstance(item["toolchain"], str) or not item["toolchain"].startswith("rustc ") or any(c in item["toolchain"] for c in "\r\n"):
+            raise ValueError("reuse requires the exact recorded compiler")
+        flags = item["build_flags"]
+        if not isinstance(flags, dict) or set(flags) != set(BUILD_FLAG_KEYS) or any(
+            not isinstance(v, str) or any(c in v for c in "\r\n") for v in flags.values()
+        ):
+            raise ValueError("reuse requires every recorded build flag")
+    if kind not in references:
+        raise ValueError("missing required CI artifact reuse reference")
+    return references[kind]
+
+
+def verify_source_equivalence(producer, execution):
+    """Keep the producer identity and refuse any compiled/runtime/test input drift."""
+    if any(not re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (producer, execution)):
+        raise ValueError("source equivalence requires full commit SHAs")
+    available = subprocess.run(["git", "cat-file", "-e", f"{producer}^{{commit}}"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    if available.returncode:
+        subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", producer], check=True)
+    changes = set()
+    for revisions in ((producer, execution), ("HEAD",)):
+        changed = subprocess.check_output(["git", "diff", "--name-only", "--no-renames", "-z", *revisions, "--"])
+        changes.update(name for name in changed.decode().split("\0") if name)
+    forbidden = changes - REUSE_SOURCE_EXCEPTIONS
+    if forbidden:
+        raise ValueError("CI artifact source inputs changed: " + ", ".join(sorted(forbidden)))
+    return sorted(changes)
+
+
+def verify_reuse_options(manifest, reference, kind):
+    if manifest.get("toolchain") != reference["toolchain"] or manifest.get("build_flags") != reference["build_flags"]:
+        raise ValueError("reused CI compiler/build flags differ from their pinned reference")
+    installed = subprocess.check_output(["rustc", "--version"], text=True,
+                                       env=dict(os.environ, RUSTUP_AUTO_INSTALL="0")).strip()
+    if installed != reference["toolchain"]:
+        raise ValueError("reused CI compiler differs from the execution toolchain")
+    flags = reference["build_flags"]
+    if flags["RUSTFLAGS"] or (kind == "rust" and flags["CARGO_PROFILE_TEST_DEBUG"] != "0"):
+        raise ValueError("reused CI artifact has incompatible native/test flags")
+    if kind == "web":
+        source = subprocess.check_output(["git", "show", f"{reference['source_sha']}:crates/ersatzrs-web/Cargo.toml"], text=True)
+        leptos = tomllib.loads(source)["package"]["metadata"]["leptos"]
+        output = flags["LEPTOS_OUTPUT_NAME"] or leptos.get("output-name")
+        hashed = flags["LEPTOS_HASH_FILES"] or str(leptos.get("hash-files")).lower()
+        if output != "ersatzrs-web" or hashed != "false":
+            raise ValueError("reused CI web artifact has incompatible Leptos output settings")
+
+
+def reuse_local(archive, sha, kind, reference, cache):
+    """Verify existing immutable bytes without building, relabelling or publishing."""
+    changed = verify_source_equivalence(reference["source_sha"], sha)
+    if not fetch_local(archive, reference["sha256"], reference["cache_key"], cache):
+        raise ValueError("required reused CI artifact is unavailable; no rebuild was started")
+    with tempfile.TemporaryDirectory(prefix="ci-reuse-") as temporary:
+        restore(archive, Path(temporary) / "verified", sha, None, kind, reference)
+    return {f"{kind}_cache_key": reference["cache_key"], f"{kind}_digest": reference["sha256"],
+            f"{kind}_source_sha": reference["source_sha"],
+            f"{kind}_equivalent_execution_sha": sha,
+            f"{kind}_allowed_source_changes": json.dumps(changed, separators=(",", ":"))}
 
 
 def local_entry(cache, key):
@@ -286,7 +377,7 @@ def fetch_local(archive: Path, expected_digest: str, key: str, cache: Path) -> b
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("pack", "restore", "verify", "publish-local", "fetch-local"))
+    parser.add_argument("mode", choices=("pack", "restore", "verify", "publish-local", "fetch-local", "reuse"))
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--kind", choices=("rust", "web"), required=True)
     parser.add_argument("--archive", type=Path)
@@ -299,7 +390,7 @@ def main():
     if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
         parser.error("a full source SHA is required")
     local = args.mode in ("publish-local", "fetch-local")
-    if not local and not args.directory:
+    if not local and args.mode != "reuse" and not args.directory:
         parser.error("pack/restore/verify requires --directory")
     if args.mode != "verify" and not args.archive:
         parser.error("this mode requires --archive")
@@ -310,15 +401,36 @@ def main():
     actual_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if args.sha != actual_sha:
         parser.error("execution checkout differs from the requested source SHA")
+    reuse = os.environ.get("CI_REUSE_ARTIFACTS", "")
+    reference = reuse_reference(reuse, args.kind) if reuse else None
+    if reference and args.mode in ("pack", "publish-local"):
+        parser.error("reuse cannot build or publish a replacement artifact")
+    cache = Path(os.environ.get("CI_LOCAL_ARTIFACT_CACHE", "")) if os.environ.get(
+        "CI_LOCAL_ARTIFACT_CACHE") else Path.home() / ".cache/ersatzrs/ci-artifacts"
+    if args.mode == "reuse":
+        if reference is None:
+            parser.error("reuse requires explicit CI_REUSE_ARTIFACTS references")
+        values = reuse_local(args.archive, args.sha, args.kind, reference, cache)
+        if args.output_file:
+            with args.output_file.open("a") as handle:
+                for key, value in values.items():
+                    handle.write(f"{key}={value}\n")
+        print(json.dumps(values, sort_keys=True))
+        return
+    if reference:
+        verify_source_equivalence(reference["source_sha"], args.sha)
     if local:
-        cache = Path(os.environ.get("CI_LOCAL_ARTIFACT_CACHE", "")) if os.environ.get(
-            "CI_LOCAL_ARTIFACT_CACHE") else Path.home() / ".cache/ersatzrs/ci-artifacts"
         if local_entry(cache, args.cache_key)[2] != args.kind:
             parser.error("local CI artifact cache key has the wrong kind")
         if args.mode == "publish-local":
             value = "digest=" + publish_local(args.archive, args.sha, args.kind, args.cache_key, cache)
         else:
-            value = "hit=" + str(fetch_local(args.archive, args.expected_digest, args.cache_key, cache)).lower()
+            if reference and (args.cache_key != reference["cache_key"] or args.expected_digest != reference["sha256"]):
+                parser.error("reuse fetch differs from its pinned artifact reference")
+            hit = fetch_local(args.archive, args.expected_digest, args.cache_key, cache)
+            if reference and not hit:
+                raise ValueError("required reused CI artifact is unavailable; no rebuild was started")
+            value = "hit=" + str(hit).lower()
         if args.output_file:
             with args.output_file.open("a") as handle:
                 handle.write(value + "\n")
@@ -328,10 +440,13 @@ def main():
     if args.mode == "pack":
         pack(root, args.archive, args.sha, args.kind)
     elif args.mode == "restore":
-        restore(args.archive, root, args.sha, args.env_file, args.kind)
+        restore(args.archive, root, args.sha, args.env_file, args.kind, reference)
     else:
-        verify(root, args.sha, args.kind)
-    print(f"CI build {args.mode}: verified source {args.sha}")
+        verify(root, args.sha, args.kind, reference)
+    if reference:
+        print(f"CI build {args.mode}: verified producer {reference['source_sha']} for equivalent execution {args.sha}")
+    else:
+        print(f"CI build {args.mode}: verified source {args.sha}")
 
 
 if __name__ == "__main__":

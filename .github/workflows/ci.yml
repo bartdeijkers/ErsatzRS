@@ -99,6 +99,11 @@ on:
         type: boolean
         required: false
         default: false
+      reuse_artifacts:
+        description: Exact local artifact references as JSON (self-hosted focused recovery only; fails closed without rebuilding)
+        type: string
+        required: false
+        default: ''
 
 # Bursty pushing is common here (44% of recent consecutive commits landed
 # <10 min apart). On the single self-hosted runner that queues full clippy+test
@@ -130,6 +135,7 @@ env:
   # Same-host runners share the user's cache by default. Other machines safely
   # miss this cache and download the unchanged GitHub artifact instead.
   CI_LOCAL_ARTIFACT_CACHE: ${{ vars.CI_LOCAL_ARTIFACT_CACHE }}
+  CI_REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}
 
 jobs:
   # A direct fast-forward merge gives main the exact commit a feature-branch
@@ -154,9 +160,14 @@ jobs:
       skip: ${{ steps.duplicate.outputs.skip }}
     steps:
       - name: Reject mixed audit mode
-        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures')) }}
+        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts) }}
         run: |
           echo "::error::audit_only cannot be combined with another focused CI mode"
+          exit 1
+      - name: Reject unfocused artifact reuse
+        if: ${{ inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+        run: |
+          echo "::error::artifact reuse is restricted to an explicit focused recovery"
           exit 1
       - id: duplicate
         uses: actions/github-script@v9
@@ -251,7 +262,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   build:
-    name: Build CI artifacts
+    name: ${{ inputs.reuse_artifacts && 'Verify reused CI artifacts' || 'Build CI artifacts' }}
     needs: [preflight, fmt]
     if: ${{ always() && !cancelled() && !inputs.audit_only && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
@@ -259,18 +270,20 @@ jobs:
     outputs:
       rust_artifact: ${{ steps.identity.outputs.rust_artifact }}
       web_artifact: ${{ steps.identity.outputs.web_artifact }}
-      rust_cache_key: ${{ steps.identity.outputs.rust_cache_key }}
-      web_cache_key: ${{ steps.identity.outputs.web_cache_key }}
-      rust_digest: ${{ steps.identity.outputs.rust_digest }}
-      web_digest: ${{ steps.identity.outputs.web_digest }}
+      rust_cache_key: ${{ steps.reuse.outputs.rust_cache_key || steps.identity.outputs.rust_cache_key }}
+      web_cache_key: ${{ steps.reuse.outputs.web_cache_key || steps.identity.outputs.web_cache_key }}
+      rust_digest: ${{ steps.reuse.outputs.rust_digest || steps.identity.outputs.rust_digest }}
+      web_digest: ${{ steps.reuse.outputs.web_digest || steps.identity.outputs.web_digest }}
+      rust_source_sha: ${{ steps.reuse.outputs.rust_source_sha || github.sha }}
+      web_source_sha: ${{ steps.reuse.outputs.web_source_sha || github.sha }}
     env:
       CARGO_BUILD_JOBS: "1"
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: ${{ inputs.runner == 'github-hosted' && '-C link-arg=-fuse-ld=lld' || '' }}
       LEPTOS_OUTPUT_NAME: ersatzrs-web
       LEPTOS_HASH_FILES: "false"
-      BUILD_RUST: ${{ !inputs.browser_only || inputs.browser_only == 'none' }}
-      BUILD_WEB: ${{ !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
+      BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') }}
+      BUILD_WEB: ${{ !inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     steps:
       - name: Validate dispatch mode
         env:
@@ -279,9 +292,12 @@ jobs:
           TELETEXT_ONLY: ${{ inputs.teletext_only }}
           BROWSER_ONLY: ${{ inputs.browser_only }}
           BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
+          REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}
+          RUNNER_POOL: ${{ inputs.runner }}
+          RESET_TARGET_DIR: ${{ inputs.reset_target_dir }}
         run: |
           python3 - <<'PYCODE'
-          import os
+          import json, os
           modes = [os.environ[key] == 'true' for key in ('TEST_ONLY', 'NEXT_ONLY')]
           modes += [os.environ[key] not in ('', 'none') for key in ('TELETEXT_ONLY', 'BROWSER_ONLY')]
           if sum(modes) > 1:
@@ -291,25 +307,43 @@ jobs:
               raise SystemExit('Unknown browser recovery case set')
           if case_set != 'fixtures' and os.environ['BROWSER_ONLY'] in ('', 'none'):
               raise SystemExit('Browser recovery case set requires browser_only')
+          if os.environ.get('REUSE_ARTIFACTS'):
+              if sum(modes) != 1 or os.environ.get('RUNNER_POOL') != 'self-hosted' or os.environ.get('RESET_TARGET_DIR') == 'true':
+                  raise SystemExit('Artifact reuse requires one self-hosted focused mode without target reset')
+              if not isinstance(json.loads(os.environ['REUSE_ARTIFACTS']), dict):
+                  raise SystemExit('Artifact reuse references must be a JSON object')
           PYCODE
       - uses: actions/checkout@v7
+      - name: Reuse verified CI artifacts
+        id: reuse
+        if: ${{ inputs.reuse_artifacts != '' }}
+        env:
+          REUSE_KINDS: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'web' || (inputs.test_only || inputs.next_engine_only || inputs.teletext_only == '1.5-rust') && 'rust' || 'rust web' }}
+        run: |
+          mkdir -p ci-artifacts
+          for kind in $REUSE_KINDS; do
+            python3 scripts/ci-build-artifacts.py reuse --kind "$kind" --sha "$GITHUB_SHA" \
+              --archive "ci-artifacts/$kind.tar.gz" --output-file "$GITHUB_OUTPUT"
+          done
       - uses: dtolnay/rust-toolchain@1.97.1
+        if: ${{ !inputs.reuse_artifacts }}
         with:
           targets: wasm32-unknown-unknown
       - name: Reset persistent target-dir (manual escape hatch)
-        if: ${{ inputs.reset_target_dir == true }}
+        if: ${{ inputs.reset_target_dir == true && !inputs.reuse_artifacts }}
         run: rm -rf "$CARGO_TARGET_DIR"
       - uses: Swatinem/rust-cache@v2
-        if: ${{ inputs.runner == 'github-hosted' }}
+        if: ${{ inputs.runner == 'github-hosted' && !inputs.reuse_artifacts }}
         with:
           key: ci-build
           cache-bin: "true"
       - name: Install LLVM linker
-        if: ${{ inputs.runner == 'github-hosted' }}
+        if: ${{ inputs.runner == 'github-hosted' && !inputs.reuse_artifacts }}
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes lld
       - name: Install build tools
+        if: ${{ !inputs.reuse_artifacts }}
         run: |
           if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
             cargo install stylance-cli --version 0.8.2 --locked
@@ -321,6 +355,7 @@ jobs:
             cargo install cargo-leptos --version 0.3.6 --locked
           fi
       - name: Build CI helper executables
+        if: ${{ !inputs.reuse_artifacts }}
         run: |
           git diff --exit-code
           cargo build --locked -p xtask --bin xtask
@@ -354,6 +389,7 @@ jobs:
             --archive ci-artifacts/web.tar.gz --sha "$GITHUB_SHA"
       - name: Record immutable artifact names
         id: identity
+        if: ${{ !inputs.reuse_artifacts }}
         run: |
           echo "rust_artifact=ci-rust-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           echo "web_artifact=ci-web-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
@@ -394,7 +430,7 @@ jobs:
           compression-level: 0
           retention-days: 7
       - name: Bound completed self-hosted build cache
-        if: ${{ inputs.runner != 'github-hosted' }}
+        if: ${{ inputs.runner != 'github-hosted' && !inputs.reuse_artifacts }}
         run: |
           # All consumers use uploaded/local immutable copies, never this target.
           cache_kib=$(du -sk -- "$CARGO_TARGET_DIR" | awk '{print $1}')
@@ -425,7 +461,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -485,7 +521,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -608,7 +644,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -722,7 +758,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.web_artifact }}
           path: ci-input
