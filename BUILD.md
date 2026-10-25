@@ -474,6 +474,15 @@ For a correction confined to the Next engine gate, dispatch its existing job:
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f next_engine_only=true
 ```
 
+For the isolated subtitle-NUL fixture failure, add `-f next_case_set=subtitle-nul`
+and the verified Rust `reuse_artifacts` reference. This selects exactly
+`real_native_next_nul_extraction_and_existing_cache_preserve_selected_captions`
+with its unchanged assertions and retains runtime staging plus both subsequent
+Next playback smoke checks. It does not repeat the other passing Next tests.
+The nondefault case set requires `next_engine_only=true`, uses a separate
+concurrency group, and appears as `CI (Next subtitle-NUL recovery)`. The default
+`next_case_set=all` preserves the complete selection.
+
 The run is titled `CI (Next engine only)`. It runs the unchanged Next runtime
 staging, regression tests and playback checks, while skipping unrelated jobs.
 Its concurrency group is separate from normal CI, so it cannot cancel a full

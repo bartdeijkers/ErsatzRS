@@ -34759,6 +34759,25 @@ already-tested binaries without compilation. Passing runtime/browser evidence
 against those unchanged producer binaries remains valid. This is a CI guard
 correction, with no release or feature work.
 
+Current Next run40178558343 finishes with451/452 passing; the sole failure is
+real_native_next_nul_extraction_and_existing_cache_preserve_selected_captions,
+at subtitle_nul_runtime_tests.rs:218: the temporary SQLite memory fixture reports
+no Subtitle table after earlier Subtitle queries/extraction already succeeded.
+The452-case archive remains valid and immutable. Bounded source inspection
+finds SQLx0.9's documented sole-memory-connection cancellation hazard and a
+callback listener abort between test iterations; the log does not prove that
+exact race occurred. No deterministic subtitle/product defect is demonstrated.
+Preserve the negative and reuse the451 passes. One unchanged isolated retry is
+the next evidence trial; an identical repeat must end unchanged retries and
+trigger the bounded fixture correction. Both following CI playback smokes were
+unexecuted after the failure and remain required.
+
+The bounded next_case_set=subtitle-nul selector now chooses exactly that test,
+requires Next-only mode and leaves both following smokes intact. Default full
+selection, assertions, deadlines and zero automatic retries are unchanged.
+35 workflow/artifact guards,9 selector checks and actionlint pass. This is
+CI-only recovery using the existing archive; no compilation or release occurs.
+
 Missing functionality/source disposition:
 - Complete managed adoption of Next's published copied-caption and selected-audio
   corrections on the four non-Mac platforms. macOS retains original rs.4 under

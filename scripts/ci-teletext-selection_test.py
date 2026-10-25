@@ -47,6 +47,17 @@ class BrowserOwnership(unittest.TestCase):
                 self.assertEqual(owners(path.as_posix()), ["2.5"])
 
 
+class NextRecovery(unittest.TestCase):
+    def test_default_preserves_full_next_filter_and_recovery_names_one_exact_test(self):
+        self.assertEqual(selection.next_recovery_filter("all"), selection.rust_filter("next"))
+        expected = ("test(=next_engine::process::runtime_tests::subtitle_nul_runtime_tests::"
+                    "real_native_next_nul_extraction_and_existing_cache_preserve_selected_captions)")
+        self.assertEqual(selection.next_recovery_filter("subtitle-nul"), expected)
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/ci-teletext-selection.py"),
+                                 "next-recovery", "subtitle-nul"], text=True, capture_output=True, check=True)
+        self.assertEqual(result.stdout.strip(), expected)
+
+
 class BrowserRecovery(unittest.TestCase):
     def test_existing_fixture_selection_is_unchanged(self):
         self.assertEqual(selection.browser_recovery_args("fixtures"), [
@@ -93,7 +104,10 @@ class BrowserRecovery(unittest.TestCase):
             self.assertEqual(owners(spec), ["1.5"])
 
     def test_cli_refuses_unknown_and_mixed_selections_without_output(self):
-        for args in (("browser-recovery", "unknown"), ("browser-recovery", "general"),
+        for args in (("next-recovery", "next"), ("next-recovery", "subtitle-nul", "--next-runtime"),
+                     ("rust", "subtitle-nul"), ("browser", "subtitle-nul"),
+                     ("browser-recovery", "subtitle-nul"), ("next-recovery", "unknown"),
+                     ("browser-recovery", "unknown"), ("browser-recovery", "general"),
                      ("rust", "channel-preview"), ("browser", "channel-preview"),
                      ("rust", "teletext-1.5"), ("browser", "teletext-1.5"),
                      ("rust", "teletext-runtime"), ("browser", "teletext-runtime"),

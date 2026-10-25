@@ -68,6 +68,15 @@ def rust_filter(suite, next_runtime=False):
     return f"{selected} & not {next_engine}"
 
 
+def next_recovery_filter(case_set):
+    if case_set == "all":
+        return rust_filter("next")
+    if case_set == "subtitle-nul":
+        return ("test(=next_engine::process::runtime_tests::subtitle_nul_runtime_tests::"
+                "real_native_next_nul_extraction_and_existing_cache_preserve_selected_captions)")
+    raise ValueError("unknown Next recovery case set")
+
+
 def browser_filter(suite):
     teletext = r"[^/]*teletext[^/]*\.spec\.ts$"
     enhanced = "(" + "|".join(ENHANCED_SPECS) + r")\.spec\.ts$"
@@ -94,11 +103,18 @@ def browser_recovery_args(case_set):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("kind", choices=("rust", "browser", "browser-recovery"))
+    parser.add_argument("kind", choices=("rust", "browser", "browser-recovery", "next-recovery"))
     parser.add_argument("suite", choices=("general", "1.5", "2.5", "all", "next",
-                                          "fixtures", "channel-preview", "teletext-1.5", "teletext-runtime"))
+                                          "fixtures", "channel-preview", "teletext-1.5", "teletext-runtime", "subtitle-nul"))
     parser.add_argument("--next-runtime", action="store_true")
     args = parser.parse_args()
+    if args.kind == "next-recovery":
+        if args.suite not in ("all", "subtitle-nul") or args.next_runtime:
+            parser.error("Next recovery requires all or subtitle-nul without --next-runtime")
+        print(next_recovery_filter(args.suite))
+        return
+    if args.suite == "subtitle-nul":
+        parser.error("subtitle-nul requires Next recovery")
     if args.kind == "browser" and args.suite not in ("general", "1.5", "2.5"):
         parser.error("browser selection requires general, 1.5 or 2.5")
     if args.kind == "browser-recovery":

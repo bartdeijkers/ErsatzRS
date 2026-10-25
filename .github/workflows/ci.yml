@@ -1,5 +1,5 @@
 name: CI
-run-name: ${{ inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
+run-name: ${{ inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && inputs.next_case_set == 'subtitle-nul' && 'CI (Next subtitle-NUL recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
 
 on:
   pull_request:
@@ -63,6 +63,14 @@ on:
         type: boolean
         required: false
         default: false
+      next_case_set:
+        description: Bounded Next recovery cases (nondefault requires next_engine_only)
+        type: choice
+        required: false
+        default: all
+        options:
+          - all
+          - subtitle-nul
       teletext_only:
         description: Run selected teletext jobs (1.5-rust excludes browsers; partial CI; incompatible with other focused modes)
         type: choice
@@ -113,7 +121,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && format('-next-engine-only{0}', inputs.next_case_set == 'subtitle-nul' && '-subtitle-nul' || '') || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -160,7 +168,7 @@ jobs:
       skip: ${{ steps.duplicate.outputs.skip }}
     steps:
       - name: Reject mixed audit mode
-        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts) }}
+        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts || (inputs.next_case_set && inputs.next_case_set != 'all')) }}
         run: |
           echo "::error::audit_only cannot be combined with another focused CI mode"
           exit 1
@@ -289,6 +297,7 @@ jobs:
         env:
           TEST_ONLY: ${{ inputs.test_only }}
           NEXT_ONLY: ${{ inputs.next_engine_only }}
+          NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
           TELETEXT_ONLY: ${{ inputs.teletext_only }}
           BROWSER_ONLY: ${{ inputs.browser_only }}
           BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
@@ -302,6 +311,11 @@ jobs:
           modes += [os.environ[key] not in ('', 'none') for key in ('TELETEXT_ONLY', 'BROWSER_ONLY')]
           if sum(modes) > 1:
               raise SystemExit('Focused CI modes are mutually exclusive')
+          next_case_set = os.environ.get('NEXT_CASE_SET', 'all')
+          if next_case_set not in ('all', 'subtitle-nul'):
+              raise SystemExit('Unknown Next recovery case set')
+          if next_case_set != 'all' and os.environ['NEXT_ONLY'] != 'true':
+              raise SystemExit('Next recovery case set requires next_engine_only')
           case_set = os.environ['BROWSER_CASE_SET']
           if case_set not in ('fixtures', 'channel-preview', 'teletext-1.5', 'teletext-runtime'):
               raise SystemExit('Unknown browser recovery case set')
@@ -572,8 +586,10 @@ jobs:
           python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/next-engine/rtsp-test-server.log
           echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
       - name: Next components, real-engine decoding and HTTP EOF
+        env:
+          NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
         run: |
-          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py rust next) & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/next-engine/tests.log
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py next-recovery "$NEXT_CASE_SET") & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
