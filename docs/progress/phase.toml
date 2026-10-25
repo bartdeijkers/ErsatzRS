@@ -165,7 +165,7 @@ ordinary Native MPEGTS Live caller attaches that same reservation before later
 selection/spawn. Three Unix native process controls and existing HTTP/EOF route
 Off/Burn/Dutch660Hz/defaultcapacity2/cleanup tests pass. Shared observed-track
 selection is an unchanged move to infra. Current strict infra/web lint and format pass;76 static transport
-controls pass (57new/19byte-identical reuse). Its local checkpoint follows; canonical native-hls-caption/qualification.json records SHA,
+controls pass (57new/19byte-identical reuse). Local checkpoint200dcf52 is complete; canonical native-hls-caption/qualification.json records SHA,
 unchanged foreign baseline and remaining uncommitted HLS files.
 
 Native HLS candidate4 proved888 versus200/plain/audio/cleanup, but the bounded
@@ -180,12 +180,15 @@ retain only their actual scopes; no exact Live source-clock claim follows.
 
 Next qualify original-PTS input and consumer policy on the same sources, using
 existing MPEGTS fix_teletext_pts0 and HLS child-format controls without extra
-source consumption. Direct/HLS options differ; RTSP parser default0 is currently
-source inspection only. Require raw-PES equality and source-derived onset/clear,
+source consumption. Direct/HLS options differ. Actual RTSP capability now preserves all56 PES
+PTS/DTS/payload packets through the pinned TCP origin, with one source send and
+zero active clients/media after cleanup. Require raw-PES equality and source-derived onset/clear,
 same-response reentry cues, AV/audio and actual cleanup. No cap/timeout increase,
 favorable seek/sample, ordinary-playback damage, permanent source exclusion or
-unbounded decoder maintenance. Record a precise runtime capability/maintainer
-prerequisite if these existing mechanisms cannot supply a safe policy. The
+unbounded decoder maintenance. Implement the smallest opt-in per-input original-PTS policy; qualify a managed
+runtime flag forwarded to nested demuxers if existing format-specific options
+cannot carry it uniformly. Preserve defaults and reject unrecognized required
+flags before source consumption on older runtimes; adoption stays a separate gate. The
 canonical receipt owns exact inputs/options/negatives and the bounded next action.
 Preserve all ten foreign edits. No push/publication or Cartesian variant queue.
 
