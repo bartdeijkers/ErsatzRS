@@ -1213,6 +1213,16 @@ missing optional capability becomes a blocking warning/error only when selected
 teletext operations require it. Reuse acquisition, bounded process execution
 and refresh/capability cache ownership. No UCU platform exception is inherited.
 
+Source-clock handling must preserve declared teletext PES timestamps across the
+one-source producer and actual consuming demuxer without guessing URL formats.
+The first-party opt-in `-fflags +preserve_teletext_pts` contract (common patch0019)
+leaves default PCR repair and DVB subtitle behavior unchanged, and HLS inherits
+it through existing child format flags. Bind capability to the exact runtime
+before selecting this operation; older runtimes reject the unknown flag before
+source opening. Missing support must remain explicit and preserve ordinary AV.
+Candidate verification is separate from application wiring, Health reporting,
+managed adoption and the required-platform acceptance owned by P9A-02/04.
+
 ### Routes, administration and accessibility
 
 Provide an authenticated management viewer for a configured channel/service,

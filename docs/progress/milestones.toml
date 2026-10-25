@@ -16147,6 +16147,35 @@ Smallest necessary work: After r1, finish only named missing native/Next Burn/Co
 Testable stop condition: Every reconciled mandatory F5/L15-E1 source-output cell passes its exact positive/refusal and lifetime oracles with unchanged audio/subtitle safety; no full-platform or managed adoption inference.
 '''
 evidence = '''
+Completed F5 original-PES runtime component (2026-10-26): first-party FFmpeg
+checkpoint 4a206f08f52ac6f10915024ce808ef77d25a9ba7 adds optional
+-fflags +preserve_teletext_pts without changing defaults or DVB subtitle repair.
+An isolated offline Linux x64 build preserves every existing FFmpeg207 correction;
+accepted source/packages and application pins remain unchanged. New executable
+26a01625635b3ac5832cb3967d877ca9317976ff03739ec8fc1b528e4ae4b094 passes the
+existing bounded decoder verifier plus56 original fixture PTS/DTS values and16
+relevant verifier regressions. The unchanged e5817730 incident source passes
+direct MPEGTS and nested HLS: all306 packets on four tracks, their PTS/DTS and
+payload hashes exactly match the original source, including18 teletext packets.
+Four decoded complete caption/video rasters equal the existing original-clock
+reference byte-for-byte. Both default remuxes remain byte-identical to published
+207, and a real DVB-subtitle remux retains all-track default packet behavior.
+The existing RTSP trial with the opt-in candidate preserves all56 original
+PTS/DTS/payload packets over one source-send and joins zero-active-client/media
+cleanup; the initial sandbox socket refusal remains a tooling negative.
+Published207 still passes its unchanged decoder gate and rejects the new flag
+before opening the source. Canonical receipt:
+tmp/phase9-next-local-teletext/provider-scan/so2-live-url/native-hls-caption/original-pts-runtime/qualification.json
+with sibling rtsp/qualification.json, tests.log and old-runtime controls.
+This closes uniform per-input runtime control and its Linux candidate proof;
+ordinary-route clock recovery, exact-runtime capability/Health selection,
+producer/consumer wiring, required-platform proof and managed adoption remain
+with their existing owners. Next connect this opt-in through the existing
+runtime report and one-source producer/consumer ownership, preserving old-runtime
+refusal, ordinary AV, selected audio, bounded admission and joined cleanup.
+No source-format guesses, reopened origins, changed samples, limits/timeouts,
+production pin change, Mac execution, push or publication are authorized here.
+
 Status: In progress. Native HTTP/RTSP MPEG-TS caption delivery is completed at58fbc948. The SO2-HLS input/actual-EOF component below is completed within Linux x86_64/software. Existing components retain their explicit boundaries; Native Live HLS source-caption output now has the concrete plain-Burn defect recorded below, and platform/adoption joins retain their primary owners. Canonical provider-scan/identity.json ucu12_rejoin_followup owns the controlled merge and accepted-source comparison. Matrix authority remains ADR0121 four output rows/five lifecycle rules, without a Cartesian variant requirement.
 SO1 current207 public-HLS compatibility completed: the original unchanged grouped test now passes segmenter-Off, segmenter-Burn and ordinary direct-Burn on exact accepted FFmpeg2525a173/ffprobe113513a6. The original synthetic sourcef9b79001 and HLS test body remain byte-exact. Actual public master/session/closed segments retain888 versus200/plain raster, selected nld660Hz, default capacity and joined cleanup; all57 existing structural/clock/continuity controls pass. Canonical native_public_hls_followup.current_runtime_207 and so1-current-runtime/qualification.json own current tools/captures and original receipt reuse. The new runtime has affected bitmap heartbeat changes, so this specifically replaces missing current-runtime integration evidence; it is not new functionality or a new variant. Existing lint/source/ownership and unrelated editor/client proofs retain their scope; VBR jitter stays informational.
 SO2-H/R current207 Native MPEG-TS network-caption component is completed within Linux x86_64/software. Fresh-host Legacy/Hybrid MPEG-TS and Local-input HLS-output smoke, strict affected infra/web all-target lint, architecture and progress checks pass; the HLS-output smoke does not prove HLS input. The exact resolved Remote Stream version must advertise dvb_teletext, and the existing embedded-subtitle policy applies before inspection. One existing managed FFmpeg producer copies every input track and source timestamp into the unchanged bounded fresh-prefix/page selector and final shared-input binding. No output profile/encoder, source reopen between probe/playback, persisted readiness or package activation is introduced. Actual direct HTTP and RTSP/TCP Off/Burn preserve the original independent1.6s888 versus200/plain raster, H264/AAC, selected nld660Hz, defaultcapacity2 and joined source/work/host cleanup. RTSP uses the qualified GStreamer1.24.2 staticRTP33 original-TS source: two requests produce exactly two source sends/connections, zero active media/clients and joined tool exit0. The unchanged Live Addon route also passes. All three Off captures are byte-exact3a3db85d and reuse57 existing transport controls; three new Burn captures pass57 new controls. Six focused regressions and reviewed HTTP/RTSP argv snapshots cover owner/version/type admission, embeddedOff, finite/protocol noSQL, named native environment forwarding and redacted proxy failure text. Original ece4dca4 reproduction and both metadata-deleting/corrected negatives stay closed/preserved; no speculative source authority is inherited. The actual RTSP ordinary-Off failure exposed an existing unsupported rw_timeout option; the supported demuxer timeout retains the exact30000000microsecond bound for rtsp/rtsps, with unchanged HTTP arguments. Canonical native_streaming_lifecycle_followup.direct_url_qualification.repair and so2-live-url/streamcopy-adoption/qualification.json own exact code/tool/source/capture pins, scoped reuse and negatives. This proves the named MPEG-TS output component, not all source/output lifecycles or client/platform acceptance. The original MediaMTX teletext-SDP source-tool limit remains retained without decoder maintenance.

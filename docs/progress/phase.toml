@@ -71,9 +71,14 @@ resume only with explicit permission, not merely a visibility change. All
 functional Level 2.5/fallback/QTeletextMaker and engine-first gates stay mandatory.
 The current package remains p9a-source-output F5: connect qualified original-PES
 clock handling to the existing one-source producer/consumer path, preserving AV,
-selected captions/audio and joined cleanup. ef017b78 closes only input-capability
-characterization; no clock correction or runtime adoption is claimed. The Mac
-scope amendment is a completed registration/CI component, not platform acceptance.
+selected captions/audio and joined cleanup. Runtime component4a206f08 now closes
+the uniform optional input control: direct/nested HLS retain all306 source
+packets/four tracks, four complete caption/video rasters equal the declared-clock
+reference, RTSP retains56 packets/one source/joined cleanup and old runtimes
+reject the flag before input. p9a-source-output owns exact candidate receipts.
+Next wire exact-runtime capability/Health and producer/consumer selection;
+ordinary-route recovery and managed adoption are not yet claimed. The Mac scope
+amendment6095aa09 is completed policy/CI work, not platform acceptance.
 Older six-platform next actions below are historical where this scope supersedes
 them; retain all valid evidence and independently required Windows/ARM work.
 
