@@ -43,6 +43,12 @@ Per-RID version, release tag and patch identity are resolved together for
 download, cache, provenance and reported runtime version; they do not weaken
 archive or payload checks. Application adoption and affected CI remain pending.
 
+UCU-12 acceptance is complete within that approved scope. Source-bound local
+and CI evidence is recorded in milestone ucu-12; the deferred macOS component
+and unavailable hardware remain unverified. This does not turn the partial
+six-platform implementation into verified all-platform delivery. Latest
+maintainer scope permits CI and source merge only, without further releases.
+
 ## Context
 
 UCU-12 is bounded by ErsatzTV v26.11.4, rows237–254. Row246 adopts upstream

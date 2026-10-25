@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'UCU-12 — focused CI recovery and combined runtime qualification; macOS deferred'
+current_focus = 'Phase 9A — continue teletext acceptance on the accepted UCU-12 base'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,205 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Active UCU-12 window (maintainer2026-10-24) is isolated on feat/ucu-12,
-fixed rows237–254/v26.11.4. Milestone ucu-12 owns the finite completion list
-and decisions. Row237 Linux renderer/signature/actual-preview components pass
-11 canvas,36 infrastructure and2 real Next023 cases, with strict affected
-all-target lint. Both unchanged official023 RTSP/WebP retirement sentinels
-fail, so both existing patches remain. The local023 source passes384 tests
-(two existing hardware checks skipped). A demonstrated host GLIBC2.38 load
-failure is corrected by rebuilding exact source in cached Bookworm; startup
-and pinned FFmpeg discovery pass there. Corrected candidate passes all three
-decoded WebP/source-clock/RTSP-handoff sentinels serially (milestone owns exact
-identity and retained negatives). Seven upstream bitmap/copy/canvas software
-checks and the application's four-mode Dutch bitmap matrix also pass.
-The real active-refresh Linux proof now passes: correctly sought picture,
-Dutch audio, consecutive programme clock/sequence and owned cleanup. Original
-black fallback is attributed to an exhausted fixture interval, not a runtime
-repair; exact history and strict affected lint are retained in the milestone.
-Windows native build/version proof and local Linux/Windows rs.1 packaging now
-pass, with exact reviewed compiler/companion pins and12 source/package guards.
-The minimal rs.2 worker security correction now passes the unchanged advisory
-policy across all six target graphs,18 provenance guards,384 source tests,
-seven software checks and all five application/two web-host playback checks.
-Bookworm and native Windows builds/version plus both local packages pass;
-the milestone owns exact identities, audit scope and retained negatives.
-Native Windows software/CUDA geometry now passes13 existing decode checks and
-two positioned/full BGRA CUDA canvas checks on the available RTX3080Ti, with
-strict device/use assertions and reverified published FFmpeg2.0.6 tools.
-Linux4K/TrueHD late-first-PGS proof now passes through actual Native commands
-and the real Next host. Native gains the source-scoped initial PGS canvas hint;
-the milestone retains measured Off/Burn costs, decoded pre/post-cue picture,
-Dutch audio, ownership, cleanup, strict lint and unchanged30s Next budget.
-Requested-QSV/no-Intel fallback now passes through the real Linux host and
-native Windows worker, including actual VPL/no-hardware diagnostics, software
-argv, decoded Dutch audio/subtitles and cleanup; stored QSV stays unchanged.
-Row246 audit proves the published heartbeat defect and missing VT/ARM64 runtime
-corrections. ADR0128 is accepted for FFmpegv2.0.7, private Next MPP and
-driver-readiness fallback; local implementation/build/test is authorized.
-Rockchip RKMPP/RGA, Intel QSV HDR, AMD VAAPI and macOS VideoToolbox captions
-remain explicit maintainer-approved unverified hardware debt. Builds, software,
-checksums and other acceptance remain required; no delivery authority is inferred.
-Rows245/247 projection/upgrade/ordinary rescan and available Linux Next
-SDR/HDR Dutch audio/caption components are complete, with affected infra/web
-lint and Media Info repository/JSON checks. Row248's available localized time-input/Play/Stop and row247 Media Info browser
-components now pass3 focused Rust and28 headed Chromium/Firefox checks, with
-strict web lint, matched SSR/WASM and inspected light/dark320px captures.
-Row250's available Linux fresh-extraction/legacy-repair Native+Next caption,
-pre-listener repair/retry and localized Health browser components pass, with29
-cache/localization regressions and strict affected lint. Row251's first built-in
-Next default and explicit Native preservation pass initialization, browser and
-real restart checks. Twelve named headed cases are covered by11 initial passes
-and one focused Firefox readiness correction/recovery; source/assets match.
-Rows239/252/254 source dispositions and the upload archive/service audit are
-complete. Upload adoption awaits a maintainer service decision. The owned
-oversized Cargo target is cleaned only after process-user checks; tested
-candidates/evidence, Next SDK and shared caches are retained. Native Windows
-source/runtime, upgrade, lint/render and extracted-application startup/restart
-components now pass. Nine failed headed cases recover after matching frontend
-type-erasure flags and installed browser tooling; three unchanged no-JS passes
-are reused. Real Native Save and readonly-cache retry survive restart with
-Health recovery and graceful owned shutdown. The affected Linux shared-reader/
-cache recovery passes27 focused checks, actual Native/Next captions, changed
-drawvg rendering and strict affected lint. Row253 and intermediate pin-source
-dispositions are complete; source54c6cb9 candidate qualification stays distinct
-from the active022 managed pin and the separate teletext adoption owner.
-Current-source Linux startup/readonly retry, matched bundle and two headed
-Health cases pass; Native93/Next-copy86 unchanged TSDuck controls pass. The
-native fixture explicitly selects its engine after the new Next first-channel
-default. A baseline read-only test annotation restores architecture verification;
-hydration retains its31-case baseline. Strict workspace lint passes. The one
-full nextest run has8206 passes and seven failures; recovery is confined to
-two fixture-environment assertions, two stale oracles and three transient
-remote callbacks. All seven now have passing focused recovery; actual remote
-HTTP playback/revocation, doctests and affected strict lint pass. This closes
-composed current-application regression proof, not a new full-suite/CI run.
-The active row246 runtime component has four locally built, checksummed
-FFmpeg2.0.7 and Next023rs.4 packages. Their available software gates pass,
-including actual ARM64 no-device fallback with scaled video, Dutch audio and
-captions. Native macOS candidates need separately authorized source pushes/CI.
-Managed companion/lock and actual four-archive installation/relocation/bundle
-checks pass. Eight affected application playback regressions and Native93/
-Next-copy86 TSDuck checks pass against the exact new runtime pair. Two affected
-native Windows SDK CUDA canvas checks also pass with FFmpeg207; this is scoped
-GPU pipeline proof, not a new worker/application build. Native/Next-Convert
-smoke pass; the Native helper explicitly selects its engine. The required
-application audit exposed Tokio1.53.1: the minimal1.53.3 lock correction passes
-all audit categories and21 focused installer/playback checks. The corrected
-lock also passes8215 workspace tests, doctest execution and strict workspace
-lint. A fresh matching frontend/current server pair passes its bundle gate
-and30 affected headed Chromium/Firefox cases. Progress/architecture/hydration
-and Native93/Next-copy86 TSDuck plus Native/Next-Convert smoke pass on that
-corrected host. Earlier receipts keep their original identity. Current local
-gates are complete; no further source correction is identified. Six-RID
-managed distribution/adoption and final adopted-source integration remain open.
-The source-candidate pushes/four existing macOS jobs are now authorized.
-Next run40097966742 passes both native builds and artifact verification; all
-six Next rs.4 kits exist. FFmpeg setup failures are corrected minimally with
-compatible pinned Homebrew tool/core/Cask data; only its two failed checks
-were retried in run40100966278. Intel hits the2h LLVM bootstrap timeout;
-ARM64 exposes an unsupported dependency-query flag. The corrected complete
-union/stderr recipe passes dependency inventory and libzvbi construction.
-The captured Cairo probe identifies missing pinned pkg-config providers;
-All19 graphics metadata modules, Cairo and native tool compilation now pass,
-as do relocation/signing construction and library-owner checks. Missing CA
-notices are corrected by preserving the exact public source/full checked MPL
-text, which passes natively. GLib notice discovery is corrected for SPDX
-layouts and internal links;21 focused guards pass. ARM64-only40115372297 owns
-complete notices and remaining strict package/software gates before an Intel
-retry with its6h bound. Both native FFmpeg software checks remain required/open.
-The exact tested binary/site remain outside mutable build output. Dependent packages
-include the now-authorized ADR0128 local runtime build. Accepted ADR0129
-records the explicit Download Results-only deviation for rows242–244;
-upload-only encryption/guidance is not applicable and Native remains supported.
-The three requested maintainer decisions are resolved.
-Six-RID qualification/distribution and final adopted-runtime integration remain
-open; no UCU12 delivery/publication authority is inferred.
-The maintainer subsequently directed skipping macOS builds until further
-instruction. No UCU12 macOS job remains running or queued; no new Mac build or
-retry is permitted until explicit resume. Complete Mac package/software and
-Intel native acceptance remain deferred/unverified under the owning milestone,
-without waiving them or expanding hardware debt. Continue independent non-Mac
-runtime distribution/adoption when separately authorized for publication.
-The maintainer subsequently approved exact Next rs.4 asset publication and the
-FFmpeg draft/four existing non-Mac package checks, then identical-byte2.0.7
-publication only on green. FFmpeg run40117309596 passes all four non-Mac checks
-at sourceaa14713e. Stable v2.0.7 publishes the same10 frozen assets; all anonymous
-hashes pass. All25 Next rs.4 assets are also published and anonymously verified.
-The local application now pins published Next023rs.4 and FFmpeg2.0.7;45 Python
-checks,26 composed runtime-manager checks and9 real bundle-layout cases pass.
-Current Linux and Windows hosts pass ordinary public cold acquisition and
-same-state Managed restart of both published runtimes, with exact hashes and
-unchanged installation/cache files. Both Linux playback smokes,30 affected
-headed cases, the matched bundle and179 Native/Next TSDuck checks pass. All four
-selected native Windows decoded/lifecycle cases pass on current Tokio1.53.3.
-Strict workspace/all-target Clippy, structural gates and11-library doctest
-execution pass. The original workspace run finishes with8209 passes and only
-six environment-contaminated mock installer failures; those six pass focused
-recovery with accidental playback overrides removed. Thus all8215 selected
-cases have passing composed evidence;502 existing manual/ignored skips remain.
-The original run's nonzero exit is retained, not described as single-run green
-CI. No further independent local acceptance work remains for this checkpoint.
-Native macOS FFmpeg/software/dependent application evidence stays deferred and
-unverified until explicit maintainer resume. UCU-12 remains In progress and its
-accepted baseline stays row236/v26.11.3. Milestone ucu-12 owns exact receipts and
-the finite remaining list; no whole-workspace or unchanged runtime rerun needed.
-UCU10/11 remain Complete. Subsequent explicit approval authorizes feature push
-and application CI: dcd9f036 is pushed and run40128284373 is live with caches
-preserved. Its first five fast/source checks pass, but Cargo deny identifies
-RUSTSEC-2026-0387 through JWT's RustCrypto backend. A native-web-only supported
-AWS-LC backend correction removes that graph and the obsolete RSA exception;
-local audit passes without a new ignore/licence exception. Focused Linux/Windows
-auth proof now passes20 cases on each platform, including native Windows C
-compilation and independent token compatibility/negative checks. Strict affected
-lint,23 workflow/artifact guards and actionlint pass. Audit-only CI40131122101
-passes on exact8e215cb9, closing that blocker. Original CI also passes the shared
-artifact build and general Rust tests. Its runtime jobs expose missing test
-inputs and a genuine copied-caption source-outpoint defect. Both finite-cut
-fixture cases now pass unchanged; six Next input cases also recover. The one
-late-PGS startup negative is retained; its focused diagnostic repeat passes
-the unchanged30s deadline and actual picture/audio/caption checks. Next-only
-CI40134839105 is green on56938c95:451 tests and both actual smokes pass.
-All four non-Mac rs.5 caption packages pass scoped qualification, including
-eight controls/three actual cases on each of Linux and native Windows;
-Mac qualification/adoption and separate publication remain open.
-General Chromium exposes libx264 receiving a retained NVENC p5 preset after
-graph denial. The shared encoder-demotion correction passes237 snapshots,
-both unchanged headed cases and93 Native TSDuck checks under deliberate CUDA
-denial, plus strict affected lint. Two-case Chromium CI40140755052 is green on
-ce749910 (21.2s). Original general Firefox passes. Teletext1.5 Chromium's old
-Native-default fixture assumption now passes both headed browsers unchanged
-after explicit disposable setup/restoration. Its other failure loses selected
-audio metadata in Next before the wrapper. Existing ADR0117 correction is
-reused in combined rs.6:53 Linux source controls, actual active-viewer decoding/
-language/leases/shutdown, three copied-caption cases and selected Dutch audio
-pass. All four non-Mac source packages pass53 controls each; Windows also
-passes four affected application cases, ARM64 fallback output passes its decoder
-oracle and Chromium followers have composed passing recovery. Original
-Level2.5 browser jobs pass. The complete64-case Level1.5 Firefox job needs a
-focused retry after runner disconnection; CI40174546124 on bc69eb66 is
-running only that check and its matched web prerequisite. ARMv7 software
-playback now passes the retained200-frame/Dutch880Hz/caption oracle with nld
-source/output language preserved under pinned QEMU. Both rs.6 actual Next
-smokes and86 Next copy TSDuck checks pass; Native evidence is reused unchanged.
-Mac work remains deferred and published rs.4 remains selected. Preserve the original run and unaffected
-evidence; partial recovery is not full new-SHA acceptance. Merge to remote/main is authorized only after UCU-12 acceptance and required
-green CI. Runtime/application releases and Docker publication remain separate.
-The maintainer now permits UCU-12 closure with outstanding macOS work recorded
-as explicit unverified debt; no Mac build is authorized. Retain exact older
-macOS runtime identities when adopting qualified non-Mac replacements. Milestone ucu-12 and
-ucu-12-ci-runtime-recovery own this bounded package.
-
-Latest UCU-12 adoption checkpoint2026-10-25: the separately authorized rs.6
-dependency release publishes23 exact assets; all anonymous downloads match.
-The managed manifest selects four corrected Linux/Windows packages while
-retaining macOS rs.4 version/tag/patch identities. All six selected archives
-pass staging;15 Linux manager cases pass including real archive relocation,
-rs.6 acquisition/offline cache and Health. Source/package guards19 pass.
-Native Windows14 manager checks and Linux/Windows real-host public cold
-acquisition/unchanged managed restart now pass with the matched web bundle.
-Only affected CI and ordered closeout remain for this runtime correction. UCU-12 may close with the explicitly approved macOS
-debt; no Mac build or native acceptance is inferred.
+UCU-12 is Complete through fixed v26.11.4/row254. All18ordered rows have
+accepted dispositions and the authoritative pin advances with them. Milestone
+ucu-12 owns exact identities, complete component history and composed CI proof.
+Four qualified Next rs.6 platforms and FFmpeg2.0.7 pass source/package/managed
+startup, decoded playback and transport acceptance; macOS retains exact rs.4
+identities and approved unverified runtime debt. Hardware debt remains unverified.
+Focused CI recovers the original failures without repeated compilation: full
+Firefox57/7existing skips; current browser10Chromium/9Firefox with existing
+skips;1955workspace+17Next Level1.5 passes; Next451passes plus one unchanged
+NUL-fixture recovery and both required smokes. Original negatives remain retained;
+the SQLite fixture race is a documented possibility, not a claimed product fix.
+Required earlier workspace gates and corrected-source checks retain their scope.
+Only source push/merge into remote/main is authorized for delivery. No further
+release, Phase9/UCU14 implementation or cleanup is part of this closeout.
+Continue the existing Phase9 acceptance program only under its own next task.
 
 Current package: p9a-source-output exact remaining SO2/SO3 route/adoption boundary.
 Next executable action: resolve only the owner's imprecise otherSO2..3 wording

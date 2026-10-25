@@ -32829,7 +32829,7 @@ compatibility proof; existing production pins remain unchanged.
 id         = 'ucu-12'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile v26.11.4 graphics, subtitle, provider and runtime behavior'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-11']
@@ -32878,12 +32878,33 @@ scope; preserve tested artifacts, evidence and caches. Required acceptance and
 explicit unverified hardware/macOS debt remain unchanged.
 """
 evidence = """
+Accepted2026-10-25 through fixed v26.11.4/f640c252276d008a5e1697fbfbb65a65fc352a5a:
+all18 ordered rows237–254 have accepted, evidenced dispositions. All mandatory
+non-deferred functionality and proof are complete. macOS/runtime and hardware
+checks remain explicitly unverified under the maintainer-approved debts below.
+Required CI uses composed, source-bound evidence: unchanged original passing
+jobs, audit40131122101, preview40140755052, complete Firefox40174546124,
+reused-bundle browser40181549125 (Chromium10/1existing skip,Firefox9/2existing
+skips), and Level1.5 Rust40183059576 (1955workspace+17Next passes). Current
+Next40178558343 supplies451passes; its sole memory-fixture NUL case passes
+unchanged in40184068956, followed by both previously unexecuted playback
+smokes. Original failure213KB artifact is retained; no cause is claimed fixed,
+no assertion/deadline is weakened and no automatic retry policy changes.
+This is composed acceptance, not a new full-suite green run on one SHA.
+Application/runtime/test inputs remain those of tested5a2d8460; later commits
+only repair CI and update documentation. The final guard rejects embedded
+CHANGELOG drift; its bytes equal the producer. Required local workspace gates
+and affected corrective checks retain their exact scopes and receipts below.
+The authoritative pin and ledger advance together. Main fast-forward is
+explicitly authorized after acceptance. No further release, Phase9/UCU14 work
+or cleanup is part of this closeout. Historical component evidence follows.
+
 Source identity component complete: tag v26.11.4 peels to
 f640c252276d008a5e1697fbfbb65a65fc352a5a; all18 ordered SHA/subject pairs
 match rows237–254 (tmp/ucu12/ordered-upstream-rows.txt). Verified remote
 main3e6fead9a1446815315dbcb8fc1deb41e23bcd20 includes accepted UCU11/61d1786c.
-The isolated feat/ucu-12 excludes unrelated dirty work. The accepted upstream
-baseline remains row236/v26.11.3; none of the new rows is accepted yet.
+The isolated feat/ucu-12 excludes unrelated dirty work. At that initial checkpoint the accepted baseline remained row236/v26.11.3;
+the final acceptance above supersedes that pending state.
 
 Row237 Linux renderer/signed-placement/actual-preview component is completed
 within its explicit scope. Watermark-only expression canvases use a measured
@@ -34618,7 +34639,7 @@ is pushed to feat/ucu-12; only missing Level1.5 Firefox CI40174546124 is running
 on that exact source. Original CI and its unaffected passes are preserved;
 main, release and Docker publication remain untouched.
 
-Finite completion list (row237–254 acceptance remains pending):
+Retained runtime/CI recovery history (superseded by final acceptance):
 Publication checkpoint2026-10-25: the maintainer permits UCU-12 closure with
 explicit unverified macOS runtime debt and separately authorizes the23 prepared
 rs.6 assets. Release423248407, next-54c6cb9-ersatzrs.6, publishes exactly those
@@ -34778,48 +34799,21 @@ selection, assertions, deadlines and zero automatic retries are unchanged.
 35 workflow/artifact guards,9 selector checks and actionlint pass. This is
 CI-only recovery using the existing archive; no compilation or release occurs.
 
-Missing functionality/source disposition:
-- Complete managed adoption of Next's published copied-caption and selected-audio
-  corrections on the four non-Mac platforms. macOS retains original rs.4 under
-  explicitly approved unverified debt.
-  Implemented
-  canvas/signed placement(row237), runtime protocol/rebuild/fallback/late-PGS
-  changes(rows238/240/241/249/251/253), external-audio projection/repair(row245),
-  provider HDR projection/repair(row247), localized time-input/Stop(row248),
-  subtitle NUL extraction/cache repair/Health(row250) and fresh Next defaults
-  under existing ADR0095(row251) have the scoped component proof above.
-- Source dispositions for upstream-only notarization(row239), bundled SQLite
-  data(row252), fixed release boundary(row254) and Download Results-only
-  deviation(rows242–244, Accepted ADR0129) are complete; no new upload service,
-  upstream key reuse or unrelated release/version change is required.
-- ADR0128's FFmpeg2.0.7/private Next MPP implementation(row246) has four-RID
-  build/software/archive/publication and six-RID Next publication proof above.
-  This does not qualify unavailable hardware or deferred Mac FFmpeg kits.
-Missing mandatory evidence:
-1. Complete copied-caption/selected-audio runtime packages/adoption and affected Teletext CI.
-   Corrected Next CI, the two finite-cut fixture cases, all four non-Mac
-   caption candidates, both corrected Native source-caption browser proofs and
-   the JWT audit are complete within their stated scope. Qualify the combined
-   rs.6 candidate without erasing these completed components.
-   Preserve the original CI and unaffected results; partial recovery is never
-   a full new-SHA CI claim. ucu-12-ci-runtime-recovery owns this blocker.
-2. Retain native macOS FFmpeg kits/software acceptance, dependent application
-   proof/distribution and corrected Next package qualification as explicitly
-   unverified debt. The maintainer's 2026-10-25 amendment permits UCU-12 closure
-   without these checks. Published macOS rs.4 predates the caption/audio fixes;
-   retain its true per-platform version/source/checksums when adopting the four
-   qualified rs.6 packages. This does not claim a uniform six-platform build.
-3. Corrected preview CI and complete Level1.5 Firefox recovery are green;
-   Chromium serial followers have composed passing recovery. Complete only
-   the currently running/queued affected CI for adopted rs.6: Next, Level1.5
-   Rust and the11-case-per-browser source-caption/runtime recovery. Reuse the now-green
-   Level2.5 browser jobs and other unaffected results.
-   Then final
-   ordered row dispositions/baseline advancement only after every required
-   non-deferred acceptance item is satisfied; retain accepted
-   baseline row236/v26.11.3 until whole-window acceptance. Runtime/media and
-   pre-correction local gates retain their scoped proof; item1 owns the
-   demonstrated runtime recovery. Do not repeat unchanged completed proof.
+Finite completion list (all mandatory non-deferred items closed):
+1. Complete: ordered canvas, playback/update/fallback, Jellyfin/HDR repair,
+   troubleshooting, subtitle-cache/Health and engine-default behavior;
+   upstream-only and ADR0129 Download Results dispositions are accepted.
+2. Complete within approved scope: exact FFmpeg2.0.7/four-platform Next rs.6
+   qualification, publication, managed acquisition/restart, decoded playback,
+   source/payload/archive identity and transport acceptance. Original macOS
+   rs.4 identities are retained without claiming the new fixes there.
+3. Complete: required local gates plus affected CI and all interrupted serial
+   followers, using the source-bound composed results above. Preserve earlier
+   unaffected passes; no full repeated suite is required. Ledger rows237–254
+   and the accepted baseline now close at v26.11.4.
+There is no remaining non-deferred acceptance blocker. Remote delivery is
+approved; releases and cleanup remain excluded by the latest scope amendment.
+
 External prerequisites/authority:
 - Maintainer instruction: no Mac build/retry until explicit resume. UCU-12 may
   close with this approved debt; completing the deferred work still requires
