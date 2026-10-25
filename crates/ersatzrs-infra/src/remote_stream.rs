@@ -26,10 +26,12 @@ use crate::addons::{
 };
 use crate::db::DbPool;
 
+mod live_caption_url;
 mod prepared_input;
 mod prepared_teletext;
 #[path = "remote_stream_source_caption.rs"]
 mod source_caption;
+pub use live_caption_url::native_live_url_caption_producer;
 pub use prepared_input::{
     spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput,
     PreparedRemoteStreamTransfer,
@@ -757,8 +759,12 @@ fn remote_stream_command_from_addon(
 
 #[must_use]
 pub fn remote_url_input_options(url: &str, is_live: bool) -> Vec<String> {
+    let rtsp = url_scheme(url).is_some_and(|scheme| {
+        scheme.eq_ignore_ascii_case("rtsp") || scheme.eq_ignore_ascii_case("rtsps")
+    });
     let mut options = vec![
-        "-rw_timeout".to_owned(),
+        // RTSP owns its socket as a demuxer; FFmpeg 9 rejects rw_timeout here.
+        if rtsp { "-timeout" } else { "-rw_timeout" }.to_owned(),
         REMOTE_INPUT_TIMEOUT_MICROSECONDS.to_owned(),
     ];
     if url_scheme(url).is_some_and(|scheme| {
@@ -927,7 +933,10 @@ pub(crate) fn remote_stream_environment_secrets(command: &RemoteStreamCommand) -
         .iter()
         .filter(|(name, value)| {
             (name.starts_with("ERSATZRS_ADDON_SECRET_")
-                || (name.starts_with("ERSATZRS_") && name.ends_with("_URL")))
+                || (name.starts_with("ERSATZRS_") && name.ends_with("_URL"))
+                || ["http_proxy", "https_proxy", "all_proxy", "no_proxy"]
+                    .iter()
+                    .any(|proxy| name.eq_ignore_ascii_case(proxy)))
                 && !value.is_empty()
         })
         .map(|(_, value)| value.clone())
@@ -2484,6 +2493,12 @@ content_rating: PG
         assert!(!remote_url_input_options("https://example.test/vod", false)
             .windows(2)
             .any(|pair| pair == ["-reconnect_at_eof", "1"]));
+        for url in ["rtsp://camera.test/live", "rtsps://camera.test/live"] {
+            assert_eq!(
+                remote_url_input_options(url, true),
+                ["-timeout", REMOTE_INPUT_TIMEOUT_MICROSECONDS]
+            );
+        }
     }
 
     #[test]

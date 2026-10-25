@@ -1114,18 +1114,19 @@ async fn serve_channel_stream_admitted_inner(
         && interval_admission.is_some()
         && active.subtitle_mode.unwrap_or(channel.subtitle_mode) != ChannelSubtitleMode::None
     {
-        let command = source_producer::live_addon(active.remote_stream.as_ref());
-        if command.is_some() {
-            match ersatzrs_infra::ffmpeg_config::use_embedded_subtitles(&state.pool).await {
-                Ok(true) => command,
-                Ok(false) => None,
-                Err(error) => {
-                    tracing::warn!(channel_id=channel.id,%error,"embedded caption policy is unavailable");
-                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
-                }
+        match source_producer::live_command(
+            &state.pool,
+            active.media_item_id,
+            active.media_version_id,
+            active.remote_stream.as_ref(),
+        )
+        .await
+        {
+            Ok(command) => command,
+            Err(error) => {
+                tracing::warn!(channel_id=channel.id,%error,"live source inventory or embedded caption policy is unavailable");
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
-        } else {
-            None
         }
     } else {
         None

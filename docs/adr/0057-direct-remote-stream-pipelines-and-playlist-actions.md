@@ -28,6 +28,14 @@ persists ErsatzTV `CollectionType` value 70. Raw `script:` sources and the
 standalone `{seek}` command-argument contract have been removed; source-side
 seek is now supplied through the versioned add-on environment.
 
+The 2026-10-25 Native live-URL qualification also exposes a direct-HLS
+manifest-read loop before any media access. `p9a-source-output` owns its causal
+EOF-option comparison and correction while preserving raw-live continuity and
+existing source-opening/cancellation guarantees. This does not reopen the
+completed producer, scheduling or cancellation components. Native MPEG-TS
+HTTP/RTSP teletext integration follows ADR0121; successful scoped receipts do
+not close this separate ordinary-HLS defect.
+
 ## Context
 
 ErsatzTV exposes script-backed streams through an internal

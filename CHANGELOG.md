@@ -46,10 +46,11 @@ release section when tagging a release.
 ### Added
 
 - Add bounded, playback-owned teletext inspection and observed-page selection
-  for an already-running producer. Native Live add-on caption Burn now uses
-  that same producer on FFmpeg 2.0.7, preserving selected audio, ordinary Off
-  playback and joined cancellation. One-shot and Next source-output adoption
-  retain their separate acceptance gates.
+  for an already-running producer. Native MPEG-TS caption Burn supports Live
+  add-ons and advertised direct MPEG-TS sources over HTTP/RTSP through one held
+  producer, preserving selected audio, source timestamps, ordinary Off playback
+  and joined cancellation. Other source/output combinations retain their
+  acceptance gates.
 
 - Add owned finite source-video frame-end qualification for subtitle preparation.
   Exact decoded clocks and complete-frame bookends are checked against the selected
@@ -678,6 +679,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Keep direct live-HLS URL playback under repair: repeated playlist reads can
+  prevent media delivery. Native MPEG-TS HTTP/RTSP caption proof does not
+  certify this separate HLS input behavior.
+
 - Allow UCU-12 acceptance with explicitly deferred macOS runtime work. Keep
   outstanding macOS FFmpeg/Next builds and playback acceptance unverified;
   retain older macOS package identities when adopting qualified corrections on
@@ -1052,6 +1057,9 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Use FFmpeg 9's RTSP socket-timeout option at the existing 30-second bound,
+  preventing valid RTSP sources from failing before ordinary playback starts.
 
 - Use software encoder controls when a refused hardware backend falls back to
   CPU encoding, so an NVENC profile's `p5` preset cannot prevent libx264 previews

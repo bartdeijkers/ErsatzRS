@@ -1611,3 +1611,26 @@ automatic Q clearing and navigation after explicit Base selection; automatic
 Base rendering/resource retirement and complete engine acceptance stay open.
 Earlier strict receiver-UTC failures remain retained negative history; correct
 later Base output or green offline checks do not certify client clearing.
+
+### Live URL source-caption inputs
+
+The opt-in `stream_source_caption_runtime_tests::live_url` selectors exercise
+ordinary Native MPEG-TS output with a direct HTTP source, a relative live-HLS
+input, or an external synthetic RTSP input. They retain the original page888
+versus200/plain raster, selected audio, default-capacity and cleanup oracles.
+An ignored selector is not a passing acceptance receipt; the progress record
+owns each actual positive or negative result.
+
+`teletext-live-rtsp-source.py` supplies the otherwise missing four-track
+teletext RTSP fixture. It requires the separately qualified GStreamer1.24.2
+RTSP-server/PyGObject test toolchain and wraps a synthetic TS188 file in static
+RTP33 over RTSP/TCP without decoding, rewriting or emitting source EOF. It is
+not a product dependency or a suitable teletext display client. Run it as
+`python3 scripts/e2e/teletext-live-rtsp-source.py <synthetic.ts> --port <port> --status <ignored-status.json>`.
+Supply its loopback `/fixture` URL through `ERSATZRS_TELETEXT_TEST_RTSP_URL`
+and its status file through `ERSATZRS_TELETEXT_TEST_RTSP_STATUS` before selecting
+`normal_direct_live_rtsp_preserves_source_captions_off_audio_and_cleanup`.
+The test checks actual source sends, connections, media retirement and the
+original source hash. The caller owns and must join the fixture process after
+the application trial, including on failure. Use isolated app/state directories
+for each ordinary-route trial; never target a production database or source.

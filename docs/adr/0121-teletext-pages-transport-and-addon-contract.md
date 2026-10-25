@@ -950,6 +950,21 @@ Apply the following source-lifecycle rules across those rows:
 - Authored services: use the validated host page generation for all source
   lifecycles without seeking or rescheduling the programme or replacing audio.
 
+The Native live-URL implementation reuses the already-owned producer path.
+Advertised teletext on the exact resolved Remote Stream version admits one
+host-owned FFmpeg stream-copy producer; it copies all input tracks with their
+source timestamps and does not change the selected output encoder or profile.
+Stored declarations grant no playback readiness. The existing bounded prefix
+observer qualifies pages against the freshly produced transport, and the
+existing final-command binding keeps captions, video and selected audio on that
+same held input. Original upstream PID/program declarations cannot substitute
+for those fresh observations after remuxing. Process-group/Job ownership,
+cumulative startup deadlines, ordinary-AV fallback and joined cancellation keep
+their existing contracts. This is a Native MPEG-TS integration boundary, not
+acceptance of every source/output combination. The source-output milestone owns
+the actual HTTP/RTSP receipts and the separately open live-HLS manifest-read
+defect; no permanent source restriction is accepted by this implementation note.
+
 There is no automatic engine switch, alternate page substitution, silent caption
 loss or double producer consumption. Prove accepted combinations with served
 media, decoded captions/pages and audio/timing comparison. Operator-selected

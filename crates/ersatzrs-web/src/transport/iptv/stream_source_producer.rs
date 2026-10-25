@@ -1,4 +1,4 @@
-//! One admitted producer owner for retained intervals or observed live add-on input.
+//! One admitted producer owner for retained intervals or observed live input.
 
 use ersatzrs_core::repositories::Result;
 use ersatzrs_domain::{RemoteStreamLiveness, SourceTeletextCaptionDelivery};
@@ -13,15 +13,36 @@ use ersatzrs_infra::{
     },
 };
 
-pub(super) fn live_addon(stream: Option<&ResolvedRemoteStream>) -> Option<RemoteStreamCommand> {
-    let stream = stream.filter(|stream| stream.liveness == RemoteStreamLiveness::Live)?;
+pub(super) async fn live_command(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    stream: Option<&ResolvedRemoteStream>,
+) -> Result<Option<RemoteStreamCommand>> {
+    let Some(stream) = stream.filter(|stream| stream.liveness == RemoteStreamLiveness::Live) else {
+        return Ok(None);
+    };
     match &stream.source {
-        RemoteStreamSource::Addon(command) => Some(
-            command
-                .with_playback_seek(RemoteStreamLiveness::Live, std::time::Duration::ZERO)
-                .0,
-        ),
-        _ => None,
+        RemoteStreamSource::Addon(command) => {
+            if !ersatzrs_infra::ffmpeg_config::use_embedded_subtitles(pool).await? {
+                return Ok(None);
+            }
+            Ok(Some(
+                command
+                    .with_playback_seek(RemoteStreamLiveness::Live, std::time::Duration::ZERO)
+                    .0,
+            ))
+        }
+        RemoteStreamSource::Url(_) => {
+            ersatzrs_infra::remote_stream::native_live_url_caption_producer(
+                pool,
+                media_item_id,
+                media_version_id,
+                stream,
+            )
+            .await
+        }
+        _ => Ok(None),
     }
 }
 

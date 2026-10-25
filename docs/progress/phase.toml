@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output SO2-H — restore selected pages on direct Live HTTP'
+current_focus = 'p9a-source-output SO2-HLS — restore ordinary live playlist delivery'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -78,14 +78,17 @@ That UCU12 closeout authorized source delivery only; it did not accept Phase9.
 The maintainer now explicitly resumes the separate Phase9 goal after controlled
 mergee0c4fc8d, preserving all six local commits and ten uncommitted files.
 
-SO2-H direct Live HTTP defect reproduction is completed with original subtitle
-metadata preserved. Canonical native_streaming_lifecycle_followup.direct_url_
-qualification owns Off/audio/transport success and the unchanged888 Burn red,
-with bounded one-opening/capacity/work/host cleanup. No delivery fix is claimed.
-SO2-R test-source capability is qualified; its ordinary application route remains
-unproven. Next restore HTTP owned fresh-page selection, pass the same grouped
-Off/Burn/audio/one-opening/cleanup oracle, then exercise ordinary RTSP with its
-qualified source. Existing completed components stay closed.
+SO2-H/R Native MPEG-TS HTTP/RTSP caption delivery is completed within Linux
+x86_64/software FFmpeg207. Fresh-host Legacy/Hybrid MPEG-TS and Local-input HLS
+smoke, strict affected lint, architecture and registration controls pass.
+Canonical native_streaming_lifecycle_followup.direct_url_qualification.repair
+owns exact888/Dutch audio, defaultcapacity2/one-source/joined-cleanup receipts,
+Live Addon reuse and57new/57same-byte transport controls. Next address the
+separate ordinary live-HLS manifest-read loop:115105manifest/0media in20seconds,
+also with valid closed segments. Compare the EOF option before claiming cause;
+preserve raw-live continuity, source-opening/audio/cleanup and original bounds.
+No HLS acceptance, suffix-only workaround or scope waiver follows from this
+completed-within-scope network-caption component. Other closed parts stay closed.
 
 SO2-N ordinary Native Live route integration is completed within Linux
 x86_64/software accepted FFmpeg2.0.7. One held producer/request delivers Off/Burn,
@@ -153,15 +156,13 @@ segmenter-Off/Burn/direct-Burn receipt, exact original source/test body,
 888/200/plain raster,nld660Hz,joined cleanup and57 transport passes. Earlier
 SO1 and unrelated source/lint/editor/client evidence retain their scope.
 
-Current package: p9a-source-output SO2-H/R direct Live HTTP/RTSP qualification.
-Next executable action: use the existing temporary host/source tools to qualify
-that explicitly required ADR0121 lifecycle boundary. SO2-N proves actual Live
-Addon input through live_addon only; a direct URL uses a different path. It is
-missing mandatory route evidence/possible implementation gap, not a demonstrated
-defect or permission for new source infrastructure. Preserve exact page/audio,
-bounded startup/no whole-live extraction, ordinary AV safety and joined actual
-cancellation/cleanup. Stop at this original positive/refusal boundary; do not
-claim source-output acceptance by extrapolating the Addon result.
+Current package: p9a-source-output SO2-HLS ordinary live-playlist delivery defect.
+Completed SO2-H/R exact HTTP/RTSP and Live Addon oracles, final affected lint
+and fresh-host smoke retain their proven scope.
+First compare the EOF option on the same valid source with bounded origin reads;
+then choose the smallest supported correction that preserves raw-live EOF retry,
+one-response delivery, original timing/tracks and joined ownership/cleanup.
+The HLS-output smoke uses a Local input; it does not accept this live HLS input.
 The separate120minute full Windows-package trial remains maintainer-deferred;
 its explicit resumption question is pending and does not block this independent
 work. AE5 normative, AB5/C3 formatter, native/Mac, X1/X3 and policy prerequisites
