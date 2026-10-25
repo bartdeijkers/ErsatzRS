@@ -68,6 +68,8 @@ def browser_recovery_args(case_set):
     if case_set == "channel-preview":
         return ["channel-watch.spec.ts", "--grep",
                 "(?:" + "|".join(re.escape(case) for case in PREVIEW_RECOVERY_CASES) + ")$"]
+    if case_set == "teletext-1.5":
+        return [browser_filter("1.5")]
     raise ValueError("unknown browser recovery case set")
 
 
@@ -75,17 +77,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("kind", choices=("rust", "browser", "browser-recovery"))
     parser.add_argument("suite", choices=("general", "1.5", "2.5", "all", "next",
-                                          "fixtures", "channel-preview"))
+                                          "fixtures", "channel-preview", "teletext-1.5"))
     parser.add_argument("--next-runtime", action="store_true")
     args = parser.parse_args()
     if args.kind == "browser" and args.suite not in ("general", "1.5", "2.5"):
         parser.error("browser selection requires general, 1.5 or 2.5")
     if args.kind == "browser-recovery":
-        if args.suite not in ("fixtures", "channel-preview") or args.next_runtime:
-            parser.error("browser recovery requires fixtures or channel-preview without --next-runtime")
+        if args.suite not in ("fixtures", "channel-preview", "teletext-1.5") or args.next_runtime:
+            parser.error("browser recovery requires a bounded case set without --next-runtime")
         print("\n".join(browser_recovery_args(args.suite)))
         return
-    if args.kind == "rust" and args.suite in ("fixtures", "channel-preview"):
+    if args.kind == "rust" and args.suite in ("fixtures", "channel-preview", "teletext-1.5"):
         parser.error("browser recovery case sets cannot select Rust tests")
     print(rust_filter(args.suite, args.next_runtime) if args.kind == "rust" else browser_filter(args.suite))
 

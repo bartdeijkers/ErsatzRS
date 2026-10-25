@@ -458,11 +458,16 @@ gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f browser_only=both
 # Retry only the error-slate and real H.264/AAC preview cases:
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
   -f browser_only=chromium -f browser_case_set=channel-preview
+# Retry only the complete Level 1.5 Firefox suite after runner interruption:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
+  -f browser_only=firefox -f browser_case_set=teletext-1.5
 ```
 
 This runs the selected browser jobs with the existing matched Leptos build,
 pinned runtime staging and isolated application runner. The default `fixtures`
-case set with `both` runs 30 cases; `channel-preview` runs two per selected browser
+case set with `both` runs 30 cases; `channel-preview` runs two per selected browser.
+`teletext-1.5` reuses the complete ordinary Level 1.5 suite filter, including
+its serial groups, without selecting general or Level 2.5 cases. Each set runs
 through the existing matrix with `max-parallel: 1`, preserving serial execution
 and avoiding resource contention between browser projects. Normal CI runs all
 six general/1.5/2.5 browser jobs. The `CI (Browser recovery)` title identifies
@@ -474,7 +479,7 @@ Combining this mode with `test_only`,
 `next_engine_only` or `teletext_only` fails before checkout or building.
 
 Record the repaired SHA and the earlier full run when reusing unaffected
-results. This three-spec recovery is scoped evidence; it does not establish full
+results. Browser recovery is scoped evidence; it does not establish full
 green CI or satisfy the exact-candidate release gate.
 
 ## Inner-loop strategy (don't recompile the source 5×)

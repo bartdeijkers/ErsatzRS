@@ -84,13 +84,14 @@ on:
           - firefox
           - both
       browser_case_set:
-        description: Bounded browser recovery cases (channel-preview requires browser_only)
+        description: Bounded browser recovery cases (nondefault sets require browser_only)
         type: choice
         required: false
         default: fixtures
         options:
           - fixtures
           - channel-preview
+          - teletext-1.5
       reset_target_dir:
         description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
         type: boolean
@@ -105,7 +106,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set == 'channel-preview' && '-channel-preview' || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -284,7 +285,7 @@ jobs:
           if sum(modes) > 1:
               raise SystemExit('Focused CI modes are mutually exclusive')
           case_set = os.environ['BROWSER_CASE_SET']
-          if case_set not in ('fixtures', 'channel-preview'):
+          if case_set not in ('fixtures', 'channel-preview', 'teletext-1.5'):
               raise SystemExit('Unknown browser recovery case set')
           if case_set != 'fixtures' and os.environ['BROWSER_ONLY'] in ('', 'none'):
               raise SystemExit('Browser recovery case set requires browser_only')

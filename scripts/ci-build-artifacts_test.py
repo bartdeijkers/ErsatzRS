@@ -461,6 +461,8 @@ class FocusedAuditSelection(unittest.TestCase):
         for browser in ("chromium", "firefox", "both"):
             self.assertEqual(self.scheduled(browser_only=browser, browser_case_set="channel-preview"),
                              {"build", "hydration"})
+        self.assertEqual(self.scheduled(browser_only="firefox", browser_case_set="teletext-1.5"),
+                         {"build", "hydration"})
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
@@ -474,7 +476,7 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertFalse(self.evaluate(expression, base, SimpleNamespace()))
         for key, value in (("test_only", True), ("next_engine_only", True),
                            ("teletext_only", "all"), ("browser_only", "both"),
-                           ("browser_case_set", "channel-preview")):
+                           ("browser_case_set", "channel-preview"), ("browser_case_set", "teletext-1.5")):
             with self.subTest(mode=key):
                 self.assertTrue(self.evaluate(expression, dict(base, **{key: value}), SimpleNamespace()))
 
@@ -485,7 +487,12 @@ class FocusedAuditSelection(unittest.TestCase):
         base = dict(os.environ, TEST_ONLY="false", NEXT_ONLY="false", TELETEXT_ONLY="none",
                     BROWSER_ONLY="none", BROWSER_CASE_SET="fixtures")
         cases = [({}, True), ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview"}, True),
+                 ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5"}, True),
                  ({"BROWSER_CASE_SET": "channel-preview"}, False),
+                 ({"BROWSER_CASE_SET": "teletext-1.5"}, False),
+                 ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5", "NEXT_ONLY": "true"}, False),
+                 ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5", "TEST_ONLY": "true"}, False),
+                 ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5", "TELETEXT_ONLY": "1.5"}, False),
                  ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "unknown"}, False),
                  ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview", "NEXT_ONLY": "true"}, False),
                  ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "channel-preview", "TEST_ONLY": "true"}, False),
@@ -497,7 +504,7 @@ class FocusedAuditSelection(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, valid, result.stderr)
 
     def test_browser_case_set_keeps_distinct_recovery_concurrency(self):
-        self.assertIn("inputs.browser_case_set == 'channel-preview' && '-channel-preview' || ''", self.workflow)
+        self.assertIn("inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || ''", self.workflow)
         self.assertIn('recovery_args="$(python3 scripts/ci-teletext-selection.py browser-recovery "$BROWSER_CASE_SET")"',
                       self.jobs["hydration"])
         self.assertIn('playwright_args+=("${selected_cases[@]}")', self.jobs["hydration"])

@@ -32,6 +32,22 @@ This closes that Linux candidate component; published rs.4, production pins,
 other native qualification and separate publication authority are unchanged.
 No macOS build or platform waiver is inferred.
 
+UCU-12 CI selected-audio maintenance candidate (2026-10-25): the unchanged
+active Next-viewer test finds `eng` in its AAC source but no language tag in
+either Next's actual HLS segment or the served MPEG-TS prefix. Captured worker
+arguments copy the resolved audio stream while suppressing metadata without
+restoring that stream's metadata. Reuse the exact existing Phase9A selected-audio
+correction as023 patch0007; its grouped regression covers copied, filtered,
+alternate-index, separate, generated and reopened-input audio. The isolated
+rs.6 candidate retains the six prior patches. Linux passes45 pipeline tests,
+eight caption controls and the unchanged headed active-viewer test, including
+both served readers' eng tags, actual decoding, leases and graceful shutdown.
+Three copied-caption playback cases and selected Dutch audio also pass in
+scoped runs. Other native qualification remains pending;
+published rs.4, completed rs.5 components, deferred macOS builds and separate
+publication requirements remain unchanged. No language guess, schema field,
+extra probe or global-metadata disclosure is introduced.
+
 UCU-12 local security maintenance candidate (2026-10-24): fixed Next0.2.3
 source54c6cb9 retains vulnerable/yanked dependencies in the distributed worker.
 The unchanged advisory policy fails on the worker graph for all six supported

@@ -1,7 +1,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { copyFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from './isolated-web-host';
@@ -689,9 +689,20 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
         // audio. A correct waveform alone cannot prove its language identity.
         const probe = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-select_streams', 'a:0',
           '-show_entries', 'stream_tags=language', '-of', 'json', prefixPath], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 }));
+        writeFileSync(testInfo.outputPath(`active-${viewers.length}.audio-metadata.json`), JSON.stringify(probe, null, 2));
+        // Shutdown removes Next's working output. Retain its input to the
+        // wrapper so a failed metadata assertion can locate the losing stage.
+        const nextFolder = join(dirname(isolatedWebHost.databasePath), 'tmp', 'ersatzrs-hls', String(fixture.channels[0]));
+        const playlist = join(nextFolder, 'live.m3u8');
+        if (existsSync(playlist)) {
+          copyFileSync(playlist, testInfo.outputPath(`active-${viewers.length}.next.m3u8`));
+          const segment = readFileSync(playlist, 'utf8').split('\n').find(line => line.endsWith('.ts'));
+          if (segment && existsSync(join(nextFolder, basename(segment)))) {
+            copyFileSync(join(nextFolder, basename(segment)), testInfo.outputPath(`active-${viewers.length}.next.ts`));
+          }
+        }
         expect(probe.streams).toHaveLength(1);
         expect(probe.streams[0].tags?.language).toBe('eng');
-        writeFileSync(testInfo.outputPath(`active-${viewers.length}.audio-metadata.json`), JSON.stringify(probe, null, 2));
       }
       for (const pid of [0, 256, 257, 512]) {
         expect(pids.has(pid), `Missing PID${pid}; observed ${[...pids].sort((a, b) => a - b)}`).toBe(true);

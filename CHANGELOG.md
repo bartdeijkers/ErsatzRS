@@ -677,6 +677,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Make the Native source-caption browser fixture explicit about its engine,
+  preserving its localized save/rejection checks when fresh channels use Next.
+
 - Add an audit-only CI recovery mode with an independent concurrency group.
   It reruns dependency checks and their fast workflow safeguards without
   cancelling a full run or treating partial success as full CI acceptance.
@@ -752,7 +755,8 @@ release section when tagging a release.
   provenance; candidate builds do not activate or publish a runtime.
 
 - Provide an opt-in Next source candidate that caps copied-video captions at the
-  original subtitle source outpoint while retaining keyframe and pass alignment.
+  original subtitle source outpoint while retaining keyframe and pass alignment,
+  and preserves the selected audio stream's metadata through copy and filtering.
   Managed-runtime adoption still requires verified replacement packages.
 - Clarify the [Phase 9A/9B authoring boundary](docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary)
   and F2 scope while preserving all generic engine acceptance requirements.

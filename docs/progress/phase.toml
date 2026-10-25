@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'UCU-12 — focused CI runtime recovery; macOS deferred'
+current_focus = 'UCU-12 — focused CI recovery and combined runtime qualification; macOS deferred'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -227,9 +227,19 @@ Mac qualification/adoption and separate publication remain open.
 General Chromium exposes libx264 receiving a retained NVENC p5 preset after
 graph denial. The shared encoder-demotion correction passes237 snapshots,
 both unchanged headed cases and93 Native TSDuck checks under deliberate CUDA
-denial, plus strict affected lint. Two-case Chromium CI is ready for the
-authorized checkpoint. Original general Firefox passes; newly failed
-Teletext1.5 Chromium needs bounded triage. Preserve the original run and unaffected
+denial, plus strict affected lint. Two-case Chromium CI40140755052 is green on
+ce749910 (21.2s). Original general Firefox passes. Teletext1.5 Chromium's old
+Native-default fixture assumption now passes both headed browsers unchanged
+after explicit disposable setup/restoration. Its other failure loses selected
+audio metadata in Next before the wrapper. Existing ADR0117 correction is
+reused in combined rs.6:53 Linux source controls, actual active-viewer decoding/
+language/leases/shutdown, three copied-caption cases and selected Dutch audio
+pass. All four non-Mac source packages pass53 controls each; Windows also
+passes four affected application cases, ARM64 fallback output passes its decoder
+oracle and Chromium followers have composed passing recovery. Original
+Level2.5 browser jobs pass. The complete64-case Level1.5 Firefox job needs a
+focused retry after runner disconnection. ARMv7 software playback still needs
+the stopped Docker engine. Mac work remains deferred and published rs.4 remains selected. Preserve the original run and unaffected
 evidence; partial recovery is not full new-SHA acceptance. No main merge,
 release, Docker publication or Mac build is authorized. Milestone ucu-12 and
 ucu-12-ci-runtime-recovery own this bounded package.

@@ -34507,16 +34507,87 @@ The existing browser recovery mechanism now accepts the bounded
 browser_case_set=channel-preview, selecting only these two cases per browser.
 Default recovery retains all three existing specs/current15 cases rather than
 dropping newer tests to its obsolete11-case count. All33 selector/workflow
-guards and scoped actionlint pass. Corrected two-case Chromium CI is the next
-authorized checkpoint action. Primary receipts:
+guards and scoped actionlint pass. Corrected two-case Chromium CI40140755052
+uses exact checkpoint ce7499107a67bb072c10f0e6cd6bd6f9dc1fe39d; its matched web
+artifact prerequisite and two-case job121014504245 pass (21.2s); the focused
+run is terminal green. No unrelated check is rerun. Primary receipts:
 tmp/ucu12/ci-recovery/chromium-general-40128284373/ and
 tmp/ucu12/adoption-published/application-ci.json. Target maintenance removes
 only inactive web-crate outputs under the60GiB policy (34.1GiB); dependencies,
 running processes, prior artifacts and unrelated changes are preserved.
 
+Teletext1.5 Chromium job120984547997 passes52 cases, skips one and fails two;
+nine serial followers do not run. The Native source-caption test assumes the
+old fresh-channel engine. Its disposable setup now explicitly selects Native
+and restores the original engine and caption setting on every exit. Both headed
+Chromium and Firefox pass the unchanged proof across nine cultures, two themes,
+JS/no-JS, persistence, atomic incompatible-engine refusal and responsive views
+(114.237s/187.515s). New-install Next defaults and stored choices are unchanged.
+
+The other failure is selected-audio metadata loss in Next. A single unchanged
+active-viewer diagnostic retains source, pre-wrapper HLS segment and served TS
+prefix: source AAC is eng; both outputs lack language. Captured worker arguments
+map0:1/acodec copy and suppress metadata without restoring the selected stream.
+The existing accepted Phase9A correction is reused byte-for-byte as023 patch0007;
+rs.6 retains all six prior patches and exact source/lock/compiler pins. Its
+grouped test covers copied, filtered, alternate-index, separate, generated and
+reopened-input audio without global-metadata disclosure or guessed language.
+Linux candidate qualification passes53 source controls (45 pipeline/eight
+caption), version/startup, GLIBC2.28 and the unchanged headed active-viewer
+test (42.997s). Both actual readers retain eng; decoded AV, source process
+ownership, disconnect leases and graceful host shutdown pass unchanged. The
+optimized worker is bb2800927331a3b41046518d584b57503f08f437df88d4e32138924ba9005ed0;
+archive4750ce97ba58746c7b26ecb7ccdfcf3a68475ed1b5ca963bd251fc8f8b4db8d9.
+The selected Dutch-audio playback case passes7.760s; three affected copied-caption
+cases pass9.215s (96c3947a-2ed3-4546-b5ce-968dba7c8071). The initial three-case
+trial omitted its required proof parent and refused setup; it is retained and
+not represented as a product defect or passing run. Windows/ARM qualification
+and nine previously unrun serial followers are running. No runtime adoption,
+Mac execution or platform waiver is claimed.
+Ten existing source-preparation guards pass. Primary receipt remains
+tmp/ucu12/adoption-published/application-ci.json, with negative stage probes and
+browser results under tmp/ucu12/ci-recovery/chromium-15-40128284373/. An invalid
+explicit test-runtime path was refused before playback; that attempt is retained
+and excluded from product evidence. Completed rs.5 caption components remain
+valid within their scope; the combined replacement still requires qualification.
+
+Maintainer pause2026-10-25: all four non-Mac rs.6 build/package components
+pass53 source controls each; Windows additionally passes all four affected
+application runtime cases. Native ARM/hardware remains unverified. The local
+serial-followers trial was interrupted during case7; it is incomplete, not
+accepted as a passing nine-case run. Owned host stop receipts confirm clean
+shutdown. ARM64 owned fallback playback had already completed exit0 before pause; its
+existing decoder oracle was not run, so integration is not accepted. Resume
+with rs6-arm64/evidence/fallback-playback/decode-command.json. The ARMv7
+equivalent-recipe gap is recorded in rs6-armv7/evidence/fallback-recipe-gap.json.
+No owned trial remains running. No more checks or pushes are started. Original GitHub CI is untouched;
+source/manifest/test and handoff edits remain uncommitted for resume.
+
+Resume2026-10-25: the original run is terminal. Both Level2.5 browser jobs pass,
+as does original general Firefox. Level1.5 Firefox job120984547941 fails because
+its self-hosted runner loses communication; its browser step never completes
+and no job log or diagnostics artifact survives. No individual test defect or
+passing case count is inferred. Only that complete64-case/ten-file Firefox
+suite needs recovery. The existing browser selector gains teletext-1.5 using
+its unchanged ownership filter;34 workflow/selection guards, scoped actionlint
+and metadata-only exact case selection pass. No general/Level2.5 or Rust job is
+selected and no runtime pin changes.
+
+The interrupted Chromium followers have composed passing recovery: five
+completion receipts are reused and only the three unfinished delivery-status
+cases rerun, all passing118.032s. The unchanged external-client prerequisite
+skip stays unverified. This is not relabelled as one uninterrupted nine-case run.
+The retained ARM64 fallback output passes the existing decoder oracle:200frames,
+160x90, selected Dutch880Hz and caption-reference error0.396. Its original
+ARM64 worker/FFmpeg207 execution under QEMU is preserved; only the decoder uses
+verified native Linux207 after Docker becomes unavailable. Native Rockchip is
+unverified. ARMv7 full playback has no retained equivalent recipe; adopting the
+existing bounded recipe for its software path needs the currently stopped
+Docker Linux engine, not a new test framework. Other independent work continues.
+
 Finite completion list (row237–254 acceptance remains pending):
 Missing functionality/source disposition:
-- Adopt Next's qualified copied-caption correction after its remaining native
+- Adopt Next's qualified copied-caption and selected-audio corrections after their remaining native
   package gates and separately authorized publication. The four non-Mac
   candidates above are completed; published rs.4 is unchanged.
   Implemented
@@ -34533,18 +34604,24 @@ Missing functionality/source disposition:
   build/software/archive/publication and six-RID Next publication proof above.
   This does not qualify unavailable hardware or deferred Mac FFmpeg kits.
 Missing mandatory evidence:
-1. Complete copied-caption runtime packages/adoption and affected Teletext CI.
+1. Complete copied-caption/selected-audio runtime packages/adoption and affected Teletext CI.
    Corrected Next CI, the two finite-cut fixture cases, all four non-Mac
-   caption candidates and the JWT audit are complete within their stated scope.
+   caption candidates, both corrected Native source-caption browser proofs and
+   the JWT audit are complete within their stated scope. Qualify the combined
+   rs.6 candidate without erasing these completed components.
    Preserve the original CI and unaffected results; partial recovery is never
    a full new-SHA CI claim. ucu-12-ci-runtime-recovery owns this blocker.
 2. Complete native macOS FFmpeg kits/software acceptance, dependent application
    proof and six-RID FFmpeg distribution. Qualify the new copied-caption Next
-   correction on macOS before its six-RID adoption; published rs.4 predates it.
+   and selected-audio corrections on macOS before six-RID adoption; published
+   rs.4 predates them.
    This work is deferred, not waived. Do not broaden earlier ARM/macOS
    application debt to new gaps or publish a mixed-source replacement.
-3. Pass only the corrected preview browser cases in CI and diagnose/recover
-   the newly failed Teletext1.5 Chromium cases while other original jobs finish.
+3. Corrected preview CI is green and Chromium serial followers have composed
+   passing recovery. Retry only the missing complete Level1.5 Firefox check
+   after runner disconnection. Complete affected CI for the adopted Next
+   correction when its replacement is qualified/published. Reuse the now-green
+   Level2.5 browser jobs and other unaffected results.
    Then final
    ordered row dispositions/baseline advancement only after every required
    acceptance item is satisfied and the Mac deferral is resolved; retain accepted

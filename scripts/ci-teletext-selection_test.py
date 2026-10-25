@@ -63,9 +63,19 @@ class BrowserRecovery(unittest.TestCase):
         self.assertIsNone(re.search(args[2], "plays a real Hx264/AAC preview derivative through Hls.js"))
         self.assertIsNone(re.search(args[2], "Next converted captions are authenticated and toggle real browser cues"))
 
+    def test_level15_recovery_reuses_the_complete_existing_suite_filter(self):
+        args = selection.browser_recovery_args("teletext-1.5")
+        self.assertEqual(args, [selection.browser_filter("1.5")])
+        for spec in (ROOT / "tests/e2e").rglob("*.spec.ts"):
+            with self.subTest(spec=spec.name):
+                self.assertEqual(bool(re.search(args[0], spec.as_posix())),
+                                 owners(spec.as_posix()) == ["1.5"])
+
     def test_cli_refuses_unknown_and_mixed_selections_without_output(self):
         for args in (("browser-recovery", "unknown"), ("browser-recovery", "general"),
                      ("rust", "channel-preview"), ("browser", "channel-preview"),
+                     ("rust", "teletext-1.5"), ("browser", "teletext-1.5"),
+                     ("browser-recovery", "teletext-1.5", "--next-runtime"),
                      ("browser-recovery", "channel-preview", "--next-runtime")):
             with self.subTest(args=args):
                 result = subprocess.run([sys.executable, str(ROOT / "scripts/ci-teletext-selection.py"), *args],
