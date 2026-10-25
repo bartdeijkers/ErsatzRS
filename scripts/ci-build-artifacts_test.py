@@ -530,7 +530,7 @@ class FocusedAuditSelection(unittest.TestCase):
 
     def scheduled(self, **selected):
         inputs = dict(audit_only=False, test_only=False, next_engine_only=False,
-                      teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="")
+                      teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="", next_case_set="all")
         inputs.update(selected)
         scheduled = set()
         for name, body in self.jobs.items():
@@ -598,12 +598,12 @@ class FocusedAuditSelection(unittest.TestCase):
         step = self.workflow.split("- name: Reject mixed audit mode\n", 1)[1]
         expression = step.splitlines()[0].strip().removeprefix("if: ")
         base = dict(audit_only=True, test_only=False, next_engine_only=False,
-                    teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="")
+                    teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="", next_case_set="all")
         self.assertFalse(self.evaluate(expression, base, SimpleNamespace()))
         for key, value in (("test_only", True), ("next_engine_only", True),
                            ("teletext_only", "all"), ("browser_only", "both"),
                            ("browser_case_set", "channel-preview"), ("browser_case_set", "teletext-1.5"),
-                           ("browser_case_set", "teletext-runtime"), ("teletext_only", "1.5-rust"), ("reuse_artifacts", "{}")):
+                           ("browser_case_set", "teletext-runtime"), ("teletext_only", "1.5-rust"), ("reuse_artifacts", "{}"), ("next_case_set", "subtitle-nul")):
             with self.subTest(mode=key):
                 self.assertTrue(self.evaluate(expression, dict(base, **{key: value}), SimpleNamespace()))
 
@@ -614,7 +614,10 @@ class FocusedAuditSelection(unittest.TestCase):
         base = dict(os.environ, TEST_ONLY="false", NEXT_ONLY="false", TELETEXT_ONLY="none",
                     BROWSER_ONLY="none", BROWSER_CASE_SET="fixtures", REUSE_ARTIFACTS="",
                     RUNNER_POOL="self-hosted", RESET_TARGET_DIR="false")
-        cases = [({}, True), ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview"}, True),
+        cases = [({"NEXT_ONLY": "true", "NEXT_CASE_SET": "subtitle-nul"}, True),
+                 ({"NEXT_CASE_SET": "subtitle-nul"}, False),
+                 ({"NEXT_ONLY": "true", "NEXT_CASE_SET": "unknown"}, False),
+                 ({"NEXT_ONLY": "true", "NEXT_CASE_SET": "all"}, True), ({}, True), ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview"}, True),
                  ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5"}, True),
                  ({"BROWSER_ONLY": "both", "BROWSER_CASE_SET": "teletext-runtime"}, True),
                  ({"TELETEXT_ONLY": "1.5-rust"}, True),
