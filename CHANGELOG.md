@@ -685,10 +685,6 @@ release section when tagging a release.
 - Add focused CI recovery selections for the Level 1.5 Rust runtime job and
   the failed source-caption/Next-viewer browser cases with their interrupted
   serial followers. Retain existing test assertions and unrelated passing CI.
-- Reuse verified CI artifacts for focused recoveries after CI/documentation-only
-  changes. Preserve the original producer revision, checksums, platform,
-  toolchain and build settings; a missing or invalid artifact fails recovery
-  without starting another build.
 
 - Make the Native source-caption browser fixture explicit about its engine,
   preserving its localized save/rejection checks when fresh channels use Next.

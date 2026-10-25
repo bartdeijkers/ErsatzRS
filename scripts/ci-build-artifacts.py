@@ -33,7 +33,7 @@ BUILD_FLAG_KEYS = ("RUSTFLAGS", "CARGO_PROFILE_TEST_DEBUG", "LEPTOS_OUTPUT_NAME"
 REUSE_SOURCE_EXCEPTIONS = {
     ".github/workflows/ci.yml", "scripts/ci-build-artifacts.py", "scripts/ci-build-artifacts_test.py",
     "scripts/ci-teletext-selection.py", "scripts/ci-teletext-selection_test.py",
-    "BUILD.md", "CHANGELOG.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
+    "BUILD.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
     "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
 }
 

@@ -203,6 +203,16 @@ class BuildArtifacts(unittest.TestCase):
              self.assertRaisesRegex(ValueError, "source inputs changed"):
             artifacts.verify_source_equivalence(SHA, SHA)
 
+    def test_source_reuse_rejects_compiled_changelog_even_when_documentation(self):
+        # Release notes embed CHANGELOG.md at compile time; documentation is
+        # not automatically independent of the server executable.
+        for changes in ([b"CHANGELOG.md\0", b""], [b"", b"CHANGELOG.md\0"]):
+            with self.subTest(changes=changes), \
+                 patch.object(artifacts.subprocess, "run", return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(artifacts.subprocess, "check_output", side_effect=changes), \
+                 self.assertRaisesRegex(ValueError, "source inputs changed: CHANGELOG.md"):
+                artifacts.verify_source_equivalence(SHA, "b" * 40)
+
     def test_browser_wrapper_uses_verified_bundle_without_any_build_tools(self):
         root, _ = self.fixture("web")
         server = root / "bin/ersatzrs-web"

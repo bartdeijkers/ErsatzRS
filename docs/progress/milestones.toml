@@ -34716,6 +34716,49 @@ without compilation or artifact-download fallback. The normal build path is
 unchanged. No release is built or published. References and proof remain in
 tmp/ucu12/ci-recovery/artifact-reuse/.
 
+CI-only checkpoint05b1a1ad0ef0bf8bd235b33fb3e6c421d4615c54 is committed and
+pushed. Its real web-cache reuse check succeeds against producer5a2d8460,
+with only the seven explicitly permitted CI/progress/doc files differing.
+Browser recovery40181549125 starts on05b1a1ad; verification job121133497302 is
+already green and executes only checkout, reference validation and artifact
+reuse. Chromium121133541044 is running; Firefox121133541061 is queued. There
+is no new compilation, installation, upload or target/cache pruning in that
+provider. Preserved Rust producer40178558343 remains the only active build;
+its resulting archive will feed the remaining Level1.5 Rust check. No release
+or unrelated phase work is performed.
+
+Preserved Rust build121124467264 is terminal green; current Next job121133900887
+is executing its existing component/decoded/HTTP checks. Its published Rust
+artifact12594449203 and immutable local copy share the raw archive digest
+abd2cad19c0f72d445bc8b135f4f02d5ebc044503e409ed0890fca158765784b,
+independently checked against the producer log. The reference retains5a2d8460,
+Rust1.97.1 and its exact recorded flags, including test debug0. Level1.5 Rust
+recovery40181886084 now consumes that archive on05b1a1ad through the same
+verification-only path. Browser40181549125 continues with its reused web
+bundle. All remaining checks are dispatched; no additional build is queued.
+
+Reused-bundle Chromium recovery121133541044 is terminal green:10 passed,
+one existing external-client prerequisite skip, zero unexpected/flaky in552.194s.
+The real active Next-viewer case executes and passes, closing the demonstrated
+metadata-loss failure together with the source-caption fixture and interrupted
+followers. Artifact12595035661 matches digest
+44ddd745ad1aaf7851e2f7fc0c0606bbcfb9055dbbc36fa8582b21a190f11d06;
+compressed evidence and JSON are retained at tmp/ucu12/ci-recovery/rs6-browser-ci/.
+The reused Rust verification121134487041 also passes in about24s with no
+compilation; Teletext1.5 job121135748111 is queued. Firefox recovery and Next
+components/smokes still run. Existing unrelated evidence remains valid.
+
+One concrete source-binding correction tightens the reuse guard: release_notes.rs
+embeds root CHANGELOG.md, so it is a compiled input and must never be exempted
+as ordinary documentation. Remove that path from the allowlist;35 focused
+guards pass, including committed and dirty changelog refusal. Revert only the
+four new CI-mechanics lines to the existing curated CI-recovery changelog entry
+from5a2d8460; detailed reuse documentation remains in BUILD.md. Root changelog
+bytes now equal the actual producer, so final application inputs match the
+already-tested binaries without compilation. Passing runtime/browser evidence
+against those unchanged producer binaries remains valid. This is a CI guard
+correction, with no release or feature work.
+
 Missing functionality/source disposition:
 - Complete managed adoption of Next's published copied-caption and selected-audio
   corrections on the four non-Mac platforms. macOS retains original rs.4 under
