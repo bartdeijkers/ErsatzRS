@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-windows-package — awaiting resumption of deferred 120-minute application trial'
+current_focus = 'p9a-source-output SO2-H/R — direct Live HTTP/RTSP route qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -138,16 +138,25 @@ remain unchanged. Resume only with an authoritative/standards-supported rule for
 the exact original trace; no guessed order, new restriction, test relaxation or
 unchanged hypothesis replay. Other completed AE5 components stay closed.
 
-Current package: p9a-windows-package, previously maintainer-deferred.
-Next action: await the requested explicit resumption decision for the existing
-full current-source Windows application-package trial, reserving120minutes.
-The completed bare-worker artifact is not this launcher/admin/playback/Health
-acceptance. Do not start that dependent trial while its deferral remains.
-If resumed, freeze the clean exact source/package/site/runtime and execute the
-existing gates; stop at their actual results, retaining failures and cleanup.
-Missing Mac/native ARM capabilities, independent AB5/C3 formatter proof, X1
-client deferral, X3 upstream-editor wait and M29/unused-object policy decisions
-keep their existing primary owners. No substitute variant or external repair.
+SO1 current FFmpeg207 Native public-HLS compatibility is completed. Canonical
+native_public_hls_followup.current_runtime_207 owns the unchanged three-case
+segmenter-Off/Burn/direct-Burn receipt, exact original source/test body,
+888/200/plain raster,nld660Hz,joined cleanup and57 transport passes. Earlier
+SO1 and unrelated source/lint/editor/client evidence retain their scope.
+
+Current package: p9a-source-output SO2-H/R direct Live HTTP/RTSP qualification.
+Next executable action: use the existing temporary host/source tools to qualify
+that explicitly required ADR0121 lifecycle boundary. SO2-N proves actual Live
+Addon input through live_addon only; a direct URL uses a different path. It is
+missing mandatory route evidence/possible implementation gap, not a demonstrated
+defect or permission for new source infrastructure. Preserve exact page/audio,
+bounded startup/no whole-live extraction, ordinary AV safety and joined actual
+cancellation/cleanup. Stop at this original positive/refusal boundary; do not
+claim source-output acceptance by extrapolating the Addon result.
+The separate120minute full Windows-package trial remains maintainer-deferred;
+its explicit resumption question is pending and does not block this independent
+work. AE5 normative, AB5/C3 formatter, native/Mac, X1/X3 and policy prerequisites
+retain their existing owners. No publication, production pin or new variant queue.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
