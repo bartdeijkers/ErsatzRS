@@ -6,6 +6,10 @@ use epoch_output::{EpochStreamWriter, StreamEpochWrite};
 #[path = "stream_external.rs"]
 mod external;
 
+#[path = "stream_source_producer.rs"]
+mod source_producer;
+use source_producer::PreparedSourcePlayback;
+
 #[path = "stream_source_teletext.rs"]
 mod source_teletext;
 
@@ -1106,6 +1110,26 @@ async fn serve_channel_stream_admitted_inner(
         );
     }
 
+    let streaming_command = if legacy_item.is_some()
+        && interval_admission.is_some()
+        && active.subtitle_mode.unwrap_or(channel.subtitle_mode) != ChannelSubtitleMode::None
+    {
+        let command = source_producer::live_addon(active.remote_stream.as_ref());
+        if command.is_some() {
+            match ersatzrs_infra::ffmpeg_config::use_embedded_subtitles(&state.pool).await {
+                Ok(true) => command,
+                Ok(false) => None,
+                Err(error) => {
+                    tracing::warn!(channel_id=channel.id,%error,"embedded caption policy is unavailable");
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let replacements = if active.external.is_some() {
         Vec::new()
     } else {
@@ -1129,7 +1153,9 @@ async fn serve_channel_stream_admitted_inner(
             load_source_video_stream_by_index(
                 &state.pool,
                 active.media_version_id,
-                active.video_stream_index,
+                active
+                    .video_stream_index
+                    .filter(|_| streaming_command.is_none()),
             )
             .await
         }
@@ -1169,7 +1195,10 @@ async fn serve_channel_stream_admitted_inner(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    if let Some(stream_index) = active.audio_stream_index {
+    if let Some(stream_index) = active
+        .audio_stream_index
+        .filter(|_| streaming_command.is_none())
+    {
         let pinned_index = usize::try_from(stream_index).ok();
         if pinned_index.is_none_or(|index| {
             !source_audio_streams
@@ -1203,7 +1232,7 @@ async fn serve_channel_stream_admitted_inner(
             playback_profile.profile.hardware_acceleration
         };
     let mut interval_reservation = None;
-    let mut retained_playback = None;
+    let mut prepared_playback = None;
     let mut retained_cancellation = None;
     let mut external_subtitle_owner = None;
     let mut source_caption_owner = None;
@@ -1212,12 +1241,20 @@ async fn serve_channel_stream_admitted_inner(
     // Cancellation retains reservations until prepared producers are reaped.
     macro_rules! fence_cancelled_startup {
         ($paths:expr, $controllers:expr) => {
-            if legacy_cancellation.as_ref().is_some_and(LegacyWrapperItemCancellation::is_cancelled) {
+            if legacy_cancellation
+                .as_ref()
+                .is_some_and(LegacyWrapperItemCancellation::is_cancelled)
+            {
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback: ersatzrs_infra::published_interval_source::RetainedIntervalPlayback| playback.prepared),
-                    interval_reservation.as_ref(), Some(&mut external_subtitle_owner),
-                    $paths, $controllers,
-                ).await;
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    $paths,
+                    $controllers,
+                )
+                .await;
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
         };
@@ -1283,7 +1320,7 @@ async fn serve_channel_stream_admitted_inner(
             Ok(Some(playback)) => {
                 source_audio_streams.clone_from(&playback.source_audio);
                 let source = Some(playback.source_video.clone());
-                retained_playback = Some(playback);
+                prepared_playback = Some(PreparedSourcePlayback::Retained(Box::new(playback)));
                 source
             }
             Ok(None) => return StatusCode::NO_CONTENT.into_response(),
@@ -1291,6 +1328,87 @@ async fn serve_channel_stream_admitted_inner(
                 tracing::warn!(channel_id = channel.id, %error,
                     "retained interval input preparation failed");
                 return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
+            }
+        }
+    } else if let Some(command) = &streaming_command {
+        let Some(cancellation) = retained_cancellation.as_mut() else {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        };
+        if interval_reservation.is_none() {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        let work = match crate::host::teletext_work::begin(
+            &state.application,
+            Some(startup_deadline.into_std()),
+        )
+        .await
+        {
+            Ok(work) => work,
+            Err(error) => {
+                tracing::warn!(channel_id=channel.id,%error,"live source caption preparation admission refused");
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+        };
+        let work_hold = work.hold_work();
+        let extractor =
+            ersatzrs_infra::ffprobe::FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let (cancelled, result) = Box::pin(await_retained_startup_stage(
+            cancellation,
+            sender,
+            ersatzrs_infra::remote_stream::prepare_native_caption_producer(
+                command,
+                &extractor,
+                RemoteStreamSpawnContext::mpeg_ts(&channel.number),
+                startup_deadline,
+                receiver,
+            ),
+        ))
+        .await;
+        if matches!(
+            &result,
+            Err(ersatzrs_infra::remote_stream::RemoteStreamError::PreparedTerminationUnconfirmed)
+        ) {
+            work_hold.retain_until_restart();
+            if let Some(reservation) = &interval_reservation {
+                reservation.retain_until_restart();
+            }
+        }
+        if cancelled {
+            if let Ok(playback) = result {
+                if !cancel_retained_startup(
+                    Some(playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await
+                {
+                    work_hold.retain_until_restart();
+                }
+            }
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        match result {
+            Ok(mut playback) => {
+                playback.video_input = playback.video_input.clone().without_readrate();
+                source_audio_streams = source_producer::observed_audio_or_fallback(
+                    &source_audio_streams,
+                    &playback.source_audio,
+                    playback.probe.is_some(),
+                );
+                let source = if playback.probe.is_some() {
+                    playback.source_video.clone()
+                } else {
+                    source_stream
+                };
+                prepared_playback = Some(PreparedSourcePlayback::Streaming(Box::new(playback)));
+                source
+            }
+            Err(error) => {
+                tracing::warn!(channel_id=channel.id,%error,"live source prefix preparation failed");
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
         }
     } else if active.external.is_some() {
@@ -1316,6 +1434,63 @@ async fn serve_channel_stream_admitted_inner(
         .await
     };
     fence_cancelled_startup!(&[], None);
+    let streaming_tracks = if let Some(playback) = &prepared_playback {
+        match playback.streaming_tracks(&state.pool, channel.id).await {
+            Ok(tracks) => tracks,
+            Err(error) => {
+                tracing::warn!(channel_id=channel.id,%error,"live source track policy is unavailable");
+                cancel_retained_startup(
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+        }
+    } else {
+        None
+    };
+    let fresh_stream_inventory = prepared_playback
+        .as_ref()
+        .is_some_and(PreparedSourcePlayback::audio_complete);
+    if streaming_tracks.is_some()
+        && (active.video_stream_index.is_some_and(|index| {
+            if !fresh_stream_inventory {
+                return true;
+            }
+            usize::try_from(index).ok().is_none_or(|index| {
+                source_stream
+                    .as_ref()
+                    .is_none_or(|stream| stream.index != index)
+            })
+        }) || active.audio_stream_index.is_some_and(|index| {
+            if !fresh_stream_inventory {
+                return true;
+            }
+            usize::try_from(index).ok().is_none_or(|index| {
+                !source_audio_streams
+                    .iter()
+                    .any(|stream| stream.index == index)
+            })
+        }))
+    {
+        cancel_retained_startup(
+            prepared_playback
+                .take()
+                .map(PreparedSourcePlayback::into_prepared),
+            interval_reservation.as_ref(),
+            Some(&mut external_subtitle_owner),
+            &[],
+            None,
+        )
+        .await;
+        return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+    }
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
         match load_channel_target_frame_rate(&state.pool, channel.id).await {
             Ok(frame_rate) => frame_rate,
@@ -1327,7 +1502,9 @@ async fn serve_channel_stream_admitted_inner(
                     "failed to load channel target frame rate; refusing to build FFmpeg command"
                 );
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &[],
@@ -1351,7 +1528,9 @@ async fn serve_channel_stream_admitted_inner(
                 "failed to load playback language preferences; refusing to build FFmpeg command"
             );
             cancel_retained_startup(
-                retained_playback.take().map(|playback| playback.prepared),
+                prepared_playback
+                    .take()
+                    .map(PreparedSourcePlayback::into_prepared),
                 interval_reservation.as_ref(),
                 Some(&mut external_subtitle_owner),
                 &[],
@@ -1393,7 +1572,18 @@ async fn serve_channel_stream_admitted_inner(
         None
     } else {
         match async {
-            if let Some(media) = &active.external {
+            if let Some(tracks) = &streaming_tracks {
+                if channel.stream_selector_mode != ChannelStreamSelectorMode::Custom {
+                    return Ok(None);
+                }
+                tracks
+                    .select_custom(
+                        &channel,
+                        content_start_time,
+                        source_producer::selection_policy(effective_streaming_mode),
+                    )
+                    .await
+            } else if let Some(media) = &active.external {
                 if channel.stream_selector_mode != ChannelStreamSelectorMode::Custom {
                     return Ok(None);
                 }
@@ -1430,7 +1620,9 @@ async fn serve_channel_stream_admitted_inner(
                     "failed to execute channel stream selector; refusing fallback stream selection"
                 );
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &[],
@@ -1447,7 +1639,11 @@ async fn serve_channel_stream_admitted_inner(
             .and_then(|selection| selection.audio_stream_index)
             .is_none()
     {
-        if let Some(media) = &active.external {
+        if streaming_tracks.is_some() {
+            // RemoteStream has no Movie/Episode callback owner. Its original
+            // callback path returns None; fresh built-in/YAML audio still applies.
+            None
+        } else if let Some(media) = &active.external {
             ersatzrs_infra::audio_script::transient::select(
                 &channel,
                 media.audio_metadata(),
@@ -1509,7 +1705,9 @@ async fn serve_channel_stream_admitted_inner(
             Ok(selection) => selection,
             Err(error) => {
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &[],
@@ -1534,16 +1732,20 @@ async fn serve_channel_stream_admitted_inner(
         ),
         selection => selection,
     };
-    let audio_selection = if retained_playback.is_some() {
-        retained_audio_selection(audio_selection, &source_audio_streams)
-    } else {
-        audio_selection
-    };
     // SQL/fresh probes and retained transports describe the complete source.
     // Eager-unprobed Remote Streams must not turn unknown audio into silence.
-    let source_audio_complete =
-        active.external.is_some() || active.remote_stream.is_none() || retained_playback.is_some();
-    let audio_selection = if source_audio_complete {
+    let source_audio_complete = active.external.is_some()
+        || active.remote_stream.is_none()
+        || prepared_playback
+            .as_ref()
+            .is_some_and(PreparedSourcePlayback::audio_complete);
+    let audio_selection = if let Some(playback) = &prepared_playback {
+        source_producer::audio_selection(
+            audio_selection,
+            &source_audio_streams,
+            playback.audio_complete(),
+        )
+    } else if source_audio_complete {
         audio_selection.with_complete_source_audio(&source_audio_streams)
     } else {
         audio_selection
@@ -1551,13 +1753,20 @@ async fn serve_channel_stream_admitted_inner(
     fence_cancelled_startup!(&[], None);
     let subtitle = if active.has_pinned_stream_selection {
         if let Some(stream_index) = active.subtitle_stream_index {
-            match select_pinned_playback_subtitle(
-                &state.pool,
-                active.media_item_id,
-                active.media_version_id,
-                stream_index,
-                effective_streaming_mode,
-            )
+            match async {
+                if let Some(tracks) = &streaming_tracks {
+                    source_producer::pinned_subtitle(tracks, stream_index)
+                } else {
+                    select_pinned_playback_subtitle(
+                        &state.pool,
+                        active.media_item_id,
+                        active.media_version_id,
+                        stream_index,
+                        effective_streaming_mode,
+                    )
+                    .await
+                }
+            }
             .await
             {
                 Ok(subtitle) => Some(subtitle),
@@ -1571,7 +1780,9 @@ async fn serve_channel_stream_admitted_inner(
                         "pinned subtitle stream is unavailable; refusing fallback selection"
                     );
                     cancel_retained_startup(
-                        retained_playback.take().map(|playback| playback.prepared),
+                        prepared_playback
+                            .take()
+                            .map(PreparedSourcePlayback::into_prepared),
                         interval_reservation.as_ref(),
                         Some(&mut external_subtitle_owner),
                         &[],
@@ -1588,7 +1799,10 @@ async fn serve_channel_stream_admitted_inner(
         selection.subtitle
     } else {
         match async {
-            if let Some(media) = &active.external {
+            if let Some(tracks) = &streaming_tracks {
+                tracks.select_subtitle(&state.pool,&preferred_subtitle_languages,subtitle_mode,
+                    source_producer::selection_policy(effective_streaming_mode)).await
+            } else if let Some(media) = &active.external {
                 media
                     .tracks()
                     .select_subtitle(
@@ -1643,7 +1857,7 @@ async fn serve_channel_stream_admitted_inner(
                     "failed to select playback subtitle; refusing subtitle-free fallback"
                 );
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback.take().map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &[],
@@ -1656,6 +1870,7 @@ async fn serve_channel_stream_admitted_inner(
     };
     fence_cancelled_startup!(&[], None);
     let subtitle = match subtitle {
+        selected if streaming_tracks.is_some() => selected,
         Some(selected) if active.external.is_some() => {
             let media = active.external.as_ref().expect("external binding checked");
             match external::prepare_subtitle(
@@ -1675,7 +1890,9 @@ async fn serve_channel_stream_admitted_inner(
                 Err(error) => {
                     tracing::warn!(channel_id = channel.id, %error, "external subtitle preparation failed");
                     cancel_retained_startup(
-                        retained_playback.take().map(|playback| playback.prepared),
+                        prepared_playback
+                            .take()
+                            .map(PreparedSourcePlayback::into_prepared),
                         interval_reservation.as_ref(),
                         Some(&mut external_subtitle_owner),
                         &[],
@@ -1698,7 +1915,9 @@ async fn serve_channel_stream_admitted_inner(
             .await
             else {
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &[],
@@ -1742,7 +1961,9 @@ async fn serve_channel_stream_admitted_inner(
         };
     if !retained_subtitle_verified {
         cancel_retained_startup(
-            retained_playback.take().map(|playback| playback.prepared),
+            prepared_playback
+                .take()
+                .map(PreparedSourcePlayback::into_prepared),
             interval_reservation.as_ref(),
             Some(&mut external_subtitle_owner),
             &[],
@@ -1763,28 +1984,60 @@ async fn serve_channel_stream_admitted_inner(
         subtitle.as_ref(),
         audio_selection,
     );
-    let subtitle_input = source_caption_owner
-        .as_ref()
-        .map(|source: &Arc<source_teletext::PlaybackSource>| source.input())
-        .or_else(|| {
-            subtitle.as_ref().and_then(|subtitle| {
-                if active.external.is_some() {
-                    external::subtitle_input(
-                        subtitle,
-                        &resolved,
-                        output_format,
-                        effective_streaming_mode,
-                    )
-                } else {
-                    subtitle_input_for_stream(
-                        subtitle,
-                        &resolved,
-                        output_format,
-                        effective_streaming_mode,
-                    )
-                }
+    let streaming_subtitle_input = if let (Some(playback), Some(subtitle)) =
+        (prepared_playback.as_mut(), subtitle.as_ref())
+    {
+        match playback.subtitle_input(subtitle) {
+            Ok(input) => input,
+            Err(error) => {
+                tracing::warn!(channel_id=channel.id,%error,"live source caption choice is unavailable");
+                cancel_retained_startup(
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
+                return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+            }
+        }
+    } else {
+        None
+    };
+    let subtitle_input = streaming_subtitle_input.or_else(|| {
+        source_caption_owner
+            .as_ref()
+            .map(|source: &Arc<source_teletext::PlaybackSource>| source.input())
+            .or_else(|| {
+                subtitle.as_ref().and_then(|subtitle| {
+                    if streaming_tracks.is_some() {
+                        subtitle_input_for_stream(
+                            subtitle,
+                            "pipe:0",
+                            output_format,
+                            effective_streaming_mode,
+                        )
+                    } else if active.external.is_some() {
+                        external::subtitle_input(
+                            subtitle,
+                            &resolved,
+                            output_format,
+                            effective_streaming_mode,
+                        )
+                    } else {
+                        subtitle_input_for_stream(
+                            subtitle,
+                            &resolved,
+                            output_format,
+                            effective_streaming_mode,
+                        )
+                    }
+                })
             })
-        });
+    });
     if active.subtitle_stream_index.is_some() && subtitle_input.is_none() {
         tracing::error!(
             channel_id = channel.id,
@@ -1793,7 +2046,9 @@ async fn serve_channel_stream_admitted_inner(
             "pinned subtitle cannot be mapped for this output; refusing subtitle-free playback"
         );
         cancel_retained_startup(
-            retained_playback.take().map(|playback| playback.prepared),
+            prepared_playback
+                .take()
+                .map(PreparedSourcePlayback::into_prepared),
             interval_reservation.as_ref(),
             Some(&mut external_subtitle_owner),
             &[],
@@ -1850,7 +2105,9 @@ async fn serve_channel_stream_admitted_inner(
                 .await;
                 if cancelled {
                     cancel_retained_startup(
-                        retained_playback.take().map(|playback| playback.prepared),
+                        prepared_playback
+                            .take()
+                            .map(PreparedSourcePlayback::into_prepared),
                         interval_reservation.as_ref(),
                         Some(&mut external_subtitle_owner),
                         &[],
@@ -1865,7 +2122,9 @@ async fn serve_channel_stream_admitted_inner(
                         tracing::warn!(channel_id = channel.id, %error,
                             "retained interval watermark preparation failed");
                         cancel_retained_startup(
-                            retained_playback.take().map(|playback| playback.prepared),
+                            prepared_playback
+                                .take()
+                                .map(PreparedSourcePlayback::into_prepared),
                             interval_reservation.as_ref(),
                             Some(&mut external_subtitle_owner),
                             &[],
@@ -1957,7 +2216,9 @@ async fn serve_channel_stream_admitted_inner(
                         artifacts.shutdown().await;
                     }
                     cancel_retained_startup(
-                        retained_playback.take().map(|playback| playback.prepared),
+                        prepared_playback
+                            .take()
+                            .map(PreparedSourcePlayback::into_prepared),
                         interval_reservation.as_ref(),
                         Some(&mut external_subtitle_owner),
                         std::slice::from_ref(&graphics_cleanup_dir),
@@ -2013,20 +2274,22 @@ async fn serve_channel_stream_admitted_inner(
         channel_start_time,
     );
     fence_cancelled_startup!(&graphics_cleanup_dirs, Some(&mut dynamic_text_controllers));
-    let media_input = retained_playback.as_ref().map_or_else(
+    let media_input = prepared_playback.as_ref().map_or_else(
         || {
             active.remote_stream.as_ref().map_or_else(
                 || Ok(InputFile::video(resolved.clone())),
                 remote_stream_input_file,
             )
         },
-        |playback| Ok(playback.video_input.clone()),
+        |playback| Ok(playback.video_input().clone()),
     );
     let media_input = match media_input {
         Ok(input) => input,
         Err(error) => {
             cancel_retained_startup(
-                retained_playback.take().map(|playback| playback.prepared),
+                prepared_playback
+                    .take()
+                    .map(PreparedSourcePlayback::into_prepared),
                 interval_reservation.as_ref(),
                 Some(&mut external_subtitle_owner),
                 &graphics_cleanup_dirs,
@@ -2067,7 +2330,9 @@ async fn serve_channel_stream_admitted_inner(
             Ok(song) => song.map(Arc::new),
             Err(error) => {
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &graphics_cleanup_dirs,
@@ -2085,8 +2350,20 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         stream_duration
     };
-    let remote_stream = active.remote_stream.clone();
-    let retained_stream = retained_playback.is_some();
+    let remote_stream = if prepared_playback
+        .as_ref()
+        .is_some_and(PreparedSourcePlayback::is_streaming)
+    {
+        None
+    } else {
+        active.remote_stream.clone()
+    };
+    let retained_stream = prepared_playback
+        .as_ref()
+        .is_some_and(PreparedSourcePlayback::is_retained);
+    let streaming_source = prepared_playback
+        .as_ref()
+        .is_some_and(PreparedSourcePlayback::is_streaming);
     let ordinary_caption = if source_caption_owner.is_some() {
         match source_caption_recovery::prepare(
             source_teletext::SelectionContext {
@@ -2110,7 +2387,9 @@ async fn serve_channel_stream_admitted_inner(
             Err(error) => {
                 tracing::error!(channel_id = channel.id, %error, "ordinary caption fallback selection failed");
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &graphics_cleanup_dirs,
@@ -2198,7 +2477,9 @@ async fn serve_channel_stream_admitted_inner(
                     "refusing to transcode an unsupported source"
                 );
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     interval_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &graphics_cleanup_dirs,
@@ -2208,6 +2489,22 @@ async fn serve_channel_stream_admitted_inner(
                 return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
             }
         };
+    if let Some(playback) = prepared_playback.as_mut() {
+        if let Err(error) = playback.bind_caption_consumer(&command, source_caption_plan.as_ref()) {
+            tracing::warn!(channel_id=channel.id,%error,"live source final caption binding refused");
+            cancel_retained_startup(
+                prepared_playback
+                    .take()
+                    .map(PreparedSourcePlayback::into_prepared),
+                interval_reservation.as_ref(),
+                Some(&mut external_subtitle_owner),
+                &graphics_cleanup_dirs,
+                Some(&mut dynamic_text_controllers),
+            )
+            .await;
+            return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+        }
+    }
     let slate_metadata = metadata.clone();
     let slate_runtime_capabilities = runtime_capabilities.clone();
     let retry_playback_profile = playback_profile.clone();
@@ -2463,7 +2760,9 @@ async fn serve_channel_stream_admitted_inner(
                     // A slate and the later media command are distinct source
                     // epochs; this explicit accepted owner cannot join them.
                     cancel_retained_startup(
-                        retained_playback.take().map(|playback| playback.prepared),
+                        prepared_playback
+                            .take()
+                            .map(PreparedSourcePlayback::into_prepared),
                         None,
                         Some(&mut external_subtitle_owner),
                         &graphics_cleanup_dirs,
@@ -2481,9 +2780,9 @@ async fn serve_channel_stream_admitted_inner(
                     )
                         .into_response();
                 }
-                if let Some(playback) = retained_playback.take() {
+                if let Some(playback) = prepared_playback.take() {
                     cancel_retained_startup(
-                        Some(playback.prepared),
+                        Some(playback.into_prepared()),
                         None,
                         Some(&mut external_subtitle_owner),
                         &graphics_cleanup_dirs,
@@ -2519,7 +2818,9 @@ async fn serve_channel_stream_admitted_inner(
                     "failed to load MPEG-TS transcode capacity"
                 );
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     None,
                     Some(&mut external_subtitle_owner),
                     &graphics_cleanup_dirs,
@@ -2535,9 +2836,11 @@ async fn serve_channel_stream_admitted_inner(
     };
 
     let cleanup_on_spawn_failure = graphics_cleanup_dirs.clone();
-    if retained_playback.is_some() && tokio::time::Instant::now() >= startup_deadline {
+    if prepared_playback.is_some() && tokio::time::Instant::now() >= startup_deadline {
         cancel_retained_startup(
-            retained_playback.take().map(|playback| playback.prepared),
+            prepared_playback
+                .take()
+                .map(PreparedSourcePlayback::into_prepared),
             capacity_reservation.as_ref(),
             Some(&mut external_subtitle_owner),
             &graphics_cleanup_dirs,
@@ -2551,7 +2854,10 @@ async fn serve_channel_stream_admitted_inner(
         )
             .into_response();
     }
-    let retained_output = if retained_playback.is_some() {
+    let retained_output = if prepared_playback
+        .as_ref()
+        .is_some_and(PreparedSourcePlayback::is_retained)
+    {
         match RetainedTsOutput::from_command(
             &command,
             stream_duration.or_else(|| active.remaining_duration(now)),
@@ -2573,7 +2879,9 @@ async fn serve_channel_stream_admitted_inner(
                     "retained MPEG-TS reserve refused"
                 );
                 cancel_retained_startup(
-                    retained_playback.take().map(|playback| playback.prepared),
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
                     capacity_reservation.as_ref(),
                     Some(&mut external_subtitle_owner),
                     &graphics_cleanup_dirs,
@@ -2592,7 +2900,9 @@ async fn serve_channel_stream_admitted_inner(
         .is_some_and(LegacyWrapperItemCancellation::is_cancelled)
     {
         cancel_retained_startup(
-            retained_playback.take().map(|playback| playback.prepared),
+            prepared_playback
+                .take()
+                .map(PreparedSourcePlayback::into_prepared),
             capacity_reservation.as_ref(),
             Some(&mut external_subtitle_owner),
             &graphics_cleanup_dirs,
@@ -2608,9 +2918,9 @@ async fn serve_channel_stream_admitted_inner(
         channel.number.clone(),
         state.hls_sessions.clone(),
         capacity_reservation,
-        Some(retry),
+        (!streaming_source).then_some(retry),
         remote_stream,
-        retained_playback.map(|playback| playback.prepared),
+        prepared_playback.map(PreparedSourcePlayback::into_prepared),
         external_subtitle_owner,
         retained_output
             .as_ref()

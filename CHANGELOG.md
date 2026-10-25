@@ -46,10 +46,10 @@ release section when tagging a release.
 ### Added
 
 - Add bounded, playback-owned teletext inspection and observed-page selection
-  for an already-running producer. Preserve its original bytes and track
-  identity, and bind the selected page to the final shared-input consumer with
-  joined cancellation. Ordinary live and one-shot caption routes remain
-  unqualified; this component does not enable them.
+  for an already-running producer. Native Live add-on caption Burn now uses
+  that same producer on FFmpeg 2.0.7, preserving selected audio, ordinary Off
+  playback and joined cancellation. One-shot and Next source-output adoption
+  retain their separate acceptance gates.
 
 - Add owned finite source-video frame-end qualification for subtitle preparation.
   Exact decoded clocks and complete-frame bookends are checked against the selected

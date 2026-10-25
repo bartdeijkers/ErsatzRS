@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output SO2-N — ordinary Native Live route on accepted FFmpeg2.0.7'
+current_focus = 'p9a-source-output SO3-R/SO4-R — current Next 0.2.3 source-output compatibility'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -78,21 +78,26 @@ That UCU12 closeout authorized source delivery only; it did not accept Phase9.
 The maintainer now explicitly resumes the separate Phase9 goal after controlled
 mergee0c4fc8d, preserving all six local commits and ten uncommitted files.
 
-Current package: p9a-source-output SO2-N ordinary Native Live route integration.
-Next executable action: rebase only the four existing preserved route candidate
-files onto UCU12 and prove ordinary Live Off/Burn on accepted FFmpeg2.0.7, which
-contains exact0017. Keep observed888/200/plain, Dutch audio, one producer/request,
-unchanged addon/generation, defaultcapacity2, transport and joined cleanup.
-Stop at that named current-route component; no adjacent variant or full-client
-work. Canonical ucu12_rejoin_followup owns merge/restore and the finite gap map.
+SO2-N ordinary Native Live route integration is completed within Linux
+x86_64/software accepted FFmpeg2.0.7. One held producer/request delivers Off/Burn,
+observed888 versus200/plain and Dutch660Hz with unchanged generation/addon calls,
+defaultcapacity2 and joined cleanup. Three helper/six retained-owner regressions,
+the actual grouped HTTP route,19 transport controls per capture, strict affected
+Clippy, format, architecture and fresh-binary ordinary MPEG-TS/HLS smoke pass.
+Canonical scheduler_recovery_followup.native_adoption owns exact final-source
+receipts, reuse and preserved negatives. Other native/adoption owners stay open.
 
-The separate SO3-R/SO4-R package ports only three already-required Phase9
-source-output corrections to current Next023/source54c6cb9: paired textBurn
+Current package: p9a-source-output SO3-R/SO4-R current-Next compatibility join.
+Next executable action: prepare one pinned source-output candidate on current
+Next023/source54c6cb9, preserving all seven accepted patches and exact lock.
+Assess/port only three already-required Phase9 corrections: paired textBurn
 clock restoration, finite-video-cut-v1 and consume-once Copy negotiation.
-Accepted rs.6 contains neither negotiated contract and retains the reset block;
-its seven-patch/lock identity is verified. Old022 candidate evidence is retained
-within scope, not current023 acceptance. No production pin or package publication
-changes here. Other native/platform/adoption owners and X1/X3 decisions remain.
+Accepted rs.6 retains the reset block and lacks both negotiated contracts.
+Stop at the existing strict source and actual ordinary-route compatibility
+conditions, including original seek2164/2143 and one-use Copy/AV/audio/cleanup.
+Old022 candidate receipts remain valid within scope, not adopted023 evidence.
+No production pin, publication, additional variant or new client search.
+Canonical ucu12_rejoin_followup retains merge/restore and the finite gap map.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
@@ -397,10 +402,10 @@ owned regression now covers unpaced input; the paced companion retains its
 original arguments. A grouped app-directory collision is retained separately.
 Canonical scheduler_recovery_followup owns the exact candidate identities and
 receipts. Earlier pacing/duration/GENPTS/heartbeat negatives remain valid.
-The four unadopted route sources are preserved outside the active product path;
-this does not enable them on published uncorrected FFmpeg2.0.6. The corrected local Linux package/Bookworm component is completed above. Other
-platform qualification, managed adoption and remaining SO2 cells
-retain their existing owners. SO3 delivery components stay closed.
+Those four route sources were historically preserved outside the product path
+on uncorrected FFmpeg2.0.6; the current SO2-N completion above now adopts them
+on accepted FFmpeg2.0.7. The local Linux package/Bookworm component stays closed.
+Other native/platform/adoption owners remain; SO3 components keep their scope.
 
 SO1 public native HLS source-caption integration is completed within Linux
 x86_64/software FFmpeg9: actual ordinary segmenter-Off, segmenter-Burn and
