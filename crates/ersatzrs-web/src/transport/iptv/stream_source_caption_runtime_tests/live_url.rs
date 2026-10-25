@@ -22,11 +22,14 @@ struct Source {
     manifests: Arc<AtomicUsize>,
     rtsp_status: Option<PathBuf>,
     segment_closes: bool,
+    requires_reentry: bool,
+    native_hls: bool,
 }
 
 #[derive(Clone, Copy)]
 enum Origin {
     Http,
+    HttpEof,
     Hls,
     Rtsp,
 }
@@ -161,17 +164,63 @@ async fn cases(
     expected: &[Vec<u8>; 3],
     source: &Source,
 ) {
-    for (index, mode) in [ChannelSubtitleMode::None, ChannelSubtitleMode::Any]
-        .into_iter()
-        .enumerate()
-    {
+    let modes: &[ChannelSubtitleMode] = if source.native_hls {
+        &[ChannelSubtitleMode::None]
+    } else {
+        &[ChannelSubtitleMode::None, ChannelSubtitleMode::Any]
+    };
+    for (index, &mode) in modes.iter().enumerate() {
         reset_active_transcode_state_for_tests();
-        start_item(state, item, mode, "nld", StreamingMode::TransportStream).await;
+        start_item(
+            state,
+            item,
+            mode,
+            "nld",
+            if source.native_hls {
+                StreamingMode::HttpLiveStreamingSegmenter
+            } else {
+                StreamingMode::TransportStream
+            },
+        )
+        .await;
         let label = if mode == ChannelSubtitleMode::None {
             "off"
         } else {
             "burn"
         };
+        let openings = if source.requires_reentry {
+            source.reads.load(Ordering::SeqCst) + 2
+        } else {
+            index + 1
+        };
+        if source.native_hls {
+            let address = public.address;
+            let capture_root = root.to_path_buf();
+            let response = tokio::spawn(async move {
+                super::hls::capture_segments(address, &capture_root, 2).await
+            })
+            .await;
+            stop_native_hls(state).await;
+            let captured = response.expect("native HLS EOF capture assertion");
+            // Verify both sides of the actual source EOF, not only the first
+            // buffered segment or an attempt counter without delivered AV.
+            for segment in captured {
+                super::hls::verify(tools, &segment, expected, false).await;
+            }
+            source_closed(source, openings).await;
+            assert_eq!(
+                state
+                    .application
+                    .operations()
+                    .entity_locker()
+                    .active_teletext_work(),
+                0
+            );
+            let capacity = active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+            assert!(capacity.peak > 0 && capacity.peak <= DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+            assert_eq!(capacity.active, 0);
+            continue;
+        }
         let output =
             capture_recorded(public, Some(&root.join(format!("{label}-partial.ts")))).await;
         tokio::fs::write(root.join(format!("{label}.ts")), &output)
@@ -187,7 +236,10 @@ async fn cases(
             "nld",
         )
         .await;
-        source_closed(source, index + 1).await;
+        if source.requires_reentry {
+            post_eof_media(tools, &output, expected, mode != ChannelSubtitleMode::None).await;
+        }
+        source_closed(source, openings).await;
         assert_eq!(
             state
                 .application
@@ -198,6 +250,59 @@ async fn cases(
         );
         println!("ordinary Live URL verified: {label}, exact caption policy, Dutch660Hz, joined upstream/defaultcapacity cleanup");
     }
+}
+
+async fn post_eof_media(tools: &[String; 3], output: &[u8], expected: &[Vec<u8>; 3], burn: bool) {
+    // The 2.4s/25fps source contains60 video frames. A real frame75 and
+    // selected audio at2.8..3.2s must therefore come after its actual EOF.
+    let frame = probe(
+        &tools[0],
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-f",
+            "mpegts",
+            "-i",
+            "pipe:0",
+            "-map",
+            "0:v:0",
+            "-vf",
+            "select=eq(n\\,75)",
+            "-an",
+            "-fps_mode",
+            "passthrough",
+            "-pix_fmt",
+            "rgb24",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ],
+        output,
+        FRAME_BYTES,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        frame.len(),
+        FRAME_BYTES,
+        "real video must continue after source EOF"
+    );
+    if burn {
+        compare_burn(&frame, &expected[0], &expected[1], &expected[2]);
+    } else {
+        assert!(frame.iter().all(|value| *value <= 20));
+    }
+    let windows = tone_windows(&tools[0], output, 660, 2 * 1024 * 1024).await;
+    assert!(
+        windows.len() >= 32,
+        "selected audio must continue beyond original source duration"
+    );
+    assert!(
+        windows[28..32].iter().all(|matching| *matching),
+        "every post-EOF audio window must retain Dutch660Hz"
+    );
 }
 
 async fn source_closed(source: &Source, openings: usize) {
@@ -235,21 +340,47 @@ async fn source_closed(source: &Source, openings: usize) {
         })
         .await
         .expect("all live upstream bodies must close after stream cancellation");
+        let actual = source.reads.load(Ordering::SeqCst);
+        if source.requires_reentry {
+            assert!(
+                actual >= openings,
+                "same viewer response must survive actual raw source EOF and reenter the source"
+            );
+        } else {
+            assert_eq!(actual, openings, "one physical live source per request");
+        }
+    }
+}
+
+async fn configure_native_hls_startup(state: &AppState, native_hls: bool) {
+    if native_hls {
+        // The shared finite/local fixture forces five-second startup. Restore
+        // the product default for three paced Live fragments; delivery still
+        // has the independent unchanged twenty-second client bound.
+        config(
+            state,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
+            None,
+        )
+        .await;
         assert_eq!(
-            source.reads.load(Ordering::SeqCst),
-            openings,
-            "one physical live source per request"
+            crate::transport::iptv::hls::load_segmenter_startup_timeout(state).await,
+            Duration::from_mins(1)
         );
     }
 }
 
-async fn run(origin: Origin) {
+async fn run(origin: Origin, native_hls: bool) {
     let rtsp = matches!(origin, Origin::Rtsp).then(rtsp_inputs);
     let tools = initialize_source_caption_runtime().await;
     let root = tempfile::tempdir().unwrap().keep();
     println!("ordinary Live URL evidence: {}", root.display());
     let library = root.join("library");
-    let file = local_source(&tools[0], &library).await;
+    let file = if matches!(origin, Origin::HttpEof) {
+        local_source_duration(&tools[0], &library, "2.4").await
+    } else {
+        local_source(&tools[0], &library).await
+    };
     let expected = calibration(&tools, &file, &root).await;
     let source = Source {
         bytes: tokio::fs::read(&file).await.unwrap().into(),
@@ -257,7 +388,9 @@ async fn run(origin: Origin) {
         active: Arc::new(AtomicUsize::new(0)),
         manifests: Arc::new(AtomicUsize::new(0)),
         rtsp_status: rtsp.as_ref().map(|(_, status)| status.clone()),
-        segment_closes: matches!(origin, Origin::Hls),
+        segment_closes: matches!(origin, Origin::Hls | Origin::HttpEof),
+        requires_reentry: matches!(origin, Origin::HttpEof),
+        native_hls,
     };
     let upstream = Server::start(
         Router::new()
@@ -269,13 +402,18 @@ async fn run(origin: Origin) {
     let state = application(&root, &upstream).await;
     let (item, version) = scan_source(&state, &library, &tools[1]).await;
     software_profile(&state).await;
+    configure_native_hls_startup(&state, native_hls).await;
     let source_url = match origin {
-        Origin::Http => upstream.url("/live.ts"),
+        Origin::Http | Origin::HttpEof => upstream.url("/live.ts"),
         Origin::Hls => upstream.url("/live.m3u8"),
         Origin::Rtsp => rtsp.unwrap().0,
     };
     install_source(&state, item, version, &source_url).await;
-    let _generation = install_and_accept(&state, &root).await;
+    let _generation = if native_hls {
+        None
+    } else {
+        Some(install_and_accept(&state, &root).await)
+    };
     let internal = Server::start(build_internal_app(state.clone())).await;
     state.internal_http_addr.set(internal.address).unwrap();
     state.next_engine.media.configure(internal.address).unwrap();
@@ -308,7 +446,7 @@ async fn run(origin: Origin) {
             "upstream_active_after_capture":source.active.load(Ordering::SeqCst),
             "manifest_reads":source.manifests.load(Ordering::SeqCst),"rtsp":rtsp,
             "source_body_has_eof":source.segment_closes,
-            "live_service_has_eof":false,"test_outcome_ok":outcome.is_ok()
+            "live_service_has_eof":false,"requires_reentry":source.requires_reentry,"test_outcome_ok":outcome.is_ok()
         }))
         .unwrap(),
     )
@@ -341,7 +479,7 @@ fn normal_direct_live_http_preserves_source_captions_off_audio_and_cleanup() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(Box::pin(run(Origin::Http)));
+        .block_on(Box::pin(run(Origin::Http, false)));
     assert_eq!(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0
@@ -358,7 +496,7 @@ fn normal_live_hls_url_preserves_source_captions_off_audio_and_cleanup() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(Box::pin(run(Origin::Hls)));
+        .block_on(Box::pin(run(Origin::Hls, false)));
     assert_eq!(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0
@@ -375,7 +513,41 @@ fn normal_direct_live_rtsp_preserves_source_captions_off_audio_and_cleanup() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(Box::pin(run(Origin::Rtsp)));
+        .block_on(Box::pin(run(Origin::Rtsp, false)));
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        0
+    );
+}
+
+#[test]
+#[ignore = "requires pinned FFmpeg/ffprobe9, short raw HTTP source EOF, isolated app-data and loopback"]
+fn normal_live_raw_http_eof_retains_same_response_captions_audio_and_cleanup() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(run(Origin::HttpEof, false)));
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        0
+    );
+}
+
+#[test]
+#[ignore = "requires pinned FFmpeg/ffprobe9, native HLS raw source EOF, isolated app-data and loopback"]
+fn normal_native_hls_raw_eof_retains_delivered_programme_and_alternate_audio() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(run(Origin::HttpEof, true)));
     assert_eq!(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0

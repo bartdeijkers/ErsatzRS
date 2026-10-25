@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output SO2-HLS — restore ordinary live playlist delivery'
+current_focus = 'p9a-source-output — qualify Native Live HLS source-caption output'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -78,17 +78,18 @@ That UCU12 closeout authorized source delivery only; it did not accept Phase9.
 The maintainer now explicitly resumes the separate Phase9 goal after controlled
 mergee0c4fc8d, preserving all six local commits and ten uncommitted files.
 
-SO2-H/R Native MPEG-TS HTTP/RTSP caption delivery is completed within Linux
-x86_64/software FFmpeg207. Fresh-host Legacy/Hybrid MPEG-TS and Local-input HLS
-smoke, strict affected lint, architecture and registration controls pass.
-Canonical native_streaming_lifecycle_followup.direct_url_qualification.repair
-owns exact888/Dutch audio, defaultcapacity2/one-source/joined-cleanup receipts,
-Live Addon reuse and57new/57same-byte transport controls. Next address the
-separate ordinary live-HLS manifest-read loop:115105manifest/0media in20seconds,
-also with valid closed segments. Compare the EOF option before claiming cause;
-preserve raw-live continuity, source-opening/audio/cleanup and original bounds.
-No HLS acceptance, suffix-only workaround or scope waiver follows from this
-completed-within-scope network-caption component. Other closed parts stay closed.
+SO2-H/R Native MPEG-TS HTTP/RTSP caption delivery is completed at58fbc948
+within Linux x86_64/software FFmpeg207. The HLS manifest/actual-EOF correction
+now passes ordinary HLS-input Off/Burn, same-response raw EOF with late888 and
+Dutch660Hz, and two complete Native HLS raw-source AV segments with cleanup.
+Canonical direct_url_qualification.hls_eof_followup owns29 focused regressions,
+152 transport controls (133new/19reused), preserved negatives and scoped reuse.
+Strict affected lint and fresh-host Legacy/Hybrid MPEG-TS/HLS-output smoke pass;
+this closes the named HLS input/EOF component within Linux/software207.
+The new Native HLS test restores product default60s startup, retaining client20s;
+its inherited5s refusal and UTC control remain negative evidence. Public PDT
+projection already handles upstream clocks; no decoder/runtime repair is started.
+Other completed source, scheduler, editor and F6 components stay closed.
 
 SO2-N ordinary Native Live route integration is completed within Linux
 x86_64/software accepted FFmpeg2.0.7. One held producer/request delivers Off/Burn,
@@ -156,13 +157,15 @@ segmenter-Off/Burn/direct-Burn receipt, exact original source/test body,
 888/200/plain raster,nld660Hz,joined cleanup and57 transport passes. Earlier
 SO1 and unrelated source/lint/editor/client evidence retain their scope.
 
-Current package: p9a-source-output SO2-HLS ordinary live-playlist delivery defect.
-Completed SO2-H/R exact HTTP/RTSP and Live Addon oracles, final affected lint
-and fresh-host smoke retain their proven scope.
-First compare the EOF option on the same valid source with bounded origin reads;
-then choose the smallest supported correction that preserves raw-live EOF retry,
-one-response delivery, original timing/tracks and joined ownership/cleanup.
-The HLS-output smoke uses a Local input; it does not accept this live HLS input.
+Current package: p9a-source-output Native HLS/Live source-caption boundary.
+SO2-HLS input/EOF is completed with29focused/152transport controls, strict lint
+and fresh-host smoke. Use current ordinary HLS/source helpers to qualify this
+existing ADR0121 row/lifecycle intersection: selected888 Burn must use bounded
+streaming input, preserve Dutch audio and join actual cleanup without awaiting
+whole Live extraction or switching engines. Close this package only on actual
+qualified Live Burn delivery and unchanged Off/cleanup; visible refusal closes
+only explicitly unsupported copy/output cases. MPEG-TS Live and Native HLS Off
+EOF evidence retain their scopes; no Cartesian variant queue is commissioned.
 The separate120minute full Windows-package trial remains maintainer-deferred;
 its explicit resumption question is pending and does not block this independent
 work. AE5 normative, AB5/C3 formatter, native/Mac, X1/X3 and policy prerequisites

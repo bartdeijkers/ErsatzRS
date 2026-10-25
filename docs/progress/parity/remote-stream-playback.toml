@@ -1,7 +1,7 @@
 feature    = 'Remote Stream playback'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs`; `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerFlood.cs`'
 rs_target  = '`crates/ersatzrs-infra/src/remote_stream.rs`; `crates/ersatzrs-web/src/transport/iptv/stream.rs`; `crates/ersatzrs-infra/src/hls_worker.rs`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0057', '0063', '0066', '0084', '0121']
 
 summary    = '''
@@ -71,8 +71,8 @@ id          = 'live-hls-manifest-reread-loop'
 adr         = '0057'
 description = 'Direct live-HLS URL playback repeatedly reads the playlist before opening any media segment, preventing ordinary AV delivery and flooding the synthetic origin within the startup budget.'
 discovered  = '2026-10-25'
-evidence    = 'Owned by p9a-source-output/SO2 in docs/progress/milestones.toml. Canonical provider-scan/identity.json native_streaming_lifecycle_followup.direct_url_qualification.repair retains the ordinary Off failure, 115105 manifest requests and zero segment requests in the unchanged20second delivery window. Closing the media-segment response does not change the failure, rejecting the first fixture hypothesis. No scoped owned process survives the failed trial. The shared live-HTTP EOF reconnect option is an evidenced cause candidate, not yet a completed causal comparison or repair. Next compare that option on the same valid source, then preserve normal playlist EOF and required raw-live retry/timeline/cleanup through existing input and supervisor mechanisms. No timeout increase, URI-suffix-only acceptance or support waiver closes this debt.'
-resolved    = false
+evidence    = 'Completed within Linux x86_64/software FFmpeg2.0.7; owning p9a-source-output/SO2-HLS and canonical provider-scan/identity.json direct_url_qualification.hls_eof_followup retain all original negatives and exact source/tool/capture pins. Demuxer-safe EOF restores actual HLS-input Off/Burn. Existing native request/retry and HLS owners preserve real AV, page888, selected Dutch audio and joined cleanup across actual raw EOF; real video75 and every2.8..3.2s audio window are independently verified.29focused regressions,152static TSDuck controls, strict affected lint and fresh-host Legacy/Hybrid/HLS-output smoke pass. The new Native HLS EOF test restores the product startup default while keeping client delivery20s; old5s/UTC refusals are retained as fixture-bound negatives. No production timeout/profile/encoder/runtime pin changes. Native Live HLS caption-output and independent platform/adoption acceptance remain at their existing owners.'
+resolved    = true
 
 [[debt]]
 id          = 'unschedulable-remote-stream-fails-whole-build'

@@ -21,8 +21,6 @@ error
 4xx,5xx
 -reconnect_delay_max
 10
--reconnect_at_eof
-1
 -i
 https://example.test/live
 -map

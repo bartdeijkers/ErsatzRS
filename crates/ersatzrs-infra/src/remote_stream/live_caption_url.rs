@@ -67,7 +67,7 @@ fn copy_producer(url: &str) -> RemoteStreamCommand {
     ]
     .map(str::to_owned)
     .to_vec();
-    args.extend(remote_url_input_options(url, true));
+    args.extend(remote_url_input_options(url));
     args.extend(
         [
             "-i",

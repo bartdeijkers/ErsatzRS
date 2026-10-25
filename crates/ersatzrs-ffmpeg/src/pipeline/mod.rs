@@ -154,6 +154,8 @@ pub struct FfmpegState {
     pub start: Option<Duration>,
     pub output_start: Option<Duration>,
     pub duration: Option<Duration>,
+    /// Bound generated audio by the real source video at natural Live EOF.
+    pub end_at_shortest: bool,
     pub output_ts_offset: Option<Duration>,
     pub thread_count: Option<u32>,
     pub report_progress: bool,
@@ -174,6 +176,7 @@ impl Default for FfmpegState {
             start: None,
             output_start: None,
             duration: None,
+            end_at_shortest: false,
             output_ts_offset: None,
             thread_count: None,
             report_progress: true,
@@ -4698,6 +4701,9 @@ fn add_output_options(
     }
 
     add_metadata_output_options(steps, &state.metadata);
+    if state.end_at_shortest {
+        steps.push(PipelineStep::generic("shortest", ["-shortest"]));
+    }
 
     if let Some(duration) = state.duration {
         steps.push(time_limit(duration));

@@ -962,8 +962,19 @@ for those fresh observations after remuxing. Process-group/Job ownership,
 cumulative startup deadlines, ordinary-AV fallback and joined cancellation keep
 their existing contracts. This is a Native MPEG-TS integration boundary, not
 acceptance of every source/output combination. The source-output milestone owns
-the actual HTTP/RTSP receipts and the separately open live-HLS manifest-read
-defect; no permanent source restriction is accepted by this implementation note.
+the actual HTTP/RTSP and HLS-input receipts; no permanent source restriction
+or full source/output acceptance follows from a scoped receipt.
+
+HTTP retries recover network and premature-read failures without hiding normal
+playlist/segment EOF. Existing native session owners reenter actual Live source
+EOF. Real selected AV drains without programme-length audio padding; generated
+silence alone ends with the real video, preserving real copy/encoded audio tails.
+Finite and retained inputs keep their established padding and bounds. A Live HLS
+worker uses its own complete FFmpeg output playlist minus pre-spawn URIs to
+advance the delivered clock and programme cursor. Missing, invalid or nonfinite
+output duration cannot authorize guessed completion. These rules use existing
+request, process, snapshot, capacity and cancellation owners, not a new worker
+service. They introduce no Next callback or other serialized-runtime extension.
 
 There is no automatic engine switch, alternate page substitution, silent caption
 loss or double producer consumption. Prove accepted combinations with served

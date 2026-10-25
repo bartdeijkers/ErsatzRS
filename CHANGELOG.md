@@ -47,7 +47,7 @@ release section when tagging a release.
 
 - Add bounded, playback-owned teletext inspection and observed-page selection
   for an already-running producer. Native MPEG-TS caption Burn supports Live
-  add-ons and advertised direct MPEG-TS sources over HTTP/RTSP through one held
+  add-ons and advertised HTTP/RTSP sources, including live HLS, through one held
   producer, preserving selected audio, source timestamps, ordinary Off playback
   and joined cancellation. Other source/output combinations retain their
   acceptance gates.
@@ -679,10 +679,6 @@ release section when tagging a release.
 
 ### Changed
 
-- Keep direct live-HLS URL playback under repair: repeated playlist reads can
-  prevent media delivery. Native MPEG-TS HTTP/RTSP caption proof does not
-  certify this separate HLS input behavior.
-
 - Allow UCU-12 acceptance with explicitly deferred macOS runtime work. Keep
   outstanding macOS FFmpeg/Next builds and playback acceptance unverified;
   retain older macOS package identities when adopting qualified corrections on
@@ -1057,6 +1053,11 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Restore live HLS input by preserving normal playlist and segment endings.
+  Native playback resumes after a raw source ends, retaining selected captions
+  and audio. Drain real source tracks without a silent padded tail, and advance
+  HLS by completed output rather than the unserved programme remainder.
 
 - Use FFmpeg 9's RTSP socket-timeout option at the existing 30-second bound,
   preventing valid RTSP sources from failing before ordinary playback starts.

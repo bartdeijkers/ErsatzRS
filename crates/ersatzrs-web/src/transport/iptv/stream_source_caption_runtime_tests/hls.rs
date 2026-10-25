@@ -3,6 +3,14 @@
 use super::*;
 
 async fn capture(public: std::net::SocketAddr, root: &Path) -> Vec<u8> {
+    capture_segments(public, root, 1).await.remove(0)
+}
+
+pub(super) async fn capture_segments(
+    public: std::net::SocketAddr,
+    root: &Path,
+    count: usize,
+) -> Vec<Vec<u8>> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
@@ -20,29 +28,47 @@ async fn capture(public: std::net::SocketAddr, root: &Path) -> Vec<u8> {
         .join(variants[0])
         .unwrap();
     assert_eq!(media_url.path(), "/iptv/session/1/hls.m3u8");
-    let playlist = next::fetch(&client, media_url.as_str(), "application/vnd.apple.mpegurl").await;
+    let playlist = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let playlist =
+                next::fetch(&client, media_url.as_str(), "application/vnd.apple.mpegurl").await;
+            let playlist = String::from_utf8(playlist).unwrap();
+            if next::uris(&playlist).count() >= count {
+                break playlist;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("required complete native HLS segments must arrive");
     tokio::fs::write(root.join("hls.m3u8"), &playlist)
         .await
         .unwrap();
-    let playlist = String::from_utf8(playlist).unwrap();
     assert!(playlist
         .lines()
         .any(|line| line == "#EXT-X-MEDIA-SEQUENCE:0"));
-    let uri = next::uris(&playlist)
-        .next()
-        .expect("actual closed native HLS segment");
-    let url = media_url.join(uri).unwrap();
-    assert_eq!(url.origin(), media_url.origin());
-    let bytes = next::fetch(&client, url.as_str(), "video/mp2t").await;
-    assert!(bytes.len().is_multiple_of(188));
-    assert!(bytes.chunks_exact(188).all(|packet| packet[0] == 0x47));
-    tokio::fs::write(root.join("captured.ts"), &bytes)
-        .await
-        .unwrap();
-    bytes
+    let mut captured = Vec::new();
+    for (index, uri) in next::uris(&playlist).take(count).enumerate() {
+        let url = media_url.join(uri).unwrap();
+        assert_eq!(url.origin(), media_url.origin());
+        let bytes = next::fetch(&client, url.as_str(), "video/mp2t").await;
+        assert!(bytes.len().is_multiple_of(188));
+        assert!(bytes.chunks_exact(188).all(|packet| packet[0] == 0x47));
+        tokio::fs::write(root.join(format!("captured-{index}.ts")), &bytes)
+            .await
+            .unwrap();
+        if index == 0 {
+            tokio::fs::write(root.join("captured.ts"), &bytes)
+                .await
+                .unwrap();
+        }
+        captured.push(bytes);
+    }
+    assert_eq!(captured.len(), count);
+    captured
 }
 
-async fn verify(tools: &[String; 3], bytes: &[u8], expected: &[Vec<u8>; 3], burn: bool) {
+pub(super) async fn verify(tools: &[String; 3], bytes: &[u8], expected: &[Vec<u8>; 3], burn: bool) {
     let streams = stream_inventory(&tools[1], bytes).await;
     assert_eq!(streams.len(), 2, "native HLS must contain the programme AV");
     let video = streams.iter().find(|s| s["codec_type"] == "video").unwrap();

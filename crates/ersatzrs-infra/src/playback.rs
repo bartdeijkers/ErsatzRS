@@ -221,6 +221,23 @@ pub fn apply_automatic_null_audio(
     request.desired.pad_audio = true;
 }
 
+/// Preserve natural Live source EOF for the existing viewing-session owner.
+/// Real source AV drains without an invented silent tail. Generated silence
+/// instead ends with the real video; it must not retain an abandoned source.
+pub fn apply_live_input_eof_policy(request: &mut PipelineRequest, live: bool) {
+    if live {
+        request.desired.pad_audio = false;
+        request.state.end_at_shortest = request.inputs.iter().any(|input| {
+            input.kind == InputKind::Audio
+                && input.path.starts_with("anullsrc=")
+                && input
+                    .input_options
+                    .windows(2)
+                    .any(|pair| pair == ["-f", "lavfi"])
+        });
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedPlaybackWatermark {
     pub watermark: ChannelWatermark,
@@ -4266,6 +4283,97 @@ mod tests {
             },
             resolution: Resolution::default(),
         }
+    }
+
+    #[test]
+    fn live_input_eof_policy_preserves_real_tracks_and_only_limits_generated_silence() {
+        let profile = null_audio_profile();
+        let mut snapshots = Vec::new();
+        for (label, live, generated, copy, selection) in [
+            (
+                "finite-source",
+                false,
+                false,
+                false,
+                PlaybackAudioSelection::Exact(3),
+            ),
+            (
+                "live-source",
+                true,
+                false,
+                false,
+                PlaybackAudioSelection::Exact(3),
+            ),
+            (
+                "live-copy",
+                true,
+                false,
+                true,
+                PlaybackAudioSelection::Exact(3),
+            ),
+            (
+                "finite-silence",
+                false,
+                true,
+                false,
+                PlaybackAudioSelection::AutomaticSilence,
+            ),
+            (
+                "live-silence",
+                true,
+                true,
+                false,
+                PlaybackAudioSelection::AutomaticSilence,
+            ),
+            (
+                "live-stale-absence",
+                true,
+                false,
+                false,
+                PlaybackAudioSelection::AutomaticSilence,
+            ),
+        ] {
+            let mut desired = DesiredVideoState::h264_1080p();
+            if copy {
+                desired.audio_format = FFmpegProfileAudioFormat::Copy;
+            }
+            let mut request =
+                PipelineRequest::new(InputFile::video("https://example.test/live"), desired)
+                    .with_source_video_stream(
+                        SourceVideoStream::new(SourceVideoCodec::H264).with_index(0),
+                    );
+            if !generated {
+                request = request
+                    .with_source_audio_streams(vec![
+                        SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3)
+                    ]);
+                request.inputs[1] = request.inputs[1].clone().with_stream_index(3);
+            }
+            request.state.duration = Some(Duration::from_secs(12));
+            request.state.report_progress = false;
+            apply_automatic_null_audio(&mut request, &profile, selection);
+            let before = request.clone();
+            apply_live_input_eof_policy(&mut request, live);
+            if !live {
+                assert_eq!(request, before);
+            }
+            assert_eq!(request.inputs, before.inputs);
+            assert_eq!(request.source_audio_streams, before.source_audio_streams);
+            assert_eq!(request.state.duration, before.state.duration);
+            assert_eq!(request.desired.audio_format, before.desired.audio_format);
+            assert_eq!(request.state.end_at_shortest, live && generated);
+            let command =
+                ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request)
+                    .unwrap();
+            let arguments = command.arguments.join("\n");
+            assert_eq!(arguments.contains("apad"), !live && !copy);
+            assert_eq!(
+                command.arguments.iter().any(|arg| arg == "-shortest"),
+                live && generated
+            );
+            snapshots.push(format!("{label}\n{arguments}"));
+        }
+        insta::assert_snapshot!(snapshots.join("\n---\n"));
     }
 
     #[test]

@@ -331,6 +331,7 @@ impl HlsDeliveryTracker {
 }
 
 struct HlsProcessCapacity<'a> {
+    completed_media_duration: Option<&'a std::sync::Mutex<Option<Duration>>>,
     producer_playlist: Option<&'a producer_playlist::MpegTsProducerPlaylist>,
     song: Option<&'a crate::song_background::NativeSongBackground>,
     active_transcode_slot_id: Option<u64>,
@@ -2246,6 +2247,7 @@ impl HlsSessionWorker {
                 },
                 song.as_ref(),
             );
+            crate::playback::apply_live_input_eof_policy(&mut request, is_live_remote);
             apply_hls_bootstrap_readburst(
                 &mut request,
                 initial_bootstrap,
@@ -2299,8 +2301,9 @@ impl HlsSessionWorker {
                 )
             };
             let command = source_caption_request.build();
+            let live_completed_media_duration = std::sync::Mutex::new(None);
             let retained_failure = Arc::new(std::sync::Mutex::new(RetainedHlsFailure::default()));
-            let (outcome, selected_graph_for_denial) = match command {
+            let (mut outcome, selected_graph_for_denial) = match command {
                 _ if producer_failed => {
                     if let Some(song) = &song {
                         song.confirm_reaped();
@@ -2346,6 +2349,8 @@ impl HlsSessionWorker {
                                 ),
                             }),
                             HlsProcessCapacity {
+                                completed_media_duration: is_live_remote
+                                    .then_some(&live_completed_media_duration),
                                 producer_playlist: producer_playlist.as_ref(),
                                 song: song.as_ref(),
                                 active_transcode_slot_id: Some(active_transcode_slot_id),
@@ -2383,6 +2388,21 @@ impl HlsSessionWorker {
                     }
                     (refused_hls_process_outcome(&error), None)
                 }
+            };
+            // A completed Live producer may end before the scheduled item.
+            // Advance by its own complete output, never by the unserved remainder.
+            let duration = if is_live_remote && outcome == HlsProcessOutcome::Success {
+                let measured = live_completed_media_duration
+                    .lock()
+                    .ok()
+                    .and_then(|value| *value);
+                if measured.is_none() {
+                    outcome =
+                        HlsProcessOutcome::Failed("live output duration was not retained".into());
+                }
+                measured
+            } else {
+                duration
             };
             if let Some(song) = &song {
                 if outcome == HlsProcessOutcome::Success {
@@ -2800,6 +2820,7 @@ impl HlsSessionWorker {
             None,
             None,
             HlsProcessCapacity {
+                completed_media_duration: None,
                 producer_playlist: None,
                 song: None,
                 active_transcode_slot_id,
@@ -2912,13 +2933,14 @@ impl HlsSessionWorker {
         capacity: HlsProcessCapacity<'_>,
     ) -> HlsProcessOutcome {
         let baseline = playlist_segment_uris(&self.working_dir).await.ok();
+        let completed_media_duration = capacity.completed_media_duration;
         let error = self
             .output_error
             .lock()
             .ok()
             .and_then(|mut error| error.take());
         if let Ok(mut outputs) = self.output_status.lock() {
-            outputs.begin(baseline, error);
+            outputs.begin(baseline.clone(), error);
         }
         let outcome = self
             .run_hls_process_with_remote_inner(
@@ -2934,6 +2956,30 @@ impl HlsSessionWorker {
         let segments = playlist_segment_uris(&self.working_dir).await.ok();
         if let Ok(mut outputs) = self.output_status.lock() {
             outputs.finish(segments.as_ref());
+        }
+        if outcome == HlsProcessOutcome::Success {
+            if let Some(completed) = completed_media_duration {
+                // FFmpeg's list_size=0 final playlist retains every new segment.
+                // Viewer trimming is a read-only projection; this is the producer's
+                // own output, including the last short segment, not source metadata.
+                let measured = match baseline {
+                    Some(baseline) => {
+                        playlist_duration_excluding_uris(&self.working_dir, &baseline).await
+                    }
+                    None => Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "live output baseline unavailable",
+                    )),
+                };
+                match (measured, completed.lock()) {
+                    (Ok(duration), Ok(mut value)) if !duration.is_zero() => *value = Some(duration),
+                    _ => {
+                        return HlsProcessOutcome::Failed(
+                            "complete live output duration unavailable".into(),
+                        )
+                    }
+                }
+            }
         }
         outcome
     }
@@ -5818,12 +5864,31 @@ async fn playlist_duration_excluding_uris(
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Duration::ZERO),
         Err(error) => return Err(error),
     };
-    Ok(parsed_playlist_segments(&playlist)
+    let parsed = parse_playlist(&playlist, Utc::now(), false).ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidData, "invalid completed HLS playlist")
+    })?;
+    parsed
+        .items
         .into_iter()
+        .filter_map(|item| match item {
+            PlaylistItem::Segment(segment) => Some(segment),
+            PlaylistItem::Discontinuity => None,
+        })
         .filter(|segment| !excluded_uris.contains(&segment.uri))
-        .filter_map(|segment| parse_extinf_duration(&segment.extinf_line))
-        .filter_map(|duration| duration.to_std().ok())
-        .fold(Duration::ZERO, Duration::saturating_add))
+        .try_fold(Duration::ZERO, |total, segment| {
+            let duration = parse_extinf_duration(&segment.extinf_line)
+                .and_then(|duration| duration.to_std().ok())
+                .filter(|duration| !duration.is_zero())
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "invalid completed HLS duration")
+                })?;
+            total.checked_add(duration).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "completed HLS duration overflow",
+                )
+            })
+        })
 }
 
 async fn hls_delivery_segments(working_dir: &Path) -> io::Result<Vec<HlsDeliverySegment>> {
@@ -6913,7 +6978,9 @@ fn parse_extinf_duration(line: &str) -> Option<chrono::Duration> {
         .1
         .parse::<f64>()
         .ok()?;
-    chrono::Duration::from_std(Duration::from_secs_f64(seconds)).ok()
+    Duration::try_from_secs_f64(seconds)
+        .ok()
+        .and_then(|duration| chrono::Duration::from_std(duration).ok())
 }
 
 fn parse_segment_sequence(uri: &str) -> Option<u64> {
@@ -9994,6 +10061,34 @@ mod tests {
             Some(Duration::from_secs(12)),
             false
         ));
+    }
+
+    #[tokio::test]
+    async fn completed_live_output_duration_keeps_short_final_segment_and_rejects_invalid_time() {
+        let root = tempfile::tempdir().unwrap();
+        let playlist = root.path().join("live.m3u8");
+        let baseline = HashSet::from(["live000000.ts".to_owned()]);
+        tokio::fs::write(&playlist, "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nlive000000.ts\n#EXTINF:2.44,\nlive000001.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:0.04,\nlive000002.ts\n").await.unwrap();
+        assert_eq!(
+            playlist_duration_excluding_uris(root.path(), &baseline)
+                .await
+                .unwrap(),
+            Duration::from_millis(2480)
+        );
+        for invalid in ["0", "-1", "NaN", "inf", "bad"] {
+            tokio::fs::write(
+                &playlist,
+                format!("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:{invalid},\nlive000001.ts\n"),
+            )
+            .await
+            .unwrap();
+            assert!(
+                playlist_duration_excluding_uris(root.path(), &baseline)
+                    .await
+                    .is_err(),
+                "{invalid}"
+            );
+        }
     }
 
     #[test]

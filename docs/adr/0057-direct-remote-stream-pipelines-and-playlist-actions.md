@@ -28,13 +28,15 @@ persists ErsatzTV `CollectionType` value 70. Raw `script:` sources and the
 standalone `{seek}` command-argument contract have been removed; source-side
 seek is now supplied through the versioned add-on environment.
 
-The 2026-10-25 Native live-URL qualification also exposes a direct-HLS
-manifest-read loop before any media access. `p9a-source-output` owns its causal
-EOF-option comparison and correction while preserving raw-live continuity and
-existing source-opening/cancellation guarantees. This does not reopen the
-completed producer, scheduling or cancellation components. Native MPEG-TS
-HTTP/RTSP teletext integration follows ADR0121; successful scoped receipts do
-not close this separate ordinary-HLS defect.
+The 2026-10-25 live-HLS qualification isolates a protocol EOF retry that rereads
+manifests without opening media. Native input options preserve normal container
+EOF while retaining bounded network and premature-read recovery. Existing
+viewing-session owners reenter an ended Live source. Real source AV drains
+without an invented padded tail; only actual generated silence ends with video.
+The HLS worker advances by its own completed output, excluding pre-spawn segments,
+rather than the requested but unserved remainder. ADR0121 and `p9a-source-output`
+own exact stream, caption/audio, timing and joined-cleanup acceptance. This
+changes no encoder/profile, source authority, runtime pin or publication gate.
 
 ## Context
 

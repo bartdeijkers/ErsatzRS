@@ -2421,6 +2421,10 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         media_input.clone()
     };
+    let is_live_remote = active
+        .remote_stream
+        .as_ref()
+        .is_some_and(|stream| stream.liveness == ersatzrs_domain::RemoteStreamLiveness::Live);
     let build_command = |input, metadata, subtitle_input| {
         let (acceleration, request) = build_stream_request_with_retained_inputs(
             input,
@@ -2440,6 +2444,7 @@ async fn serve_channel_stream_admitted_inner(
             graphics_overlays.clone(),
             Some(opacity_clock),
             retained_stream,
+            is_live_remote,
             song.as_deref(),
         );
         let request = source_teletext::consumer_request(
@@ -2677,6 +2682,7 @@ async fn serve_channel_stream_admitted_inner(
                                 graphics_overlays.clone(),
                                 Some(opacity_clock),
                                 retained_stream,
+                                is_live_remote,
                                 song.as_deref(),
                             )
                             .map(|(command, _)| command)
@@ -2705,6 +2711,7 @@ async fn serve_channel_stream_admitted_inner(
                         graphics_overlays,
                         Some(opacity_clock),
                         retained_stream,
+                        is_live_remote,
                         song.as_deref(),
                     );
                     let source_caption_request = source_teletext::consumer_request(
@@ -4842,6 +4849,7 @@ fn build_stream_command_with_input_and_opacity_clock(
         graphics_overlays,
         opacity_clock,
         false,
+        false,
         None,
     )
     .map(|(command, _)| command)
@@ -4869,6 +4877,7 @@ fn build_stream_command_with_retained_inputs(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
     retained_stream: bool,
+    is_live_remote: bool,
     song: Option<&ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> Result<
     (
@@ -4895,6 +4904,7 @@ fn build_stream_command_with_retained_inputs(
         graphics_overlays,
         opacity_clock,
         retained_stream,
+        is_live_remote,
         song,
     );
     ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(acceleration, request)
@@ -4923,6 +4933,7 @@ fn build_stream_request_with_retained_inputs(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
     retained_stream: bool,
+    is_live_remote: bool,
     song: Option<&ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> (ersatzrs_domain::HardwareAccelerationKind, PipelineRequest) {
     let seek_after_input = input.seek_after_input;
@@ -5006,6 +5017,7 @@ fn build_stream_request_with_retained_inputs(
         request = request.with_retained_stream_input();
     }
     apply_automatic_null_audio(&mut request, playback_profile, audio_selection);
+    ersatzrs_infra::playback::apply_live_input_eof_policy(&mut request, is_live_remote);
     if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
         if thread_count > 0 {
             request.state.thread_count = Some(thread_count);
@@ -7959,6 +7971,7 @@ mod tests {
             Vec::new(),
             None,
             true,
+            false,
             None,
         )
         .expect("fresh retained video-only retry")
@@ -8025,6 +8038,7 @@ mod tests {
             Vec::new(),
             None,
             retained,
+            false,
             None,
         )
         .expect("native known source command")
@@ -8056,6 +8070,7 @@ mod tests {
             Vec::new(),
             None,
             true,
+            false,
             None,
         )
         .unwrap()

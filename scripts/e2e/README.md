@@ -1634,3 +1634,13 @@ The test checks actual source sends, connections, media retirement and the
 original source hash. The caller owns and must join the fixture process after
 the application trial, including on failure. Use isolated app/state directories
 for each ordinary-route trial; never target a production database or source.
+
+The same opt-in fixture also provides
+`normal_live_hls_url_preserves_source_captions_off_audio_and_cleanup`,
+`normal_live_raw_http_eof_retains_same_response_captions_audio_and_cleanup`, and
+`normal_native_hls_raw_eof_retains_delivered_programme_and_alternate_audio`.
+They cover normal manifest/segment EOF, raw-source reentry within one MPEG-TS
+response, and actual Native HLS output on both sides of source EOF. The last
+probe restores the product startup default instead of the shared finite test
+fixture override; its independent 20-second delivery bound remains in force.
+These are source/output regressions, not suitable-client or platform acceptance.

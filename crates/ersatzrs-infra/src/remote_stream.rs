@@ -758,7 +758,7 @@ fn remote_stream_command_from_addon(
 }
 
 #[must_use]
-pub fn remote_url_input_options(url: &str, is_live: bool) -> Vec<String> {
+pub fn remote_url_input_options(url: &str) -> Vec<String> {
     let rtsp = url_scheme(url).is_some_and(|scheme| {
         scheme.eq_ignore_ascii_case("rtsp") || scheme.eq_ignore_ascii_case("rtsps")
     });
@@ -782,9 +782,8 @@ pub fn remote_url_input_options(url: &str, is_live: bool) -> Vec<String> {
             "-reconnect_delay_max".to_owned(),
             "10".to_owned(),
         ]);
-        if is_live {
-            options.extend(["-reconnect_at_eof".to_owned(), "1".to_owned()]);
-        }
+        // Preserve normal playlist/segment EOF for container autodetection.
+        // Treating it as an endless raw body prevents HLS from opening media.
     }
     options
 }
@@ -803,10 +802,8 @@ pub fn remote_stream_input_file(
         }
         RemoteStreamSource::Prepared(path) => InputFile::video(path.to_string_lossy()),
         RemoteStreamSource::Url(url) => {
-            let input = InputFile::video(url.clone()).with_input_options(remote_url_input_options(
-                url,
-                stream.liveness == RemoteStreamLiveness::Live,
-            ));
+            let input =
+                InputFile::video(url.clone()).with_input_options(remote_url_input_options(url));
             if stream.liveness == RemoteStreamLiveness::Live {
                 input.without_readrate()
             } else {
@@ -2467,7 +2464,7 @@ content_rating: PG
     }
 
     #[test]
-    fn explicit_live_source_and_http_live_reconnect_at_eof() {
+    fn explicit_live_source_uses_demuxer_safe_http_and_rtsp_options() {
         let rtsp = RemoteStreamDefinition {
             url: Some("rtsp://camera.test/live".to_owned()),
             addon: None,
@@ -2487,15 +2484,22 @@ content_rating: PG
                 .expect("source")
                 .is_live
         );
-        assert!(remote_url_input_options("https://example.test/live", true)
-            .windows(2)
-            .any(|pair| pair == ["-reconnect_at_eof", "1"]));
-        assert!(!remote_url_input_options("https://example.test/vod", false)
-            .windows(2)
-            .any(|pair| pair == ["-reconnect_at_eof", "1"]));
+        for url in [
+            "https://example.test/live",
+            "https://example.test/opaque",
+            "https://example.test/live.m3u8",
+            "https://example.test/vod",
+        ] {
+            let options = remote_url_input_options(url);
+            assert!(!options.iter().any(|option| option == "-reconnect_at_eof"));
+            assert!(options.windows(2).any(|pair| pair == ["-reconnect", "1"]));
+            assert!(options
+                .windows(2)
+                .any(|pair| pair == ["-reconnect_streamed", "1"]));
+        }
         for url in ["rtsp://camera.test/live", "rtsps://camera.test/live"] {
             assert_eq!(
-                remote_url_input_options(url, true),
+                remote_url_input_options(url),
                 ["-timeout", REMOTE_INPUT_TIMEOUT_MICROSECONDS]
             );
         }
