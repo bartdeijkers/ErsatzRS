@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'Phase 9A — continue teletext acceptance on the accepted UCU-12 base'
+current_focus = 'p9a-source-output SO2-N — ordinary Native Live route on accepted FFmpeg2.0.7'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -74,16 +74,25 @@ skips;1955workspace+17Next Level1.5 passes; Next451passes plus one unchanged
 NUL-fixture recovery and both required smokes. Original negatives remain retained;
 the SQLite fixture race is a documented possibility, not a claimed product fix.
 Required earlier workspace gates and corrected-source checks retain their scope.
-Only source push/merge into remote/main is authorized for delivery. No further
-release, Phase9/UCU14 implementation or cleanup is part of this closeout.
-Continue the existing Phase9 acceptance program only under its own next task.
+That UCU12 closeout authorized source delivery only; it did not accept Phase9.
+The maintainer now explicitly resumes the separate Phase9 goal after controlled
+mergee0c4fc8d, preserving all six local commits and ten uncommitted files.
 
-Current package: p9a-source-output exact remaining SO2/SO3 route/adoption boundary.
-Next executable action: resolve only the owner's imprecise otherSO2..3 wording
-against ADR0121 and canonical ordinary-route/source receipts. Name each actual
-unaccepted product enablement or adoption prerequisite and its exact owner.
-Stop at the matched existing clause/receipt and finite remaining blocker list;
-no new variant, general audit or trial without an unmatched mandatory cell.
+Current package: p9a-source-output SO2-N ordinary Native Live route integration.
+Next executable action: rebase only the four existing preserved route candidate
+files onto UCU12 and prove ordinary Live Off/Burn on accepted FFmpeg2.0.7, which
+contains exact0017. Keep observed888/200/plain, Dutch audio, one producer/request,
+unchanged addon/generation, defaultcapacity2, transport and joined cleanup.
+Stop at that named current-route component; no adjacent variant or full-client
+work. Canonical ucu12_rejoin_followup owns merge/restore and the finite gap map.
+
+The separate SO3-R/SO4-R package ports only three already-required Phase9
+source-output corrections to current Next023/source54c6cb9: paired textBurn
+clock restoration, finite-video-cut-v1 and consume-once Copy negotiation.
+Accepted rs.6 contains neither negotiated contract and retains the reset block;
+its seven-patch/lock identity is verified. Old022 candidate evidence is retained
+within scope, not current023 acceptance. No production pin or package publication
+changes here. Other native/platform/adoption owners and X1/X3 decisions remain.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
