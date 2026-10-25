@@ -748,7 +748,13 @@ fn playback_channel_seek_fields() -> impl IntoView {
     view! {
         <label class=style::playbackField>
             <span>{tr(TextKey::DateAndTime)}" (UTC)"</span>
-            <input class=style::input type="datetime-local" name="start" value=chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()/>
+            <input class=style::input type="datetime-local" name="start" required
+                aria-describedby="preview-start-help" aria-errormessage="preview-start-error"
+                data-preview-start data-message-required=tr(TextKey::PreviewStartRequired)
+                data-message-invalid=tr(TextKey::PreviewStartInvalid)
+                value=chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()/>
+            <small id="preview-start-help" data-preview-time-help>{tr(TextKey::PreviewStartHelp)}</small>
+            <small id="preview-start-error" data-preview-time-error role="alert" hidden></small>
         </label>
         <label class=style::playbackField>
             <span>{tr(TextKey::PreviewProgrammeSeek)}</span>
@@ -850,7 +856,11 @@ fn playback_preview_player(preview: OwnedPreviewView) -> impl IntoView {
         >
             <h2 class=style::subheading>{tr(TextKey::Preview)}</h2>
             <div class=style::divider></div>
-            <button class=style::primaryButton type="submit" data-preview-play disabled=active || blocked>{tr(TextKey::Play)}</button>
+            <button class=style::primaryButton type="submit" data-preview-play disabled=active || blocked
+                aria-describedby=(active || blocked).then_some("preview-play-reason")>{tr(TextKey::Play)}</button>
+            <p id="preview-play-reason" data-preview-play-reason hidden=!active && !blocked>
+                {if blocked { tr(TextKey::PreviewCleanupUnconfirmed) } else { tr(TextKey::PreviewAlreadyRunning) }}
+            </p>
             <button class=style::secondaryButton type="submit" data-preview-stop formaction=stop formmethod="post" formnovalidate disabled=!active || preview.state == "cancelling">{tr(TextKey::StopPreview)}</button>
             <a class=style::secondaryButton data-preview-refresh href=preview.return_url hidden=preview.id.is_empty()>{tr(TextKey::Refresh)}</a>
             <p data-preview-operation-status aria-live="polite">{label}</p>

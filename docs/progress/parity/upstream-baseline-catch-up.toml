@@ -1,10 +1,14 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.3)'
+etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.4)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
+adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125', '0128', '0129']
 summary    = """
-UCU-00–11 are Complete: all236 rows through v26.11.3 are accepted.
+UCU-00–12 are Complete:254rows through fixed v26.11.4 are accepted.
+UCU-12 owns dispositions and source-bound composed proof. Open approved
+macOS/runtime and hardware debt remains unverified; the feature status retains
+that debt without reopening the accepted UCU-12 window.
+Current evidence: ucu-12.
 The authoritative current baseline is docs/automation/parity-baseline.md. Native, stored engine/profile choices
 and international audio/subtitle behavior remain supported. UCU-10 is delivered
 through PR105 on remote main 32c12793. Run 38623973857 passes every non-browser
@@ -12,7 +16,6 @@ gate and Chromium; Firefox has 345 passes, 30 skips and only fixture-collision
 case 329 failed. The maintainer requires only that corrected headed case rerun:
 1 pass in 11.3s, no full CI rerun. The fixture-only commit uses [skip ci]; earlier
 passed checks are reused, not claimed as a new full green exact-commit run.
-UCU-10 owns the complete receipts and superseding verification amendment.
 
 UCU-11 accepts rows233–236: Convert-only optional HLS text, media-only TS
 wrappers, reviewed released Next022 and the six-second remux burst. All20
@@ -308,6 +311,14 @@ resolved    = false
 evidence    = 'The maintainer explicitly approved ARM/macOS acceptance debt on 2026-10-01 so UCU-09 may close after its remaining gates. This applies to ADRs 0095/0096/0098 and does not claim those targets passed, alter supported platforms, waive Linux x64 or Windows x64 application checks, or replace the separate approved GPU-validation debt. UCU-09 owns current platform evidence.'
 
 [[debt]]
+id          = 'ucu-12-hardware-acceptance'
+description = 'Native UCU-12 hardware acceptance remains unverified for Rockchip RKMPP/RGA, Intel QSV HDR, AMD VAAPI and macOS VideoToolbox captions.'
+discovered  = '2026-10-24'
+resolved    = false
+adr         = '0128'
+evidence    = 'The maintainer explicitly approved this bounded unverified hardware acceptance debt on 2026-10-24. It does not claim hardware passed or waive builds, software, checksum, source/provenance, no-device fallback or other acceptance requirements. Close each path only with exact candidate identity and native decoded behavior on the corresponding hardware/driver; cross-builds, emulation and another GPU do not qualify it. UCU-12 owns available evidence and the remaining non-deferred gates.'
+
+[[debt]]
 id          = 'ucu-optional-next-engine-integration'
 description = 'Implement Next as an optional second engine alongside the native pipeline: persisted selection, package/runtime integration, supervised process and configuration exchange, health/troubleshooting, and verified playback with subtitle/audio handling and recovery on the supported platforms.'
 discovered  = '2026-09-22'
@@ -434,3 +445,34 @@ discovered = '2026-10-14'
 resolved = true
 adr = '0125'
 evidence = 'ADR0125 is Accepted and locally implemented. UCU-10 owns the fully passing dependency audit,370 affected Linux checks,336 native Windows checks plus corrected104 YAML checks,101 focused Linux YAML checks,6043 workspace closeout/doctests and strict workspace/affected core lint. Native file/import behavior and portable database fixtures are corrected without disabling tests. Final matched build/bundle, six headed browser cases, parity, three lifecycle HTTP smokes, Native87 and Next83 TSDuck checks and strict complete-frame capture decoding pass. Next distribution/adoption is resolved; approved hardware/platform debt remains unverified.'
+
+[[debt]]
+id = 'ucu12-ffmpeg-9-and-private-rockchip-runtime'
+description = 'Complete row246 common subtitle-heartbeat, VideoToolbox caption and ARM64 RKMPP/RKRGA runtime requirements, including private Next MPP identity and actual driver-readiness fallback.'
+discovered = '2026-10-24'
+resolved = true
+adr = '0128'
+evidence = 'ADR0128 is Accepted. Milestone ucu-12 owns the published2.0.6 heartbeat negative, four verified FFmpeg2.0.7 software/archive kits, six Next rs.4 kits and actual ARM64 no-device decoded fallback. Both approved dependency publications are complete:25 Next and10 FFmpeg assets match anonymous downloads; all four non-Mac package CI checks pass in40117309596 onaa14713e. Local published pins,45 Python checks,26 composed manager checks and9 actual bundle-layout cases pass. Linux ordinary public cold startup/managed restart, decoded Native/Next playback,30 affected headed cases, bundle and179 Native/Next TSDuck checks pass. Windows combined public adoption also passes; all four existing current-Tokio Windows playback cases, structural gates and doctest execution pass. The original workspace nextest run is terminal:8209 passes plus six environment-contaminated mock failures, all six recovered without a source change. All8215 selected cases therefore have passing composed evidence;502 existing manual/ignored skips remain. Available local gates are complete; this is not single-run green CI. Native macOS FFmpeg build/software evidence remains deferred and unverified under ucu-12-macos-build-deferral; no Mac retry until explicit maintainer resume. Application/main push, application CI, Docker publication and application release remain separate. Approved hardware debt stays explicitly unverified under ucu-12-hardware-acceptance. Final UCU-12 acceptance completes the four-platform runtime/private-MPP component and current rs.6 adoption. Remaining macOS/runtime and hardware work stays explicitly unverified in its separate approved debt; supported targets are retained. No further release is required.'
+
+[[debt]]
+id = 'ucu-12-macos-build-deferral'
+description = 'Complete native macOS FFmpeg and corrected Next candidate builds and package/software acceptance after the maintainer resumes them.'
+discovered = '2026-10-24'
+resolved = false
+adr = '0128'
+evidence = 'Maintainer amendment2026-10-25 explicitly permits closing UCU-12 without macOS completion. No Mac build/retry until explicit instruction. Native FFmpeg2.0.7 kits, software/application acceptance and distribution, plus corrected Next rs.6 builds/package/software acceptance remain unverified debt after milestone closure. Retain exact existing macOS rs.4 identities and checksums without claiming the caption-source-outpoint or selected-audio fixes. Four qualified non-Mac successors may be adopted independently; do not relabel older Mac packages or claim uniform six-platform source. Last ARM64 run40115372297 failed; prior components retain only their recorded scope. This approved debt does not remove supported targets or infer hardware qualification. Milestone ucu-12 owns the finite completion list.'
+
+[[debt]]
+id = 'ucu-12-ci-jwt-backend'
+description = 'Restore the dependency audit after RUSTSEC-2026-0387 without an ignore, while preserving the existing HS256-only token contract on the supported native web backend.'
+discovered = '2026-10-24'
+resolved = true
+evidence = 'Audit-only CI40131122101 passes Preflight, Format and Cargo deny on exact8e215cb91ba68dae521de40f799f9400927729ea, closing the RUSTSEC-2026-0387 blocker without an ignore or licence exception. The supported native-web AWS-LC backend removes the vulnerable graph and obsolete RSA exception. All20 independent-token, negative-auth and router cases pass on each of Linux/native Windows, including normal Windows C/MSVC/NASM compilation; strict affected lint and23 workflow safeguards pass. Original CI40128284373 continues separately. This focused recovery is not a full corrected-SHA CI claim. Milestone ucu-12 owns exact receipts; other platform proof is not inferred and Mac/hardware limitations stay unchanged.'
+
+[[debt]]
+id = 'ucu-12-ci-runtime-recovery'
+description = 'Recover the demonstrated runtime/browser CI failures, preserve original Next caption source outpoints and selected audio metadata, and use valid software controls after hardware encoder demotion.'
+discovered = '2026-10-24'
+resolved = true
+adr = '0117'
+evidence = 'Next-only CI40134839105 is green on56938c95: all451 selected tests and both actual smokes pass, closing the missing-input/report-ownership failure. The original late-PGS negative is retained; no deadline is widened or cause inferred. Both finite-cut cases pass unchanged. All four non-Mac rs.5 caption candidates are complete within scope: Linux/native Windows each pass eight source controls and three unchanged actual cases; ARM64/ARMv7 each pass version/startup and eight controls under QEMU. Official023 retains the exact source-outpoint negative; Mac qualification, publication and adoption remain open. General Chromium additionally reveals hardware p5 controls reaching libx264 after graph denial. Its correction passes237 snapshots, two unchanged headed cases and93 Native transport checks on the real published runtime under deliberate denial, plus strict affected lint. Two-case Chromium CI40140755052 is green on ce749910. Original general Firefox passes. The obsolete Native-default fixture in Teletext1.5 Chromium is corrected and passes both headed browsers with all cultures/themes/JS paths retained. Its selected-audio language loss is localized before the wrapper; existing exact ADR0117 metadata correction is reused in combined rs.6. Linux passes53 source controls, the unchanged active-viewer decoding/language/lease/shutdown case, three caption cases and selected Dutch audio. All four non-Mac source packages pass53 controls each; Windows also passes four affected actual cases. ARM64 fallback output passes the retained200-frame/Dutch880Hz/caption oracle using verified native decoding. Chromium followers have composed passing recovery. Both original Level2.5 browser jobs pass. Level1.5 Firefox needs a complete64-case focused retry after runner disconnection; no per-case result survived. The equivalent retained ARMv7 software recipe now passes200frames, Dutch880Hz, captions and nld language identity under pinned QEMU. Both actual rs.6 Next smokes and86 Next copy TSDuck checks pass. Only missing Level1.5 Firefox coverage retries in CI40174546124 on bc69eb66; unchanged Native proof is reused. Published rs.4 and production pins are unchanged. Milestone ucu-12 owns the finite completion list, rejected trials and exact receipts. Mac builds remain deferred; hardware debt stays unverified. Subsequent maintainer amendment permits UCU-12 closure with explicit unverified macOS debt. The separately approved rs.6 release publishes23 assets with all anonymous downloads verified. Production manifest now selects four rs.6 packages and exact retained Mac rs.4 identities;15 manager cases,28 staging and27 CI-artifact checks plus strict infrastructure Clippy pass. Real six-archive staging/relocation does not execute Mac binaries. Native Windows14 manager checks and both Linux/Windows real-host public cold acquisition/unchanged managed restart now pass with exact runtime hashes and matched web assets; owned hosts stop cleanly. Bounded11-case browser and Level1.5 Rust-only CI selectors retain all assertions and unrelated passing evidence. Affected CI remains pending. Final recovery is complete: browser40181549125 passes10Chromium/9Firefox with only existing skips; Rust40183059576 passes1955workspace+17Next. Next40178558343 supplies451passes; one unchanged NUL fixture retry40184068956 and both following smokes pass. Original failures and valid prior gates are retained. Reuse preserves producer5a2d8460 and verifies CI-only source equivalence; embedded CHANGELOG drift is rejected and final bytes match. This is composed acceptance, not a full new-SHA suite.'

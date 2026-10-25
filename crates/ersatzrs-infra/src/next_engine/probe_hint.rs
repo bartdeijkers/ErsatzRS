@@ -202,9 +202,12 @@ pub(crate) async fn persisted(
                     color_transfer: row.try_get("ColorTransfer").repository()?,
                     color_primaries: row.try_get("ColorPrimaries").repository()?,
                     dv_profile: dv_profile.and_then(|value| u32::try_from(value).ok()),
-                    has_hdr10_metadata: Some(
-                        mastering.is_some() || max_cll.is_some() || max_fall.is_some(),
-                    ),
+                    // Persisted/provider absence is not a negative frame probe.
+                    // Leave PQ frame inspection to Next when no positive data exists.
+                    has_hdr10_metadata: (mastering.is_some()
+                        || max_cll.is_some()
+                        || max_fall.is_some())
+                    .then_some(true),
                     rotation: row.try_get("Rotation").repository()?,
                 });
             }

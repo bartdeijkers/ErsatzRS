@@ -123,6 +123,23 @@ separate hosted shards. Cargo tools are prepared in the build job; execution
 jobs use its verified nextest/helper executables. The full test selection remains
 intact. Hosted execution remains an explicit fallback rather than the default.
 
+For a dependency-audit correction, use the existing workflow's focused mode:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -F audit_only=true
+```
+
+This runs preflight, format/source-policy/workflow-selection safeguards and
+`cargo deny check`. Its independent concurrency group preserves full CI already
+running on that branch. Mixed focused modes are rejected, and an audit-only
+success never proves full CI or skips a later full gate. Reuse unaffected
+evidence and separately recheck behavior affected by the dependency correction.
+
+Native JWT cryptography statically links AWS-LC through `aws-lc-rs`. A C/C++
+compiler is required; Windows x64 builds also use NASM. The selected non-FIPS
+backend does not change the application's HS256-only token contract. See the
+[upstream build requirements](https://aws.github.io/aws-lc-rs/requirements/index.html).
+
 Two self-hosted runners share one physical machine. Each runner runs its jobs
 serially in its own workspace, so sharing build output across that runner's
 jobs loses no wall-clock parallelism; the two runners do run jobs at the same
@@ -211,10 +228,47 @@ Format, Clippy, dependency and source-contract checks remain independent gates.
 This Linux build-sharing arrangement is not native acceptance for other RIDs.
 
 Focused dispatch builds only the required products: Rust for `test_only` or
-`next_engine_only`, web for `browser_only`, and both for `teletext_only` or full
+`next_engine_only` or `teletext_only=1.5-rust`, web for `browser_only`, and both
+for the other `teletext_only` modes or full
 CI. The same-SHA failed-job rerun reuses its successful producer artifact; a new
 revision needs a new verified build. Artifacts expire after seven days, after
-which the producer must run again. No cross-revision artifact reuse is allowed.
+which the producer must run again unless an exact retained local artifact is
+available. Ordinary CI requires exact source identity. The explicitly selected
+focused-recovery exception below permits only an unchanged runtime/test/config
+tree with a small allowlist of CI orchestration and progress-document changes.
+
+### Reuse verified artifacts for focused recovery
+
+On the self-hosted machine, `reuse_artifacts` accepts a JSON object keyed by
+`rust` and/or `web`. Each reference must supply the original 40-character
+`source_sha`, immutable `cache_key`, archive `sha256`, exact `toolchain` string
+and all four recorded `build_flags`: `RUSTFLAGS`, `CARGO_PROFILE_TEST_DEBUG`,
+`LEPTOS_OUTPUT_NAME` and `LEPTOS_HASH_FILES`. Pass the JSON as an input value;
+the workflow passes it to Python through `CI_REUSE_ARTIFACTS`, never as shell
+source. Use the existing `teletext_only=1.5-rust` or `browser_only` selection to
+recover the affected jobs without another artifact compilation.
+
+The artifact provider only checks out source and verifies the pinned local
+archives. It runs no Cargo commands, tool installation, target reset, artifact
+publication or cache pruning. Missing/corrupt archives fail closed; no rebuild
+or alternative download starts. Consumers recheck archive hashes, the complete
+file inventory and permissions, host/libc, toolchain, flags and original source
+identity. The producer SHA stays in `build.json`; logs distinguish it from the
+execution SHA. The helper rejects any changed runtime, test, dependency or
+configuration input and permits only its explicit CI/docs path allowlist.
+
+Empty local web-build environment values remain empty in the evidence; their
+effective output name and hashing settings come from the identical producer
+Cargo metadata. They must still match the expected `ersatzrs-web`, unhashed
+Leptos bundle. Rust artifacts require the CI test-debug setting. Existing
+locally qualified server/site components may be packaged once with truthful
+component and build evidence; a warm cache or an old server with newer frontend
+files alone does not establish a reusable matched build. Keep the referenced
+immutable local cache group until all consumers finish.
+
+Reuse is restricted to one explicit focused mode, self-hosted execution and no
+target reset. Normal full CI and its exact-SHA rules remain unchanged; these
+scoped results never imply a fresh full-CI result for the execution commit.
 
 The smoke runner accepts an explicitly selected server without rebuilding:
 
@@ -275,10 +329,14 @@ gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=1.5
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=2.5
 # Run both levels and all four teletext browser jobs:
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=all
+# Retry only the original Level 1.5 Rust job, including its existing Next tests:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=1.5-rust
 ```
 
-Each level selects its Rust job and both browser projects, after the shared
-artifact producer. A job rerun tests
+The `1.5` and `2.5` modes select their Rust job and both browser projects, after
+the shared artifact producer. The `1.5-rust` mode keeps the complete existing
+Level 1.5 Rust/Next selection and its runtime staging, but builds only the Rust
+artifact and skips all browser jobs. A job rerun tests
 its original SHA; dispatch tests the new branch revision. The title
 `CI (Teletext only)` and separate concurrency group prevent a focused run
 from cancelling or standing in for full CI. Focused modes are mutually
@@ -416,6 +474,15 @@ For a correction confined to the Next engine gate, dispatch its existing job:
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f next_engine_only=true
 ```
 
+For the isolated subtitle-NUL fixture failure, add `-f next_case_set=subtitle-nul`
+and the verified Rust `reuse_artifacts` reference. This selects exactly
+`real_native_next_nul_extraction_and_existing_cache_preserve_selected_captions`
+with its unchanged assertions and retains runtime staging plus both subsequent
+Next playback smoke checks. It does not repeat the other passing Next tests.
+The nondefault case set requires `next_engine_only=true`, uses a separate
+concurrency group, and appears as `CI (Next subtitle-NUL recovery)`. The default
+`next_case_set=all` preserves the complete selection.
+
 The run is titled `CI (Next engine only)`. It runs the unchanged Next runtime
 staging, regression tests and playback checks, while skipping unrelated jobs.
 Its concurrency group is separate from normal CI, so it cannot cancel a full
@@ -428,32 +495,51 @@ repeat any checks invalidated by the correction. This focused run cannot suppres
 a later full run through Preflight and does not establish full green CI or
 satisfy the exact-candidate release gate above.
 
-### Retry the failed browser fixtures on a corrected revision
+### Retry the failed browser cases on a corrected revision
 
-Use the bounded recovery mode to run all 11 cases per selected browser in the
-Block preview, teletext authoring and editor specs. Run complete serial groups
+Use the default bounded recovery mode to run all 15 current cases per selected
+browser in the Block preview, teletext authoring and editor specs. Run complete serial groups
 so failures are rechecked with their predecessors and any followers that did not
 run after the original failure, including both TCP publication cases.
 
 ```bash
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f browser_only=both
 # Use browser_only=chromium or browser_only=firefox to recover just one project.
+# Retry only the error-slate and real H.264/AAC preview cases:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
+  -f browser_only=chromium -f browser_case_set=channel-preview
+# Retry only the complete Level 1.5 Firefox suite after runner interruption:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
+  -f browser_only=firefox -f browser_case_set=teletext-1.5
+# Retry the two runtime failures and nine interrupted serial followers only:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
+  -f browser_only=chromium -f browser_case_set=teletext-runtime
 ```
 
 This runs the selected browser jobs with the existing matched Leptos build,
-pinned runtime staging and isolated application runner. `both` runs 22 cases
+pinned runtime staging and isolated application runner. The default `fixtures`
+case set with `both` runs 30 cases; `channel-preview` runs two per selected browser.
+`teletext-1.5` reuses the complete ordinary Level 1.5 suite filter, including
+its serial groups, without selecting general or Level 2.5 cases.
+`teletext-runtime` selects 11 exact current cases from source-caption delivery
+and restart-flow: source-caption choice, active Next viewers, two localized
+MPEG-TS settings cases, two shared-profile generation cases, the ordinary-URL
+external-client case and four per-output delivery cases. Existing platform,
+browser and external-client prerequisites remain unchanged; listed cases are
+not necessarily executed when those prerequisites are absent. Other authoring,
+editor and already-passing lifecycle cases are excluded. Each set runs
 through the existing matrix with `max-parallel: 1`, preserving serial execution
 and avoiding resource contention between browser projects. Normal CI runs all
 six general/1.5/2.5 browser jobs. The `CI (Browser recovery)` title identifies
 partial evidence and cannot suppress full CI through Preflight. Its
 browser-specific
-concurrency group preserves other running gates. On a shared host, wait for an
+concurrency group preserves other running gates and case sets. On a shared host, wait for an
 existing job of the same project to release its port before starting recovery.
 Combining this mode with `test_only`,
 `next_engine_only` or `teletext_only` fails before checkout or building.
 
 Record the repaired SHA and the earlier full run when reusing unaffected
-results. This three-spec recovery is scoped evidence; it does not establish full
+results. Browser recovery is scoped evidence; it does not establish full
 green CI or satisfy the exact-candidate release gate.
 
 ## Inner-loop strategy (don't recompile the source 5×)
@@ -515,6 +601,13 @@ Cargo. CI runs the same nextest selection through the `ci` profile
 which additionally writes a JUnit report so per-test durations are available as
 a build artifact. Neither the local nor the CI selection runs doctests; only
 `./run.sh test-closeout` adds them.
+
+After a failed workspace run and focused recovery, use
+`./run.sh test-closeout --doctests-only` (Windows:
+`.\run.cmd test-closeout --doctests-only`) to execute the remaining doctest
+component. This does not run unit/integration tests or claim a complete closeout.
+Link the original run, focused recovery and doctest results when reusing
+unaffected evidence; repeat any checks invalidated by the correction.
 
 The closeout deliberately uses the sole supported SQLite graph. Historical
 dual-backend feature combinations are not part of current development or
@@ -743,6 +836,12 @@ several releases. Two distinct failure modes:
    with that WASM. The dev recipe `cargo leptos build` then `cargo run --bin`
    works only because the binary defaults agree; prefer `./run.sh dev`
    (`cargo leptos watch`) or `./run.sh serve`, which keep them in lockstep.
+   Debug cargo-leptos 0.3.6 also enables `--cfg erase_components` for both
+   sides. A plain Cargo server lacks that flag: pairing it with the erased
+   frontend can load every asset successfully and still fail on missing
+   hydration marker nodes. Match component-erasure settings as well as source,
+   features and server-function hash keys when assembling native candidates.
+   The asset-presence gate does not replace an actual hydrated interaction.
 2. **File-hashing mismatch ("wasm checksum mismatch").** cargo-leptos can hash
    `/pkg` asset filenames (writing `site/pkg/hash.txt`). If the WASM build and
    the running binary disagree about hashing, the server emits
@@ -843,11 +942,16 @@ See the disk-space note in
 
 Release archive staging requires Python 3.12 and access to the exact public
 Next distribution selected by the canonical shared manifest,
-`scripts/release/next-patches/manifest.json`. The local UCU-11 integration now
-pins [Next v0.2.2](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-4a0b59a-ersatzrs.1)
-in `bartdeijkers/ErsatzRS-next`; integrated Linux/Windows adoption and required
-local acceptance pass. The six verified source builds retain both temporary corrections
-under ADR 0117. Each archive records source, lockfile, patch and payload hashes.
+`scripts/release/next-patches/manifest.json`. The UCU-12 managed pin selects
+[Next v0.2.3 rs.6](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-54c6cb9-ersatzrs.6)
+for Linux x64, ARM64, ARMv7 and Windows x64 in `bartdeijkers/ErsatzRS-next`.
+macOS retains the original published rs.4 archives, URLs and five-patch identity;
+its newer builds and acceptance remain explicitly deferred. The four rs.6
+archives add copied-caption source-outpoint and selected-audio metadata fixes
+to those five reviewed inputs under ADRs 0117 and 0128. All selected archives
+are checksum-verified. Each archive records source, original/prepared lock,
+patch and payload hashes. Application adoption acceptance is tracked separately
+in the UCU-12 milestone; publication alone does not establish it.
 The dependency assets are publicly downloadable without credentials. Package
 staging verifies the pinned checksums and provenance; it never rebuilds Next.
 `scripts/release/stage-next.py --rid <rid> --output <stage>/next` stages the
@@ -857,6 +961,11 @@ root beside ErsatzRS, retaining only license/provenance in `next/`.
 Windows packages also require `libvpl.dll` and `libvpl-LICENSE.txt` from the
 same verified Next archive beside `ersatztv-channel.exe` at the package root.
 Missing or invalid companions fail staging before the destination is published.
+Linux ARM64 also stages the private `librockchip_mpp.so.1`, both licence texts,
+README and API header from the same archive. Exact hashes, sizes and complete
+inventory are required. The worker loads this owned library and checks real
+codec readiness; unavailable hardware falls back to software. Native Rockchip
+hardware acceptance remains explicitly unverified.
 It checks archive and license SHA-256 values pinned in source and records
 the selected asset, full pinned source revision and license hash. Staging rejects
 an artifact whose revision differs from the canonical manifest's
@@ -865,8 +974,11 @@ Review upstream changes, validate the selected runtime and update the pin.
 Application releases still require their own acceptance and green exact-SHA CI;
 dependency publication needs its explicit maintainer authorization. Missing artifacts, invalid checksums or missing
 licenses fail packaging. A new accepted snapshot requires new pinned hashes.
-All six supported RIDs use the same reviewed source and two patches. Source and
-lockfile hashes are pinned alongside the archive hashes; altered provenance
+All six supported RIDs use the same upstream source and prepared lockfile.
+Per-platform overrides retain the complete older macOS version, release tag
+and patch list; acquisition, cache identity, Health and staging resolve these
+together. macOS rs.4 does not contain the two rs.6 corrections. Source and
+lockfile hashes are pinned alongside archive hashes; altered provenance
 fails staging. Reproduction instructions are below. The former unmodified
 ARMv7 source helper remains available for future patch retirement, but refuses
 the active patched pin. Ordinary application packaging downloads existing
@@ -883,7 +995,7 @@ archive hashes remain fixed. Before a Docker build, stage the snapshot on the
 host using the exact current tag (not a mutable upstream release):
 
 ```sh
-gh release download next-4a0b59a-ersatzrs.1 \
+gh release download next-54c6cb9-ersatzrs.6 \
   --repo bartdeijkers/ErsatzRS-next --dir .next-snapshot
 ```
 

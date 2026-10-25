@@ -1,0 +1,128 @@
+diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.rs
+--- a/crates/ffpipeline/src/pipeline.rs
++++ b/crates/ffpipeline/src/pipeline.rs
+@@ -1283,6 +1283,7 @@
+         let mut result: ArgVec = Vec::new();
+ 
+         let mut audio_label = String::from("0:a");
++        let mut audio_metadata_source = None;
+         let mut video_label = String::from("0:v");
+         let mut subtitle_label = None;
+         let mut graphics_labels = vec![
+@@ -1392,6 +1393,7 @@
+                         }
+                     };
+                     audio_label = format!("{}:{}", audio_input_index, index);
++                    audio_metadata_source = Some(format!("{}:s:{}", audio_input_index, index));
+                 }
+                 PipelineInput::Subtitle {
+                     input_source,
+@@ -1456,11 +1458,17 @@
+         result.extend(args!["-map", filter_chain.video_label().to_owned()]);
+         result.extend(args!["-map", filter_chain.audio_label().to_owned()]);
+ 
+-        result.extend(
+-            self.output_options
+-                .iter()
+-                .flat_map(|o| o.as_arg(&self.output_context)),
+-        );
++        for option in &self.output_options {
++            if matches!(option, OutputOption::Format(_)) {
++                // Keep global metadata suppression, but retain the actual selected
++                // audio stream's metadata even when filtering replaces its label.
++                // Format emits the output filename, so the mapping must precede it.
++                if let Some(source) = &audio_metadata_source {
++                    result.extend(args!["-map_metadata:s:a:0", source.to_owned()]);
++                }
++            }
++            result.extend(option.as_arg(&self.output_context));
++        }
+ 
+         result
+     }
+@@ -1762,6 +1770,85 @@
+                 assert!(!args.iter().any(|arg| arg.contains("loop=-1:1")));
+             }
+         }
++    }
++
++    #[test]
++    fn selected_audio_metadata_uses_the_actual_input_before_the_output_filename() {
++        let shared = multichannel_ac3_input("main.mkv");
++        let mut alternate = multichannel_ac3_input("main.mkv");
++        alternate
++            .audio_input
++            .probe_result
++            .streams
++            .push(crate::probe::ProbeResultStream::Audio(
++                crate::probe::ProbeResultAudioStream {
++                    stream_index: 3,
++                    codec: "aac".to_owned(),
++                    channels: 2,
++                },
++            ));
++        alternate.audio_input.stream_index = Some(3);
++        let separate = separate_audio_input(
++            InputSource::Local(crate::input::LocalInputSource {
++                path: "song.flac".to_owned(),
++            }),
++            Duration::ZERO,
++        );
++        let mut copied = stereo_output();
++        copied.video.copy = Some(crate::output_settings::CopyPolicy::default());
++        copied.audio.copy = Some(crate::output_settings::CopyPolicy::default());
++
++        for (name, input, output, expected) in [
++            (
++                "shared filtered",
++                multichannel_ac3_input("main.mkv"),
++                stereo_output(),
++                "0:s:1",
++            ),
++            ("shared copied", shared, copied, "0:s:1"),
++            ("selected alternate", alternate, stereo_output(), "0:s:3"),
++            ("separate filtered", separate, stereo_output(), "1:s:1"),
++            (
++                "generated silence",
++                video_only_input(Duration::ZERO),
++                stereo_output(),
++                "1:s:0",
++            ),
++        ] {
++            let mut pipeline = Pipeline::full(&FfmpegInfo::default(), input, output).unwrap();
++            pipeline.optimize();
++            assert_selected_audio_metadata(&pipeline.args(), expected, name);
++        }
++
++        // Loudness plus canvas deliberately reopens the same path as input 1.
++        assert_selected_audio_metadata(
++            &loudnorm_args(Duration::from_millis(12_345), true, true),
++            "1:s:1",
++            "same-path own audio input",
++        );
++    }
++
++    fn assert_selected_audio_metadata(args: &ArgVec, expected: &str, name: &str) {
++        let mappings: Vec<_> = args
++            .windows(2)
++            .filter(|pair| pair[0].starts_with("-map_metadata"))
++            .map(|pair| (pair[0].as_ref(), pair[1].as_ref()))
++            .collect();
++        assert_eq!(
++            mappings,
++            vec![("-map_metadata", "-1"), ("-map_metadata:s:a:0", expected)],
++            "{name}"
++        );
++        let suppression = args.iter().position(|a| a == "-map_metadata").unwrap();
++        let mapping = args
++            .iter()
++            .position(|a| a == "-map_metadata:s:a:0")
++            .unwrap();
++        let filename = args.iter().position(|a| a == "out.m3u8").unwrap();
++        assert!(
++            suppression < mapping && mapping + 1 < filename,
++            "{name}: {args:?}"
++        );
+     }
+ 
+     #[test]

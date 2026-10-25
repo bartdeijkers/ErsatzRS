@@ -172,8 +172,11 @@ async fn fixture_child_direct_remote() {
     )
     .await;
     http.stop().await;
-    finite.expect("finite HTTP callback playback");
-    live.expect("live HTTP callback playback");
+    assert!(
+        finite.is_ok() && live.is_ok(),
+        "HTTP callback playback: finite={finite:?}, live={live:?}; retained at {}",
+        root.keep().display()
+    );
     let rtsp = servers::Rtsp::start(&ffmpeg, &original, root.path()).await;
     let result = observed_case(
         &original,
@@ -339,7 +342,14 @@ async fn assert_clock(ffmpeg: &Path, saved: &Path, uri: &str, case: Case) {
         } else {
             rgb[2] > 180 && rgb[0] < 70 && rgb[1] < 70
         },
-        "direct source clock mismatch"
+        "direct source clock mismatch: rgb={rgb:?}, live={}, transport={}, capture={}",
+        case.live,
+        if uri.starts_with("http:") {
+            "http"
+        } else {
+            "rtsp"
+        },
+        saved.display(),
     );
 }
 
@@ -360,6 +370,9 @@ async fn capture(
             .trim_playlist()
             .await
             .ok_or("missing direct playlist")?;
+        tokio::fs::write(saved.with_extension("m3u8"), &playlist)
+            .await
+            .map_err(|error| error.to_string())?;
         let segment = playlist
             .lines()
             .find(|line| {

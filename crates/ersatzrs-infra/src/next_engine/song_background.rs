@@ -134,6 +134,7 @@ mod tests {
                 occurrence: CanvasBinding {
                     session: None,
                     playout_start: None,
+                    region: None,
                     video_stream_index: None,
                     channel: 1,
                     item,

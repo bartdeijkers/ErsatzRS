@@ -46,6 +46,10 @@ References:
   `ci` profile and uploads a JUnit report with per-test durations (ADR 0090);
   it does not run doctests, so the closeout gate remains the only path that
   covers them.
+  To resume just the doctest component after focused failure recovery, use
+  `./run.sh test-closeout --doctests-only` or the Windows equivalent documented
+  in [BUILD.md](BUILD.md). Report the composed evidence explicitly; this option
+  alone does not satisfy closeout.
 - **Hydration smoke**: prefer a runnable Playwright spec under `tests/e2e/` and
   run it with `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test ...`.
   For exploratory work, a browser probe through Playwright MCP or another

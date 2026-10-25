@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output — exact remaining route/adoption boundary'
+current_focus = 'Phase 9A — continue teletext acceptance on the accepted UCU-12 base'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+UCU-12 is Complete through fixed v26.11.4/row254. All18ordered rows have
+accepted dispositions and the authoritative pin advances with them. Milestone
+ucu-12 owns exact identities, complete component history and composed CI proof.
+Four qualified Next rs.6 platforms and FFmpeg2.0.7 pass source/package/managed
+startup, decoded playback and transport acceptance; macOS retains exact rs.4
+identities and approved unverified runtime debt. Hardware debt remains unverified.
+Focused CI recovers the original failures without repeated compilation: full
+Firefox57/7existing skips; current browser10Chromium/9Firefox with existing
+skips;1955workspace+17Next Level1.5 passes; Next451passes plus one unchanged
+NUL-fixture recovery and both required smokes. Original negatives remain retained;
+the SQLite fixture race is a documented possibility, not a claimed product fix.
+Required earlier workspace gates and corrected-source checks retain their scope.
+Only source push/merge into remote/main is authorized for delivery. No further
+release, Phase9/UCU14 implementation or cleanup is part of this closeout.
+Continue the existing Phase9 acceptance program only under its own next task.
+
 Current package: p9a-source-output exact remaining SO2/SO3 route/adoption boundary.
 Next executable action: resolve only the owner's imprecise otherSO2..3 wording
 against ADR0121 and canonical ordinary-route/source receipts. Name each actual

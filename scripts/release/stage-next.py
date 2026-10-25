@@ -23,6 +23,7 @@ DOWNLOAD_BASE = f"https://github.com/{DISTRIBUTION_REPOSITORY}/releases/download
 PINNED_REVISION = MANIFEST["upstream_revision"]
 SOURCE_ARCHIVE_SHA256 = MANIFEST["source_archive_sha256"]
 SOURCE_LOCK_SHA256 = MANIFEST["source_lock_sha256"]
+PREPARED_LOCK_SHA256 = MANIFEST.get("patched_lock_sha256", SOURCE_LOCK_SHA256)
 PATCHED_DISTRIBUTION_VERSION = MANIFEST["distribution_version"]
 PINNED_PATCHES = [{"file": p["file"], "sha256": p["sha256"]} for p in MANIFEST["patches"]]
 TARGETS = {rid: package["target"] for rid, package in MANIFEST["runtime_packages"].items()}
@@ -31,22 +32,65 @@ PINNED_HASHES = MANIFEST["artifact_sha256"]
 
 BINARIES = ("ersatztv-channel",)
 WINDOWS_COMPANIONS = ("libvpl.dll", "libvpl-LICENSE.txt")
+ARM64_COMPANIONS = {
+    "librockchip_mpp.so.1",
+    "librockchip_mpp-LICENSE-Apache-2.0.txt",
+    "librockchip_mpp-LICENSE-MIT.txt",
+    "librockchip_mpp-README.txt",
+    "librockchip_mpp-rk_mpi.h",
+}
 MAX_ARCHIVE = 128 * 1024 * 1024
+
+
+def distribution_for(rid):
+    """Resolve one complete platform identity, including retained releases."""
+    package = MANIFEST["runtime_packages"][rid]
+    keys = ("distribution_version", "distribution_tag", "patches")
+    present = sum(key in package for key in keys)
+    if present not in (0, 3):
+        raise ValueError("Next platform requires a complete distribution identity")
+    version = package.get("distribution_version", PATCHED_DISTRIBUTION_VERSION)
+    tag = package.get("distribution_tag", DISTRIBUTION_TAG)
+    patches = package.get("patches", PINNED_PATCHES)
+    if any(not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value)
+           for value in (version, tag)) or not isinstance(patches, list) or not patches:
+        raise ValueError("Invalid Next platform distribution identity")
+    return version, tag, [{"file": p["file"], "sha256": p["sha256"]} for p in patches]
+
+
+def package_url(rid):
+    version, tag, _ = distribution_for(rid)
+    suffix = ".zip" if rid == "win-x64" else ".tar.gz"
+    return f"https://github.com/{DISTRIBUTION_REPOSITORY}/releases/download/{tag}/ersatzrs-next-{version}-{rid}{suffix}"
 
 
 def download(url, limit):
     # gh uses the existing host login or CI token without exposing credentials
     # to this script or forwarding authentication across download redirects.
-    if shutil.which("gh") and (url == RELEASE_URL or url.startswith(DOWNLOAD_BASE + "/")):
-        endpoint = f"repos/{DISTRIBUTION_REPOSITORY}/releases/tags/{DISTRIBUTION_TAG}"
-        if url != RELEASE_URL:
-            metadata = json.loads(download(RELEASE_URL, 2 * 1024 * 1024))
+    releases = {DISTRIBUTION_TAG} | {
+        package["distribution_tag"] for package in MANIFEST["runtime_packages"].values()
+        if "distribution_tag" in package
+    }
+    accepted_release = None
+    for tag in releases:
+        if not isinstance(tag, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", tag):
+            raise ValueError("Invalid Next distribution tag")
+        release_url = f"https://api.github.com/repos/{DISTRIBUTION_REPOSITORY}/releases/tags/{tag}"
+        base = f"https://github.com/{DISTRIBUTION_REPOSITORY}/releases/download/{tag}"
+        if url == release_url or url.startswith(base + "/"):
+            accepted_release = tag, release_url
+            break
+    if shutil.which("gh") and accepted_release:
+        tag, release_url = accepted_release
+        endpoint = f"repos/{DISTRIBUTION_REPOSITORY}/releases/tags/{tag}"
+        if url != release_url:
+            metadata = json.loads(download(release_url, 2 * 1024 * 1024))
             matches = [asset for asset in metadata["assets"] if asset["name"] == url.rsplit("/", 1)[1]]
             if len(matches) != 1:
                 raise ValueError("Missing or ambiguous snapshot asset")
             endpoint = f"repos/{DISTRIBUTION_REPOSITORY}/releases/assets/{matches[0]['id']}"
         command = ["gh", "api", endpoint]
-        if url != RELEASE_URL:
+        if url != release_url:
             command += ["-H", "Accept: application/octet-stream"]
         with tempfile.TemporaryFile() as output:
             subprocess.run(command, stdout=output, check=True, timeout=60)
@@ -88,11 +132,38 @@ def select_asset(metadata, rid):
     return asset, match[2], asset["name"][:-len(suffix)]
 
 
+def arm64_companion_payload(rid):
+    required = rid == "linux-arm64" and (
+        "linux_arm64_companions_sha256" in MANIFEST
+        or any(p["file"] == "0004-private-mpp-driver-readiness.patch"
+               for p in MANIFEST["runtime_packages"][rid].get("patches", PINNED_PATCHES))
+    )
+    if not required:
+        return None
+    companions = MANIFEST.get("linux_arm64_companions_sha256")
+    if not isinstance(companions, dict) or companions.keys() != ARM64_COMPANIONS:
+        raise ValueError("Next ARM64 requires exactly the declared MPP library and notices")
+    declared = MANIFEST.get("runtime_packages", {}).get(rid, {})
+    hashes, sizes = declared.get("payload_sha256", {}), declared.get("payload_bytes", {})
+    names = {"ersatztv-channel", "LICENSE"} | ARM64_COMPANIONS
+    if not isinstance(hashes, dict) or not isinstance(sizes, dict) or hashes.keys() != names or sizes.keys() != names:
+        raise ValueError("Next ARM64 requires exact payload hashes and sizes")
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in hashes.values()):
+        raise ValueError("Next ARM64 payload requires exact SHA-256 values")
+    if any(type(value) is not int or not 0 < value <= MAX_ARCHIVE for value in sizes.values()):
+        raise ValueError("Next ARM64 payload requires bounded positive sizes")
+    if any(hashes[name] != digest for name, digest in companions.items()):
+        raise ValueError("Next ARM64 companion pins differ from the declared payload")
+    return declared
+
+
 def read_binaries(payload, rid, root, extra_names=()):
     names = [n + (".exe" if rid == "win-x64" else "") for n in BINARIES]
     result = {}
     if rid == "win-x64":
         names.extend(WINDOWS_COMPANIONS)
+    if arm64_companion_payload(rid) is not None:
+        names.extend(sorted(ARM64_COMPANIONS))
     names.extend(extra_names)
     if rid == "win-x64":
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
@@ -117,19 +188,32 @@ def read_binaries(payload, rid, root, extra_names=()):
 
 
 def verify_patched_payload(files, rid):
+    version, _, patches = distribution_for(rid)
     origin = json.loads(files["origin.json"])
     expected = {
         "kind": "patched-source-build", "repository": REPOSITORY,
         "source_revision": PINNED_REVISION, "rid": rid, "target": TARGETS[rid],
         "source_archive_sha256": SOURCE_ARCHIVE_SHA256,
-        "cargo_lock_sha256": SOURCE_LOCK_SHA256,
-        "distribution_version": PATCHED_DISTRIBUTION_VERSION, "patches": PINNED_PATCHES,
+        "cargo_lock_sha256": PREPARED_LOCK_SHA256,
+        "distribution_version": version, "patches": patches,
     }
     if any(origin.get(key) != value for key, value in expected.items()):
         raise ValueError("Next source/patch provenance differs from the accepted snapshot")
+    compiler = MANIFEST.get("rust_toolchain")
+    if compiler is not None and (
+        not isinstance(compiler, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", compiler)
+        or not origin.get("rustc", "").startswith(f"rustc {compiler} ")
+    ):
+        raise ValueError("Next compiler provenance differs from the accepted snapshot")
     payload = {name: data for name, data in files.items() if name != "origin.json"}
     if origin.get("payload_sha256") != {name: hashlib.sha256(data).hexdigest() for name, data in payload.items()}:
         raise ValueError("Next payload SHA-256 mismatch")
+    declared = arm64_companion_payload(rid)
+    if declared is not None and (
+        origin["payload_sha256"] != declared["payload_sha256"]
+        or {name: len(data) for name, data in payload.items()} != declared["payload_bytes"]
+    ):
+        raise ValueError("Next ARM64 payload differs from declared hashes or sizes")
     if hashlib.sha256(files["LICENSE"]).hexdigest() != PINNED_HASHES["LICENSE"]:
         raise ValueError("Next license SHA-256 mismatch")
     return origin
@@ -137,23 +221,22 @@ def verify_patched_payload(files, rid):
 
 def stage_patched_snapshot(rid, output, archive_path=None, fetch=download):
     """Stage the reviewed ADR 0117 distribution without executing or extracting it."""
-    if not PATCHED_DISTRIBUTION_VERSION or not PINNED_PATCHES:
-        raise ValueError("No patched Next snapshot is accepted")
+    version, tag, _ = distribution_for(rid)
     output = Path(output)
     if output.exists():
         raise ValueError("Next staging destination already exists")
-    root = f"ersatzrs-next-{PATCHED_DISTRIBUTION_VERSION}-{rid}"
+    root = f"ersatzrs-next-{version}-{rid}"
     name = root + (".zip" if rid == "win-x64" else ".tar.gz")
     expected_hash = PINNED_HASHES.get(name)
     if not expected_hash:
         raise ValueError("No accepted Next archive for this platform")
-    payload = Path(archive_path).read_bytes() if archive_path else fetch(f"{DOWNLOAD_BASE}/{name}", MAX_ARCHIVE)
+    payload = Path(archive_path).read_bytes() if archive_path else fetch(package_url(rid), MAX_ARCHIVE)
     if not 0 < len(payload) <= MAX_ARCHIVE or hashlib.sha256(payload).hexdigest() != expected_hash:
         raise ValueError("Next snapshot SHA-256 mismatch")
     files = read_binaries(payload, rid, root, ("LICENSE", "origin.json"))
     origin = verify_patched_payload(files, rid)
     origin.update(distribution_repository=DISTRIBUTION_REPOSITORY,
-                  distribution_tag=DISTRIBUTION_TAG, asset=name, sha256=expected_hash)
+                  distribution_tag=tag, asset=name, sha256=expected_hash)
     files["origin.json"] = (json.dumps(origin, indent=2) + "\n").encode()
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=".next-", dir=output.parent))
@@ -166,7 +249,7 @@ def stage_patched_snapshot(rid, output, archive_path=None, fetch=download):
     finally:
         if temporary.exists():
             shutil.rmtree(temporary)
-    print(f"Staged patched Next {PATCHED_DISTRIBUTION_VERSION} for {rid}: sha256:{expected_hash}")
+    print(f"Staged patched Next {version} for {rid}: sha256:{expected_hash}")
 
 
 def stage(metadata, rid, output, archive_path=None, fetch=download):

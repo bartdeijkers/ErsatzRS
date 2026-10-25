@@ -1,5 +1,5 @@
 name: CI
-run-name: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
+run-name: ${{ inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && inputs.next_case_set == 'subtitle-nul' && 'CI (Next subtitle-NUL recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
 
 on:
   pull_request:
@@ -53,13 +53,26 @@ on:
         type: boolean
         required: false
         default: false
+      audit_only:
+        description: Run dependency audit only (does not establish full CI acceptance; incompatible with other focused modes)
+        type: boolean
+        required: false
+        default: false
       next_engine_only:
         description: Run only the Next engine job (does not establish full CI acceptance; incompatible with test_only)
         type: boolean
         required: false
         default: false
+      next_case_set:
+        description: Bounded Next recovery cases (nondefault requires next_engine_only)
+        type: choice
+        required: false
+        default: all
+        options:
+          - all
+          - subtitle-nul
       teletext_only:
-        description: Run teletext Rust and Chromium/Firefox jobs (partial CI; incompatible with other focused modes)
+        description: Run selected teletext jobs (1.5-rust excludes browsers; partial CI; incompatible with other focused modes)
         type: choice
         required: false
         default: none
@@ -68,8 +81,9 @@ on:
           - all
           - '1.5'
           - '2.5'
+          - 1.5-rust
       browser_only:
-        description: Run the 11 cases in the three failed-fixture specs in selected browsers (partial CI; incompatible with other focused modes)
+        description: Run the bounded recovery case set in selected browsers (partial CI; incompatible with other focused modes)
         type: choice
         required: false
         default: none
@@ -78,11 +92,26 @@ on:
           - chromium
           - firefox
           - both
+      browser_case_set:
+        description: Bounded browser recovery cases (nondefault sets require browser_only)
+        type: choice
+        required: false
+        default: fixtures
+        options:
+          - fixtures
+          - channel-preview
+          - teletext-1.5
+          - teletext-runtime
       reset_target_dir:
         description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
         type: boolean
         required: false
         default: false
+      reuse_artifacts:
+        description: Exact local artifact references as JSON (self-hosted focused recovery only; fails closed without rebuilding)
+        type: string
+        required: false
+        default: ''
 
 # Bursty pushing is common here (44% of recent consecutive commits landed
 # <10 min apart). On the single self-hosted runner that queues full clippy+test
@@ -92,7 +121,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}', inputs.browser_only) || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && format('-next-engine-only{0}', inputs.next_case_set == 'subtitle-nul' && '-subtitle-nul' || '') || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -114,6 +143,7 @@ env:
   # Same-host runners share the user's cache by default. Other machines safely
   # miss this cache and download the unchanged GitHub artifact instead.
   CI_LOCAL_ARTIFACT_CACHE: ${{ vars.CI_LOCAL_ARTIFACT_CACHE }}
+  CI_REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}
 
 jobs:
   # A direct fast-forward merge gives main the exact commit a feature-branch
@@ -130,13 +160,23 @@ jobs:
   # queue time to save a duplicate that is comparatively rare.
   preflight:
     name: Preflight
-    if: ${{ !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    if: ${{ inputs.audit_only || (!inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none')) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
     outputs:
       skip: ${{ steps.duplicate.outputs.skip }}
     steps:
+      - name: Reject mixed audit mode
+        if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts || (inputs.next_case_set && inputs.next_case_set != 'all')) }}
+        run: |
+          echo "::error::audit_only cannot be combined with another focused CI mode"
+          exit 1
+      - name: Reject unfocused artifact reuse
+        if: ${{ inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+        run: |
+          echo "::error::artifact reuse is restricted to an explicit focused recovery"
+          exit 1
       - id: duplicate
         uses: actions/github-script@v9
         with:
@@ -161,7 +201,8 @@ jobs:
                 && run.display_title !== 'CI (Test only)'
                 && run.display_title !== 'CI (Next engine only)'
                 && run.display_title !== 'CI (Teletext only)'
-                && run.display_title !== 'CI (Browser recovery)',
+                && run.display_title !== 'CI (Browser recovery)'
+                && run.display_title !== 'CI (Audit only)',
             );
             core.setOutput('skip', proven.length > 0 ? 'true' : 'false');
             if (proven.length > 0) {
@@ -182,6 +223,9 @@ jobs:
           fetch-depth: 0 # Compare new Clippy allows with the PR base or push predecessor.
       - uses: dtolnay/rust-toolchain@1.97.1
       - run: cargo fmt --all -- --check
+      - name: Focused audit selection safeguards
+        if: ${{ inputs.audit_only }}
+        run: python3 scripts/ci-build-artifacts_test.py
       - name: New Clippy allow policy
         env:
           CLIPPY_ALLOW_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
@@ -198,6 +242,7 @@ jobs:
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
     needs: fmt
+    if: ${{ !inputs.audit_only }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -225,59 +270,94 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   build:
-    name: Build CI artifacts
+    name: ${{ inputs.reuse_artifacts && 'Verify reused CI artifacts' || 'Build CI artifacts' }}
     needs: [preflight, fmt]
-    if: ${{ always() && !cancelled() && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
+    if: ${{ always() && !cancelled() && !inputs.audit_only && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     timeout-minutes: 120
     outputs:
       rust_artifact: ${{ steps.identity.outputs.rust_artifact }}
       web_artifact: ${{ steps.identity.outputs.web_artifact }}
-      rust_cache_key: ${{ steps.identity.outputs.rust_cache_key }}
-      web_cache_key: ${{ steps.identity.outputs.web_cache_key }}
-      rust_digest: ${{ steps.identity.outputs.rust_digest }}
-      web_digest: ${{ steps.identity.outputs.web_digest }}
+      rust_cache_key: ${{ steps.reuse.outputs.rust_cache_key || steps.identity.outputs.rust_cache_key }}
+      web_cache_key: ${{ steps.reuse.outputs.web_cache_key || steps.identity.outputs.web_cache_key }}
+      rust_digest: ${{ steps.reuse.outputs.rust_digest || steps.identity.outputs.rust_digest }}
+      web_digest: ${{ steps.reuse.outputs.web_digest || steps.identity.outputs.web_digest }}
+      rust_source_sha: ${{ steps.reuse.outputs.rust_source_sha || github.sha }}
+      web_source_sha: ${{ steps.reuse.outputs.web_source_sha || github.sha }}
     env:
       CARGO_BUILD_JOBS: "1"
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: ${{ inputs.runner == 'github-hosted' && '-C link-arg=-fuse-ld=lld' || '' }}
       LEPTOS_OUTPUT_NAME: ersatzrs-web
       LEPTOS_HASH_FILES: "false"
-      BUILD_RUST: ${{ !inputs.browser_only || inputs.browser_only == 'none' }}
-      BUILD_WEB: ${{ !inputs.test_only && !inputs.next_engine_only }}
+      BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') }}
+      BUILD_WEB: ${{ !inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     steps:
       - name: Validate dispatch mode
         env:
           TEST_ONLY: ${{ inputs.test_only }}
           NEXT_ONLY: ${{ inputs.next_engine_only }}
+          NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
           TELETEXT_ONLY: ${{ inputs.teletext_only }}
           BROWSER_ONLY: ${{ inputs.browser_only }}
+          BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
+          REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}
+          RUNNER_POOL: ${{ inputs.runner }}
+          RESET_TARGET_DIR: ${{ inputs.reset_target_dir }}
         run: |
           python3 - <<'PYCODE'
-          import os
+          import json, os
           modes = [os.environ[key] == 'true' for key in ('TEST_ONLY', 'NEXT_ONLY')]
           modes += [os.environ[key] not in ('', 'none') for key in ('TELETEXT_ONLY', 'BROWSER_ONLY')]
           if sum(modes) > 1:
               raise SystemExit('Focused CI modes are mutually exclusive')
+          next_case_set = os.environ.get('NEXT_CASE_SET', 'all')
+          if next_case_set not in ('all', 'subtitle-nul'):
+              raise SystemExit('Unknown Next recovery case set')
+          if next_case_set != 'all' and os.environ['NEXT_ONLY'] != 'true':
+              raise SystemExit('Next recovery case set requires next_engine_only')
+          case_set = os.environ['BROWSER_CASE_SET']
+          if case_set not in ('fixtures', 'channel-preview', 'teletext-1.5', 'teletext-runtime'):
+              raise SystemExit('Unknown browser recovery case set')
+          if case_set != 'fixtures' and os.environ['BROWSER_ONLY'] in ('', 'none'):
+              raise SystemExit('Browser recovery case set requires browser_only')
+          if os.environ.get('REUSE_ARTIFACTS'):
+              if sum(modes) != 1 or os.environ.get('RUNNER_POOL') != 'self-hosted' or os.environ.get('RESET_TARGET_DIR') == 'true':
+                  raise SystemExit('Artifact reuse requires one self-hosted focused mode without target reset')
+              if not isinstance(json.loads(os.environ['REUSE_ARTIFACTS']), dict):
+                  raise SystemExit('Artifact reuse references must be a JSON object')
           PYCODE
       - uses: actions/checkout@v7
+      - name: Reuse verified CI artifacts
+        id: reuse
+        if: ${{ inputs.reuse_artifacts != '' }}
+        env:
+          REUSE_KINDS: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'web' || (inputs.test_only || inputs.next_engine_only || inputs.teletext_only == '1.5-rust') && 'rust' || 'rust web' }}
+        run: |
+          mkdir -p ci-artifacts
+          for kind in $REUSE_KINDS; do
+            python3 scripts/ci-build-artifacts.py reuse --kind "$kind" --sha "$GITHUB_SHA" \
+              --archive "ci-artifacts/$kind.tar.gz" --output-file "$GITHUB_OUTPUT"
+          done
       - uses: dtolnay/rust-toolchain@1.97.1
+        if: ${{ !inputs.reuse_artifacts }}
         with:
           targets: wasm32-unknown-unknown
       - name: Reset persistent target-dir (manual escape hatch)
-        if: ${{ inputs.reset_target_dir == true }}
+        if: ${{ inputs.reset_target_dir == true && !inputs.reuse_artifacts }}
         run: rm -rf "$CARGO_TARGET_DIR"
       - uses: Swatinem/rust-cache@v2
-        if: ${{ inputs.runner == 'github-hosted' }}
+        if: ${{ inputs.runner == 'github-hosted' && !inputs.reuse_artifacts }}
         with:
           key: ci-build
           cache-bin: "true"
       - name: Install LLVM linker
-        if: ${{ inputs.runner == 'github-hosted' }}
+        if: ${{ inputs.runner == 'github-hosted' && !inputs.reuse_artifacts }}
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes lld
       - name: Install build tools
+        if: ${{ !inputs.reuse_artifacts }}
         run: |
           if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
             cargo install stylance-cli --version 0.8.2 --locked
@@ -289,6 +369,7 @@ jobs:
             cargo install cargo-leptos --version 0.3.6 --locked
           fi
       - name: Build CI helper executables
+        if: ${{ !inputs.reuse_artifacts }}
         run: |
           git diff --exit-code
           cargo build --locked -p xtask --bin xtask
@@ -322,6 +403,7 @@ jobs:
             --archive ci-artifacts/web.tar.gz --sha "$GITHUB_SHA"
       - name: Record immutable artifact names
         id: identity
+        if: ${{ !inputs.reuse_artifacts }}
         run: |
           echo "rust_artifact=ci-rust-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           echo "web_artifact=ci-web-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
@@ -362,7 +444,7 @@ jobs:
           compression-level: 0
           retention-days: 7
       - name: Bound completed self-hosted build cache
-        if: ${{ inputs.runner != 'github-hosted' }}
+        if: ${{ inputs.runner != 'github-hosted' && !inputs.reuse_artifacts }}
         run: |
           # All consumers use uploaded/local immutable copies, never this target.
           cache_kib=$(du -sk -- "$CARGO_TARGET_DIR" | awk '{print $1}')
@@ -393,7 +475,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -437,8 +519,9 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
-      NEXTEST_TEST_THREADS: "4"
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
+      # Runtime fixtures share channel1's report path in this owned app-data root.
+      NEXTEST_TEST_THREADS: "1"
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.7
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -452,7 +535,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -465,27 +548,35 @@ jobs:
         run: |
           mkdir -p ci-artifacts/next-engine
           runtime_tmp="$RUNNER_TEMP/next-engine-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          mkdir -p "$runtime_tmp"
+          mkdir -p "$runtime_tmp/app-data"
           echo "TMPDIR=$runtime_tmp" >> "$GITHUB_ENV"
+          echo "ERSATZRS_APP_DATA_DIR=$runtime_tmp/app-data" >> "$GITHUB_ENV"
           git rev-parse HEAD > ci-artifacts/next-engine/ersatzrs-sha.txt
           rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
       - name: Stage Next and validated FFmpeg runtime
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Retain the same pinned archive for the real acquisition/health test.
+          # Retain every reviewed archive for inventory and real acquisition/health tests.
           python3 - <<'PYCODE' | tee ci-artifacts/next-engine/next-runtime.log
-          import importlib.util, os, pathlib
+          import importlib.util, os, pathlib, shutil
           spec = importlib.util.spec_from_file_location('stage_next', 'scripts/release/stage-next.py')
           stage = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(stage)
+          manifest = pathlib.Path(stage.__file__).resolve().parent / 'next-patches/manifest.json'
+          packages = pathlib.Path(os.environ['TMPDIR']) / 'next-packages'
+          packages.mkdir()
+          shutil.copyfile(manifest, packages / 'manifest.json')
+          for rid, package in sorted(stage.MANIFEST['runtime_packages'].items()):
+              archive = packages / package['asset']
+              archive.write_bytes(stage.download(stage.package_url(rid), stage.MAX_ARCHIVE))
+              output = pathlib.Path(os.environ['TMPDIR']) / ('next' if rid == 'linux-x64' else f'next-verified-{rid}')
+              stage.stage_patched_snapshot(rid, output, archive)
           asset = stage.MANIFEST['runtime_packages']['linux-x64']['asset']
-          archive = pathlib.Path(os.environ['TMPDIR']) / asset
-          archive.write_bytes(stage.download(f'{stage.DOWNLOAD_BASE}/{asset}', stage.MAX_ARCHIVE))
           with open(os.environ['GITHUB_ENV'], 'a') as env:
-              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE={archive}\n')
-              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST={pathlib.Path("scripts/release/next-patches/manifest.json").resolve()}\n')
-          stage.stage_patched_snapshot('linux-x64', pathlib.Path(os.environ['TMPDIR']) / 'next', archive)
+              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE={packages / asset}\n')
+              env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST={manifest}\n')
+              env.write(f'NEXT_CANDIDATE_PACKAGES={packages}\n')
           PYCODE
           cp "$TMPDIR/next/origin.json" ci-artifacts/next-engine/next-origin.json
           sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/next-engine/next-sha256.txt
@@ -495,8 +586,10 @@ jobs:
           python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/next-engine/rtsp-test-server.log
           echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
       - name: Next components, real-engine decoding and HTTP EOF
+        env:
+          NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
         run: |
-          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py rust next) & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/next-engine/tests.log
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py next-recovery "$NEXT_CASE_SET") & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
@@ -516,8 +609,15 @@ jobs:
               report = root / 'ci/junit.xml'
               if report.is_file():
                   shutil.copyfile(report, destination / 'junit.xml')
-          for index, log in enumerate(pathlib.Path(os.environ.get('TMPDIR', os.environ['RUNNER_TEMP'])).glob('ersatzrs-smoke-*/ersatzrs-web-smoke.log')):
+          runtime = pathlib.Path(os.environ.get('TMPDIR', os.environ['RUNNER_TEMP']))
+          for index, log in enumerate(runtime.glob('ersatzrs-smoke-*/ersatzrs-web-smoke.log')):
               shutil.copyfile(log, destination / f'host-{index}.log')
+          for index, log in enumerate(sorted(runtime.glob('.tmp*/session.log'))):
+              shutil.copyfile(log, destination / f'runtime-session-{index}.log')
+          if data := os.environ.get('ERSATZRS_APP_DATA_DIR'):
+              reports = pathlib.Path(data) / 'ffmpeg-reports'
+              if reports.is_dir():
+                  shutil.copytree(reports, destination / 'ffmpeg-reports', dirs_exist_ok=True)
           PYCODE
       - name: Upload Next diagnostics
         if: always()
@@ -541,12 +641,12 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        level: ${{ fromJSON(inputs.teletext_only == '1.5' && '["1.5"]' || inputs.teletext_only == '2.5' && '["2.5"]' || '["1.5","2.5"]') }}
+        level: ${{ fromJSON((inputs.teletext_only == '1.5' || inputs.teletext_only == '1.5-rust') && '["1.5"]' || inputs.teletext_only == '2.5' && '["2.5"]' || '["1.5","2.5"]') }}
     env:
       CARGO_BUILD_JOBS: "1"
       TELETEXT_LEVEL: ${{ matrix.level }}
       NEXTEST_TEST_THREADS: "4"
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.7
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -560,7 +660,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.rust_artifact }}
           path: ci-input
@@ -633,7 +733,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     # All six jobs execute the same verified SSR/WASM build.
     needs: build
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only }}
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     # One job per general/1.5/2.5 suite and Playwright project. The suite runs on a single worker because
     # it mutates shared application state in its test database (TEST.md): each
     # job runs scripts/e2e/playwright-e2e.sh separately, and that script
@@ -660,7 +760,7 @@ jobs:
       # Keep each project's result JSON and host log separate; both jobs upload
       # from test-results/.
       ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.suite }}-${{ matrix.project }}
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.7
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local web artifact
@@ -674,7 +774,7 @@ jobs:
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY" --expected-digest "$CI_ARTIFACT_DIGEST" \
             --output-file "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
-        if: steps.local_artifact.outputs.hit != 'true'
+        if: ${{ !inputs.reuse_artifacts && steps.local_artifact.outputs.hit != 'true' }}
         with:
           name: ${{ needs.build.outputs.web_artifact }}
           path: ci-input
@@ -709,6 +809,7 @@ jobs:
           BROWSER_ONLY: ${{ inputs.browser_only }}
           BROWSER_PROJECT: ${{ matrix.project }}
           BROWSER_SUITE: ${{ matrix.suite }}
+          BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
         run: |
           export ErsatzRS_FFMPEG__PATH="$FFMPEG_PATH"
           export ErsatzRS_FFPROBE__PATH="$FFPROBE_PATH"
@@ -716,7 +817,9 @@ jobs:
           export PATH="$ffmpeg_bin_dir:$PATH"
           playwright_args=(--project="$BROWSER_PROJECT")
           if [[ -n "$BROWSER_ONLY" && "$BROWSER_ONLY" != 'none' ]]; then
-            playwright_args+=(block-preview.spec.ts teletext-authoring-flow.spec.ts teletext-editor-flow.spec.ts)
+            recovery_args="$(python3 scripts/ci-teletext-selection.py browser-recovery "$BROWSER_CASE_SET")"
+            mapfile -t selected_cases <<< "$recovery_args"
+            playwright_args+=("${selected_cases[@]}")
           else
             playwright_args+=("$(python3 scripts/ci-teletext-selection.py browser "$BROWSER_SUITE")")
           fi
@@ -751,7 +854,7 @@ jobs:
     name: Commit lint
     needs: fmt
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: ${{ !inputs.audit_only && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') }}
     permissions:
       contents: read
       pull-requests: read
@@ -799,7 +902,7 @@ jobs:
   docs:
     name: Documentation links
     needs: preflight
-    if: needs.preflight.outputs.skip != 'true'
+    if: ${{ !inputs.audit_only && needs.preflight.outputs.skip != 'true' }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7

@@ -156,6 +156,7 @@ async fn source_teletext_page_capture_header_only_replacement_keeps_the_other_fi
         header_only.observed_pages.headers().unwrap().clone(),
     ));
     store(&pool, &claim, &header_only).await;
+    // read-only transaction: compare both stored file captures in one snapshot.
     let mut tx = pool.begin().await.unwrap();
     assert_eq!(load(&mut tx, 401, 501).await.unwrap(), Some(header_only));
     assert_eq!(load(&mut tx, 401, 502).await.unwrap(), Some(other));

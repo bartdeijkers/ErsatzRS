@@ -491,7 +491,12 @@ pub(super) fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStr
             &mut projected,
             "Emby",
             detected_range,
-            stream.dv_profile,
+            stream.dv_profile.filter(|value| *value > 0).or_else(|| {
+                emby_dolby_vision_profile(
+                    stream.extended_video_type.as_deref(),
+                    stream.extended_video_sub_type.as_deref(),
+                )
+            }),
             stream.dv_bl_signal_compatibility_id,
             stream.bl_present_flag,
             stream.el_present_flag,
@@ -499,6 +504,21 @@ pub(super) fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStr
         );
     }
     Some(projected)
+}
+
+fn emby_dolby_vision_profile(kind: Option<&str>, subtype: Option<&str>) -> Option<i32> {
+    if !kind.is_some_and(|kind| kind.eq_ignore_ascii_case("DolbyVision")) {
+        return None;
+    }
+    // Upstream's DoviProfile(\d) match; retain partial evidence, never invent
+    // the missing compatibility/BL/EL/RPU fields required by ADR 0064.
+    let (_, suffix) = subtype?.split_once("DoviProfile")?;
+    suffix
+        .chars()
+        .next()?
+        .to_digit(10)
+        .filter(|value| *value > 0)
+        .and_then(|value| i32::try_from(value).ok())
 }
 
 #[cfg(test)]
@@ -519,6 +539,7 @@ mod tests {
         .expect("deserialize Emby stream");
 
         let stream = project_stream(response).expect("project video stream");
+        assert_eq!(stream.dolby_vision_profile, Some(5));
         assert_eq!(
             stream.dolby_vision_metadata_state,
             DolbyVisionMetadataState::Incomplete
@@ -527,6 +548,24 @@ mod tests {
             .dolby_vision_metadata_hint
             .as_deref()
             .is_some_and(|hint| hint.contains("Emby")));
+    }
+
+    #[test]
+    fn emby_profile_text_requires_dolby_vision_and_a_positive_profile() {
+        for (kind, subtype, expected) in [
+            ("DolbyVision", "DoviProfile5", Some(5)),
+            ("dolbyvision", "DoviProfile8.1", Some(8)),
+            ("HDR10", "DoviProfile5", None),
+            ("DolbyVision", "DoviProfile0", None),
+            ("DolbyVision", "DoviProfile-1", None),
+            ("DolbyVision", "DoviProfile", None),
+            ("DolbyVision", "", None),
+        ] {
+            assert_eq!(
+                super::emby_dolby_vision_profile(Some(kind), Some(subtype)),
+                expected
+            );
+        }
     }
 }
 

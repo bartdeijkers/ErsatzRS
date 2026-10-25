@@ -130,6 +130,7 @@ mod tests {
             occurrence: CanvasBinding {
                 session: Some(uuid::Uuid::new_v4()),
                 playout_start: None,
+                region: None,
                 video_stream_index: None,
                 channel: 1,
                 item: 2,

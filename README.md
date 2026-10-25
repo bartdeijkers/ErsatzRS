@@ -89,6 +89,13 @@ and the required local gates pass. Application remote delivery and CI follow
 local acceptance; a new application release remains separate. The Native engine
 remains supported, and approved hardware/platform debt stays explicitly unverified.
 
+UCU-12 catch-up through **v26.11.4** is in progress. Its managed runtime pins
+select published Next v0.2.3 rs.4 and ErsatzRS-ffmpeg v2.0.7 packages. Linux and
+Windows public installation, restart and decoded playback pass, along with the
+required available local gates. Whole-window acceptance remains open: macOS
+FFmpeg builds and dependent software/application proof are deferred until
+maintainer resume. Approved hardware/platform debt stays explicitly unverified.
+
 Teletext (Phase 9) and the "The Box" video-jukebox extension (Phase 10) are
 planned work. They are not advertised as features of this release.
 

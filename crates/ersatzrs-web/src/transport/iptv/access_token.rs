@@ -326,6 +326,52 @@ mod tests {
     }
 
     #[test]
+    fn hs256_backend_preserves_independent_token_bytes_and_rejects_tampering() {
+        // Fixed synthetic vector generated independently with Node.js crypto HMAC-SHA256.
+        const TOKEN: &str = concat!(
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.",
+            "eyJzdWIiOiJzeW50aGV0aWMtYmFja2VuZC1jb21wYXRpYmlsaXR5IiwiZXhwIjo0MTAyNDQ0ODAwfQ.",
+            "Lex47f2ME0r0GQaHIMAhtQFlERRZALVuo039X4kmfW0",
+        );
+        #[derive(Serialize)]
+        struct CompatibleClaims {
+            sub: &'static str,
+            exp: u64,
+        }
+        let claims = CompatibleClaims {
+            sub: "synthetic-backend-compatibility",
+            exp: 4_102_444_800,
+        };
+        let secret = b"synthetic-iptv-secret";
+        assert_eq!(
+            encode(
+                &Header::default(),
+                &claims,
+                &EncodingKey::from_secret(secret)
+            )
+            .unwrap(),
+            TOKEN
+        );
+        let verifier = IptvAccessTokenVerifier::enabled("synthetic-iptv-secret");
+        assert!(verifier.verify(TOKEN));
+        assert!(!IptvAccessTokenVerifier::enabled("different-synthetic-secret").verify(TOKEN));
+        let (payload, signature) = TOKEN.rsplit_once('.').unwrap();
+        let tampered = format!("{payload}.A{}", &signature[1..]);
+        assert!(!verifier.verify(&tampered));
+    }
+
+    #[test]
+    fn verifier_rejects_a_valid_token_using_another_hmac_algorithm() {
+        let token = encode(
+            &Header::new(Algorithm::HS384),
+            &TestClaims { exp: 4_102_444_800 },
+            &EncodingKey::from_secret(b"synthetic-iptv-secret"),
+        )
+        .unwrap();
+        assert!(!IptvAccessTokenVerifier::enabled("synthetic-iptv-secret").verify(&token));
+    }
+
+    #[test]
     fn verifier_rejects_invalid_or_expired_tokens() {
         let verifier = IptvAccessTokenVerifier::enabled("secret");
         assert!(!verifier.verify("not-a-token"));

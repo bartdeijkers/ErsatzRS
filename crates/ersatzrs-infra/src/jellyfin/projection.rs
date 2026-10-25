@@ -428,7 +428,8 @@ pub(super) fn project_playback(
 pub(super) fn project_stream(stream: JellyfinMediaStreamResponse) -> Option<MediaStream> {
     let kind = match stream.stream_type.as_deref()? {
         "Video" => MediaStreamKind::Video,
-        "Audio" => MediaStreamKind::Audio,
+        // Jellyfin external audio is a separate file, not a source stream.
+        "Audio" if !stream.is_external => MediaStreamKind::Audio,
         "Subtitle" if stream.is_external => MediaStreamKind::ExternalSubtitle,
         "Subtitle" => MediaStreamKind::Subtitle,
         _ => return None,
@@ -603,3 +604,6 @@ mod rotation_tests {
 
 #[cfg(test)]
 mod source_declaration_tests;
+
+#[cfg(test)]
+mod external_audio_tests;

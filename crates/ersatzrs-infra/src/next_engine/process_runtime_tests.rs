@@ -1078,6 +1078,21 @@ async fn fixture_child_javascript_audio() {
 #[path = "image_subtitle_runtime_tests.rs"]
 mod image_subtitle_runtime_tests;
 
+#[path = "late_pgs_runtime_tests.rs"]
+mod late_pgs_runtime_tests;
+
+#[path = "hardware_fallback_runtime_tests.rs"]
+mod hardware_fallback_runtime_tests;
+
+#[path = "jellyfin_audio_runtime_tests.rs"]
+mod jellyfin_audio_runtime_tests;
+
+#[path = "subtitle_nul_runtime_tests.rs"]
+mod subtitle_nul_runtime_tests;
+
+#[path = "../../../../tests/support/late_pgs.rs"]
+mod late_pgs;
+
 #[path = "text_subtitle_runtime_tests.rs"]
 mod text_subtitle_runtime_tests;
 
@@ -1290,3 +1305,6 @@ mod copy_runtime_tests;
 
 #[path = "output_frame_rate_runtime_tests.rs"]
 mod output_frame_rate_runtime_tests;
+
+#[path = "playout_refresh_runtime_tests.rs"]
+mod playout_refresh_runtime_tests;

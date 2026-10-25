@@ -4,7 +4,7 @@ use super::*;
 use crate::next_engine::{protocol, SourceVideoCutSupport};
 
 #[tokio::test]
-#[ignore = "requires FFmpeg9, Python3 on Unix, exact ERSATZRS_NEXT_MAPPED_SOURCE and fresh contained proof directory"]
+#[ignore = "requires FFmpeg9, Python3 and fresh contained proof directory; ERSATZRS_NEXT_MAPPED_SOURCE optionally supplies the exact incident fixture"]
 async fn finite_video_cut_preparation_preserves_srt_cache_and_installation_fences() {
     let root = fixture::proof_root();
     let fixture = Fixture::new_with_scenario(&root, CaptionScenario::Incident).await;

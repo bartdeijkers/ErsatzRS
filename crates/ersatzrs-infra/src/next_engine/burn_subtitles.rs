@@ -131,7 +131,19 @@ async fn extract_inner(
     if outcome.is_err() {
         cleanup(&mut child).await?;
     }
-    outcome
+    outcome?;
+    // The private extraction cache does not reuse the legacy subtitle cache.
+    // Sanitize before its caller can atomically admit this completed artifact.
+    tokio::select! {
+        biased;
+        () = cancelled(&mut cancellation) => Err(BurnError::Cancelled),
+        () = tokio::time::sleep_until(deadline) => Err(BurnError::Deadline),
+        result = crate::subtitle_cache_nul::strip_or_delete(output) => match result {
+            crate::subtitle_cache_nul::StripResult::Unchanged
+            | crate::subtitle_cache_nul::StripResult::Stripped => Ok(()),
+            _ => Err(BurnError::Output),
+        }
+    }
 }
 
 async fn cancelled(signal: &mut Option<tokio::sync::oneshot::Receiver<()>>) {

@@ -6,6 +6,8 @@
 mod test_manifest;
 
 pub mod canvas;
+mod canvas_region;
+pub use canvas_region::CanvasRegion;
 mod canvas_rate;
 pub use canvas_rate::{GraphicsFrameRate, InvalidGraphicsFrameRate};
 pub mod capabilities;

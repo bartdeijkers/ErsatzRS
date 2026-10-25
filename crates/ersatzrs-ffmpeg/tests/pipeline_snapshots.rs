@@ -1422,6 +1422,86 @@ fn software_pipeline_overlays_image_subtitle_from_source_stream() {
 }
 
 #[test]
+fn pgs_burn_initial_canvas_is_scoped_to_its_shared_source_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(
+        InputFile::image_subtitle("/media/movie.mkv", SubtitleMethod::Burn)
+            .with_subtitle_codec("hdmv_pgs_subtitle")
+            .with_stream_index(3),
+    );
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments;
+    insta::assert_snapshot!(args.join(" "));
+    assert_eq!(args.iter().filter(|arg| *arg == "-i").count(), 1);
+    assert!(
+        args.iter().position(|arg| arg == "-canvas_size:3").unwrap()
+            < args.iter().position(|arg| arg == "-i").unwrap()
+    );
+    assert!(args.iter().any(|arg| arg.contains("[0:3]scale=")));
+}
+
+#[test]
+fn pgs_canvas_hint_follows_selected_burn_source_and_current_stream_index() {
+    use ersatzrs_ffmpeg::CommandGenerator;
+    for intel in [false, true] {
+        for codec in ["pgssub", " HDMV_PGS_SUBTITLE "] {
+            let input = InputFile::image_subtitle("/media/movie.mkv", SubtitleMethod::Burn)
+                .with_stream_index(2)
+                .with_subtitle_codec(codec)
+                .with_stream_index(3);
+            let inputs = [
+                InputFile::video("/media/movie.mkv"),
+                InputFile::audio("/media/movie.mkv"),
+                input,
+            ];
+            let args = CommandGenerator::generate_arguments(&inputs, &[], intel);
+            assert_eq!(
+                args.iter().filter(|arg| *arg == "-canvas_size:3").count(),
+                1
+            );
+            assert!(
+                args.iter().position(|arg| arg == "-canvas_size:3").unwrap()
+                    < args.iter().position(|arg| arg == "-i").unwrap()
+            );
+        }
+    }
+    let subtitle = InputFile::image_subtitle("/media/captions.sup", SubtitleMethod::Burn)
+        .with_subtitle_codec("pgssub")
+        .with_stream_index(0);
+    let inputs = [InputFile::video("/media/movie.mkv"), subtitle];
+    let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+    let first = args.iter().position(|arg| arg == "-i").unwrap();
+    let hint = args.iter().position(|arg| arg == "-canvas_size:0").unwrap();
+    let second = args.iter().rposition(|arg| arg == "-i").unwrap();
+    assert!(first < hint && hint < second);
+}
+
+#[test]
+fn pgs_canvas_hint_does_not_change_other_codecs_copy_or_unselected_inputs() {
+    use ersatzrs_ffmpeg::CommandGenerator;
+    for (codec, method) in [
+        ("dvdsub", SubtitleMethod::Burn),
+        ("dvb_subtitle", SubtitleMethod::Burn),
+        ("pgssub", SubtitleMethod::Copy),
+        ("pgssub", SubtitleMethod::Convert),
+    ] {
+        let inputs = [
+            InputFile::video("main.mkv"),
+            InputFile::image_subtitle("main.mkv", method).with_subtitle_codec(codec),
+        ];
+        let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+        assert!(!args.iter().any(|arg| arg.starts_with("-canvas_size")));
+    }
+    let inputs = [
+        InputFile::video("main.mkv"),
+        InputFile::image_subtitle("main.mkv", SubtitleMethod::Burn),
+        InputFile::image_subtitle("main.mkv", SubtitleMethod::Burn).with_subtitle_codec("pgssub"),
+    ];
+    let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+    assert!(!args.iter().any(|arg| arg.starts_with("-canvas_size")));
+}
+
+#[test]
 fn software_pipeline_overlays_exact_source_teletext_caption_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     request.inputs.push(InputFile::teletext_subtitle(
@@ -1775,7 +1855,9 @@ fn nvenc_pipeline_keeps_nvenc_encode_on_encoder_only_build_snapshot() {
     // filter kernels (no `--enable-cuda-nvcc`/`--enable-cuda-llvm`). Hardware
     // decode and the software-frame CUDA upload are both gated off so no CUDA
     // filter is emitted, while the encoder stays h264_nvenc.
-    let desired = DesiredVideoState::h264_1080p();
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.video_preset = Some("p5".to_owned());
+    desired.video_tune = Some("hq".to_owned());
     let mut report = capability_report_for_tests();
     report.filters.remove("scale_cuda");
     report.filters.remove("yadif_cuda");
@@ -1791,6 +1873,8 @@ fn nvenc_pipeline_keeps_nvenc_encode_on_encoder_only_build_snapshot() {
     let arguments = command.arguments.join(" ");
 
     assert!(arguments.contains("-codec:v h264_nvenc"));
+    assert!(arguments.contains("-preset:v p5"));
+    assert!(arguments.contains("-tune:v hq"));
     assert!(arguments.contains("-hwaccel none -c:v h264"));
     assert!(!arguments.contains("-hwaccel cuda"));
     assert!(!arguments.contains("scale_cuda"));
@@ -6020,7 +6104,11 @@ fn an_unproven_cuda_graph_demotes_nvenc_to_software() {
         "",
         GraphFailureKind::CudaInterop,
     ));
-    let request = hdr_nvenc_request(report);
+    // Match the fresh-install profile: hardware encoder controls must not
+    // reach libx264 when the functional graph probe refuses NVENC.
+    let mut request = hdr_nvenc_request(report);
+    request.desired.video_preset = Some("p5".to_owned());
+    request.desired.video_tune = Some("hq".to_owned());
 
     let args = NvencPipelineBuilder
         .build(request.clone())
@@ -6032,6 +6120,9 @@ fn an_unproven_cuda_graph_demotes_nvenc_to_software() {
     assert!(!args.contains("scale_cuda"), "got: {args}");
     assert!(!args.contains("hwupload_cuda"), "got: {args}");
     assert!(!args.contains("-init_hw_device cuda"), "got: {args}");
+    assert!(args.contains("-codec:v libx264"), "got: {args}");
+    assert!(args.contains("-preset:v veryfast"), "got: {args}");
+    assert!(!args.contains("-tune:v"), "got: {args}");
     insta::assert_snapshot!(args);
 }
 

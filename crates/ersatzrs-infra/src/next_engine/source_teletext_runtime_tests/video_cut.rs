@@ -6,14 +6,12 @@ use ersatzrs_core::locking::TeletextWorkGuard;
 use std::sync::Arc;
 
 #[tokio::test]
-#[ignore = "requires pinned FFprobe9, ERSATZRS_NEXT_MAPPED_SOURCE incident fixture and fresh proof directory"]
+#[ignore = "requires pinned FFmpeg9/FFprobe9, Python3 and fresh proof directory; ERSATZRS_NEXT_MAPPED_SOURCE optionally supplies the exact incident fixture"]
 async fn finite_video_cut_qualifies_actual_frames_and_refuses_unproven_eof_and_stale_source() {
     let root = fixture::proof_root();
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
-    let clip = root.join("caption-source.ts");
-    tokio::fs::copy(runtime_path("ERSATZRS_NEXT_MAPPED_SOURCE"), &clip)
-        .await
-        .unwrap();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let clip = fixture::finite_video_cut_source(&ffmpeg, &root).await;
     let (pool, locker) = prepare_schedule(&clip, false, &text_profile()).await;
     fixture::acquire_and_store(&pool, &ffprobe, &clip, &root).await;
     let candidate = crate::teletext_source::discover_caption_requests(

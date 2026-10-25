@@ -1326,6 +1326,22 @@ fn build_transcode_pipeline(
     // upload-fallback path: software-decoded frames are uploaded and filtered
     // on the GPU.
     let encoder_acceleration = effective_acceleration;
+    if acceleration != HardwareAccelerationKind::None
+        && encoder_acceleration == HardwareAccelerationKind::None
+        && request.desired.video_format != FFmpegProfileVideoFormat::Copy
+    {
+        // Encoder controls belong to the selected backend. Keep this before
+        // filter-only fallback, which still uses the hardware encoder.
+        request.desired.video_preset = match request.desired.video_format {
+            FFmpegProfileVideoFormat::H264
+            | FFmpegProfileVideoFormat::Hevc
+            | FFmpegProfileVideoFormat::None => Some("veryfast".to_owned()),
+            FFmpegProfileVideoFormat::Copy
+            | FFmpegProfileVideoFormat::Mpeg2Video
+            | FFmpegProfileVideoFormat::Av1 => None,
+        };
+        request.desired.video_tune = None;
+    }
     let cuda_filters_available = request
         .runtime_capabilities
         .as_ref()

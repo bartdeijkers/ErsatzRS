@@ -2,6 +2,131 @@ use super::*;
 use ersatzrs_domain::{FFmpegProfile, GraphicsElement, GraphicsElementConfig, Resolution};
 
 #[tokio::test]
+#[ignore = "requires exact packaged FFmpeg and FFprobe 9"]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "manual gate receives the exact packaged executable"
+)]
+async fn canvas_region_projection_measures_local_image_and_signs_fixed_placement() {
+    let root = tempfile::tempdir().unwrap();
+    let image = region_image(root.path()).await;
+    let (pool, _, channel, _) = super::super::schedule::tests::fixture().await;
+    let media = super::super::schedule::bind_media(&pool, super::super::selection::tests::item())
+        .await
+        .unwrap();
+    let profile = playback::PlaybackProfile {
+        profile: FFmpegProfile {
+            scaling_behavior: ersatzrs_domain::ScalingBehavior::Stretch,
+            ..Default::default()
+        },
+        resolution: Resolution {
+            width: 1920,
+            height: 1080,
+            ..Default::default()
+        },
+    };
+    let mut projected = protocol::PlayoutItem {
+        id: "region".into(),
+        start: media.item.start,
+        finish: media.item.finish,
+        source: None,
+        tracks: None,
+        watermark: None,
+        graphics: Vec::new(),
+    };
+    let mut watermark = plain_watermark_fixture().remove(0);
+    watermark.watermark.mode = ChannelWatermarkMode::OpacityExpression;
+    watermark.watermark.size = ersatzrs_domain::WatermarkSize::ActualSize;
+    watermark.watermark.location = ersatzrs_domain::WatermarkLocation::BottomRight;
+    watermark.watermark.horizontal_margin_percent = 0.0;
+    watermark.watermark.vertical_margin_percent = 0.0;
+    watermark.image = playback::PlaybackWatermarkImage::Local(image);
+    let plan = project(
+        &pool,
+        &channel,
+        &media,
+        &profile,
+        &mut projected,
+        &[watermark.clone()],
+        &[],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        plan.binding.region,
+        Some(ersatzrs_ffmpeg::CanvasRegion {
+            x: 1618,
+            y: 928,
+            width: 302,
+            height: 152
+        })
+    );
+    let relay = MediaRelay::new();
+    relay.configure("127.0.0.1:18419".parse().unwrap()).unwrap();
+    let published = plan.publish(&relay, None, projected.start).unwrap();
+    let value = serde_json::to_value(published).unwrap();
+    assert_eq!(
+        value["layout"],
+        serde_json::json!({"mode":"region", "origin":{"x":1618,"y":928}})
+    );
+    let stable = serde_json::to_value(&plan).unwrap();
+    assert_eq!(stable["hint"]["video"][0]["width"], 302);
+    assert_eq!(stable["hint"]["video"][0]["height"], 152);
+    for image in [
+        playback::PlaybackWatermarkImage::Http("http://127.0.0.1:9/never-probed.png".into()),
+        playback::PlaybackWatermarkImage::Local(root.path().join("missing.png")),
+    ] {
+        watermark.image = image;
+        let plan = project(
+            &pool,
+            &channel,
+            &media,
+            &profile,
+            &mut projected,
+            &[watermark.clone()],
+            &[],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(plan.binding.region.is_none());
+        assert_eq!(plan.hint.video[0].width, 1920);
+        assert_eq!(plan.hint.video[0].height, 1080);
+    }
+}
+
+#[allow(
+    clippy::disallowed_methods,
+    reason = "manual fixture uses the exact packaged executable"
+)]
+async fn region_image(root: &std::path::Path) -> std::path::PathBuf {
+    let image = root.join("region.png");
+    let output = tokio::process::Command::new(std::env::var_os("ERSATZRS_FFMPEG").unwrap())
+        .args([
+            "-nostdin",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=301x151,format=rgba",
+            "-frames:v",
+            "1",
+        ])
+        .arg(&image)
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    image
+}
+
+#[tokio::test]
 async fn generated_video_canvas_uses_output_geometry_without_pinning_cover_art() {
     for cover in [false, true] {
         let (pool, _, channel, _) = super::super::schedule::tests::fixture().await;

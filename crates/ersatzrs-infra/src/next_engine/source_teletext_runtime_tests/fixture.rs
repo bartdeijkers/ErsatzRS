@@ -49,6 +49,24 @@ pub(super) async fn source(ffmpeg: &Path, root: &Path) -> PathBuf {
     clip
 }
 
+/// Preserve the incident's literal frame clock without requiring an external file in CI.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "Explicit incident-file override in an opt-in disposable runtime fixture"
+)]
+pub(super) async fn finite_video_cut_source(ffmpeg: &Path, root: &Path) -> PathBuf {
+    if let Some(source) = std::env::var_os("ERSATZRS_NEXT_MAPPED_SOURCE") {
+        let clip = root.join("caption-source.ts");
+        tokio::fs::copy(source, &clip).await.unwrap();
+        clip
+    } else {
+        // The EOF fixture independently checks this input's 500 decoded frames,
+        // 77544-tick format origin and final 1924290+3600-tick frame. The cut
+        // tests retain their separate literal 827946-tick boundary oracle.
+        source_inner(ffmpeg, root, None, "unclosed-caption").await
+    }
+}
+
 pub(super) async fn source_with_mux_rate(ffmpeg: &Path, root: &Path, mux_rate: u32) -> PathBuf {
     let clip = source_inner(ffmpeg, root, Some(mux_rate), "two-captions").await;
     assert!(tokio::fs::metadata(&clip).await.unwrap().len() > 32_768 * 188);

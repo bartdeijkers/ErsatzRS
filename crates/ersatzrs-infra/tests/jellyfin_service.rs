@@ -1,5 +1,8 @@
 mod common;
 
+#[path = "jellyfin_service/external_audio_repair.rs"]
+mod external_audio_repair;
+
 #[macro_use]
 #[path = "../../../tests/support/manifest_dir.rs"]
 mod test_manifest;

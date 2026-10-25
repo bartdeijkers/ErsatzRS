@@ -9,16 +9,18 @@ use ersatzrs_ffmpeg::DrawvgOverlay;
 fn native_drawvg_paths_render_complete_marker_frames() {
     let ffmpeg = selected_ffmpeg();
     let root = tempfile::tempdir().unwrap();
-    let mut names = vec![
+    let names = [
         "plate.vgs",
         "director's [cut], next; title.vgs",
         "café.vgs",
         " plate.vgs ",
+        // Windows forbids ':' and treats backslashes as directory separators;
+        // its native cases are exercised by windows-drawvg-paths.ps1.
+        #[cfg(not(windows))]
+        "colon:plate.vgs",
+        #[cfg(not(windows))]
+        r"literal\backslash.vgs",
     ];
-    // Windows forbids ':' and treats backslashes as directory separators;
-    // its native cases are exercised by windows-drawvg-paths.ps1.
-    #[cfg(not(windows))]
-    names.extend(["colon:plate.vgs", r"literal\backslash.vgs"]);
     for name in names {
         let path = root.path().join(name);
         std::fs::write(&path, "setcolor red\nrect 8 8 24 24 fill\n").unwrap();

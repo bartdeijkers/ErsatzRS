@@ -234,13 +234,12 @@ jobs:
             exit 1
           fi
           python scripts/release/stage-next.py --rid "$RID" --output "$stage/next"
-          next_binary="ersatztv-channel"
-          if [ "$RID" = "win-x64" ]; then next_binary="${next_binary}.exe"; fi
-          mv "$stage/next/$next_binary" "$stage/$next_binary"
-          if [ "$RID" = "win-x64" ]; then
-            mv "$stage/next/libvpl.dll" "$stage/libvpl.dll"
-            mv "$stage/next/libvpl-LICENSE.txt" "$stage/libvpl-LICENSE.txt"
-          fi
+          for next_payload in "$stage/next/"*; do
+            case "${next_payload##*/}" in
+              LICENSE|origin.json) continue ;;
+            esac
+            mv "$next_payload" "$stage/"
+          done
           if [ "$ARCHIVE" = "zip" ]; then
             7z a -tzip "${stage}.zip" "$stage" >/dev/null
             if [ "$RID" = "win-x64" ] && ! 7z l -slt "${stage}.zip" | tr "\\\\" "/" | grep -Fx "Path = ${stage}/ErsatzRS.exe" >/dev/null; then

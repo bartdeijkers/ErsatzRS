@@ -36,12 +36,14 @@ pub(crate) fn apply_provider_dolby_vision_metadata(
         let normalized = value.trim().to_ascii_lowercase();
         normalized.contains("dovi") || normalized.contains("dolby")
     });
+    // Providers use zero for an absent profile/flag; it is not DV evidence.
+    let profile = profile.filter(|value| *value > 0);
     let detected = range_detected
         || profile.is_some()
-        || compatibility_id.is_some()
-        || bl_present.is_some()
-        || el_present.is_some()
-        || rpu_present.is_some();
+        || compatibility_id.is_some_and(|value| value > 0)
+        || bl_present.is_some_and(|value| value > 0)
+        || el_present.is_some_and(|value| value > 0)
+        || rpu_present.is_some_and(|value| value > 0);
     if !detected {
         return;
     }
@@ -813,5 +815,44 @@ mod tests {
             row.get::<i32, _>("DolbyVisionMetadataState"),
             DolbyVisionMetadataState::Complete.as_i32()
         );
+    }
+
+    #[test]
+    fn provider_zero_sentinels_are_not_positive_dolby_vision_evidence() {
+        for provider in ["Jellyfin", "Emby", "Plex"] {
+            for profile in [None, Some(0), Some(-1)] {
+                let mut stream = MediaStream::default();
+                apply_provider_dolby_vision_metadata(
+                    &mut stream,
+                    provider,
+                    Some("SDR"),
+                    profile,
+                    Some(0),
+                    Some(0),
+                    Some(0),
+                    Some(0),
+                );
+                assert_eq!(
+                    stream.dolby_vision_metadata_state,
+                    DolbyVisionMetadataState::NotDetected
+                );
+                assert_eq!(stream.dolby_vision_profile, None);
+                apply_provider_dolby_vision_metadata(
+                    &mut stream,
+                    provider,
+                    Some("DolbyVision"),
+                    profile,
+                    Some(0),
+                    Some(0),
+                    Some(0),
+                    Some(0),
+                );
+                assert_eq!(
+                    stream.dolby_vision_metadata_state,
+                    DolbyVisionMetadataState::Incomplete
+                );
+                assert_eq!(stream.dolby_vision_profile, None);
+            }
+        }
     }
 }

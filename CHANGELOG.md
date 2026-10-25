@@ -15,6 +15,20 @@ release section when tagging a release.
 
 ### Security
 
+- Use JWT 11's supported AWS-LC backend to remove the vulnerable RustCrypto
+  dependency reported by RUSTSEC-2026-0387, and remove the obsolete RSA advisory
+  exception. Preserve HS256-only validation and existing token compatibility.
+
+- Update the application Tokio runtime to 1.53.3, resolving I/O-safety advisory
+  [RUSTSEC-2026-0386](https://rustsec.org/advisories/RUSTSEC-2026-0386.html)
+  without changing dependency features or audit policy.
+
+- Pin the published Next 0.2.3 worker (rs.6 on Linux/Windows, retained rs.4 on
+  macOS) with fixed TLS and
+  Tokio dependencies and a non-yanked crypto crate. Require the original and
+  patched lockfile checksums during source preparation and packaging. Managed
+  runtime adoption remains subject to compatibility and platform acceptance.
+
 - Update certificate validation to rustls-webpki 0.103.16 and webpki-roots
   1.0.10, and ZIP handling to 9.0.5. Resolve RUSTSEC-2026-0381,
   RUSTSEC-2026-0382 and RUSTSEC-2026-0367 through RUSTSEC-2026-0369,
@@ -664,6 +678,45 @@ release section when tagging a release.
 
 ### Changed
 
+- Allow UCU-12 acceptance with explicitly deferred macOS runtime work. Keep
+  outstanding macOS FFmpeg/Next builds and playback acceptance unverified;
+  retain older macOS package identities when adopting qualified corrections on
+  Linux and Windows.
+- Add focused CI recovery selections for the Level 1.5 Rust runtime job and
+  the failed source-caption/Next-viewer browser cases with their interrupted
+  serial followers. Retain existing test assertions and unrelated passing CI.
+
+- Make the Native source-caption browser fixture explicit about its engine,
+  preserving its localized save/rejection checks when fresh channels use Next.
+
+- Add an audit-only CI recovery mode with an independent concurrency group.
+  It reruns dependency checks and their fast workflow safeguards without
+  cancelling a full run or treating partial success as full CI acceptance.
+
+- Select the verified ErsatzRS-ffmpeg 2.0.7 package line for managed-runtime
+  fallback and pinned runtime CI jobs. Retain existing operator pin behavior;
+  macOS builds and approved hardware acceptance remain explicitly unverified.
+
+- Retain local troubleshooting Download Results without adding diagnostic
+  uploads, under the approved ADR 0129 parity deviation. Native remains a
+  supported engine; users choose whether and where to share the archive.
+
+- Allow the local closeout wrapper to run its doctest component separately
+  after focused failure recovery, without repeating unaffected unit tests.
+  The default closeout still runs both stages.
+
+- Clarify the debug frontend/server component-erasure requirement: successful
+  asset downloads alone do not prove that native admin controls hydrate.
+
+- Enforce an exact compiler version for each reviewed Next source candidate.
+  Next 0.2.3 packaging requires Rust 1.99.0; existing source packages retain
+  their Rust 1.97.1 requirement. The application's toolchain is unchanged.
+
+- Add a bounded regional-canvas renderer for the Next graphics integration.
+  Watermarks retain full-output placement and opacity timing; mutable authored
+  graphics are clipped to the published rectangle. Runtime adoption remains gated
+  by the UCU-12 integration checks.
+
 - Record the remaining Next one-shot video-copy failure: keyframe preflight can
   consume the single-use source before playback. Successful delivery remains an
   acceptance gate; verified caption refusal does not establish playback safety.
@@ -710,9 +763,13 @@ release section when tagging a release.
   while preserving the accepted runtime defaults. Keep exact patch and package
   provenance; candidate builds do not activate or publish a runtime.
 
-- Provide an opt-in Next source candidate that caps copied-video captions at the
-  original subtitle source outpoint while retaining keyframe and pass alignment.
-  Managed-runtime adoption still requires verified replacement packages.
+- Adopt the published Linux/Windows Next rs.6 packages. They cap copied-video
+  captions at the original subtitle source outpoint while retaining keyframe
+  and pass alignment, and preserve the selected audio stream's metadata through
+  copy and filtering.
+  Keep macOS on its original rs.4 package identity, without claiming these
+  fixes there. Verify each platform's version, release tag and patch provenance
+  together during acquisition and staging.
 - Clarify the [Phase 9A/9B authoring boundary](docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary)
   and F2 scope while preserving all generic engine acceptance requirements.
 
@@ -997,6 +1054,70 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Use software encoder controls when a refused hardware backend falls back to
+  CPU encoding, so an NVENC profile's `p5` preset cannot prevent libx264 previews
+  from starting. Preserve hardware controls when only filtering falls back and
+  leave saved profiles unchanged.
+
+- Supply isolated app data and the verified published-package inventory to Next
+  CI runtime cases, serialize their shared report path, and retain existing
+  session and FFmpeg diagnostics. Generate the literal-clock fixture for finite-cut
+  tests when no explicit incident input is supplied, retaining the exact
+  cutoff, cache, stale-source and installation-fence assertions.
+
+- Stage security-patched Next packages using their prepared lockfile identity,
+  and verify the private ARM64 MPP library and all four companion notices
+  against exact payload hashes and sizes. Reject missing or modified companions
+  before launch while preserving verification of existing runtime packages.
+
+- Keep all Next runtime companions beside the application in release archives
+  and Docker layouts, including ARM64's private MPP files and Windows' VPL files.
+  Preserve the application's licence and Next's separate provenance and licence.
+
+- Let the local TSDuck gate reuse an explicitly selected, separately verified
+  server candidate when checking runtime packages, avoiding a redundant build.
+
+- Keep requested RKMPP channels on software when the private MPP companion has
+  no initialized hardware codecs. Refuse unpinned system libraries and retain
+  selected audio, subtitles and stored acceleration choices during fallback.
+
+- Preserve remote troubleshooting callbacks without requiring a saved channel
+  when optional provider source retention is enabled. Preview source identity,
+  track selection and revocation checks remain in effect.
+
+- Keep native teletext test fixtures portable and explicitly document read-only
+  transaction checks, restoring Windows compilation and architecture verification
+  without disabling assertions or treating Linux-only decoder calibration as
+  portable runtime evidence.
+
+- Create the first channel on a fresh installation with Next, matching the
+  accepted new-channel default and verified runtime acquisition. Existing Native
+  selections and shared profiles retain their settings. Keep native playback
+  gates independent of that default by selecting their fixture engine explicitly.
+
+- Remove NUL characters from extracted text subtitles before admitting them for
+  Native or Next playback. Repair existing subtitle-cache files once and
+  regenerate older Next artifacts; retain Unicode text, selected audio and
+  original sidecars. Failed repairs remain retryable with localized Health
+  guidance rather than being reported as complete.
+
+- Require a valid UTC date and time before channel troubleshooting playback,
+  with localized field feedback and an explanation while Play is unavailable.
+  Stop remains available when a running preview's time field is invalid.
+
+- Keep missing stored HDR10 metadata unknown so Next can inspect PQ frames.
+  Decode Emby's Dolby Vision profile labels, ignore absent-profile sentinels,
+  and refresh possible provider HDR/Dolby Vision records once without replacing
+  valid streams, local HDR metadata or disabled-library settings.
+
+- Exclude Jellyfin external audio files from a movie or episode's physical
+  stream list. Request a one-time rescan of affected stored items, preserving
+  valid audio/subtitle selections and cached subtitle data until replacement.
+
+- Avoid video-sized blank PGS canvases in Native playback before the first
+  subtitle cue. Bind the initial canvas hint to the selected source stream,
+  preserving later presentation dimensions and selected audio.
 
 - Preserve native teletext fallback cells for qualified Romanian, Polish,
   Serbian/Croatian/Slovenian and Latvian/Lithuanian text and the Greek numeral

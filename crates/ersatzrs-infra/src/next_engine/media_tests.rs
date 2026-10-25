@@ -8,6 +8,7 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     let start = chrono::DateTime::from_timestamp(1_000, 0).unwrap();
     let binding = CanvasBinding {
         playout_start: None,
+        region: None,
         video_stream_index: None,
         session: None,
         channel: 1,
@@ -67,6 +68,7 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     assert!(!MediaRelay::new().authorized_canvas(&binding, ticket, start));
     assert!(!relay.authorized_canvas(&binding, "invalid", start));
     assert_canvas_tampering(&relay, &binding, ticket, start);
+    assert_canvas_region_tampering(&relay, &binding, start);
     let session = Uuid::new_v4();
     let scoped = binding.for_session(session);
     let Source::Http { headers, .. } = relay.canvas_source(&scoped, probe_hint.unwrap()).unwrap()
@@ -76,6 +78,45 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     assert!(headers
         .iter()
         .any(|header| header == &format!("{SESSION_HEADER}: {session}")));
+}
+
+fn assert_canvas_region_tampering(
+    relay: &MediaRelay,
+    binding: &super::super::canvas::CanvasBinding,
+    start: chrono::DateTime<chrono::Utc>,
+) {
+    let mut regional = binding.clone();
+    regional.region = Some(ersatzrs_ffmpeg::CanvasRegion {
+        x: 2,
+        y: 4,
+        width: 32,
+        height: 16,
+    });
+    let regional_ticket = relay.canvas_ticket(&regional).unwrap();
+    assert!(relay.authorized_canvas(&regional, &regional_ticket, start));
+    for region in [
+        None,
+        Some(ersatzrs_ffmpeg::CanvasRegion {
+            x: 4,
+            ..regional.region.unwrap()
+        }),
+        Some(ersatzrs_ffmpeg::CanvasRegion {
+            y: 6,
+            ..regional.region.unwrap()
+        }),
+        Some(ersatzrs_ffmpeg::CanvasRegion {
+            width: 64,
+            ..regional.region.unwrap()
+        }),
+        Some(ersatzrs_ffmpeg::CanvasRegion {
+            height: 32,
+            ..regional.region.unwrap()
+        }),
+    ] {
+        let mut changed = regional.clone();
+        changed.region = region;
+        assert!(!relay.authorized_canvas(&changed, &regional_ticket, start));
+    }
 }
 
 fn assert_canvas_tampering(
@@ -98,6 +139,7 @@ fn assert_canvas_tampering(
         "session",
         "playout_start",
         "video_stream_index",
+        "region",
     ] {
         let mut changed = binding.clone();
         match field {
@@ -113,6 +155,14 @@ fn assert_canvas_tampering(
             "session" => changed.session = Some(Uuid::nil()),
             "playout_start" => changed.playout_start = Some(start + chrono::TimeDelta::seconds(1)),
             "video_stream_index" => changed.video_stream_index = Some(1),
+            "region" => {
+                changed.region = Some(ersatzrs_ffmpeg::CanvasRegion {
+                    x: 2,
+                    y: 2,
+                    width: 32,
+                    height: 16,
+                });
+            }
             _ => changed.expires += chrono::TimeDelta::seconds(1),
         }
         assert!(!relay.authorized_canvas(&changed, ticket, start), "{field}");

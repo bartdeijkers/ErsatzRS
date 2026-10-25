@@ -47,7 +47,7 @@ fn request(
 fn invalid_added_position(
     exported: &ExportedOriginalTeletextDesign,
     request: &mut NativeTeletextEditorialImportRequest,
-) {
+) -> (u8, usize) {
     let name = support::name(exported, identity(1));
     let file = request
         .files
@@ -59,12 +59,20 @@ fn invalid_added_position(
         .records()
         .to_vec();
     let mut changed = 0;
+    let mut location = None;
     for record in &mut records {
-        if let TeletextTtiRecord::Packet { row: 26, words, .. } = record {
-            for value in words {
+        if let TeletextTtiRecord::Packet {
+            row: 26,
+            designation,
+            words,
+            ..
+        } = record
+        {
+            for (slot, value) in words.iter_mut().enumerate() {
                 if *value == POSITION {
                     *value |= 40 << 11;
                     changed += 1;
+                    location = Some((*designation, slot));
                 }
             }
         }
@@ -75,6 +83,7 @@ fn invalid_added_position(
         policy().tti,
     )
     .unwrap();
+    location.unwrap()
 }
 
 async fn reject_atomic_and_forged(
@@ -87,7 +96,7 @@ async fn reject_atomic_and_forged(
     expected: &checks::Expected,
 ) {
     let mut invalid = request(exported, receipt, expected);
-    invalid_added_position(exported, &mut invalid);
+    let (designation, slot) = invalid_added_position(exported, &mut invalid);
     let mut forged = request(exported, receipt, expected);
     forged.receipt_digest = "0".repeat(64);
     for (request, malformed) in [(invalid, true), (forged, false)] {
@@ -107,8 +116,9 @@ async fn reject_atomic_and_forged(
             };
             assert_eq!(error.failure, NativeTeletextEditorialTtiFailure::Structure);
             assert_eq!(
-                error.row, None,
-                "resource-group reconstruction has no invented packet ordinal"
+                (error.row, error.designation, error.column),
+                (Some(26), Some(designation), Some(slot)),
+                "resource-group reconstruction retains the actual rejected X/26 word"
             );
             assert_eq!(error.resource, Some(resources()[0]));
         } else {

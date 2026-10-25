@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `f75abe5322f2a05099579df9e95acb675949c780` |
-| **Commit subject** | `prep for release v26.11.3` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f75abe5322f2a05099579df9e95acb675949c780 |
+| **Pinned commit** | `f640c252276d008a5e1697fbfbb65a65fc352a5a` |
+| **Commit subject** | `docs: prep for release v26.11.4` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f640c252276d008a5e1697fbfbb65a65fc352a5a |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -75,6 +75,15 @@ revisions; the shared upstream checkout is preserved to avoid disrupting other
 work. Ordinary gap discovery still requires the checkout identity check above.
 Remote application push and associated CI are authorized after local acceptance;
 retry only failed specific CI jobs. Application release remains separate.
+
+UCU-12 accepts rows237–254 through fixed v26.11.4 on2026-10-25:
+**254 accepted,0pending** across UCU-00–12. The terminal tag/SHA and every
+ordered subject are verified; required local gates and source-bound composed
+CI recovery pass. Milestone ucu-12 owns exact evidence and retained negatives.
+The maintainer permits closure with explicit unverified macOS/runtime and
+hardware debt; supported targets remain. Latest delivery scope is CI and
+source push/merge into remote/main only, without another release or later
+catch-up work. The shared upstream checkout remains untouched.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not

@@ -2159,6 +2159,9 @@ pub enum TextKey {
     PreviewProgrammeSeek,
     PreviewProgrammeSeekHelp,
     PreviewTimestamp,
+    PreviewStartHelp,
+    PreviewStartRequired,
+    PreviewStartInvalid,
     PreviewAlreadyRunning,
     PreviewCleanupUnconfirmed,
     PreviewConfigurationInvalid,
@@ -2442,6 +2445,8 @@ pub enum TextKey {
     SubtitleCleanup,
     SubtitleCleanupMessage,
     SubtitleCleanupBrief,
+    SubtitleCacheRepairPendingMessage,
+    SubtitleCacheRepairPendingBrief,
     ArtworkOrphans,
     ArtworkOrphansMessage,
     ArtworkOrphansBrief,
@@ -4582,6 +4587,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::PreviewProgrammeSeek,
     TextKey::PreviewProgrammeSeekHelp,
     TextKey::PreviewTimestamp,
+    TextKey::PreviewStartHelp,
+    TextKey::PreviewStartRequired,
+    TextKey::PreviewStartInvalid,
     TextKey::PreviewAlreadyRunning,
     TextKey::PreviewCleanupUnconfirmed,
     TextKey::PreviewConfigurationInvalid,
@@ -4846,6 +4854,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SubtitleCleanup,
     TextKey::SubtitleCleanupMessage,
     TextKey::SubtitleCleanupBrief,
+    TextKey::SubtitleCacheRepairPendingMessage,
+    TextKey::SubtitleCacheRepairPendingBrief,
     TextKey::ArtworkOrphans,
     TextKey::ArtworkOrphansMessage,
     TextKey::ArtworkOrphansBrief,
@@ -6102,6 +6112,14 @@ fn artwork_health_message(
         ));
     }
     if title == "Subtitle Cleanup" {
+        if brief_message == "Subtitle cache repair pending" {
+            let key = if message.is_empty() {
+                TextKey::SubtitleCacheRepairPendingBrief
+            } else {
+                TextKey::SubtitleCacheRepairPendingMessage
+            };
+            return Some(text(language, key).to_owned());
+        }
         let count = brief_message
             .strip_suffix(" subtitle row(s) awaiting cleanup")?
             .parse::<u64>()
@@ -7302,6 +7320,30 @@ mod tests {
     }
 
     #[test]
+    fn playback_time_validation_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for key in [
+                TextKey::PreviewStartHelp,
+                TextKey::PreviewStartRequired,
+                TextKey::PreviewStartInvalid,
+            ] {
+                let localized = text(language, key);
+                assert!(!localized.trim().is_empty(), "{}", definition.code);
+                if language != UiLanguage::English {
+                    assert_ne!(
+                        localized,
+                        text(UiLanguage::English, key),
+                        "{}",
+                        definition.code
+                    );
+                }
+            }
+            assert!(text(language, TextKey::PreviewStartHelp).contains("UTC"));
+        }
+    }
+
+    #[test]
     fn addon_list_disk_usage_health_is_localized_for_every_language() {
         let title = "Add-on list disk usage";
         let message = "List #1: 25.000 GB used; warning at 25 GB.\nCombined: 250.000 GB used; warning at 250 GB.";
@@ -7457,6 +7499,32 @@ mod tests {
             }
             if language != UiLanguage::English {
                 assert_ne!(title, "Subtitle Cleanup");
+                assert_ne!(localized, message);
+                assert_ne!(localized_brief, brief);
+            }
+        }
+    }
+
+    #[test]
+    fn subtitle_cache_repair_health_text_is_localized_for_every_language() {
+        let message = "Subtitle cache repair has not finished. Some cached subtitles may not display. Automatic cache maintenance will retry. If this warning persists, check write access to the subtitle cache and available disk space.";
+        let brief = "Subtitle cache repair pending";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let localized = health_check_message_text(language, "Subtitle Cleanup", message, brief);
+            let localized_brief =
+                health_check_message_text(language, "Subtitle Cleanup", "", brief);
+            assert_eq!(
+                localized,
+                text(language, TextKey::SubtitleCacheRepairPendingMessage)
+            );
+            assert_eq!(
+                localized_brief,
+                text(language, TextKey::SubtitleCacheRepairPendingBrief)
+            );
+            assert!(!localized.trim().is_empty());
+            assert!(!localized_brief.trim().is_empty());
+            if language != UiLanguage::English {
                 assert_ne!(localized, message);
                 assert_ne!(localized_brief, brief);
             }

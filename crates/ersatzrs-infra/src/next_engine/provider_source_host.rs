@@ -58,6 +58,11 @@ impl NextHost {
         ) {
             return Ok(None);
         }
+        // Transient previews own their source/profile without a persisted channel.
+        // Provider retention is limited to ordinary sessions, as in provider_files.
+        if self.preview_session(request.instance).await.is_some() {
+            return Ok(None);
+        }
         let context = self.provider_context(request).await?;
         let Some(intent) = RetainedSourceIntent::discover(
             &self.pool,

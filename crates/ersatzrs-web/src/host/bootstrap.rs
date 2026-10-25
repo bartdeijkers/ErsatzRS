@@ -150,6 +150,12 @@ pub async fn run() {
         .expect("database initialisation failed");
 
     init_logging(&startup.pool).await;
+    ersatzrs_infra::subtitle_cache_nul::repair_once(
+        &startup.pool,
+        &ersatzrs_infra::file_system_layout::subtitle_cache_folder(),
+    )
+    .await
+    .expect("subtitle cache repair state initialization failed");
     let listen_addr = configured_listen_addr();
     let streaming_addr =
         super::config::streaming_listen_addr().expect("valid streaming listener configuration");

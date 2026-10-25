@@ -12,6 +12,9 @@ use crate::{
 
 use super::{canvas::CanvasBinding, media::MediaRelay, protocol, schedule::ScheduledMedia};
 
+#[path = "graphics_region.rs"]
+mod region;
+
 /// Pure publication metadata participates in validation; credentials and the
 /// current process UUID are installed only after that validation succeeds.
 #[derive(Clone, Serialize)]
@@ -66,6 +69,12 @@ impl CanvasProjection {
             return Err(unavailable());
         }
         Ok(protocol::Watermark {
+            layout: binding.region.map(|region| protocol::CanvasLayout::Region {
+                origin: protocol::CanvasPosition {
+                    x: region.x,
+                    y: region.y,
+                },
+            }),
             source: relay.canvas_source(&binding, self.hint.clone())?,
             kind: Some(protocol::GraphicsLayerKind::Canvas),
             location: protocol::WatermarkLocation::TopLeft,
@@ -148,6 +157,18 @@ pub(super) async fn project(
     } else {
         super::selection::source_video(pool, media.media_version_id, index).await?
     };
+    let frame = ersatzrs_ffmpeg::FrameSize::new(width, height);
+    let content = match profile.profile.scaling_behavior {
+        ersatzrs_domain::ScalingBehavior::ScaleAndPad if !generated => video
+            .as_ref()
+            .and_then(|video| video.square_pixel_frame_size(frame)),
+        _ => Some(frame),
+    };
+    let region = if graphics.is_empty() {
+        region::measure(watermarks, frame, content).await
+    } else {
+        None
+    };
     let expires = media
         .item
         .finish
@@ -155,39 +176,48 @@ pub(super) async fn project(
         .ok_or_else(unavailable)?;
     Ok(Some(Box::new(CanvasProjection {
         binding: CanvasBinding {
+            region,
             video_stream_index: index,
             ..CanvasBinding::new(channel.id, media, expires)
         },
-        hint: protocol::ProbeHint {
-            single_use: None,
-            format_name: Some("nut".into()),
-            duration_ms: None,
-            audio: Vec::new(),
-            subtitle: Vec::new(),
-            video: vec![protocol::VideoProbeHint {
-                source_frame_cut: None,
-                codec: "ffv1".into(),
-                width,
-                height,
-                pix_fmt: "bgra".into(),
-                stream_index: 0,
-                frame_rate: video
-                    .and_then(|video| video.frame_rate)
-                    .map(ersatzrs_ffmpeg::FrameRate::r_frame_rate),
-                profile: None,
-                field_order: None,
-                sample_aspect_ratio: Some("1:1".into()),
-                display_aspect_ratio: None,
-                color_range: None,
-                color_space: None,
-                color_transfer: None,
-                color_primaries: None,
-                dv_profile: None,
-                has_hdr10_metadata: None,
-                rotation: None,
-            }],
-        },
+        hint: canvas_hint(
+            region.map_or(width, |region| region.width),
+            region.map_or(height, |region| region.height),
+            video
+                .and_then(|video| video.frame_rate)
+                .map(ersatzrs_ffmpeg::FrameRate::r_frame_rate),
+        ),
     })))
+}
+
+fn canvas_hint(width: u32, height: u32, frame_rate: Option<String>) -> protocol::ProbeHint {
+    protocol::ProbeHint {
+        single_use: None,
+        format_name: Some("nut".into()),
+        duration_ms: None,
+        audio: Vec::new(),
+        subtitle: Vec::new(),
+        video: vec![protocol::VideoProbeHint {
+            source_frame_cut: None,
+            codec: "ffv1".into(),
+            width,
+            height,
+            pix_fmt: "bgra".into(),
+            stream_index: 0,
+            frame_rate,
+            profile: None,
+            field_order: None,
+            sample_aspect_ratio: Some("1:1".into()),
+            display_aspect_ratio: None,
+            color_range: None,
+            color_space: None,
+            color_transfer: None,
+            color_primaries: None,
+            dv_profile: None,
+            has_hdr10_metadata: None,
+            rotation: None,
+        }],
+    }
 }
 
 fn unavailable() -> RepositoryError {

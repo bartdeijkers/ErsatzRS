@@ -1581,12 +1581,12 @@ pub(in crate::admin::server_fns::media_browser) async fn load_media_info_streams
                     None
                 },
                 has_hdr10_metadata: if kind_value == 1 {
-                    Some(
-                        r.try_get::<Option<String>, _>("MasteringDisplay")?
-                            .is_some()
-                            || r.try_get::<Option<i64>, _>("MaxCll")?.is_some()
-                            || r.try_get::<Option<i64>, _>("MaxFall")?.is_some(),
-                    )
+                    let present = r
+                        .try_get::<Option<String>, _>("MasteringDisplay")?
+                        .is_some()
+                        || r.try_get::<Option<i64>, _>("MaxCll")?.is_some()
+                        || r.try_get::<Option<i64>, _>("MaxFall")?.is_some();
+                    (is_local_library || present).then_some(present)
                 } else {
                     None
                 },

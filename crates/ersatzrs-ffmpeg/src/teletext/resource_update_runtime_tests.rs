@@ -73,7 +73,7 @@ fn candidate(
         }],
     )
     .unwrap()];
-    let mot = super::resource_runtime_tests::mot(resource, true);
+    let mot = fixtures::drcs_mot(resource, true);
     let selection = TeletextDisplayMotSelection {
         display: address,
         mot: Some(mot.identity()),

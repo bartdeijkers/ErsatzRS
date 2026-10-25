@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Verify and prepare the temporary Next source exception (ADR 0116)."""
+"""Verify and prepare the temporary Next source exception (ADR 0117)."""
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 
@@ -16,6 +17,13 @@ def digest(path):
 def reviewed_manifest(path=MANIFEST, revision=None):
     path = Path(path)
     manifest = json.loads(path.read_text(encoding="utf-8"))
+    toolchain = manifest.get("rust_toolchain", "1.97.1")
+    if not isinstance(toolchain, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", toolchain):
+        raise ValueError("Next compiler pin must be an exact stable Rust version")
+    if "patched_lock_sha256" in manifest:
+        lock = manifest["patched_lock_sha256"]
+        if not isinstance(lock, str) or not re.fullmatch(r"[0-9a-f]{64}", lock):
+            raise ValueError("Next patched lock pin must be an exact SHA-256")
     revision = revision or manifest["upstream_revision"]
     if revision != manifest["upstream_revision"]:
         raise ValueError("New Next revision requires unpatched regression review and patch retirement assessment")
@@ -55,12 +63,14 @@ def prepare(archive, output, manifest_path=MANIFEST, revision=None, unpatched=Fa
             # review instead of silently carrying our patch onto another version.
             subprocess.run(["git", "-C", str(output), "apply", "--check", file], check=True)
             subprocess.run(["git", "-C", str(output), "apply", file], check=True)
-    if digest(output / "Cargo.lock") != manifest["source_lock_sha256"]:
-        raise ValueError("Next patch changed the upstream lockfile")
+    expected_lock = manifest["source_lock_sha256"] if unpatched else manifest.get(
+        "patched_lock_sha256", manifest["source_lock_sha256"])
+    if digest(output / "Cargo.lock") != expected_lock:
+        raise ValueError("Next prepared Cargo.lock differs from its exact reviewed hash")
     provenance = {
         "source_revision": manifest["upstream_revision"],
         "source_archive_sha256": manifest["source_archive_sha256"],
-        "cargo_lock_sha256": manifest["source_lock_sha256"],
+        "cargo_lock_sha256": expected_lock,
         "distribution_version": manifest["distribution_version"],
         "patches": [] if unpatched else [
             {"file": patch["file"], "sha256": patch["sha256"]}

@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use crate::{
     canvas_overlay_filter, hide_banner, loglevel_error, no_standard_input, no_stats, pipe_output,
-    time_limit, CommandGenerator, ComplexFilter, FfmpegCommand, FilterChain, FrameSize,
-    GraphicsFrameRate, GraphicsOverlayFilter, GraphicsPipelineOverlay, InputFile, PipelineStep,
-    WatermarkOpacityClock,
+    time_limit, CanvasRegion, CommandGenerator, ComplexFilter, FfmpegCommand, FilterChain,
+    FrameSize, GraphicsFrameRate, GraphicsOverlayFilter, GraphicsPipelineOverlay, InputFile,
+    PipelineStep, WatermarkOpacityClock,
 };
 
 /// Render geometry and timing for one canvas chunk. Source inputs carry their
@@ -32,7 +32,21 @@ pub struct InvalidCanvasRenderRequest;
 pub fn build_canvas_command(
     request: CanvasRenderRequest,
 ) -> Result<FfmpegCommand, InvalidCanvasRenderRequest> {
-    build_canvas_output(request, false)
+    build_canvas_output(request, false, None)
+}
+
+/// Render only a fixed rectangle while retaining full-output watermark geometry.
+/// Mutable authored graphics keep their original coordinate system and are
+/// clipped to the published rectangle instead of widening it.
+///
+/// # Errors
+/// Returns an error for invalid timing, empty dimensions or coordinate overflow.
+pub fn build_canvas_region_command(
+    request: CanvasRenderRequest,
+    region: CanvasRegion,
+) -> Result<FfmpegCommand, InvalidCanvasRenderRequest> {
+    region.validate()?;
+    build_canvas_output(request, false, Some(region))
 }
 
 /// Render a single PNG through the same native canvas and programme-clock filters.
@@ -42,30 +56,78 @@ pub fn build_canvas_command(
 pub fn build_canvas_preview_command(
     request: CanvasRenderRequest,
 ) -> Result<FfmpegCommand, InvalidCanvasRenderRequest> {
-    build_canvas_output(request, true)
+    build_canvas_output(request, true, None)
 }
 
 fn build_canvas_output(
     mut request: CanvasRenderRequest,
     preview: bool,
+    region: Option<CanvasRegion>,
 ) -> Result<FfmpegCommand, InvalidCanvasRenderRequest> {
-    if request.resolution.width == 0
-        || request.resolution.height == 0
-        || request.content_size.width == 0
-        || request.content_size.height == 0
-        || !request.frame_rate.parsed().is_finite()
-        || request.frame_rate.parsed() <= 0.0
-        || request.duration.is_zero()
-    {
-        return Err(InvalidCanvasRenderRequest);
-    }
+    validate_request(&request)?;
+    // Watermarks use the small base surface. Authored drawvg/drawtext scripts
+    // can depend on frame dimensions, so a later selection change retains the
+    // full coordinate system and crops only after those scripts have rendered.
+    let small_surface = region.filter(|_| {
+        request
+            .overlays
+            .iter()
+            .all(|overlay| matches!(overlay, GraphicsPipelineOverlay::NativeImage { .. }))
+    });
+    let surface = small_surface.map_or(request.resolution, |region| {
+        FrameSize::new(region.width, region.height)
+    });
     let mut inputs = vec![InputFile::lavfi_video(format!(
         "color=c=black@0.0:s={}x{}:r={},format=bgra",
-        request.resolution.width,
-        request.resolution.height,
+        surface.width,
+        surface.height,
         request.frame_rate.r_frame_rate(),
     ))
     .with_input_options(["-readrate", "1"])];
+    let mut chain = canvas_overlays(&mut request, &mut inputs, small_surface);
+    if let Some(region) = region.filter(|_| small_surface.is_none()) {
+        // A profile may shrink after publication. Keep the signed dimensions
+        // even for newly selected authored graphics; missing frame area is
+        // transparent, rather than an invalid crop that kills the chunk.
+        let width = request.resolution.width.max(region.x + region.width);
+        let height = request.resolution.height.max(region.y + region.height);
+        if width != request.resolution.width || height != request.resolution.height {
+            chain
+                .pixel_format
+                .push(format!("pad={width}:{height}:0:0:color=black@0"));
+        }
+        chain.pixel_format.push(format!(
+            "crop={}:{}:{}:{}:exact=1",
+            region.width, region.height, region.x, region.y,
+        ));
+    }
+    let complex = ComplexFilter::build(&inputs, chain, false);
+    let output_size = region.map_or(request.resolution, |region| {
+        FrameSize::new(region.width, region.height)
+    });
+    let slices = if output_size.width < 4 || output_size.height < 4 {
+        "1"
+    } else {
+        "16"
+    };
+    let steps = [
+        no_standard_input(),
+        hide_banner(),
+        no_stats(),
+        loglevel_error(),
+        PipelineStep::complex_filter(complex.options),
+        time_limit(request.duration),
+        canvas_output_step(preview, slices),
+        pipe_output(),
+    ];
+    Ok(CommandGenerator::generate_command(&inputs, &steps, false))
+}
+
+fn canvas_overlays(
+    request: &mut CanvasRenderRequest,
+    inputs: &mut Vec<InputFile>,
+    small_surface: Option<CanvasRegion>,
+) -> FilterChain {
     let mut chain = FilterChain {
         pixel_format: vec!["format=bgra".to_owned()],
         ..FilterChain::default()
@@ -74,7 +136,7 @@ fn build_canvas_output(
         .overlays
         .sort_by_key(GraphicsPipelineOverlay::z_index);
     let mut image_index = 0;
-    for overlay in request.overlays {
+    for overlay in std::mem::take(&mut request.overlays) {
         match overlay {
             GraphicsPipelineOverlay::Drawvg { filter, .. } => {
                 chain
@@ -109,31 +171,42 @@ fn build_canvas_output(
                     .graphics_overlay
                     .push(GraphicsOverlayFilter::NativeImage {
                         input_index: image_index,
-                        filter: canvas_overlay_filter(
-                            &overlay,
-                            request.resolution,
-                            request.content_size,
-                        ),
+                        filter: match small_surface {
+                            Some(region) => crate::canvas_region_overlay_filter(
+                                &overlay,
+                                request.resolution,
+                                request.content_size,
+                                region,
+                            ),
+                            None => canvas_overlay_filter(
+                                &overlay,
+                                request.resolution,
+                                request.content_size,
+                            ),
+                        },
                     });
                 image_index += 1;
             }
         }
     }
-    let complex = ComplexFilter::build(&inputs, chain, false);
-    let steps = [
-        no_standard_input(),
-        hide_banner(),
-        no_stats(),
-        loglevel_error(),
-        PipelineStep::complex_filter(complex.options),
-        time_limit(request.duration),
-        canvas_output_step(preview),
-        pipe_output(),
-    ];
-    Ok(CommandGenerator::generate_command(&inputs, &steps, false))
+    chain
 }
 
-fn canvas_output_step(preview: bool) -> PipelineStep {
+fn validate_request(request: &CanvasRenderRequest) -> Result<(), InvalidCanvasRenderRequest> {
+    if request.resolution.width == 0
+        || request.resolution.height == 0
+        || request.content_size.width == 0
+        || request.content_size.height == 0
+        || !request.frame_rate.parsed().is_finite()
+        || request.frame_rate.parsed() <= 0.0
+        || request.duration.is_zero()
+    {
+        return Err(InvalidCanvasRenderRequest);
+    }
+    Ok(())
+}
+
+fn canvas_output_step(preview: bool, slices: &str) -> PipelineStep {
     if preview {
         PipelineStep::generic(
             "canvas_preview",
@@ -159,7 +232,7 @@ fn canvas_output_step(preview: bool) -> PipelineStep {
                 "-level",
                 "3",
                 "-slices",
-                "16",
+                slices,
                 "-slicecrc",
                 "0",
                 "-pix_fmt",

@@ -132,6 +132,55 @@ async fn prepare(
 }
 
 #[tokio::test]
+async fn unsanitized_cache_is_rebuilt_and_atomic_replacement_is_reusable() {
+    let root = tempfile::tempdir().unwrap();
+    let identity = key(1);
+    let expiry = Utc::now() + Duration::minutes(2);
+    let old = seed(root.path(), &identity, 30, expiry);
+    let manifest = root.path().join(format!("{identity}.json"));
+    let mut record: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    record["version"] = 1.into();
+    std::fs::write(&manifest, serde_json::to_vec(&record).unwrap()).unwrap();
+    assert!(read_manifest(root.path(), &identity).unwrap().is_none());
+    let cache = BurnCache::new(root.path().to_owned());
+    let result = cache
+        .prepare_artifact(
+            &identity,
+            "srt",
+            expiry,
+            Instant::now() + std::time::Duration::from_secs(5),
+            || async { true },
+            |path, file| async move {
+                assert!(!old.exists(), "old cache must be retired before building");
+                drop(file);
+                tokio::fs::write(&path, b"caption\0 caf\xc3\xa9")
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    crate::subtitle_cache_nul::strip_or_delete(&path).await,
+                    crate::subtitle_cache_nul::StripResult::Stripped
+                );
+                Ok(())
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read(&result).unwrap(), "caption café".as_bytes());
+    assert_eq!(
+        prepare(&cache, &identity, Utc::now()).await.unwrap(),
+        result
+    );
+    assert_eq!(
+        read_manifest(root.path(), &identity)
+            .unwrap()
+            .unwrap()
+            .version,
+        VERSION
+    );
+}
+
+#[tokio::test]
 async fn completed_artifact_survives_restart_and_lease_only_extends() {
     let root = tempfile::tempdir().unwrap();
     let identity = key(1);

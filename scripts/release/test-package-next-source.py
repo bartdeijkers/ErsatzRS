@@ -26,10 +26,11 @@ class PackageTests(unittest.TestCase):
         (self.payload / "ersatztv-channel").write_bytes(b"fixture executable")
         self.manifest = module.prepare_next.reviewed_manifest()
         m = self.manifest
+        self.rustc = f"rustc {m.get('rust_toolchain', '1.97.1')} (fixture)"
         self.source = {
             "source_revision": m["upstream_revision"],
             "source_archive_sha256": m["source_archive_sha256"],
-            "cargo_lock_sha256": m["source_lock_sha256"],
+            "cargo_lock_sha256": m.get("patched_lock_sha256", m["source_lock_sha256"]),
             "distribution_version": m["distribution_version"],
             "patches": [{"file": p["file"], "sha256": p["sha256"]} for p in m["patches"]],
         }
@@ -40,7 +41,7 @@ class PackageTests(unittest.TestCase):
         self.addCleanup(mocked.stop)
 
     def package(self, rid="linux-x64"):
-        return module.package(self.payload, self.provenance, rid, self.root / "out", "rustc 1.97.1 (fixture)")
+        return module.package(self.payload, self.provenance, rid, self.root / "out", self.rustc)
 
     def test_archive_retains_exact_payload_patch_provenance_and_permissions(self):
         receipt = self.package()
@@ -67,6 +68,108 @@ class PackageTests(unittest.TestCase):
         (self.payload / "LICENSE").write_text("changed")
         with self.assertRaisesRegex(ValueError, "license checksum"):
             self.package()
+
+    def test_default_compiler_pin_is_not_relaxed(self):
+        review = self.root / "legacy-review"
+        shutil.copytree(module.prepare_next.MANIFEST.parent / "v0.2.2", review)
+        path = review / "manifest.json"
+        manifest = module.prepare_next.reviewed_manifest(path)
+        self.assertNotIn("rust_toolchain", manifest)
+        self.assertNotIn("patched_lock_sha256", manifest)
+        source = {
+            "source_revision": manifest["upstream_revision"],
+            "source_archive_sha256": manifest["source_archive_sha256"],
+            "cargo_lock_sha256": manifest["source_lock_sha256"],
+            "distribution_version": manifest["distribution_version"],
+            "patches": [{"file": p["file"], "sha256": p["sha256"]} for p in manifest["patches"]],
+        }
+        provenance = self.root / "legacy-source.json"
+        provenance.write_text(json.dumps(source))
+        with self.assertRaisesRegex(ValueError, "require Rust 1.97.1"):
+            module.package(self.payload, provenance, "linux-x64", self.root / "out",
+                           "rustc 1.99.0 (fixture)", path)
+        receipt = module.package(self.payload, provenance, "linux-x64", self.root / "out",
+                                 "rustc 1.97.1 (fixture)", path)
+        self.assertEqual(receipt["origin"]["cargo_lock_sha256"], manifest["source_lock_sha256"])
+        self.assertEqual(receipt["origin"]["rustc"], "rustc 1.97.1 (fixture)")
+
+    def test_candidate_compiler_pin_is_exact_and_scoped(self):
+        review = self.root / "review"
+        shutil.copytree(module.prepare_next.MANIFEST.parent, review)
+        path = review / "manifest.json"
+        manifest = json.loads(path.read_text())
+        manifest["rust_toolchain"] = "1.99.0"
+        path.write_text(json.dumps(manifest))
+        for invalid in ["rustc 1.97.1 (fixture)", "rustc 1.99.1 (fixture)",
+                        "rustc 1.99.0-nightly (fixture)"]:
+            with self.subTest(compiler=invalid):
+                with self.assertRaisesRegex(ValueError, "require Rust 1.99.0"):
+                    module.package(self.payload, self.provenance, "linux-x64",
+                                   self.root / "candidate-output", invalid, path)
+        receipt = module.package(self.payload, self.provenance, "linux-x64",
+                                 self.root / "candidate-output", "rustc 1.99.0 (fixture)", path)
+        self.assertEqual(receipt["origin"]["rustc"], "rustc 1.99.0 (fixture)")
+
+    def test_package_requires_the_reviewed_post_patch_lock(self):
+        review = self.root / "review"
+        shutil.copytree(module.prepare_next.MANIFEST.parent, review)
+        path = review / "manifest.json"
+        manifest = json.loads(path.read_text())
+        manifest["patched_lock_sha256"] = "b" * 64
+        path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "provenance differs"):
+            module.package(self.payload, self.provenance, "linux-x64", self.root / "out",
+                           self.rustc, path)
+        self.source["cargo_lock_sha256"] = manifest["patched_lock_sha256"]
+        self.provenance.write_text(json.dumps(self.source))
+        receipt = module.package(self.payload, self.provenance, "linux-x64", self.root / "out",
+                                 self.rustc, path)
+        self.assertEqual(receipt["origin"]["cargo_lock_sha256"], manifest["patched_lock_sha256"])
+
+    def test_arm64_mpp_requires_complete_exact_companions(self):
+        review = self.root / "review"
+        shutil.copytree(module.prepare_next.MANIFEST.parent, review)
+        path = review / "manifest.json"
+        manifest = json.loads(path.read_text())
+        patch_file = review / "0004-private-mpp-driver-readiness.patch"
+        patch_file.write_bytes(b"fixture MPP source patch")
+        manifest["patches"] = [p for p in manifest["patches"] if p["file"] != patch_file.name]
+        manifest["patches"].append({
+            "file": patch_file.name, "sha256": module.sha(patch_file),
+            "upstream_review_revision": manifest["upstream_revision"],
+            "retire_when": "fixture retirement", "unpatched_regression": "fixture refusal",
+        })
+        manifest.pop("linux_arm64_companions_sha256", None)
+        self.source["patches"] = [{"file": p["file"], "sha256": p["sha256"]}
+                                  for p in manifest["patches"]]
+        self.provenance.write_text(json.dumps(self.source))
+        output = self.root / "arm64-output"
+
+        def package():
+            path.write_text(json.dumps(manifest))
+            return module.package(self.payload, self.provenance, "linux-arm64",
+                                  output, self.rustc, path)
+
+        with self.assertRaisesRegex(ValueError, "name exactly"):
+            package()
+        companions = {}
+        for name in module.ARM64_COMPANIONS:
+            (self.payload / name).write_bytes(("fixture " + name).encode())
+            companions[name] = module.sha(self.payload / name)
+        manifest["linux_arm64_companions_sha256"] = companions
+        missing = companions.copy()
+        missing.pop("librockchip_mpp-LICENSE-MIT.txt")
+        manifest["linux_arm64_companions_sha256"] = missing
+        with self.assertRaisesRegex(ValueError, "name exactly"):
+            package()
+        manifest["linux_arm64_companions_sha256"] = companions
+        (self.payload / "librockchip_mpp.so.1").write_bytes(b"tampered companion")
+        with self.assertRaisesRegex(ValueError, "companion checksum"):
+            package()
+        (self.payload / "librockchip_mpp.so.1").write_bytes(b"fixture librockchip_mpp.so.1")
+        receipt = package()
+        for name, digest in companions.items():
+            self.assertEqual(receipt["origin"]["payload_sha256"][name], digest)
 
     def test_windows_requires_exact_companions(self):
         (self.payload / "ersatztv-channel.exe").write_bytes(b"fixture executable")
@@ -99,11 +202,11 @@ class PackageTests(unittest.TestCase):
             path.write_text(json.dumps(manifest))
             with self.assertRaisesRegex(ValueError, "name exactly"):
                 module.package(self.payload, self.provenance, "win-x64", output,
-                               "rustc 1.97.1 (fixture)", path)
+                               self.rustc, path)
         manifest["windows_companions_sha256"] = companions
         path.write_text(json.dumps(manifest))
         receipt = module.package(self.payload, self.provenance, "win-x64", output,
-                                 "rustc 1.97.1 (fixture)", path)
+                                 self.rustc, path)
         for name, digest in companions.items():
             self.assertEqual(receipt["origin"]["payload_sha256"][name], digest)
 

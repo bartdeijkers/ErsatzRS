@@ -19,6 +19,27 @@ function failure(form, code) {
   form.querySelector("textarea").value =
     form.querySelector("[data-preview-status]").textContent;
 }
+function playAvailability(form, disabled, reason = "busy") {
+  const play = form.querySelector("[data-preview-play]");
+  play.disabled = disabled;
+  const explanation = form.querySelector("[data-preview-play-reason]");
+  explanation.hidden = !disabled;
+  explanation.textContent = disabled ? message(form, reason) : "";
+  if (disabled) play.setAttribute("aria-describedby", explanation.id);
+  else play.removeAttribute("aria-describedby");
+}
+function validateStart(input) {
+  input.setCustomValidity("");
+  const invalid = !input.validity.valid || (input.value && !Number.isFinite(Date.parse(input.value)));
+  const text = !invalid ? "" : input.validity.valueMissing && !input.validity.badInput
+    ? input.dataset.messageRequired : input.dataset.messageInvalid;
+  input.setCustomValidity(text);
+  input.setAttribute("aria-invalid", String(Boolean(text)));
+  const error = input.form.querySelector("[data-preview-time-error]");
+  error.textContent = text;
+  error.hidden = !text;
+  return !text;
+}
 function endpoint(id) {
   return `/api/troubleshoot/playback/previews/${encodeURIComponent(id)}`;
 }
@@ -40,9 +61,8 @@ async function render(form, session, job) {
   const root = form.querySelector("[data-channel-preview]");
   root.dataset.operationState = job.state;
   root.querySelector("[data-preview-operation-status]").textContent = message(form, job.state);
-  const play = form.querySelector("[data-preview-play]");
   const stop = form.querySelector("[data-preview-stop]");
-  play.disabled = !session.done || !job.cleanup_confirmed;
+  playAvailability(form, !session.done || !job.cleanup_confirmed, session.done ? "cleanup" : "busy");
   stop.disabled = session.done || job.state === "cancelling";
   stop.formAction = `/admin-api/troubleshoot/playback/${job.id}/stop`;
   const refresh = root.querySelector("[data-preview-refresh]");
@@ -111,6 +131,11 @@ function attach() {
 }
 
 // Delegation and observation cover SSR and client-side navigation alike.
+for (const eventName of ["input", "change", "invalid"]) {
+  document.addEventListener(eventName, event => {
+    if (event.target.matches("[data-preview-start]")) validateStart(event.target);
+  }, true);
+}
 document.addEventListener("submit", async event => {
   const form = event.target;
   if (!form.matches("form[data-playback-troubleshooting]")) return;
@@ -137,11 +162,13 @@ document.addEventListener("submit", async event => {
     return;
   }
   if (current && !current.done) return;
+  const input = form.querySelector("[data-preview-start]");
+  if (input && !validateStart(input)) { input.reportValidity(); return; }
   if (current) retire(form, current);
   const session = sessionFor(form);
   const url = new URL("/api/troubleshoot/playback/previews", location.origin);
   url.search = new URLSearchParams(new FormData(form)).toString();
-  form.querySelector("[data-preview-play]").disabled = true;
+  playAvailability(form, true, "connecting");
   form.querySelector("textarea").value = "";
   form.querySelector("[data-preview-speed]").hidden = true;
   destroy(form.querySelector("video"));
@@ -155,7 +182,7 @@ document.addEventListener("submit", async event => {
       session.done = true;
       if (form.isConnected) {
         failure(form, response.status === 401 || response.status === 403 ? "authorization" : error.code);
-        form.querySelector("[data-preview-play]").disabled = false;
+        playAvailability(form, false);
       }
       return;
     }
@@ -171,7 +198,7 @@ document.addEventListener("submit", async event => {
       status(form, "network");
       if (!session.id) {
         session.done = true;
-        form.querySelector("[data-preview-play]").disabled = false;
+        playAvailability(form, false);
       }
     }
   }

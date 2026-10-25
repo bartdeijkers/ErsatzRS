@@ -23,6 +23,12 @@ pub enum SubtitleTextFormat {
     WebVtt,
 }
 
+/// Bitmap format with a known pre-presentation canvas requirement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubtitleImageFormat {
+    Pgs,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaStream {
     pub index: usize,
@@ -53,6 +59,8 @@ pub struct InputFile {
     pub filter_steps: Vec<String>,
     pub subtitle_method: Option<SubtitleMethod>,
     pub subtitle_text_format: Option<SubtitleTextFormat>,
+    /// Codec needing an initial canvas before its first presentation arrives.
+    pub subtitle_image_format: Option<SubtitleImageFormat>,
     pub is_image_based_subtitle: bool,
     pub allow_readrate: bool,
     pub seek_after_input: bool,
@@ -70,6 +78,7 @@ impl InputFile {
             filter_steps: Vec::new(),
             subtitle_method: None,
             subtitle_text_format: None,
+            subtitle_image_format: None,
             is_image_based_subtitle: false,
             allow_readrate: true,
             seek_after_input: false,
@@ -273,7 +282,11 @@ impl InputFile {
 
     #[must_use]
     pub fn with_subtitle_codec(mut self, codec: &str) -> Self {
-        self.subtitle_text_format = match codec.trim().to_ascii_lowercase().as_str() {
+        let codec = codec.trim().to_ascii_lowercase();
+        self.subtitle_image_format = (self.is_image_based_subtitle
+            && matches!(codec.as_str(), "pgssub" | "hdmv_pgs_subtitle"))
+        .then_some(SubtitleImageFormat::Pgs);
+        self.subtitle_text_format = match codec.as_str() {
             "ass" | "ssa" => Some(SubtitleTextFormat::Ass),
             "webvtt" | "vtt" => Some(SubtitleTextFormat::WebVtt),
             "mov_text" | "subrip" | "srt" => Some(SubtitleTextFormat::Srt),
