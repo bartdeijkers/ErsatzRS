@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety PS1 — current ARM candidate artifact qualification'
+current_focus = 'p9a-platform-safety PS1 — current Windows worker artifact qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -109,14 +109,25 @@ the same pinned fontconfig with mount-to-host path mapping; initial default-font
 comparison remains retained. Normal exit/container removal pass. Current source,
 ordinary-route/95transport and unchanged FFmpeg compatibility receipts are reused.
 
-Current package: p9a-platform-safety PS1 current ARM candidate artifacts.
-Next executable action: use the existing ARM64/ARMv7 source-build/software recipes
-for the same current023 ten-patch candidate, retaining original source/lock/compiler,
-private MPP companions and fixed AV/Dutch-audio/caption/cleanup oracles. Stop at
-the two named candidate artifact/emulated-software components. Native execution,
-other artifacts, final Health and managed adoption retain their existing owners;
-the120minute Windows package trial remains deferred. No publication, production
-pin, new client search or decoder/editor maintenance. X1/X3 decisions unchanged.
+PS1 current023 ARM64/ARMv7 artifact and emulated-software components are completed.
+Canonical next023_source_output_followup.arm_artifact_qualification owns exact
+source/lock/compiler/ten-patch/privateMPP/notice/package pins, warm-cache builds,
+68 affected controls per architecture and actual generic200frame/160x90/nld880Hz/
+caption software output. Native-host decoding uses identical pinned font context
+and original strict oracles. Finite workers exit normally; six containers are
+absent. This is QEMU/software/artifact proof, not native ARM or source-output
+route acceptance; those exact required proofs retain their primary owner.
+
+Current package: p9a-platform-safety PS1 current Windows worker artifact.
+Next executable action: qualify existing native toolchain/recipe availability,
+then build/package only the current023 ten-patch Windows worker and run its
+existing affected source/software guards if available. Stop at that worker
+artifact component; do not start the separate deferred120minute application-
+package trial. Keep native application/Health, macOS artifacts/execution,
+physical ARM and explicit managed adoption at their existing owners. If toolchain
+access is absent, record that concrete prerequisite and select an independent
+existing item; no substitute variants, publication or production pin changes.
+X1 deferral/X3 upstream wait remain unchanged.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
