@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety PS1 — exact current source-output candidate qualification'
+current_focus = 'p9a-platform-safety PS1 — current ARM candidate artifact qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -99,14 +99,24 @@ fails the explicit absent-cut qualification before physical coverage, not a new
 physical-output counterexample. Canonical next023_source_output_followup owns
 receipts and candidate archivec6765c48/payload552d6e0f. No production pin changed.
 
-Current package: p9a-platform-safety PS1 exact candidate qualification join.
-Next executable action: join the current Linux candidate provenance/software
-receipts to PS1 and qualify its existing supported Linux portability boundary
-with the pinned Bookworm tool, reusing accepted FFmpeg2.0.7 and unchanged source
-fixtures. Stop at that named Linux candidate component; other native artifacts,
-120-minute deferred Windows package trial and managed adoption retain owners.
-No adjacent variant, production pin, publication, client search or external
-maintenance. X1 deferral/X3 upstream wait remain unchanged.
+PS1 current023 Linux candidate package/Bookworm component is completed.
+Canonical next023_source_output_followup.linux_package_bookworm owns exact
+archive/origin/payload/license equality, unchanged production-candidate refusal,
+nine package guards and actual pinned Debian12/glibc2.36 worker/FFmpeg207 execution.
+The existing finite software oracle proves200frames/160x90, selected nld880Hz,
+48 caption-reference pixels and error0.438 versus plain66.062. Host decoding uses
+the same pinned fontconfig with mount-to-host path mapping; initial default-font
+comparison remains retained. Normal exit/container removal pass. Current source,
+ordinary-route/95transport and unchanged FFmpeg compatibility receipts are reused.
+
+Current package: p9a-platform-safety PS1 current ARM candidate artifacts.
+Next executable action: use the existing ARM64/ARMv7 source-build/software recipes
+for the same current023 ten-patch candidate, retaining original source/lock/compiler,
+private MPP companions and fixed AV/Dutch-audio/caption/cleanup oracles. Stop at
+the two named candidate artifact/emulated-software components. Native execution,
+other artifacts, final Health and managed adoption retain their existing owners;
+the120minute Windows package trial remains deferred. No publication, production
+pin, new client search or decoder/editor maintenance. X1/X3 decisions unchanged.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
