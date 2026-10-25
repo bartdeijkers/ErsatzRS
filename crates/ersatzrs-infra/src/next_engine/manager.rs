@@ -140,6 +140,27 @@ struct Package {
     asset: String,
     payload_sha256: BTreeMap<String, String>,
     payload_bytes: BTreeMap<String, u64>,
+    distribution_version: Option<String>,
+    distribution_tag: Option<String>,
+    patches: Option<Vec<Patch>>,
+}
+
+impl Package {
+    fn version<'a>(&'a self, manifest: &'a Manifest) -> &'a str {
+        self.distribution_version
+            .as_deref()
+            .unwrap_or(&manifest.distribution_version)
+    }
+
+    fn tag<'a>(&'a self, manifest: &'a Manifest) -> &'a str {
+        self.distribution_tag
+            .as_deref()
+            .unwrap_or(&manifest.distribution_tag)
+    }
+
+    fn patches<'a>(&'a self, manifest: &'a Manifest) -> &'a [Patch] {
+        self.patches.as_deref().unwrap_or(&manifest.patches)
+    }
 }
 
 #[derive(Clone, Deserialize)]
@@ -171,7 +192,25 @@ impl Manifest {
             .get(rid)
             .ok_or(NextRuntimeError::Platform)?;
         let names = self.payload_names(rid)?;
-        if package.payload_sha256.keys().ne(names.iter())
+        let override_count = usize::from(package.distribution_version.is_some())
+            + usize::from(package.distribution_tag.is_some())
+            + usize::from(package.patches.is_some());
+        // A deferred platform retains one complete identity, never a mixture
+        // of the new filename/tag and the older source patch set (ADR 0128).
+        if !matches!(override_count, 0 | 3)
+            || [package.version(self), package.tag(self)]
+                .iter()
+                .any(|value| {
+                    !value
+                        .as_bytes()
+                        .first()
+                        .is_some_and(u8::is_ascii_alphanumeric)
+                        || !value
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+                })
+            || package.patches(self).is_empty()
+            || package.payload_sha256.keys().ne(names.iter())
             || package.payload_bytes.keys().ne(names.iter())
             || package
                 .payload_bytes
@@ -186,7 +225,7 @@ impl Manifest {
             || package.asset
                 != format!(
                     "ersatzrs-next-{}-{rid}{}",
-                    self.distribution_version,
+                    package.version(self),
                     if rid == "win-x64" { ".zip" } else { ".tar.gz" }
                 )
         {
@@ -208,7 +247,10 @@ impl Manifest {
         if rid == "linux-arm64"
             && self.linux_arm64_companions_sha256.is_empty()
             && self
-                .patches
+                .runtime_packages
+                .get(rid)
+                .ok_or(NextRuntimeError::Platform)?
+                .patches(self)
                 .iter()
                 .any(|patch| patch.file == "0004-private-mpp-driver-readiness.patch")
         {
@@ -235,11 +277,12 @@ impl Manifest {
             .unwrap_or(&self.source_lock_sha256)
     }
 
-    fn download_base(&self) -> String {
-        format!(
+    fn download_base(&self, rid: &str) -> Result<String, NextRuntimeError> {
+        Ok(format!(
             "https://github.com/{}/releases/download/{}",
-            self.distribution_repository, self.distribution_tag
-        )
+            self.distribution_repository,
+            self.package(rid)?.tag(self)
+        ))
     }
 }
 
@@ -313,10 +356,7 @@ fn verify_files(
             manifest.source_archive_sha256.as_str(),
         ),
         ("cargo_lock_sha256", manifest.prepared_lock_sha256()),
-        (
-            "distribution_version",
-            manifest.distribution_version.as_str(),
-        ),
+        ("distribution_version", package.version(manifest)),
         ("rid", rid),
         ("target", package.target.as_str()),
     ] {
@@ -328,7 +368,7 @@ fn verify_files(
         .map_err(|_| NextRuntimeError::Identity)?;
     let hashes: BTreeMap<String, String> = serde_json::from_value(origin["payload_sha256"].clone())
         .map_err(|_| NextRuntimeError::Identity)?;
-    if patches != manifest.patches || hashes != package.payload_sha256 {
+    if patches != package.patches(manifest) || hashes != package.payload_sha256 {
         return Err(NextRuntimeError::Identity);
     }
     Ok(())
@@ -380,19 +420,20 @@ fn automatic_result(
     folder: PathBuf,
     split_bundle: bool,
     source: NextRuntimeSource,
-) -> NextRuntimeAcquisition {
-    NextRuntimeAcquisition {
+) -> Result<NextRuntimeAcquisition, NextRuntimeError> {
+    let package = manifest.package(rid)?;
+    Ok(NextRuntimeAcquisition {
         binary: folder.join(format!(
             "ersatztv-channel{}",
             if rid == "win-x64" { ".exe" } else { "" }
         )),
         source,
         rid: rid.to_owned(),
-        version: manifest.distribution_version.clone(),
+        version: package.version(manifest).to_owned(),
         published_pin_verified: true,
         folder,
         split_bundle,
-    }
+    })
 }
 
 fn local_automatic(
@@ -402,27 +443,22 @@ fn local_automatic(
 ) -> Option<NextRuntimeAcquisition> {
     if let Some(bundle) = config.host_executable.parent() {
         if validate_folder(manifest, rid, bundle, true).is_ok() {
-            return Some(automatic_result(
+            return automatic_result(
                 manifest,
                 rid,
                 bundle.to_owned(),
                 true,
                 NextRuntimeSource::Bundled,
-            ));
+            )
+            .ok();
         }
     }
     let folder = config
         .managed_root
-        .join(&manifest.distribution_tag)
+        .join(manifest.package(rid).ok()?.tag(manifest))
         .join(rid);
     if validate_folder(manifest, rid, &folder, false).is_ok() {
-        return Some(automatic_result(
-            manifest,
-            rid,
-            folder,
-            false,
-            NextRuntimeSource::Managed,
-        ));
+        return automatic_result(manifest, rid, folder, false, NextRuntimeSource::Managed).ok();
     }
     None
 }
@@ -436,7 +472,9 @@ pub async fn ensure(
     config: NextRuntimeManagerConfig,
 ) -> Result<NextRuntimeAcquisition, NextRuntimeError> {
     let manifest = Manifest::accepted()?;
-    let base = manifest.download_base();
+    let rid = ersatzrs_ffmpeg::runtime::current_ersatzrs_ffmpeg_rid()
+        .ok_or(NextRuntimeError::Platform)?;
+    let base = manifest.download_base(rid)?;
     let accepted = acquire(config, manifest, &base).await?;
     if accepted.published_pin_verified
         && super::version::probe_binary(&accepted.binary)
@@ -718,7 +756,7 @@ fn install(
     archive: &[u8],
 ) -> Result<NextRuntimeAcquisition, NextRuntimeError> {
     let files = archive_files(manifest, rid, archive)?;
-    let parent = root.join(&manifest.distribution_tag);
+    let parent = root.join(manifest.package(rid)?.tag(manifest));
     ordinary_directory(&parent)?;
     let staging = tempfile::Builder::new()
         .prefix(".next-")
@@ -757,13 +795,13 @@ fn install(
     if existed {
         fs::remove_dir_all(backup).map_err(|_| NextRuntimeError::Storage)?;
     }
-    Ok(automatic_result(
+    automatic_result(
         manifest,
         rid,
         destination,
         false,
         NextRuntimeSource::Downloaded,
-    ))
+    )
 }
 
 /// Return the already accepted startup location. Before composition-root startup,

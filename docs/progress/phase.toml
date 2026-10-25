@@ -238,11 +238,29 @@ pass. All four non-Mac source packages pass53 controls each; Windows also
 passes four affected application cases, ARM64 fallback output passes its decoder
 oracle and Chromium followers have composed passing recovery. Original
 Level2.5 browser jobs pass. The complete64-case Level1.5 Firefox job needs a
-focused retry after runner disconnection. ARMv7 software playback still needs
-the stopped Docker engine. Mac work remains deferred and published rs.4 remains selected. Preserve the original run and unaffected
-evidence; partial recovery is not full new-SHA acceptance. No main merge,
-release, Docker publication or Mac build is authorized. Milestone ucu-12 and
+focused retry after runner disconnection; CI40174546124 on bc69eb66 is
+running only that check and its matched web prerequisite. ARMv7 software
+playback now passes the retained200-frame/Dutch880Hz/caption oracle with nld
+source/output language preserved under pinned QEMU. Both rs.6 actual Next
+smokes and86 Next copy TSDuck checks pass; Native evidence is reused unchanged.
+Mac work remains deferred and published rs.4 remains selected. Preserve the original run and unaffected
+evidence; partial recovery is not full new-SHA acceptance. Merge to remote/main is authorized only after UCU-12 acceptance and required
+green CI. Runtime/application releases and Docker publication remain separate.
+The maintainer now permits UCU-12 closure with outstanding macOS work recorded
+as explicit unverified debt; no Mac build is authorized. Retain exact older
+macOS runtime identities when adopting qualified non-Mac replacements. Milestone ucu-12 and
 ucu-12-ci-runtime-recovery own this bounded package.
+
+Latest UCU-12 adoption checkpoint2026-10-25: the separately authorized rs.6
+dependency release publishes23 exact assets; all anonymous downloads match.
+The managed manifest selects four corrected Linux/Windows packages while
+retaining macOS rs.4 version/tag/patch identities. All six selected archives
+pass staging;15 Linux manager cases pass including real archive relocation,
+rs.6 acquisition/offline cache and Health. Source/package guards19 pass.
+Native Windows14 manager checks and Linux/Windows real-host public cold
+acquisition/unchanged managed restart now pass with the matched web bundle.
+Only affected CI and ordered closeout remain for this runtime correction. UCU-12 may close with the explicitly approved macOS
+debt; no Mac build or native acceptance is inferred.
 
 Current package: p9a-source-output exact remaining SO2/SO3 route/adoption boundary.
 Next executable action: resolve only the owner's imprecise otherSO2..3 wording

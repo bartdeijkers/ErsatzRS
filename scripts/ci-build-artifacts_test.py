@@ -463,6 +463,31 @@ class FocusedAuditSelection(unittest.TestCase):
                              {"build", "hydration"})
         self.assertEqual(self.scheduled(browser_only="firefox", browser_case_set="teletext-1.5"),
                          {"build", "hydration"})
+        for browser in ("chromium", "firefox", "both"):
+            self.assertEqual(self.scheduled(browser_only=browser, browser_case_set="teletext-runtime"),
+                             {"build", "hydration"})
+        for level in ("1.5", "2.5", "all"):
+            self.assertEqual(self.scheduled(teletext_only=level), {"build", "teletext", "hydration"})
+
+    def test_rust_level15_recovery_excludes_web_build_and_browsers(self):
+        self.assertEqual(self.scheduled(teletext_only="1.5-rust"), {"build", "teletext"})
+        inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="1.5-rust")
+        for key, expected in (("BUILD_RUST", True), ("BUILD_WEB", False)):
+            expression = re.search(rf"^      {key}: (.+)$", self.jobs["build"], re.M)[1]
+            self.assertEqual(self.evaluate(expression, inputs, SimpleNamespace()), expected)
+        expression = re.search(r"^        level: (.+)$", self.jobs["teletext"], re.M)[1]
+        expression = expression.removeprefix("${{").removesuffix("}}").strip()
+        expression = expression.replace("&&", " and ").replace("||", " or ")
+        for mode, expected in (("1.5-rust", ["1.5"]), ("1.5", ["1.5"]),
+                               ("2.5", ["2.5"]), ("all", ["1.5", "2.5"]), ("none", ["1.5", "2.5"])):
+            actual = eval(expression, {"__builtins__": {}}, {
+                "inputs": SimpleNamespace(teletext_only=mode), "fromJSON": json.loads,
+            })
+            self.assertEqual(actual, expected)
+        self.assertIn('TELETEXT_LEVEL: ${{ matrix.level }}', self.jobs["teletext"])
+        self.assertIn('scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL")', self.jobs["teletext"])
+        self.assertIn('scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime)', self.jobs["teletext"])
+        self.assertIn("format('-teletext-{0}', inputs.teletext_only)", self.workflow)
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
@@ -476,7 +501,8 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertFalse(self.evaluate(expression, base, SimpleNamespace()))
         for key, value in (("test_only", True), ("next_engine_only", True),
                            ("teletext_only", "all"), ("browser_only", "both"),
-                           ("browser_case_set", "channel-preview"), ("browser_case_set", "teletext-1.5")):
+                           ("browser_case_set", "channel-preview"), ("browser_case_set", "teletext-1.5"),
+                           ("browser_case_set", "teletext-runtime"), ("teletext_only", "1.5-rust")):
             with self.subTest(mode=key):
                 self.assertTrue(self.evaluate(expression, dict(base, **{key: value}), SimpleNamespace()))
 
@@ -488,6 +514,14 @@ class FocusedAuditSelection(unittest.TestCase):
                     BROWSER_ONLY="none", BROWSER_CASE_SET="fixtures")
         cases = [({}, True), ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "channel-preview"}, True),
                  ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5"}, True),
+                 ({"BROWSER_ONLY": "both", "BROWSER_CASE_SET": "teletext-runtime"}, True),
+                 ({"TELETEXT_ONLY": "1.5-rust"}, True),
+                 ({"TELETEXT_ONLY": "1.5-rust", "BROWSER_ONLY": "chromium"}, False),
+                 ({"TELETEXT_ONLY": "1.5-rust", "NEXT_ONLY": "true"}, False),
+                 ({"TELETEXT_ONLY": "1.5-rust", "TEST_ONLY": "true"}, False),
+                 ({"BROWSER_CASE_SET": "teletext-runtime"}, False),
+                 ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-runtime", "NEXT_ONLY": "true"}, False),
+                 ({"BROWSER_ONLY": "chromium", "BROWSER_CASE_SET": "teletext-runtime", "TELETEXT_ONLY": "1.5-rust"}, False),
                  ({"BROWSER_CASE_SET": "channel-preview"}, False),
                  ({"BROWSER_CASE_SET": "teletext-1.5"}, False),
                  ({"BROWSER_ONLY": "firefox", "BROWSER_CASE_SET": "teletext-1.5", "NEXT_ONLY": "true"}, False),
@@ -545,9 +579,10 @@ class FocusedAuditSelection(unittest.TestCase):
                 manifest_path = root / "recipe/next-patches/manifest.json"
                 manifest_path.parent.mkdir(parents=True)
                 manifest_path.write_text(json.dumps(manifest))
-                fetched, verified = [], []
+                fetched, verified, urls = [], [], []
 
                 def fetch(url, limit):
+                    urls.append(url)
                     fetched.append(url.rsplit("/", 1)[1])
                     return fetched[-1].encode()
 
@@ -559,7 +594,7 @@ class FocusedAuditSelection(unittest.TestCase):
                     output.mkdir()
 
                 stage = SimpleNamespace(__file__=str(root / "recipe/stage-next.py"), MANIFEST=manifest,
-                                        DOWNLOAD_BASE="https://example.invalid/reviewed", MAX_ARCHIVE=1024,
+                                        package_url=lambda rid: f"https://example.invalid/{'retained' if rid.startswith('osx-') else 'current'}/{manifest['runtime_packages'][rid]['asset']}", MAX_ARCHIVE=1024,
                                         download=fetch, stage_patched_snapshot=verify)
                 spec = SimpleNamespace(loader=SimpleNamespace(exec_module=lambda _: None))
                 env_file = root / "github.env"
@@ -574,6 +609,9 @@ class FocusedAuditSelection(unittest.TestCase):
                     exec(code, {})
                 self.assertEqual(set(verified), set(rids))
                 self.assertEqual(len(fetched), len(rids))
+                for rid in rids:
+                    release = "retained" if rid.startswith("osx-") else "current"
+                    self.assertIn(f"https://example.invalid/{release}/{manifest['runtime_packages'][rid]['asset']}", urls)
                 values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
                 packages = Path(values["NEXT_CANDIDATE_PACKAGES"])
                 self.assertEqual((packages / "manifest.json").read_bytes(), manifest_path.read_bytes())

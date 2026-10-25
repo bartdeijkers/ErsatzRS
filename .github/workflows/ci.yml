@@ -64,7 +64,7 @@ on:
         required: false
         default: false
       teletext_only:
-        description: Run teletext Rust and Chromium/Firefox jobs (partial CI; incompatible with other focused modes)
+        description: Run selected teletext jobs (1.5-rust excludes browsers; partial CI; incompatible with other focused modes)
         type: choice
         required: false
         default: none
@@ -73,6 +73,7 @@ on:
           - all
           - '1.5'
           - '2.5'
+          - 1.5-rust
       browser_only:
         description: Run the bounded recovery case set in selected browsers (partial CI; incompatible with other focused modes)
         type: choice
@@ -92,6 +93,7 @@ on:
           - fixtures
           - channel-preview
           - teletext-1.5
+          - teletext-runtime
       reset_target_dir:
         description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
         type: boolean
@@ -268,7 +270,7 @@ jobs:
       LEPTOS_OUTPUT_NAME: ersatzrs-web
       LEPTOS_HASH_FILES: "false"
       BUILD_RUST: ${{ !inputs.browser_only || inputs.browser_only == 'none' }}
-      BUILD_WEB: ${{ !inputs.test_only && !inputs.next_engine_only }}
+      BUILD_WEB: ${{ !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     steps:
       - name: Validate dispatch mode
         env:
@@ -285,7 +287,7 @@ jobs:
           if sum(modes) > 1:
               raise SystemExit('Focused CI modes are mutually exclusive')
           case_set = os.environ['BROWSER_CASE_SET']
-          if case_set not in ('fixtures', 'channel-preview', 'teletext-1.5'):
+          if case_set not in ('fixtures', 'channel-preview', 'teletext-1.5', 'teletext-runtime'):
               raise SystemExit('Unknown browser recovery case set')
           if case_set != 'fixtures' and os.environ['BROWSER_ONLY'] in ('', 'none'):
               raise SystemExit('Browser recovery case set requires browser_only')
@@ -517,7 +519,7 @@ jobs:
           shutil.copyfile(manifest, packages / 'manifest.json')
           for rid, package in sorted(stage.MANIFEST['runtime_packages'].items()):
               archive = packages / package['asset']
-              archive.write_bytes(stage.download(f'{stage.DOWNLOAD_BASE}/{archive.name}', stage.MAX_ARCHIVE))
+              archive.write_bytes(stage.download(stage.package_url(rid), stage.MAX_ARCHIVE))
               output = pathlib.Path(os.environ['TMPDIR']) / ('next' if rid == 'linux-x64' else f'next-verified-{rid}')
               stage.stage_patched_snapshot(rid, output, archive)
           asset = stage.MANIFEST['runtime_packages']['linux-x64']['asset']
@@ -587,7 +589,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        level: ${{ fromJSON(inputs.teletext_only == '1.5' && '["1.5"]' || inputs.teletext_only == '2.5' && '["2.5"]' || '["1.5","2.5"]') }}
+        level: ${{ fromJSON((inputs.teletext_only == '1.5' || inputs.teletext_only == '1.5-rust') && '["1.5"]' || inputs.teletext_only == '2.5' && '["2.5"]' || '["1.5","2.5"]') }}
     env:
       CARGO_BUILD_JOBS: "1"
       TELETEXT_LEVEL: ${{ matrix.level }}
@@ -679,7 +681,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     # All six jobs execute the same verified SSR/WASM build.
     needs: build
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only }}
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     # One job per general/1.5/2.5 suite and Playwright project. The suite runs on a single worker because
     # it mutates shared application state in its test database (TEST.md): each
     # job runs scripts/e2e/playwright-e2e.sh separately, and that script

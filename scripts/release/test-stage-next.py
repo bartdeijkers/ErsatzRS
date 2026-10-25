@@ -74,7 +74,8 @@ class AcceptedSourceTests(unittest.TestCase):
                          [{key: item[key] for key in ('file', 'sha256')} for item in manifest['patches']])
         for rid in module.PLATFORMS:
             suffix = '.zip' if rid == 'win-x64' else '.tar.gz'
-            name = f'ersatzrs-next-{module.PATCHED_DISTRIBUTION_VERSION}-{rid}{suffix}'
+            version, _, _ = module.distribution_for(rid)
+            name = f'ersatzrs-next-{version}-{rid}{suffix}'
             self.assertRegex(module.PINNED_HASHES[name], r'^[0-9a-f]{64}$')
 
 
@@ -323,7 +324,12 @@ class PatchedSnapshotTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        manifest = copy.deepcopy(module.MANIFEST)
+        for package in manifest["runtime_packages"].values():
+            for key in ("distribution_version", "distribution_tag", "patches"):
+                package.pop(key, None)
         values = {
+            "MANIFEST": manifest,
             "PATCHED_DISTRIBUTION_VERSION": "0.1.0-fixture-ersatzrs.1",
             "PINNED_PATCHES": [{"file": "fix.patch", "sha256": "a" * 64}],
             "PINNED_HASHES": {"LICENSE": hashlib.sha256(b"fixture license").hexdigest()},
@@ -336,6 +342,7 @@ class PatchedSnapshotTests(unittest.TestCase):
             self.configure_mpp_review(prepared_lock=module.PREPARED_LOCK_SHA256)
 
     def archive(self, rid, defect=None):
+        version, _, patches = module.distribution_for(rid)
         binary = "ersatztv-channel.exe" if rid == "win-x64" else "ersatztv-channel"
         files = {binary: b"fixture binary", "LICENSE": b"fixture license"}
         if rid == "linux-arm64":
@@ -347,12 +354,12 @@ class PatchedSnapshotTests(unittest.TestCase):
             "source_revision": module.PINNED_REVISION, "rid": rid, "target": module.TARGETS[rid],
             "source_archive_sha256": module.SOURCE_ARCHIVE_SHA256,
             "cargo_lock_sha256": module.PREPARED_LOCK_SHA256,
-            "distribution_version": module.PATCHED_DISTRIBUTION_VERSION,
-            "patches": module.PINNED_PATCHES,
+            "distribution_version": version,
+            "patches": patches,
             "payload_sha256": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
             "rustc": f"rustc {module.MANIFEST.get('rust_toolchain', '1.97.1')} (fixture)",
         }
-        if defect in ("patches", "source_revision", "cargo_lock_sha256", "rid", "target"):
+        if defect in ("patches", "source_revision", "cargo_lock_sha256", "rid", "target", "distribution_version"):
             origin[defect] = "unreviewed"
         elif defect == "payload":
             files[binary] = b"changed payload"
@@ -370,7 +377,7 @@ class PatchedSnapshotTests(unittest.TestCase):
         elif defect == "mpp-tampered":
             files[self.mpp_defect] = b"changed companion"
         files["origin.json"] = json.dumps(origin).encode()
-        prefix = f"ersatzrs-next-{module.PATCHED_DISTRIBUTION_VERSION}-{rid}"
+        prefix = f"ersatzrs-next-{version}-{rid}"
         buffer = io.BytesIO()
         if rid == "win-x64":
             with zipfile.ZipFile(buffer, "w") as bundle:
@@ -500,6 +507,64 @@ class PatchedSnapshotTests(unittest.TestCase):
                     self.assertEqual(hashlib.sha256((out / name).read_bytes()).hexdigest(), digest)
                 with self.assertRaisesRegex(ValueError, "already exists"):
                     module.stage_patched_snapshot(rid, out, fetch=lambda url, limit: data)
+
+    def test_retained_platform_uses_its_original_release_and_provenance(self):
+        for rid in ("osx-x64", "osx-arm64"):
+            retained = module.MANIFEST["runtime_packages"][rid]
+            retained.update(distribution_version="0.2.3-retained", distribution_tag="next-retained",
+                            patches=[{"file": "retained.patch", "sha256": "d" * 64}])
+            data = self.archive(rid)
+            fetched = []
+
+            def fetch(url, limit):
+                fetched.append(url)
+                return data
+
+            output = self.root / rid
+            module.stage_patched_snapshot(rid, output, fetch=fetch)
+            expected = f"https://github.com/{module.DISTRIBUTION_REPOSITORY}/releases/download/next-retained/ersatzrs-next-0.2.3-retained-{rid}.tar.gz"
+            self.assertEqual(fetched, [expected])
+            origin = json.loads((output / "origin.json").read_text())
+            self.assertEqual(origin["distribution_version"], "0.2.3-retained")
+            self.assertEqual(origin["distribution_tag"], "next-retained")
+            self.assertEqual(origin["patches"], retained["patches"])
+            for defect in ("distribution_version", "patches"):
+                data = self.archive(rid, defect)
+                with self.assertRaisesRegex(ValueError, "provenance"):
+                    module.stage_patched_snapshot(rid, self.root / "rejected", fetch=fetch)
+                self.assertFalse((self.root / "rejected").exists())
+            retained.pop("patches")
+            with self.assertRaisesRegex(ValueError, "complete distribution identity"):
+                module.package_url(rid)
+            retained["patches"] = [{"file": "retained.patch", "sha256": "d" * 64}]
+            for invalid in ("../outside", ".", ".."):
+                retained["distribution_tag"] = invalid
+                with self.assertRaisesRegex(ValueError, "distribution identity"):
+                    module.package_url(rid)
+
+    def test_authenticated_download_resolves_retained_release_asset(self):
+        rid = "osx-x64"
+        module.MANIFEST["runtime_packages"][rid].update(
+            distribution_version="0.2.3-retained", distribution_tag="next-retained",
+            patches=[{"file": "retained.patch", "sha256": "d" * 64}])
+        url = module.package_url(rid)
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[2].endswith("/tags/next-retained"):
+                data = json.dumps({"assets": [{"id": 42, "name": url.rsplit("/", 1)[1]}]}).encode()
+            else:
+                data = b"retained archive"
+            kwargs["stdout"].write(data)
+
+        with patch.object(module.shutil, "which", return_value="gh"), \
+             patch.object(module.subprocess, "run", side_effect=run):
+            self.assertEqual(module.download(url, 1024), b"retained archive")
+        self.assertEqual(commands, [
+            ["gh", "api", f"repos/{module.DISTRIBUTION_REPOSITORY}/releases/tags/next-retained"],
+            ["gh", "api", f"repos/{module.DISTRIBUTION_REPOSITORY}/releases/assets/42", "-H", "Accept: application/octet-stream"],
+        ])
 
     def test_invalid_archive_or_provenance_never_publishes_partial_stage(self):
         for rid in ("linux-arm", "win-x64"):

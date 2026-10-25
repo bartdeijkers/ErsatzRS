@@ -34,6 +34,22 @@ PREVIEW_RECOVERY_CASES = (
     "shows the real transcode error when decoded preview video is an error slate",
     "plays a real H.264/AAC preview derivative through Hls.js",
 )
+TELETEXT_RUNTIME_RECOVERY_SPECS = (
+    "channels-source-teletext-delivery.spec.ts", "teletext-restart-flow.spec.ts",
+)
+TELETEXT_RUNTIME_RECOVERY_CASES = (
+    "localized source-caption choice persists through native forms and rejects incompatible output atomically",
+    "standalone Level 1.5 active Next viewers release source processes and leases on shutdown",
+    "built-in MPEG-TS choice persists through localized settings and host restart (en-us/JS)",
+    "built-in MPEG-TS choice persists through localized settings and host restart (nl/no-JS)",
+    "shared profile generations match browser and ordinary streams (en-us/JS)",
+    "shared profile generations match browser and ordinary streams (nl/no-JS)",
+    "standalone Level 1.5 ordinary URL is held for an external client qualification",
+    "per-output teletext delivery status (en-us/ts-legacy/v1)",
+    "per-output teletext delivery status (en-us/ts-legacy/v2)",
+    "per-output teletext delivery status (nl/ts/v1)",
+    "per-output teletext delivery status (nl/ts/v2)",
+)
 
 
 def rust_filter(suite, next_runtime=False):
@@ -70,6 +86,9 @@ def browser_recovery_args(case_set):
                 "(?:" + "|".join(re.escape(case) for case in PREVIEW_RECOVERY_CASES) + ")$"]
     if case_set == "teletext-1.5":
         return [browser_filter("1.5")]
+    if case_set == "teletext-runtime":
+        return [*TELETEXT_RUNTIME_RECOVERY_SPECS, "--grep",
+                "(?:" + "|".join(re.escape(case) for case in TELETEXT_RUNTIME_RECOVERY_CASES) + ")$"]
     raise ValueError("unknown browser recovery case set")
 
 
@@ -77,17 +96,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("kind", choices=("rust", "browser", "browser-recovery"))
     parser.add_argument("suite", choices=("general", "1.5", "2.5", "all", "next",
-                                          "fixtures", "channel-preview", "teletext-1.5"))
+                                          "fixtures", "channel-preview", "teletext-1.5", "teletext-runtime"))
     parser.add_argument("--next-runtime", action="store_true")
     args = parser.parse_args()
     if args.kind == "browser" and args.suite not in ("general", "1.5", "2.5"):
         parser.error("browser selection requires general, 1.5 or 2.5")
     if args.kind == "browser-recovery":
-        if args.suite not in ("fixtures", "channel-preview", "teletext-1.5") or args.next_runtime:
+        if args.suite not in ("fixtures", "channel-preview", "teletext-1.5", "teletext-runtime") or args.next_runtime:
             parser.error("browser recovery requires a bounded case set without --next-runtime")
         print("\n".join(browser_recovery_args(args.suite)))
         return
-    if args.kind == "rust" and args.suite in ("fixtures", "channel-preview", "teletext-1.5"):
+    if args.kind == "rust" and args.suite in ("fixtures", "channel-preview", "teletext-1.5", "teletext-runtime"):
         parser.error("browser recovery case sets cannot select Rust tests")
     print(rust_filter(args.suite, args.next_runtime) if args.kind == "rust" else browser_filter(args.suite))
 

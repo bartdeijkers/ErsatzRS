@@ -26,6 +26,23 @@ resume. Approved hardware debt stays unverified. Milestone `ucu-12` owns exact
 publication, runtime and remaining acceptance evidence; these dependency
 approvals do not authorize application delivery or Docker publication.
 
+Maintainer acceptance amendment, 2026-10-25: macOS has no priority and UCU-12
+may close without its outstanding builds and acceptance. Keep the macOS
+FFmpeg/Next build, software, package, application and distribution gaps as
+explicit unverified debt; do not start those builds until instructed. Qualified
+non-macOS successors may be adopted independently while macOS retains its exact
+older package identity. Old packages must not be relabelled as new builds or
+credited with the new caption/audio fixes. This supersedes uniform six-kit
+completion as a prerequisite for UCU-12 closure, without removing supported
+platforms or changing the separate publication-approval gate.
+
+The separately approved rs.6 publication supplies four unchanged, qualified
+non-macOS Next packages and their source/patch/licence materials. All 23 public
+downloads match the approved checksums. macOS retains the original rs.4 assets.
+Per-RID version, release tag and patch identity are resolved together for
+download, cache, provenance and reported runtime version; they do not weaken
+archive or payload checks. Application adoption and affected CI remain pending.
+
 ## Context
 
 UCU-12 is bounded by ErsatzTV v26.11.4, rows237–254. Row246 adopts upstream

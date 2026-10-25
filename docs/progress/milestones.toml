@@ -32855,6 +32855,12 @@ Retire temporary runtime patches only after equivalent unpatched regressions
 pass. Verify exact source, payload and archive checksums; reuse valid packages
 unless a demonstrated gap requires an authorized amendment. Existing approved
 hardware/platform debt remains explicitly unverified and is not broadened.
+Maintainer amendment 2026-10-25: UCU-12 may close without macOS completion.
+Deferred macOS FFmpeg/Next builds, software/package/application acceptance and
+distribution remain explicit unverified debt under ucu-12-macos-build-deferral.
+Do not start macOS builds until instructed. Adopt qualified non-macOS runtime
+packages while retaining exact older macOS identities; never relabel old
+packages as corrected or infer that macOS contains the new fixes.
 Reuse valid evidence and existing runners/scripts. After affected corrections
 and integration, complete required strict workspace lint/test-closeout, matched
 Leptos bundle, progress/parity/architecture/hydration gates, affected headed
@@ -34585,11 +34591,81 @@ unverified. ARMv7 full playback has no retained equivalent recipe; adopting the
 existing bounded recipe for its software path needs the currently stopped
 Docker Linux engine, not a new test framework. Other independent work continues.
 
+The maintainer subsequently approves Docker Desktop startup. Using host Docker
+directly, the existing pinned ARMv7 image/FFmpeg207/rs.6 payload and retained
+software fixture/controller pass unchanged200-frame/160x90/Dutch880Hz/caption
+oracles. Source AAC stream2 is nld and actual HLS audio remains nld; generated
+arguments restore selected-stream metadata after global suppression. This closes
+the routine recipe/environment gap for generic software only. No new framework,
+hardware claim, existing-container change or runtime build occurs. Receipt:
+tmp/ucu12/next023/rs6-armv7/evidence/software-playback/result.json.
+
+Combined rs.6 available transport qualification is complete: both existing
+actual Next Burn/Convert, preview and cleanup smoke checks pass with the frozen
+corrected native host, followed by86/86 Next copy TSDuck checks on Hybrid TS
+and discontinuity-aware HLS groups. Earlier Native93/93 evidence remains valid;
+its source/runtime are unchanged. Receipt:
+tmp/ucu12/next023/rs6-linux64/evidence/transport/result.json. Publication and
+managed adoption are not inferred. Authorized checkpoint bc69eb6625d19e212aac1889f24d5b1584d132b2
+is pushed to feat/ucu-12; only missing Level1.5 Firefox CI40174546124 is running
+on that exact source. Original CI and its unaffected passes are preserved;
+main, release and Docker publication remain untouched.
+
 Finite completion list (row237–254 acceptance remains pending):
+Publication checkpoint2026-10-25: the maintainer permits UCU-12 closure with
+explicit unverified macOS runtime debt and separately authorizes the23 prepared
+rs.6 assets. Release423248407, next-54c6cb9-ersatzrs.6, publishes exactly those
+bytes on distribution-repository commit95206a8153fded6f1deff06eddbeaaa7239d5341.
+All23 uploaded sizes/digests and anonymous public downloads match; existing
+releases/latest and the clean distribution checkout are preserved. All six
+selected real archives stage successfully: four rs.6 and two original Mac
+rs.4; no Mac binary executes. Python staging28 and CI-artifact guards27 pass.
+The local managed manifest now retains explicit Mac version/tag/five-patch
+overrides while selecting seven-patch rs.6 elsewhere. New application manager
+checks, public acquisition/Health and affected CI remain pending. Receipts:
+tmp/ucu12/next023/rs6-distribution/publication-result.json and
+staging-verification/result.json. This closes package publication only.
+
+Linux managed adoption component is complete:15 manager cases pass, including
+all six real archives installed/relocated with exact identity (Mac data only),
+actual rs.6 acquisition, offline cache and Health. Strict infrastructure Clippy,
+source/package guards19 and the matched Leptos build pass. The existing
+real-host trial acquires published FFmpeg2.0.7/Next rs.6 without credentials,
+PATH or runtime overrides in13.994s; same-state restart reuses the unchanged
+bytes/mtimes in9.539s. Both owned hosts stop cleanly; served JS/WASM hashes
+match. The required web-bundle gate passes with the published runtime.
+Host SHA256cbfe01c92d8392a97868e5b856142a8a6332e9e04f4cf3f0867bdfc281b9dcb0;
+WASM SHA256beb561e66d5cd2fa584ea739b52c13f9ba52a7fad6ee3a162bb98d9fa359d525.
+Existing decoded rs.6 and transport evidence remains applicable: worker bytes
+and application playback code are unchanged by manager identity resolution.
+Receipts remain under rs6-distribution/public-startup and
+web-bundle-published-runtime.log. Native Windows adoption and affected CI are
+still mandatory; no milestone acceptance or merge is claimed.
+
+Native Windows adoption is now complete:14/14 manager checks pass in1.730s
+against the current per-platform manager and manifest; source hashes match.
+The rebuilt native host6aeacd424c11982a796389e25a59261002ea19f44a45f477eb777d099d51e8ec
+passes ordinary public Downloaded startup in18.985s and unchanged Managed
+restart in9.578s with exact FFmpeg2.0.7/Next rs.6 payloads, Health200 and the
+same matched WASM above. Both owned PIDs are verified absent. Before the
+native host build, inactive owned web-package artifacts were pruned after
+crossing the60GiB guard; dependency/shared caches and four prior frozen hosts
+were preserved. Final native target size35.629GiB. Receipts:
+rs6-distribution/windows-adoption/manager-result.json,
+build-result.json and public-startup-result.json.
+
+The bounded recovery selectors now cover exactly11 affected browser cases per
+browser (two original failures plus nine interrupted serial followers) and the
+unchanged complete Level1.5 Rust/Next job without unrelated browser jobs.
+Eight selector and28 CI-artifact guards, actionlint, both browser listings and
+workspace formatting pass. Existing prerequisite skips and all assertions
+remain unchanged. The original complete Firefox recovery40174546124 continues;
+the next authorized source checkpoint requires only affected CI recovery.
+
 Missing functionality/source disposition:
-- Adopt Next's qualified copied-caption and selected-audio corrections after their remaining native
-  package gates and separately authorized publication. The four non-Mac
-  candidates above are completed; published rs.4 is unchanged.
+- Complete managed adoption of Next's published copied-caption and selected-audio
+  corrections on the four non-Mac platforms. macOS retains original rs.4 under
+  explicitly approved unverified debt.
   Implemented
   canvas/signed placement(row237), runtime protocol/rebuild/fallback/late-PGS
   changes(rows238/240/241/249/251/253), external-audio projection/repair(row245),
@@ -34611,12 +34687,12 @@ Missing mandatory evidence:
    rs.6 candidate without erasing these completed components.
    Preserve the original CI and unaffected results; partial recovery is never
    a full new-SHA CI claim. ucu-12-ci-runtime-recovery owns this blocker.
-2. Complete native macOS FFmpeg kits/software acceptance, dependent application
-   proof and six-RID FFmpeg distribution. Qualify the new copied-caption Next
-   and selected-audio corrections on macOS before six-RID adoption; published
-   rs.4 predates them.
-   This work is deferred, not waived. Do not broaden earlier ARM/macOS
-   application debt to new gaps or publish a mixed-source replacement.
+2. Retain native macOS FFmpeg kits/software acceptance, dependent application
+   proof/distribution and corrected Next package qualification as explicitly
+   unverified debt. The maintainer's 2026-10-25 amendment permits UCU-12 closure
+   without these checks. Published macOS rs.4 predates the caption/audio fixes;
+   retain its true per-platform version/source/checksums when adopting the four
+   qualified rs.6 packages. This does not claim a uniform six-platform build.
 3. Corrected preview CI is green and Chromium serial followers have composed
    passing recovery. Retry only the missing complete Level1.5 Firefox check
    after runner disconnection. Complete affected CI for the adopted Next
@@ -34624,24 +34700,28 @@ Missing mandatory evidence:
    Level2.5 browser jobs and other unaffected results.
    Then final
    ordered row dispositions/baseline advancement only after every required
-   acceptance item is satisfied and the Mac deferral is resolved; retain accepted
+   non-deferred acceptance item is satisfied; retain accepted
    baseline row236/v26.11.3 until whole-window acceptance. Runtime/media and
    pre-correction local gates retain their scoped proof; item1 owns the
    demonstrated runtime recovery. Do not repeat unchanged completed proof.
 External prerequisites/authority:
-- Maintainer instruction: no Mac build/retry until explicit resume. Closure
-  requires that resume plus passing missing native package/software proof;
-  ucu-12-macos-build-deferral owns the unverified acceptance gap.
+- Maintainer instruction: no Mac build/retry until explicit resume. UCU-12 may
+  close with this approved debt; completing the deferred work still requires
+  resume and passing native package/software proof. The unresolved
+  ucu-12-macos-build-deferral debt owns that gap beyond milestone closure.
 - Accepted ADR0128 and approved ucu-12-hardware-acceptance retain Rockchip
   RKMPP/RGA, Intel QSV HDR, AMD VAAPI and macOS VideoToolbox captions as explicit
   unverified debt. Earlier approved platform/hardware debt keeps its original
   bounded scope. Nothing here marks those paths verified.
-- The original rs.4/FFmpeg2.0.7 dependency publications are complete; the new
-  rs.5 replacement still requires separate publication authorization after
-  qualification.
+- The original rs.4/FFmpeg2.0.7 and separately approved four-platform rs.6
+  dependency publications are complete. No further runtime publication is
+  currently required for this bounded correction.
   Subsequent explicit approval
   authorizes the feature-branch push and application CI described above;
-  main merge, application release and Docker publication remain separate. Preserve unrelated processes, dirty files,
+  the maintainer subsequently authorizes merging feat/ucu-12 into remote/main
+  once UCU-12 acceptance is complete and required CI is green. This conditional
+  merge approval does not resume macOS builds or authorize dependency/application
+  releases or Docker publication. Preserve unrelated processes, dirty files,
   frozen evidence and shared caches. Do not extend the v26.11.4 cutoff.
 """
 

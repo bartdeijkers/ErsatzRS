@@ -228,7 +228,8 @@ Format, Clippy, dependency and source-contract checks remain independent gates.
 This Linux build-sharing arrangement is not native acceptance for other RIDs.
 
 Focused dispatch builds only the required products: Rust for `test_only` or
-`next_engine_only`, web for `browser_only`, and both for `teletext_only` or full
+`next_engine_only` or `teletext_only=1.5-rust`, web for `browser_only`, and both
+for the other `teletext_only` modes or full
 CI. The same-SHA failed-job rerun reuses its successful producer artifact; a new
 revision needs a new verified build. Artifacts expire after seven days, after
 which the producer must run again. No cross-revision artifact reuse is allowed.
@@ -292,10 +293,14 @@ gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=1.5
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=2.5
 # Run both levels and all four teletext browser jobs:
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=all
+# Retry only the original Level 1.5 Rust job, including its existing Next tests:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f teletext_only=1.5-rust
 ```
 
-Each level selects its Rust job and both browser projects, after the shared
-artifact producer. A job rerun tests
+The `1.5` and `2.5` modes select their Rust job and both browser projects, after
+the shared artifact producer. The `1.5-rust` mode keeps the complete existing
+Level 1.5 Rust/Next selection and its runtime staging, but builds only the Rust
+artifact and skips all browser jobs. A job rerun tests
 its original SHA; dispatch tests the new branch revision. The title
 `CI (Teletext only)` and separate concurrency group prevent a focused run
 from cancelling or standing in for full CI. Focused modes are mutually
@@ -461,13 +466,23 @@ gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
 # Retry only the complete Level 1.5 Firefox suite after runner interruption:
 gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
   -f browser_only=firefox -f browser_case_set=teletext-1.5
+# Retry the two runtime failures and nine interrupted serial followers only:
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted \
+  -f browser_only=chromium -f browser_case_set=teletext-runtime
 ```
 
 This runs the selected browser jobs with the existing matched Leptos build,
 pinned runtime staging and isolated application runner. The default `fixtures`
 case set with `both` runs 30 cases; `channel-preview` runs two per selected browser.
 `teletext-1.5` reuses the complete ordinary Level 1.5 suite filter, including
-its serial groups, without selecting general or Level 2.5 cases. Each set runs
+its serial groups, without selecting general or Level 2.5 cases.
+`teletext-runtime` selects 11 exact current cases from source-caption delivery
+and restart-flow: source-caption choice, active Next viewers, two localized
+MPEG-TS settings cases, two shared-profile generation cases, the ordinary-URL
+external-client case and four per-output delivery cases. Existing platform,
+browser and external-client prerequisites remain unchanged; listed cases are
+not necessarily executed when those prerequisites are absent. Other authoring,
+editor and already-passing lifecycle cases are excluded. Each set runs
 through the existing matrix with `max-parallel: 1`, preserving serial execution
 and avoiding resource contention between browser projects. Normal CI runs all
 six general/1.5/2.5 browser jobs. The `CI (Browser recovery)` title identifies
@@ -883,10 +898,13 @@ See the disk-space note in
 Release archive staging requires Python 3.12 and access to the exact public
 Next distribution selected by the canonical shared manifest,
 `scripts/release/next-patches/manifest.json`. The UCU-12 managed pin selects
-[Next v0.2.3 rs.4](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-54c6cb9-ersatzrs.4)
-in `bartdeijkers/ErsatzRS-next`. All six existing archives are published and
-checksum-verified. They retain five reviewed compatibility/security inputs
-under ADRs 0117 and 0128. Each archive records source, original/prepared lock,
+[Next v0.2.3 rs.6](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-54c6cb9-ersatzrs.6)
+for Linux x64, ARM64, ARMv7 and Windows x64 in `bartdeijkers/ErsatzRS-next`.
+macOS retains the original published rs.4 archives, URLs and five-patch identity;
+its newer builds and acceptance remain explicitly deferred. The four rs.6
+archives add copied-caption source-outpoint and selected-audio metadata fixes
+to those five reviewed inputs under ADRs 0117 and 0128. All selected archives
+are checksum-verified. Each archive records source, original/prepared lock,
 patch and payload hashes. Application adoption acceptance is tracked separately
 in the UCU-12 milestone; publication alone does not establish it.
 The dependency assets are publicly downloadable without credentials. Package
@@ -911,8 +929,11 @@ Review upstream changes, validate the selected runtime and update the pin.
 Application releases still require their own acceptance and green exact-SHA CI;
 dependency publication needs its explicit maintainer authorization. Missing artifacts, invalid checksums or missing
 licenses fail packaging. A new accepted snapshot requires new pinned hashes.
-All six supported RIDs use the same reviewed source and five patch inputs. Source and
-lockfile hashes are pinned alongside the archive hashes; altered provenance
+All six supported RIDs use the same upstream source and prepared lockfile.
+Per-platform overrides retain the complete older macOS version, release tag
+and patch list; acquisition, cache identity, Health and staging resolve these
+together. macOS rs.4 does not contain the two rs.6 corrections. Source and
+lockfile hashes are pinned alongside archive hashes; altered provenance
 fails staging. Reproduction instructions are below. The former unmodified
 ARMv7 source helper remains available for future patch retirement, but refuses
 the active patched pin. Ordinary application packaging downloads existing
@@ -929,7 +950,7 @@ archive hashes remain fixed. Before a Docker build, stage the snapshot on the
 host using the exact current tag (not a mutable upstream release):
 
 ```sh
-gh release download next-54c6cb9-ersatzrs.4 \
+gh release download next-54c6cb9-ersatzrs.6 \
   --repo bartdeijkers/ErsatzRS-next --dir .next-snapshot
 ```
 

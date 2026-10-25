@@ -31,6 +31,9 @@ fn synthetic_manifest(mut manifest: Manifest, rid: &str) -> (Manifest, BTreeMap<
         }
     }
     let prepared_lock = manifest.prepared_lock_sha256().to_owned();
+    let identity = manifest.runtime_packages.get(rid).unwrap();
+    let version = identity.version(&manifest).to_owned();
+    let patches = identity.patches(&manifest).to_vec();
     let package = manifest.runtime_packages.get_mut(rid).unwrap();
     package.payload_sha256 = files
         .iter()
@@ -45,9 +48,9 @@ fn synthetic_manifest(mut manifest: Manifest, rid: &str) -> (Manifest, BTreeMap<
         "source_revision": manifest.upstream_revision,
         "source_archive_sha256": manifest.source_archive_sha256,
         "cargo_lock_sha256": prepared_lock,
-        "distribution_version": manifest.distribution_version,
+        "distribution_version": version,
         "rid": rid, "target": package.target,
-        "patches": manifest.patches.iter().map(|p| serde_json::json!({"file":p.file,"sha256":p.sha256})).collect::<Vec<_>>(),
+        "patches": patches.iter().map(|p| serde_json::json!({"file":p.file,"sha256":p.sha256})).collect::<Vec<_>>(),
         "payload_sha256": package.payload_sha256,
     });
     let mut files = files;
@@ -191,6 +194,104 @@ fn managed_next_archive_guards_reject_malformed_members_even_with_matching_archi
         assert!(matches!(
             archive_files(&manifest, "linux-x64", &archive),
             Err(NextRuntimeError::Identity)
+        ));
+    }
+}
+
+#[tokio::test]
+async fn managed_next_deferred_platform_retains_exact_download_cache_origin_and_health_identity() {
+    for rid in ["osx-x64", "osx-arm64"] {
+        let mut manifest = Manifest::accepted().unwrap();
+        let package = manifest.runtime_packages.get_mut(rid).unwrap();
+        package.distribution_version = Some("0.2.3-retained".to_owned());
+        package.distribution_tag = Some("next-retained".to_owned());
+        package.patches = Some(manifest.patches[..1].to_vec());
+        package.asset = format!("ersatzrs-next-0.2.3-retained-{rid}.tar.gz");
+        manifest
+            .artifact_sha256
+            .insert(package.asset.clone(), "0".repeat(64));
+        let (mut manifest, files) = synthetic_manifest(manifest, rid);
+        assert!(manifest
+            .download_base(rid)
+            .unwrap()
+            .ends_with("/next-retained"));
+        assert!(manifest
+            .download_base("linux-x64")
+            .unwrap()
+            .ends_with(&manifest.distribution_tag));
+        let archive = good_archive(&mut manifest, rid, &files);
+        let root = tempfile::tempdir().unwrap();
+        let cfg = config(root.path());
+        let accepted = install(&cfg.managed_root, &manifest, rid, &archive).unwrap();
+        assert_eq!(accepted.version, "0.2.3-retained");
+        assert_eq!(
+            accepted.folder,
+            cfg.managed_root.join("next-retained").join(rid)
+        );
+        let cached = local_automatic(&cfg, &manifest, rid).unwrap();
+        assert_eq!(cached.source, NextRuntimeSource::Managed);
+        assert_eq!(cached.version, accepted.version);
+        validate_automatic(&cached, manifest.clone(), async {
+            Some("0.2.3-retained".to_owned())
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            validate_automatic(&cached, manifest.clone(), async {
+                Some(manifest.distribution_version.clone())
+            })
+            .await,
+            Err(NextRuntimeError::Execution)
+        );
+
+        for field in ["distribution_version", "patches"] {
+            let mut changed = files.clone();
+            let mut origin: serde_json::Value =
+                serde_json::from_slice(&changed["origin.json"]).unwrap();
+            origin[field] = if field == "distribution_version" {
+                serde_json::json!(manifest.distribution_version)
+            } else {
+                serde_json::json!(manifest
+                    .patches
+                    .iter()
+                    .map(|p| serde_json::json!({"file":p.file,"sha256":p.sha256}))
+                    .collect::<Vec<_>>())
+            };
+            changed.insert(
+                "origin.json".to_owned(),
+                serde_json::to_vec(&origin).unwrap(),
+            );
+            assert_eq!(
+                verify_files(&manifest, rid, &changed),
+                Err(NextRuntimeError::Identity)
+            );
+        }
+        let mut incomplete = manifest.clone();
+        incomplete.runtime_packages.get_mut(rid).unwrap().patches = None;
+        assert!(matches!(
+            incomplete.package(rid),
+            Err(NextRuntimeError::Manifest)
+        ));
+        for invalid in ["../outside", ".", ".."] {
+            let mut escaping = manifest.clone();
+            escaping
+                .runtime_packages
+                .get_mut(rid)
+                .unwrap()
+                .distribution_tag = Some(invalid.to_owned());
+            assert!(matches!(
+                escaping.package(rid),
+                Err(NextRuntimeError::Manifest)
+            ));
+        }
+        let mut relabelled = manifest.clone();
+        relabelled.runtime_packages.get_mut(rid).unwrap().asset = format!(
+            "ersatzrs-next-{}-{rid}.tar.gz",
+            manifest.distribution_version
+        );
+        assert!(matches!(
+            relabelled.package(rid),
+            Err(NextRuntimeError::Manifest)
         ));
     }
 }
@@ -381,7 +482,10 @@ async fn managed_next_offline_bundle_cache_and_strict_override_resolution() {
     ));
     cfg.override_folder = None;
     fs::remove_dir_all(cfg.host_executable.parent().unwrap()).unwrap();
-    let cache = cfg.managed_root.join(&manifest.distribution_tag).join(rid);
+    let cache = cfg
+        .managed_root
+        .join(manifest.package(rid).unwrap().tag(&manifest))
+        .join(rid);
     write_folder(&cache, &files, false);
     let managed = acquire(cfg.clone(), manifest.clone(), "http://127.0.0.1:1")
         .await
@@ -458,7 +562,7 @@ async fn managed_next_failed_or_cancelled_http_never_publishes_partial_install_o
     request.assert_calls_async(1).await;
     assert!(!cfg
         .managed_root
-        .join(&manifest.distribution_tag)
+        .join(manifest.package(rid).unwrap().tag(&manifest))
         .join(rid)
         .exists());
     assert!(try_install_lock(&cfg.managed_root).unwrap().is_some());
@@ -494,7 +598,10 @@ fn managed_next_bad_repair_preserves_existing_accepted_copy_and_receipt() {
     let root = tempfile::tempdir().unwrap();
     let rid = ersatzrs_ffmpeg::runtime::current_ersatzrs_ffmpeg_rid().unwrap();
     let (manifest, files) = synthetic(rid);
-    let destination = root.path().join(&manifest.distribution_tag).join(rid);
+    let destination = root
+        .path()
+        .join(manifest.package(rid).unwrap().tag(&manifest))
+        .join(rid);
     write_folder(&destination, &files, false);
     assert!(matches!(
         install(root.path(), &manifest, rid, b"not the pinned archive"),
@@ -586,7 +693,7 @@ async fn managed_next_automatic_identity_rejection_precedes_every_version_probe(
     ] {
         let folder = root.path().join(format!("{source:?}"));
         write_folder(&folder, &files, split);
-        let accepted = automatic_result(&manifest, rid, folder, split, source);
+        let accepted = automatic_result(&manifest, rid, folder, split, source).unwrap();
         let probed = std::cell::Cell::new(false);
         let valid = validate_automatic(&accepted, manifest.clone(), async {
             probed.set(true);
@@ -662,7 +769,10 @@ async fn real_next_candidate_package_acquisition_and_health_validation() {
         .unwrap();
     assert_eq!(cached.source, NextRuntimeSource::Managed);
     assert_eq!(cached.binary, installed.binary);
-    assert_eq!(cached.version, manifest.distribution_version);
+    assert_eq!(
+        cached.version,
+        manifest.package(rid).unwrap().version(&manifest)
+    );
     validate_automatic(
         &cached,
         manifest.clone(),

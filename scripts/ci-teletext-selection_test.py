@@ -71,10 +71,33 @@ class BrowserRecovery(unittest.TestCase):
                 self.assertEqual(bool(re.search(args[0], spec.as_posix())),
                                  owners(spec.as_posix()) == ["1.5"])
 
+    def test_runtime_recovery_retains_only_failed_cases_and_interrupted_followers(self):
+        args = selection.browser_recovery_args("teletext-runtime")
+        self.assertEqual(args[:3], ["channels-source-teletext-delivery.spec.ts",
+                                   "teletext-restart-flow.spec.ts", "--grep"])
+        self.assertEqual(len(selection.TELETEXT_RUNTIME_RECOVERY_CASES), 11)
+        self.assertEqual(len(set(selection.TELETEXT_RUNTIME_RECOVERY_CASES)), 11)
+        for name in selection.TELETEXT_RUNTIME_RECOVERY_CASES:
+            self.assertIsNotNone(re.search(args[3], f"chromium {name}"))
+            self.assertIsNone(re.search(args[3], f"chromium {name} unrelated suffix"))
+        for name in (
+            "standalone Level 1.5 active Legacy viewers release source processes and leases on shutdown",
+            "standalone Level 1.5 active Hybrid viewers release source processes and leases on shutdown",
+            "standalone Level 1.5 Lua scopes survive real host restarts and expire to accepted base",
+            "per-output teletext delivery status (en-us/ts-legacy/v3)",
+            "built-in MPEG-TS choice persists through localized settings and host restart (en-us/no-JS)",
+        ):
+            self.assertIsNone(re.search(args[3], name))
+        for spec in args[:2]:
+            self.assertTrue((ROOT / "tests/e2e" / spec).is_file())
+            self.assertEqual(owners(spec), ["1.5"])
+
     def test_cli_refuses_unknown_and_mixed_selections_without_output(self):
         for args in (("browser-recovery", "unknown"), ("browser-recovery", "general"),
                      ("rust", "channel-preview"), ("browser", "channel-preview"),
                      ("rust", "teletext-1.5"), ("browser", "teletext-1.5"),
+                     ("rust", "teletext-runtime"), ("browser", "teletext-runtime"),
+                     ("browser-recovery", "teletext-runtime", "--next-runtime"),
                      ("browser-recovery", "teletext-1.5", "--next-runtime"),
                      ("browser-recovery", "channel-preview", "--next-runtime")):
             with self.subTest(args=args):
