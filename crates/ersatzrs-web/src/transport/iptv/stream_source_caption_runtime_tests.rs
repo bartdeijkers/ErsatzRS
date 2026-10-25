@@ -27,6 +27,9 @@ mod streaming;
 #[path = "stream_source_caption_runtime_tests/live.rs"]
 mod live;
 
+#[path = "stream_source_caption_runtime_tests/live_url.rs"]
+mod live_url;
+
 #[path = "stream_source_caption_runtime_tests/next.rs"]
 mod next;
 

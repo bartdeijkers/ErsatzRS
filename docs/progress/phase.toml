@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output SO2-H/R — direct Live HTTP/RTSP route qualification'
+current_focus = 'p9a-source-output SO2-H — restore selected pages on direct Live HTTP'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -77,6 +77,15 @@ Required earlier workspace gates and corrected-source checks retain their scope.
 That UCU12 closeout authorized source delivery only; it did not accept Phase9.
 The maintainer now explicitly resumes the separate Phase9 goal after controlled
 mergee0c4fc8d, preserving all six local commits and ten uncommitted files.
+
+SO2-H direct Live HTTP defect reproduction is completed with original subtitle
+metadata preserved. Canonical native_streaming_lifecycle_followup.direct_url_
+qualification owns Off/audio/transport success and the unchanged888 Burn red,
+with bounded one-opening/capacity/work/host cleanup. No delivery fix is claimed.
+SO2-R test-source capability is qualified; its ordinary application route remains
+unproven. Next restore HTTP owned fresh-page selection, pass the same grouped
+Off/Burn/audio/one-opening/cleanup oracle, then exercise ordinary RTSP with its
+qualified source. Existing completed components stay closed.
 
 SO2-N ordinary Native Live route integration is completed within Linux
 x86_64/software accepted FFmpeg2.0.7. One held producer/request delivers Off/Burn,
