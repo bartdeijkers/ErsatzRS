@@ -17,6 +17,19 @@ CI and verified publication. It does not claim completed runtime acceptance.
 Partial — accepted corrections are implemented; approved platform/hardware
 obligations and independent upstream patch retirement remain open.
 
+Phase9A current-source compatibility (2026-10-25): unpublished Next023 rs.7
+retains all seven accepted rs.6 patches, source54c6cb9, compiler1.99.0 and the
+exact reviewed post-patch lock. The three existing Phase9 corrections preserve
+the paired Burn clock, negotiated finite source-frame cut and consume-once Copy
+input. Only import/context porting was necessary; behavior and tests are retained.
+Linux software passes374 source tests and both original2164/2143 ordinary routes,
+plus grouped Off/prepared-Burn/Convert and95 static transport checks. Accepted
+rs.6 comparison stops at its missing finite-cut capability assertion before
+physical coverage; it is not a new physical-overrun observation. Canonical
+`p9a-source-output` evidence owns exact identities, negative scope and reuse.
+This completes the current-source compatibility component; production pins,
+managed adoption, portability and other native platforms remain separate gates.
+
 UCU-12 CI caption-maintenance candidate (2026-10-24): released Next023 and
 published rs.4 retain the copied-caption original-outpoint defect already
 corrected in the separate Phase9A candidate. The unchanged ordinary-SRT,

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-source-output SO3-R/SO4-R — current Next 0.2.3 source-output compatibility'
+current_focus = 'p9a-platform-safety PS1 — exact current source-output candidate qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -87,17 +87,26 @@ Clippy, format, architecture and fresh-binary ordinary MPEG-TS/HLS smoke pass.
 Canonical scheduler_recovery_followup.native_adoption owns exact final-source
 receipts, reuse and preserved negatives. Other native/adoption owners stay open.
 
-Current package: p9a-source-output SO3-R/SO4-R current-Next compatibility join.
-Next executable action: prepare one pinned source-output candidate on current
-Next023/source54c6cb9, preserving all seven accepted patches and exact lock.
-Assess/port only three already-required Phase9 corrections: paired textBurn
-clock restoration, finite-video-cut-v1 and consume-once Copy negotiation.
-Accepted rs.6 retains the reset block and lacks both negotiated contracts.
-Stop at the existing strict source and actual ordinary-route compatibility
-conditions, including original seek2164/2143 and one-use Copy/AV/audio/cleanup.
-Old022 candidate receipts remain valid within scope, not adopted023 evidence.
-No production pin, publication, additional variant or new client search.
-Canonical ucu12_rejoin_followup retains merge/restore and the finite gap map.
+SO3-R/SO4-R current-Next source/runtime compatibility is completed within Linux
+x86_64/software unpublished023 rs.7 plus accepted FFmpeg2.0.7. All seven accepted
+patches/compiler/lock remain exact; only three existing corrections are ported.
+Fresh preparation,374 source tests,10 prepare guards, strict lint/format and
+three original ordinary-route tests/five captures pass95 transport controls.
+Both2164/2143 retain176 output/166 source frames, exact889/clear/Dutch audio,
+one provider response,grant410 and zero owners. Copy Off and immutable prepared
+Burn/Convert retain their unchanged AV/audio/cue/cleanup oracles. Accepted rs.6
+fails the explicit absent-cut qualification before physical coverage, not a new
+physical-output counterexample. Canonical next023_source_output_followup owns
+receipts and candidate archivec6765c48/payload552d6e0f. No production pin changed.
+
+Current package: p9a-platform-safety PS1 exact candidate qualification join.
+Next executable action: join the current Linux candidate provenance/software
+receipts to PS1 and qualify its existing supported Linux portability boundary
+with the pinned Bookworm tool, reusing accepted FFmpeg2.0.7 and unchanged source
+fixtures. Stop at that named Linux candidate component; other native artifacts,
+120-minute deferred Windows package trial and managed adoption retain owners.
+No adjacent variant, production pin, publication, client search or external
+maintenance. X1 deferral/X3 upstream wait remain unchanged.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,

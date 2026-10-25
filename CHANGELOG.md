@@ -717,13 +717,11 @@ release section when tagging a release.
   graphics are clipped to the published rectangle. Runtime adoption remains gated
   by the UCU-12 integration checks.
 
-- Record the remaining Next one-shot video-copy failure: keyframe preflight can
-  consume the single-use source before playback. Successful delivery remains an
-  acceptance gate; verified caption refusal does not establish playback safety.
-
-- Keep the experimental Next teletext Burn runtime unaccepted after a reproduced
-  source-outpoint overrun; stream, selected-audio and storage cleanup checks
-  remain separately qualified.
+- Carry the reviewed source-caption fixes onto an unpublished Next 0.2.3
+  candidate: preserve the Burn source clock, enforce qualified source-frame
+  outpoints and avoid reopening single-use Copy inputs. The original seek and
+  Off/Burn/Convert playback checks pass on Linux software; managed adoption
+  and other-platform acceptance retain their separate gates.
 
 - Track Phase 9A acceptance through finite, separately closable milestone
   dependencies, with preserved handoff history separate from current work.
