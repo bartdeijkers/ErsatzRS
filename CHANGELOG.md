@@ -679,6 +679,12 @@ release section when tagging a release.
 
 ### Changed
 
+- During the private-repository period, require Linux x64, ARM64, ARMv7 and
+  Windows x64 for build, package, runtime and Phase 9A acceptance. Defer both
+  macOS architectures by maintainer decision and disable their candidate jobs
+  until explicit permission to resume; retain their code and existing evidence.
+  All functional teletext and engine-first requirements remain unchanged.
+
 - Allow UCU-12 acceptance with explicitly deferred macOS runtime work. Keep
   outstanding macOS FFmpeg/Next builds and playback acceptance unverified;
   retain older macOS package identities when adopting qualified corrections on

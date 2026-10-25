@@ -51,7 +51,9 @@ library and create a playable channel.
 
 See [system requirements](docs/reference/system-requirements.md) for the package
 matrix, runtime requirements, and unverified platform/hardware combinations.
-macOS remains a supported build target but has no archive in this release line.
+macOS code compatibility is retained, but build, package, runtime and acceptance
+work is deferred by maintainer decision during the private-repository period.
+Explicit permission is required to resume; no verified macOS support is claimed.
 
 ## Operate your server
 

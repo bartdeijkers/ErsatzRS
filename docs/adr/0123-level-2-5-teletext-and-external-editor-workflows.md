@@ -1906,7 +1906,12 @@ Its acceptance never satisfies or bypasses the following complete-engine gate.
 P9A-01 is reopened for the expanded standards/interchange contract. P9A-04 accepts
 the complete independent engine with synthetic pages before P9B-01 starts the
 sole production TV-guide addon in ErsatzRS-Addons, inspired only by NOS guide
-pages 200–299. Existing platform, subtitle, audio, lifecycle and output gates stay.
+pages 200–299. Existing subtitle, audio, lifecycle and output gates stay.
+The accepted 2026-10-26 amendment in ADR 0121 makes the three Linux RIDs and
+Windows x64 the required private-period platform matrix. Both macOS RIDs are
+Deferred by maintainer decision, not accepted; explicit permission is required
+to resume. All authored Level 2.5, Level 1/1.5 fallback and editor/interchange
+requirements remain mandatory before full independent 9A acceptance.
 
 Require TSDuck transport checks, independent decoding of representative enhanced
 functions and actual display/page/subpage navigation in a demonstrably suitable

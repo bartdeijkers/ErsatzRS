@@ -77,16 +77,32 @@ These rules are mandatory for implementation and acceptance work:
 
 ## Supported Platforms
 
-ErsatzRS targets the same set of platforms as ErsatzTV. All six must build and run correctly:
+ErsatzRS retains code compatibility for the same six targets as ErsatzTV.
+By explicit maintainer decision on 2026-10-26, the private-repository period has
+four required build, package, runtime and acceptance targets:
 
-| Rust target triple | RID | OS | Architecture |
-|---|---|---|---|
-| `x86_64-unknown-linux-gnu` | `linux-x64` | Linux | x86-64 |
-| `aarch64-unknown-linux-gnu` | `linux-arm64` | Linux | AArch64 |
-| `armv7-unknown-linux-gnueabihf` | `linux-arm` | Linux | ARMv7 |
-| `x86_64-apple-darwin` | `osx-x64` | macOS | x86-64 |
-| `aarch64-apple-darwin` | `osx-arm64` | macOS | Apple Silicon |
-| `x86_64-pc-windows-msvc` | `win-x64` | Windows | x86-64 |
+| Rust target triple | RID | OS | Architecture | Current obligation |
+|---|---|---|---|---|
+| `x86_64-unknown-linux-gnu` | `linux-x64` | Linux | x86-64 | Required |
+| `aarch64-unknown-linux-gnu` | `linux-arm64` | Linux | AArch64 | Required |
+| `armv7-unknown-linux-gnueabihf` | `linux-arm` | Linux | ARMv7 | Required |
+| `x86_64-apple-darwin` | `osx-x64` | macOS | x86-64 | Deferred by maintainer decision |
+| `aarch64-apple-darwin` | `osx-arm64` | macOS | Apple Silicon | Deferred by maintainer decision |
+| `x86_64-pc-windows-msvc` | `win-x64` | Windows | x86-64 | Required |
+
+Do not start macOS-specific builds, crossbuilds, packages, toolchain installations
+or acceptance/runtime trials, or use paid runners/services for them. macOS jobs
+remain disabled. Resumption requires explicit maintainer permission; changing
+repository visibility alone does not authorize it. Preserve existing macOS code,
+platform guards, artifacts and evidence; introduce no deliberate incompatibility.
+Additional macOS-specific repair and maintenance are deferred.
+
+Phase 9A may be accepted after all unchanged functional requirements and every
+required check for the three Linux targets and Windows x64 are proven. Full
+authored Level 2.5, correct Level 1/1.5 fallback, QTeletextMaker interchange and
+engine-first delivery remain mandatory. This is neither macOS acceptance nor
+verified six-platform support. See the runtime/platform contract in
+[ADR 0121](docs/adr/0121-teletext-pages-transport-and-addon-contract.md).
 
 **Platform parity rule:** No Rust source file may hard-code an OS or architecture assumption
 outside of a `#[cfg(target_os = …)]` / `#[cfg(target_arch = …)]` guard, and every such

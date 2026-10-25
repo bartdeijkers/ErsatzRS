@@ -62,6 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Private-period platform amendment, maintainer decision 2026-10-26: Linux x64,
+ARM64, ARMv7 and Windows x64 remain required. macOS x64/ARM64 are Deferred by
+maintainer decision, not accepted, and outside the current required matrix.
+No macOS builds/crossbuilds/packages/toolchain installs/runtime/acceptance trials
+or paid runners/services may start. Preserve code, guards, artifacts and evidence;
+resume only with explicit permission, not merely a visibility change. All
+functional Level 2.5/fallback/QTeletextMaker and engine-first gates stay mandatory.
+The current package remains p9a-source-output F5: connect qualified original-PES
+clock handling to the existing one-source producer/consumer path, preserving AV,
+selected captions/audio and joined cleanup. ef017b78 closes only input-capability
+characterization; no clock correction or runtime adoption is claimed. The Mac
+scope amendment is a completed registration/CI component, not platform acceptance.
+Older six-platform next actions below are historical where this scope supersedes
+them; retain all valid evidence and independently required Windows/ARM work.
+
 UCU-12 is Complete through fixed v26.11.4/row254. All18ordered rows have
 accepted dispositions and the authoritative pin advances with them. Milestone
 ucu-12 owns exact identities, complete component history and composed CI proof.

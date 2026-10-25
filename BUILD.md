@@ -705,6 +705,14 @@ Trade-offs:
 
 ## Cross-compiling
 
+**Private-period exception (maintainer decision, 2026-10-26):** only the three
+Linux targets and Windows x64 are required. macOS x64/ARM64 build, crossbuild,
+package, toolchain-installation and acceptance/runtime work is deferred; do not
+start macOS runners or paid services. The macOS recipes below are retained for
+future use only after explicit maintainer permission. A visibility change alone
+does not authorize resumption. Existing macOS artifacts and evidence remain
+unverified within their recorded scope. See [AGENTS.md](AGENTS.md#supported-platforms).
+
 ErsatzRS targets the same six RIDs as ErsatzTV (`linux-x64`, `linux-arm64`,
 `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`). Targets are installed on
 demand: CI installs the matching target per matrix cell, and locally you add
@@ -730,8 +738,8 @@ cross build --workspace --target armv7-unknown-linux-gnueabihf
 cross build --workspace --target x86_64-pc-windows-gnu
 ```
 
-macOS targets are **not** supported by `cross`. Build them on a real macOS
-host (or `macos-latest` / `macos-13` GitHub runners):
+macOS targets are **not** supported by `cross`. After explicit permission to
+resume, use a real native host with the reviewed deployment baseline:
 
 ```bash
 cargo build --workspace --target aarch64-apple-darwin   # osx-arm64

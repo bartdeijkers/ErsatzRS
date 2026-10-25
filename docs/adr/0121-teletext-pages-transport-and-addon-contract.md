@@ -1188,8 +1188,24 @@ production fallback.
 
 ### Runtime and platform contract
 
-All six RIDs retain the same model and safe-Rust encoder. Managed FFmpeg 9
-packages must include libzvbi and required license/dependency notices, expose
+All six RIDs retain the same model and safe-Rust encoder. The accepted maintainer
+amendment of 2026-10-26 temporarily requires only `linux-x64`, `linux-arm64`,
+`linux-arm` and `win-x64` while the repository is private. `osx-x64` and
+`osx-arm64` build, crossbuild, package, toolchain-installation, runtime and
+acceptance work is **Deferred by maintainer decision**, not accepted. Do not start
+macOS jobs or paid runners/services. Preserve code, guards, artifacts and scoped
+evidence without deliberate incompatibility; additional macOS repair is deferred.
+Explicit maintainer permission is necessary to resume, even after a visibility
+change. The existing deferred macOS milestone owners retain future obligations.
+
+P9A acceptance requires all functional requirements, including complete authored
+Level 2.5, correct Level 1/1.5 fallback, full QTeletextMaker interchange and
+engine-first delivery, plus every required four-platform check. It must claim
+neither verified macOS support nor six-platform acceptance. Native ARM and the
+required Windows package trial are not waived by this macOS-only amendment.
+
+Managed FFmpeg 9 packages for each required RID must include libzvbi and required
+license/dependency notices, expose
 accepted decoder options and pass an actual small page/subtitle decode probe.
 Runtime identity includes the exact artifact digest; version or decoder name
 alone is insufficient. Operator runtimes report supported/unavailable accurately;
@@ -1223,7 +1239,8 @@ expired publication. Preserve the existing subtitle/audio and provider checks.
 The native engine needs a standards-based authoring encoder and output adapter;
 libzvbi alone cannot supply those. Genuine DVB and browser delivery share a typed
 page generation but require independent runtime and client proof. P9A-02 must
-verify packaging on every RID, P9A-03 owns source metadata, P9A-04 closes generic
+verify packaging on every currently required RID, P9A-03 owns source metadata,
+P9A-04 closes generic
 engine acceptance and P9B-01/02 own actual content and integrated acceptance.
 None of those gates is waived by this decision or its synthetic experiment.
 

@@ -90,6 +90,15 @@ preserve behavior by default, and document deliberate deviations through ADRs.
 
 ## Runtime Boundaries
 
+The private-period platform policy in [AGENTS.md](AGENTS.md#supported-platforms)
+requires Linux x64, ARM64, ARMv7 and Windows x64. macOS x64/ARM64 build, package,
+runtime and acceptance work is deferred by maintainer decision (2026-10-26),
+not accepted. Existing code, guards, artifacts and evidence remain; resumption
+requires explicit permission and no macOS runners or services may be started.
+[ADR 0121](docs/adr/0121-teletext-pages-transport-and-addon-contract.md#runtime-and-platform-contract)
+owns the corresponding teletext acceptance boundary. Functional requirements
+and the independent full-engine gate before production 9B remain unchanged.
+
 - FFmpeg is invoked through `tokio::process::Command`.
 - No libav bindings are allowed without a new ADR.
 - FFmpeg 9.x is the supported runtime line; older and unverified future major

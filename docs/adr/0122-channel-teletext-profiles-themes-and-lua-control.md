@@ -307,7 +307,9 @@ production TV-guide add-on in ErsatzRS-Addons. Its sole NOS reference remains
 TV-guide-related pages 200–299. It supplies named themes, overrides and defined
 custom zones. P9B-02 repeats the accepted scenarios with the exact installed
 production package, actual guide content and supported clients. Existing source
-subtitle, alternate-audio, six-RID, native/Next, browser and TSDuck gates remain.
+subtitle, alternate-audio, required-platform, native/Next, browser and TSDuck
+gates remain. ADR 0121 owns the 2026-10-26 private-period macOS deferral; it is
+not macOS acceptance and changes no functional requirement.
 
 ## Consequences
 

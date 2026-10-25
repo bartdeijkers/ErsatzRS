@@ -23,9 +23,12 @@ No Docker image is included in v1.1.0. Existing GHCR tags must not be treated as
 images of this release. Other releases may include images for Linux amd64,
 arm64 and arm/v7; check their release notes before using them.
 
-Beta tags may publish only the Windows archive. macOS x86-64 and Apple Silicon remain
-supported build targets, but the active release workflow does not currently
-publish macOS archives.
+Beta tags may publish only the Windows archive. During the private-repository
+period, the required matrix is Linux x64, ARM64, ARMv7 and Windows x64. macOS
+x86-64 and Apple Silicon build, package, runtime and acceptance work is deferred
+by maintainer decision (2026-10-26), not accepted. Existing code, artifacts and
+evidence are retained without a verified macOS support claim. Resumption requires
+explicit maintainer permission; no macOS builds or paid runners are authorized.
 
 ARMv7, ARM64, Intel macOS, and Apple Silicon macOS application acceptance for
 Next, JavaScript audio selection, and chapter expressions remains explicitly

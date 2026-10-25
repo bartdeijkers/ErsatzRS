@@ -1,18 +1,9 @@
 name: Next source candidate (macOS)
 
 # Linux and Windows candidates can be built and exercised on the maintainer's
-# host. These two runners provide the missing macOS build environments. This
-# workflow uploads candidates only; it cannot publish a dependency release.
+# host. macOS work is deferred during the private period, not accepted.
+# The preserved workflow cannot start runners without explicit permission.
 on:
-  push:
-    branches: [build/next-rtsp-candidate]
-    paths:
-      - .github/workflows/next-source-candidate.yml
-      - scripts/release/next-patches/**
-      - scripts/release/prepare-next-source.py
-      - scripts/release/package-next-source.py
-      - scripts/release/test-prepare-next-source.py
-      - scripts/release/test-package-next-source.py
   workflow_dispatch:
     inputs:
       review_manifest:
@@ -36,6 +27,8 @@ concurrency:
 
 jobs:
   package:
+    # Deferred by maintainer decision (2026-10-26); restore only with explicit permission.
+    if: ${{ false }}
     name: Next ${{ matrix.rid }} source candidate
     strategy:
       fail-fast: false

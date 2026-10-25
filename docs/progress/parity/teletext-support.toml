@@ -42,7 +42,7 @@ unforced complete cleanup. managed_qualification_followup/overlay-playback owns
 exact scopes/clock guards; no graphics/current-package/adoption claim.
 F4 closes MOT engine/HTTP/cache and scoped X28-retirement engine/decode proof.
 It owns limits and the unresolved M29 Header/POP policy. Warm-client remains open. Windows-package deferred; future120minutes.
-Full-package/remaining platform-overlay/sixRID/adoption and ARM/macOS prerequisites remain open. Base application/host lifecycle is closed; quota/cancellation safety and
+Four-RID package/overlay/adoption and native ARM remain open; macOS is deferred (ADR0121). Base application/host lifecycle is closed; quota/cancellation safety and
 receiver/native-platform proof retain their owners. F6 default2 Copy/DVB is verified
 in c07af3a1; tmp/phase9-f6-native-carriage/work.json owns87/87 TSDuck.
 
@@ -56,7 +56,7 @@ No DVBViewer. Kodi21.2 shares retained21.3 decoder hashes and Local/DRCS/panel
 blockers; no full2.5 success expectation or physical GoogleTV trial. P9A-04 owns
 one gated joint end-trial. No unchanged negative retries/decoder maintenance.
 X1 remains deferred; X3 waits upstream QTM complete POP/GPOP/context>208; no waiver.
-Neither excuses base capability gaps. All six-RID, P9A-02 Health/licensing,
+Neither excuses base capability gaps. All required four-RID, P9A-02 Health/licensing,
 playback/HLS/caption/audio/localized-management gates remain mandatory. Production
 guide starts only after full independent9A; Phase10 waits forP9B-02.
 '''
@@ -196,9 +196,9 @@ resolution  = 'P9A-01 accepted ADR 0121 on 2026-10-10; the plan source map and m
 
 [[debt]]
 id          = 'teletext-runtime-capability-is-unproven'
-description = 'The selected-runtime capability report has bounded decoder-option and functional text/bitmap probes, localized Health guidance and runtime-bound troubleshooting export, but first-party FFmpeg packages are not yet accepted across all six RIDs. Complete macOS packaging, dependency/licensing and remaining platform evidence without making missing optional support fatal to unrelated playback.'
+description = 'The selected-runtime capability report has bounded decoder-option and functional text/bitmap probes, localized Health guidance and runtime-bound troubleshooting export, but first-party FFmpeg packages are not yet independently accepted across the three required Linux RIDs and Windows x64. Both macOS RIDs are Deferred by maintainer decision (2026-10-26), not accepted; preserve their code/evidence and resume only with explicit permission. Complete required dependency/licensing and remaining four-platform evidence without making missing optional support fatal to unrelated playback.'
 discovered  = '2026-08-07'
-evidence    = 'P9A-02 evidence owns the bounded probe in `teletext_probe.rs`, its `version.rs` integration, exact v2.0.6 package hashes and functional Linux x64/Windows plus emulated ARM64/ARMv7 proof, Health/troubleshooting checks and the missing macOS packaging/platform acceptance. Package presence and UCU exceptions do not satisfy six-RID acceptance.'
+evidence    = 'P9A-02 evidence owns the bounded probe in `teletext_probe.rs`, its `version.rs` integration, exact v2.0.6 package hashes and functional Linux x64/Windows plus emulated ARM64/ARMv7 proof, Health/troubleshooting checks and remaining required four-platform acceptance. The separate macOS artifact/native milestones retain deferred future proof obligations outside the current required graph. Package presence and UCU exceptions do not satisfy required four-RID acceptance.'
 resolved    = false
 
 [[debt]]
