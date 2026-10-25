@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-enhanced AE5 — original cross-emitter source-order qualification'
+current_focus = 'p9a-windows-package — awaiting resumption of deferred 120-minute application trial'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -128,16 +128,26 @@ current Windows application-package trial remains deferred with120minutes
 reserved; native ARM/Mac, missing Mac artifacts, final Health and explicit managed
 adoption retain their existing owners. No publication/production pin changed.
 
-Current package: p9a-author-enhanced AE5 original CrossEmitterOrder witness.
-Next executable action: use the existing original17-action source/native trace
-and primary A8(2)/12.3.3 rules to determine whether an exact same-cell opening/
-reset lifetime order is supported. Keep original IDs,lower-bound1/pending17 and
-known-open1/pending15 facts; no guessed endpoint or storage/emitter clock.
-Stop at either a sourced complete-factory/native-order qualification of that
-original witness or an exact missing normative/maintainer decision and resume
-condition. Only a demonstrated defect permits a product change; no new variant,
-external decoder repair, client retry or relaxed admission. Other completed
-components remain closed. X1 deferral/X3 upstream wait remain unchanged.
+AE5 original CrossEmitterOrder bounded source assessment is completed; its
+conformance requirement remains blocked. Canonical authored_cross_emitter_followup
+.normative_order_assessment owns EN13.3/13.7 and additional TR100287V1.2.1 review.
+Active visual equivalence/AP restoration supplies neither the missing same-cell
+control lifetime/order nor an empty object's explicit endpoint. The original16
+invocations/17 actions, known lower-bound1/pending17 and normative expectations
+remain unchanged. Resume only with an authoritative/standards-supported rule for
+the exact original trace; no guessed order, new restriction, test relaxation or
+unchanged hypothesis replay. Other completed AE5 components stay closed.
+
+Current package: p9a-windows-package, previously maintainer-deferred.
+Next action: await the requested explicit resumption decision for the existing
+full current-source Windows application-package trial, reserving120minutes.
+The completed bare-worker artifact is not this launcher/admin/playback/Health
+acceptance. Do not start that dependent trial while its deferral remains.
+If resumed, freeze the clean exact source/package/site/runtime and execute the
+existing gates; stop at their actual results, retaining failures and cleanup.
+Missing Mac/native ARM capabilities, independent AB5/C3 formatter proof, X1
+client deferral, X3 upstream-editor wait and M29/unused-object policy decisions
+keep their existing primary owners. No substitute variant or external repair.
 
 PS1 corrected Linux package/Bookworm component is completed. Canonical
 scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
