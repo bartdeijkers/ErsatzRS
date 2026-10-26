@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — native Windows rs7 Burn/Convert compatibility; promotion separately gated'
+current_focus = 'p9a-managed-adoption — sustained native rs7 Burn/Convert transport proof; promotion separately gated'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -114,11 +114,20 @@ Six hosts exit0 unforced, owned groups/Job empty naturally and native source is
 unchanged. Retained exact artifacts match ten current startup/Health sources;
 no fresh full-source/matched-bundle/browser or accepted production-pin claim.
 The one-off HTML parser negative is retained and corrected without product edits.
-Current package: p9a-managed-adoption. Next executable step: reuse the existing
-native Windows ordinary Next Burn and Convert smoke gates with exact rs7 and
-original-PTS bytes. Earlier package output used rs6 worker1ab984fd, not current
-560e246b. Keep its source/AV/caption/nld/cache/reconnect/idle/cleanup oracles; only
-these two affected gates, no repeated Legacy/Hybrid/admin/Linux output matrix.
+Completed two native Windows current-rs7 ordinary output gates: canonical
+provider-scan/managed-current-candidates/windows-output/qualification.json owns
+Burn/Convert passes with original-PTS FFmpeg, unchanged source/AV/caption/nld/
+wrapper/cache/reconnect/idle oracles, ten metadata probes and twelve natural fully
+empty Jobs. Eight captures retain exact native hashes; source/package stay
+unchanged and isolated copied hosts/tools are removed. The stale helper-tool
+hash preflight is retained; only the qualified archive input was corrected.
+Current package: p9a-managed-adoption. Next executable step: required sustained
+native Windows transport for the exact candidates, using existing TSDuck URL gate
+and owned-host/synthetic fixture mechanisms for Next Burn/Convert. Current smoke
+prefixes contain657–870 packets, below unchanged MIN_PACKETS=2000; do not claim
+that gate or lower its thresholds. Retain AV/caption/nld and joined cleanup.
+Reuse unaffected Legacy/Hybrid, headed admin, Linux source/output and artifacts;
+no new client search, general audit or repeated completed component.
 Production promotion/publication remains separately gated and unauthorized.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
