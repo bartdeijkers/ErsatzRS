@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-windows-package — deferred; explicit resume required (120 minutes)'
+current_focus = 'p9a-windows-package — native components closed; Firefox reload blocker'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -99,11 +99,24 @@ tests/32 EN/NL scenarios, both themes/hydrated/no-JS Refresh persistence,
 old false/Info versus new true/Pass and exact two-tool diagnostics identity.
 One matched current SSR/WASM bundle is byte-identical across both runtime cases;
 unchanged native/source/AV/editor/client evidence is reused within its scope.
-No independent local work package remains in the current finite owner list.
-Current waiting package: p9a-windows-package, still maintainer-deferred with
-120minutes reserved; resume only with explicit authorization, then run the
-existing current-source packaged launcher/admin/output/Health recipe. Until
-that or another external prerequisite changes, start no substitute variants.
+Completed native Windows build/archive/Health/ordinary-output components:
+provider-scan/windows-current-clean-package/qualification.json owns clean
+source34e04bcd, matched release archivecdf06813, four exact MSVC binaries,
+32 headed Health tests/64 EN-NL scenarios and three unchanged native output gates
+with8 AAC/nld captures and drained runtime Jobs. Same-state launcher restart
+persists Dutch/light settings for both old207 and optional-clock candidate.
+Compiler forced-child cleanup and the initial mixed-profile candidate are
+retained separately; no product runtime cleanup or compiler failure is hidden.
+Current package remains p9a-windows-package: full-suite native Firefox Next
+navigation times out at channels reload/pagehide in both runtime cases. One
+isolated baseline Firefox replay passes; all missing Firefox Health cells are
+closed separately. The final package gate stays open, not marked accepted.
+Next executable step: use the same temporary native host to test an ownership
+guard around inactive preview teardown. Require a focused lifecycle regression
+and actual unchanged Chromium/Firefox navigation; retain original negatives.
+No speculative product fix or new client search. A product change still needs
+its final clean-source package boundary. Reuse completed build/Health/output
+and untouched editor/publication/isolation/Lua/F6 proof within their scope.
 Other exact prerequisites retain their primary records: author-enhanced AE5
 needs authoritative A8(2) same-cell/empty-NoDirectAddress order/lifetime semantics
 and independent C3 capability; author-base AB5 needs correct raw-header/secondary

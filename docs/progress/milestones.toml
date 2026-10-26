@@ -16734,23 +16734,50 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 [[milestone]]
 id         = 'p9a-windows-package'
 phase      = 'Phase 9A — Generic teletext engine'
-title      = 'Run the deferred current-source Windows package trial'
-status     = 'Deferred'
+title      = 'Run the authorized current-source Windows package trial'
+status     = 'In progress'
 feature    = 'teletext-support'
 depends_on = []
 acceptance = '''
 Requirement owner: V6/X2 and L15-E2 current clean-source Windows packaged-admin/runtime boundary.
 User action/proof: Install and use the exact current server/site/runtime Windows package through its launcher and required admin/playback flows.
-Smallest necessary work: Wait for the maintainer-authorized120minute trial, freeze the exact current clean-source package and run the existing required native launcher/admin/hydration/runtime/Health/output gates. No publication or adoption is implied.
+Smallest necessary work: Use the maintainer-authorized120minute trial, freeze the exact current clean-source package and run the existing required native launcher/admin/hydration/runtime/Health/output gates. No publication or adoption is implied.
 Testable stop condition: The authorized120minute native Windows package session passes exact package identity, consistent site bundle and all applicable existing acceptance gates with retained negatives and cleanup.
 '''
 evidence = '''
-Status: Deferred. Exact remaining gap: Maintainer deferred this current-source packaged trial; a future authorized session reserves120minutes. Current40ad component63 and frozen7603285d candidate package/playback results have different scopes.
-Reuse: audio_language_followup/package_followup and network/prepared/manager/Health/native_host_smoke/wire_transport/overlay-playback native Windows receipts, plus40ad0608 component proof. Accepted UCU12 FFmpeg2.0.7/Windows Next023 rs.6 is the current general baseline; historical022 managed.1 receipts keep their original scope. The current023 rs.7 bare-worker artifact/source/startup component is closed at PS1, not this full application-package trial.
-Missing mandatory proof: Current clean-source packaged launcher/admin/SSR-WASM and applicable native output/Health proof; no stale frozen package inference.
-Dependencies are the typed depends_on edges; internal unfinished dependencies
-are not external blockers. Shared obligations stay with their primary owners
-in the P9A-04 ownership map; this package does not duplicate those trials.
+Completed native build/archive, Health and ordinary-output components (2026-10-26):
+canonical provider-scan/windows-current-clean-package/qualification.json under
+tmp/phase9-next-local-teletext owns clean source34e04bcd, four AMD64 binaries,
+Rust1.97.1 and matched release archivecdf06813. The existing actual-server
+structural gate, independent extraction, bundled published Next023rs6,
+source/executable/public/CSS identities and both packaged launcher bootstraps pass.
+All32 headed Health tests/64 EN-NL scenarios pass across Chromium/Firefox,
+light/dark and JS/no-JS: exact207 false/Info and qualified original-clock
+Windows candidate true/Pass, real Refresh persistence and both tool hashes.
+Both same-state launcher restarts retain Dutch/light settings. Native ordinary
+MPEG-TS/HLS and Next Burn/Convert gates pass their unchanged AV/caption/880Hz
+Dutch/cache/reconnect/preview/idle oracles; all8 captures retain AAC/nld and
+strict runtime Jobs fully drain. Evidence directories are retained deliberately.
+Compiler artifact receipts retain exit0 plus bounded forced cleanup of one
+unclassified build-job child; neither natural compiler cleanup nor graceful
+tray-menu Exit is inferred. Initial release-SSR/dev-client marker failure is
+retained; same-source release frontend corrects that configuration without
+rebuilding native binaries. No product Rust, publication or managed-pin change.
+Exact remaining gap: Package overall remains In progress. Both full18 admin
+runs pass Chromium9 but Firefox Next navigation times out30s at channels-page
+reload/pagehide preview teardown. One exact isolated baseline Firefox9 replay
+passes; the candidate's8 missing Firefox Health cells pass separately. This is
+composed scoped proof, never a fresh full18 green claim. Retain both failures.
+Next smallest action: Test an ownership guard for inactive preview teardown
+with the existing native host; require lifecycle and actual navigation proof
+without changing console/time/oracle bounds. Commit no speculative fix. Any
+product change retains the final clean-source package requirement.
+Reuse: Historical40ad component63, frozen7603 and overlay/source/editor/isolation/
+F6/transport receipts retain their original scopes. UCU12 FFmpeg207/Next023rs6 is
+the general baseline; current023rs7 bare-worker proof is not app adoption.
+Native ARM/platform/adoption/client/editor and full9A remain with their owners.
+Dependencies are the typed depends_on edges; shared obligations are referenced,
+not duplicated. No macOS work, CI, push, publication or acceptance waiver.
 '''
 
 [[milestone]]
@@ -16771,6 +16798,18 @@ Smallest necessary work: Reconcile and close independently executable named plat
 Testable stop condition: Every r1-named applicable independent safety/provenance cell passes or is explicitly owned by the exact still-open native/artifact package; package completion requires all cells within this owner proven, not merely categorized.
 '''
 evidence = '''
+Completed PS2 native Windows Health and scoped ordinary-output component
+(2026-10-26): provider-scan/windows-current-clean-package/qualification.json
+owns clean source34e04bcd, matched release archivecdf06813 and32 headed Health
+cases/64 EN-NL scenarios across both runtimes/browsers/themes/JS modes. Exact
+old207 false/Info and candidate true/Pass, persisted Refresh/diagnostic tool
+identity and same-state packaged launcher restart pass. Three unchanged native
+ordinary-output gates and all8 AAC/nld captures pass with bounded owned cleanup.
+Reuse compiler/archive and prior unrelated proof within their explicit scopes.
+p9a-windows-package owns the separately open Firefox channels-reload defect;
+Health completion is not erased by that later navigation gap. No full Windows
+package, original-wire transport, adoption or aggregate acceptance is inferred.
+
 Completed PS2 current optional-clock Linux Health/admin component
 (2026-10-26): canonical original-pts-runtime/health-admin/qualification.json
 under provider-scan/so2-live-url/native-hls-caption owns16 actual headed tests
@@ -16788,7 +16827,7 @@ Nine-culture helper/unit, old-runtime AV, original-clock source/route/ownership
 and four-RID candidate software proofs are reused within scope. Mandatory65GiB
 target cleanup retained the finished host/canonical artifacts before rebuilding.
 This closes the affected current Linux localized-Health/diagnostics obligation.
-Native ARM/full Windows app, accepted adoption and other existing external
+Native ARM/the remaining Windows package navigation, accepted adoption and other external
 capability/policy owners remain open; no completed component is reopened.
 
 Completed PS1 original-PES ARM64/ARMv7/Windows candidate artifact/software
