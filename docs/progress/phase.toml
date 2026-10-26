@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — current-candidate install and compatibility proof; production promotion separately gated'
+current_focus = 'p9a-managed-adoption — original-PTS FFmpeg candidate installation/identity; promotion separately gated'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -87,12 +87,20 @@ web/scanner/healthcheck builds pass55m58s/61m28s: six fresh ELFs,2848 unchanged
 inputs and declared glibc2.39 baseline; both own containers are removed. Native
 ARM is assumed, not verified. No production adoption or fresh full CI is inferred.
 Canonical provider-scan/platform-safety-closeout/qualification.json owns proof.
-Current package: p9a-managed-adoption. Next executable step: use its existing
-current-candidate temporary-root install/offline-reuse/corruption/startup/Health
-and applicable compatibility mechanisms for original-PTS/current023rs7 bytes.
-Reuse old candidate.4 proof only within its valid scope; do not infer installation
-of new bytes. Production promotion/publication remains separately gated, with
-no production-pin change or publication authorized by this checkpoint.
+Completed current Next023rs7 install/cache/identity component: canonical
+provider-scan/managed-current-candidates/qualification.json owns four existing
+passed tests, two each on Linux/nativeWindows. Both hosts validate all four
+required RIDs' install/relocation/bundle; their real local-HTTP install, exact
+offline reuse, version/identity-before-execution, corruption refusal and lease
+release pass. Native clean34e04 critical sources match current; all source bytes
+stay unchanged. The Windows Job is fully emptied with one forced unclassified
+descendant termination; no natural-exit attribution is claimed. No full global
+startup, persisted Health, production pin or accepted adoption is inferred.
+Current package: p9a-managed-adoption. Next executable step: locate and reuse its
+existing first-party FFmpeg archive/manager qualification mechanism for the
+original-PTS candidate; then close only missing shared startup/Health/affected
+compatibility joins. No new client search, unrelated variants or output matrix.
+Production promotion/publication remains separately gated and unauthorized.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component
