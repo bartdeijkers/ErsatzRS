@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-enhanced — AE5 authoritative source-order/lifetime witness and independent C3 capability'
+current_focus = 'p9a-platform-safety — existing PS1/PS2 exact artifact and Health receipt join'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -74,13 +74,18 @@ execution is Deferred until suitable hardware becomes available, date unknown.
 Compatibility is provisionally assumed, not native-verified. Build/package,
 dependency, software/emulation and CI remain required; p9a-native-arm retains
 future native obligations but no longer blocks current acceptance.
-Current waiting package: p9a-author-enhanced AE5. Exact prerequisite: an
-authoritative original source-order/lifetime witness for A8(2) same-cell and empty
-NoDirectAddress semantics, plus an independently capable C3 formatter. Existing
-candidate/Windows components are closed below. No independently executable local
-package is identified in the finite owner list; do not replace these prerequisites
-with more editor variants or unchanged decoder repairs. Resume this package when
-that concrete witness/capability is available; other owners retain their gates.
+Completed p9a-source-output: the finite SO1..SO5 Linux/software source-output
+component is closed by existing exact route/clock/AV/audio/cleanup proof. Canonical
+provider-scan/identity.json source_output_closure_followup joins13 terminal runtime
+receipts,14 byte-valid captures/266 transport checks and36 unchanged implementation
+hashes. This closes a mandatory proof join, not new runtime functionality, a
+production pin or platform acceptance. Historical component negatives remain.
+Current package: p9a-platform-safety PS1/PS2 primary-receipt join. Consume existing
+exact artifacts, software/Health and current Windows-package proof; close only
+when each existing applicable clause has its valid primary receipt. Do not invent
+variants, repeat unchanged chains or move managed adoption into this owner.
+AE5 still needs the recorded authoritative source-order/lifetime witness and
+independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component
 within the unpublished Linux x64 software candidate. Canonical current receipt:
 tmp/phase9-next-local-teletext/provider-scan/so2-live-url/native-hls-caption/original-pts-application/qualification.json.

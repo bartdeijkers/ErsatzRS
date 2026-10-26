@@ -4,7 +4,7 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
 summary    = '''
-ADR0123 keeps full1/1.5/2.5 acceptance open; P9A-04 owns L15/F/V/X.
+ADR0123: full1/1.5/2.5 remains open; P9A-04 owns L15/F/V/X.
 EB1/2,EE1..3,A1/scoped A2 are closed. F2 metadata/zones/version and scoped F1
 Main/Base-prefix/position/charset, V30/V31 DRCS attachment/undo, created banks,
 leading AP/calls, Public↔Global and steady-Flash undo are closed. F3 scoped
@@ -12,7 +12,7 @@ C2/Local/Main/resource,A7,A8 spacing/default tails/inherited width and C3 size
 factory are closed; AB1..4 proved, AB5 external. SI1..4 inventory is complete.
 F5/provider,SO2-N/4/5 and ADR0127 inputs retain scopes895af814/e87fde98/6137ac30.
 SO3-R/4-R are closed on Linux Next023 candidate/software. Runtime gates P9A-03.
-p9a-source-output closes candidate Linux Native Live HLS/original-PES wiring;
+Source/output SO1..5 is closed on Linux candidates; platform/adoption separate;
 p9a-platform-safety owns completed Linux package/source-input, three-RID software
 and headed Linux/Windows Health proof. ARM native execution is Deferred,
 compatibility assumed until hardware access; emulation remains proof only.
@@ -57,7 +57,7 @@ no full2.5 success expectation or physical GoogleTV trial before the gated joint
 end-trial. X1 remains deferred; X3 waits upstream QTM complete POP/GPOP/context>208.
 No unchanged negative retries, decoder maintenance, base-capability excuse or
 waiver. Required four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
-checks remain. Local work waits on semantics/client/editor prerequisites.
+checks remain. Next: existing platform proof join; semantic/client/editor open.
 Production guide follows full independent9A; Phase10 followsP9B-02.
 '''
 
