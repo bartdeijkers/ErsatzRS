@@ -713,6 +713,13 @@ future use only after explicit maintainer permission. A visibility change alone
 does not authorize resumption. Existing macOS artifacts and evidence remain
 unverified within their recorded scope. See [AGENTS.md](AGENTS.md#supported-platforms).
 
+**Native ARM execution (maintainer decision, 2026-10-26):** until suitable
+hardware becomes available, ARM64/ARMv7 operation is provisionally assumed from
+retained build/package/emulation evidence. Actual native execution is deferred,
+not verified. Keep both ARM build/package/emulation and CI coverage intact;
+Docker/QEMU on an x86-64 host remains emulation and cannot close the retained
+native proof obligation. The availability date is unknown.
+
 ErsatzRS targets the same six RIDs as ErsatzTV (`linux-x64`, `linux-arm64`,
 `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`). Targets are installed on
 demand: CI installs the matching target per matrix cell, and locally you add

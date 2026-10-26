@@ -1200,9 +1200,34 @@ change. The existing deferred macOS milestone owners retain future obligations.
 
 P9A acceptance requires all functional requirements, including complete authored
 Level 2.5, correct Level 1/1.5 fallback, full QTeletextMaker interchange and
-engine-first delivery, plus every required four-platform check. It must claim
-neither verified macOS support nor six-platform acceptance. Native ARM and the
-required Windows package trial are not waived by this macOS-only amendment.
+engine-first delivery, plus every currently required four-platform check. The
+macOS-only amendment originally retained native ARM execution and the Windows
+package trial. The additional explicit maintainer decision below supersedes only
+that native ARM execution requirement. Windows remains required. Neither verified
+macOS support nor six-platform acceptance may be claimed.
+
+#### Temporary native ARM execution assumption
+
+On 2026-10-26 the maintainer confirmed no native ARM hardware is available and
+no availability date is known. Native `linux-arm64`/`linux-arm` execution and its
+native acceptance evidence are **Deferred by maintainer decision**, not Complete
+or verified. Current Phase 9A acceptance may proceed without that native evidence,
+provided every other applicable requirement passes and the assumption is explicit.
+
+Keep both ARM RIDs' build, package, dependency/license, software/emulation and CI
+checks required. Retained crossbuild/QEMU evidence supports a provisional native
+compatibility assumption; it never becomes proof of native execution or device
+support. Preserve code, platform guards, artifacts and negative/historical proof.
+`p9a-native-arm` retains all native decoder/host/Health/source/output/audio/caption/
+cleanup obligations for resumption when suitable hardware becomes available;
+there is no promised date and no unrelated native-platform or hardware claim.
+
+The current required dependency graph excludes only that deferred native owner.
+No generic Deferred-dependency bypass is introduced: all other required open,
+blocked or deferred owners continue to prevent their parent from being Complete.
+This changes no full authored Level 2.5/fallback, QTeletextMaker, client, semantics,
+playback-safety or engine-first requirement and does not authorize paid resources,
+publication or a macOS resumption.
 
 Managed FFmpeg 9 packages for each required RID must include libzvbi and required
 license/dependency notices, expose

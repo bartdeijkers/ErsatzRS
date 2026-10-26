@@ -84,8 +84,8 @@ four required build, package, runtime and acceptance targets:
 | Rust target triple | RID | OS | Architecture | Current obligation |
 |---|---|---|---|---|
 | `x86_64-unknown-linux-gnu` | `linux-x64` | Linux | x86-64 | Required |
-| `aarch64-unknown-linux-gnu` | `linux-arm64` | Linux | AArch64 | Required |
-| `armv7-unknown-linux-gnueabihf` | `linux-arm` | Linux | ARMv7 | Required |
+| `aarch64-unknown-linux-gnu` | `linux-arm64` | Linux | AArch64 | Build/package/emulation required; native execution deferred |
+| `armv7-unknown-linux-gnueabihf` | `linux-arm` | Linux | ARMv7 | Build/package/emulation required; native execution deferred |
 | `x86_64-apple-darwin` | `osx-x64` | macOS | x86-64 | Deferred by maintainer decision |
 | `aarch64-apple-darwin` | `osx-arm64` | macOS | Apple Silicon | Deferred by maintainer decision |
 | `x86_64-pc-windows-msvc` | `win-x64` | Windows | x86-64 | Required |
@@ -97,8 +97,18 @@ repository visibility alone does not authorize it. Preserve existing macOS code,
 platform guards, artifacts and evidence; introduce no deliberate incompatibility.
 Additional macOS-specific repair and maintenance are deferred.
 
+**Native ARM execution amendment (maintainer decision, 2026-10-26):** native
+ARM64/ARMv7 hardware is unavailable with no known availability date. Native
+execution/acceptance is temporarily deferred and does not block current Phase 9A
+acceptance. Retain ARM build, package, dependency, software/emulation and CI
+obligations, code/guards and all evidence. Native operation is provisionally
+assumed from that evidence, not verified or accepted as native. QEMU remains
+emulation. Resume the retained native checks when suitable hardware becomes
+available; this does not authorize paid provisioning or change other deferrals.
+
 Phase 9A may be accepted after all unchanged functional requirements and every
-required check for the three Linux targets and Windows x64 are proven. Full
+currently required, non-deferred check for the three Linux targets and Windows
+x64 are proven, with the native ARM assumption explicitly disclosed. Full
 authored Level 2.5, correct Level 1/1.5 fallback, QTeletextMaker interchange and
 engine-first delivery remain mandatory. This is neither macOS acceptance nor
 verified six-platform support. See the runtime/platform contract in

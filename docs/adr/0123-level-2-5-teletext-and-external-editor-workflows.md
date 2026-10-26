@@ -1910,7 +1910,11 @@ pages 200–299. Existing subtitle, audio, lifecycle and output gates stay.
 The accepted 2026-10-26 amendment in ADR 0121 makes the three Linux RIDs and
 Windows x64 the required private-period platform matrix. Both macOS RIDs are
 Deferred by maintainer decision, not accepted; explicit permission is required
-to resume. All authored Level 2.5, Level 1/1.5 fallback and editor/interchange
+to resume. The additional 2026-10-26 native ARM amendment in ADR 0121 defers
+only actual ARM64/ARMv7 execution until hardware is available, with no known
+date. ARM build/package/emulation and CI remain required; native compatibility
+is assumed, not verified. That explicit assumption does not block current 9A
+acceptance. All authored Level 2.5, Level 1/1.5 fallback and editor/interchange
 requirements remain mandatory before full independent 9A acceptance.
 
 Require TSDuck transport checks, independent decoding of representative enhanced

@@ -30,6 +30,13 @@ by maintainer decision (2026-10-26), not accepted. Existing code, artifacts and
 evidence are retained without a verified macOS support claim. Resumption requires
 explicit maintainer permission; no macOS builds or paid runners are authorized.
 
+Native Linux ARM64/ARMv7 execution is also temporarily deferred by maintainer
+decision (2026-10-26), because no hardware is available and no date is known.
+ARM builds, packages, software/emulation checks and CI remain required. Native
+compatibility is a provisional assumption, not verified hardware operation;
+retain and resume native acceptance when suitable hardware becomes available.
+This assumption is explicit in current Phase 9A acceptance.
+
 ARMv7, ARM64, Intel macOS, and Apple Silicon macOS application acceptance for
 Next, JavaScript audio selection, and chapter expressions remains explicitly
 unverified. Building or publishing an archive does not establish that acceptance.

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-native-arm — waiting for native ARM64/ARMv7 execution access'
+current_focus = 'p9a-author-enhanced — AE5 authoritative source-order/lifetime witness and independent C3 capability'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -69,12 +69,18 @@ No macOS builds/crossbuilds/packages/toolchain installs/runtime/acceptance trial
 or paid runners/services may start. Preserve code, guards, artifacts and evidence;
 resume only with explicit permission, not merely a visibility change. All
 functional Level 2.5/fallback/QTeletextMaker and engine-first gates stay mandatory.
-Current waiting package: p9a-native-arm. Exact prerequisite: actual native Linux
-ARM64 and ARMv7 execution environments for the existing R1 cells. On access,
-run those exact artifact/host/Health/output gates; do not substitute QEMU or
-invent local variants. No independently executable local package remains in the
-finite owner list after the Windows package closure below. Other recorded
-external capability/policy owners remain mandatory; no aggregate is accepted.
+Native ARM amendment (maintainer decision 2026-10-26): actual ARM64/ARMv7
+execution is Deferred until suitable hardware becomes available, date unknown.
+Compatibility is provisionally assumed, not native-verified. Build/package,
+dependency, software/emulation and CI remain required; p9a-native-arm retains
+future native obligations but no longer blocks current acceptance.
+Current waiting package: p9a-author-enhanced AE5. Exact prerequisite: an
+authoritative original source-order/lifetime witness for A8(2) same-cell and empty
+NoDirectAddress semantics, plus an independently capable C3 formatter. Existing
+candidate/Windows components are closed below. No independently executable local
+package is identified in the finite owner list; do not replace these prerequisites
+with more editor variants or unchanged decoder repairs. Resume this package when
+that concrete witness/capability is available; other owners retain their gates.
 Completed: the Native Live HLS/original-PES source-clock application component
 within the unpublished Linux x64 software candidate. Canonical current receipt:
 tmp/phase9-next-local-teletext/provider-scan/so2-live-url/native-hls-caption/original-pts-application/qualification.json.
@@ -125,7 +131,8 @@ and independent C3 capability; author-base AB5 needs correct raw-header/secondar
 independent decoding; m29-policy needs an accepted author/receiver CoP or exact
 semantics-preserving reset. Client gates retain X1 deferral/no DVBViewer/no physical
 Kodi before the agreed joint final; editor-upstream retains X3 upstream banks/
-over208-context capacity. Native ARM64/ARMv7 environments remain unavailable.
+over208-context capacity. Native ARM execution is maintainer-deferred, with
+provisional compatibility assumed and its future proof retained.
 Dependent source/platform/adoption/aggregate/final gates stay open without
 waiving their clauses. No Mac execution, CI, push or publication is authorized.
 The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.

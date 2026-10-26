@@ -682,6 +682,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Temporarily defer native ARM64/ARMv7 execution acceptance while hardware is
+  unavailable. Retain ARM builds, packages, emulation and CI; disclose native
+  compatibility as assumed rather than verified. Keep future native checks and
+  every other Phase 9A functional acceptance gate.
+
 - During the private-repository period, require Linux x64, ARM64, ARMv7 and
   Windows x64 for build, package, runtime and Phase 9A acceptance. Defer both
   macOS architectures by maintainer decision and disable their candidate jobs

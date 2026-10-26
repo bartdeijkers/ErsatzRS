@@ -2275,8 +2275,13 @@ title      = 'Package and probe teletext decoding'
 status     = 'In progress'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
-depends_on = ['p9a-01', 'p9a-native-arm', 'p9a-windows-package', 'p9a-platform-safety', 'p9a-managed-adoption']
+depends_on = ['p9a-01', 'p9a-windows-package', 'p9a-platform-safety', 'p9a-managed-adoption']
 acceptance = '''
+Native ARM amendment (2026-10-26): native ARM64/ARMv7 execution is Deferred by
+maintainer decision until hardware becomes available, with no known date. Native
+compatibility is provisionally assumed, not verified. ARM build/package, dependency,
+software/emulation and CI checks remain required; only the native execution owner
+is excluded from current required dependencies. All other functional gates remain.
 ADR0121 private-period amendment (2026-10-26): the three Linux RIDs and Windows
 x64 remain required; both macOS RIDs are Deferred by maintainer decision, not
 accepted. Resumption requires explicit permission. All functional requirements
@@ -3167,7 +3172,7 @@ Current owner/index (query each ID as an ordinary milestone):
 | F4/V5/L15-C independent base lifecycle versus enhanced retirement and M29 policy | p9a-lifecycle-base; p9a-retirement-enhanced; p9a-m29-policy |
 | V4/L15-B2,C localized admin/agent file workflow | p9a-admin-base; p9a-admin-enhanced |
 | V3/L15-D/base X1 versus deferred full2.5 X1 | p9a-client-base; p9a-client-enhanced |
-| P9A-02/V6/X2/L15-E2 exact artifacts, native hosts, safety and adoption | Required: p9a-native-arm; p9a-windows-package; p9a-platform-safety; p9a-managed-adoption. Deferred future macOS owners: p9a-macos-artifacts; p9a-native-macos |
+| P9A-02/V6/X2/L15-E2 exact artifacts, native hosts, safety and adoption | Required: p9a-windows-package; p9a-platform-safety; p9a-managed-adoption (including ARM build/package/emulation). Deferred native ARM owner: p9a-native-arm, compatibility assumed until hardware access. Deferred future macOS owners: p9a-macos-artifacts; p9a-native-macos |
 | All base L15; all enhanced F/V/X; final gate before9B | p9a-level15; p9a-level25; p9a-final-gate |
 
 Clause ownership map (the unchanged parent acceptance remains authoritative):
@@ -3189,8 +3194,10 @@ and actual navigation -> p9a-client-base/enhanced, with authoring/final-gate
 owning independent/transport proof; no Kodi mandate or TSDuck-only acceptance.
 P9A-02: every exact first-party RID accepted decoder or explicit platform
 decision, optional operator capability/no unrelated playback breakage ->
-p9a-platform-safety; required native ARM/current Windows package ->
-p9a-native-arm/windows-package. Deferred future macOS artifact/native owners ->
+p9a-platform-safety; required current Windows package -> p9a-windows-package.
+Deferred native ARM execution/assumed compatibility -> p9a-native-arm until
+hardware is available; ARM build/package/emulation stays with platform-safety.
+Deferred future macOS artifact/native owners ->
 p9a-macos-artifacts/native-macos. Exact options/functional fixture/dependencies/source/licenses,
 existing acquisition/probes and no UCU waiver -> p9a-platform-safety and those
 native/artifact owners. Accepted managed promotion -> p9a-managed-adoption.
@@ -16686,19 +16693,36 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-native-arm'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Qualify both supported native ARM runtimes'
-status     = 'Blocked'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases']
 acceptance = '''
+Native ARM amendment (2026-10-26): native ARM64/ARMv7 execution is Deferred by
+maintainer decision until hardware becomes available, with no known date. Native
+compatibility is provisionally assumed, not verified. ARM build/package, dependency,
+software/emulation and CI checks remain required; only the native execution owner
+is excluded from current required dependencies. All other functional gates remain.
 Requirement owner: P9A-02 native linux-arm64/linux-arm; V6/X2 and L15-E2.
 User action/proof: Run accepted decoder/runtime, Health and applicable source/output playback natively on Linux ARM64 and ARMv7.
-Smallest necessary work: Obtain native environments and run only the reconciled exact-archive dependency/options/text/bitmap/startup/Health and applicable output/source-subtitle/alternate-audio/cleanup gates. Keep armv7 baseline and linkage explicit.
+Smallest necessary work on resumption: When suitable hardware becomes available, run only the reconciled exact-archive dependency/options/text/bitmap/startup/Health and applicable output/source-subtitle/alternate-audio/cleanup gates. Keep armv7 baseline and linkage explicit.
 Testable stop condition: Both exact native ARM environments pass the unchanged required decoder, provenance, Health and applicable playback gates with exact artifacts and declared system baseline.
 '''
 evidence = '''
-Status: Blocked. Exact remaining gap: External native ARM64/ARMv7 execution environments are missing. Current artifacts/builds and Bookworm/QEMU probes are crossbuild/emulated proof only.
+Status: Deferred by explicit maintainer decision (2026-10-26). No native ARM
+hardware is available and no availability date is known. Current Phase 9A may
+proceed with native compatibility provisionally assumed, never native-verified,
+provided all other required checks pass. This owner is not Complete. Preserve
+all existing evidence and native obligations for resumption when hardware is
+available; do not start substitute variants or paid provisioning.
+Historical capability finding retained: native ARM64/ARMv7 execution environments
+are missing. Current artifacts/builds and Bookworm/QEMU probes remain
+crossbuild/emulated proof only. This policy adds no native execution evidence.
+Policy verification: provider-scan/native-arm-policy/qualification.json under
+canonical tmp/phase9-next-local-teletext retains the exact three removed native
+edges, unchanged other statuses/dependencies and still-blocking functional gates.
+Its progress-check.log validates structure only, not native behavior.
 Reuse: P9A-02 exact archive/executable pins, QEMU8.2.2 with Bookworm sysroots and recorded GLIBC2.36 constraint; candidate.4 crossbuild scope remains separate.
-Missing mandatory proof: Native host/decoder/runtime and r1-named applicable Health/playback evidence for both ARM RIDs; no QEMU/native equivalence.
+Future native proof (deferred, not a current acceptance gate): Native host/decoder/runtime and r1-named applicable Health/playback evidence for both ARM RIDs; no QEMU/native equivalence.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.
@@ -16789,15 +16813,20 @@ phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete the independent applicable platform Health output matrix'
 status     = 'In progress'
 feature    = 'teletext-support'
-depends_on = ['p9a-r1-cases', 'p9a-source-output', 'p9a-native-arm', 'p9a-windows-package']
+depends_on = ['p9a-r1-cases', 'p9a-source-output', 'p9a-windows-package']
 acceptance = '''
+Native ARM amendment (2026-10-26): native ARM64/ARMv7 execution is Deferred by
+maintainer decision until hardware becomes available, with no known date. Native
+compatibility is provisionally assumed, not verified. ARM build/package, dependency,
+software/emulation and CI checks remain required; only the native execution owner
+is excluded from current required dependencies. All other functional gates remain.
 ADR0121 private-period amendment (2026-10-26): the three Linux RIDs and Windows
 x64 remain required; both macOS RIDs are Deferred by maintainer decision, not
 accepted. Resumption requires explicit permission. All functional requirements
 and engine-first delivery remain mandatory.
 Requirement owner: P9A-02 optional/operator reports and provenance; F5/V6/X2 and L15-E2 shared platform safety.
 User action/proof: See accurate optional decoder/runtime Health and retain ordinary AV/subtitles/selected alternate audio across every applicable supported output policy.
-Smallest necessary work: Reconcile and close independently executable named platform/runtime Health/output/provenance cells with existing tooling. Obtain unavailable RID execution through native-arm/windows-package owners, not invented local substitutes; do not classify internal work as an external blocker.
+Smallest necessary work: Reconcile and close independently executable named platform/runtime Health/output/provenance cells with existing tooling. Keep Windows package proof with its owner and future native ARM execution with the Deferred native-arm owner, not invented local substitutes; do not classify internal work as an external blocker.
 Testable stop condition: Every r1-named applicable independent safety/provenance cell passes or is explicitly owned by the exact still-open native/artifact package; package completion requires all cells within this owner proven, not merely categorized.
 '''
 evidence = '''
@@ -16901,7 +16930,7 @@ PS1 current023 ARM64/ARMv7 artifact/emulated-software components completed: cano
 PS1 current023 Windows bare-worker artifact component completed: canonical next023_source_output_followup.windows_worker_artifact and next023-source-output/windows-artifact/qualification.json bind native MSVC Rust1.99.0/source54c6cb9/exact lock/ten patches, archive9df0d844/payload560e246b and the unchanged pinned VPL companions/license. Existing native recipe passes54 pipeline/clock/cut controls plus14 channel/caption/source-owner controls and actual synthetic worker startup/discovery with exact FFmpeg2.0.7. Existing safe member reading matches archive/origin/actual executable and notices. Original rs.6 payload hashes remain exact; no owned compiler/worker/FFmpeg processes remain. This closes worker build/artifact/source/startup only. The then-deferred120minute current Windows application-package trial is now completed by p9a-windows-package with its own source/runtime/admin/output boundary; none of that later proof is inferred from this worker-only receipt. No Mac, physical ARM, hardware or managed-adoption acceptance is inferred. Available non-Mac worker candidate artifact components are now closed; missing Mac artifacts/native execution and final application/Health/adoption joins retain existing owners. Independent engine work returns to the already named AE5 original source-order/lifetime witness, without a new variant queue.
 
 Reuse/closed: P9A-02 bounded decoder/operator nine-culture Health, manager/startup/enabled-channel/nativeWindows receipts, exact Linux/nativeWindows configuration-precedence/playback/cleanup scopes and completed6137 localized refresh. Crossbuild, QEMU, interop, native runtime and current package remain separate claims.
-Missing proof/stop: Every PS1/PS2 applicable clause has the exact completed primary receipt and accurate persisted Health/runtime identity; no missing native ARM environment or required candidate-adoption proof is replaced by local success. The separate current-source Windows package owner is now Complete within its declared scope. Managed adoption is a separate owner after this join, not a new duplicate test matrix.
+Missing proof/stop: Every PS1/PS2 applicable clause has the exact completed primary receipt and accurate persisted Health/runtime identity; native ARM execution is explicitly Deferred, while every currently required candidate-adoption and non-native ARM proof remains mandatory. The separate current-source Windows package owner is now Complete within its declared scope. Managed adoption is a separate owner after this join, not a new duplicate test matrix.
 '''
 
 [[milestone]]
@@ -16910,8 +16939,13 @@ phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Accept the fully qualified managed runtime'
 status     = 'Blocked'
 feature    = 'teletext-support'
-depends_on = ['p9a-source-output', 'p9a-native-arm', 'p9a-windows-package', 'p9a-platform-safety']
+depends_on = ['p9a-source-output', 'p9a-windows-package', 'p9a-platform-safety']
 acceptance = '''
+Native ARM amendment (2026-10-26): native ARM64/ARMv7 execution is Deferred by
+maintainer decision until hardware becomes available, with no known date. Native
+compatibility is provisionally assumed, not verified. ARM build/package, dependency,
+software/emulation and CI checks remain required; only the native execution owner
+is excluded from current required dependencies. All other functional gates remain.
 ADR0121 private-period amendment (2026-10-26): the three Linux RIDs and Windows
 x64 remain required; both macOS RIDs are Deferred by maintainer decision, not
 accepted. Resumption requires explicit permission. All functional requirements
@@ -16922,7 +16956,7 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
-Status: Blocked for independent Phase9 adoption. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Exact remaining gaps: qualified candidate artifact/platform-safety joins and native ARM execution. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
+Status: Blocked for independent Phase9 adoption. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Exact remaining gaps: qualified candidate artifact/platform-safety joins and explicit accepted adoption. Native ARM execution is now Deferred by the separate maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
 Reuse: ucu-12 exact adopted per-platform manifest and its bounded source/software/managed/transport scopes; audio_language_followup earlier reproduced source/lock/four patches, candidate.4 archives, manager identity/corruption/offline checks and scoped Linux/nativeWindows proof retain their historical boundaries. No package/pin is changed by this Phase9 rejoin. Shared obligations remain with the existing owners, not a second adoption matrix.
 Missing mandatory proof: Full exact accepted required four-RID package/host/Health/output qualification and explicit managed adoption; crossbuild/startup/interop/component success cannot substitute.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
@@ -16982,6 +17016,11 @@ status     = 'Not started'
 feature    = 'teletext-support'
 depends_on = ['p9a-03', 'p9a-level15', 'p9a-level25']
 acceptance = '''
+Native ARM amendment (2026-10-26): native ARM64/ARMv7 execution is Deferred by
+maintainer decision until hardware becomes available, with no known date. Native
+compatibility is provisionally assumed, not verified. ARM build/package, dependency,
+software/emulation and CI checks remain required; only the native execution owner
+is excluded from current required dependencies. All other functional gates remain.
 ADR0121 private-period amendment (2026-10-26): the three Linux RIDs and Windows
 x64 remain required; both macOS RIDs are Deferred by maintainer decision, not
 accepted. Resumption requires explicit permission. All functional requirements
@@ -16989,7 +17028,7 @@ and engine-first delivery remain mandatory.
 Requirement owner: P9A-04 final full-engine gate; all P9A-01..04 F/V/X and L15 clauses; engine-first ADR0120.
 User action/proof: Begin production teletext content only after the entire generic source/authored base+enhanced engine and all agreed integration gates are accepted.
 Smallest necessary work: Freeze exact source/artifacts and run only outstanding final mandatory gates, retaining valid evidence when code/inputs/assumptions match: strict Clippy, test-closeout, matched Leptos SSR/WASM build, parity/progress checks, changed localized headed/hydrated/no-JS Chromium/Firefox proof, source-subtitle regressions, applicable ordinary smoke and manual TSDuck plus all independent/client/platform gates.
-Testable stop condition: Every unchanged P9A-01..04 clause and mandatory gate passes, every package dependency is Complete, and canonical p9a-04 evidence supports full generic-engine acceptance before any production9B content begins.
+Testable stop condition: Every unchanged P9A-01..04 clause and mandatory gate passes, every currently required package dependency is Complete and the Deferred native ARM assumption is disclosed, and canonical p9a-04 evidence supports full generic-engine acceptance before any production9B content begins.
 '''
 evidence = '''
 Status: Not started. Exact remaining gap: Full engine acceptance is open; registry validation and scoped component passes are not a green full CI, complete authored feature or release/publication claim.

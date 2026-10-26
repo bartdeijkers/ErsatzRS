@@ -14,8 +14,9 @@ F5/provider,SO2-N/4/5 and ADR0127 inputs retain scopes895af814/e87fde98/6137ac30
 SO3-R/4-R are closed on Linux Next023 candidate/software. Runtime gates P9A-03.
 p9a-source-output closes candidate Linux Native Live HLS/original-PES wiring;
 p9a-platform-safety owns completed Linux package/source-input, three-RID software
-and headed Linux/Windows Health proof. ARM is QEMU; Windows clean-source
-package is closed with per-project native clients; combined negatives retained.
+and headed Linux/Windows Health proof. ARM native execution is Deferred,
+compatibility assumed until hardware access; emulation remains proof only.
+Windows package is closed; native clients pass, combined negatives retained.
 
 Typed service/resource,X26/X27/X28/M29 execution/raster remain partial.
 Original identities/effects/fallback/bounds are protected; wrappers are derived.
@@ -56,8 +57,8 @@ no full2.5 success expectation or physical GoogleTV trial before the gated joint
 end-trial. X1 remains deferred; X3 waits upstream QTM complete POP/GPOP/context>208.
 No unchanged negative retries, decoder maintenance, base-capability excuse or
 waiver. Required four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
-checks remain. No local package remains without native ARM/semantics/client/
-editor prerequisites. Production guide follows full independent9A; Phase10 followsP9B-02.
+checks remain. Local work waits on semantics/client/editor prerequisites.
+Production guide follows full independent9A; Phase10 followsP9B-02.
 '''
 
 [[debt]]
