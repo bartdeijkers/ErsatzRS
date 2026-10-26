@@ -16735,7 +16735,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-windows-package'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Run the authorized current-source Windows package trial'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'teletext-support'
 depends_on = []
 acceptance = '''
@@ -16745,39 +16745,42 @@ Smallest necessary work: Use the maintainer-authorized120minute trial, freeze th
 Testable stop condition: The authorized120minute native Windows package session passes exact package identity, consistent site bundle and all applicable existing acceptance gates with retained negatives and cleanup.
 '''
 evidence = '''
-Completed native build/archive, Health and ordinary-output components (2026-10-26):
-canonical provider-scan/windows-current-clean-package/qualification.json under
-tmp/phase9-next-local-teletext owns clean source34e04bcd, four AMD64 binaries,
-Rust1.97.1 and matched release archivecdf06813. The existing actual-server
-structural gate, independent extraction, bundled published Next023rs6,
-source/executable/public/CSS identities and both packaged launcher bootstraps pass.
-All32 headed Health tests/64 EN-NL scenarios pass across Chromium/Firefox,
-light/dark and JS/no-JS: exact207 false/Info and qualified original-clock
-Windows candidate true/Pass, real Refresh persistence and both tool hashes.
-Both same-state launcher restarts retain Dutch/light settings. Native ordinary
-MPEG-TS/HLS and Next Burn/Convert gates pass their unchanged AV/caption/880Hz
-Dutch/cache/reconnect/preview/idle oracles; all8 captures retain AAC/nld and
-strict runtime Jobs fully drain. Evidence directories are retained deliberately.
-Compiler artifact receipts retain exit0 plus bounded forced cleanup of one
-unclassified build-job child; neither natural compiler cleanup nor graceful
-tray-menu Exit is inferred. Initial release-SSR/dev-client marker failure is
-retained; same-source release frontend corrects that configuration without
-rebuilding native binaries. No product Rust, publication or managed-pin change.
-Exact remaining gap: Package overall remains In progress. Both full18 admin
-runs pass Chromium9 but Firefox Next navigation times out30s at channels-page
-reload/pagehide preview teardown. One exact isolated baseline Firefox9 replay
-passes; the candidate's8 missing Firefox Health cells pass separately. This is
-composed scoped proof, never a fresh full18 green claim. Retain both failures.
-Next smallest action: Test an ownership guard for inactive preview teardown
-with the existing native host; require lifecycle and actual navigation proof
-without changing console/time/oracle bounds. Commit no speculative fix. Any
-product change retains the final clean-source package requirement.
-Reuse: Historical40ad component63, frozen7603 and overlay/source/editor/isolation/
-F6/transport receipts retain their original scopes. UCU12 FFmpeg207/Next023rs6 is
-the general baseline; current023rs7 bare-worker proof is not app adoption.
-Native ARM/platform/adoption/client/editor and full9A remain with their owners.
-Dependencies are the typed depends_on edges; shared obligations are referenced,
-not duplicated. No macOS work, CI, push, publication or acceptance waiver.
+Completed within the current clean-source Windows application-package boundary
+(2026-10-26). Canonical provider-scan/windows-current-clean-package/qualification.json
+under tmp/phase9-next-local-teletext owns source34e04bcd, docs-only runtime-source
+equivalence to8c07ef35, four exact AMD64 MSVC/Rust1.97.1 release executables and
+matched release archivecdf06813. Independent extraction, source/payload/public/
+CSS identity, bundled published Next023rs6 and actual-server structural gate pass.
+Actual packaged launcher child/bootstrap/disposable DB/native healthcheck pass;
+both runtime cases retain Dutch/light settings through same-state restart.
+All36 required per-runtime/per-browser admin cases are proved:32 headed Health
+cases/64 EN-NL scenarios and4 responsive/cached Next-navigation cases. Both themes
+and JS/no-JS, real Refresh persistence, exact two-tool diagnostics/generation,
+old207 false/Info and explicit original-clock Windows candidate true/Pass pass.
+Native ordinary MPEG-TS/HLS and Next Burn/Convert retain strict AV/caption/880Hz
+Dutch/cache/reconnect/preview/idle oracles; all8 output captures are AAC/nld and
+runtime Jobs fully drain. Earlier editor/publication/isolation/Lua/F6 and transport
+receipts remain reused only within their original scopes, not replayed.
+Verified method: existing per-project CLI invocation. Same unmodified package,
+live launcher/host PID/database/port pass Chromium9 then Firefox9 without host
+restart or fixture reset between CLI processes. Candidate Firefox navigation
+passes independently7.8s; its other8 Firefox Health cases and Chromium9 already
+pass. This is composed per-client proof, never a fresh full combined-CLI claim.
+Retain the negative combined native multi-project CLI stalls in both runtime
+cases. Their underlying runner mechanism is not diagnosed or claimed fixed.
+A temporary single-JS ownership guard failed full acceptance and is rejected;
+no product, browser preference, assertion, timeout or production pin was changed.
+The initial release-SSR/dev-client marker negative is also retained; matching
+release frontend corrects the candidate configuration with unchanged native
+binary bytes. Compiler exit0 plus bounded forced cleanup of one unclassified
+build-job descendant remains explicit, not natural compiler cleanup. Fixtures
+terminate their own launcher hosts; no new graceful tray-menu Exit is inferred.
+Exact remaining gap within this package: None. Do not reopen without a concrete
+relevant regression. General runtime is UCU12 FFmpeg207/Next023rs6; unpublished
+rs7/native source-output/candidate adoption, native ARM, licensing/other applicable
+platform cells and full authored/client/editor acceptance retain their primary
+owners. No six-platform/full9A, original-wire TSDuck, Mac, physical-hardware or
+production-adoption claim. No CI, push, publication or acceptance waiver.
 '''
 
 [[milestone]]
@@ -16806,9 +16809,10 @@ old207 false/Info and candidate true/Pass, persisted Refresh/diagnostic tool
 identity and same-state packaged launcher restart pass. Three unchanged native
 ordinary-output gates and all8 AAC/nld captures pass with bounded owned cleanup.
 Reuse compiler/archive and prior unrelated proof within their explicit scopes.
-p9a-windows-package owns the separately open Firefox channels-reload defect;
-Health completion is not erased by that later navigation gap. No full Windows
-package, original-wire transport, adoption or aggregate acceptance is inferred.
+p9a-windows-package now closes its full scoped package gate through unchanged
+per-project native client proofs and a same-host isolation control; combined-CLI
+negatives remain retained. No original-wire transport, candidate adoption or
+aggregate platform acceptance is inferred.
 
 Completed PS2 current optional-clock Linux Health/admin component
 (2026-10-26): canonical original-pts-runtime/health-admin/qualification.json
@@ -16827,7 +16831,7 @@ Nine-culture helper/unit, old-runtime AV, original-clock source/route/ownership
 and four-RID candidate software proofs are reused within scope. Mandatory65GiB
 target cleanup retained the finished host/canonical artifacts before rebuilding.
 This closes the affected current Linux localized-Health/diagnostics obligation.
-Native ARM/the remaining Windows package navigation, accepted adoption and other external
+Native ARM, accepted candidate adoption and other external
 capability/policy owners remain open; no completed component is reopened.
 
 Completed PS1 original-PES ARM64/ARMv7/Windows candidate artifact/software
@@ -16894,10 +16898,10 @@ Status: In progress; completion waits for the listed source-output/native/artifa
 PS1 current023 Linux package/Bookworm component completed: canonical next023_source_output_followup.linux_package_bookworm and next023-source-output/bookworm/qualification.json bind archivec6765c48, payload552d6e0f, exact source/compiler/lock/ten patches and license. Existing safe member reading proves archive/origin/payload equality; the unchanged production loader refuses this unadopted candidate. Nine package guards pass, reusing ten preparation guards. The existing finite software recipe runs the exact worker and FFmpeg2.0.7 inside pinned Debian12 image3783cc01/glibc2.36; normal exit and container removal pass. Native-host decoding of those original files with the same pinned fontconfig/font proves200frames/160x90, nld880Hz and48 caption-reference pixels/error0.438 versus plain66.062. The initial host-default-font comparison is retained; only host path/environment mapping is corrected, without worker replay or oracle change. Reuse current source/ordinary-route/95transport and unchanged earlier FFmpeg compatibility within scope. This closes current Linux candidate package portability, not other RIDs, native ARM/macOS/Windows, final Health or managed adoption. Next independently executable PS1 work is the two existing ARM candidate build/software recipes; QEMU/native/adoption claims remain separate and the Windows120minute trial stays deferred.
 PS1 current023 ARM64/ARMv7 artifact/emulated-software components completed: canonical next023_source_output_followup.arm_artifact_qualification and next023-source-output/arm-candidates/qualification.json own exact checksum-pinned preparation/compiler/lock/ten-patch provenance, independent warm-cache builds, candidate archives and unchanged private MPP companions/notices. Each pinned Bookworm/QEMU runtime passes its original53 controls plus15 distinct new clock/cut/single-use controls (68 each), actual version/startup and applicable no-device discovery. Existing generic software recipes each deliver200frames/160x90, selected nld880Hz and48 caption-reference pixels/error0.396; native-host decoding uses the same pinned font context and original strict oracles. Both finite workers exit normally; all six owned containers are absent. Existing safe member reading matches actual workers/companions/license/origin to the exact archives. This closes those two artifact/QEMU components only; it supplies no ordinary source-output route, native ARM, physical MPP or managed-adoption claim. Next independently executable PS1 boundary is current Windows worker source-artifact qualification through its existing recipe, if the native toolchain is available; the separate120minute full application-package trial remains deferred and is not started by a worker-only build. Missing Mac artifacts/native environments and all final Health/adoption obligations remain with existing owners.
 
-PS1 current023 Windows bare-worker artifact component completed: canonical next023_source_output_followup.windows_worker_artifact and next023-source-output/windows-artifact/qualification.json bind native MSVC Rust1.99.0/source54c6cb9/exact lock/ten patches, archive9df0d844/payload560e246b and the unchanged pinned VPL companions/license. Existing native recipe passes54 pipeline/clock/cut controls plus14 channel/caption/source-owner controls and actual synthetic worker startup/discovery with exact FFmpeg2.0.7. Existing safe member reading matches archive/origin/actual executable and notices. Original rs.6 payload hashes remain exact; no owned compiler/worker/FFmpeg processes remain. This closes worker build/artifact/source/startup only. The separate full current Windows application-package trial stays deferred with120minutes reserved; no AV/admin/native-app, Mac, physical ARM, hardware, Health or managed-adoption acceptance is inferred. Available non-Mac worker candidate artifact components are now closed; missing Mac artifacts/native execution and final application/Health/adoption joins retain existing owners. Independent engine work returns to the already named AE5 original source-order/lifetime witness, without a new variant queue.
+PS1 current023 Windows bare-worker artifact component completed: canonical next023_source_output_followup.windows_worker_artifact and next023-source-output/windows-artifact/qualification.json bind native MSVC Rust1.99.0/source54c6cb9/exact lock/ten patches, archive9df0d844/payload560e246b and the unchanged pinned VPL companions/license. Existing native recipe passes54 pipeline/clock/cut controls plus14 channel/caption/source-owner controls and actual synthetic worker startup/discovery with exact FFmpeg2.0.7. Existing safe member reading matches archive/origin/actual executable and notices. Original rs.6 payload hashes remain exact; no owned compiler/worker/FFmpeg processes remain. This closes worker build/artifact/source/startup only. The then-deferred120minute current Windows application-package trial is now completed by p9a-windows-package with its own source/runtime/admin/output boundary; none of that later proof is inferred from this worker-only receipt. No Mac, physical ARM, hardware or managed-adoption acceptance is inferred. Available non-Mac worker candidate artifact components are now closed; missing Mac artifacts/native execution and final application/Health/adoption joins retain existing owners. Independent engine work returns to the already named AE5 original source-order/lifetime witness, without a new variant queue.
 
 Reuse/closed: P9A-02 bounded decoder/operator nine-culture Health, manager/startup/enabled-channel/nativeWindows receipts, exact Linux/nativeWindows configuration-precedence/playback/cleanup scopes and completed6137 localized refresh. Crossbuild, QEMU, interop, native runtime and current package remain separate claims.
-Missing proof/stop: Every PS1/PS2 applicable clause has the exact completed primary receipt and accurate persisted Health/runtime identity; no missing native artifact/environment or deferred120minute Windows-package proof is replaced by local success. Managed adoption is a separate owner after this join, not a new duplicate test matrix.
+Missing proof/stop: Every PS1/PS2 applicable clause has the exact completed primary receipt and accurate persisted Health/runtime identity; no missing native ARM environment or required candidate-adoption proof is replaced by local success. The separate current-source Windows package owner is now Complete within its declared scope. Managed adoption is a separate owner after this join, not a new duplicate test matrix.
 '''
 
 [[milestone]]
@@ -16918,7 +16922,7 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
-Status: Blocked for independent Phase9 adoption. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Exact remaining gaps: qualified candidate artifact/platform-safety joins, native ARM execution, and the deferred current Windows package trial. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
+Status: Blocked for independent Phase9 adoption. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Exact remaining gaps: qualified candidate artifact/platform-safety joins and native ARM execution. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
 Reuse: ucu-12 exact adopted per-platform manifest and its bounded source/software/managed/transport scopes; audio_language_followup earlier reproduced source/lock/four patches, candidate.4 archives, manager identity/corruption/offline checks and scoped Linux/nativeWindows proof retain their historical boundaries. No package/pin is changed by this Phase9 rejoin. Shared obligations remain with the existing owners, not a second adoption matrix.
 Missing mandatory proof: Full exact accepted required four-RID package/host/Health/output qualification and explicit managed adoption; crossbuild/startup/interop/component success cannot substitute.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
