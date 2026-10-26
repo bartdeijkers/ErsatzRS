@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety — existing PS1/PS2 exact artifact and Health receipt join'
+current_focus = 'p9a-managed-adoption — current-candidate install and compatibility proof; production promotion separately gated'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -80,10 +80,19 @@ provider-scan/identity.json source_output_closure_followup joins13 terminal runt
 receipts,14 byte-valid captures/266 transport checks and36 unchanged implementation
 hashes. This closes a mandatory proof join, not new runtime functionality, a
 production pin or platform acceptance. Historical component negatives remain.
-Current package: p9a-platform-safety PS1/PS2 primary-receipt join. Consume existing
-exact artifacts, software/Health and current Windows-package proof; close only
-when each existing applicable clause has its valid primary receipt. Do not invent
-variants, repeat unchanged chains or move managed adoption into this owner.
+Completed p9a-platform-safety PS1/PS2 independent join: exact four-RID runtime
+artifact/software, Linux/Windows headed Health and current ARM host crossbuild
+proof are closed within their declared source/runtime boundaries. ARM64/ARMv7
+web/scanner/healthcheck builds pass55m58s/61m28s: six fresh ELFs,2848 unchanged
+inputs and declared glibc2.39 baseline; both own containers are removed. Native
+ARM is assumed, not verified. No production adoption or fresh full CI is inferred.
+Canonical provider-scan/platform-safety-closeout/qualification.json owns proof.
+Current package: p9a-managed-adoption. Next executable step: use its existing
+current-candidate temporary-root install/offline-reuse/corruption/startup/Health
+and applicable compatibility mechanisms for original-PTS/current023rs7 bytes.
+Reuse old candidate.4 proof only within its valid scope; do not infer installation
+of new bytes. Production promotion/publication remains separately gated, with
+no production-pin change or publication authorized by this checkpoint.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component
@@ -138,8 +147,9 @@ semantics-preserving reset. Client gates retain X1 deferral/no DVBViewer/no phys
 Kodi before the agreed joint final; editor-upstream retains X3 upstream banks/
 over208-context capacity. Native ARM execution is maintainer-deferred, with
 provisional compatibility assumed and its future proof retained.
-Dependent source/platform/adoption/aggregate/final gates stay open without
-waiving their clauses. No Mac execution, CI, push or publication is authorized.
+Source-output and independent platform-safety components are closed. Runtime
+adoption and dependent aggregate/final gates stay open with all their clauses.
+No Mac execution, CI, push or publication is authorized.
 The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.
 Older six-platform next actions below are historical where this scope supersedes
 them; retain all valid evidence and independently required Windows/ARM work.
