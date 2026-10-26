@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — original-PTS FFmpeg candidate installation/identity; promotion separately gated'
+current_focus = 'p9a-managed-adoption — exact candidate startup/Health joins; promotion separately gated'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -96,10 +96,20 @@ release pass. Native clean34e04 critical sources match current; all source bytes
 stay unchanged. The Windows Job is fully emptied with one forced unclassified
 descendant termination; no natural-exit attribution is claimed. No full global
 startup, persisted Health, production pin or accepted adoption is inferred.
-Current package: p9a-managed-adoption. Next executable step: locate and reuse its
-existing first-party FFmpeg archive/manager qualification mechanism for the
-original-PTS candidate; then close only missing shared startup/Health/affected
-compatibility joins. No new client search, unrelated variants or output matrix.
+Completed original-PTS FFmpeg installer/cache/identity component: canonical
+provider-scan/managed-current-candidates/ffmpeg/qualification.json joins composed
+15 Linux/14 nativeWindows controls and final real-archive passes on both hosts.
+Staged/promoted launcher capabilities, original-PES PTS, offline reuse, exact
+non-null publication hashes and wrong-checksum preservation pass. Existing
+production bytes/pins/policy remain unchanged. Strict crate lint passes; native
+source is restored, full bounded Job cleanup is confirmed with forced unclassified
+descendants, never natural exit. This closed component is not commissioned again.
+Current package: p9a-managed-adoption. Next executable step: use existing host/
+package mechanisms to close the still-missing actual startup/Health and affected
+compatibility joins of these exact current FFmpeg/Next candidate bytes. Reuse
+unchanged output/admin evidence; distinguish installer tests from actual global
+startup/persisted Health and accepted production adoption. Do not change ADR0008
+selection/update/PATH fallback or silently copy the distinct Next cache-pin policy.
 Production promotion/publication remains separately gated and unauthorized.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.

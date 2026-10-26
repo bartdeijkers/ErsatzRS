@@ -1635,6 +1635,131 @@ mod tests {
         assert!(select_package_asset(&release, "linux-arm").is_none());
     }
 
+    // Use an independently qualified archive and its pinned digest. Exercise the
+    // installer behind explicit override selection without changing process env,
+    // production release pins, or ADR 0008's update/PATH fallback policy.
+    #[tokio::test]
+    #[ignore = "requires qualified native original-PTS archive and SHA256 fixture env"]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "manual opt-in test reads only its explicit archive fixture settings"
+    )]
+    async fn real_original_pts_candidate_installs_and_reuses_managed_runtime() {
+        let path = PathBuf::from(
+            std::env::var("ERSATZRS_FFMPEG_TEST_PACKAGE_ARCHIVE").expect("archive fixture"),
+        );
+        let checksum =
+            std::env::var("ERSATZRS_FFMPEG_TEST_PACKAGE_SHA256").expect("pinned archive digest");
+        assert!(is_sha256_hex(&checksum));
+        let archive = fs::read(&path).expect("read qualified archive");
+        assert_eq!(sha256_hex(&archive), checksum.to_ascii_lowercase());
+        let rid = current_ersatzrs_ffmpeg_rid().expect("native RID");
+        let archive_name = path.file_name().unwrap().to_str().unwrap();
+        let archive_url = "https://example.test/qualified-original-pts";
+        let tag = "v2.0.7-teletext-pts-local";
+        let release = FfmpegReleaseMetadata {
+            tag_name: tag.to_owned(),
+            assets: vec![FfmpegReleaseAsset {
+                name: archive_name.to_owned(),
+                download_url: archive_url.to_owned(),
+                digest: Some(format!("sha256:{checksum}")),
+            }],
+        };
+        assert!(select_package_asset(&release, rid).is_some());
+        let temp = tempfile::tempdir().expect("isolated managed root");
+        let mut config = FfmpegRuntimeManagerConfig::new(temp.path());
+        config.release_tag = tag.to_owned();
+        config.release_tag_pinned = true;
+        let client = FakeClient::default();
+        client.add_release(release.clone());
+        client.add_download(archive_url, archive);
+        let validator = CapabilityRuntimeValidator;
+        let selected = release_for_install(&config, &client).await.unwrap();
+        let installed = download_release_install_and_validate(
+            &config, rid, selected, None, &client, &validator,
+        )
+        .await
+        .expect("real archive passes staging capability gate and promotion");
+        assert_eq!(
+            installed.acquisition.source,
+            FfmpegRuntimeSource::Downloaded
+        );
+        assert_eq!(installed.acquisition.installed_tag.as_deref(), Some(tag));
+        assert!(installed
+            .capabilities
+            .teletext_decoder
+            .preserves_original_pts());
+        assert!(!installed.has_errors());
+        assert_eq!(client.download_call_count(), 1);
+        assert_eq!(*client.latest_calls.lock().unwrap(), 0);
+        assert_eq!(*client.release_calls.lock().unwrap(), 1);
+
+        // Revalidate the promoted paths, including generated Unix launchers and
+        // their relocated library layout, with unavailable release metadata.
+        config.allow_download = false;
+        let offline = FakeClient::default();
+        let candidate = managed_candidate(temp.path()).expect("promoted pair");
+        let mut cached = resolve_managed_candidate(candidate, rid, &config, &offline, &validator)
+            .await
+            .expect("actual installed runtime remains usable offline");
+        assert_eq!(cached.acquisition.source, FfmpegRuntimeSource::Managed);
+        assert_eq!(cached.acquisition.installed_tag.as_deref(), Some(tag));
+        assert!(cached.acquisition.update_check_error.is_some());
+        assert_eq!(offline.download_call_count(), 0);
+        assert!(!cached.has_errors());
+        assert!(cached
+            .capabilities
+            .teletext_decoder
+            .preserves_original_pts());
+        assert_eq!(cached.ffmpeg.sha256, installed.ffmpeg.sha256);
+        assert_eq!(cached.ffprobe.sha256, installed.ffprobe.sha256);
+        assert_published_runtime_identity(&mut cached);
+
+        // A rejected replacement must leave the accepted installation intact.
+        // Digest enforcement precedes staging and real validation; no PATH or
+        // override fallback can mask this direct installer-boundary failure.
+        let before_ffmpeg = fs::read(&cached.ffmpeg.path).unwrap();
+        let before_ffprobe = fs::read(&cached.ffprobe.path).unwrap();
+        let before_tag = fs::read(temp.path().join(CURRENT_TAG_FILE)).unwrap();
+        let bad = FakeClient::default();
+        bad.add_download(archive_url, b"corrupt replacement".to_vec());
+        let error = download_release_install_and_validate(
+            &config,
+            rid,
+            release,
+            Some(tag.to_owned()),
+            &bad,
+            &validator,
+        )
+        .await
+        .expect_err("checksum mismatch before promotion");
+        assert!(matches!(
+            error,
+            FfmpegRuntimeManagerError::ChecksumMismatch { .. }
+        ));
+        assert_eq!(fs::read(&cached.ffmpeg.path).unwrap(), before_ffmpeg);
+        assert_eq!(fs::read(&cached.ffprobe.path).unwrap(), before_ffprobe);
+        assert_eq!(
+            fs::read(temp.path().join(CURRENT_TAG_FILE)).unwrap(),
+            before_tag
+        );
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    fn assert_published_runtime_identity(report: &mut FfmpegRuntimeReport) {
+        let actual_hash = |path: &str| Some(sha256_hex(&fs::read(path).unwrap()));
+        assert_eq!(report.ffmpeg.sha256, actual_hash(&report.ffmpeg.path));
+        assert_eq!(report.ffprobe.sha256, actual_hash(&report.ffprobe.path));
+        report.set_generation(1);
+        let identity = report.capabilities.runtime_identity.as_ref().unwrap();
+        assert_eq!(identity.ffmpeg_path, report.ffmpeg.path);
+        assert_eq!(identity.ffprobe_path, report.ffprobe.path);
+        assert_eq!(identity.ffmpeg_sha256, report.ffmpeg.sha256);
+        assert_eq!(identity.ffprobe_sha256, report.ffprobe.sha256);
+        assert!(Path::new(&identity.ffmpeg_path).is_file());
+        assert!(Path::new(&identity.ffprobe_path).is_file());
+    }
+
     fn seed_managed_runtime(root: &Path, tag: &str) {
         let bin = root.join(CURRENT_DIR_NAME).join("bin");
         fs::create_dir_all(&bin).expect("bin dir");
