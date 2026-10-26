@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety — qualify exact original-PTS Linux candidate package'
+current_focus = 'p9a-platform-safety — integrate qualified runtime source inputs'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -76,12 +76,18 @@ It owns exact runtime/source hashes, complete same-response EOF cue/clear/reentr
 ordinary HTTP/RTSP/HLS/Native HLS,nld660Hz,default2,joined cleanup and old-runtime
 AV preservation. Final focused controls, strict all-target lint and fresh-host
 ordinary smoke pass; other source/editor/F6/isolation receipts retain scope.
-One current package: p9a-platform-safety PS1, exact new original-PTS FFmpeg Linux
-candidate package/provenance and affected compatibility. Reuse the existing
-package/Bookworm/compatibility tooling and unchanged Next/source-output proof.
-Stop when the exact archive/source/license/dependency identities, original-PTS
-verifier and affected existing playback recipes pass; do not infer other native
-RID, matched headed admin, managed adoption or production pin acceptance.
+Completed PS1 exact original-PTS Linux package/Bookworm component: canonical
+original-pts-runtime/package/qualification.json binds archiveae83ecf2, all10421
+source-file comparisons/strict patch replay, accepted207 dependency/license
+records, existing safe package/relocation/wrong-pin guards and actual baseline
+compatibility/56PTS/sparse400frame,nld879.94Hz proof. Container cleanup passed.
+One current package: PS1 exact first-party source-input integration. The clean
+primary FFmpeg checkout still lacks accepted207 input changes present in the
+qualified composite (accepted branch1e357c9 plus optional4a206f08 patch).
+Join those existing inputs, preserve all platform code and the current Mac
+workflow deferral, then stop on exact inventory equality and affected existing
+non-Mac guards. Do not start a Mac build/recipe/acceptance trial or infer other
+native RID, Windows application, matched admin or managed-adoption proof.
 The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.
 Older six-platform next actions below are historical where this scope supersedes
 them; retain all valid evidence and independently required Windows/ARM work.
