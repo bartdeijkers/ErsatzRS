@@ -296,6 +296,7 @@ impl GeneratedSourceTeletextPlan<'_> {
             owners,
             index,
             self.intel,
+            &input_prefix_options(self.steps),
         ));
         options
     }

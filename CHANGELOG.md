@@ -49,9 +49,11 @@ release section when tagging a release.
   for an already-running producer. Native MPEG-TS caption Burn supports Live
   add-ons and advertised HTTP/RTSP sources, including live HLS, through one held
   producer, preserving selected audio, source ownership, ordinary Off playback
-  and joined cancellation. A separately verified Linux runtime candidate adds
-  opt-in preservation of original teletext timestamps. Application integration,
-  managed adoption and other source/output combinations retain their gates.
+  and joined cancellation. Qualify original timestamp handling before selecting
+  Live captions and apply the same clock policy to their producer and consumer.
+  Older runtimes retain ordinary AV without unverified Live teletext captions.
+  The corrected Linux runtime candidate remains separate from managed adoption
+  and the remaining source/output acceptance gates.
 
 - Add owned finite source-video frame-end qualification for subtitle preparation.
   Exact decoded clocks and complete-frame bookends are checked against the selected

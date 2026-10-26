@@ -23,6 +23,7 @@ pub async fn native_live_url_caption_producer(
     media_item_id: i64,
     media_version_id: i64,
     stream: &ResolvedRemoteStream,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
 ) -> Result<Option<RemoteStreamCommand>> {
     let RemoteStreamSource::Url(url) = &stream.source else {
         return Ok(None);
@@ -52,11 +53,19 @@ pub async fn native_live_url_caption_producer(
     .fetch_one(pool)
     .await
     .repository()?;
-    Ok(advertised.then(|| copy_producer(url)))
+    Ok(advertised.then(|| copy_producer(url, capabilities)))
 }
 
-fn copy_producer(url: &str) -> RemoteStreamCommand {
-    let program = ersatzrs_ffmpeg::ffmpeg_path();
+fn copy_producer(
+    url: &str,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+) -> RemoteStreamCommand {
+    let program = capabilities
+        .runtime_identity
+        .as_ref()
+        .map_or_else(ersatzrs_ffmpeg::ffmpeg_path, |identity| {
+            identity.ffmpeg_path.clone()
+        });
     let mut args = [
         "-hide_banner",
         "-loglevel",
@@ -67,23 +76,20 @@ fn copy_producer(url: &str) -> RemoteStreamCommand {
     ]
     .map(str::to_owned)
     .to_vec();
+    if capabilities.teletext_decoder.preserves_original_pts() {
+        args.extend(["-fflags".to_owned(), "+preserve_teletext_pts".to_owned()]);
+    }
     args.extend(remote_url_input_options(url));
+    args.extend(["-i", url, "-map", "0", "-c", "copy"].map(str::to_owned));
+    // Reuse the established sparse-subtitle mux bound; it does not authorize
+    // caption timing, which requires the separate original-PES input contract.
     args.extend(
-        [
-            "-i",
-            url,
-            "-map",
-            "0",
-            "-c",
-            "copy",
-            "-mpegts_copyts",
-            "1",
-            "-f",
-            "mpegts",
-            "pipe:1",
-        ]
-        .map(str::to_owned),
+        ersatzrs_ffmpeg::sparse_subtitle_interleave()
+            .output_options()
+            .iter()
+            .cloned(),
     );
+    args.extend(["-mpegts_copyts", "1", "-f", "mpegts", "pipe:1"].map(str::to_owned));
     RemoteStreamCommand {
         tool_paths: vec![std::path::PathBuf::from(&program)],
         program,
@@ -144,7 +150,10 @@ mod tests {
     fn copy_producer_keeps_all_tracks_original_clocks_and_url_protocol_options() {
         let mut snapshots = Vec::new();
         for url in ["https://example.test/live", "rtsp://example.test/live"] {
-            let command = copy_producer(url);
+            let mut capabilities = ersatzrs_ffmpeg::FfmpegCapabilityReport::default();
+            capabilities.teletext_decoder.status = ersatzrs_ffmpeg::TeletextDecoderStatus::Ready;
+            capabilities.teletext_decoder.original_pts = true;
+            let command = copy_producer(url, &capabilities);
             snapshots.push(command.args.join("\n"));
             assert_eq!(
                 command.tool_paths,
@@ -152,6 +161,24 @@ mod tests {
             );
         }
         insta::assert_snapshot!(snapshots.join("\n---\n"));
+    }
+
+    #[test]
+    fn older_runtime_keeps_copy_av_without_requesting_the_unknown_clock_flag() {
+        let command = copy_producer(
+            "https://example.test/live",
+            &ersatzrs_ffmpeg::FfmpegCapabilityReport::default(),
+        );
+        assert!(!command
+            .args
+            .iter()
+            .any(|arg| arg.contains("preserve_teletext_pts")));
+        assert!(command.args.windows(2).any(|pair| pair == ["-map", "0"]));
+        assert!(command.args.windows(2).any(|pair| pair == ["-c", "copy"]));
+        assert!(command
+            .args
+            .windows(2)
+            .any(|pair| pair == ["-max_interleave_delta", "100000"]));
     }
 
     #[test]
@@ -206,17 +233,27 @@ mod tests {
         .await
         .unwrap();
         let stream = live("https://example.test/live");
-        assert!(native_live_url_caption_producer(&pool, 20, 10, &stream)
+        assert!(native_live_url_caption_producer(
+            &pool,
+            20,
+            10,
+            &stream,
+            &ersatzrs_ffmpeg::FfmpegCapabilityReport::default()
+        )
+        .await
+        .unwrap()
+        .is_some());
+        for (item, version) in [(21, 10), (20, 11), (20, 12), (20, 99)] {
+            assert!(native_live_url_caption_producer(
+                &pool,
+                item,
+                version,
+                &stream,
+                &ersatzrs_ffmpeg::FfmpegCapabilityReport::default()
+            )
             .await
             .unwrap()
-            .is_some());
-        for (item, version) in [(21, 10), (20, 11), (20, 12), (20, 99)] {
-            assert!(
-                native_live_url_caption_producer(&pool, item, version, &stream)
-                    .await
-                    .unwrap()
-                    .is_none()
-            );
+            .is_none());
         }
         sqlx::query(r#"INSERT INTO "ConfigElement" VALUES (?,'false')"#)
             .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES)
@@ -224,10 +261,16 @@ mod tests {
             .await
             .unwrap();
         pool.execute(r#"DROP TABLE "MediaStream""#).await.unwrap();
-        assert!(native_live_url_caption_producer(&pool, 20, 10, &stream)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(native_live_url_caption_producer(
+            &pool,
+            20,
+            10,
+            &stream,
+            &ersatzrs_ffmpeg::FfmpegCapabilityReport::default()
+        )
+        .await
+        .unwrap()
+        .is_none());
         pool.close().await;
     }
 
@@ -242,10 +285,16 @@ mod tests {
         finite.liveness = RemoteStreamLiveness::Finite;
         finite.is_live = false;
         for stream in [finite, live("udp://example.test:1234")] {
-            assert!(native_live_url_caption_producer(&pool, 20, 10, &stream)
-                .await
-                .unwrap()
-                .is_none());
+            assert!(native_live_url_caption_producer(
+                &pool,
+                20,
+                10,
+                &stream,
+                &ersatzrs_ffmpeg::FfmpegCapabilityReport::default()
+            )
+            .await
+            .unwrap()
+            .is_none());
         }
     }
 }

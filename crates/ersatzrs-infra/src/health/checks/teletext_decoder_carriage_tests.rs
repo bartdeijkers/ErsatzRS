@@ -20,6 +20,7 @@ fn decoder() -> TeletextDecoderCapability {
     TeletextDecoderCapability {
         status: TeletextDecoderStatus::Ready,
         missing_options: Vec::new(),
+        original_pts: false,
     }
 }
 

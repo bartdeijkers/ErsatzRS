@@ -3,6 +3,7 @@
 #![cfg(unix)]
 
 use super::*;
+use ersatzrs_ffmpeg::TeletextTimestampPolicy::OriginalPes;
 
 const PRODUCER: &str = "org.ersatzrs.remote.live-caption-fixture";
 
@@ -113,7 +114,7 @@ async fn run() {
     let source = local_source(&tools[0], &library).await;
     let expected = calibration(&tools, &source, &root).await;
     let unused_provider = Server::start(Router::new()).await;
-    let state = application(&root, &unused_provider).await;
+    let state = live_caption_application(&root, &unused_provider, &tools, OriginalPes).await;
     let (item, version) = scan_source(&state, &library, &tools[1]).await;
     software_profile(&state).await;
     install_producer(&state, &root, item, version).await;

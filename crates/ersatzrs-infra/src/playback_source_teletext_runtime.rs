@@ -511,7 +511,7 @@ async fn prepare(
     Ok(qualified)
 }
 
-async fn begin(
+pub(crate) async fn begin(
     pool: &DbPool,
     locker: &EntityLocker,
     deadline: Instant,

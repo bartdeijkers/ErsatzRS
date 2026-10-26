@@ -47,13 +47,19 @@ impl PreparedSourcePlayback {
         &self,
         pool: &DbPool,
         channel_id: i64,
+        capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
     ) -> Result<Option<TransientPlaybackTracks>> {
         let Self::Streaming(playback) = self else {
             return Ok(None);
         };
-        ersatzrs_infra::remote_stream::native_live_caption_tracks(playback, pool, channel_id)
-            .await
-            .map(Some)
+        ersatzrs_infra::remote_stream::native_live_caption_tracks(
+            playback,
+            pool,
+            channel_id,
+            capabilities,
+        )
+        .await
+        .map(Some)
     }
 
     pub(super) fn subtitle_input(

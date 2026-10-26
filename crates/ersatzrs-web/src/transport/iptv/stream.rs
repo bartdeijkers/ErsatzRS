@@ -1110,6 +1110,7 @@ async fn serve_channel_stream_admitted_inner(
         );
     }
 
+    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
     let streaming_command = if legacy_item.is_some()
         && interval_admission.is_some()
         && active.subtitle_mode.unwrap_or(channel.subtitle_mode) != ChannelSubtitleMode::None
@@ -1119,6 +1120,7 @@ async fn serve_channel_stream_admitted_inner(
             active.media_item_id,
             active.media_version_id,
             active.remote_stream.as_ref(),
+            &runtime_capabilities,
         )
         .await
         {
@@ -1456,7 +1458,10 @@ async fn serve_channel_stream_admitted_inner(
     };
     fence_cancelled_startup!(&[], None);
     let streaming_tracks = if let Some(playback) = &prepared_playback {
-        match playback.streaming_tracks(&state.pool, channel.id).await {
+        match playback
+            .streaming_tracks(&state.pool, channel.id, &runtime_capabilities)
+            .await
+        {
             Ok(tracks) => tracks,
             Err(error) => {
                 tracing::warn!(channel_id=channel.id,%error,"live source track policy is unavailable");
@@ -1538,7 +1543,6 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         None
     };
-    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
     let language_preferences = match playback_language_preferences(&state.pool).await {
         Ok(preferences) => preferences,
         Err(error) => {

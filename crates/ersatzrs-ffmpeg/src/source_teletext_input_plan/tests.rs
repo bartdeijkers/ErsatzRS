@@ -604,3 +604,50 @@ fn raw_burst_and_seek_remain_opaque_even_with_generated_realtime_reserve() {
 mod carriage;
 #[path = "segment_tests.rs"]
 mod segments;
+
+#[test]
+fn original_live_clock_is_typed_owner_scoped_and_command_sealed() {
+    let mut snapshots = Vec::new();
+    for shared in [true, false] {
+        let mut request = request();
+        if !shared {
+            request.inputs.last_mut().unwrap().path = "caption.ts".into();
+        }
+        let caption = request.inputs.last_mut().unwrap();
+        *caption = caption.clone().with_original_teletext_pts();
+        let (command, plan) = build(HardwareAccelerationKind::None, request);
+        assert_eq!(
+            plan.caption_input().teletext_timestamp_policy,
+            crate::TeletextTimestampPolicy::OriginalPes
+        );
+        assert!(!plan.timing().has_opaque_input_options());
+        let flags = plan
+            .physical_input_options()
+            .windows(2)
+            .rfind(|pair| pair[0] == "-fflags")
+            .unwrap()[1]
+            .clone();
+        assert!(flags.ends_with("+preserve_teletext_pts"));
+        if shared {
+            assert!(flags.contains("+genpts+discardcorrupt+igndts"));
+        } else {
+            assert_eq!(flags, "+preserve_teletext_pts");
+        }
+        assert!(plan.matches_command(&command));
+        snapshots.push(command.arguments.clone());
+        let mut tampered = command.clone();
+        let flag = tampered
+            .arguments
+            .iter_mut()
+            .find(|arg| arg.contains("preserve_teletext_pts"))
+            .unwrap();
+        *flag = "+genpts".into();
+        assert!(!plan.matches_command(&tampered));
+    }
+    let snapshots = snapshots
+        .iter()
+        .map(|args| args.join("\n"))
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    insta::assert_snapshot!("original_live_clock_input_argv", snapshots);
+}

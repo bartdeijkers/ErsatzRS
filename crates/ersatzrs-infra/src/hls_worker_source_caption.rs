@@ -59,6 +59,118 @@ impl HlsSessionWorker {
         self.source_teletext_locker.set(locker)
     }
 
+    /// Qualify one already-admitted Live producer; never cancel by dropping the
+    /// preparation future. Optional observations keep the same ordinary AV owner.
+    pub(super) async fn prepare_live_caption_playback(
+        &self,
+        pool: &DbPool,
+        command: &crate::remote_stream::RemoteStreamCommand,
+        reservation: &crate::transcode_capacity::ActiveTranscodeReservation,
+        slot_id: u64,
+        idle: Option<std::time::Duration>,
+        watch_idle: Option<std::time::Duration>,
+    ) -> Result<Box<crate::remote_stream::PreparedNativeCaptionPlayback>, super::HlsProcessOutcome>
+    {
+        use crate::remote_stream::{
+            prepare_native_caption_producer, RemoteStreamError, RemoteStreamSpawnContext,
+        };
+        let Some(locker) = self.source_teletext_locker.get() else {
+            return Err(super::HlsProcessOutcome::SourceCaptionUnavailable);
+        };
+        let deadline = external::deadline(self);
+        let work = runtime::begin(pool, locker, deadline)
+            .await
+            .map_err(|_| super::HlsProcessOutcome::SourceCaptionUnavailable)?;
+        let hold = work.hold_work();
+        let extractor = crate::ffprobe::FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
+        let (cancel, receiver) = tokio::sync::oneshot::channel();
+        let command = command.clone();
+        let context = RemoteStreamSpawnContext::hls(&self.channel_number);
+        let capacity = reservation.clone();
+        let worker_hold = hold.clone();
+        // Request cancellation closes the sender, while this existing owned
+        // worker keeps admission until preparation and native cleanup settle.
+        tracing::debug!(
+            channel_id = self.channel_id,
+            "preparing owned Live HLS caption input"
+        );
+        let mut operation = tokio::spawn(async move {
+            let _work = work;
+            let result =
+                prepare_native_caption_producer(&command, &extractor, context, deadline, receiver)
+                    .await;
+            match result {
+                Ok(mut playback) => {
+                    if playback
+                        .prepared
+                        .retain_playback_capacity(capacity.clone())
+                        .is_err()
+                    {
+                        if playback.prepared.cancel().await.is_err() {
+                            capacity.retain_until_restart();
+                            worker_hold.retain_until_restart();
+                        }
+                        return Err(RemoteStreamError::PreparedCancelled);
+                    }
+                    playback.video_input = playback.video_input.without_readrate();
+                    Ok(Box::new(playback))
+                }
+                Err(error) => {
+                    if matches!(error, RemoteStreamError::PreparedTerminationUnconfirmed) {
+                        worker_hold.retain_until_restart();
+                        capacity.retain_until_restart();
+                    }
+                    Err(error)
+                }
+            }
+        });
+        let interrupted = loop {
+            tokio::select! {
+                biased;
+                () = self.cancel.notified() => break super::HlsProcessOutcome::Cancelled,
+                () = self.wait_for_idle_timeout(idle) => break super::HlsProcessOutcome::Cancelled,
+                () = self.wait_for_idle_timeout(watch_idle) => break super::HlsProcessOutcome::Reclaimed,
+                () = self.reclaim_transcode.notified() => {
+                    if self.take_reclaim_request(slot_id) { break super::HlsProcessOutcome::Reclaimed; }
+                }
+                result = &mut operation => {
+                    return match result {
+                        Ok(Ok(playback)) => {
+                            tracing::debug!(channel_id = self.channel_id, probe_available = playback.probe.is_some(),
+                                audio_tracks = playback.source_audio.len(), subtitle_choices = playback.tracks().subtitles.len(),
+                                "prepared owned Live HLS caption input");
+                            Ok(playback)
+                        },
+                        Ok(Err(_)) => {
+                            tracing::warn!(channel_id=self.channel_id, "Live HLS producer preparation failed");
+                            Err(super::HlsProcessOutcome::Cancelled)
+                        }
+                        Err(_) => {
+                            hold.retain_until_restart();
+                            reservation.retain_until_restart();
+                            Err(super::HlsProcessOutcome::Cancelled)
+                        }
+                    };
+                }
+            }
+        };
+        let _ = cancel.send(());
+        match operation.await {
+            Ok(Ok(playback)) => {
+                if playback.prepared.cancel().await.is_err() {
+                    hold.retain_until_restart();
+                    reservation.retain_until_restart();
+                }
+            }
+            Ok(Err(RemoteStreamError::PreparedTerminationUnconfirmed)) | Err(_) => {
+                hold.retain_until_restart();
+                reservation.retain_until_restart();
+            }
+            Ok(Err(_)) => (),
+        }
+        Err(interrupted)
+    }
+
     pub(super) async fn automatic_source_caption(
         &self,
         pool: &DbPool,

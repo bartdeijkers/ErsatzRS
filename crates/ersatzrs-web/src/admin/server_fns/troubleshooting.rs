@@ -2371,11 +2371,13 @@ mod tests {
             teletext_decoder: TeletextDecoderCapability {
                 status: TeletextDecoderStatus::MissingOptions,
                 missing_options: vec!["txt_page".into()],
+                original_pts: false,
             },
             ..FfmpegCapabilityReport::default()
         };
         let json = serde_json::to_value(TeletextDecoderSummary::from(&report)).unwrap();
         assert_eq!(json["RuntimeGeneration"], 12);
+        assert_eq!(json["Capability"]["original_pts"], false);
         assert_eq!(json["FFmpegSha256"], "a".repeat(64));
         assert_eq!(json["FFprobeSha256"], "b".repeat(64));
         assert_eq!(json["Capability"]["status"], "missing_options");

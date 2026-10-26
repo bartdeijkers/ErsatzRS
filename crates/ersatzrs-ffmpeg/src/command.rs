@@ -198,7 +198,8 @@ pub fn build_mpegts_concat_command(
 
 /// Sparse subtitle packets must not hold live audiovisual output in the native
 /// muxer's ten-second default interleave queue (ADR 0121).
-pub(crate) fn sparse_subtitle_interleave() -> PipelineStep {
+#[must_use]
+pub fn sparse_subtitle_interleave() -> PipelineStep {
     PipelineStep::generic(
         "sparse_subtitle_interleave",
         ["-max_interleave_delta", "100000"],
@@ -247,7 +248,8 @@ impl CommandGenerator {
         pipeline_steps: &[PipelineStep],
         is_intel_vaapi_or_qsv: bool,
     ) -> Vec<String> {
-        let mut arguments = input_prefix_options(pipeline_steps);
+        let prefix = input_prefix_options(pipeline_steps);
+        let mut arguments = prefix.clone();
         let owners = crate::physical_inputs::physical_inputs(inputs, is_intel_vaapi_or_qsv);
         for (index, input) in owners.iter().enumerate() {
             arguments.extend(physical_input_options(
@@ -255,6 +257,7 @@ impl CommandGenerator {
                 &owners,
                 index,
                 is_intel_vaapi_or_qsv,
+                &prefix,
             ));
             arguments.extend(["-i".to_owned(), input.path.clone()]);
         }
@@ -320,6 +323,7 @@ pub(crate) fn physical_input_options(
     owners: &[&InputFile],
     index: usize,
     intel: bool,
+    prefix: &[String],
 ) -> Vec<String> {
     let input = owners[index];
     let mut options = physical_input_base_options(inputs, input, intel);
@@ -327,6 +331,25 @@ pub(crate) fn physical_input_options(
         .iter()
         .any(|owner| owner.source_key() == input.source_key())
     {
+        if selected_bitmap_burn_input(inputs).is_some_and(|subtitle| {
+            subtitle.teletext_timestamp_policy == crate::TeletextTimestampPolicy::OriginalPes
+                && subtitle
+                    .streams
+                    .first()
+                    .is_some_and(|stream| stream.source_teletext_page.is_some())
+                && subtitle.source_key() == input.source_key()
+        }) {
+            // Preserve the caller's existing flag value; repeated CLI fflags
+            // keys replace each other rather than merging their text.
+            let prefix = if index == 0 { prefix } else { &[] };
+            let flags = prefix
+                .windows(2)
+                .chain(options.windows(2))
+                .rfind(|pair| pair[0] == "-fflags")
+                .map_or("", |pair| pair[1].as_str());
+            let flags = format!("{flags}+preserve_teletext_pts");
+            options.extend(["-fflags".to_owned(), flags]);
+        }
         options.extend(source_teletext_caption_input_options(inputs, input));
         options.extend(selected_subtitle_canvas_input_options(inputs, input));
     }

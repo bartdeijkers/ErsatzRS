@@ -1223,6 +1223,17 @@ source opening. Missing support must remain explicit and preserve ordinary AV.
 Candidate verification is separate from application wiring, Health reporting,
 managed adoption and the required-platform acceptance owned by P9A-02/04.
 
+The runtime report proves this operation using a copy of the pinned fixture
+whose56 PCR fields advance by one second while all PES bytes remain unchanged.
+Require all56 original PTS/DTS values, not merely recognition of the flag. Legacy
+reports default this separate optional capability to false; decoder page/text/
+bitmap readiness remains independent. The Native Live producer and observed
+track selection share one runtime snapshot, and the consuming physical input
+uses typed `TeletextTimestampPolicy::OriginalPes` with unchanged existing flags
+and command/source seals. Missing capability explicitly excludes unverified Live
+teletext choices while retaining the same ordinary AV producer and selected
+audio; localized Health and runtime-bound troubleshooting expose that outcome.
+
 ### Routes, administration and accessibility
 
 Provide an authenticated management viewer for a configured channel/service,

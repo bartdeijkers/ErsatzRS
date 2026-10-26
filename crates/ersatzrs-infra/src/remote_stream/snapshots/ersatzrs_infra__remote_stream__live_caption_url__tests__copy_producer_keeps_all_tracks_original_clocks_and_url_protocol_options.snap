@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-infra/src/remote_stream/live_caption_url.rs
-assertion_line: 154
+assertion_line: 163
 expression: "snapshots.join(\"\\n---\\n\")"
 ---
 -hide_banner
@@ -9,6 +9,8 @@ error
 -nostdin
 -copyts
 -copy_unknown
+-fflags
++preserve_teletext_pts
 -rw_timeout
 30000000
 -reconnect
@@ -27,6 +29,8 @@ https://example.test/live
 0
 -c
 copy
+-max_interleave_delta
+100000
 -mpegts_copyts
 1
 -f
@@ -39,6 +43,8 @@ error
 -nostdin
 -copyts
 -copy_unknown
+-fflags
++preserve_teletext_pts
 -timeout
 30000000
 -i
@@ -47,6 +53,8 @@ rtsp://example.test/live
 0
 -c
 copy
+-max_interleave_delta
+100000
 -mpegts_copyts
 1
 -f

@@ -49,6 +49,10 @@ pub struct TeletextDecoderCapability {
     pub status: TeletextDecoderStatus,
     /// Required option names absent from decoder help, with no raw tool output.
     pub missing_options: Vec<String>,
+    /// The exact runtime preserves every declared fixture PES timestamp with
+    /// its opt-in input flag. Missing legacy report data grants no authority.
+    #[serde(default)]
+    pub original_pts: bool,
 }
 
 impl TeletextDecoderCapability {
@@ -57,6 +61,92 @@ impl TeletextDecoderCapability {
     pub fn is_ready(&self) -> bool {
         self.status == TeletextDecoderStatus::Ready
     }
+
+    /// Whether both decoder and original Live PES-clock proofs succeeded.
+    #[must_use]
+    pub fn preserves_original_pts(&self) -> bool {
+        self.is_ready() && self.original_pts
+    }
+}
+
+pub(crate) const ORIGINAL_PTS_PROBE_ARGUMENTS: &[&str] = &[
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-copyts",
+    "-fflags",
+    "+preserve_teletext_pts",
+    "-f",
+    "mpegts",
+    "-i",
+    "pipe:0",
+    "-map",
+    "0:s:0",
+    "-c",
+    "copy",
+    "-f",
+    "framecrc",
+    "pipe:1",
+];
+
+// Skew only the independent fixture's adaptation-only PCRs by one second.
+// Its ordinary PCRs do not trigger repair, so accepting that input alone could
+// mistake a recognized-but-ignored flag for functional original-clock support.
+fn original_pts_probe_fixture() -> Option<Vec<u8>> {
+    let mut fixture = TELETEXT_DECODE_FIXTURE.to_vec();
+    let mut changed = 0;
+    for packet in fixture.chunks_exact_mut(188) {
+        if packet[..3] != [0x47, 0x01, 0x00]
+            || packet[3] & 0x30 != 0x20
+            || packet[4] != 183
+            || packet[5] != 0x10
+        {
+            continue;
+        }
+        let base = (u64::from(packet[6]) << 25)
+            | (u64::from(packet[7]) << 17)
+            | (u64::from(packet[8]) << 9)
+            | (u64::from(packet[9]) << 1)
+            | u64::from(packet[10] >> 7);
+        let base = base + 90000;
+        let extension = packet[10] & 0x7f;
+        packet[6..11].copy_from_slice(&(base << 7).to_be_bytes()[3..]);
+        packet[10] |= extension;
+        changed += 1;
+    }
+    (changed == 56).then_some(fixture)
+}
+
+// The independent pinned fixture declares eight cycles of seven PES timestamps.
+// Do not accept a flag name alone, a partial prefix or a retimed packet trace.
+fn valid_original_pts(output: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(output) else {
+        return false;
+    };
+    if !text.lines().any(|line| line == "#tb 0: 1/90000") {
+        return false;
+    }
+    let mut packets = text
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#'));
+    for cycle in 0..8 {
+        for offset in [0, 3600, 18000, 21600, 36000, 39600, 72000] {
+            let Some(line) = packets.next() else {
+                return false;
+            };
+            let mut fields = line.split(',').map(str::trim);
+            if fields.next() != Some("0") {
+                return false;
+            }
+            let expected = 90000 + cycle * 90000 + offset;
+            for _ in 0..2 {
+                if fields.next().and_then(|value| value.parse::<i64>().ok()) != Some(expected) {
+                    return false;
+                }
+            }
+        }
+    }
+    packets.next().is_none()
 }
 
 pub(crate) const TEXT_PROBE_ARGUMENTS: &[&str] = &[
@@ -138,6 +228,7 @@ pub async fn probe_teletext_decoder(ffmpeg: &str, advertised: bool) -> TeletextD
         return TeletextDecoderCapability {
             status: TeletextDecoderStatus::MissingOptions,
             missing_options,
+            original_pts: false,
         };
     }
     let Ok(text) = run_probe(
@@ -166,13 +257,25 @@ pub async fn probe_teletext_decoder(ffmpeg: &str, advertised: bool) -> TeletextD
     if !valid_decoded_bitmap(&bitmap) {
         return outcome(TeletextDecoderStatus::BitmapProbeFailed);
     }
-    outcome(TeletextDecoderStatus::Ready)
+    let mut capability = outcome(TeletextDecoderStatus::Ready);
+    if let Some(fixture) = original_pts_probe_fixture() {
+        capability.original_pts = run_probe(
+            ffmpeg,
+            ORIGINAL_PTS_PROBE_ARGUMENTS,
+            &fixture,
+            MAX_HELP_BYTES,
+        )
+        .await
+        .is_ok_and(|output| valid_original_pts(&output));
+    }
+    capability
 }
 
 fn outcome(status: TeletextDecoderStatus) -> TeletextDecoderCapability {
     TeletextDecoderCapability {
         status,
         missing_options: Vec::new(),
+        original_pts: false,
     }
 }
 
@@ -302,6 +405,76 @@ mod tests {
     use std::fmt::Write as _;
 
     #[test]
+    fn original_pts_probe_argv_snapshot() {
+        insta::assert_snapshot!(
+            "teletext_original_pts_probe_argv",
+            ORIGINAL_PTS_PROBE_ARGUMENTS.join("\n")
+        );
+    }
+
+    #[test]
+    fn original_pts_input_changes_only_the_56_pcr_fields_not_pes_or_payload() {
+        use sha2::Digest as _;
+        let fixture = original_pts_probe_fixture().unwrap();
+        let expected = [
+            0x08, 0xec, 0xfe, 0xde, 0xeb, 0xe5, 0x05, 0x4f, 0x70, 0x7a, 0x3d, 0xb2, 0xbd, 0xfc,
+            0x82, 0xf7, 0x3b, 0xfa, 0xef, 0x0c, 0xf4, 0x4a, 0x62, 0xc5, 0x87, 0x02, 0x7d, 0x98,
+            0xd3, 0x0e, 0x62, 0xf8,
+        ];
+        assert_eq!(&sha2::Sha256::digest(&fixture)[..], &expected);
+        let mut changed = 0;
+        for (original, prepared) in TELETEXT_DECODE_FIXTURE
+            .chunks_exact(188)
+            .zip(fixture.chunks_exact(188))
+        {
+            if original != prepared {
+                assert_eq!(&original[..6], &prepared[..6]);
+                assert_eq!(&original[11..], &prepared[11..]);
+                assert_eq!(&original[..3], &[0x47, 0x01, 0x00]);
+                assert_eq!(original[3] & 0x30, 0x20);
+                changed += 1;
+            }
+        }
+        assert_eq!(changed, 56);
+        assert_eq!(fixture.len(), TELETEXT_DECODE_FIXTURE.len());
+    }
+
+    #[test]
+    fn original_clock_requires_complete_exact_pts_dts_and_time_base() {
+        let mut valid = String::from("#tb 0: 1/90000\n");
+        for cycle in 0..8 {
+            for offset in [0, 3600, 18000, 21600, 36000, 39600, 72000] {
+                let pts = 90000 + cycle * 90000 + offset;
+                writeln!(valid, "0, {pts}, {pts}, 0, 139, checksum").unwrap();
+            }
+        }
+        assert!(valid_original_pts(valid.as_bytes()));
+        for invalid in [
+            valid.replace("90000, 90000", "89999, 90000"),
+            valid.replace("90000, 90000", "90000, 89999"),
+            valid.replace("1/90000", "1/1000"),
+            valid.lines().take(56).collect::<Vec<_>>().join("\n"),
+            format!("{valid}0, 90000, 90000, 0, 139, duplicate\n"),
+        ] {
+            assert!(!valid_original_pts(invalid.as_bytes()));
+        }
+    }
+
+    #[test]
+    fn legacy_report_does_not_authorize_original_live_timestamps() {
+        let report: TeletextDecoderCapability =
+            serde_json::from_str(r#"{"status":"ready","missing_options":[]}"#).unwrap();
+        assert!(report.is_ready());
+        assert!(!report.original_pts);
+        assert!(!report.preserves_original_pts());
+        let mut changed = report;
+        changed.original_pts = true;
+        assert!(changed.preserves_original_pts());
+        changed.status = TeletextDecoderStatus::TextProbeFailed;
+        assert!(!changed.preserves_original_pts());
+    }
+
+    #[test]
     fn decoder_probe_argv_snapshot() {
         // ADR 0121: exact-page, input-scoped decoder options and bounded output.
         insta::assert_snapshot!("teletext_text_probe_argv", TEXT_PROBE_ARGUMENTS.join("\n"));
@@ -372,5 +545,9 @@ mod tests {
             .expect("select the exact runtime candidate");
         let result = probe_teletext_decoder(&ffmpeg, true).await;
         assert_eq!(result.status, TeletextDecoderStatus::Ready, "{result:?}");
+        if crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_EXPECT_ORIGINAL_PTS"]).is_some()
+        {
+            assert!(result.original_pts, "{result:?}");
+        }
     }
 }

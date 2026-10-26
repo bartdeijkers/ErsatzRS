@@ -22,6 +22,7 @@ pub async fn native_live_caption_command(
     item: i64,
     version: i64,
     stream: Option<&ResolvedRemoteStream>,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
 ) -> Result<Option<RemoteStreamCommand>> {
     let Some(stream) = stream.filter(|stream| stream.liveness == RemoteStreamLiveness::Live) else {
         return Ok(None);
@@ -38,7 +39,7 @@ pub async fn native_live_caption_command(
             ))
         }
         RemoteStreamSource::Url(_) => {
-            super::native_live_url_caption_producer(pool, item, version, stream).await
+            super::native_live_url_caption_producer(pool, item, version, stream, capabilities).await
         }
         _ => Ok(None),
     }
@@ -51,8 +52,15 @@ pub async fn native_live_caption_tracks(
     playback: &PreparedNativeCaptionPlayback,
     pool: &DbPool,
     channel_id: i64,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
 ) -> Result<TransientPlaybackTracks> {
     let mut tracks = playback.tracks();
+    if !capabilities.teletext_decoder.preserves_original_pts() {
+        tracks
+            .subtitles
+            .retain(|subtitle| subtitle.codec.as_deref() != Some("dvb_teletext"));
+        tracing::warn!(channel_id, "original Live teletext timestamps are unavailable; preserving ordinary AV on the same producer");
+    }
     if !tracks
         .subtitles
         .iter()

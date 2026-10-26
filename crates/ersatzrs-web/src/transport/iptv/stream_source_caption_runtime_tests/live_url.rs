@@ -4,6 +4,7 @@
 
 use super::*;
 use axum::{body::Bytes, extract::State};
+use ersatzrs_ffmpeg::TeletextTimestampPolicy;
 use sha2::Digest as _;
 use std::{
     convert::Infallible,
@@ -13,6 +14,7 @@ use std::{
         Arc,
     },
 };
+use TeletextTimestampPolicy::{DecoderDefault, OriginalPes};
 
 #[derive(Clone)]
 struct Source {
@@ -24,6 +26,7 @@ struct Source {
     segment_closes: bool,
     requires_reentry: bool,
     native_hls: bool,
+    original_clock: TeletextTimestampPolicy,
 }
 
 #[derive(Clone, Copy)]
@@ -164,7 +167,7 @@ async fn cases(
     expected: &[Vec<u8>; 3],
     source: &Source,
 ) {
-    let modes: &[ChannelSubtitleMode] = if source.native_hls {
+    let modes: &[ChannelSubtitleMode] = if source.native_hls && source.requires_reentry {
         &[ChannelSubtitleMode::None]
     } else {
         &[ChannelSubtitleMode::None, ChannelSubtitleMode::Any]
@@ -183,6 +186,7 @@ async fn cases(
             },
         )
         .await;
+        let burn = mode != ChannelSubtitleMode::None && source.original_clock == OriginalPes;
         let label = if mode == ChannelSubtitleMode::None {
             "off"
         } else {
@@ -195,9 +199,11 @@ async fn cases(
         };
         if source.native_hls {
             let address = public.address;
-            let capture_root = root.to_path_buf();
+            let capture_root = root.join(label);
+            tokio::fs::create_dir_all(&capture_root).await.unwrap();
+            let count = if source.requires_reentry { 2 } else { 1 };
             let response = tokio::spawn(async move {
-                super::hls::capture_segments(address, &capture_root, 2).await
+                super::hls::capture_segments(address, &capture_root, count).await
             })
             .await;
             stop_native_hls(state).await;
@@ -205,7 +211,7 @@ async fn cases(
             // Verify both sides of the actual source EOF, not only the first
             // buffered segment or an attempt counter without delivered AV.
             for segment in captured {
-                super::hls::verify(tools, &segment, expected, false).await;
+                super::hls::verify(tools, &segment, expected, burn).await;
             }
             source_closed(source, openings).await;
             assert_eq!(
@@ -227,17 +233,9 @@ async fn cases(
             .await
             .unwrap();
         let actual = pixels(&tools[0], &output, None).await;
-        verify_case(
-            tools,
-            &output,
-            expected,
-            &actual,
-            mode != ChannelSubtitleMode::None,
-            "nld",
-        )
-        .await;
+        verify_case(tools, &output, expected, &actual, burn, "nld").await;
         if source.requires_reentry {
-            post_eof_media(tools, &output, expected, mode != ChannelSubtitleMode::None).await;
+            post_eof_media(tools, &output, expected, burn, &source.bytes).await;
         }
         source_closed(source, openings).await;
         assert_eq!(
@@ -252,7 +250,13 @@ async fn cases(
     }
 }
 
-async fn post_eof_media(tools: &[String; 3], output: &[u8], expected: &[Vec<u8>; 3], burn: bool) {
+async fn post_eof_media(
+    tools: &[String; 3],
+    output: &[u8],
+    expected: &[Vec<u8>; 3],
+    burn: bool,
+    source: &[u8],
+) {
     // The 2.4s/25fps source contains60 video frames. A real frame75 and
     // selected audio at2.8..3.2s must therefore come after its actual EOF.
     let frame = probe(
@@ -289,10 +293,11 @@ async fn post_eof_media(tools: &[String; 3], output: &[u8], expected: &[Vec<u8>;
         FRAME_BYTES,
         "real video must continue after source EOF"
     );
+    // Frame75 remains a required post-EOF AV observation. It is not itself
+    // caption authority: the original page's next complete cue occurs later.
+    assert!(frame.iter().all(|value| *value <= 20));
     if burn {
-        compare_burn(&frame, &expected[0], &expected[1], &expected[2]);
-    } else {
-        assert!(frame.iter().all(|value| *value <= 20));
+        exact_eof_caption_trace(tools, output, source, expected).await;
     }
     let windows = tone_windows(&tools[0], output, 660, 2 * 1024 * 1024).await;
     assert!(
@@ -302,6 +307,157 @@ async fn post_eof_media(tools: &[String; 3], output: &[u8], expected: &[Vec<u8>;
     assert!(
         windows[28..32].iter().all(|matching| *matching),
         "every post-EOF audio window must retain Dutch660Hz"
+    );
+}
+
+// Reuse the independently qualified direct MPEGTS no-repair control, rather
+// than deriving expected captions from the new generic runtime flag. All
+// observed frames retain the fixture's existing raster tolerances and capture.
+async fn original_eof_caption_frames(tools: &[String; 3], source: &[u8]) -> Vec<u8> {
+    // Match the pre-existing qualified two-stage source adapter. A raw-file
+    // decoder sees a different packet order; it is not this copied-pipe control.
+    // Both independent private no-repair options predate the new generic flag.
+    let copied = probe(
+        &tools[0],
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-copyts",
+            "-copy_unknown",
+            "-fix_teletext_pts",
+            "0",
+            "-f",
+            "mpegts",
+            "-i",
+            "pipe:0",
+            "-map",
+            "0",
+            "-c",
+            "copy",
+            "-max_interleave_delta",
+            "100000",
+            "-mpegts_copyts",
+            "1",
+            "-f",
+            "mpegts",
+            "pipe:1",
+        ],
+        source,
+        4 * 1024 * 1024,
+    )
+    .await
+    .unwrap();
+    let reference = probe(&tools[0], &[
+        "-hide_banner", "-loglevel", "error", "-fix_teletext_pts", "0",
+        "-txt_page:2", "888", "-txt_format:2", "bitmap", "-txt_default_region:2", "-1",
+        "-f", "mpegts", "-i", "pipe:0", "-filter_complex",
+        "[0:2]scale=492:250:force_original_aspect_ratio=decrease,pad=w=492:h=250:x=-1:y=-1:color=black@0[s];[0:0][s]overlay=x=(W-w)/2:y=(H-h)/2:format=0[v]",
+        "-map", "[v]", "-an", "-fps_mode", "passthrough", "-pix_fmt", "rgb24",
+        // The fixture has60 genuine source-video frames. Do not treat the
+        // subtitle decoder's additional EOF clear canvas as another source frame.
+        "-frames:v", "60", "-f", "rawvideo", "pipe:1"
+    ], &copied, FRAME_BYTES * 128).await.unwrap();
+    assert_eq!(
+        reference.len(),
+        FRAME_BYTES * 60,
+        "unchanged2.4s source and25fps presentation"
+    );
+    reference
+}
+
+async fn exact_eof_caption_trace(
+    tools: &[String; 3],
+    output: &[u8],
+    source: &[u8],
+    expected: &[Vec<u8>; 3],
+) {
+    let reference = original_eof_caption_frames(tools, source).await;
+    let actual = probe(
+        &tools[0],
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "mpegts",
+            "-i",
+            "pipe:0",
+            "-map",
+            "0:v:0",
+            "-an",
+            "-pix_fmt",
+            "rgb24",
+            "-fps_mode",
+            "passthrough",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ],
+        output,
+        FRAME_BYTES * 128,
+    )
+    .await
+    .unwrap();
+    assert_eq!(actual.len() % FRAME_BYTES, 0);
+    let metadata = probe(
+        &tools[1],
+        &[
+            "-v",
+            "error",
+            "-f",
+            "mpegts",
+            "-i",
+            "pipe:0",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=key_frame",
+            "-of",
+            "json",
+        ],
+        output,
+        64 * 1024,
+    )
+    .await
+    .unwrap();
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata).unwrap();
+    let frames = metadata["frames"].as_array().unwrap();
+    assert_eq!(frames.len(), actual.len() / FRAME_BYTES);
+    // The source has60 frames. The next actual encoder keyframe after those
+    // complete frames identifies source reentry independently of caption pixels.
+    let reentry = frames
+        .iter()
+        .enumerate()
+        .find(|(index, frame)| *index >= 60 && frame["key_frame"] == 1)
+        .map(|(index, _)| index)
+        .expect("same-response actual source reentry");
+    let mut post_eof_cue = false;
+    for (index, pixels) in actual.chunks_exact(FRAME_BYTES).enumerate() {
+        let source_frame = if index < reentry {
+            index.min(59)
+        } else {
+            index - reentry
+        };
+        assert!(
+            source_frame < 60,
+            "bounded capture remains within the two original occurrences"
+        );
+        let golden = &reference[source_frame * FRAME_BYTES..(source_frame + 1) * FRAME_BYTES];
+        if golden.iter().any(|value| *value > 160) {
+            compare_burn(pixels, golden, &expected[1], &expected[2]);
+            post_eof_cue |= index >= reentry;
+        } else {
+            assert!(
+                pixels.iter().all(|value| *value <= 20),
+                "caption must clear at exact original-source phase, frame{index}"
+            );
+        }
+    }
+    assert!(
+        post_eof_cue,
+        "same response must deliver the new source's independently timed caption cue"
     );
 }
 
@@ -371,16 +527,23 @@ async fn configure_native_hls_startup(state: &AppState, native_hls: bool) {
 }
 
 async fn run(origin: Origin, native_hls: bool) {
+    run_with_clock(origin, native_hls, OriginalPes).await;
+}
+
+async fn run_with_clock(origin: Origin, native_hls: bool, original_clock: TeletextTimestampPolicy) {
     let rtsp = matches!(origin, Origin::Rtsp).then(rtsp_inputs);
     let tools = initialize_source_caption_runtime().await;
     let root = tempfile::tempdir().unwrap().keep();
     println!("ordinary Live URL evidence: {}", root.display());
     let library = root.join("library");
-    let file = if matches!(origin, Origin::HttpEof) {
-        local_source_duration(&tools[0], &library, "2.4").await
-    } else {
-        local_source(&tools[0], &library).await
+    // A held Live input needs a following keyframe to close three four-second
+    // HLS fragments; EOF stays withheld beyond that startup reserve.
+    let duration = match (origin, native_hls) {
+        (Origin::HttpEof, _) => "2.4",
+        (_, true) => "16",
+        _ => "12",
     };
+    let file = local_source_duration(&tools[0], &library, duration).await;
     let expected = calibration(&tools, &file, &root).await;
     let source = Source {
         bytes: tokio::fs::read(&file).await.unwrap().into(),
@@ -391,6 +554,7 @@ async fn run(origin: Origin, native_hls: bool) {
         segment_closes: matches!(origin, Origin::Hls | Origin::HttpEof),
         requires_reentry: matches!(origin, Origin::HttpEof),
         native_hls,
+        original_clock,
     };
     let upstream = Server::start(
         Router::new()
@@ -399,7 +563,7 @@ async fn run(origin: Origin, native_hls: bool) {
             .with_state(source.clone()),
     )
     .await;
-    let state = application(&root, &upstream).await;
+    let state = live_caption_application(&root, &upstream, &tools, original_clock).await;
     let (item, version) = scan_source(&state, &library, &tools[1]).await;
     software_profile(&state).await;
     configure_native_hls_startup(&state, native_hls).await;
@@ -431,27 +595,7 @@ async fn run(origin: Origin, native_hls: bool) {
         }
     })
     .await;
-    let rtsp = if let Some(path) = &source.rtsp_status {
-        tokio::fs::read(path)
-            .await
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-    } else {
-        None
-    };
-    tokio::fs::write(
-        root.join("source-owner.json"),
-        serde_json::to_vec_pretty(&json!({
-            "upstream_reads":source.reads.load(Ordering::SeqCst),
-            "upstream_active_after_capture":source.active.load(Ordering::SeqCst),
-            "manifest_reads":source.manifests.load(Ordering::SeqCst),"rtsp":rtsp,
-            "source_body_has_eof":source.segment_closes,
-            "live_service_has_eof":false,"requires_reentry":source.requires_reentry,"test_outcome_ok":outcome.is_ok()
-        }))
-        .unwrap(),
-    )
-    .await
-    .unwrap();
+    record_source_owner(&root, &source, outcome.is_ok()).await;
     let public = Arc::try_unwrap(public)
         .unwrap_or_else(|_| panic!("joined trial must release its listener reference"));
     finish_caption_owner(
@@ -467,6 +611,30 @@ async fn run(origin: Origin, native_hls: bool) {
         assert!(source.manifests.load(Ordering::SeqCst) >= 2);
     }
     outcome.expect("ordinary direct Live HTTP must preserve captions and selected audio");
+}
+
+async fn record_source_owner(root: &Path, source: &Source, outcome_ok: bool) {
+    let rtsp = if let Some(path) = &source.rtsp_status {
+        tokio::fs::read(path)
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+    } else {
+        None
+    };
+    tokio::fs::write(
+        root.join("source-owner.json"),
+        serde_json::to_vec_pretty(&json!({
+            "upstream_reads":source.reads.load(Ordering::SeqCst),
+            "upstream_active_after_capture":source.active.load(Ordering::SeqCst),
+            "manifest_reads":source.manifests.load(Ordering::SeqCst),"rtsp":rtsp,
+            "source_body_has_eof":source.segment_closes,
+            "live_service_has_eof":false,"requires_reentry":source.requires_reentry,"test_outcome_ok":outcome_ok
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
 }
 
 #[test]
@@ -548,6 +716,44 @@ fn normal_native_hls_raw_eof_retains_delivered_programme_and_alternate_audio() {
         .build()
         .unwrap()
         .block_on(Box::pin(run(Origin::HttpEof, true)));
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        0
+    );
+}
+
+#[test]
+#[ignore = "requires pinned FFmpeg/ffprobe9, endless HTTP source, Native HLS Off/Burn, isolated app-data and loopback"]
+fn normal_native_live_hls_retains_source_captions_and_selected_audio() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(run(Origin::Http, true)));
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        0
+    );
+}
+
+#[test]
+#[ignore = "requires exact older FFmpeg9 without original-PES capability, synthetic Live HTTP and loopback"]
+fn old_runtime_preserves_live_av_when_original_teletext_clock_is_unavailable() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(run_with_clock(
+            Origin::Http,
+            false,
+            DecoderDefault,
+        )));
     assert_eq!(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0

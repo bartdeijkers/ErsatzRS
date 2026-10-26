@@ -338,6 +338,7 @@ struct HlsProcessCapacity<'a> {
     work_ahead_reservation: Option<&'a mut Option<WorkAheadReservation>>,
     delivery_pool: Option<&'a DbPool>,
     delivery_recovery: Option<HlsDeliveryRecovery>,
+    live_input: Option<Box<crate::remote_stream::PreparedRemoteStreamInput>>,
     source_caption: Option<(
         Arc<crate::playback::source_teletext::runtime::PlaybackSource>,
         crate::transcode_capacity::ActiveTranscodeReservation,
@@ -1258,6 +1259,31 @@ impl HlsSessionWorker {
                 continue;
             }
 
+            let ordinary_caption_only = source_caption_fallback.take().is_some_and(|occurrence| {
+                occurrence == source_caption::CaptionOccurrence::from(&active)
+            });
+            let subtitle_mode = active.subtitle_mode.unwrap_or(active.channel_subtitle_mode);
+            let live_runtime_capabilities = self.runtime_capabilities().await;
+            let live_command = if !ordinary_caption_only
+                && subtitle_mode != ersatzrs_domain::ChannelSubtitleMode::None
+                && !(active.has_pinned_stream_selection && active.subtitle_stream_index.is_none())
+            {
+                match self
+                    .startup_read(crate::remote_stream::native_live_caption_command(
+                        &pool,
+                        active.media_item_id,
+                        active.media_version_id,
+                        active.remote_stream.as_ref(),
+                        &live_runtime_capabilities,
+                    ))
+                    .await
+                {
+                    Ok(command) => command,
+                    Err(_) => break,
+                }
+            } else {
+                None
+            };
             let source_stream = match self
                 .startup_read(async {
                     if let Some(media) = &active.external {
@@ -1266,7 +1292,7 @@ impl HlsSessionWorker {
                         load_source_video_stream_by_index(
                             &pool,
                             active.media_version_id,
-                            active.video_stream_index,
+                            active.video_stream_index.filter(|_| live_command.is_none()),
                         )
                         .await
                     }
@@ -1309,7 +1335,8 @@ impl HlsSessionWorker {
                     continue;
                 }
             };
-            if let Some(stream_index) = active.audio_stream_index {
+            if let Some(stream_index) = active.audio_stream_index.filter(|_| live_command.is_none())
+            {
                 let pinned_index = usize::try_from(stream_index).ok();
                 if pinned_index.is_none_or(|index| {
                     !source_audio_streams
@@ -1498,7 +1525,7 @@ impl HlsSessionWorker {
             {
                 apply_hls_software_video_fallback(&mut playback_profile);
             }
-            let source_stream = if interval_playback.is_some() {
+            let source_stream = if interval_playback.is_some() || live_command.is_some() {
                 source_stream
             } else if active.external.is_some() {
                 tokio::select! {
@@ -1553,7 +1580,6 @@ impl HlsSessionWorker {
                     continue;
                 }
             };
-            let subtitle_mode = active.subtitle_mode.unwrap_or(active.channel_subtitle_mode);
             let preferred_subtitle_languages = language_preferences.subtitle_languages(
                 active.preferred_subtitle_language_code.as_deref(),
                 active.channel_preferred_subtitle_language_code.as_deref(),
@@ -1570,11 +1596,129 @@ impl HlsSessionWorker {
             );
             let channel_for_streams =
                 active.channel_for_runtime_streams(self.channel_id, self.channel_number.clone());
+            let mut live_playback = if live_command.is_some() {
+                let stream = active.remote_stream.as_ref().map(|stream| {
+                    if supports_quality_fallback {
+                        with_remote_stream_video_height_ceiling(
+                            stream,
+                            delivery_adaptation
+                                .map_or(REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT, |value| {
+                                    value.max_video_height
+                                }),
+                        )
+                    } else {
+                        stream.clone()
+                    }
+                });
+                let Ok(Some(command)) = self
+                    .startup_read(crate::remote_stream::native_live_caption_command(
+                        &pool,
+                        active.media_item_id,
+                        active.media_version_id,
+                        stream.as_ref(),
+                        &live_runtime_capabilities,
+                    ))
+                    .await
+                else {
+                    break;
+                };
+                match Box::pin(self.prepare_live_caption_playback(
+                    &pool,
+                    &command,
+                    &active_transcode_reservation,
+                    active_transcode_slot_id,
+                    idle_timeout,
+                    watch_idle_timeout,
+                ))
+                .await
+                {
+                    Ok(playback) => Some(playback),
+                    Err(HlsProcessOutcome::SourceCaptionUnavailable) => {
+                        source_caption_fallback =
+                            Some(source_caption::CaptionOccurrence::from(&active));
+                        continue;
+                    }
+                    Err(HlsProcessOutcome::Reclaimed) => {
+                        self.set_admission_status(HlsAdmissionStatus::Waiting);
+                        continue;
+                    }
+                    Err(_) => break,
+                }
+            } else {
+                None
+            };
+            let source_stream = live_playback
+                .as_ref()
+                .and_then(|playback| playback.source_video.clone())
+                .or(source_stream);
+            let source_audio_streams = live_playback
+                .as_ref()
+                .filter(|playback| playback.probe.is_some())
+                .map_or(source_audio_streams, |playback| {
+                    playback.source_audio.clone()
+                });
+            if let Some(playback) = live_playback
+                .as_ref()
+                .filter(|playback| playback.probe.is_some())
+            {
+                let video_valid = active.video_stream_index.is_none_or(|index| {
+                    playback
+                        .source_video
+                        .as_ref()
+                        .is_some_and(|video| usize::try_from(index).ok() == Some(video.index))
+                });
+                let audio_valid = active.audio_stream_index.is_none_or(|index| {
+                    usize::try_from(index).ok().is_some_and(|index| {
+                        source_audio_streams
+                            .iter()
+                            .any(|audio| audio.index == index)
+                    })
+                });
+                if !video_valid || !audio_valid {
+                    break;
+                }
+            }
+            let streaming_tracks = if let Some(playback) = &live_playback {
+                match self
+                    .startup_read(crate::remote_stream::native_live_caption_tracks(
+                        playback,
+                        &pool,
+                        self.channel_id,
+                        &live_runtime_capabilities,
+                    ))
+                    .await
+                {
+                    Ok(tracks) => Some(tracks),
+                    Err(_) => break,
+                }
+            } else {
+                None
+            };
+            let live_policy = crate::remote_stream::native_live_caption_policy(
+                StreamingMode::HttpLiveStreamingSegmenter,
+            );
             let custom_selection = if active.has_pinned_stream_selection {
                 None
             } else {
                 match self
-                    .startup_read(external::custom(&pool, &active, &channel_for_streams))
+                    .startup_read(async {
+                        if let Some(tracks) = &streaming_tracks {
+                            if channel_for_streams.stream_selector_mode
+                                != ersatzrs_domain::ChannelStreamSelectorMode::Custom
+                            {
+                                return Ok(None);
+                            }
+                            tracks
+                                .select_custom(
+                                    &channel_for_streams,
+                                    active.playout_start,
+                                    live_policy,
+                                )
+                                .await
+                        } else {
+                            external::custom(&pool, &active, &channel_for_streams).await
+                        }
+                    })
                     .await
                 {
                     Ok(selection) => selection,
@@ -1595,7 +1739,8 @@ impl HlsSessionWorker {
                     }
                 }
             };
-            let script_audio = if !active.has_pinned_stream_selection
+            let script_audio = if streaming_tracks.is_none()
+                && !active.has_pinned_stream_selection
                 && custom_selection
                     .as_ref()
                     .and_then(|selection| selection.audio_stream_index)
@@ -1696,6 +1841,9 @@ impl HlsSessionWorker {
             if active.remote_stream.is_none()
                 || active.external.is_some()
                 || interval_playback.is_some()
+                || live_playback
+                    .as_ref()
+                    .is_some_and(|playback| playback.probe.is_some())
             {
                 audio_selection = audio_selection.with_complete_source_audio(&source_audio_streams);
             }
@@ -1703,13 +1851,22 @@ impl HlsSessionWorker {
             let subtitle = if active.has_pinned_stream_selection {
                 if let Some(stream_index) = active.subtitle_stream_index {
                     match self
-                        .startup_read(select_pinned_playback_subtitle(
-                            &pool,
-                            active.media_item_id,
-                            active.media_version_id,
-                            stream_index,
-                            StreamingMode::HttpLiveStreamingSegmenter,
-                        ))
+                        .startup_read(async {
+                            if let Some(tracks) = &streaming_tracks {
+                                return crate::remote_stream::pinned_native_caption_subtitle(
+                                    tracks,
+                                    stream_index,
+                                );
+                            }
+                            select_pinned_playback_subtitle(
+                                &pool,
+                                active.media_item_id,
+                                active.media_version_id,
+                                stream_index,
+                                StreamingMode::HttpLiveStreamingSegmenter,
+                            )
+                            .await
+                        })
                         .await
                     {
                         Ok(subtitle) => Some(subtitle),
@@ -1734,6 +1891,19 @@ impl HlsSessionWorker {
                 }
             } else if let Some(selection) = custom_selection {
                 selection.subtitle
+            } else if let Some(tracks) = &streaming_tracks {
+                match self
+                    .startup_read(tracks.select_subtitle(
+                        &pool,
+                        &preferred_subtitle_languages,
+                        subtitle_mode,
+                        live_policy,
+                    ))
+                    .await
+                {
+                    Ok(subtitle) => subtitle,
+                    Err(_) => break,
+                }
             } else {
                 match self
                     .startup_read(Box::pin(self.automatic_source_caption(
@@ -1751,11 +1921,7 @@ impl HlsSessionWorker {
                                     duration,
                                 )
                             }),
-                            ordinary_only: source_caption_fallback.take().is_some_and(
-                                |occurrence| {
-                                    occurrence == source_caption::CaptionOccurrence::from(&active)
-                                },
-                            ),
+                            ordinary_only: ordinary_caption_only,
                         },
                     )))
                     .await
@@ -1840,24 +2006,39 @@ impl HlsSessionWorker {
                 }
                 break;
             }
-            let subtitle_input = source_caption
-                .as_ref()
-                .map(|source| source.input())
-                .or_else(|| {
-                    subtitle.as_ref().and_then(|subtitle| {
-                        let input = if active.external.is_some() {
-                            crate::external_json::native::subtitle_input
-                        } else {
-                            subtitle_input_for_stream
-                        };
-                        input(
-                            subtitle,
-                            &active.media_path,
-                            self.output_format,
-                            StreamingMode::HttpLiveStreamingSegmenter,
-                        )
+            let live_subtitle_input =
+                if let (Some(playback), Some(selected)) = (&mut live_playback, &subtitle) {
+                    match playback.subtitle_input(selected) {
+                        Ok(input) => input,
+                        Err(_) => break,
+                    }
+                } else {
+                    None
+                };
+            let subtitle_input = live_subtitle_input.or_else(|| {
+                source_caption
+                    .as_ref()
+                    .map(|source| source.input())
+                    .or_else(|| {
+                        subtitle.as_ref().and_then(|subtitle| {
+                            let input = if active.external.is_some() {
+                                crate::external_json::native::subtitle_input
+                            } else {
+                                subtitle_input_for_stream
+                            };
+                            input(
+                                subtitle,
+                                if live_playback.is_some() {
+                                    "pipe:0"
+                                } else {
+                                    &active.media_path
+                                },
+                                self.output_format,
+                                StreamingMode::HttpLiveStreamingSegmenter,
+                            )
+                        })
                     })
-                });
+            });
             if active.subtitle_stream_index.is_some() && subtitle_input.is_none() {
                 tracing::error!(
                     channel_id = self.channel_id,
@@ -2082,15 +2263,19 @@ impl HlsSessionWorker {
                 active.content_duration,
                 channel_start_time,
             );
-            let media_input = interval_playback.as_ref().map_or_else(
-                || {
-                    active.remote_stream.as_ref().map_or_else(
-                        || Ok(InputFile::video(active.media_path.clone())),
-                        remote_stream_input_file,
-                    )
-                },
-                |prepared| Ok(prepared.video_input.clone()),
-            );
+            let media_input = if let Some(playback) = &live_playback {
+                Ok(playback.video_input.clone())
+            } else {
+                interval_playback.as_ref().map_or_else(
+                    || {
+                        active.remote_stream.as_ref().map_or_else(
+                            || Ok(InputFile::video(active.media_path.clone())),
+                            remote_stream_input_file,
+                        )
+                    },
+                    |prepared| Ok(prepared.video_input.clone()),
+                )
+            };
             let mut media_input = match media_input {
                 Ok(input) => input,
                 Err(error) => {
@@ -2311,6 +2496,18 @@ impl HlsSessionWorker {
                     (HlsProcessOutcome::SourceCaptionUnavailable, None)
                 }
                 Ok((command, source_caption_plan)) => {
+                    if let Some(playback) = &mut live_playback {
+                        if playback
+                            .bind_caption_consumer(&command, source_caption_plan.as_ref())
+                            .is_err()
+                        {
+                            tracing::warn!(
+                                channel_id = self.channel_id,
+                                "Live HLS caption consumer binding refused"
+                            );
+                            break;
+                        }
+                    }
                     // Attributed from the command that actually ran, so a
                     // runtime failure cannot be blamed on a graph this spawn
                     // did not use.
@@ -2359,6 +2556,9 @@ impl HlsSessionWorker {
                                     .then_some(&mut work_ahead_reservation),
                                 delivery_pool: is_live_remote.then_some(&pool),
                                 delivery_recovery,
+                                live_input: live_playback
+                                    .take()
+                                    .map(|playback| Box::new(playback.prepared)),
                                 source_caption: source_caption.as_ref().map(|source| {
                                     (
                                         Arc::clone(source),
@@ -2828,6 +3028,7 @@ impl HlsSessionWorker {
                 delivery_pool: None,
                 delivery_recovery: None,
                 source_caption: None,
+                live_input: None,
             },
         )
         .await
@@ -3013,7 +3214,10 @@ impl HlsSessionWorker {
             .await;
         let mut fallback_verified =
             delivery_recovery.is_some_and(|recovery| recovery.fallback_verified);
-        let producer = remote_stream.as_ref().and_then(remote_stream_producer);
+        let producer = remote_stream
+            .as_ref()
+            .filter(|_| capacity.live_input.is_none())
+            .and_then(remote_stream_producer);
         if retained
             .as_ref()
             .is_some_and(|retained| tokio::time::Instant::now() >= retained.deadline)
@@ -3034,7 +3238,7 @@ impl HlsSessionWorker {
         let mut reserve_interval = tokio::time::interval(Duration::from_millis(250));
         let mut initialized_bitmap = None;
         if let Some((source, _, plan, request)) = &capacity.source_caption {
-            if producer.is_some() || retained.is_some() {
+            if producer.is_some() || retained.is_some() || capacity.live_input.is_some() {
                 if let Some(retained) = retained {
                     let _ = retained.prepared.cancel().await;
                 }
@@ -3062,7 +3266,23 @@ impl HlsSessionWorker {
             song.mark_in_use();
         }
         let (spawn, retained_diagnostics, failed_spawn_cleanup_confirmed) =
-            if let Some(retained) = retained {
+            if let Some(prepared) = capacity.live_input.take() {
+                tracing::debug!(
+                    channel_id = self.channel_id,
+                    "spawning bound Live HLS caption consumer"
+                );
+                let child = crate::remote_stream::spawn_ffmpeg_with_prepared_remote_input(
+                    &command,
+                    Some(&self.working_dir),
+                    *prepared,
+                    RemoteStreamSpawnContext::hls(&self.channel_number),
+                )
+                .await;
+                let confirmed = child.as_ref().is_err_and(|error| {
+                    matches!(error, crate::remote_stream::RemoteStreamError::Spawn(_))
+                });
+                (child.map_err(std::io::Error::other), None, confirmed)
+            } else if let Some(retained) = retained {
                 let child = crate::remote_stream::spawn_ffmpeg_with_prepared_remote_input(
                     &command,
                     Some(&self.working_dir),
@@ -3097,6 +3317,10 @@ impl HlsSessionWorker {
             }
             return HlsProcessOutcome::Failed("failed to spawn ffmpeg hls segmenter".to_owned());
         };
+        tracing::debug!(
+            channel_id = self.channel_id,
+            "HLS audiovisual consumer is running"
+        );
         // No await separates a local consumer spawn from transfer of its exact
         // receipt and actual transcode admission. The child adapter, including
         // its uncertainty Drop, owns them independently of the requesting UI.
@@ -7265,53 +7489,74 @@ mod tests {
     use tokio::time::timeout;
     use uuid::Uuid;
 
-    #[test]
-    fn source_caption_plan_tracks_final_hls_input_and_fresh_retry() {
+    fn build_source_caption_hls_test_command(
+        page: Option<u16>,
+        start: Duration,
+        live: bool,
+    ) -> (
+        FfmpegCommand,
+        Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    ) {
         let mut profile = playback_profile();
         profile.profile.hardware_acceleration = HardwareAccelerationKind::None;
-        let build = |page: Option<u16>, start| {
-            let (acceleration, mut request) = build_hls_request_with_input_explicit_discontinuity(
-                InputFile::video("synthetic-source.ts"),
-                OutputFormat::Hls,
-                true,
-                false,
-                true,
-                start,
-                Some(Duration::from_secs(12)),
-                None,
-                &profile,
-                None,
-                OutputMetadata::default(),
-                FfmpegCapabilityReport::default(),
-                Some(SourceVideoStream::new(SourceVideoCodec::H264).with_index(7)),
-                vec![
-                    SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1),
-                    SourceAudioStream::new(SourceAudioCodec::Aac).with_index(5),
-                ],
-                PlaybackAudioSelection::Exact(5),
-                page.map(|page| {
-                    InputFile::teletext_subtitle(
-                        "synthetic-source.ts",
-                        9,
-                        ersatzrs_domain::TeletextPageNumber::new(page).unwrap(),
-                    )
-                }),
-                Vec::new(),
-                Vec::new(),
-                HlsDiscontinuity::Absent,
-                None,
-                HlsInputTimeline::Original,
-                None,
-            );
-            apply_hls_bootstrap_readburst(&mut request, true, false, 3);
-            crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest::new(
-                acceleration,
-                request,
-            )
-            .build()
-            .unwrap()
+        let path = if live {
+            "pipe:0"
+        } else {
+            "synthetic-source.ts"
         };
-        let (primary, plan) = build(Some(888), Duration::from_secs(40));
+        let (acceleration, mut request) = build_hls_request_with_input_explicit_discontinuity(
+            if live {
+                InputFile::video(path)
+                    .with_seek_after_input()
+                    .without_readrate()
+            } else {
+                InputFile::video(path)
+            },
+            OutputFormat::Hls,
+            true,
+            false,
+            true,
+            start,
+            Some(Duration::from_secs(12)),
+            None,
+            &profile,
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(SourceVideoStream::new(SourceVideoCodec::H264).with_index(7)),
+            vec![
+                SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1),
+                SourceAudioStream::new(SourceAudioCodec::Aac).with_index(5),
+            ],
+            PlaybackAudioSelection::Exact(5),
+            page.map(|page| {
+                InputFile::teletext_subtitle(
+                    path,
+                    9,
+                    ersatzrs_domain::TeletextPageNumber::new(page).unwrap(),
+                )
+            }),
+            Vec::new(),
+            Vec::new(),
+            HlsDiscontinuity::Absent,
+            None,
+            HlsInputTimeline::Original,
+            None,
+        );
+        crate::playback::apply_live_input_eof_policy(&mut request, live);
+        apply_hls_bootstrap_readburst(&mut request, true, false, 3);
+        crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest::new(
+            acceleration,
+            request,
+        )
+        .build()
+        .unwrap()
+    }
+
+    #[test]
+    fn source_caption_plan_tracks_final_hls_input_and_fresh_retry() {
+        let (primary, plan) =
+            build_source_caption_hls_test_command(Some(888), Duration::from_secs(40), false);
         let plan = plan.expect("actual HLS source caption has its generated plan");
         assert!(plan.matches_command(&primary));
         assert!(!plan.timing().has_opaque_input_options());
@@ -7342,7 +7587,8 @@ mod tests {
             .any(|pair| pair == ["-readrate", "1.05"]));
 
         // A rebuilt command must carry its new seal, even for the same page.
-        let (retry, retry_plan) = build(Some(888), Duration::from_secs(41));
+        let (retry, retry_plan) =
+            build_source_caption_hls_test_command(Some(888), Duration::from_secs(41), false);
         let retry_plan = retry_plan.unwrap();
         assert!(retry_plan.matches_command(&retry));
         assert!(!retry_plan.timing().has_opaque_input_options());
@@ -7352,7 +7598,8 @@ mod tests {
         );
         assert!(!plan.matches_command(&retry));
         assert!(!retry_plan.matches_command(&primary));
-        let (ordinary, ordinary_plan) = build(None, Duration::from_secs(40));
+        let (ordinary, ordinary_plan) =
+            build_source_caption_hls_test_command(None, Duration::from_secs(40), false);
         assert!(ordinary_plan.is_none());
         assert!(!plan.matches_command(&ordinary));
         assert!(!ordinary.arguments.iter().any(|arg| arg == "-txt_page:9"));
@@ -7360,6 +7607,20 @@ mod tests {
             .arguments
             .windows(2)
             .any(|pair| pair == ["-readrate", "1.05"]));
+        let (live, live_plan) =
+            build_source_caption_hls_test_command(Some(888), Duration::ZERO, true);
+        let live_plan = live_plan.unwrap();
+        assert!(live_plan.matches_command(&live));
+        assert_eq!(live_plan.caption_input().path, "pipe:0");
+        assert_eq!(
+            live_plan.timing().effective_input_seek_microseconds(),
+            Some(0)
+        );
+        assert!(!live
+            .arguments
+            .iter()
+            .any(|argument| argument == "-readrate"));
+        insta::assert_json_snapshot!("native_live_hls_caption_shared_pipe_argv", live.arguments);
     }
 
     #[test]

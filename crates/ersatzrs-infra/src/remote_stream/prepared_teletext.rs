@@ -192,11 +192,14 @@ fn selected_input(
         .collect::<Vec<_>>();
     match matches.as_slice() {
         [] if subtitle.codec.as_deref() != Some("dvb_teletext") => Ok(None),
-        [choice] => Ok(Some(InputFile::teletext_subtitle(
-            "pipe:0",
-            usize::try_from(subtitle.stream_index).map_err(|_| unavailable())?,
-            choice.page,
-        ))),
+        [choice] => Ok(Some(
+            InputFile::teletext_subtitle(
+                "pipe:0",
+                usize::try_from(subtitle.stream_index).map_err(|_| unavailable())?,
+                choice.page,
+            )
+            .with_original_teletext_pts(),
+        )),
         _ => Err(unavailable()),
     }
 }

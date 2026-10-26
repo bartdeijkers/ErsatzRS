@@ -46,6 +46,10 @@ impl HealthCheck for TeletextDecoderHealthCheck {
             }
         }
         let (status, message) = match self.capability.status {
+            TeletextDecoderStatus::Ready if !self.capability.original_pts => (
+                HealthCheckStatus::Info,
+                "The runtime can decode teletext but cannot preserve original Live caption timestamps. Live teletext captions are unavailable; ordinary playback remains available.",
+            ),
             TeletextDecoderStatus::Ready => (
                 HealthCheckStatus::Pass,
                 "The selected FFmpeg runtime passed teletext page selection, subtitle text and colour bitmap decoding.",
@@ -110,6 +114,7 @@ mod tests {
             let result = TeletextDecoderHealthCheck::new(TeletextDecoderCapability {
                 status,
                 missing_options: vec!["txt_page".into()],
+                original_pts: false,
             })
             .check()
             .await
@@ -121,10 +126,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unavailable_live_clock_is_visible_without_rejecting_ordinary_playback() {
+        let result = TeletextDecoderHealthCheck::new(TeletextDecoderCapability {
+            status: TeletextDecoderStatus::Ready,
+            missing_options: Vec::new(),
+            original_pts: false,
+        })
+        .check()
+        .await
+        .unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Info);
+        assert!(result
+            .message
+            .contains("Live teletext captions are unavailable"));
+        assert_eq!(
+            HealthCheckSummary::from_results(&[result]),
+            HealthCheckSummary::default()
+        );
+    }
+
+    #[tokio::test]
     async fn successful_decode_does_not_claim_authored_service_readiness() {
         let result = TeletextDecoderHealthCheck::new(TeletextDecoderCapability {
             status: TeletextDecoderStatus::Ready,
             missing_options: Vec::new(),
+            original_pts: true,
         })
         .check()
         .await

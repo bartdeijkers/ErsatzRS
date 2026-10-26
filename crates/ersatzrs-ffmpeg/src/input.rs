@@ -47,9 +47,22 @@ impl MediaStream {
     }
 }
 
+/// Input-clock policy for caller-qualified teletext caption decoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TeletextTimestampPolicy {
+    /// Retain the runtime's ordinary decoder behavior.
+    #[default]
+    DecoderDefault,
+    /// Preserve declared PES timestamps with the verified opt-in input flag.
+    OriginalPes,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InputFile {
     pub kind: InputKind,
+    /// Preserve original teletext PES timestamps on the selected physical owner.
+    /// The caller must qualify the exact runtime's optional input contract.
+    pub teletext_timestamp_policy: TeletextTimestampPolicy,
     pub path: String,
     /// Inputs normally share one decoder by path. A distinct instance keeps
     /// canvas layers with independent seek positions on separate decoders.
@@ -71,6 +84,7 @@ impl InputFile {
     pub fn new(kind: InputKind, path: impl Into<String>, stream_index: usize) -> Self {
         Self {
             kind,
+            teletext_timestamp_policy: TeletextTimestampPolicy::DecoderDefault,
             path: path.into(),
             input_instance: 0,
             streams: vec![MediaStream::new(stream_index)],
@@ -237,6 +251,14 @@ impl InputFile {
             Self::image_subtitle(path, SubtitleMethod::Burn).with_stream_index(stream_index);
         input.streams[0].source_teletext_page = Some(page);
         input
+    }
+
+    /// Opt in only for an exact-runtime-qualified Live teletext caption input.
+    /// This typed option neither authorizes a source nor changes opaque options.
+    #[must_use]
+    pub const fn with_original_teletext_pts(mut self) -> Self {
+        self.teletext_timestamp_policy = TeletextTimestampPolicy::OriginalPes;
+        self
     }
 
     #[must_use]

@@ -1707,6 +1707,7 @@ pub enum TextKey {
     TeletextDecoderHelpFailed,
     TeletextDecoderTextFailed,
     TeletextDecoderBitmapFailed,
+    TeletextDecoderOriginalPtsUnavailable,
     SourceTeletextDelivery,
     SourceTeletextDeliveryHelp,
     SourceTeletextDeliveryBurn,
@@ -4139,6 +4140,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TeletextDecoderHelpFailed,
     TextKey::TeletextDecoderTextFailed,
     TextKey::TeletextDecoderBitmapFailed,
+    TextKey::TeletextDecoderOriginalPtsUnavailable,
     TextKey::SourceTeletextDelivery,
     TextKey::SourceTeletextDeliveryHelp,
     TextKey::SourceTeletextDeliveryBurn,
@@ -5950,6 +5952,7 @@ fn teletext_decoder_health_message(language: UiLanguage, message: &str) -> Optio
         "Teletext page and subtitle text decoding failed. Select a compatible FFmpeg 9 runtime." => {
             TextKey::TeletextDecoderTextFailed
         }
+        "The runtime can decode teletext but cannot preserve original Live caption timestamps. Live teletext captions are unavailable; ordinary playback remains available." => TextKey::TeletextDecoderOriginalPtsUnavailable,
         "Teletext colour bitmap decoding failed. Select a compatible FFmpeg 9 runtime." => {
             TextKey::TeletextDecoderBitmapFailed
         }
@@ -7167,6 +7170,7 @@ mod tests {
             TextKey::TeletextDecoderHelpFailed,
             TextKey::TeletextDecoderTextFailed,
             TextKey::TeletextDecoderBitmapFailed,
+            TextKey::TeletextDecoderOriginalPtsUnavailable,
             TextKey::TeletextCarriageReady,
             TextKey::TeletextCarriageMissing,
             TextKey::TeletextCarriageInvalid,

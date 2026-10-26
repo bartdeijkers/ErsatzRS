@@ -1179,6 +1179,49 @@ async fn stop_native_hls(state: &AppState) {
     );
 }
 
+// The shared application fixture deliberately has synthetic capabilities. Live
+// caption trials replace only the selected runtime's identity and decoder proof
+// with the actual pinned tools; they do not claim startup/managed adoption.
+async fn record_live_caption_runtime(state: &AppState, tools: &[String; 3]) -> bool {
+    use sha2::Digest as _;
+    let decoder = ersatzrs_ffmpeg::probe_teletext_decoder(&tools[0], true).await;
+    assert!(decoder.is_ready(), "{decoder:?}");
+    let original_pts = decoder.preserves_original_pts();
+    let digest = |bytes: Vec<u8>| {
+        use std::fmt::Write as _;
+        let mut hex = String::with_capacity(64);
+        for byte in sha2::Sha256::digest(bytes) {
+            write!(&mut hex, "{byte:02x}").unwrap();
+        }
+        hex
+    };
+    let ffmpeg_sha256 = digest(tokio::fs::read(&tools[0]).await.unwrap());
+    let ffprobe_sha256 = digest(tokio::fs::read(&tools[1]).await.unwrap());
+    let mut runtime = state.ffmpeg_runtime.write().await;
+    runtime.ffmpeg.path.clone_from(&tools[0]);
+    runtime.ffmpeg.sha256 = Some(ffmpeg_sha256);
+    runtime.ffprobe.path.clone_from(&tools[1]);
+    runtime.ffprobe.sha256 = Some(ffprobe_sha256);
+    runtime.capabilities.teletext_decoder = decoder;
+    runtime.set_generation(1);
+    original_pts
+}
+
+async fn live_caption_application(
+    root: &Path,
+    provider: &Server,
+    tools: &[String; 3],
+    expected_clock: ersatzrs_ffmpeg::TeletextTimestampPolicy,
+) -> AppState {
+    let state = application(root, provider).await;
+    assert_eq!(
+        record_live_caption_runtime(&state, tools).await,
+        expected_clock == ersatzrs_ffmpeg::TeletextTimestampPolicy::OriginalPes,
+        "the exact selected runtime must match the named clock-capability trial"
+    );
+    state
+}
+
 async fn initialize_source_caption_runtime() -> [String; 3] {
     let _ = tracing_subscriber::fmt()
         .with_env_filter("ersatzrs_web=debug,ersatzrs_infra=debug")
