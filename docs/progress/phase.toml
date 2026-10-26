@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — exact candidate startup/Health joins; promotion separately gated'
+current_focus = 'p9a-managed-adoption — native Windows rs7 Burn/Convert compatibility; promotion separately gated'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -99,17 +99,26 @@ startup, persisted Health, production pin or accepted adoption is inferred.
 Completed original-PTS FFmpeg installer/cache/identity component: canonical
 provider-scan/managed-current-candidates/ffmpeg/qualification.json joins composed
 15 Linux/14 nativeWindows controls and final real-archive passes on both hosts.
-Staged/promoted launcher capabilities, original-PES PTS, offline reuse, exact
+Staged/promoted installed-layout capabilities, original-PES PTS, offline reuse, exact
 non-null publication hashes and wrong-checksum preservation pass. Existing
 production bytes/pins/policy remain unchanged. Strict crate lint passes; native
 source is restored, full bounded Job cleanup is confirmed with forced unclassified
 descendants, never natural exit. This closed component is not commissioned again.
-Current package: p9a-managed-adoption. Next executable step: use existing host/
-package mechanisms to close the still-missing actual startup/Health and affected
-compatibility joins of these exact current FFmpeg/Next candidate bytes. Reuse
-unchanged output/admin evidence; distinguish installer tests from actual global
-startup/persisted Health and accepted production adoption. Do not change ADR0008
-selection/update/PATH fallback or silently copy the distinct Next cache-pin policy.
+Completed exact-candidate actual startup/persisted Health component: canonical
+provider-scan/managed-current-candidates/startup-health/qualification.json owns
+six actual Linux/nativeWindows starts and eight exact profile/Health outcomes.
+Managed original-PTS FFmpeg including Windows colocation, explicit rs7 Next,
+non-null identities, persisted managed paths/summaries, exact unsupported-profile
+Fail/restored Pass and cold restart pass; offline metadata stays Warning.
+Six hosts exit0 unforced, owned groups/Job empty naturally and native source is
+unchanged. Retained exact artifacts match ten current startup/Health sources;
+no fresh full-source/matched-bundle/browser or accepted production-pin claim.
+The one-off HTML parser negative is retained and corrected without product edits.
+Current package: p9a-managed-adoption. Next executable step: reuse the existing
+native Windows ordinary Next Burn and Convert smoke gates with exact rs7 and
+original-PTS bytes. Earlier package output used rs6 worker1ab984fd, not current
+560e246b. Keep its source/AV/caption/nld/cache/reconnect/idle/cleanup oracles; only
+these two affected gates, no repeated Legacy/Hybrid/admin/Linux output matrix.
 Production promotion/publication remains separately gated and unauthorized.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
