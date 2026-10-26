@@ -16771,6 +16771,32 @@ Smallest necessary work: Reconcile and close independently executable named plat
 Testable stop condition: Every r1-named applicable independent safety/provenance cell passes or is explicitly owned by the exact still-open native/artifact package; package completion requires all cells within this owner proven, not merely categorized.
 '''
 evidence = '''
+Completed PS1 original-PES ARM64/ARMv7/Windows candidate artifact/software
+component (2026-10-26): canonical original-pts-runtime/other-rids/qualification.json
+under provider-scan/so2-live-url/native-hls-caption owns the grouped three-RID
+receipt. Archives8cd65f48(ARM64),9649af9b(ARMv7),a4ac2ed2(Windows) bind source457453f,
+exact accepted207 images/read-only dependency prefixes, actual compiler IDs,
+original per-RID flags and strict three-file optional patch. Only the candidate
+extra-version changes. All original source and complete dependency-prefix hashes
+remain unchanged after builds. Existing architecture/layout/relocation/full-file
+and wrong-executable-pin guards pass; applied-patch counts are19/18/20.
+Both pinned ARM Bookworm/QEMU recipes and native Windows bare tools pass the
+existing graphics/two-AV1/SVG/twelve-WebP/56original-PTS/sparse gates: each delivers
+400frames/16s,nld879.94Hz,before/after-gap captions and unchanged lead/progress
+limits. Every build/runtime container is removed; native Windows retains zero
+owned processes and removes marker-owned scratch. The first Windows wrapper
+failed before product execution because Get-FileHash was unavailable; the
+existing Python digest mechanism corrects only that tool assumption. Exact
+binaries, inputs, deadlines and media oracles remain unchanged; initial evidence
+is preserved. Reuse exact Linux x64 package/ordinary-route and unchanged helper,
+editor/publication/isolation/F6 proof. No Mac work, production pin, native ARM,
+full Windows app, hardware, matched headed admin or managed adoption is inferred.
+This closes the three remaining original-PTS candidate artifact/software cells;
+PS2 current optional-clock Health/admin and required native/application/adoption
+joins retain their existing owners. Next finite independently executable proof:
+matched current Linux SSR/WASM headed Health with old-runtime Info/new-runtime
+Pass, localized text and exact runtime/export identity, reusing AV/stream proof.
+
 Completed PS1 first-party source-input integration (2026-10-26): local runtime
 checkpoint457453f joins the exact accepted207 branch1e357c9 and qualified
 optional-clock branch69e65b4, preserving both histories. All50 image inputs
@@ -16784,9 +16810,9 @@ byte-identical to its accepted source parent; its workflow remains unconditional
 disabled. No Mac recipe/test/build, source rebuild, CI, push, publication or
 managed adoption occurred. Canonical original-pts-runtime/package/source-join.json
 owns exact parents, default-root positive/refusal and scoped reuse. This closes
-the demonstrated current-checkout/input gap. Next existing PS1 obligation is
-original-PTS FFmpeg artifact/compatibility qualification for Linux ARM64/ARMv7
-and Windows x64; native ARM/full Windows application and adoption stay separate.
+the demonstrated current-checkout/input gap. Its following three-RID artifact/
+software obligation is now completed above; native ARM/full Windows application
+and adoption remain separate.
 
 Completed PS1 original-PES Linux package/Bookworm component (2026-10-26):
 Canonical original-pts-runtime/package/qualification.json under

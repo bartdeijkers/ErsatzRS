@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety — qualify remaining original-PTS runtime artifacts'
+current_focus = 'p9a-platform-safety — prove current optional-clock Health in admin'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -86,13 +86,20 @@ and original-clock histories, all50 exact package inputs, the default-ROOT
 verifier and wrong-patch guard, unchanged17 generic helper controls and all
 Mac code/current explicit workflow deferral. Canonical source-join.json under
 the same package receipt owns exact parents, refusals and scoped reuse.
-One current package: PS1 original-PTS FFmpeg artifact/compatibility qualification
-for the other three required RIDs: Linux ARM64, Linux ARMv7 and Windows x64.
-Reuse accepted207 dependencies and existing package/runtime recipes; stop on
-exact source/patch/compiler/package identities, applicable original-PTS decoder
-and ordinary AV/sparse-subtitle/selected-audio guards for each RID. Keep native
-ARM, the deferred120minute Windows application trial and managed adoption with
-their existing owners. No Mac execution, CI, push or publication is authorized.
+Completed PS1 remaining original-PTS artifacts/software: canonical
+original-pts-runtime/other-rids/qualification.json binds source457453f and
+archives8cd65f48(ARM64),9649af9b(ARMv7),a4ac2ed2(Windows), unchanged accepted inputs,
+exact compiler/patch/dependency identities and strict existing package guards.
+ARM QEMU/native Windows bare tools pass original56PTS,graphics/WebP and sparse
+400frame/16s,nld879.94Hz gates with joined cleanup. The initial Windows wrapper
+cmdlet failure is retained; the existing Python hash mechanism fixes only it.
+One current package: PS2 current optional-clock Health/admin proof on Linux.
+Use the existing matched SSR/WASM host and headed localized Health playbook;
+stop on actual old-runtime Info/new-runtime Pass, correct localized text and
+exact runtime/export identity. Reuse valid ordinary AV, source-route, helper and
+unchanged editor/client receipts; do not replay their entire chains. Native ARM,
+the deferred120minute Windows application trial and managed adoption retain
+their primary owners. No Mac execution, CI, push or publication is authorized.
 The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.
 Older six-platform next actions below are historical where this scope supersedes
 them; retain all valid evidence and independently required Windows/ARM work.
