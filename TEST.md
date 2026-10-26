@@ -525,6 +525,18 @@ Support pages in `tests/e2e/support-page-criteria.ts`. The support spec can
 seed the persisted health snapshot with `E2E_SEED_SUPPORT=1` when
 `E2E_DB_PATH` or `ERSATZRS_DB_PATH` points at the SQLite test database.
 
+`teletext-decoder-health.spec.ts` checks the actual startup-cached decoder in
+English/Dutch, both themes and hydrated/no-JS flows. Its default published-runtime
+expectation is `Info`: decoding works, but original Live caption timestamps are
+unavailable. For an independently qualified candidate, set
+`ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS=true` to require `Pass`; this does not infer
+the expected capability from the response. Pin both tools with
+`ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256` and
+`ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256` when proving an exact runtime. The same
+flow checks Refresh persistence, localized messages, diagnostics identities
+and the exported `original_pts` value. Use the existing wrapper with
+`--headed --workers 1` and a matching SSR/WASM bundle.
+
 ## Admin route verification
 
 Route and hydration/browser verification state is canonical in

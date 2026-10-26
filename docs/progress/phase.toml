@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety — prove current optional-clock Health in admin'
+current_focus = 'p9a-windows-package — deferred; explicit resume required (120 minutes)'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -93,13 +93,26 @@ exact compiler/patch/dependency identities and strict existing package guards.
 ARM QEMU/native Windows bare tools pass original56PTS,graphics/WebP and sparse
 400frame/16s,nld879.94Hz gates with joined cleanup. The initial Windows wrapper
 cmdlet failure is retained; the existing Python hash mechanism fixes only it.
-One current package: PS2 current optional-clock Health/admin proof on Linux.
-Use the existing matched SSR/WASM host and headed localized Health playbook;
-stop on actual old-runtime Info/new-runtime Pass, correct localized text and
-exact runtime/export identity. Reuse valid ordinary AV, source-route, helper and
-unchanged editor/client receipts; do not replay their entire chains. Native ARM,
-the deferred120minute Windows application trial and managed adoption retain
-their primary owners. No Mac execution, CI, push or publication is authorized.
+Completed PS2 current optional-clock Linux headed Health/admin: canonical
+original-pts-runtime/health-admin/qualification.json owns16 Chromium/Firefox
+tests/32 EN/NL scenarios, both themes/hydrated/no-JS Refresh persistence,
+old false/Info versus new true/Pass and exact two-tool diagnostics identity.
+One matched current SSR/WASM bundle is byte-identical across both runtime cases;
+unchanged native/source/AV/editor/client evidence is reused within its scope.
+No independent local work package remains in the current finite owner list.
+Current waiting package: p9a-windows-package, still maintainer-deferred with
+120minutes reserved; resume only with explicit authorization, then run the
+existing current-source packaged launcher/admin/output/Health recipe. Until
+that or another external prerequisite changes, start no substitute variants.
+Other exact prerequisites retain their primary records: author-enhanced AE5
+needs authoritative A8(2) same-cell/empty-NoDirectAddress order/lifetime semantics
+and independent C3 capability; author-base AB5 needs correct raw-header/secondary
+independent decoding; m29-policy needs an accepted author/receiver CoP or exact
+semantics-preserving reset. Client gates retain X1 deferral/no DVBViewer/no physical
+Kodi before the agreed joint final; editor-upstream retains X3 upstream banks/
+over208-context capacity. Native ARM64/ARMv7 environments remain unavailable.
+Dependent source/platform/adoption/aggregate/final gates stay open without
+waiving their clauses. No Mac execution, CI, push or publication is authorized.
 The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.
 Older six-platform next actions below are historical where this scope supersedes
 them; retain all valid evidence and independently required Windows/ARM work.

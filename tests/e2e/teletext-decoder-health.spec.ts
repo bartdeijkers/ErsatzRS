@@ -2,6 +2,16 @@ import { expect, Locator, test } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
 
 const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
+// The published runtime lacks the optional Live-clock contract. Candidate runs
+// must declare their independently qualified expectation rather than infer it
+// from the Health result being tested.
+const originalPtsSetting = process.env.ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS ?? 'false';
+if (!['true', 'false'].includes(originalPtsSetting)) {
+  throw new Error('ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS must be true or false.');
+}
+const originalPts = originalPtsSetting === 'true';
+const decoderReadyEnglish = 'The selected FFmpeg runtime passed teletext page selection, subtitle text and colour bitmap decoding.';
+const clockUnavailableEnglish = 'The runtime can decode teletext but cannot preserve original Live caption timestamps. Live teletext captions are unavailable; ordinary playback remains available.';
 
 async function linkContrast(link: Locator): Promise<number> {
   // Use the same computed-colour method as the metadata-editor contrast gate.
@@ -129,8 +139,10 @@ for (const javaScriptEnabled of [true, false]) {
         page.on('pageerror', error => errors.push(error.message));
         page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
         for (const [language, title, message, refreshLabel] of [
-          ['en-us', 'Teletext decoding', 'The selected FFmpeg runtime passed teletext page selection, subtitle text and colour bitmap decoding.', 'Refresh'],
-          ['nl', 'Teletekstdecodering', 'De geselecteerde FFmpeg-runtime heeft de controles voor teletekstpaginaselectie, ondertiteltekst en kleurenbitmapdecodering doorstaan.', 'Vernieuwen'],
+          ['en-us', 'Teletext decoding', originalPts ? decoderReadyEnglish : clockUnavailableEnglish, 'Refresh'],
+          ['nl', 'Teletekstdecodering', originalPts
+            ? 'De geselecteerde FFmpeg-runtime heeft de controles voor teletekstpaginaselectie, ondertiteltekst en kleurenbitmapdecodering doorstaan.'
+            : 'De runtime kan teletekst decoderen, maar behoudt de oorspronkelijke tijdstempels van liveondertitels niet. Live-teletekstondertitels zijn niet beschikbaar; gewone weergave blijft beschikbaar.', 'Vernieuwen'],
         ]) {
           expect((await page.request.post('/admin-api/settings/ui/save', {
             form: { is_dark_mode: String(isDarkMode), language }, maxRedirects: 0,
@@ -158,22 +170,26 @@ for (const javaScriptEnabled of [true, false]) {
           const stored = database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=?').get('health.results') as { Value: string };
           const result = (JSON.parse(stored.Value) as { title: string; status: string; message: string }[])
             .find(result => result.title === 'Teletext decoding');
-          expect(result?.status).toBe('Pass');
-          expect(result?.message).toContain('colour bitmap decoding');
+          expect(result?.status).toBe(originalPts ? 'Pass' : 'Info');
+          expect(result?.message).toBe(originalPts ? decoderReadyEnglish : clockUnavailableEnglish);
           await row.scrollIntoViewIfNeeded();
-          await page.screenshot({ path: `test-results/teletext-health-${testInfo.project.name}-${javaScriptEnabled}-${isDarkMode}-${language}.png`, fullPage: true });
-          await row.screenshot({ path: `test-results/teletext-health-row-${testInfo.project.name}-${javaScriptEnabled}-${isDarkMode}-${language}.png` });
+          await page.screenshot({ path: testInfo.outputPath(`teletext-health-${language}.png`), fullPage: true });
+          await row.screenshot({ path: testInfo.outputPath(`teletext-health-row-${language}.png`) });
         }
         await page.goto('/system/troubleshooting');
         const general = JSON.parse((await page.locator('#general-panel pre').textContent())!);
         const decoder = general.FfmpegSettings.TeletextDecoder;
         expect(decoder.Capability.status).toBe('ready');
         expect(decoder.Capability.missing_options).toEqual([]);
+        expect(decoder.Capability.original_pts).toBe(originalPts);
         expect(decoder.RuntimeGeneration).toBeGreaterThan(0);
         expect(decoder.FFmpegSha256).toMatch(/^[a-f0-9]{64}$/);
         expect(decoder.FFprobeSha256).toMatch(/^[a-f0-9]{64}$/);
         if (process.env.ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256) {
           expect(decoder.FFmpegSha256).toBe(process.env.ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256);
+        }
+        if (process.env.ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256) {
+          expect(decoder.FFprobeSha256).toBe(process.env.ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256);
         }
         expect(errors).toEqual([]);
       } finally {
