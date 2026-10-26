@@ -1068,6 +1068,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve partial captures and TSDuck diagnostics when the manual URL gate
+  fails with `--keep`, retaining default cleanup and failure exit codes.
+
 - Keep Native Live playback capacity attached to its prepared source and actual
   consumer until cleanup finishes, including failed consumer startup and abandoned
   preparation. Unconfirmed cleanup retains admission until restart.

@@ -301,7 +301,7 @@ mode_baseline() {
 mode_url() {
   local url="${1:?usage: url <stream-url> [seconds]}" secs="${2:-$CAPTURE_SECONDS}"
   WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/tsduck-gate-url.XXXXXX")"
-  trap 'rm -rf "$WORKDIR"' EXIT
+  trap '[ "$KEEP" = 1 ] || rm -rf "$WORKDIR"' EXIT
   local cap="$WORKDIR/capture.ts" safe_url label
   safe_url="$(redact_stream_url "$url")"
   if [[ "$url" == *.m3u8* ]]; then

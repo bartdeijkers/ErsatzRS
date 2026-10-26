@@ -52,3 +52,38 @@ if check_delivery_monitor "$monitor_log" 5184000 starving_monitor >/dev/null; th
 fi
 
 printf 'tsduck delivery regressions passed\n'
+
+# A failed input must retain its partial bytes and diagnostics with --keep.
+# Stub only the gate's tools, so this regression needs no server or TSDuck.
+capture_root=$(mktemp -d)
+trap 'rm -f "$monitor_log"; rm -rf "$capture_root"' EXIT
+mkdir "$capture_root/bin" "$capture_root/keep" "$capture_root/remove"
+cat >"$capture_root/bin/tsp" <<'STUB'
+#!/usr/bin/env bash
+printf 'partial transport' >"${@: -1}"
+printf 'synthetic capture failure\n' >&2
+exit 1
+STUB
+chmod +x "$capture_root/bin/tsp"
+for tool in tsanalyze jq curl; do
+  ln -s tsp "$capture_root/bin/$tool"
+done
+for retention in keep remove; do
+  args=()
+  [ "$retention" = keep ] && args=(--keep)
+  if PATH="$capture_root/bin:$PATH" TMPDIR="$capture_root/$retention" \
+      bash "$SCRIPT_DIR/tsduck-playback-gate.sh" "${args[@]}" \
+        url http://example.invalid/capture 1 >"$capture_root/$retention.log" 2>&1; then
+    printf 'expected failed capture: %s\n' "$retention" >&2
+    exit 1
+  fi
+done
+kept=("$capture_root/keep"/tsduck-gate-url.*)
+[ "${#kept[@]}" = 1 ] && [ -d "${kept[0]}" ] \
+  && [ "$(cat "${kept[0]}/capture.ts")" = 'partial transport' ] \
+  && grep -qF 'synthetic capture failure' "${kept[0]}/capture.ts.delivery.log" \
+  || { printf 'failed --keep capture lost evidence\n' >&2; exit 1; }
+removed=("$capture_root/remove"/tsduck-gate-url.*)
+[ ! -e "${removed[0]}" ] \
+  || { printf 'default failed capture was not cleaned\n' >&2; exit 1; }
+printf 'tsduck failed-capture retention regressions passed\n'

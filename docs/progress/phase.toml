@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — sustained native rs7 Burn/Convert transport proof; promotion separately gated'
+current_focus = 'p9a-managed-adoption — cached-HLS transport classification; sustained native TS closed'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -121,13 +121,21 @@ wrapper/cache/reconnect/idle oracles, ten metadata probes and twelve natural ful
 empty Jobs. Eight captures retain exact native hashes; source/package stay
 unchanged and isolated copied hosts/tools are removed. The stale helper-tool
 hash preflight is retained; only the qualified archive input was corrected.
-Current package: p9a-managed-adoption. Next executable step: required sustained
-native Windows transport for the exact candidates, using existing TSDuck URL gate
-and owned-host/synthetic fixture mechanisms for Next Burn/Convert. Current smoke
-prefixes contain657–870 packets, below unchanged MIN_PACKETS=2000; do not claim
-that gate or lower its thresholds. Retain AV/caption/nld and joined cleanup.
-Reuse unaffected Legacy/Hybrid, headed admin, Linux source/output and artifacts;
-no new client search, general audit or repeated completed component.
+Completed sustained native TS component: canonical
+provider-scan/managed-current-candidates/native-transport/qualification.json
+owns four20s normal/cached Burn/
+Convert captures,88 unchanged TSDuck checks and four independent exact AV/caption/
+nld880Hz proofs. Both hosts exit0 unforced and whole Job empty naturally; source/
+package exact, copied roots removed. The one-line URL --keep fix preserves early
+failure evidence with default cleanup and failure codes unchanged. Existing smoke
+oracles, consistent SQLite backups and native installed tools retain their limits.
+Current package: p9a-managed-adoption. Next executable step: correlate the two
+cached-HLS negatives with exact playlist/segment discontinuity provenance before
+choosing a correction. Burn CC4/low6 and Convert CC5/low7 remain red; roughly60s
+media in requested20s capture makes cached-history/capture effects a hypothesis,
+not an established explanation. Preserve original bytes and strict thresholds;
+use existing group-capture/TSDuck tools, no rerun of the four closed TS gates or
+unaffected editor/admin/Linux/platform matrices. No new client search or firewall.
 Production promotion/publication remains separately gated and unauthorized.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
