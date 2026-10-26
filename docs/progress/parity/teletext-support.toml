@@ -17,8 +17,9 @@ SO3-R/4-R are closed on Linux Next023 candidate/software.
 Runtime gates P9A-03; output/adoption retain their owners.
 Native Live HLS/original-PES clock wiring is completed within the unpublished
 Linux x64 candidate; p9a-source-output owns the original-pts-application receipt.
-Its scoped Linux candidate package/Bookworm proof is completed; source-input
-integration, required native proof and managed adoption retain their owners.
+Its scoped Linux candidate package/Bookworm and source-input integration proofs
+are completed; remaining required RID artifacts/native proof and managed
+adoption retain their owners.
 
 Typed services/resources, X26/X27/X28/M29, execution and raster remain partial.
 Original identity/effects/fallback/bounds stay protected. A7/A8/C3, foreign-X26, repertoires/fonts, objects/DRCS/panels and

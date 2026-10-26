@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-platform-safety — integrate qualified runtime source inputs'
+current_focus = 'p9a-platform-safety — qualify remaining original-PTS runtime artifacts'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -81,13 +81,18 @@ original-pts-runtime/package/qualification.json binds archiveae83ecf2, all10421
 source-file comparisons/strict patch replay, accepted207 dependency/license
 records, existing safe package/relocation/wrong-pin guards and actual baseline
 compatibility/56PTS/sparse400frame,nld879.94Hz proof. Container cleanup passed.
-One current package: PS1 exact first-party source-input integration. The clean
-primary FFmpeg checkout still lacks accepted207 input changes present in the
-qualified composite (accepted branch1e357c9 plus optional4a206f08 patch).
-Join those existing inputs, preserve all platform code and the current Mac
-workflow deferral, then stop on exact inventory equality and affected existing
-non-Mac guards. Do not start a Mac build/recipe/acceptance trial or infer other
-native RID, Windows application, matched admin or managed-adoption proof.
+Completed PS1 first-party source-input integration:457453f retains accepted207
+and original-clock histories, all50 exact package inputs, the default-ROOT
+verifier and wrong-patch guard, unchanged17 generic helper controls and all
+Mac code/current explicit workflow deferral. Canonical source-join.json under
+the same package receipt owns exact parents, refusals and scoped reuse.
+One current package: PS1 original-PTS FFmpeg artifact/compatibility qualification
+for the other three required RIDs: Linux ARM64, Linux ARMv7 and Windows x64.
+Reuse accepted207 dependencies and existing package/runtime recipes; stop on
+exact source/patch/compiler/package identities, applicable original-PTS decoder
+and ordinary AV/sparse-subtitle/selected-audio guards for each RID. Keep native
+ARM, the deferred120minute Windows application trial and managed adoption with
+their existing owners. No Mac execution, CI, push or publication is authorized.
 The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.
 Older six-platform next actions below are historical where this scope supersedes
 them; retain all valid evidence and independently required Windows/ARM work.

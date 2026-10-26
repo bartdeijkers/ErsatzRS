@@ -16771,6 +16771,23 @@ Smallest necessary work: Reconcile and close independently executable named plat
 Testable stop condition: Every r1-named applicable independent safety/provenance cell passes or is explicitly owned by the exact still-open native/artifact package; package completion requires all cells within this owner proven, not merely categorized.
 '''
 evidence = '''
+Completed PS1 first-party source-input integration (2026-10-26): local runtime
+checkpoint457453f joins the exact accepted207 branch1e357c9 and qualified
+optional-clock branch69e65b4, preserving both histories. All50 image inputs
+match immutable packageae83ecf2. Existing207 verification now succeeds from its
+actual repository ROOT without a version/input override; its wrong-patch guard
+still rejects drift. The qualified probe/source/graphics/WebP/sparse scripts
+and17 non-Mac helper controls are unchanged, so their package/runtime evidence
+is reused. Three documentation conflicts retain published history, historical
+Mac component evidence and the stricter current deferral. Existing Mac code is
+byte-identical to its accepted source parent; its workflow remains unconditionally
+disabled. No Mac recipe/test/build, source rebuild, CI, push, publication or
+managed adoption occurred. Canonical original-pts-runtime/package/source-join.json
+owns exact parents, default-root positive/refusal and scoped reuse. This closes
+the demonstrated current-checkout/input gap. Next existing PS1 obligation is
+original-PTS FFmpeg artifact/compatibility qualification for Linux ARM64/ARMv7
+and Windows x64; native ARM/full Windows application and adoption stay separate.
+
 Completed PS1 original-PES Linux package/Bookworm component (2026-10-26):
 Canonical original-pts-runtime/package/qualification.json under
 provider-scan/so2-live-url/native-hls-caption owns archiveae83ecf2,
@@ -16786,10 +16803,8 @@ no rebuild, new stream/client/native RID or managed adoption is inferred.
 The primary FFmpeg checkout69e65b4 is explicitly not equivalent to the accepted
 207 image inventory. This package truthfully binds accepted branch1e357c9 plus
 optional patch4a206f08, without dropping0018, existing Mac code or ARM inputs.
-Next smallest PS1 source obligation: integrate those already qualified inputs
-into the clean primary runtime checkout, preserve its explicit Mac deferral,
-and prove exact equality with the qualified composite before production build
-or adoption. Required other-RID/native/application proof retains its owners.
+The source obligation exposed at this package checkpoint is now closed by
+457453f above; the exact archive is retained without rebuilding or repackaging. Required other-RID/native/application proof retains its owners.
 
 Status: In progress; completion waits for the listed source-output/native/artifact prerequisites. Completed independent component: the exact corrected SO2 FFmpeg9 Linux x86_64 candidate passes the existing native sparse-PGS/alternate-audio, SVG and animated-WebP compatibility gates. Canonical provider-scan/identity.json native_streaming_lifecycle_followup.route_join_followup.scheduler_recovery_followup.linux_compatibility owns exact scripts/runtime/source/object hashes, scoped reuse and results. This closes affected Linux candidate playback compatibility after the concrete scheduler change, not package provenance, other RIDs, managed adoption or the full Health/output join. Completed additional Linux package component: canonical scheduler_recovery_followup.linux_package_bookworm owns local archive7466c8bd, correctedFFmpeg80e3502c and unchangedffprobe3e0a8c01. Existing layout/checksum/safe extraction and wrong-executable-pin refusal pass before/after relocation; source metadata preserves original per-tool/dependency/license provenance plus exact0017 correction and b434264 source checkpoint. The one local archive is not a rewritten published2.0.6 or the unchanged four-RID manifest. Existing gates pass in pinned Debian12/Bookworm image3783cc01/glibc2.36: actual drawtext/drawvg, two decoded frames each rav1e/SVTAV1, SVG, twelve animation cases, sparsePGS before/after gap and400 AVframes/16s with Dutch879.94Hz, lead0.547s/progressgap0.1s. Native libzvbi options remain available. Container removal is verified. Reuse exact original scheduler/ordinary-route/TSDuck proof; do not repeat it as a new Bookworm stream claim. Exact remaining proof: PS1 consume exact required four-RID source/build/license/dependency/decoder probe qualification from the artifact/native owners; PS2 join the accepted source/output/failure contracts from source-output to truthful optional/operator Health and ordinary subtitle/alternate-audio safety. No additional general Linux/Windows Health experiment is concretely established by the current record.
 PS1 current023 Linux package/Bookworm component completed: canonical next023_source_output_followup.linux_package_bookworm and next023-source-output/bookworm/qualification.json bind archivec6765c48, payload552d6e0f, exact source/compiler/lock/ten patches and license. Existing safe member reading proves archive/origin/payload equality; the unchanged production loader refuses this unadopted candidate. Nine package guards pass, reusing ten preparation guards. The existing finite software recipe runs the exact worker and FFmpeg2.0.7 inside pinned Debian12 image3783cc01/glibc2.36; normal exit and container removal pass. Native-host decoding of those original files with the same pinned fontconfig/font proves200frames/160x90, nld880Hz and48 caption-reference pixels/error0.438 versus plain66.062. The initial host-default-font comparison is retained; only host path/environment mapping is corrected, without worker replay or oracle change. Reuse current source/ordinary-route/95transport and unchanged earlier FFmpeg compatibility within scope. This closes current Linux candidate package portability, not other RIDs, native ARM/macOS/Windows, final Health or managed adoption. Next independently executable PS1 work is the two existing ARM candidate build/software recipes; QEMU/native/adoption claims remain separate and the Windows120minute trial stays deferred.
