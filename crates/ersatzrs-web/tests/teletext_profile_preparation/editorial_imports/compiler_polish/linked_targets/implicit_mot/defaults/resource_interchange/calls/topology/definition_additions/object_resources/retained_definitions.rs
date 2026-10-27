@@ -7,6 +7,9 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 #[path = "retained_definitions/actual_admin.rs"]
 mod actual_admin;
 
+#[path = "retained_definitions/removal.rs"]
+mod removal;
+
 fn added_identity() -> TeletextObjectIdentity {
     TeletextObjectIdentity::public(bank_resources()[2], TeletextObjectId::new(32)).unwrap()
 }

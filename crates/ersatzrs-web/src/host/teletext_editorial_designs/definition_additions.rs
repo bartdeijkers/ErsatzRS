@@ -19,6 +19,13 @@ use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 #[path = "definition_additions/retained_banks.rs"]
 mod retained_banks;
 
+#[path = "definition_additions/removals.rs"]
+mod removals;
+pub use removals::{
+    remove_unused_teletext_editorial_resource_definition,
+    NativeTeletextResourceDefinitionRemoveRequest,
+};
+
 #[path = "definition_additions/announcements.rs"]
 mod announcements;
 pub use announcements::{
@@ -141,6 +148,7 @@ enum Action {
         source: TeletextObjectIdentity,
         new_object_id: TeletextObjectId,
     },
+    Remove(TeletextObjectIdentity),
 }
 struct Request {
     name: String,
@@ -194,6 +202,15 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
             }
             if values.len() > budget.max_records.min(budget.max_structure_items) {
                 return Err(NativeTeletextEditorialImportError::Budget);
+            }
+            return Ok(());
+        }
+        Action::Remove(identity) => {
+            if budget.max_objects == 0 || budget.max_structure_items == 0 {
+                return Err(NativeTeletextEditorialImportError::Budget);
+            }
+            if identity.resource().is_none() {
+                return Err(NativeTeletextEditorialImportError::Association);
             }
             return Ok(());
         }
@@ -281,7 +298,8 @@ fn resolve(
         | Action::Selections { .. }
         | Action::Choices { .. }
         | Action::Consumers(_)
-        | Action::ConsumerChoices { .. } => {
+        | Action::ConsumerChoices { .. }
+        | Action::Remove(_) => {
             return Err(NativeTeletextEditorialImportError::Association);
         }
         Action::Announcements(values) => return Ok((vec![], vec![], values)),
@@ -463,6 +481,9 @@ fn encode(
     deadline: Instant,
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
+    if let Action::Remove(identity) = action {
+        return removals::encode(baselines, identity, revision, policy, deadline);
+    }
     if let Action::AttachmentChoices(choices) = action {
         return encode_attachments(baselines, &choices, revision, policy, deadline);
     }
@@ -558,14 +579,16 @@ fn encode(
     finish_encode(&baselines, &incoming, revision, policy, deadline)
 }
 
-fn finish_encode(
+fn compile_cumulative(
     baselines: &Baselines,
-    incoming: &TeletextEditorialChanges,
     revision: i64,
     policy: &NativeTeletextExportPolicy,
     deadline: Instant,
-) -> Result<(EncodedStoredDesign, String)> {
-    let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
+) -> Result<(
+    EncodedStoredDesign,
+    String,
+    super::RestoredStoredTeletextDesign,
+)> {
     let document = repeat::encode_cumulative_document(
         &baselines.root,
         &baselines.cumulative,
@@ -594,6 +617,19 @@ fn finish_encode(
             .compile(stored, policy.encoding.clone(), deadline, Vec::new())
             .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?
     };
+    Ok((document, document_digest, edited))
+}
+
+fn finish_encode(
+    baselines: &Baselines,
+    incoming: &TeletextEditorialChanges,
+    revision: i64,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<(EncodedStoredDesign, String)> {
+    let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
+    let (document, document_digest, edited) =
+        compile_cumulative(baselines, revision, policy, deadline)?;
     super::super::teletext_editorial_effects::validate_teletext_editorial_transition_with_operands(
         latest
             .original
