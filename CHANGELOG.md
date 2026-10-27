@@ -685,8 +685,9 @@ release section when tagging a release.
 - Prepare a complete pinned Next source-output runtime candidate for local
   four-platform verification, retaining deferred macOS identities and existing
   production runtime selection. Require explicit removal of unused authored
-  object copies before full teletext engine acceptance; implementation remains
-  pending rather than silently treating it as optional.
+  object copies before full teletext engine acceptance. Complete-service removal
+  validation now retains resource owners and refuses live, dormant and MOT-default
+  dependencies; the explicit draft/admin action remains pending.
 
 - Temporarily defer native ARM64/ARMv7 execution acceptance while hardware is
   unavailable. Retain ARM builds, packages, emulation and CI; disclose native

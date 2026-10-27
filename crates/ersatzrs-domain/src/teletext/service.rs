@@ -46,6 +46,9 @@ mod resource_object_programs;
 #[path = "resource_object_definition_addition_service.rs"]
 mod resource_object_definition_additions;
 
+#[path = "resource_object_definition_removal_service.rs"]
+mod resource_object_definition_removals;
+
 #[path = "object_resource_addition_service.rs"]
 mod object_resource_additions;
 

@@ -378,6 +378,36 @@ impl TeletextDeclaredService {
         Ok(self)
     }
 
+    /// Remove unused resource definitions without discarding declared resource owners.
+    ///
+    /// All MOT defaults remain protected, including suppressed or unassociated
+    /// slots. Empty-page sentinels follow the rebuilt semantic companions; exact
+    /// MOTs, inventory, display resolutions and source identities remain intact.
+    /// The host must separately establish copy ownership and edit authority.
+    /// # Errors
+    /// Rejects referenced or invalid targets and complete semantic/dependency or
+    /// budget failures. No partially modified service is returned.
+    pub fn without_unused_resource_object_definitions(
+        mut self,
+        removals: &[super::TeletextObjectIdentity],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextResourceObjectDefinitionRemovalError> {
+        self.semantic = self
+            .semantic
+            .without_unused_resource_object_definitions(removals, budget)?;
+        for reservation in &self.defaults {
+            let identity = reservation.selection().target;
+            if removals.contains(&identity) {
+                return Err(
+                    super::TeletextResourceObjectDefinitionRemovalError::Referenced { identity },
+                );
+            }
+        }
+        self.empty_object_pages = self.semantic.object_companions().to_vec();
+        self.validate_resource_usage()?;
+        Ok(self)
+    }
+
     /// Add new complete native object banks without changing MOTs or selections.
     ///
     /// Reconstructs the complete declaration/inventory boundary; semantic success

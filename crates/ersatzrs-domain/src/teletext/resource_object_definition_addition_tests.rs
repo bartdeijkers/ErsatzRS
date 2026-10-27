@@ -4,6 +4,9 @@ use super::*;
 #[path = "object_resource_addition_tests.rs"]
 mod object_resource_addition_tests;
 
+#[path = "resource_object_definition_removal_tests.rs"]
+mod resource_object_definition_removal_tests;
+
 fn identity(global: bool, page: u8, s1: u8, id: u16) -> TeletextObjectIdentity {
     let resource = resource(
         if global {
@@ -494,6 +497,14 @@ fn resource_definition_additions_declared_wrapper_preserves_inventory_and_resolu
         &edited.semantic().objects().definitions()[..2],
         original.semantic().objects().definitions()
     );
+    let removals: Vec<_> = additions()
+        .iter()
+        .map(TeletextResourceObjectDefinitionAddition::identity)
+        .collect();
+    let restored = edited
+        .without_unused_resource_object_definitions(&removals, budget())
+        .unwrap();
+    assert_eq!(restored, original);
 }
 
 #[test]

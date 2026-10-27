@@ -399,6 +399,30 @@ fn every_unassociated_bank_default_is_reserved_and_requires_real_definition() {
     let checked = bind(input, declared, vec![]).unwrap();
     assert_eq!(checked.defaults().len(), 2);
     assert_eq!(checked.defaults()[1].selection().target, target(0xb0));
+    let limits = TeletextServiceBudget {
+        max_records: 64,
+        max_objects: 64,
+        max_structure_items: 1024,
+        max_base_content_bytes: 1024,
+        max_commands: 1024,
+        max_collected_commands: 1024,
+        max_collected_drcs_references: 64,
+    };
+    // No actual display executes this unassociated MOT slot. It is still a
+    // declared dependency and cannot be discarded as an unused copy.
+    assert!(checked
+        .semantic()
+        .clone()
+        .without_unused_resource_object_definitions(&[target(0xb0)], limits)
+        .is_ok());
+    assert_eq!(
+        checked
+            .clone()
+            .without_unused_resource_object_definitions(&[target(0xb0)], limits),
+        Err(TeletextResourceObjectDefinitionRemovalError::Referenced {
+            identity: target(0xb0),
+        })
+    );
 }
 
 #[test]
