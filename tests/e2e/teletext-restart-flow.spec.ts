@@ -939,9 +939,14 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
     const external = process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_DIR;
     test.skip(!external, 'Requires an owned external-client controller; marker completion is not renderer acceptance.');
     test.skip(process.platform === 'win32' || !process.env.FFMPEG_PATH, 'Requires the existing POSIX synthetic package and FFmpeg9.');
-    test.setTimeout(180_000);
+    // Human control needs matching bounded fixture media and operator time.
+    // The default 75s hold/60s source, capture and product deadlines stay exact.
+    const holdSeconds = Number(process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_HOLD_SECONDS ?? 75);
+    expect(Number.isInteger(holdSeconds) && holdSeconds >= 75 && holdSeconds <= 600).toBe(true);
+    test.setTimeout(Math.max(180_000, (holdSeconds + 120) * 1000));
     const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath,
-      { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 60 } });
+      { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH!,
+        durationSeconds: process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_HOLD_SECONDS ? holdSeconds : 60 } });
     fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
     const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, viewport: { width: 1280, height: 900 } });
     const page = await context.newPage(); const errors: string[] = [];
@@ -974,7 +979,7 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
       fixture.resetSourceStart();
       writeFileSync(join(external!, 'host-ready.json'), JSON.stringify({ probe_version: 1, url, channel,
         host: isolatedWebHost.processIdentity(), scope: 'Real ordinary standalone base URL; native rendering/navigation acceptance is separate.' }, null, 2));
-      await expect.poll(() => existsSync(join(external!, 'client-complete.json')), { timeout: 75_000 }).toBe(true);
+      await expect.poll(() => existsSync(join(external!, 'client-complete.json')), { timeout: holdSeconds * 1000 }).toBe(true);
       const completed = JSON.parse(readFileSync(join(external!, 'client-complete.json'), 'utf8'));
       expect(completed).toMatchObject({ probe_version: 1, url, owned_client_closed: true });
       expect(restartSafety(fixture)).toEqual(safe);

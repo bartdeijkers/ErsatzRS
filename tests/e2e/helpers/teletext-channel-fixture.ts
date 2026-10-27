@@ -132,6 +132,7 @@ export class TeletextChannelFixture {
   private readonly packageFiles = new Map<string, Buffer>();
   private readonly authoredPages: boolean;
   private readonly playback: boolean;
+  private readonly playbackDurationSeconds: number;
   private scripted = false;
 
   constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; playback?: { ffmpeg: string; durationSeconds?: number } } = {}) {
@@ -140,12 +141,13 @@ export class TeletextChannelFixture {
     if (options.editorOperand && !options.editorPages) throw new Error('Synthetic operand editor requires editor pages.');
     if (options.standaloneLevel15 && (!this.authoredPages || options.editorPages)) throw new Error('Standalone base fixture requires the original V2 producer.');
     this.playback = options.playback !== undefined;
+    this.playbackDurationSeconds = options.playback?.durationSeconds ?? 12;
     if (this.playback && !this.authoredPages) throw new Error('Synthetic playback requires the authored producer.');
     // Retained immutable histories/files belong to the wrapper DB's temporary
     // directory; it is disposed only after the host has stopped.
     this.root = mkdtempSync(join(this.playback ? dirname(databasePath) : tmpdir(), 'ersatzrs-e2e-teletext-'));
     if (options.playback) {
-      try { this.generatePlaybackSource(options.playback.ffmpeg, options.playback.durationSeconds); }
+      try { this.generatePlaybackSource(options.playback.ffmpeg, this.playbackDurationSeconds); }
       catch (error) { rmSync(this.root, { recursive: true, force: true }); throw error; }
     }
     this.packagePath = this.authoredPages ? join(this.root, 'package') : this.root;
@@ -222,8 +224,8 @@ export class TeletextChannelFixture {
   }
 
   private generatePlaybackSource(ffmpeg: string, durationSeconds = 12): void {
-    if (!Number.isSafeInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 60) {
-      throw new Error('Synthetic playback duration must be between 1 and 60 seconds.');
+    if (!Number.isSafeInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 600) {
+      throw new Error('Synthetic playback duration must be between 1 and 600 seconds.');
     }
     const version = execFileSync(ffmpeg, ['-version'], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 });
     if (!/^ffmpeg version (?:n)?9(?:[.\s-])/.test(version.split('\n')[0])) {
@@ -237,7 +239,7 @@ export class TeletextChannelFixture {
       '-c:a', 'aac', '-b:a', '128k', '-metadata:s:a:0', 'language=eng',
       '-muxrate', '4953600', '-pcr_period', '20', '-mpegts_start_pid', '256',
       '-mpegts_pmt_start_pid', '4096', '-f', 'mpegts', 'pipe:1'],
-    { timeout: 30_000, maxBuffer: (durationSeconds <= 12 ? 8 : 40) * 1024 * 1024, killSignal: 'SIGKILL' });
+    { timeout: 30_000, maxBuffer: (durationSeconds <= 12 ? 8 : durationSeconds <= 60 ? 40 : 384) * 1024 * 1024, killSignal: 'SIGKILL' });
     if (!bytes.length || bytes.length % 188 !== 0) throw new Error('Synthetic source is not packet-aligned MPEG-TS.');
     for (let offset = 0; offset < bytes.length; offset += 188) {
       if (bytes[offset] !== 0x47 || (((bytes[offset + 1] & 0x1f) << 8) | bytes[offset + 2]) === 512) {
@@ -347,7 +349,7 @@ export class TeletextChannelFixture {
     for (const channel of this.channels) {
       writeFileSync(join(this.root, `synthetic-client-schedule-${channel}.json`), JSON.stringify({
         startTime: new Date().toISOString(), programs: [{ title: 'Synthetic local clip',
-          serverKey: `Synthetic-${this.channels[0]}`, duration: 60_000,
+          serverKey: `Synthetic-${this.channels[0]}`, duration: Math.max(60_000, this.playbackDurationSeconds * 1000),
           file: join(this.root, 'synthetic-client-source.ts'), ratingKey: '1' }],
       }));
     }

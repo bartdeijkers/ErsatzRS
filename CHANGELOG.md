@@ -687,6 +687,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Define an explicit, versioned author/receiver agreement for absent secondary
+  teletext character defaults. Preserve immutable originals and require separate
+  implementation, safe publication and receiver proof before replacing existing
+  protective refusals.
+
 - Prepare a complete pinned Next source-output runtime candidate for local
   four-platform verification, retaining deferred macOS identities and existing
   production runtime selection. Require explicit removal of unused authored

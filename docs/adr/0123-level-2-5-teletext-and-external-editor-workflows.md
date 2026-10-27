@@ -1898,11 +1898,11 @@ accepted authoring limitation. Ordinary routes, active-publication Health, warm
 publisher/recovery ownership and complete restart/Lua timing remain open. Durable
 selection alone never proves per-output delivery or receiver cache reconciliation.
 
-### Proposed author/receiver policy for magazine-default retirement
+### Author/receiver policy for magazine-default retirement
 
-**Proposed for maintainer review (2026-10-27); not an accepted policy or
-implemented runtime behavior.** The existing protective refusal remains active.
-This proposal addresses the existing `p9a-m29-policy` owner; it does not change
+**Accepted by the maintainer (2026-10-27); implementation and mandatory
+receiver qualification remain open.** The existing protective refusal remains active.
+This agreement addresses the existing `p9a-m29-policy` owner; it does not change
 other authored-service, receiver, editor or platform requirements.
 
 EN 300 706 V1.2.1 Annex D.2.1(2) leaves the secondary-language default without
@@ -1911,10 +1911,10 @@ explicit seven-bit value `0x7f` a different meaning: no second G0 set. Those
 states are not interchangeable. The other applicable absent-packet defaults
 remain governed by Annex D and the original MOT/page context. Source:
 [ETSI EN 300 706 V1.2.1](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf),
-printed pages 104 and 133. The following policy is a proposed application
+printed pages 104 and 133. The following policy is an accepted application
 agreement, not a claim that ETSI mandates this choice for every receiver.
 
-Proposed policy ID: `ersatzrs-secondary-default-v1`.
+Policy ID: `ersatzrs-secondary-default-v1`.
 
 1. **Explicit author intent.** A design/profile may explicitly bind its absent-
    packet secondary-language intent to either `no second G0` or one valid,
@@ -1946,7 +1946,7 @@ Proposed policy ID: `ersatzrs-secondary-default-v1`.
    in metadata. Retained receiver cache history continues to fence later
    generations. If a removed consumer cannot be covered by an already defined,
    proven retirement operation, reject the whole transition; do not invent a
-   blank successor or a new semantic reset in this work package. This proposal
+   blank successor or a new semantic reset in this work package. This policy
    retires the old defaults' effects for qualified consumers, not the fact that
    an M/29 packet was transmitted earlier.
 5. **Qualify receivers, do not assume them.** Acceptance requires the original
@@ -1966,10 +1966,10 @@ Proposed policy ID: `ersatzrs-secondary-default-v1`.
    ordinary AV/captions/selected audio. A policy choice creates a draft; only
    separate explicit validated publication may change the stream.
 
-The review decision is whether to adopt this opt-in author/receiver agreement
-and then implement/prove the existing owner's transition, with `no second G0`
-as the first offered explicit choice. Approval of the proposal is not proof
-of a compatible receiver and does not close `p9a-m29-policy`. No original
+The maintainer approved this opt-in author/receiver agreement and its
+implementation, with `no second G0` as the first offered explicit choice.
+The decision is not implementation or proof of a compatible receiver and does
+not close `p9a-m29-policy`. No original
 unknown-default fixture may be relabelled as an already equivalent explicit
 choice: test its original receiver-dependent semantics or retain the exact
 blocker. If a required original case cannot be preserved through the chosen
