@@ -17078,22 +17078,42 @@ with --keep; default cleanup/failure codes stay intact. Real refused-URL and
 hermetic partial-byte/stderr regressions prove this one-line exit-trap fix.
 The original short657–870-packet smoke evidence is retained, not reclassified.
 
-Exact remaining gap: both cached-HLS gates are red (Burn CC4/rolling-low6;
-Convert CC5/rolling-low7). Original captures and failure logs are retained;
-combined HLS captures contain about60s media in a requested20s capture. Neither
-packet loss in the served segments nor valid declared-discontinuity/cached-history
-capture effects are yet established. Do not label this a product repair or
-accept HLS. Next correlate saved CC error locations with playlist/segment
-provenance using the existing HLS group-capture mechanism before selecting the
-smallest source/capture correction. Four closed TS gates are not commissioned
-again; no lowered thresholds, favorable seek/profile change or new client search.
+Completed sustained native cached-HLS history/live component (2026-10-27):
+managed-current-candidates/hls-live-qualification/qualification.json owns both
+Burn/Convert retained-history and actual live-delivery proofs. Existing group
+capture preserves sequences5..19 including declared sequence11 discontinuity;
+each live capture is a byte-exact substring of that independently fetched history.
+All initial cached segments are covered. Four unmodified groups pass76 structural/
+clock/continuity controls; two20s live samples pass48 playlist/transport/delivery
+controls with the same default thresholds, seven/six periodic delivery samples,
+zero low intervals and27967ms PCR media each. TSDuck3.44-4676 starts three4s target
+durations from the live edge, per RFC8216 section6.3.3, while complete retained
+history is validated separately. No favorable seek, counter repair, tolerance
+change or hidden history omission substitutes for proof. Six independent exact
+FFmpeg9 AV/caption/nld880–882Hz proofs pass; Convert retains actual Dutch WebVTT.
+Both host cleanups are unforced and both whole Jobs empty naturally; all3911
+frozen source entries, original package and private runtime payloads stay exact,
+and isolated roots are removed. Burn's whole-table guard negative is preserved:
+the scanner adds only unrelated MovieId2 rows; selected original rows and seed
+media/version/metadata stay exact. A separate finalization proves immutable bytes
+and cleanup, rather than rewriting its red Job outcome. Convert uses the existing
+selected-configuration boundary with explicit source/version binding. A verifier
+log-path failure is retained; three completed Burn AV proofs are reused unchanged.
+The earlier diagnostic classification is38 checks, not44 (the prior uncommitted
+handoff miscounted); its original log is authoritative. Generic URL-mode negatives
+remain: raw concatenation loses announced boundary semantics and cached prefill
+inflates its rolling reference. That unchanged mode is not claimed green; the
+existing grouped-history and separately documented live proof close this scoped
+obligation. No product mux/timestamp/encoder change is required or claimed.
+Exact remaining gap: separately authorized production promotion and exact
+adopted-byte final gates. Four closed sustained TS gates remain closed.
 Consistent SQLite backups fix the proved base-file/WAL fixture-copy error;
 selected-resolution guarding matches the existing smoke oracle and permits only
 the documented unused default-resolution seed. Native-loopback tools replace the
 unreachable WSL adapter; no firewall/tool installation. These negatives remain.
 Accepted promotion/publication and exact adopted-byte final gates remain owned.
 
-Status: In progress for the existing current-candidate installation/compatibility proof; production adoption remains separately gated. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Source-output and the scoped independent PS1/PS2 artifact/platform joins are now Complete, including current ARM host crossbuilds. Exact remaining work: classify and close the two cached-HLS transport negatives above, then the separately authorized exact production-promotion boundary and exact adopted-byte final gates. The four sustained native TS gates are closed within their exact frozen-source/candidate scope. Current Linux/nativeWindows installer/cache/identity and actual startup/persisted Health components above are closed and not commissioned again. Earlier candidate.4 proof remains reusable only within unchanged mechanisms, never as installation of new bytes. Final accepted production promotion/publication requires its separate authority; nothing here changes the production pin. Native ARM execution remains Deferred by the explicit maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
+Status: In progress for the existing current-candidate installation/compatibility proof; production adoption remains separately gated. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Source-output and the scoped independent PS1/PS2 artifact/platform joins are now Complete, including current ARM host crossbuilds. Exact remaining work: the separately authorized exact production-promotion boundary and exact adopted-byte final gates. Sustained native cached-HLS history/live qualification is closed above within its exact frozen-source/private-candidate boundary. The four sustained native TS gates are closed within their exact frozen-source/candidate scope. Current Linux/nativeWindows installer/cache/identity and actual startup/persisted Health components above are closed and not commissioned again. Earlier candidate.4 proof remains reusable only within unchanged mechanisms, never as installation of new bytes. Final accepted production promotion/publication requires its separate authority; nothing here changes the production pin. Native ARM execution remains Deferred by the explicit maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
 Reuse: ucu-12 exact adopted per-platform manifest and its bounded source/software/managed/transport scopes; audio_language_followup earlier reproduced source/lock/four patches, candidate.4 archives, manager identity/corruption/offline checks and scoped Linux/nativeWindows proof retain their historical boundaries. No package/pin is changed by this Phase9 rejoin. Shared obligations remain with the existing owners, not a second adoption matrix.
 Missing mandatory proof: Full exact accepted required four-RID package/host/Health/output qualification and explicit managed adoption; crossbuild/startup/interop/component success cannot substitute.
 Dependencies are the typed depends_on edges; internal unfinished dependencies

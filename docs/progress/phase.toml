@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — cached-HLS transport classification; sustained native TS closed'
+current_focus = 'p9a-managed-adoption — native cached-HLS component closed; accepted promotion remains separately gated'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -129,14 +129,26 @@ nld880Hz proofs. Both hosts exit0 unforced and whole Job empty naturally; source
 package exact, copied roots removed. The one-line URL --keep fix preserves early
 failure evidence with default cleanup and failure codes unchanged. Existing smoke
 oracles, consistent SQLite backups and native installed tools retain their limits.
-Current package: p9a-managed-adoption. Next executable step: correlate the two
-cached-HLS negatives with exact playlist/segment discontinuity provenance before
-choosing a correction. Burn CC4/low6 and Convert CC5/low7 remain red; roughly60s
-media in requested20s capture makes cached-history/capture effects a hypothesis,
-not an established explanation. Preserve original bytes and strict thresholds;
-use existing group-capture/TSDuck tools, no rerun of the four closed TS gates or
-unaffected editor/admin/Linux/platform matrices. No new client search or firewall.
-Production promotion/publication remains separately gated and unauthorized.
+Completed native cached-HLS history/live component (2026-10-27): canonical
+provider-scan/managed-current-candidates/hls-live-qualification/qualification.json
+owns124 unchanged TSDuck checks and six independent AV/caption/nld880–882Hz
+proofs for Burn/Convert, exact live-byte membership in fully retained history,
+selected configuration/source identity and natural complete owned cleanup.
+All initial cached sequences and the declared boundary remain strictly checked;
+RFC8216 live entry does not hide the history. Original generic URL negatives and
+tool-guard/log-path negatives remain. The earlier diagnostic group log has38
+checks, correcting the prior uncommitted44-check handoff. No product repair,
+production pin, publication, current full CI or broader source-build claim.
+Current package: p9a-managed-adoption. Its next finite action is explicit
+maintainer authorization for production promotion followed by exact adopted-byte
+final gates; this instruction does not authorize pushing or publication. Existing
+closed installer/Health/TS/HLS components are not commissioned again. Other open
+engine obligations remain with their finite-list owners and recorded deferrals.
+No independent package is currently executable: AB5/AE5, M29, client-control
+access/X1, upstream editor X3 and unused-object classification require their
+recorded external capability/source/access or maintainer decision. Dependent
+aggregates do not authorize substitute internal variants. Resume the appropriate
+existing owner when its exact prerequisite changes.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component
