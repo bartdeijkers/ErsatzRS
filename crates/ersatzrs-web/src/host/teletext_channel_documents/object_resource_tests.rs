@@ -313,6 +313,7 @@ fn edits<'a>(
     definitions: &'a [TeletextResourceObjectDefinitionAddition],
 ) -> EditorialResourceDocuments<'a> {
     EditorialResourceDocuments {
+        secondary_default_agreements: &[],
         base_text_edits: &[],
         main_programs: &[],
         main_presence: &[],

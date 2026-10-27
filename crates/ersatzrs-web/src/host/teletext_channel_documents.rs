@@ -44,6 +44,8 @@ type EditorialProgramDocuments<'a> = (
 
 /// Trusted replay inputs; receipt and shared-effect qualification stay with callers.
 pub(super) struct EditorialResourceDocuments<'a> {
+    pub(super) secondary_default_agreements:
+        &'a [ersatzrs_app::teletext_design_documents::TeletextSavedSecondaryDefaultAgreement],
     pub(super) base_text_edits: &'a [ersatzrs_domain::TeletextBaseTextEdit],
     pub(super) main_presence: &'a [ersatzrs_domain::TeletextMainProgramPresenceOverlay],
     pub(super) main_programs: &'a [ersatzrs_domain::TeletextMainLocalInvocationProgramOverlay],
@@ -515,6 +517,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
         entry_addon_id,
         documents,
         EditorialResourceDocuments {
+            secondary_default_agreements: &[],
             base_text_edits: &[],
             main_programs: &[],
             main_presence: &[],
@@ -555,6 +558,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
         && editorial.main_presence.is_empty()
         && editorial.main_programs.is_empty()
         && editorial.base_text_edits.is_empty()
+        && editorial.secondary_default_agreements.is_empty()
     {
         let (rows, page, objects, bitmaps, _) = editorial.programs;
         return encode_original_channel_documents_with_editorial_overlays(
@@ -669,6 +673,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
         entry_producer,
         documents,
         EditorialResourceDocuments {
+            secondary_default_agreements: &[],
             base_text_edits: &[],
             main_programs: &[],
             main_presence: &[],
@@ -698,6 +703,9 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
     check_original_editorial_input(documents.len(), &editorial, deadline, &policy)?;
+    if documents.is_empty() && !editorial.secondary_default_agreements.is_empty() {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
     if documents.is_empty() {
         return Ok(empty_editorial_originals());
     }
@@ -715,7 +723,13 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
         editorial.resource_additions.len(),
         &policy,
     )?;
-    let producers = prepare_producers(documents, deadline, region, &policy)?;
+    let producers = prepare_producers_with_agreements(
+        documents,
+        deadline,
+        region,
+        &policy,
+        editorial.secondary_default_agreements,
+    )?;
     let metadata = entry_metadata(entry_producer, &producers, policy.entry)?;
     check_deadline(deadline)?;
     let mut composition =
@@ -1423,12 +1437,23 @@ fn check_producer_budget(
     Ok(())
 }
 
-fn prepare_producers(
+fn prepare_producers_with_agreements(
     documents: Vec<TeletextProfileDocument>,
     deadline: Instant,
     region: Option<TeletextEncodingRegion>,
     policy: &TeletextChannelDocumentEncodingPolicy,
+    agreements: &[ersatzrs_app::teletext_design_documents::TeletextSavedSecondaryDefaultAgreement],
 ) -> Result<Vec<TeletextProducerPresentation>, ChannelTeletextDocumentEncodingError> {
+    if agreements
+        .last()
+        .is_some_and(|entry| entry.producer() >= documents.len())
+        || agreements
+            .windows(2)
+            .any(|pair| pair[0].producer() >= pair[1].producer())
+    {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    let mut agreements = agreements.iter().peekable();
     check_producer_budget(documents.len(), policy)?;
     preflight_producer_storage(documents.len(), policy.composition.max_storage_bytes)?;
     let mut producers = Vec::with_capacity(documents.len());
@@ -1455,6 +1480,15 @@ fn prepare_producers(
             },
         )
         .map_err(|error| ChannelTeletextDocumentEncodingError::Presentation { binding, error })?;
+        let producer = if agreements
+            .peek()
+            .is_some_and(|entry| entry.producer() == binding)
+        {
+            producer
+                .with_secondary_default_agreement(agreements.next().map(|entry| entry.agreement()))
+        } else {
+            producer
+        };
         check_deadline(deadline)?;
         producers.push(producer);
     }

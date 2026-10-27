@@ -38,6 +38,14 @@ pub use editorial_overlay::{
     TeletextSavedObjectResourceAddition, TeletextSavedObjectSubpageAnnouncement,
 };
 
+#[path = "teletext_design_documents/secondary_defaults.rs"]
+mod secondary_defaults;
+pub use secondary_defaults::{
+    append_teletext_design_secondary_default_agreements,
+    append_teletext_effective_design_secondary_default_agreements,
+    TeletextSavedSecondaryDefaultAgreement,
+};
+
 pub(crate) const MAX_BINDINGS: usize = 1024;
 const MAX_DEPTH: usize = 32;
 
@@ -219,8 +227,15 @@ pub struct TeletextRestoredDesignDocumentParts {
     pub guide_inputs: Option<TeletextSavedGuideInputs>,
     pub guide_source: Option<TeletextGuideSourceFence>,
     pub editorial_overlay: Option<TeletextSavedEditorialOverlay>,
+    pub secondary_default_agreements: Vec<TeletextSavedSecondaryDefaultAgreement>,
 }
 impl RestoredTeletextDesignDocuments {
+    /// Explicit historical intent, never inferred from effective settings or TTI.
+    #[must_use]
+    pub fn secondary_default_agreements(&self) -> &[TeletextSavedSecondaryDefaultAgreement] {
+        &self.parts.secondary_default_agreements
+    }
+
     /// Structurally checked concept rows, never authenticated import/save or
     /// publication authority. Native restoration must apply or reject them.
     #[must_use]
@@ -310,6 +325,8 @@ pub struct TeletextDesignDocumentError {
 /// No raw parser messages or producer text escape this boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextDesignDocumentFailure {
+    #[error("invalid selected-profile secondary-default agreement")]
+    SecondaryDefaultAgreement,
     #[error("invalid editorial overlay or original-page association")]
     EditorialOverlay,
     #[error("invalid closed storage JSON")]
@@ -433,7 +450,8 @@ stored_map!(Envelope { format_version: u16, selection: Selection, generation: St
     edit_policy: EditPolicy, resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
     #[serde(default)] guide_inputs: guide_inputs::OptionalGuideInputs,
     #[serde(default)] guide_source: source_fence::OptionalGuideSource,
-    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay });
+    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay,
+    #[serde(default)] secondary_default_agreements: secondary_defaults::OptionalAgreements });
 stored_map!(Selection { channel_id: EntityId, bindings: Vec<Member> });
 stored_map!(Member { contract: u32, channel_id: EntityId, addon_id: String, binding_revision: i64,
     profile_id: EntityId, profile_revision: i64, installation: Installation, effective_settings: Vec<Setting> });
@@ -854,6 +872,9 @@ pub fn decode_teletext_design_documents(
         envelope.v1_region.0,
         &parsed.documents,
     )?;
+    let secondary_default_agreements = envelope
+        .secondary_default_agreements
+        .restore_base(&selection)?;
     let editorial_overlay = envelope
         .editorial_overlay
         .0
@@ -885,6 +906,7 @@ pub fn decode_teletext_design_documents(
             guide_inputs,
             guide_source,
             editorial_overlay,
+            secondary_default_agreements,
         },
     })
 }
@@ -1275,6 +1297,8 @@ enum Path {
     Response,
     Transmissions,
     Transmission,
+    SecondaryDefaults,
+    SecondaryDefaultBindings,
     GuideInputs,
     GuideRequest,
     GuideSource,
@@ -1667,6 +1691,8 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::PublishedOverride, "state") => Path::OverrideState,
                 (Path::Root, "documents") => Path::Documents,
                 (Path::Root, "resource_transmissions") => Path::Transmissions,
+                (Path::Root, "secondary_default_agreements") => Path::SecondaryDefaults,
+                (Path::SecondaryDefaults, "bindings") => Path::SecondaryDefaultBindings,
                 (Path::Root, "guide_inputs") => Path::GuideInputs,
                 (Path::GuideInputs, "v1" | "v2" | "v3") => Path::GuideRequest,
                 (Path::Root, "guide_source") => Path::GuideSource,
@@ -1812,7 +1838,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
             Path::EditorialBitmapRows => (10, Path::Other, "editorial bitmap rows"),
             Path::EditorialRows => (25, Path::EditorialRow, "editorial rows"),
             Path::EditorialCells => (40, Path::Other, "editorial cells"),
-            _ => glyph_program_sequence_limits(self.path, self.scan.budget),
+            _ => additional_sequence_limits(self.path, self.scan.budget),
         };
         let mut count = 0_usize;
         loop {
@@ -1839,11 +1865,16 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
         Ok(())
     }
 }
-fn glyph_program_sequence_limits(
+fn additional_sequence_limits(
     path: Path,
     budget: TeletextDesignDocumentBudget,
 ) -> (usize, Path, &'static str) {
     match path {
+        Path::SecondaryDefaultBindings => (
+            budget.max_documents.min(MAX_BINDINGS),
+            Path::Other,
+            "secondary default bindings",
+        ),
         Path::EditorialMainPresenceOverlays => (
             budget.validation.service.max_records,
             Path::EditorialMainPresenceOverlay,

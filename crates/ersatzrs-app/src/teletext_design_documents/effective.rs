@@ -105,8 +105,15 @@ pub struct TeletextRestoredEffectiveDesignDocumentParts {
     pub guide_inputs: Option<TeletextSavedGuideInputs>,
     pub guide_source: Option<TeletextGuideSourceFence>,
     pub editorial_overlay: Option<TeletextSavedEditorialOverlay>,
+    pub secondary_default_agreements: Vec<super::TeletextSavedSecondaryDefaultAgreement>,
 }
 impl RestoredEffectiveTeletextDesignDocuments {
+    /// Intent bound to the producing profile, including its Scripted origin.
+    #[must_use]
+    pub fn secondary_default_agreements(&self) -> &[super::TeletextSavedSecondaryDefaultAgreement] {
+        &self.parts.secondary_default_agreements
+    }
+
     #[must_use]
     pub const fn selection(&self) -> &Selection {
         &self.parts.selection
@@ -188,7 +195,8 @@ stored_map!(EffectiveEnvelope { format_version: u16, effective_selection: Effect
     resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
     guide_inputs: guide_inputs::StoredGuideInputs,
     #[serde(default)] guide_source: source_fence::OptionalGuideSource,
-    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay });
+    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay,
+    #[serde(default)] secondary_default_agreements: super::secondary_defaults::OptionalAgreements });
 stored_map!(EffectiveSelection { channel_id: EntityId, bindings: Vec<EffectiveMember>,
     valid_until: Required<DateTime<Utc>> });
 stored_map!(EffectiveMember { origin: String, base: Required<Member>, scripted: Required<Published> });
@@ -511,6 +519,9 @@ pub fn decode_teletext_effective_design_documents(
         })
         .collect::<Vec<_>>();
     validate_transmissions(&transmissions, budget)?;
+    let secondary_default_agreements = envelope
+        .secondary_default_agreements
+        .restore_effective(&selection, &envelope.producer_bindings)?;
     let editorial_overlay = envelope
         .editorial_overlay
         .0
@@ -532,6 +543,7 @@ pub fn decode_teletext_effective_design_documents(
             guide_inputs: Some(guide_inputs),
             guide_source,
             editorial_overlay,
+            secondary_default_agreements,
         },
     })
 }

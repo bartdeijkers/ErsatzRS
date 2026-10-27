@@ -47,8 +47,10 @@ release section when tagging a release.
 
 - Derive complete teletext page contexts from an explicitly supplied secondary
   character-set agreement, preserving original declarations and Level 1/1.5
-  packets. Persisted profile/design binding and warm receiver proof remain
-  separately required.
+  packets. Private saved designs now retain versioned choices bound to exact
+  producer/profile revisions, including Scripted origins, and restore them through
+  native composition without rewriting originals. Explicit author/admin actions,
+  export receipt integration and warm receiver proof remain separately required.
 
 - Remove an unused added teletext object from the current draft through a
   localized admin form, including without JavaScript. Protect original,
@@ -691,6 +693,10 @@ release section when tagging a release.
   generation and executable checksums in the troubleshooting report.
 
 ### Changed
+
+- **Breaking Rust API:** restored base/effective teletext design parts include
+  `secondary_default_agreements`; native consumers must apply or explicitly
+  reject this intent rather than silently discard it.
 
 - **Breaking Rust API:** `TeletextProducerPresentation::into_parts` returns the
   agreement as a third value, alongside original service and presentation

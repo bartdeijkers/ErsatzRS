@@ -4,6 +4,9 @@
 #[path = "resource_operand_tests.rs"]
 mod resource_operand_tests;
 
+#[path = "secondary_default_tests.rs"]
+mod secondary_default_tests;
+
 use std::time::{Duration, Instant};
 
 use ersatzrs_app::teletext_design_documents::{

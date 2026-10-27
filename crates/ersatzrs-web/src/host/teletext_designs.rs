@@ -570,7 +570,6 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.drcs_bitmap_overlays());
-    let editorial = (overlays, operands, object_operands, bitmaps, programs);
     let base_text_edits = parts
         .editorial_overlay
         .as_ref()
@@ -592,12 +591,13 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         && main_presence.is_empty()
         && main_programs.is_empty()
         && base_text_edits.is_empty()
+        && parts.secondary_default_agreements.is_empty()
     {
         encode_original_channel_documents_with_editorial_programs(
             &parts.selection,
             parts.entry_addon_id.as_deref(),
             parts.documents,
-            editorial,
+            (overlays, operands, object_operands, bitmaps, programs),
             deadline,
             region,
             policy,
@@ -608,6 +608,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
             parts.entry_addon_id.as_deref(),
             parts.documents,
             EditorialResourceDocuments {
+                secondary_default_agreements: &parts.secondary_default_agreements,
                 object_resource_additions: resources.object_resource_additions,
                 object_subpage_announcements: resources.object_subpage_announcements,
                 object_page_selections: resources.object_page_selections,
@@ -615,7 +616,7 @@ pub(super) fn compile_restored_parts_with_resource_intents(
                 base_text_edits,
                 main_programs,
                 main_presence,
-                programs: editorial,
+                programs: (overlays, operands, object_operands, bitmaps, programs),
                 resource_operands: resources.operands,
                 resource_programs: resources.programs,
                 resource_additions: resources.additions,

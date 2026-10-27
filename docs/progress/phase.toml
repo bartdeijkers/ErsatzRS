@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-m29-policy — bind verified native agreement to profile/design receipts'
+current_focus = 'p9a-m29-policy — explicit receipt-bound author choice'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -176,12 +176,21 @@ extension. Header/POP enrollment retains original DecoderDependent snapshots,
 resources/defaults and every non-X28/M29 unit. Version/choice/alias rejection,
 complete page contexts and existing budgets are preserved. The original-only
 consumer now refuses unsupported bound intent; agreement is retained in parts.
-Current package: p9a-m29-policy persisted/application binding of the accepted
-secondary-default agreement. Next finite action: thread the verified intent
-through existing profile/design companion and retained-receipt state,
-retaining immutable originals, decoder-dependent unknown cases, exact head and
-publication fences. Close typed intent/roundtrip/located refusal proof before
-claiming a warm receiver transition; full client evidence remains mandatory.
+Completed M29 private storage/native reconstruction: binding/qualification.json
+owns269 app/native/admission controls, strict app/web lint and exact unchanged core reuse.
+Versioned intent binds the exact selected profile/revision and producer mapping,
+including Scripted Off separation. Original bytes/metadata and unknown snapshots
+survive append, existing concept overlays and native reopen; retained root remains
+unbound. The first21/22 native negative identified an empty-resource shortcut
+silently skipping the new intent; the corrected full path passes unchanged oracles.
+Current package on resume: p9a-m29-policy explicit retained-receipt author choice.
+Next finite action: add the typed choice to existing admitted worker/exact-head
+concept CAS, preserving shared-effect checks, retained-root undo and separate
+publication, then connect its localized admin form. Full companion/receipt
+interchange and exact warm receiver evidence retain their existing owner.
+Maintainer session cutoff2026-10-27 23:55 CET: stop after this checkpoint;
+canonical binding/qualification.json records exact commit, terminal checks,
+remaining foreign work and resume action. No next package starts tonight.
 No new client search, external decoder maintenance, DVBViewer or physical Kodi.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.

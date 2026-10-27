@@ -1922,6 +1922,19 @@ original-only adapters must reject unsupported bound intent rather than discard
 it. Per-page derivation retains the original source and marks the agreement
 explicitly; it does not turn original `DecoderDependent` data into a declaration.
 
+Private saved design envelopes carry optional `secondary_default_agreements`
+(schema version 1): sorted producer ordinals, exact selected profile IDs/revisions
+and typed policy choices. Effective designs resolve ordinals through the original
+producer mapping; Scripted Off is never an owner. Absence remains absence, while
+null, empty, duplicate, foreign or unknown-version intent is rejected. The closed
+older envelope contract rejects this field rather than silently dropping it.
+Append-only capture preserves original source spelling and trailing whitespace;
+existing editorial overlays retain the companion. Native reconstruction consumes
+it before composition, preserving original producer snapshots. This structural
+binding grants no author consent, export-sidecar permission or publication right:
+explicit retained-receipt author actions, exact-head save/publication fences and
+warm receiver qualification remain separately mandatory.
+
 1. **Explicit author intent.** A design/profile may explicitly bind its absent-
    packet secondary-language intent to either `no second G0` or one valid,
    concrete Table 33 designation. No choice is inferred from UI language,

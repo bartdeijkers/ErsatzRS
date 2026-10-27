@@ -692,6 +692,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
         entry,
         parts.documents,
         EditorialResourceDocuments {
+            secondary_default_agreements: &parts.secondary_default_agreements,
             object_resource_additions: resources.object_resource_additions,
             object_subpage_announcements: resources.object_subpage_announcements,
             object_page_selections: resources.object_page_selections,
