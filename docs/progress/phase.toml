@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-client-base — guided Windows trial; local runtime promotion preparation closed'
+current_focus = 'p9a-editor-enhanced EE5 — mandatory unused-copy removal; client and M29 replies pending'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -146,16 +146,25 @@ four existing-stager checks/wrong-RID rejection,10+28 source/stager regressions
 and four exact FFmpeg archive/source inventories. Production selection/defaults
 remain unchanged; final public FFmpeg tag/asset mapping and publication/adopted-byte
 gates remain separately authorized steps. No rebuild or repeated runtime gate.
-Current package: p9a-client-base guided interactive Windows11 trial, authorized
-2026-10-27. Next finite action: reuse its existing temporary synthetic host/pinned
-ProgDVB fixture and arrange operator-ready teletext controls; prove only missing
-base display/navigation/update/reveal/timed-flash/AV. The ordinary Windows
-installation is stopped and must remain untouched. No DVBViewer or physical Kodi.
-Maintainer also resolves unused object-copy removal as mandatory editor-enhanced
-EE5 before9A and authorizes a concrete M29 policy proposal for review. Those are
-independently executable existing owners, not optionality blockers. No M29 policy
-is yet accepted. AB5/AE5 capability/source, X1 deferral and upstream X3 remain;
-resume those owners only when their exact retained prerequisites change.
+The guided Windows11 base-client trial is prepared but awaits the operator-ready
+reply. Read-only preflight found an interactive session and no relevant client/
+ErsatzRS processes; no test host or client is running. Pinned receiver/matched
+host and exact selected ordinary test are retained. Existing simple pages do not
+prove conceal/flash; qualify the control prerequisite before that combined gate.
+The ordinary installation remains stopped; no DVBViewer or physical Kodi trial.
+M29 concrete policy proposal is completed in ADR0123, proposed-authorreceiver-
+policy-for-magazine-default-retirement. Canonical
+tmp/phase9-mot-retirement/m29-policy/proposal/qualification.json owns its review
+boundary. No policy is accepted or runtime changed; required original unknown
+semantics and receiver evidence stay open. Await explicit review before adoption.
+Current package: p9a-editor-enhanced EE5, mandatory before9A by maintainer2026-10-27.
+Next finite action: inspect existing object-copy/reference/undo functions, then
+add only the missing explicit unused-copy draft deletion. Stop after eligible
+removal/exact undo/reopen and referenced/default/protected/stale atomic refusals
+pass through existing interchange/preview/publication boundaries. Preserve source
+catalogues, surviving identities/provenance and active publication. No new editor
+variants or policy implementation before its approval. AB5/AE5 and X1/X3 retain
+their recorded capability/source/deferral conditions.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component

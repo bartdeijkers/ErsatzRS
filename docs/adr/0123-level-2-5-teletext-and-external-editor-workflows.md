@@ -1898,6 +1898,84 @@ accepted authoring limitation. Ordinary routes, active-publication Health, warm
 publisher/recovery ownership and complete restart/Lua timing remain open. Durable
 selection alone never proves per-output delivery or receiver cache reconciliation.
 
+### Proposed author/receiver policy for magazine-default retirement
+
+**Proposed for maintainer review (2026-10-27); not an accepted policy or
+implemented runtime behavior.** The existing protective refusal remains active.
+This proposal addresses the existing `p9a-m29-policy` owner; it does not change
+other authored-service, receiver, editor or platform requirements.
+
+EN 300 706 V1.2.1 Annex D.2.1(2) leaves the secondary-language default without
+X/28 and M/29 to the decoder or a local Code of Practice. Table 33 gives the
+explicit seven-bit value `0x7f` a different meaning: no second G0 set. Those
+states are not interchangeable. The other applicable absent-packet defaults
+remain governed by Annex D and the original MOT/page context. Source:
+[ETSI EN 300 706 V1.2.1](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf),
+printed pages 104 and 133. The following policy is a proposed application
+agreement, not a claim that ETSI mandates this choice for every receiver.
+
+Proposed policy ID: `ersatzrs-secondary-default-v1`.
+
+1. **Explicit author intent.** A design/profile may explicitly bind its absent-
+   packet secondary-language intent to either `no second G0` or one valid,
+   concrete Table 33 designation. No choice is inferred from UI language,
+   primary charset, an empty bank or a missing field. New designs may offer
+   `no second G0` as an explicit choice, never as a silent migration. Existing
+   imported/third-party Header/POP content keeps `DecoderDependent` unless the
+   author explicitly creates a new policy-bound draft revision. Existing
+   explicit secondary declarations retain precedence and exact identities.
+2. **Preserve originals and provenance.** Store the policy ID, exact choice and
+   scope in the existing versioned companion metadata and profile/settings
+   receipt. Preserve original bytes, Header/POP absence, resource identities,
+   defaults and source lineage. A derived transmission context is not an edit
+   to the immutable original or an installed package. Export/import, root undo,
+   cold reopen and publication receipts must retain the policy explicitly;
+   missing/conflicting metadata never becomes implicit consent.
+3. **Resolve only the agreed uncertainty.** For an enrolled Header/POP owner,
+   derive its complete page presentation from its own original primary/national
+   context, original MOT conditions and Annex D defaults. Resolve only its
+   previously unspecified secondary default through the explicit policy. Never
+   copy the old magazine palette/panels, another producer's context or a global
+   guessed primary. Existing X/28 and resource/default semantics are preserved;
+   do not synthesize an object bank or change which objects are effective.
+4. **Use the existing safe transition path.** Do not pretend C4 erases M/29 or
+   physically clear the receiver's cache by omitting a packet. Keep the existing
+   full per-page X/28 coverage condition after a magazine default has reached
+   that sink. Any proposed lowering uses complete derived page overrides for
+   every required old/new exact consumer, preserving the original design kind
+   in metadata. Retained receiver cache history continues to fence later
+   generations. If a removed consumer cannot be covered by an already defined,
+   proven retirement operation, reject the whole transition; do not invent a
+   blank successor or a new semantic reset in this work package. This proposal
+   retires the old defaults' effects for qualified consumers, not the fact that
+   an M/29 packet was transmitted earlier.
+5. **Qualify receivers, do not assume them.** Acceptance requires the original
+   same-HTTP-stream warm transition on an exact suitable receiver: cold output
+   under its declared default agreement must equal the warm policy-bound
+   successor's intended primary/secondary, ESC, palette, panel and fallback
+   results. Prove both the no-second choice and a nontrivial explicit secondary
+   choice. A receiver that cannot demonstrate that agreement remains unqualified;
+   success on an explicit-packet enhanced decoder does not prove a basic
+   client's absent-packet/ESC behavior. Preserve the intended Level 1/1.5
+   information/navigation and the separately required client-level evidence.
+6. **Keep safe failure and timing.** Unenrolled decoder-dependent content keeps
+   the present located refusal for an unsafe warm transition. Mixed producer
+   policies, conflicting protected consumers, stale revisions, unknown choices
+   or missing output capability reject atomically before accepted publication.
+   Retain current generation/sink-ACK/ownership/deadline/cancellation fences and
+   ordinary AV/captions/selected audio. A policy choice creates a draft; only
+   separate explicit validated publication may change the stream.
+
+The review decision is whether to adopt this opt-in author/receiver agreement
+and then implement/prove the existing owner's transition, with `no second G0`
+as the first offered explicit choice. Approval of the proposal is not proof
+of a compatible receiver and does not close `p9a-m29-policy`. No original
+unknown-default fixture may be relabelled as an already equivalent explicit
+choice: test its original receiver-dependent semantics or retain the exact
+blocker. If a required original case cannot be preserved through the chosen
+agreement, report that gap for an explicit maintainer decision rather than
+claiming full retirement acceptance or silently narrowing the requirement.
+
 ### Required unused-object-copy removal
 
 Maintainer clarification (2026-10-27): explicit removal of unused authored object
