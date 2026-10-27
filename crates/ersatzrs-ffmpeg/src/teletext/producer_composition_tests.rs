@@ -5,6 +5,9 @@ use super::authored_service_tests::{declaration_limits, limits, semantic_limits}
 use super::*;
 use ersatzrs_domain::*;
 
+#[path = "producer_composition_tests/secondary_default_agreement.rs"]
+mod secondary_default_agreement;
+
 fn address(number: u16, subcode: u16) -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(number).unwrap(),

@@ -45,6 +45,11 @@ release section when tagging a release.
 
 ### Added
 
+- Derive complete teletext page contexts from an explicitly supplied secondary
+  character-set agreement, preserving original declarations and Level 1/1.5
+  packets. Persisted profile/design binding and warm receiver proof remain
+  separately required.
+
 - Remove an unused added teletext object from the current draft through a
   localized admin form, including without JavaScript. Protect original,
   referenced and default objects; require a current revision and explicit
@@ -686,6 +691,10 @@ release section when tagging a release.
   generation and executable checksums in the troubleshooting report.
 
 ### Changed
+
+- **Breaking Rust API:** `TeletextProducerPresentation::into_parts` returns the
+  agreement as a third value, alongside original service and presentation
+  snapshots, so callers can retain or explicitly reject that intent.
 
 - Define an explicit, versioned author/receiver agreement for absent secondary
   teletext character defaults. Preserve immutable originals and require separate

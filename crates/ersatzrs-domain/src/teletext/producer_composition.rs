@@ -17,8 +17,8 @@ use super::{
     TeletextResolvedPageEnhancementDraft, TeletextResolvedPageResourceSelection,
     TeletextResolvedServiceDraft, TeletextResourceIdentity, TeletextResourceKind,
     TeletextResourceSubpageIndex, TeletextRow, TeletextRun, TeletextRunContent,
-    TeletextSemanticService, TeletextServiceBudget, TeletextServiceError, TeletextStructureError,
-    TeletextX27LinkRole,
+    TeletextSecondaryDefaultAgreement, TeletextSemanticService, TeletextServiceBudget,
+    TeletextServiceError, TeletextStructureError, TeletextX27LinkRole,
 };
 use std::{collections::BTreeMap, fmt, mem::size_of};
 
@@ -46,11 +46,17 @@ pub struct TeletextProducerCompositionBudget {
     pub service: TeletextServiceBudget,
     pub declarations: TeletextDeclaredServiceBudget,
 }
-/// The only presentation transformation performed by this cold factory.
+/// Explicit checked presentation transformations, retaining original provenance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextProducerPageDerivation {
     Unchanged,
-    MagazineToPage { magazine: u8 },
+    MagazineToPage {
+        magazine: u8,
+    },
+    /// Complete page context under an explicitly supplied author/receiver choice.
+    SecondaryDefaultAgreement {
+        agreement: TeletextSecondaryDefaultAgreement,
+    },
 }
 /// Original source ordinal and exact address, without namespace remapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1019,6 +1025,19 @@ fn copy_pages(
                 } else {
                     TeletextProducerPageDerivation::Unchanged
                 }
+            } else if let Some(agreement) = producer.secondary_default_agreement().filter(|_| {
+                matches!(
+                    snapshot.source(),
+                    TeletextProducerPresentationSource::Header { .. }
+                        | TeletextProducerPresentationSource::MotFallback { .. }
+                )
+            }) {
+                let mut defaults = *snapshot.effective_defaults();
+                defaults.secondary = agreement.secondary();
+                enhanced
+                    .get_or_insert_with(|| empty_metadata(base.address))
+                    .presentation = Some(defaults);
+                TeletextProducerPageDerivation::SecondaryDefaultAgreement { agreement }
             } else {
                 TeletextProducerPageDerivation::Unchanged
             };
@@ -1162,6 +1181,22 @@ fn same_presentation(
     derivation: TeletextProducerPageDerivation,
     current: Option<TeletextEffectivePresentation<'_>>,
 ) -> bool {
+    if let TeletextProducerPageDerivation::SecondaryDefaultAgreement { agreement } = derivation {
+        if !matches!(
+            original.source(),
+            TeletextProducerPresentationSource::Header { .. }
+                | TeletextProducerPresentationSource::MotFallback { .. }
+        ) || original.secondary_selection()
+            != TeletextProducerSecondarySelection::DecoderDependent
+        {
+            return false;
+        }
+        let mut expected = *original.effective_defaults();
+        expected.secondary = agreement.secondary();
+        return matches!(current, Some(TeletextEffectivePresentation::Extension {
+            source: TeletextPresentationSource::Page, defaults,
+        }) if *defaults == expected);
+    }
     match (original.source(), current) {
         (
             TeletextProducerPresentationSource::Page,

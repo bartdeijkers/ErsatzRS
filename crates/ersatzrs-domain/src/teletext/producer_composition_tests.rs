@@ -1,6 +1,9 @@
 //! Checked synthetic contributions; cold composition is not replacement evidence.
 use crate::teletext::*;
 
+#[path = "producer_composition_tests/secondary_default_agreement.rs"]
+mod secondary_default_agreement;
+
 fn address(page: u16, subcode: u16) -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(page).unwrap(),

@@ -105,6 +105,10 @@ pub enum TeletextDocumentEncodingError {
     TimedOut,
     #[error("teletext document validation/encoding worker failed")]
     WorkerFailed,
+    #[error(
+        "teletext secondary-default agreement requires retained profile/design policy binding"
+    )]
+    SecondaryDefaultAgreement,
 }
 
 /// Invoke, validate and compile one exact bound document under one deadline.
@@ -166,13 +170,16 @@ fn encode_document(
         TeletextProfileDocument::Authored(declared) => *declared,
     };
     check_deadline(deadline)?;
-    let (declared, presentations) = TeletextProducerPresentation::new(
+    let (declared, presentations, None) = TeletextProducerPresentation::new(
         declared,
         TeletextProducerPresentationBudget {
             max_pages: policy.validation.declarations.max_displays,
         },
     )?
-    .into_parts();
+    .into_parts() else {
+        // This original-only adapter must not discard newly bound author intent.
+        return Err(TeletextDocumentEncodingError::SecondaryDefaultAgreement);
+    };
     check_deadline(deadline)?;
     let encoded = encode_teletext_authored_service_before(
         declared,

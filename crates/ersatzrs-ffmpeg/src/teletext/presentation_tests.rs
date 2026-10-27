@@ -6,7 +6,7 @@ use super::{encode_teletext_page, presentation::*, TeletextEncodingError, Telete
 
 /// Extract data using fixed Hamming 24/18 positions, checking every parity equation.
 /// This reader deliberately does not call the production encoder or bit writer.
-fn decode(body: &[u8; 40]) -> [u32; 13] {
+pub(super) fn decode(body: &[u8; 40]) -> [u32; 13] {
     assert_eq!(body[0], 0x15); // Normative Hamming 8/4 code for designation zero.
     std::array::from_fn(|index| {
         let start = 1 + index * 3;
@@ -31,7 +31,7 @@ fn decode(body: &[u8; 40]) -> [u32; 13] {
     })
 }
 
-fn field(words: &[u32; 13], offset: usize, width: usize) -> u32 {
+pub(super) fn field(words: &[u32; 13], offset: usize, width: usize) -> u32 {
     (0..width).fold(0, |value, bit| {
         let position = offset + bit;
         value | (((words[position / 18] >> (position % 18)) & 1) << bit)

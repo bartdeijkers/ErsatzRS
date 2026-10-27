@@ -6,7 +6,7 @@ use super::{
     TeletextDeclaredService, TeletextEffectivePresentation, TeletextLevel25Palette,
     TeletextLevel25PresentationDefaults, TeletextMotConditionalPopFallback, TeletextNationalOption,
     TeletextPageAddress, TeletextPageCharsetDesignation, TeletextPanelStatus, TeletextPanelWidth,
-    TeletextPresentationSource, TeletextSidePanels,
+    TeletextPresentationSource, TeletextSecondaryDefaultAgreement, TeletextSidePanels,
 };
 use std::{fmt, mem::size_of};
 
@@ -108,6 +108,7 @@ pub enum TeletextProducerPresentationError {
 pub struct TeletextProducerPresentation {
     original: TeletextDeclaredService,
     pages: Vec<TeletextProducerPagePresentation>,
+    secondary_default_agreement: Option<TeletextSecondaryDefaultAgreement>,
 }
 impl TeletextProducerPresentation {
     /// Snapshot every original display before cross-producer composition.
@@ -133,7 +134,28 @@ impl TeletextProducerPresentation {
         for page in &original.semantic().base().pages {
             pages.push(snapshot(&original, page.address)?);
         }
-        Ok(Self { original, pages })
+        Ok(Self {
+            original,
+            pages,
+            secondary_default_agreement: None,
+        })
+    }
+    /// Attach or remove an explicit author/receiver choice for this producer's
+    /// Header/POP owners. Original packets, snapshots and decoder-dependent
+    /// provenance are unchanged. Callers must authenticate author consent and
+    /// retain this value in their versioned profile/design receipt; publication
+    /// and warm receiver equivalence require their separate existing gates.
+    #[must_use]
+    pub const fn with_secondary_default_agreement(
+        mut self,
+        agreement: Option<TeletextSecondaryDefaultAgreement>,
+    ) -> Self {
+        self.secondary_default_agreement = agreement;
+        self
+    }
+    #[must_use]
+    pub const fn secondary_default_agreement(&self) -> Option<TeletextSecondaryDefaultAgreement> {
+        self.secondary_default_agreement
     }
     #[must_use]
     pub const fn original(&self) -> &TeletextDeclaredService {
@@ -154,15 +176,16 @@ impl TeletextProducerPresentation {
         self.original
     }
     /// Move the original model and its associated snapshots into native work.
-    /// Neither component grants materialization or publication authority.
+    /// All intent is retained; these values grant no publication authority.
     #[must_use]
     pub fn into_parts(
         self,
     ) -> (
         TeletextDeclaredService,
         Vec<TeletextProducerPagePresentation>,
+        Option<TeletextSecondaryDefaultAgreement>,
     ) {
-        (self.original, self.pages)
+        (self.original, self.pages, self.secondary_default_agreement)
     }
 }
 impl fmt::Debug for TeletextProducerPresentation {

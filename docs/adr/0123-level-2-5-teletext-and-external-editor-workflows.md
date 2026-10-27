@@ -1916,6 +1916,12 @@ agreement, not a claim that ETSI mandates this choice for every receiver.
 
 Policy ID: `ersatzrs-secondary-default-v1`.
 
+The native producer keeps this agreement separate from original declarations
+and presentation snapshots. Its parts API returns all three together;
+original-only adapters must reject unsupported bound intent rather than discard
+it. Per-page derivation retains the original source and marks the agreement
+explicitly; it does not turn original `DecoderDependent` data into a declaration.
+
 1. **Explicit author intent.** A design/profile may explicitly bind its absent-
    packet secondary-language intent to either `no second G0` or one valid,
    concrete Table 33 designation. No choice is inferred from UI language,
