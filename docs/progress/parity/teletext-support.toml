@@ -47,7 +47,7 @@ managed.1 negatives remain. Baseline: UCU12 FFmpeg207/Next023rs.6; candidate,
 native and adoption differ.
 Closed candidate components: Linux/Windows installer/Health/TS and cached HLS (124 TSDuck/six AV proofs, managed-current-candidates/hls-live-qualification).
 Promotion preparation closed; publication/adopted-byte gates remain.
-EE5 engine/native draft closed; admin open. M29/Windows replies pending.
+EE5 unused-copy removal closed; Windows/M29 replies pending.
 Base application/host lifecycle is closed; quota/cancellation/native receivers
 and accepted four-RID/platform/adoption joins retain owners. Authorized Windows
 clean34e04/cdf06813 package passes36 admin/32 Health/64 localized cases and

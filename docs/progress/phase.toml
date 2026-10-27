@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-editor-enhanced EE5 — mandatory unused-copy removal; client and M29 replies pending'
+current_focus = 'p9a-client-base — prepared guided Windows control prerequisite; await operator-ready'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -157,30 +157,23 @@ policy-for-magazine-default-retirement. Canonical
 tmp/phase9-mot-retirement/m29-policy/proposal/qualification.json owns its review
 boundary. No policy is accepted or runtime changed; required original unknown
 semantics and receiver evidence stay open. Await explicit review before adoption.
-Current package: p9a-editor-enhanced EE5, mandatory before9A by maintainer2026-10-27.
-The engine-only complete-service removal safeguard is closed:
-tmp/phase9-resource-context/unused-copy-removal/qualification.json owns13 related
-controls and strict domain lint, including dormant/Main/suppressed/unassociated
-MOT reference refusals and an exact original-service roundtrip. It grants no
-host copy/edit/publication authority. The complete native-host draft proof is closed at
-unused-copy-removal/host/qualification.json: both stored addition forms,
-immutable-root/current-receipt ownership, exact latest-minus-one declared model,
-prior concept digest/native export/shared preview, separate explicit publication,
-cold reopen and atomic refusals pass two current integration cases. Reuse four
-unchanged Add/Copy passes and the exact shared compile body. Final bundled positive covers both
-retained-bank and standalone additions with exact prior digest/native output,
-then explicit publication/reopen. The unchanged negative and four Add/Copy cases
-are reused. Strict final scoped web lint/format passes; all checks are terminal. Retain the original lookup
-negative and test-only compile errors in the canonical packet.
-Next finite action: expose the guarded removal request through the localized
-HTTP/admin action with current-head/no-JS/original-used-stale protections and
-required headed/culture proof. The whole EE5 gate stays open. Engine59c41697 and
-this verified native-host component remain closed unless a concrete regression. Stop after eligible
-removal/exact undo/reopen and referenced/default/protected/stale atomic refusals
-pass through existing interchange/preview/publication boundaries. Preserve source
-catalogues, surviving identities/provenance and active publication. No new editor
-variants or policy implementation before its approval. AB5/AE5 and X1/X3 retain
-their recorded capability/source/deferral conditions.
+Completed p9a-editor-enhanced EE5 unused-copy removal, mandatory before9A:
+engine59c41697 and native host21f1fa7e remain closed. The localized HTTP/admin
+join is completed at unused-copy-removal/admin/qualification.json:53 SSR/i18n
+passes, actual POST and six atomic invalid controls, both headed browsers across
+all9 cultures/themes and JS/no-JS, four exact undo revisions, complete native
+models/units/shared preview, separate publication/cold reopen and preserved
+source/package/Night/config. Strict web all-target lint and hydration/format pass.
+The editor-enhanced owner is Blocked only on required parent/EE4 dependencies;
+EE1/2/3/5 are closed. Reopen only for a concrete regression. No adjacent variants.
+Current package: p9a-client-base guided Windows control prerequisite. Canonical
+level15-progdvb-guided/identity.json retains the pinned private client, matched
+synthetic host and operator-ready question. Next executable step is the bounded
+manual teletext-control trial after the operator-ready reply; reserve120 minutes.
+The ordinary Windows installation remains stopped. Reuse red-video acquisition;
+do not repeat failed foreground-message automation. Existing simple pages do not
+close conceal/flash or full base display/navigation. No DVBViewer/physical Kodi.
+M29 policy review remains separately pending, with no implicit implementation.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component

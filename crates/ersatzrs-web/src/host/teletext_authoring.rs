@@ -60,6 +60,7 @@ use super::teletext_work::{self, TeletextWorkError};
 mod effective;
 mod metadata;
 mod object_choices;
+mod object_removals;
 pub use crate::admin::server_fns::teletext_drafts::{
     TeletextMainCallChoiceObservation, TeletextObjectCallChoiceObservation,
     TeletextObjectChoicesObservation, TeletextObjectDefinitionChoiceObservation,
@@ -196,6 +197,7 @@ pub struct TeletextAuthoringPreview {
     navigation: Vec<TeletextNavigationLink>,
     pages: Vec<TeletextPageAddress>,
     resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
+    removable_resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
     object_resources: Vec<TeletextResourceIdentity>,
     object_choices: TeletextObjectChoicesObservation,
     authoring: Vec<TeletextAuthoringPageMetadata>,
@@ -242,6 +244,11 @@ impl TeletextAuthoringPreview {
     #[must_use]
     pub fn resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
         &self.resource_objects
+    }
+    /// Unused added definitions in this historical preview, never removal authority.
+    #[must_use]
+    pub fn removable_resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
+        &self.removable_resource_objects
     }
     /// Retained POP/GPOP and DRCS/GDRCS banks, including empty object companions.
     /// Observation establishes neither addition nor publication authority.
@@ -960,6 +967,11 @@ fn render_original(
         navigation,
         pages,
         resource_objects: resource_objects(service),
+        removable_resource_objects: object_removals::observe(
+            service,
+            restored.added_resource_objects(),
+            deadline,
+        )?,
         object_resources: object_resources(service),
         object_choices: object_choices::observe(
             service,

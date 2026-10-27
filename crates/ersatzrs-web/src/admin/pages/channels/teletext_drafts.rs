@@ -17,6 +17,7 @@ mod output_status;
 mod resource_add;
 mod resource_announcements;
 mod resource_banks;
+mod resource_remove;
 mod resource_selection;
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
@@ -30,6 +31,7 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "editorial-limit" => TextKey::TeletextEditorLimit,
         "editorial-mismatch" => TextKey::TeletextEditorMismatch,
         "object-copy-invalid" => TextKey::TeletextObjectCopyInvalid,
+        "object-remove-invalid" => TextKey::TeletextObjectRemoveInvalid,
         "object-add-invalid" => TextKey::TeletextObjectAddInvalid,
         "resource-bank-invalid" => TextKey::TeletextResourceBankInvalid,
         "subpage-announcement-invalid" => TextKey::TeletextSubpageAnnouncementInvalid,
@@ -429,6 +431,7 @@ fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
             {resource_selection::form(data, observation)}
             {resource_add::form(data, observation)}
             {object_copy_form(data, observation)}
+            {resource_remove::form(data, observation)}
             {editorial_import_form(data.channel_id, observation.current_design_head)}
             <p>{tr(TextKey::TeletextEditorNoPublicationHelp)}</p>
         </section>
@@ -849,6 +852,7 @@ mod tests {
             }],
             diagnostics: Vec::new(),
             resource_objects: Vec::new(),
+            removable_resource_objects: Vec::new(),
             object_resources: Vec::new(),
             object_choices:
                 crate::admin::server_fns::teletext_drafts::TeletextObjectChoicesObservation::default(
@@ -1353,6 +1357,50 @@ mod tests {
         data.resource_objects.clear();
         let html = context.with(|| object_copy_form(&data, &observation).to_html());
         assert!(!html.contains("teletext-object-copy-form"));
+    }
+
+    #[test]
+    fn object_remove_form_uses_only_observed_choices_and_disables_historical_submission() {
+        use ersatzrs_domain::{
+            TeletextObjectId, TeletextObjectIdentity, TeletextRawDataPageNumber,
+            TeletextResourceIdentity, TeletextResourceKind, TeletextResourceSubpageIndex,
+        };
+        let context = Owner::new();
+        let mut data = preview();
+        let resource = TeletextResourceIdentity::new(
+            TeletextResourceKind::Pop,
+            TeletextRawDataPageNumber::new(2, 0xe0).unwrap(),
+            TeletextResourceSubpageIndex::new(15).unwrap(),
+        )
+        .unwrap();
+        let eligible = TeletextObjectIdentity::public(resource, TeletextObjectId::new(33)).unwrap();
+        data.resource_objects
+            .push(TeletextObjectIdentity::public(resource, TeletextObjectId::new(20)).unwrap());
+        data.removable_resource_objects.push(eligible);
+        let observation = TeletextDraftPublicationObservation {
+            digest: "b".repeat(64),
+            current_design_head: data.revision,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: false,
+            can_publish: false,
+            replaces_pending: false,
+        };
+        let html = context.with(|| resource_remove::form(&data, &observation).to_html());
+        assert!(html.contains("/admin-api/teletext/design/remove-unused-object"));
+        assert!(html.contains("Pop 2E0 S1=15 · 33"));
+        assert!(!html.contains("Pop 2E0 S1=15 · 20"));
+        assert!(html.contains("name=\"object\""));
+        assert!(html.contains(tr(TextKey::TeletextObjectRemoveHelp)));
+        assert!(!html.contains("<fieldset disabled"));
+        data.revision -= 1;
+        let html = context.with(|| resource_remove::form(&data, &observation).to_html());
+        assert!(html.contains("<fieldset disabled"));
+        assert!(html.contains(tr(TextKey::TeletextObjectRemoveCurrentHelp)));
+        data.removable_resource_objects.clear();
+        let html = context.with(|| resource_remove::form(&data, &observation).to_html());
+        assert!(!html.contains("teletext-object-remove-form"));
     }
 
     #[test]

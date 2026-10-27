@@ -103,6 +103,7 @@ pub struct RestoredOriginalTeletextDesign {
     originals: EncodedChannelTeletextOriginals,
     edit_policy: TeletextSavedEditPolicy,
     object_page_attachments: Vec<ersatzrs_domain::TeletextObjectPageSelectionChange>,
+    added_resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
 }
 impl RestoredOriginalTeletextDesign {
     pub(super) fn with_resource_lifecycle_variants(
@@ -177,6 +178,11 @@ impl RestoredOriginalTeletextDesign {
     #[must_use]
     pub fn object_page_attachments(&self) -> &[ersatzrs_domain::TeletextObjectPageSelectionChange] {
         &self.object_page_attachments
+    }
+    /// Authenticated cumulative additions, observed without granting edit authority.
+    #[must_use]
+    pub fn added_resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
+        &self.added_resource_objects
     }
     #[must_use]
     pub const fn edit_policy(&self) -> TeletextSavedEditPolicy {
@@ -632,6 +638,25 @@ pub(super) fn compile_restored_parts_with_resource_intents(
         originals,
         edit_policy: parts.edit_policy,
         object_page_attachments: restored_object_page_attachments(parts.editorial_overlay.as_ref()),
+        added_resource_objects: restored_added_resource_objects(parts.editorial_overlay.as_ref()),
+    })
+}
+
+pub(super) fn restored_added_resource_objects(
+    overlay: Option<&ersatzrs_app::teletext_design_documents::TeletextSavedEditorialOverlay>,
+) -> Vec<ersatzrs_domain::TeletextObjectIdentity> {
+    overlay.map_or_else(Vec::new, |overlay| {
+        overlay
+            .resource_object_definition_additions()
+            .iter()
+            .map(ersatzrs_domain::TeletextResourceObjectDefinitionAddition::identity)
+            .chain(overlay.object_resource_additions().iter().flat_map(|bank| {
+                bank.addition()
+                    .definitions()
+                    .iter()
+                    .map(|definition| definition.identity)
+            }))
+            .collect()
     })
 }
 

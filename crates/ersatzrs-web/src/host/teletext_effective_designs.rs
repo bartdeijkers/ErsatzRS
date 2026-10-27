@@ -87,6 +87,7 @@ pub struct RestoredEffectiveOriginalDesign {
     originals: EncodedChannelTeletextOriginals,
     edit_policy: TeletextSavedEditPolicy,
     object_page_attachments: Vec<ersatzrs_domain::TeletextObjectPageSelectionChange>,
+    added_resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
 }
 impl RestoredEffectiveOriginalDesign {
     pub(super) fn with_resource_lifecycle_variants(
@@ -170,6 +171,11 @@ impl RestoredEffectiveOriginalDesign {
     #[must_use]
     pub fn object_page_attachments(&self) -> &[ersatzrs_domain::TeletextObjectPageSelectionChange] {
         &self.object_page_attachments
+    }
+    /// Authenticated cumulative additions, observed without granting edit authority.
+    #[must_use]
+    pub fn added_resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
+        &self.added_resource_objects
     }
     #[must_use]
     pub const fn edit_policy(&self) -> TeletextSavedEditPolicy {
@@ -726,6 +732,9 @@ pub(super) fn compile_effective_restored_parts_with_resource_intents(
         originals,
         edit_policy: parts.edit_policy,
         object_page_attachments: super::teletext_designs::restored_object_page_attachments(
+            parts.editorial_overlay.as_ref(),
+        ),
+        added_resource_objects: super::teletext_designs::restored_added_resource_objects(
             parts.editorial_overlay.as_ref(),
         ),
     })

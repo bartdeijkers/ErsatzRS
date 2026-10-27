@@ -10,6 +10,12 @@ mod actual_admin;
 #[path = "retained_definitions/removal.rs"]
 mod removal;
 
+#[path = "retained_definitions/removal_http.rs"]
+mod removal_http;
+
+#[path = "retained_definitions/removal_admin.rs"]
+mod removal_admin;
+
 fn added_identity() -> TeletextObjectIdentity {
     TeletextObjectIdentity::public(bank_resources()[2], TeletextObjectId::new(32)).unwrap()
 }

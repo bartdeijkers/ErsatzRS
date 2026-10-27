@@ -117,6 +117,7 @@ fn channel_page(
             | "editorial-missing-receipt"
             | "editorial-limit"
             | "object-copy-invalid"
+            | "object-remove-invalid"
             | "object-add-invalid"
     );
     let (code, message, role) = if !error.is_empty() {

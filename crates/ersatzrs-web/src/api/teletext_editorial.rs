@@ -50,11 +50,13 @@ mod resource_announcements;
 mod resource_banks;
 mod resource_controls;
 mod resource_copy;
+mod resource_remove;
 mod resource_selection;
 pub use resource_add::add_object;
 pub use resource_announcements::announce_object_subpages;
 pub use resource_banks::add_resource_bank;
 pub use resource_copy::copy_object;
+pub use resource_remove::remove_unused_object;
 pub use resource_selection::{attach_object_page, choose_object_pages, restore_page_attachment};
 
 pub const MAX_TELETEXT_EDITOR_UPLOAD_BYTES: usize = 8 * 1024 * 1024;

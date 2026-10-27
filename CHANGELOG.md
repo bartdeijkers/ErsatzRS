@@ -45,6 +45,11 @@ release section when tagging a release.
 
 ### Added
 
+- Remove an unused added teletext object from the current draft through a
+  localized admin form, including without JavaScript. Protect original,
+  referenced and default objects; require a current revision and explicit
+  publication before changing the broadcast.
+
 - Add bounded, playback-owned teletext inspection and observed-page selection
   for an already-running producer. Native MPEG-TS caption Burn supports Live
   add-ons and advertised HTTP/RTSP sources, including live HLS, through one held

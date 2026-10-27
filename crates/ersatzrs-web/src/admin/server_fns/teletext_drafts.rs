@@ -72,6 +72,8 @@ pub struct TeletextDraftPreviewData {
     pub valid_until: Option<String>,
     pub pages: Vec<TeletextPageAddress>,
     pub resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
+    #[serde(default)]
+    pub removable_resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
     pub object_resources: Vec<ersatzrs_domain::TeletextResourceIdentity>,
     pub object_choices: TeletextObjectChoicesObservation,
     pub navigation: Vec<TeletextNavigationLink>,
@@ -252,6 +254,7 @@ fn project_preview(
         valid_until: preview.valid_until().map(|until| until.to_rfc3339()),
         pages: preview.pages().to_vec(),
         resource_objects: preview.resource_objects().to_vec(),
+        removable_resource_objects: preview.removable_resource_objects().to_vec(),
         object_resources: preview.object_resources().to_vec(),
         object_choices: preview.object_choices().clone(),
         navigation: preview.navigation().to_vec(),

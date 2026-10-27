@@ -235,6 +235,17 @@ fn render_original(
             .encoded()
             .map(super::resource_objects)
             .unwrap_or_default(),
+        removable_resource_objects: restored
+            .encoded()
+            .map(|service| {
+                super::object_removals::observe(
+                    service,
+                    restored.added_resource_objects(),
+                    deadline,
+                )
+            })
+            .transpose()?
+            .unwrap_or_default(),
         object_resources: restored
             .encoded()
             .map(super::object_resources)
