@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — native cached-HLS component closed; accepted promotion remains separately gated'
+current_focus = 'p9a-client-base — guided Windows trial; local runtime promotion preparation closed'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -139,16 +139,23 @@ RFC8216 live entry does not hide the history. Original generic URL negatives and
 tool-guard/log-path negatives remain. The earlier diagnostic group log has38
 checks, correcting the prior uncommitted44-check handoff. No product repair,
 production pin, publication, current full CI or broader source-build claim.
-Current package: p9a-managed-adoption. Its next finite action is explicit
-maintainer authorization for production promotion followed by exact adopted-byte
-final gates; this instruction does not authorize pushing or publication. Existing
-closed installer/Health/TS/HLS components are not commissioned again. Other open
-engine obligations remain with their finite-list owners and recorded deferrals.
-No independent package is currently executable: AB5/AE5, M29, client-control
-access/X1, upstream editor X3 and unused-object classification require their
-recorded external capability/source/access or maintainer decision. Dependent
-aggregates do not authorize substitute internal variants. Resume the appropriate
-existing owner when its exact prerequisite changes.
+Local runtime-promotion preparation is completed at
+provider-scan/managed-current-candidates/local-promotion/qualification.json:
+complete source-adjacent Next rs.7 required-four-RID pins, retained Mac records,
+four existing-stager checks/wrong-RID rejection,10+28 source/stager regressions
+and four exact FFmpeg archive/source inventories. Production selection/defaults
+remain unchanged; final public FFmpeg tag/asset mapping and publication/adopted-byte
+gates remain separately authorized steps. No rebuild or repeated runtime gate.
+Current package: p9a-client-base guided interactive Windows11 trial, authorized
+2026-10-27. Next finite action: reuse its existing temporary synthetic host/pinned
+ProgDVB fixture and arrange operator-ready teletext controls; prove only missing
+base display/navigation/update/reveal/timed-flash/AV. The ordinary Windows
+installation is stopped and must remain untouched. No DVBViewer or physical Kodi.
+Maintainer also resolves unused object-copy removal as mandatory editor-enhanced
+EE5 before9A and authorizes a concrete M29 policy proposal for review. Those are
+independently executable existing owners, not optionality blockers. No M29 policy
+is yet accepted. AB5/AE5 capability/source, X1 deferral and upstream X3 remain;
+resume those owners only when their exact retained prerequisites change.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component

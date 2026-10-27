@@ -1898,6 +1898,17 @@ accepted authoring limitation. Ordinary routes, active-publication Health, warm
 publisher/recovery ownership and complete restart/Lua timing remain open. Durable
 selection alone never proves per-output delivery or receiver cache reconciliation.
 
+### Required unused-object-copy removal
+
+Maintainer clarification (2026-10-27): explicit removal of unused authored object
+copies is mandatory before full Phase9A acceptance. The existing editor-enhanced
+EE5 owner supplies the bounded action and proof. Removal is an explicit draft
+operation with reference/protection validation and exact undo, not automatic
+catalogue truncation during interchange. Preserve original/protected definitions,
+surviving native identities and default/invocation provenance. Draft edits do not
+change broadcasting; publication remains a separate validated atomic action.
+This does not relax full native-bank/context interchange or receiver acceptance.
+
 ### Evidence and delivery order
 
 The standalone Level 1/1.5 boundary above is the first delivery priority.

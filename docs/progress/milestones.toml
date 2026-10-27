@@ -16084,7 +16084,7 @@ evidence = '''
 Status: Complete within bounded record reconciliation, not product acceptance.
 Canonical: tmp/phase9-next-local-teletext/provider-scan/identity.json case_reconciliation_followup. The ordinary owners below now name AB1..7, AE1..5, EB1..2, EE1..4, SI1..4 and SO1..5. Their sources are the pre-existing receipt exclusions and ADR0121/0123 clauses, not newly invented variants or a provider/engine Cartesian product. Complete scoped actions remain closed. Original P9A-01..04 acceptance is unchanged.
 Resolved ownership: F1/V2 -> editor-base/enhanced/upstream; F3/V1 -> author-base/enhanced; F4/V5 -> completed lifecycle-base plus retirement-enhanced/m29-policy/client-enhanced; F5 -> source-inventory/source-output and platform/adoption. Applicable L15 rows consume those same primary owners. Admin and platform owners consume shared proof instead of commissioning duplicates.
-Exact record uncertainties remain visible as finite obligations, not presumed defects: AB7/AE5 and EB2/EE1..3 need the existing accepted inventory-to-receipt classification owned by standards; SI4/SO5 need the recorded source-format/preference classification. These are bounded proof-ledger tasks using only the already accepted inventory and named exclusions; no speculative case is authorized by historical other-family wording. The sole unresolved optionality decision is unused-object removal, explicitly owned in editor-enhanced; it remains deferred until classified, never silently waived.
+Exact record uncertainties remain visible as finite obligations, not presumed defects: AB7/AE5 and EB2/EE1..3 need the existing accepted inventory-to-receipt classification owned by standards; SI4/SO5 need the recorded source-format/preference classification. These are bounded proof-ledger tasks using only the already accepted inventory and named exclusions; no speculative case is authorized by historical other-family wording. Maintainer2026-10-27 resolves unused-object removal as mandatory before9A, owned by editor-enhanced EE5. This closes only classification, not that new action or its mandatory proof.
 New acceptance evidence: Existing lifecycle receipts jointly satisfy the explicit base component boundary; lifecycle-base is Complete. Actual receiver effects remain client-owned. Existing prepared-callback, provider-policy, public Convert and localized Health scopes are removed from residual wording.
 Missing mandatory proof: None for this record-reconciliation component. Product/conformance/editor/source/client/platform proof remains with the named owners and typed full9A dependencies.
 '''
@@ -16347,18 +16347,19 @@ depends_on = ['p9a-r1-cases', 'p9a-author-enhanced', 'p9a-metadata', 'p9a-select
 acceptance = '''
 Requirement owner: P9A-04 complete agreed interchange; F1/V2 enhanced resource/context/definition boundary.
 User action/proof: Losslessly edit complete enhanced resource sets, definitions, selected roles, targets, links and context with full identities and protected consumers retained.
-Smallest necessary work: After r1, finish only named engine/import/export/effective-role/target/resource-call and complete-set/dependency gaps. Keep immutable originals, complete catalogues including dormant/protected definitions, exact root undo, targeted3.5/ambiguous rejection and explicit addon-version/publication authority. Unused-object removal remains deferred with its mandatory-gate classification owned by r1.
+Smallest necessary work: After r1, finish only named engine/import/export/effective-role/target/resource-call and complete-set/dependency gaps. Keep immutable originals, complete catalogues including dormant/protected definitions, exact root undo, targeted3.5/ambiguous rejection and explicit addon-version/publication authority. Maintainer2026-10-27 explicitly requires unused-object-copy removal before full9A; EE5 below is its implementation/proof owner.
 Testable stop condition: All reconciled enhanced internal interchange cells pass full complete-factory/native/TTI/shared-preview/draft/publication/reopen oracles; the final enhanced aggregate separately requires upstream actual-editor proof.
 '''
 evidence = '''
-Status: In progress. Internal EE1..3 actions are completed within their recorded boundaries; required parent dependencies, EE4 and the deferred optionality decision remain.
+Status: In progress. Internal EE1..3 actions are completed within their recorded boundaries; required parent dependencies, EE4 and mandatory EE5 removal remain.
 EE1 completed: complete Main/Local/default/interleaved generated-Base context correspondence. The qualified original/final factory demonstrated a real nonempty-definition refusal, now corrected with trusted Main6/Local5 boundaries, exact original command positions and native Local-marker relocation; final complete native validation stays mandatory. Both Greek same-packing and Latin repacking preserve five catalogue definitions, owner125 dormant Local, owner126 defaults0/2/3/provenance, complete model/units/fallback/TTI, concept/headCAS, shared preview, reexport, explicit publication/cold reopen and exact root undo. Genuine pinned headed QTM1.0 Greek SaveAs/F5 reload joins exact saved bytes to the full lifecycle; stock libzvbi0.2.42 proves12 fixed1.5/2.5 cell observations and3 wrong-golden refusals. Reuse154 parser passes;4 affected native regressions and strict lib/integration Clippy pass. The preserved negative final-capture read used the wrong single-TTI bound; only the test capture now uses the existing project bound. Canonical: tmp/phase9-next-local-teletext/provider-scan/identity.json editor_complete_context_followup. No new runtime/client/platform or full native-bank editor acceptance; EE2 positions/root undo are closed for this action.
 EE2 shared source-position/root-undo obligation is completed for the closed EE1/EE3 actions: full native command/definition positions and original default sources match independently compiled targets, and exact root documents return. Previously closed leading Main and steady derived-Flash Local last-call undo retain their scope. No separately named deferred variant remains; new work requires a concrete regression or accepted missing clause.
 EE3 internal action completed: one fitting complete multi-document resource-set roundtrip changes the existing GPOP20-to-POP21 origin and Passive21 glyph together through one receipt/headCAS concept. The complete four-definition catalogue includes original uninvoked protected Passive23; all three display owners/defaults, logical identities, calls, resource links and shared consumers retain their exact independent native model/units/source positions. Complete display/fallback packets remain unchanged. A malformed second edited document rejects the whole import without head/publication/config changes. Shared preview, every re-exported file, explicit publication/cold reopen, exact original document/complete-export root undo and explicit undo republication pass. Fresh exports correctly snapshot the CURRENT complete catalogue; their sibling copies are immutable within that import, not across later receipts. The initial contrary oracle and its exact byte differences are retained. Canonical: tmp/phase9-next-local-teletext/provider-scan/identity.json editor_complete_set_followup, complete-final and clippy-extracted receipts. This is new native aggregate evidence, no product correction or new actual-editor/client/runtime/platform claim. Existing fitting-catalogue QTM and graph/selection/attachment proof retain their own scope; actual native-bank/oversized full editor aggregate remains EE4/X3.
 EE4 actual native POP/GPOP and complete over208-word editor capability belongs exclusively to editor-upstream/X3, including dormant/protected definitions. Wait changed upstream; never truncate or relabel native semantics.
-Exact external classification gate: Unused-object deletion remains maintainer-deferred. Original F1, old sessions and tmp/phase9-f1-original-position/work.json excluded / header-c2 coordinated-positions receipt preserve the exclusion; no reviewed accepted source establishes mandatory versus optional9A status. Before final closure, obtain an explicit classification: mandatory9A action with a named owner/stop, or expressly optional deferred work. No deletion is implemented and no original acceptance is waived while unresolved.
+EE5 mandatory unused-object-copy removal (maintainer2026-10-27): classification is resolved as required before full9A, not optional deferred work. Missing functionality/proof: explicitly remove a selected unused object copy from a draft through the existing authoring/editor application boundary. Preserve original/protected catalogues, surviving identities/default/invocation provenance and all referenced consumers; do not silently strip definitions on export/import or mutate packages. Smallest work: inspect the existing copy/definition/reference and undo functions, implement the missing explicit deletion action, and reuse the existing validation/draft/publication/native roundtrip mechanisms. Stop: eligible unused-copy deletion and exact undo/reopen work; referenced/default/protected or stale deletion rejects atomically with no head/publication/config damage; export/import/preview and separately explicit publication preserve complete surviving content. Bundle those controls; no new unrelated editor variants. This existing milestone owns EE5, not an additional parallel plan.
+
 Reuse/closed: Complete selection-undo; header-c2 resource-set-creation/consumer_cross_role_native_followup, main-presence, coordinated-positions, main-contexts, drcs-page-selection, role-attachment, created-bank-attachment, main-deferred-ap and row-tail-background/local-call-import. V28 selections/MOT-only undo, V31 first attach/retarget/restore, populated created-bank composition and native Public-to-Global crossing remain closed.
-Missing proof/stop: Internal EE1/EE2/EE3 actions are closed. Required author-enhanced/r1/metadata/selection dependencies retain their owners. The maintainer-deferred unused-object optionality gate must be explicitly classified before final closure; actual native-bank/full-capacity editor proof remains mandatory through editor-upstream/EE4. Do not create substitute internal variants for those external prerequisites.
+Missing proof/stop: Internal EE1/EE2/EE3 actions are closed. Required author-enhanced/r1/metadata/selection dependencies retain their owners. Mandatory EE5 unused-copy removal still needs implementation/proof; its classification is resolved. Actual native-bank/full-capacity editor proof remains mandatory through editor-upstream/EE4. Do not create substitute internal variants for those external prerequisites.
 '''
 
 [[milestone]]
@@ -16570,6 +16571,7 @@ Smallest necessary work: Keep protective refusal. Present the existing exact pol
 Testable stop condition: The missing semantics policy/reset is resolved explicitly and then the affected safe-retirement oracles pass. This enhanced-only prerequisite does not by itself block standalone base L15.
 '''
 evidence = '''
+Maintainer2026-10-27 authorizes a concrete author/receiver Code-of-Practice proposal for review. Next bounded action: derive explicit proposed semantics, immutable-original/provenance handling, compatibility and warm-transition proof obligations from the retained policy packet; submit the concrete policy before adopting it. This authorizes proposal work only, not a guessed reset, changed absence/sentinel semantics, standard waiver or accepted receiver policy.
 Status: Blocked. Exact remaining gap: External author/receiver Code-of-Practice semantics decision or demonstrated semantics-preserving reset is missing. AnnexD.2.1(2) permits decoder-dependent absent secondary G0; Table33 0x7f explicitly means no second G0, so those models cannot be equated.
 Reuse: tmp/phase9-mot-retirement/m29-policy/identity.json closes the bounded reset-feasibility assessment, retaining the C4/cache negative and source/model distinction. original_secondary_followup (f91ab796, 2/2) remain classification evidence.
 Missing mandatory proof: An explicit accepted author/receiver CoP decision with the required receiver scope, or exact semantics-preserving reset proof; neither is supplied by the completed feasibility receipt.
@@ -16630,6 +16632,7 @@ Smallest necessary work: Obtain that supported operator/control capability and r
 Testable stop condition: A supported operator-controlled pinned suitable base receiver passes every mandatory D/V3/base-X1 display/navigation/update/reveal/timed-flash and AV oracle with exact versions/settings and cleanup.
 '''
 evidence = '''
+Maintainer2026-10-27 confirms a guided interactive Windows11 trial is possible; the ordinary ErsatzRS installation is currently stopped. Next bounded action after the current runtime-preparation checkpoint: reuse the isolated synthetic temporary-host fixture and pinned ProgDVB, arrange an operator-ready session, then run only the missing fixed base display/control oracles. Do not start or alter the ordinary installation/database, use DVBViewer, or test physical Kodi/GoogleTV. Authorization/access availability is not display/control acceptance.
 Status: Blocked. Exact remaining gap: External supported private teletext-control/operator session is missing for pinned ProgDVB Standard7.73.2/exe7.73.2.0. Ordinary red-video acquisition/rendering is already proven twice; native teletext remains unproven because Windows refused foreground and documented T messages produced no display. This is not a decoder-incapability finding.
 Reuse: base_client_qualification/progdvb_runtime/ordinary_stream_followup and P9A-04 retained exact20 shared-file/state/cleanup proof; existing bounded control negatives and independent/transport proof retain scope.
 Missing mandatory proof: Actual suitable base teletext display and interactive control/oracles on a pinned ordinary-stream client. No DVBViewer; no physical Kodi21.2/GoogleTV trial before the conditional joint full2.5 end session.
@@ -16998,6 +17001,26 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
+Completed local runtime promotion preparation (2026-10-27):
+managed-current-candidates/local-promotion/qualification.json owns the explicitly
+authorized preparation. The source-adjacent rs.7 candidate manifest now contains
+complete four-RID archive/payload/size/distribution pins and exact retained rs.4
+Mac records. The unchanged existing stager validates all four real archives and
+rejects a wrong-RID archive before output. All ten source-adjacent patch pins,
+compiler/lock/retirement records pass; existing source/staging regressions pass
+10+28. Four FFmpeg archive/payload/source inventories match qualified original-PTS
+bytes and retain their composite accepted207+0019 source provenance. Basename and
+Windows .exe receipt adapters are corrected without changing any digest/oracle.
+No runtime is executed or rebuilt; hermetic staging fixtures do not establish
+platform acceptance. Existing installer/Health/TS/HLS and platform proof is reused
+within its unchanged identity boundary. Production manifests/default tags stay
+exact. The FFmpeg local tag remains v2.0.7-teletext-pts-local, not a claimed public
+release; final public tag/asset mapping and publication require a separate reviewed
+decision before production selection. This closes local preparation only. New
+maintainer decisions also make editor-enhanced EE5 mandatory, authorize an M29
+policy proposal, and make the guided Windows base-client trial executable once
+its temporary host/operator session is ready. Full9A and9B gates are unchanged.
+
 Completed current Next023rs7 installation/cache/identity component (2026-10-26):
 provider-scan/identity.json managed_current_candidates points to
 managed-current-candidates/qualification.json. The unchanged two real-archive
@@ -17105,8 +17128,7 @@ remain: raw concatenation loses announced boundary semantics and cached prefill
 inflates its rolling reference. That unchanged mode is not claimed green; the
 existing grouped-history and separately documented live proof close this scoped
 obligation. No product mux/timestamp/encoder change is required or claimed.
-Exact remaining gap: separately authorized production promotion and exact
-adopted-byte final gates. Four closed sustained TS gates remain closed.
+Exact remaining gap: public release-tag/asset mapping and separately authorized publication, then production selection and exact adopted-byte final gates. Local promotion preparation is completed above; four closed sustained TS gates remain closed.
 Consistent SQLite backups fix the proved base-file/WAL fixture-copy error;
 selected-resolution guarding matches the existing smoke oracle and permits only
 the documented unused default-resolution seed. Native-loopback tools replace the
