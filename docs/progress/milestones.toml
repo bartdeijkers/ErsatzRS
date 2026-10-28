@@ -12298,6 +12298,33 @@ Kodi APK build/ABI, Android version, skin and actual remote mapping are unknown;
 this source reference is not a pin of the maintainer device. No ADB/network
 connection, install, settings change or test on that physical device occurred.
 
+Joint-session LAN prerequisite, maintainer clarification2026-10-28: the target
+remains Android Kodi on the Google TV Streamer. The maintainer currently uses
+the native Windows11 ErsatzRS host because the WSL host is not reachable over
+the Windows LAN endpoint. Read-only host inspection finds WSL NAT mode and no
+listener on8409 in either Windows or WSL at that observation; absence of a running
+server does not establish a product or firewall defect. The checked-in web
+site-addr is already0.0.0.0:8409. Microsoft documents either mirrored networking
+or NAT portproxy for LAN access; the bounded proposal is one Windows-LAN8409 to
+WSL8409 forwarding rule and a Private-profile TCP rule restricted to the local
+subnet. At the initial inspection no setting or device was changed. The maintainer
+then created the forwarding/firewall rules. Read-back confirms the enabled
+Private inbound TCP8409 rule, exact Windows LAN local address, local/24 remote
+subnet, and portproxy to the current WSL address on8409. Windows now listens on
+the forwarding endpoint; WSL still has no8409 listener. This closes configuration
+readiness only, not an HTTP response, remote television acquisition or client
+acceptance. No WSL mode change, host launch or physical-device trial occurred.
+A NAT rule must be refreshed if the WSL address changes; avoid a simultaneous native
+Windows listener on the same endpoint. Prefer the existing Windows-hosted route
+unless the maintainer authorizes preparing the WSL forwarding alternative.
+Neither host reachability nor forwarding changes the retained Kodi capability
+findings. The joined session must pin the actual host OS/bundle/runtime and prove
+television acquisition through that route; WSL delivery is Linux evidence,
+including when forwarded by Windows, and cannot substitute for native Windows
+acceptance. Use http://<server-lan-host>:8409 in shared records. No physical
+device trial starts before the already agreed joint final session.
+Reference: https://learn.microsoft.com/en-us/windows/wsl/networking
+
 Do not schedule a green full2.5 trial on unchanged stock21.2. The single joined
 final session below is prepared but gated: all independent engine/editor/runtime
 conditions must be ready, a pinned client must have capability-positive evidence
@@ -12322,7 +12349,10 @@ authorized maintenance decision is required before a passing expectation exists.
    publish with exact selection/revision/scope fences; read separate per-output
    receipt status. Invalid/protected/stale edits must leave ordinary AV and the
    last valid channel state safe. Reuse existing negative evidence if unchanged.
-4. Open the ordinary HTTP MPEGTS channel through the exact PVR IPTV Simple and
+4. Start the pinned host and establish television-to-host LAN reachability;
+   record native Windows or Linux/WSL plus any forwarding explicitly. A localhost
+   probe alone cannot establish this boundary. Open the ordinary HTTP MPEGTS
+   channel through the exact PVR IPTV Simple and
    recorded inputstream route. Record any actual ffmpegdirect/timeshift use;
    changing inputstream is not presumed to fix Kodi's renderer. Use existing
    default capacity and ordinary Legacy/Hybrid paths within their required scope,
