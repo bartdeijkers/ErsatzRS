@@ -30,6 +30,27 @@ pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     value
 }
 
+fn complete_catalogue_response(theme: &str, page: u16, subcode: u16) -> Value {
+    let mut value = response(theme, page, subcode);
+    // Keep the original large fixture available to its other callers. Add a
+    // small unused definition to this full-catalogue lifecycle, within the
+    // same native bank's capacity, without changing any display consumer.
+    let original = super::response(theme, page, subcode);
+    let mut dormant = original["service"]["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|object| object["identity"]["object_id"] == 21)
+        .unwrap()
+        .clone();
+    dormant["identity"]["object_id"] = json!(23);
+    value["service"]["objects"]
+        .as_array_mut()
+        .unwrap()
+        .push(dormant);
+    value
+}
+
 pub(super) fn encoding(
 ) -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy {
     let mut policy = seed::encoding();
@@ -205,12 +226,22 @@ async fn assert_missing_fragment_is_atomic(fixture: &Fixture, flow: &Flow) {
 #[tokio::test]
 async fn original_pop_fragments_import_publish_repeat_undo_reopen_preserves_all_consumers() {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
-        response,
+        complete_catalogue_response,
         Fixture::new_persistent().await,
         encoding,
         authoring_metadata::write_compact,
     ))
     .await;
+    assert_eq!(
+        flow.accepted[0]
+            .service()
+            .declared()
+            .semantic()
+            .objects()
+            .definitions()
+            .len(),
+        4
+    );
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
     assert_missing_fragment_is_atomic(&fixture, &flow).await;
     let concept = import(&fixture, request(&flow.receipts[0], 1, 2, 3)).await;
