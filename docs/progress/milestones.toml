@@ -12314,6 +12314,19 @@ subnet, and portproxy to the current WSL address on8409. Windows now listens on
 the forwarding endpoint; WSL still has no8409 listener. This closes configuration
 readiness only, not an HTTP response, remote television acquisition or client
 acceptance. No WSL mode change, host launch or physical-device trial occurred.
+Subsequent bounded HTTP proof2026-10-28 closes the Windows-to-WSL response
+prerequisite: canonical tmp/phase9-next-local-teletext/level15-output-status/
+kodi212-source-qualification/lan-route/qualification.json records the existing
+Linux host3b44fe66 with isolated empty SQLite/state and exact retained runtime
+bytes, listening on0.0.0.0:8409. Windows curl through the configured LAN endpoint
+fails before startup, succeeds during the local200 health response, and fails
+again after shutdown. The health body is empty; attribution rests on that
+before/during/after sequence and owned server lifecycle, not a unique body marker.
+The host exits0 unforced, its process group is absent, and the private host data
+is removed. No production data, host configuration, network rule, receiver or
+device was modified by this trial. This is Windows-originated HTTP routing to a
+retained Linux server, not a remote-LAN television probe, ordinary-stream/client
+proof, matched browser bundle, current-source build or native Windows adoption.
 A NAT rule must be refreshed if the WSL address changes; avoid a simultaneous native
 Windows listener on the same endpoint. Prefer the existing Windows-hosted route
 unless the maintainer authorizes preparing the WSL forwarding alternative.
