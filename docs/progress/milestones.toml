@@ -16808,6 +16808,22 @@ Smallest necessary work: Obtain that supported operator/control capability and r
 Testable stop condition: A supported operator-controlled pinned suitable base receiver passes every mandatory D/V3/base-X1 display/navigation/update/reveal/timed-flash and AV oracle with exact versions/settings and cleanup.
 '''
 evidence = '''
+Completed LAN handoff preparation2026-10-28: canonical
+level15-client-controls/lan-forwarding/qualification.json owns the dedicated
+opt-in ERSATZRS_TELETEXT_EXTERNAL_CLIENT_PORT isolated-host port, scoped by
+ERSATZRS_TELETEXT_EXTERNAL_CLIENT_DIR. Default suites retain ephemeral127.0.0.1. Missing
+owned-client directory, invalid port and occupied8409 all reject before host
+creation; no existing host is reused/stopped. Both default and LAN headed
+profile/preview/explicit-publication trials pass. The existing user-created
+Windows/WSL forwarding delivers an actual5577-packet ordinary stream to native
+Windows curl; that unchanged prefix passes the existing independent three-page
+attribute/AV/660Hz Dutch audio/TSDuck oracle. Owned hosts stop normally and the
+LAN test address closes afterwards. No firewall/portproxy, production database,
+television or Kodi setting changed. This closes fixture reachability, not actual
+receiver rendering/navigation/reveal/timed flash or native-Windows server proof.
+Next bounded action: prepare the already selected Kodi21.2/IPTV Simple input
+and joint base-control steps from existing source/evidence, retaining its exact
+known capability limits; run the physical trial only with the maintainer present.
 Completed ordinary control-fixture preparation2026-10-28: canonical
 tmp/phase9-next-local-teletext/level15-client-controls/qualification.json owns
 two terminal-green headed existing-host/profile/preview/explicit-publication/
@@ -16828,10 +16844,9 @@ Bluetooth keyboard access is maintainer-confirmed. Canonical Kodi identity.json
 current_base_route/base_keyboard_source records default V/I versus custom T,
 the reveal/Showl25 cycle that also gates1.5 X26, and raw-header/high-subcode
 source limitations. Source inspection is not actual screen/control proof.
-Next bounded action: connect this existing isolated fixture to the established
-Windows/WSL LAN forwarding for a later joint physical trial. No television
-access now; preserve actual remaining glyph/control/AV expectations. Historical
-ProgDVB directions below are superseded as current work; retain their evidence.
+LAN forwarding is now closed by the receipt above. No television access now;
+preserve actual remaining glyph/control/AV expectations. Historical ProgDVB
+directions below are superseded as current work; retain their evidence.
 Completed bounded source/artifact prequalification2026-10-28: canonical tmp/phase9-next-local-teletext/level15-progdvb-guided/prequalification-20261028/qualification.json retains exact previous basic/manual positives and enhancement negatives. Official ProgDVB modules/language/menu documentation establishes continuous parsing and activation/language selection, not a documented X26/G2/diacritic/G3 enhancement switch. The official Standard7.73.3 installer is downloaded and hashed without execution/installation; seven named files are extracted read-only into the isolated proof directory. Engine/UI binaries differ, so no decoder equivalence or incapability is inferred; help is byte-identical and both English tables retain identical teletext entries. No relevant capability-positive setting/fix is established, so no unchanged runtime replay or new guided session is commissioned. This closes the approved bounded prequalification action, not any missing base display/control oracle. Resume only with a relevant documented configuration/capability or suitable versioned alternative; retain existing conformance fixtures for the actual proof. No Windows settings, running clients or packages are changed.
 Current authorized package2026-10-28: first identify a documented capability-positive ProgDVB configuration or applicable existing conformance fixture. Only then perform missing fixed base display/control trials. Stop on a fixed-oracle failure and record the exact capability gap; no unchanged negative replay or external decoder maintenance. Prior operator access/basic navigation proof remains closed.
 Completed guided manual-control component (2026-10-27): canonical tmp/phase9-next-local-teletext/level15-progdvb-guided/identity.json owns the actual ordinary hls-direct stream and pinned ProgDVB Standard7.73.2/exe7.73.2.0 (2cfb5878), with immutable matched Linux host ce3d4463/site. Manual T/200 succeeds; operator-supplied200/0000 and own PID-verified201/0000 window captures show actual basic pages. The operator reports both201 and subpage20 navigation, later explicitly confirming BASE200/0020; no own subpage20 image was obtained before the bounded window ended, so retain that as operator evidence only. This closes the missing supported human-control/access prerequisite, not the full base-client gate.

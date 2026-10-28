@@ -979,6 +979,7 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
       expect(authoredPackets).toBeGreaterThan(0);
       fixture.resetSourceStart();
       writeFileSync(join(external!, 'host-ready.json'), JSON.stringify({ probe_version: 1, url, channel,
+        listen_address: isolatedWebHost.listenAddress,
         fixture_kind: clientControls ? 'level15-controls' : 'standalone-base',
         client_controls: clientControls ? { steady: [5, 8], conceal: [7, 8], flash: [9, 8], double_height: [11, 8],
           contiguous: [14, 8], separated: [15, 8], update: [17, 15], boxed: [19, 8],

@@ -18,6 +18,7 @@ type HostStop = {
 type HostRestart = { before: HostIdentity; after: HostIdentity; stop: HostStop };
 type IsolatedWebHost = {
   baseURL: string;
+  listenAddress: string;
   databasePath: string;
   processIdentity(): HostIdentity;
   restart(): Promise<HostRestart>;
@@ -81,16 +82,26 @@ export const test = base.extend<{ isolatedWebHost: IsolatedWebHost }>({
     if (!server || !site || !wrapperDb) {
       throw new Error('Isolated host requires playwright-e2e.sh host exports');
     }
+    // Manual receiver trials reuse an explicitly configured LAN forwarding
+    // port. Ordinary suites retain loopback/ephemeral isolation. Fail closed
+    // before filesystem/process creation if the dedicated opt-in is invalid.
+    const externalPort = process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_PORT;
+    if (externalPort !== undefined && (!process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_DIR
+      || !/^[0-9]{1,5}$/.test(externalPort) || Number(externalPort) < 1 || Number(externalPort) > 65535)) {
+      throw new Error('External-client port requires the owned client directory and an integer from 1 through 65535.');
+    }
+    const bindHost = externalPort === undefined ? '127.0.0.1' : '0.0.0.0';
+    const bindPort = externalPort === undefined ? 0 : Number(externalPort);
     const root = mkdtempSync(join(dirname(wrapperDb), 'storage-failure-'));
     const databasePath = join(root, 'isolated.db');
     for (const directory of ['state', 'data', 'tmp']) mkdirSync(join(root, directory));
     const listener = createServer();
     await new Promise<void>((resolve, reject) => {
       listener.once('error', reject);
-      listener.listen(0, '127.0.0.1', resolve);
+      listener.listen(bindPort, bindHost, resolve);
     });
     const address = listener.address();
-    if (!address || typeof address === 'string') throw new Error('No loopback port');
+    if (!address || typeof address === 'string') throw new Error('No owned host port');
     await new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()));
     const baseURL = `http://127.0.0.1:${address.port}`;
     // Hold this exact launch contract for initial start and every restart. The
@@ -100,7 +111,7 @@ export const test = base.extend<{ isolatedWebHost: IsolatedWebHost }>({
       ERSATZRS_DATABASE__URL: `sqlite:${databasePath}`,
       ERSATZRS_APP_STATE_DIR: join(root, 'state'), ERSATZRS_APP_DATA_DIR: join(root, 'data'),
       TMPDIR: join(root, 'tmp'), LEPTOS_SITE_ROOT: site, LEPTOS_OUTPUT_NAME: 'ersatzrs-web',
-      LEPTOS_SITE_ADDR: `127.0.0.1:${address.port}` };
+      LEPTOS_SITE_ADDR: `${bindHost}:${address.port}` };
     const stops: HostStop[] = [];
     const evidence = info.outputPath('isolated-host-stops.json');
     let host: OwnedHost | undefined;
@@ -145,7 +156,7 @@ export const test = base.extend<{ isolatedWebHost: IsolatedWebHost }>({
     };
     try {
       await start();
-      await use({ baseURL, databasePath, processIdentity, restart });
+      await use({ baseURL, listenAddress: environment.LEPTOS_SITE_ADDR, databasePath, processIdentity, restart });
     } finally {
       disposing = true;
       // Even an abandoned callback is awaited within its existing stop/start

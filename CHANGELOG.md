@@ -706,7 +706,9 @@ release section when tagging a release.
 
 - Extend the isolated Level 1.5 receiver fixture with conceal, flash, double-height
   text and mosaics, with independently checked ordinary-stream delivery and
-  selected alternate audio; keep the original fixture and production paths intact.
+  selected alternate audio. An explicit owned-client port supports existing LAN
+  forwarding; default suites remain on isolated loopback and reject occupied ports.
+  Keep the original fixture and production paths intact.
 
 - Keep implemented Level 2.5 teletext available as experimental, with localized
   notices in the authoring and preview admin. Phase 9A now
