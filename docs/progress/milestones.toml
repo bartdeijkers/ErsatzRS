@@ -952,7 +952,7 @@ both transitions, save, and reload.
 id         = 'p9a-01'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Decide the teletext product and standards contract'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p8e-03', 'p8f-01', 'dtx-a-02', 'ucu-09', 'p9a-standards']
@@ -983,7 +983,9 @@ encoding/carriage decision. ADR 0120 fixes engine-first ownership followed by
 one tvguide teletext add-on; accept the technical page and versioned add-on
 contract, validation, compatibility, bounded refresh/publication, restart and
 visible stale/last-good/failure policy. Full-page support is required. This
-standards gate remains open despite acceptance of the ownership decision.
+standards gate requires the technical decisions as well as ownership;
+p9a-standards owns the unchanged clause/source classification. Actual product,
+runtime and suitable-client proof remains required at its primary P9A-04 owners.
 ADR0123 retains the implemented Level2.5 model/encoding/interchange as experimental; its
 remaining enhanced-only audit/conformance/client acceptance is Deferred under the
 latest2026-10-28 maintainer decision. Complete the applicable Level1/1.5 standards and
@@ -992,6 +994,24 @@ display/navigation remain required. Optional external-editor compatibility must 
 accurately scoped.
 '''
 evidence = '''
+Completed accepted-decision component2026-10-28: canonical provider-scan/
+identity.json case_reconciliation_followup.contract_gate_closeout maps every
+unchanged P9A-01 decision clause to accepted ADRs0120/0121/0122/0123 and the
+already Complete p9a-standards S1/S2/S3 classification, which explicitly owns
+P9A-01 entire acceptance. All five typed prerequisites are Complete. Accepted
+technical ADR06b3a923 precedes source-metadata migration24764d1b; source inventory,
+source-output and accepted UCU12 revalidation retain their scoped receipts.
+The contract covers source captions/full pages/generated pages, output/carriage/
+browser/accessibility, exact source selection and listener/API boundaries,
+programme context, versioned typed add-on/validation, bounded publication/stale/
+restart, profiles/themes/zones/adminLua and generic file/native interchange.
+Latest explicit scope amendments retain mandatory complete1/1.5/shared proof,
+experimental2.5 and optional QTM; no requirement is waived by this closure.
+This closes the product/standards decision gate only. ADR implementation remains
+Partial. Actual four-header independent proof, joint suitable-client control and
+managed production adoption retain their Blocked primary owners; P9A-04/level15/
+final-gate and9B are not accepted. Earlier not-complete/next-action chronology
+below remains historical and does not reopen this completed contract component.
 Maintainer amendment2026-10-28 (ADR0123; canonical decision checks at tmp/phase9-editor-optional-decision/qualification.json): QTM is an optional example editor, not a required component or9A gate. Generic complete native authoring, supported lossless TTI/sidecars, identities/navigation, metadata/zones, protection, concepts/preview/publication/reopen and full2.5/fallback remain required. Retain every scoped QTM positive/negative; wait changed upstream without local extension work. The X1 deferral is lifted only for bounded source/documentation-first qualification, retaining unchanged fixed oracles and all device/maintenance exclusions. Runtime publication remains separately authorized.
 Current work and clause ownership are the ordinary finite packages indexed
 in P9A-04. The following chronology preserves scoped receipts and negatives;
@@ -2278,7 +2298,7 @@ same-process reload gates passed with ErsatzRS FFmpeg 9 on Windows and WSL/Linux
 id         = 'p9a-02'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Package and probe teletext decoding'
-status     = 'In progress'
+status     = 'Blocked'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-01', 'p9a-windows-package', 'p9a-platform-safety', 'p9a-managed-adoption']
@@ -2302,6 +2322,9 @@ acquisition and probes. UCU-specific platform/hardware exceptions do not waive
 these teletext gates without a separate accepted decision.
 '''
 evidence = '''
+Current2026-10-28 runtime aggregate is Blocked on p9a-managed-adoption.
+The decision contract and completed candidate/platform/package components remain
+closed; actual approved production selection and final adopted-byte gates remain.
 Current work and clause ownership are the ordinary finite packages indexed
 in P9A-04. The following chronology preserves scoped receipts and negatives;
 its earlier Next/NextAction/next-step wording is historical, not executable
@@ -2393,7 +2416,7 @@ pending; source changes are not package or Phase 9 acceptance.
 id         = 'p9a-03'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Scan and persist teletext services and pages'
-status     = 'In progress'
+status     = 'Blocked'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-02', 'p9a-source-inventory']
@@ -2408,6 +2431,9 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+Current2026-10-28 scanner aggregate is Blocked on runtime owner p9a-02.
+Its source-inventory/metadata component is already Complete; no new scan variant
+is queued. Runtime/managed adoption remains required before this aggregate closes.
 Current functional inventory component: p9a-source-inventory is Complete; SI4 binds all unchanged scan/persistence/identity/provenance clauses to canonical SI1..3, alias/page and genuine native receipts. This is evidence classification, no new implementation or broad runtime claim. P9A-03 remains In progress behind its unchanged p9a-02 dependency for accepted runtime/platform delivery. Source-output and authored/charset/display/client acceptance retain their existing owners.
 
 Current work and clause ownership are the ordinary finite packages indexed

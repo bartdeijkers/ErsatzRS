@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-01 — Close the accepted product/standards decision component'
+current_focus = 'Phase 9A handoff — Keep the current direction unambiguous'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -122,13 +122,19 @@ candidate-tag404 and eight archive differences from explicit published baselines
 All local qualification components stay closed. Managed adoption is Blocked on
 maintainer public-tag/asset policy and publication/adoption authority plus final
 adopted-byte gates; no current source override or metadata check adopts it.
-Current package: existing p9a-01 accepted product/standards decision component.
-Next finite action: compare that unchanged decision acceptance with accepted
-ADRs0120/0121/0123 and completed standards/source-inventory evidence. Close the
-contract component only if every decision clause is already satisfied; retain
-actual engine/client/runtime acceptance under its existing primary owners.
-This is targeted closure of an existing open gate, not a new scope audit or
-permission to change any requirement.
+Completed P9A-01 decision gate: the accepted technical ADRs, completed standards
+S1/S2/S3 clause ownership and five completed prerequisites satisfy that contract
+component. Canonical identity.json case_reconciliation_followup.contract_gate_closeout
+retains source hashes/chronology and every remaining primary proof owner.
+P9A-02/03 are dependency-blocked aggregates, not new runtime/scanner variant work.
+Current package: existing Phase9A handoff correctness under the authorized regie
+scope. A fresh progress-next query printed historical SO4 next-action paragraphs
+alongside the current direction; next_steps/handoff text totals over300k characters.
+Next finite action: make the existing current-step record/query unambiguous while
+preserving exact historical source/evidence and parallel edits. Reuse the existing
+format/tool; add only the smallest necessary presentation support and focused
+regressions. Stop when default next reports one current direction and historical
+handoff remains explicitly retrievable; no product/acceptance requirement changes.
 
 The four independent base raw-header negatives remain author-base-owned; do not
 normalize them or begin external decoder maintenance. Production adoption retains
