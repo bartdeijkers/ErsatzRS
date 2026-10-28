@@ -17347,6 +17347,15 @@ open until the required shared final gate closes; enhanced-only acceptance is De
 and does not block them.
 '''
 evidence = '''
+Completed mandatory CI selection correction2026-10-28: canonical provider-scan/
+identity.json experimental_base_ci_followup reproduces the concrete shared
+profile test being wrongly assigned to the now optional2.5 job. Generic
+native-binary/authored-service names no longer imply enhanced-only ownership;
+the exact standalone_base family overrides incidental resource terms. Existing
+native binary metadata retains497 test identities with exactly one owner:
+322 common/base cases now mandatory1.5,175 named enhanced cases optional2.5.
+This is filter/coverage metadata verification, not execution of497 tests or
+fresh full CI. Existing source/decoder/client oracles and tests remain unchanged.
 Current2026-10-28 boundary: generic base authoring/interchange remains required; existing EB1/EB2 QTM evidence is reusable but the brand is not a dependency. All independent/client/AV/platform gates remain.
 Status: Not started. Exact remaining gap: Standalone L15 is not accepted. Base repertoire/editor/lifecycle/source-output/localized workflow/client/platform/adoption proof all remain required beyond the completed scoped components.
 Reuse: All Complete components and primary base packages above, canonical standalone_level15_followup and historical base receipts; no full-chain replay solely for chronology.

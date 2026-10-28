@@ -315,6 +315,11 @@ binary names are matched as well as test names, so unnamed tests in teletext
 integration targets are retained on both runner pools.
 
 Shared infrastructure and unclassified teletext tests default to the 1.5 job.
+Generic authored-service and `teletext_profile_preparation` binary names do not
+make every contained test enhanced-only. The standalone-base family stays in
+1.5 even when a test name mentions forbidden optional resources; named enhanced
+families remain in the optional 2.5 selector. Mixed/shared validation guards can
+still exercise experimental data without establishing enhanced conformance.
 The 2.5 job owns the named enhanced object/resource/DRCS/palette/panel/context
 families, including their Level 1/1.5 fallback assertions. This is CI ownership,
 not a claim that either level has passed product acceptance. A change to shared

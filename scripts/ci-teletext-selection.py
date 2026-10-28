@@ -16,8 +16,9 @@ ENHANCED = (
     r"composed_main|main_composition|origin_carrier|normalized_editorial|"
     r"augmented_origin|display_resolution|attribute_execution|attribute_observation|"
     r"enhancement_program|enhancement_objects|editorial_tti|editorial_effects|"
-    r"compatibility_lowering|physical_spacing|authored_service|level_?2_?5"
+    r"compatibility_lowering|physical_spacing|level_?2_?5"
 )
+BASE_REQUIRED = r"(^|::)standalone_base::"
 ENHANCED_SPECS = (
     "teletext-bank-dependencies",
     "teletext-definition-add",
@@ -55,7 +56,10 @@ TELETEXT_RUNTIME_RECOVERY_CASES = (
 
 def rust_filter(suite, next_runtime=False):
     teletext = f"(test(/{TELETEXT}/) | binary(/{TELETEXT}/))"
-    enhanced = f"(test(/{ENHANCED}/) | binary(=teletext_profile_preparation))"
+    # Generic authored-service and integration-binary names also contain base
+    # and shared guards. Classify features, retaining the explicit standalone
+    # family even when its test name mentions forbidden optional resources.
+    enhanced = f"(test(/{ENHANCED}/) & not test(/{BASE_REQUIRED}/))"
     next_engine = "(test(next_engine::) | test(transport::iptv::next_media::))"
     if suite == "general":
         return f"not test(next_engine::) & not {teletext}"

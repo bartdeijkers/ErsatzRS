@@ -708,7 +708,8 @@ release section when tagging a release.
   notices in the authoring and preview admin. Phase 9A now
   requires fully verified Level 1/1.5 and shared playback/platform safeguards;
   remaining enhanced-only acceptance waits for a new maintainer task. Level 2.5
-  Rust and browser CI jobs are opt-in; general and Level 1.5 checks remain required.
+  Rust and browser CI jobs are opt-in; general and Level 1.5 checks remain required,
+  including shared native integration and standalone-base guards.
 
 - Treat QTeletextMaker as an optional external editor for teletext authoring.
   Keep generic lossless TTI/metadata workflows independent of upstream editor

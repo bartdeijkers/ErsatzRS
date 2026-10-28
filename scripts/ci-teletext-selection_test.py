@@ -22,6 +22,55 @@ def owners(path):
             if re.search(selection.browser_filter(suite), path)]
 
 
+class RustOwnership(unittest.TestCase):
+    @staticmethod
+    def selected(suite, name, binary, next_runtime=False):
+        # Evaluate the actual emitted nextest predicates on real and intentionally synthetic shared
+        # identities, without compiling or executing those Rust test bodies.
+        expression = selection.rust_filter(suite, next_runtime=next_runtime)
+        expression = re.sub(r"(test|binary)\(/(.*?)/\)", lambda m: str(bool(
+            re.search(m[2], name if m[1] == "test" else binary))), expression)
+        expression = re.sub(r"(test|binary)\(([^()]*)\)", lambda m: str(
+            (name if m[1] == "test" else binary) == m[2][1:] if m[2].startswith("=")
+            else m[2] in (name if m[1] == "test" else binary)), expression)
+        return bool(eval(expression.replace("&", " and ").replace("|", " or "),
+                         {"__builtins__": {}}, {}))
+
+    def test_native_shared_and_standalone_checks_remain_required(self):
+        cases = (
+            ("native_profile_preparation_keeps_simultaneous_channels_isolated", "teletext_profile_preparation"),
+            ("client_capture::installed_originals_pending_request_capture_actual_direct_mpegts_for_client_trial", "teletext_profile_preparation"),
+            ("teletext::authored_service_tests::standalone_base::standalone_spacing_and_level15_x26_compile_without_optional_resource_banks", "ersatzrs_ffmpeg"),
+            ("teletext::authored_service_tests::standalone_base::standalone_conceal_reveal_and_flash_phases_preserve_essential_base_pixels", "ersatzrs_ffmpeg"),
+            ("teletext::authored_service_tests::new_shared_base_guard", "ersatzrs_ffmpeg"),
+        )
+        for name, binary in cases:
+            with self.subTest(name=name):
+                self.assertTrue(self.selected("1.5", name, binary))
+                self.assertFalse(self.selected("2.5", name, binary))
+                self.assertFalse(self.selected("general", name, binary))
+                self.assertTrue(self.selected("all", name, binary))
+
+    def test_named_enhanced_families_stay_optional_and_disjoint(self):
+        for name, binary in (
+            ("editorial_imports::resource_interchange::original_pop_fragments_import_publish_repeat_undo_reopen_preserves_all_consumers", "teletext_profile_preparation"),
+            ("teletext::authored_service_tests::drcs::normal_table", "ersatzrs_ffmpeg"),
+            ("teletext::authored_service_tests::physical_spacing::original_width", "ersatzrs_ffmpeg"),
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(self.selected("1.5", name, binary))
+                self.assertTrue(self.selected("2.5", name, binary))
+                self.assertFalse(self.selected("general", name, binary))
+                self.assertTrue(self.selected("all", name, binary))
+
+    def test_ordinary_and_next_runtime_ownership_is_preserved(self):
+        self.assertTrue(self.selected("general", "media_is_unchanged", "ersatzrs_web"))
+        name = "next_engine::process::runtime_tests::teletext_caption_output"
+        self.assertFalse(self.selected("1.5", name, "ersatzrs_infra"))
+        self.assertTrue(self.selected("1.5", name, "ersatzrs_infra", next_runtime=True))
+        self.assertFalse(self.selected("next", name, "ersatzrs_infra"))
+
+
 class BrowserOwnership(unittest.TestCase):
     def test_every_current_spec_has_exactly_one_owner(self):
         specs = list((ROOT / "tests/e2e").rglob("*.spec.ts"))
