@@ -15,6 +15,9 @@ use ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncod
 #[path = "mot_retirement/populated.rs"]
 mod populated;
 
+#[path = "mot_retirement/secondary_defaults.rs"]
+mod secondary_defaults;
+
 const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_MOT_RETIREMENT_DIR";
 
 fn response(theme: &str, page: u16, subcode: u16) -> Value {

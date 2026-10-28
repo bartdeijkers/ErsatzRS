@@ -2016,8 +2016,13 @@ silently replace that native-only choice.
 The localized current-draft form makes original/no-second/designated consent
 explicit. Its native POST creates a fresh server-owned receipt and rechecks
 channel, head and protected effects; observed producer ordinals grant no rights.
-Historical controls are disabled, and publication remains a separate action. Legacy companions without the field
-remain valid; explicit null and unknown intent fail closed.
+Historical controls are disabled, and publication remains a separate action.
+The verified authoring order resolves the agreement before adding an
+ESC-dependent row: choose explicitly, re-export the current concept, then edit
+and import. An unbound original retains its located `DecoderDependentSecondary`
+refusal; choosing a context does not rewrite that original provenance. Legacy
+companions without the field remain valid; explicit null and unknown intent
+fail closed.
 
 ### Required unused-object-copy removal
 
