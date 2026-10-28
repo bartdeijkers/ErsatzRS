@@ -4,14 +4,15 @@
 
 use super::super::super::client_capture;
 use super::super::drcs_bitmap_delivery::captured_units;
-use ersatzrs_ffmpeg::teletext::source_header::{
-    observe_dvb_teletext_header, TeletextHeaderObservation,
+use ersatzrs_ffmpeg::teletext::{
+    source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyEvent},
+    source_header::{observe_dvb_teletext_header, TeletextHeaderObservation},
 };
 use futures_util::FutureExt as _;
 use serde_json::{json, Value};
-use std::{io::Write as _, panic::AssertUnwindSafe, path::Path};
+use std::{collections::VecDeque, io::Write as _, panic::AssertUnwindSafe, path::Path};
 
-fn cells(controls: bool) -> Vec<Value> {
+fn cells(controls: bool, updated: bool) -> Vec<Value> {
     let steady = json!([0, 0, false, false, false, false]);
     let cell = |row, column, expected: Value, attributes: Value| {
         json!({"row":row,"column":column,"l1":expected,"l15":expected,"l25":expected,
@@ -47,7 +48,12 @@ fn cells(controls: bool) -> Vec<Value> {
             (12, 8, json!([68, 15, 0, 7, 0, 2]), steady.clone()),
             (14, 8, json!([127, 24, 0, 5, 0, 0]), steady.clone()),
             (15, 8, json!([127, 25, 0, 6, 0, 0]), steady.clone()),
-            (17, 15, json!([65, 15, 0, 7, 0, 0]), steady.clone()),
+            (
+                17,
+                15,
+                json!([if updated { 66 } else { 65 }, 15, 0, 7, 0, 0]),
+                steady.clone(),
+            ),
             (
                 19,
                 8,
@@ -61,15 +67,20 @@ fn cells(controls: bool) -> Vec<Value> {
     result
 }
 
-fn acquisition(units: &[Vec<u8>], page: u16, subcode: u16) -> (usize, usize) {
+fn acquisition(units: &[Vec<u8>], page: u16, subcode: u16, last: bool) -> (usize, usize) {
     let mut first = None;
+    let mut complete = None;
     for (index, unit) in units.iter().enumerate() {
         let unit: &[u8; 46] = unit.as_slice().try_into().unwrap();
         match observe_dvb_teletext_header(unit).unwrap() {
             TeletextHeaderObservation::Header(header)
             | TeletextHeaderObservation::Terminator(header) => {
-                if let Some(first) = first {
-                    return (first, index + 1); // Include the actual closing header, never synthesize one.
+                if let Some(start) = first.take() {
+                    // Include the actual closing header, never synthesize one.
+                    complete = Some((start, index + 1));
+                    if !last {
+                        return (start, index + 1);
+                    }
                 }
                 if header
                     .display_page()
@@ -87,7 +98,41 @@ fn acquisition(units: &[Vec<u8>], page: u16, subcode: u16) -> (usize, usize) {
             }
         }
     }
-    panic!("missing complete captured page {page}/{subcode:04x}");
+    complete.unwrap_or_else(|| panic!("missing complete captured page {page}/{subcode:04x}"))
+}
+
+// The first and final page windows keep the existing512-unit bound. Decode
+// every PES envelope across the full finite capture, retaining only the tail;
+// AV/TSDuck still inspect all bytes. Never raise an observation/time limit.
+fn last_units(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
+    let mut units = VecDeque::with_capacity(512);
+    for packet in bytes.chunks_exact(188) {
+        if let TeletextAssemblyEvent::Complete(pes) =
+            assembler.push(packet.try_into().unwrap()).unwrap()
+        {
+            for unit in pes.units().filter_map(|unit| unit.teletext_unit()) {
+                if units.len() == 512 {
+                    units.pop_front();
+                }
+                units.push_back(unit.to_vec());
+            }
+        }
+    }
+    assembler.finish().unwrap();
+    assert!(!units.is_empty());
+    units.into_iter().collect()
+}
+
+fn cases(units: &[Vec<u8>], controls: bool, updated: bool) -> (Vec<Value>, Vec<Value>) {
+    let mut boundaries = Vec::new();
+    let cases = [(200, 0), (200, 32), (201, 0)].into_iter().map(|(page, subcode)| {
+        let (first, end) = acquisition(units, page, subcode, updated);
+        boundaries.push(json!({"page":page,"subcode":subcode,"first":first,"end":end,"updated":updated}));
+        json!({"name":format!("base_client_{page}_{subcode}_{updated}"),"page":if page==200 {0x200} else {0x201},
+            "subcode":subcode,"units":&units[first..end],"cells":cells(controls, updated)})
+    }).collect();
+    (cases, boundaries)
 }
 
 fn save(directory: &Path, name: &str, value: &Value) {
@@ -116,18 +161,32 @@ async fn ordinary_client_controls_capture_preserves_base_attributes_and_selected
             "standalone-base"
         }
     );
-    let capture = directory.join("ordinary-prefix.ts");
+    let updated = directory.join("host-update-complete.json").exists();
+    if updated {
+        assert!(controls);
+        let update: Value = serde_json::from_slice(
+            &std::fs::read(directory.join("host-update-complete.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(update["url"], ready["url"]);
+        assert_eq!(update["before_generation"], ready["generation_id"]);
+        assert_ne!(update["generation"], update["before_generation"]);
+    }
+    let capture = directory.join(if updated {
+        "ordinary-live.ts"
+    } else {
+        "ordinary-prefix.ts"
+    });
     let metadata = std::fs::symlink_metadata(&capture).unwrap();
     assert!(metadata.is_file() && (188..=8 * 1024 * 1024).contains(&metadata.len()));
     let bytes = std::fs::read(&capture).unwrap();
     let units = captured_units(&bytes);
-    let mut boundaries = Vec::new();
-    let cases: Vec<_> = [(200, 0), (200, 32), (201, 0)].into_iter().map(|(page, subcode)| {
-        let (first, end) = acquisition(&units, page, subcode);
-        boundaries.push(json!({"page":page,"subcode":subcode,"first":first,"end":end}));
-        json!({"name":format!("base_client_{page}_{subcode}"),"page":if page==200 {0x200} else {0x201},
-            "subcode":subcode,"units":&units[first..end],"cells":cells(controls)})
-    }).collect();
+    let (mut cases, mut boundaries) = cases(&units, controls, false);
+    if updated {
+        let (changed, changed_boundaries) = self::cases(&last_units(&bytes), controls, true);
+        cases.extend(changed);
+        boundaries.extend(changed_boundaries);
+    }
     let request = json!({"expected_version":"0.2.0","cases":cases});
     let proof = directory.join("native-proof");
     std::fs::create_dir(&proof).unwrap();
@@ -140,6 +199,7 @@ async fn ordinary_client_controls_capture_preserves_base_attributes_and_selected
         &json!({"independent_decoder":report,"page_boundaries":boundaries,
         "transport":"passed","source_video":"literal calibration frame preserved","selected_audio":audio,
         "tone_hz":if controls {660} else {440},"negative_flags":if controls {2} else {0},
+        "update":updated,"capture_bytes":bytes.len(),
         "scope":"Base attributes/AV preparation only; existing oracle also checks advanced decoder mode on the same base pages. No physical client, timed flash/reveal or full1.5 acceptance."}),
     );
 }
@@ -156,7 +216,10 @@ async fn verify_decoder(request: &Value, controls: bool) -> Value {
     )
     .await;
     let report: Value = serde_json::from_slice(&report).unwrap();
-    assert_eq!(report["cases_passed"], 3);
+    assert_eq!(
+        report["cases_passed"],
+        json!(request["cases"].as_array().unwrap().len())
+    );
     if controls {
         for (row, attribute, expected_text) in [(7, 2, "attributes 7,8"), (9, 0, "attributes 9,8")]
         {
@@ -244,6 +307,7 @@ async fn verify_av(directory: &Path, proof: &Path, bytes: &[u8], controls: bool)
             "-v",
             "error",
             "-show_streams",
+            "-count_packets",
             "-of",
             "json",
             "-f",

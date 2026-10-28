@@ -708,7 +708,9 @@ release section when tagging a release.
   text and mosaics, with independently checked ordinary-stream delivery and
   selected alternate audio. An explicit owned-client port supports existing LAN
   forwarding; default suites remain on isolated loopback and reject occupied ports.
-  Receiver preparation follows the actual Kodi playlist-advertised TS URL.
+  Receiver preparation follows the actual Kodi playlist-advertised TS URL and
+  supports an explicit publication update on the same open response without
+  changing the installed package or selected profile.
   Keep the original fixture and production paths intact.
 
 - Keep implemented Level 2.5 teletext available as experimental, with localized

@@ -213,11 +213,15 @@ export class TeletextChannelFixture {
       throw error;
     }
     const producerScript = options.editorPages ? authoredScript.replace('teletext.pages.v2', 'teletext.pages.v3') : authoredScript;
-    this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? producerScript : scriptBody));
+    // A receiver update models mutable upstream data outside the immutable
+    // installed package, as in the native standalone live-update fixture.
+    const clientScript = this.clientControls ? producerScript.replace('"response-$theme.json"', '"../client-response-$theme.json"') : producerScript;
+    this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? clientScript : scriptBody));
     if (this.authoredPages) {
       for (const theme of ['day', 'night'] as const) {
         const response = options.standaloneLevel15 ? standalonePages(theme, this.clientControls) : options.editorPages ? editorPages(theme, options.editorOperand) : themedPages(theme);
         this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(response)));
+        if (this.clientControls) writeFileSync(join(this.root, `client-response-${theme}.json`), JSON.stringify(response));
       }
     }
     for (const [name, body] of this.packageFiles) writeFileSync(join(this.packagePath, name), body, { mode: 0o644 });
@@ -422,6 +426,17 @@ export class TeletextChannelFixture {
     if (!existsSync(path)) return [];
     const value = readFileSync(path, 'utf8');
     return this.authoredPages ? value.trim().split('\n').filter(Boolean) : value.match(/invoked/g) ?? [];
+  }
+
+  prepareClientUpdate(): void {
+    if (!this.clientControls) throw new Error('Client update requires the owned standalone control fixture.');
+    const service = JSON.parse(this.packageFiles.get('response-day.json')!.toString('utf8'));
+    for (const page of service.pages) {
+      const row = page.rows.find((value: { row: number }) => value.row === 17);
+      if (row.runs[0].content.text !== 'UPDATE A') throw new Error('Unexpected original client update sentinel.');
+      row.runs[0].content.text = 'UPDATE B';
+    }
+    writeFileSync(join(this.root, 'client-response-day.json'), JSON.stringify(service));
   }
 
   request(theme: 'day' | 'night'): Record<string, unknown> | undefined {

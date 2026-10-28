@@ -949,6 +949,12 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
       { authoredPages: true, standaloneLevel15: true, clientControls, playback: { ffmpeg: process.env.FFMPEG_PATH!,
         durationSeconds: process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_HOLD_SECONDS ? holdSeconds : 60 } });
     fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
+    if (clientControls) {
+      const path = fileURLToPath(new URL('../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl));
+      const policy = JSON.parse(readFileSync(path, 'utf8'));
+      policy.version = 2; policy.live_updates = { poll_interval_ms: 25, recovery_timeout_ms: 2000 };
+      fixture.setOutputPolicy(JSON.stringify(policy));
+    }
     const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, viewport: { width: 1280, height: 900 } });
     const page = await context.newPage(); const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -964,7 +970,12 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
       await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
       await raster(page, 'day', '200');
       await page.screenshot({ path: testInfo.outputPath('external-client-publication.png') });
-      const safe = restartSafety(fixture);
+      let safe = restartSafety(fixture);
+      const profiles = fixture.profiles();
+      const binding = fixture.binding(channel);
+      const currentGeneration = () => (fixture.database.prepare('SELECT "GenerationId" FROM "TeletextAcceptedGenerationCurrent" WHERE "ChannelId"=?').get(channel) as { GenerationId: number }).GenerationId;
+      const initialGeneration = currentGeneration();
+      let updated = false;
       copyFileSync(join(fixture.root, 'synthetic-client-source.ts'), join(external!, 'source.ts'));
       fixture.resetSourceStart();
       let url = `${isolatedWebHost.baseURL}/iptv/hls-direct/${channel}.ts`;
@@ -990,19 +1001,53 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
       expect(authoredPackets).toBeGreaterThan(0);
       fixture.resetSourceStart();
       writeFileSync(join(external!, 'host-ready.json'), JSON.stringify({ probe_version: 1, url, channel,
-        listen_address: isolatedWebHost.listenAddress,
+        listen_address: isolatedWebHost.listenAddress, generation_id: initialGeneration,
+        publication_update: clientControls ? { request: 'client-update-publish.json', result: 'host-update-complete.json',
+          requires: { probe_version: 1, url, expected_generation_id: initialGeneration, publish: true }, from: 'UPDATE A', to: 'UPDATE B' } : null,
         fixture_kind: clientControls ? 'level15-controls' : 'standalone-base',
         client_controls: clientControls ? { steady: [5, 8], conceal: [7, 8], flash: [9, 8], double_height: [11, 8],
           contiguous: [14, 8], separated: [15, 8], update: [17, 15], boxed: [19, 8],
           source_audio: ['eng:440Hz', 'nld:660Hz'], selected_audio: 'nld',
           keyboard_defaults: { open: 'V', reveal: 'I', pages: 'Up/Down', subpages: 'Left/Right' } } : null,
         host: isolatedWebHost.processIdentity(), scope: 'Real ordinary standalone base URL; native rendering/navigation acceptance is separate.' }, null, 2));
-      await expect.poll(() => existsSync(join(external!, 'client-complete.json')), { timeout: holdSeconds * 1000 }).toBe(true);
+      await expect.poll(async () => {
+        const update = join(external!, 'client-update-publish.json');
+        if (clientControls && !updated && existsSync(update)) {
+          expect(JSON.parse(readFileSync(update, 'utf8'))).toEqual({ probe_version: 1, url, expected_generation_id: initialGeneration, publish: true });
+          const before = publicationRows(fixture);
+          fixture.prepareClientUpdate();
+          expect(fixture.unchangedPackage()).toBe(true);
+          await prepare(page, fixture, 'Explicit external base update', true);
+          await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), true);
+          expect(currentGeneration()).toBe(initialGeneration);
+          await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), true);
+          const generation = currentGeneration();
+          expect(generation).not.toBe(initialGeneration);
+          const after = publicationRows(fixture);
+          for (const index of [0, 2]) {
+            expect(after[index]).toHaveLength(before[index].length + 1);
+            expect(after[index].slice(0, before[index].length)).toEqual(before[index]);
+          }
+          expect(after[1]).toHaveLength(before[1].length); expect(after[3]).toHaveLength(before[3].length);
+          expect(after[3]).toEqual([{ ChannelId: channel, GenerationId: generation }]);
+          expect(after[1]).toEqual([{ ChannelId: channel, RequestId: (after[0].at(-1) as { Id: number }).Id }]);
+          const changed = restartSafety(fixture);
+          const stable = (value: unknown) => { const { publication: _history, ...rest } = value as Record<string, unknown>; return rest; };
+          expect(stable(changed.snapshot)).toEqual(stable(safe.snapshot));
+          expect(changed.workerEpoch).toBe(safe.workerEpoch);
+          expect(fixture.profiles()).toEqual(profiles); expect(fixture.binding(channel)).toEqual(binding);
+          expect(fixture.unchangedPackage()).toBe(true); safe = changed; updated = true;
+          writeFileSync(join(external!, 'host-update-complete.json'), JSON.stringify({ probe_version: 1, url,
+            before_generation: initialGeneration, generation, publication: after,
+            scope: 'Explicit same-profile publication only; receiver observation is separate.' }, null, 2));
+        }
+        return existsSync(join(external!, 'client-complete.json'));
+      }, { timeout: holdSeconds * 1000 }).toBe(true);
       const completed = JSON.parse(readFileSync(join(external!, 'client-complete.json'), 'utf8'));
       expect(completed).toMatchObject({ probe_version: 1, url, owned_client_closed: true });
       expect(restartSafety(fixture)).toEqual(safe);
-      expect(fixture.calls()).toEqual(['day']); expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
-      writeFileSync(join(external!, 'host-success.json'), JSON.stringify({ url, channel, errors,
+      expect(fixture.calls()).toEqual(updated ? ['day', 'day'] : ['day']); expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
+      writeFileSync(join(external!, 'host-success.json'), JSON.stringify({ url, channel, errors, updated,
         scope: 'Owned host/profile/publication/ordinary-prefix/state proof only; completion marker does not certify the external renderer.' }, null, 2));
     } finally { await context.close(); fixture.close(); }
   });
