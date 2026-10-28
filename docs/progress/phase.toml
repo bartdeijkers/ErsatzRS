@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-client-base — Joint Level1/1.5 receiver trial readiness'
+current_focus = 'p9a-client-base — Close the remaining original G3 display witness'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,40 +62,32 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-client-base — joint Level1/1.5 receiver trial.
-Next finite action: when the maintainer is present, record installed Kodi21.2,
-IPTV Simple and inputstream versions/settings, then run the prepared joint
-control protocol in canonical tmp/phase9-next-local-teletext/level15-client-controls/
-live-publication/qualification.json. Use the existing600s human hold only after
-operator readiness. No physical-device trial while the maintainer is away.
+Current package: p9a-client-base — remaining original G3 display witness.
+Next finite action: obtain the original code47 G3 shape observation on the
+existing200/0000 ordinary page, with any necessary installed-state recording,
+while the maintainer is available. Do not repeat completed controls or expand
+into repertoire/editor variants. Keep known header/high-subcode capability
+limits explicit; the representative joint result is not all-base conformance.
 
-Completed preparation: actual playlist -> ordinary Legacy TS -> independent
-base pages, source video and selected Dutch audio; explicit UPDATE A->B on one
-Windows response, strict whole-capture transport and joined cleanup. The original
-English/default capture and all prior closed components remain reusable.
+Complete within scope: actual Android GoogleTV/Kodi21.2, IPTV Simple21.11.0,
+FFmpeg Direct21.3.8 ordinary AV,200/201 and0020 navigation, requested national/X26
+glyphs, Info reveal, timed flash/steady, double height, contiguous/separated
+mosaics/box, retained-player UPDATE A->B and return-to-AV/client stop. Canonical
+level15-client-controls/joint-kodi-20261028/qualification.json retains the first
+600s handshake timeout and successful observations; joint-kodi-navigation-20261028/
+qualification.json owns the second headed exit0, safety guards and joined cleanup.
+No source/fixture/runtime changed; reuse existing whole-response transport/AV/
+independent proof. All own processes are terminal and8409 is free.
 
-External prerequisites, not parallel internal work: author-base retains four
-fixed independent raw-header observations; available pinned decoders and the
-installed TSDuck body-only interface cannot close them. Resume only with relevant
-changed capability or explicit maintainer direction. Managed adoption retains
-approved public tag/asset mapping, publication authority and final adopted-byte
-gates. Qualified local components remain closed; no source override is accepted
-as production repair. These primary owners retain their exact canonical evidence.
-
-P9A-01's accepted decision contract is Complete. Runtime/scanner aggregates are
-blocked on their existing dependencies. Final1.5/9A closeout follows the remaining
-required owners; no substitute glyph/editor variants or unchanged negative
-client replays are queued. Existing Level2.5 stays experimental with optional CI;
-resume enhanced-only work only on a new task. Preserve Mac/nativeARM deferrals,
-all evidence and parallel edits. Push or publish nothing.
-
-Checkpoint metadata is repaired under the unchanged commit policy. Every code
-tree, author/committer and message wording is preserved; scopes and one body
-line-wrap are normalized. Canonical provider-scan/commit-scope-repair/full-range.json
-maps retained original proof SHAs to the corrected local chain. Both original
-chains remain reachable under phase9a-before-commit-scope-repair-20261028 and
-phase9a-before-full-commit-policy-repair-20261028. This is local commitlint proof,
-not a source push or a fresh full CI run.
+External prerequisites retain their primary owners: author-base's four original
+independent raw-header observations require relevant changed decoder capability
+or explicit maintainer direction. Managed adoption requires approved public tag/
+asset mapping, publication authority and final adopted-byte gates; local candidate
+components stay closed. No source override is accepted as production adoption.
+P9A-01 decision contract is Complete; final gates follow remaining required owners.
+Existing2.5 remains experimental, enhanced-only proof Deferred, and dedicated2.5
+CI optional. Preserve Mac/nativeARM deferrals, original proof SHAs/backup refs,
+parallel edits and all negative evidence. Push or publish nothing.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

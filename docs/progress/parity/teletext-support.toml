@@ -48,17 +48,18 @@ native and adoption differ.
 Closed candidate components: Linux/Windows installer/Health/TS and cached HLS (124 TSDuck/six AV proofs, managed-current-candidates/hls-live-qualification).
 Promotion preparation closed; publication/adopted-byte gates remain.
 EE5/client control and M29 author/admin closed: author-action/,admin/qualification.json.
-Handover/editor closed; receiver blocked.
+Handover/editor and scoped joint receiver controls closed; remaining client
+proof retains p9a-client-base ownership.
 Base lifecycle is closed; quota/cancellation/native receivers
 and accepted four-RID/platform/adoption joins retain owners. Authorized Windows
 clean34e04/cdf06813 package passes36 admin/32 Health/64 localized cases and
 ordinary gates. macOS stays deferred under ADR0121.
 
-Base stream/X26/navigation/update/reveal/timedflash remains unqualified.
-No DVBViewer. Kodi21.2 shares retained21.3 decoder hashes/Local/DRCS/panel blockers;
-no full2.5 success expectation. The gated joint physical final now concerns1/1.5;
-enhanced-only readiness is not a prerequisite. Full2.5 X1 work is Deferred until a new task; optional X3 waits upstream QTM.
-No unchanged retries, decoder maintenance or waiver. Four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
+Actual Kodi21.2 representative base receiver controls Complete; remaining
+G3/capability proof: p9a-client-base. No all-base conformance claim.
+No DVBViewer. Known Kodi limitations remain with client owners; full2.5 X1
+is Deferred until a new task and optional X3 waits upstream. No unchanged
+retries, decoder maintenance or waiver. Four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
 checks remain with their existing owners.
 Production guide follows independently accepted revised9A; Phase10 followsP9B-02.
 '''
