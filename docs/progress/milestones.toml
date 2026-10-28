@@ -16357,6 +16357,21 @@ Smallest necessary work: Complete the r1-named existing base repertoire/conversi
 Testable stop condition: All reconciled base A1/A2/F3/V1 cells preserve original context and essential fallback and pass exact glyph/attribute/position/conversion oracles; raw-coded success alone never establishes logical Unicode conversion.
 '''
 evidence = '''
+Completed installed-tool header eligibility assessment2026-10-28: canonical
+provider-scan/ab5-decoder-capability-20261028/tsduck-header-capability/qualification.json
+pins observed TSDuck3.44-4676 help and four exact public release source files.
+The teletext plugin exports SRT body lines; its demux consumes header controls
+without storing row0 characters and emits only boxed rows1..24. The public frame
+callback does not expose the missing header cells/repertoire. Descriptor-string
+charset flags cannot provide that missing row0 output. No runtime replay,
+build/SDK install, adapter, decoder repair, input or expectation change follows.
+This closes the bounded existing-tool eligibility action, not any of the four
+remaining semantic observations.132 base observations still retain128 positives
+and four raw-header negatives. Exact missing external capability: independently
+exposed Latin code35/namespace0 at row0,col8 while preserving the original
+English-national body, at1/1.5 with/withoutX28. Resume only on relevant changed
+capability or explicit new maintainer direction; no further internal variants
+are queued to compensate. Existing completed base components remain closed.
 Completed AB5 current-level ownership partition2026-10-28: canonical
 provider-scan/ab5-decoder-capability-20261028/qualification.json
 level15_acceptance_partition joins the original198 observations without a new

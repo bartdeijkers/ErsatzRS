@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-client-base — Level 1/1.5 stream-client qualification'
+current_focus = 'p9a-managed-adoption — Exact production-promotion prerequisites'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -85,7 +85,7 @@ retain128 positives and four mandatory raw-header negatives. The66 enhanced
 observations and exact explicit-secondary01 cells are Deferred, not a current
 base capability prerequisite; immutable198-record proof remains canonical at
 ab5-decoder-capability-20261028/qualification.json level15_acceptance_partition.
-Current package: p9a-client-base ordinary control-fixture preparation is closed
+Completed p9a-client-base ordinary control-fixture preparation is retained
 within its encoded-page/transport/AV boundary. Canonical level15-client-controls/
 qualification.json joins two headed ordinary preparations, two independent native
 capture checks, original440Hz and selected660Hz Dutch audio, three page/subpage
@@ -107,11 +107,22 @@ package and old histories, independent A/B at all three page identities, every
 one of19273 transport packets, video/660Hz Dutch audio, reused English baseline,
 strict checks and actual owned cleanup. Its existing fixture marker requests
 publication explicitly; no source timeout/byte limit or production path changes.
-Next finite receiver action: the receipt's joint-control protocol with installed
-Kodi/IPTV Simple/inputstream identities and actual page/subpage/X26/geometry/
-update/reveal/timed-flash/AV observations. Use the existing600s human hold only
-when the maintainer is present. No device access now. Source/header/high-subcode
-limitations remain explicit; the preparation does not accept all1.5 behavior.
+The finite joint receiver protocol is prepared; actual Kodi/IPTV Simple/inputstream
+identities and page/subpage/X26/geometry/update/reveal/timed-flash/AV observations
+await the maintainer. Existing600s human hold starts only when present. No device
+access now or inference that representative preparation accepts all1.5 behavior.
+Completed existing-tool AB5 header eligibility: installed TSDuck3.44-4676 exposes
+subtitle body lines only, not row0 cells. Canonical tsduck-header-capability/
+qualification.json retains the source/CLI boundary; the same four semantic
+observations remain external-capability-blocked, with no decoder work or new
+internal glyph/editor variants queued.
+Current package: p9a-managed-adoption exact production-promotion prerequisites.
+Next finite action: confirm current public release/asset availability against the
+already qualified source-adjacent Next/FFmpeg candidates and distinguish an
+available exact publication from a still-required maintainer mapping/authority.
+Read-only release identity; no new runtime build, trial, adoption, push or release
+is commissioned by this prerequisite check.
+
 The four independent base raw-header negatives remain author-base-owned; do not
 normalize them or begin external decoder maintenance. Production adoption retains
 its own authority and current enhanced-only tasks remain Deferred.
