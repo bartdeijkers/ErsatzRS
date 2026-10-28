@@ -282,6 +282,12 @@ pub fn build_app(app_state: AppState) -> Router {
                 )),
             )
             .route(
+                "/admin-api/teletext/design/choose-secondary-default",
+                post(api::teletext_editorial::choose_secondary_default).layer(
+                    DefaultBodyLimit::max(api::teletext::MAX_TELETEXT_FORM_BYTES),
+                ),
+            )
+            .route(
                 "/admin-api/teletext/design/import",
                 post(api::teletext_editorial::import_design).layer(DefaultBodyLimit::max(
                     api::teletext_editorial::MAX_TELETEXT_EDITOR_UPLOAD_BYTES,

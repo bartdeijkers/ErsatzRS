@@ -1,6 +1,11 @@
 //! Installed profiles -> retained receipt -> context concept -> reopen/undo.
 //! Unix-only synthetic producer fixture; no external client or editor GUI claim.
 use super::*;
+
+#[path = "secondary_defaults/admin.rs"]
+mod admin;
+#[path = "secondary_defaults/http.rs"]
+mod http;
 use ersatzrs_app::teletext_design_documents::decode_teletext_design_documents;
 use ersatzrs_core::repositories::TeletextDesignRejection;
 use ersatzrs_domain::{

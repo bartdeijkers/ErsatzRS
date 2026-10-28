@@ -525,6 +525,14 @@ Support pages in `tests/e2e/support-page-criteria.ts`. The support spec can
 seed the persisted health snapshot with `E2E_SEED_SUPPORT=1` when
 `E2E_DB_PATH` or `ERSATZRS_DB_PATH` points at the SQLite test database.
 
+`teletext-secondary-default.spec.ts` uses the existing owned native-router and
+ready/completion markers for receipt-bound context concepts. Run its matching
+ignored `secondary_default_headed_localized_native_forms` host with current,
+component-erasure-matched frontend assets, then headed Chromium and Firefox
+sequentially. It checks nine cultures, both themes, JS/no-JS, exact context undo
+and historical controls; native assertions own cold replay and live isolation.
+It establishes no external-editor or receiver capability.
+
 `teletext-decoder-health.spec.ts` checks the actual startup-cached decoder in
 English/Dutch, both themes and hydrated/no-JS flows. Its default published-runtime
 expectation is `Info`: decoding works, but original Live caption timestamps are

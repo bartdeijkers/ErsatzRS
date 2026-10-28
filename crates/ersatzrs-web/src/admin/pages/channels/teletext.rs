@@ -118,6 +118,7 @@ fn channel_page(
             | "editorial-limit"
             | "object-copy-invalid"
             | "object-remove-invalid"
+            | "secondary-default-invalid"
             | "object-add-invalid"
     );
     let (code, message, role) = if !error.is_empty() {
@@ -588,6 +589,27 @@ mod tests {
                 redacted: false,
             }],
         }
+    }
+
+    #[test]
+    fn secondary_default_error_reaches_the_localized_channel_feedback() {
+        let owner = Owner::new();
+        let data = ChannelTeletextData {
+            channel_id: 44,
+            channel_number: "1".into(),
+            channel_name: "Synthetic".into(),
+            catalog_available: true,
+            authoring_selection: None,
+            authoring_error: None,
+            effective_authoring: None,
+            effective_authoring_error: None,
+            addons: Vec::new(),
+        };
+        let html = owner.with(|| {
+            channel_page(data, "secondary-default-invalid", "", None, false, None).to_html()
+        });
+        assert!(html.contains("data-code=\"secondary-default-invalid\""));
+        assert!(html.contains(tr(TextKey::TeletextSecondaryDefaultInvalid)));
     }
 
     #[test]

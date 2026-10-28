@@ -112,6 +112,8 @@ mod tests {
     #[test]
     fn editorial_boundaries_identify_permissions_panels_and_bindings_without_controls() {
         let data = TeletextDraftAuthoringData {
+            secondary_default_context: false,
+            secondary_default_agreement: None,
             producer_index: 1,
             binding_index: 2,
             addon_id: "org.example.synthetic".to_owned(),

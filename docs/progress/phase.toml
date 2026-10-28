@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-m29-policy — explicit receipt-bound author choice'
+current_focus = 'p9a-m29-policy — policy-bound ordinary-stream handover'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -190,10 +190,17 @@ Original producers/profile revisions/source fences and unknown snapshots survive
 historical TTI cannot silently erase a newer native-only choice. Export companion
 intent is an exact association echo, never uploaded edit authority. Strict
 protected-effect and closed-format rejection retain their existing boundaries.
-Current package: p9a-m29-policy localized receipt-bound admin enrollment.
-Next finite action: connect the verified native action to the existing localized
-concept form/HTTP route, then prove affected routes and headed admin behavior.
-Full external-editor/companion and exact warm receiver evidence retain their owner.
+Completed M29 localized author/admin enrollment: admin/qualification.json owns
+three explicit choices, current-head HTTP authority, historical disabled forms,
+83 affected native/SSR/i18n controls and both actual headed browsers. JS/no-JS,
+all9 cultures/both themes,12 concept changes/four exact undo operations and cold
+reopen retain original sources, Night, configuration and live pointers. The real
+browser found and verified the corrected channel-feedback whitelist gap.
+Current package: p9a-m29-policy policy-bound ordinary-stream handover.
+Next finite action: join the accepted choice to the existing ordinary-stream
+handover trial, proving exact consumer coverage, original-response delivery and
+AV/ACK/ownership/cleanup. Keep receiver capability and full external-editor proof
+with their existing owners; do not reopen deferred client searches.
 No new client search, external decoder maintenance, DVBViewer or physical Kodi.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.

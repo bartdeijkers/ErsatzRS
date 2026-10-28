@@ -92,6 +92,10 @@ pub struct TeletextDraftAuthoringData {
     pub producer_index: usize,
     pub binding_index: usize,
     pub addon_id: String,
+    #[serde(default)]
+    pub secondary_default_context: bool,
+    #[serde(default)]
+    pub secondary_default_agreement: Option<ersatzrs_domain::TeletextSecondaryDefaultAgreement>,
     pub template: ersatzrs_addon_contract::TeletextAuthoringTemplateWire,
     pub theme: ersatzrs_addon_contract::TeletextAuthoringThemeWire,
     pub regions: Vec<ersatzrs_addon_contract::TeletextAuthoringRegionWire>,
@@ -273,6 +277,8 @@ fn project_authoring(
         producer_index: metadata.producer_index,
         binding_index: metadata.binding_index,
         addon_id: metadata.addon_id.clone(),
+        secondary_default_context: metadata.secondary_default_context,
+        secondary_default_agreement: metadata.secondary_default_agreement,
         template: metadata.template.clone(),
         theme: metadata.theme.clone(),
         regions: metadata.regions.clone(),
@@ -419,6 +425,8 @@ mod tests {
             })).unwrap();
         let page = &captured.pages[0];
         let metadata = TeletextAuthoringPageMetadata {
+            secondary_default_context: false,
+            secondary_default_agreement: None,
             producer_index: 1,
             binding_index: 3,
             addon_id: "synthetic.authoring".to_owned(),
@@ -429,7 +437,9 @@ mod tests {
         };
         let projected = project_authoring(&metadata);
         let json = serde_json::to_value(&projected).unwrap();
-        assert_eq!(json.as_object().unwrap().len(), 7);
+        assert_eq!(json.as_object().unwrap().len(), 9);
+        assert_eq!(json["secondary_default_context"], false);
+        assert!(json["secondary_default_agreement"].is_null());
         assert_eq!(json["producer_index"], 1);
         assert_eq!(json["binding_index"], 3);
         assert_eq!(json["addon_id"], "synthetic.authoring");

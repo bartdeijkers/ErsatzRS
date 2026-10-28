@@ -45,12 +45,15 @@ release section when tagging a release.
 
 ### Added
 
-- Save explicit secondary-G0 agreements as receipt-bound teletext concepts,
+- Save explicit secondary-G0 agreements as receipt-bound teletext concepts
+  through localized draft-preview forms, with a populated no-JavaScript path,
   preserving source documents, protected content and exact root undo. Reopening,
   repeated edits and export companions retain the choice; historical imports
   cannot silently replace it. Publication remains a separate action.
   **Breaking Rust API:** `TeletextExportProducer` adds the optional
-  `secondary_default_agreement` field; existing JSON without it remains valid.
+  `secondary_default_agreement` field; authoring observations add context and
+  agreement fields. Existing JSON without these optional/defaulted fields
+  remains valid.
 
 - Derive complete teletext page contexts from an explicitly supplied secondary
   character-set agreement, preserving original declarations and Level 1/1.5

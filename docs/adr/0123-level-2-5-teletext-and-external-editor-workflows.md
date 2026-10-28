@@ -2012,7 +2012,11 @@ The external producer companion carries the optional closed, independently
 versioned agreement alongside its existing profile/revision identity. Its echo
 is association evidence, never permission to change the choice through TTI.
 A historical receipt whose context differs from the current concept cannot
-silently replace that native-only choice. Legacy companions without the field
+silently replace that native-only choice.
+The localized current-draft form makes original/no-second/designated consent
+explicit. Its native POST creates a fresh server-owned receipt and rechecks
+channel, head and protected effects; observed producer ordinals grant no rights.
+Historical controls are disabled, and publication remains a separate action. Legacy companions without the field
 remain valid; explicit null and unknown intent fail closed.
 
 ### Required unused-object-copy removal

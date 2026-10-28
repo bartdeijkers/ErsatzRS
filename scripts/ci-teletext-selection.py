@@ -26,6 +26,7 @@ ENHANCED_SPECS = (
     "teletext-resource-bank-flow",
     "teletext-resource-diagnostics",
     "teletext-retained-bank",
+    "teletext-secondary-default",
 )
 RECOVERY_SPECS = (
     "block-preview.spec.ts", "teletext-authoring-flow.spec.ts", "teletext-editor-flow.spec.ts",

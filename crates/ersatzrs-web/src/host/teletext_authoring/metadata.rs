@@ -19,6 +19,8 @@ pub struct TeletextAuthoringPageMetadata {
     pub producer_index: usize,
     pub binding_index: usize,
     pub addon_id: String,
+    pub secondary_default_context: bool,
+    pub secondary_default_agreement: Option<ersatzrs_domain::TeletextSecondaryDefaultAgreement>,
     pub template: TeletextAuthoringTemplateWire,
     pub theme: TeletextAuthoringThemeWire,
     pub regions: Vec<TeletextAuthoringRegionWire>,
@@ -85,12 +87,21 @@ fn observation(
     selected: Selected<'_>,
     binding_index: usize,
     addon_id: &str,
+    producer: &TeletextProducerPresentation,
 ) -> TeletextAuthoringPageMetadata {
     let (producer_index, metadata, page) = selected;
     TeletextAuthoringPageMetadata {
         producer_index,
         binding_index,
         addon_id: addon_id.to_owned(),
+        secondary_default_context: producer.pages().iter().any(|page| {
+            matches!(
+                page.source(),
+                ersatzrs_domain::TeletextProducerPresentationSource::Header { .. }
+                    | ersatzrs_domain::TeletextProducerPresentationSource::MotFallback { .. }
+            )
+        }),
+        secondary_default_agreement: producer.secondary_default_agreement(),
         template: metadata.template.clone(),
         theme: metadata.theme.clone(),
         regions: page.regions.clone(),
@@ -120,7 +131,12 @@ pub(super) fn base(
         .bindings
         .get(selected.0)
         .ok_or_else(invalid)?;
-    Ok(vec![observation(selected, selected.0, &binding.addon_id)])
+    Ok(vec![observation(
+        selected,
+        selected.0,
+        &binding.addon_id,
+        &restored.producers()[selected.0],
+    )])
 }
 
 pub(super) fn effective(
@@ -148,5 +164,6 @@ pub(super) fn effective(
         selected,
         binding_index,
         binding.addon_id(),
+        &restored.producers()[selected.0],
     )])
 }

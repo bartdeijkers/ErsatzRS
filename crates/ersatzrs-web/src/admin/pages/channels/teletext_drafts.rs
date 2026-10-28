@@ -19,6 +19,7 @@ mod resource_announcements;
 mod resource_banks;
 mod resource_remove;
 mod resource_selection;
+mod secondary_defaults;
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
 
@@ -32,6 +33,7 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "editorial-mismatch" => TextKey::TeletextEditorMismatch,
         "object-copy-invalid" => TextKey::TeletextObjectCopyInvalid,
         "object-remove-invalid" => TextKey::TeletextObjectRemoveInvalid,
+        "secondary-default-invalid" => TextKey::TeletextSecondaryDefaultInvalid,
         "object-add-invalid" => TextKey::TeletextObjectAddInvalid,
         "resource-bank-invalid" => TextKey::TeletextResourceBankInvalid,
         "subpage-announcement-invalid" => TextKey::TeletextSubpageAnnouncementInvalid,
@@ -432,6 +434,7 @@ fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
             {resource_add::form(data, observation)}
             {object_copy_form(data, observation)}
             {resource_remove::form(data, observation)}
+            {secondary_defaults::forms(data, observation)}
             {editorial_import_form(data.channel_id, observation.current_design_head)}
             <p>{tr(TextKey::TeletextEditorNoPublicationHelp)}</p>
         </section>
@@ -1357,6 +1360,69 @@ mod tests {
         data.resource_objects.clear();
         let html = context.with(|| object_copy_form(&data, &observation).to_html());
         assert!(!html.contains("teletext-object-copy-form"));
+    }
+
+    #[test]
+    fn secondary_default_form_observes_current_choice_and_disables_historical_revision() {
+        use crate::admin::server_fns::teletext_drafts::TeletextDraftAuthoringData;
+        use ersatzrs_domain::{
+            TeletextPageCharsetDesignation, TeletextSecondaryDefaultAgreement,
+            TeletextSecondaryDefaultChoice,
+        };
+        let context = Owner::new();
+        let mut data = preview();
+        data.authoring.push(
+            serde_json::from_value::<TeletextDraftAuthoringData>(serde_json::json!({
+                "producer_index":0,"binding_index":2,"addon_id":"synthetic<source>",
+                "secondary_default_context":true,
+                "template":{"id":"template","revision":"1"},
+                "theme":{"id":"night","overrides":[]},"regions":[],"dynamic_fields":[]
+            }))
+            .unwrap(),
+        );
+        let observation = TeletextDraftPublicationObservation {
+            digest: "b".repeat(64),
+            current_design_head: data.revision,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: false,
+            can_publish: false,
+            replaces_pending: false,
+        };
+        for (agreement, selected) in [
+            (None, "original"),
+            (
+                Some(TeletextSecondaryDefaultAgreement::new(
+                    TeletextSecondaryDefaultChoice::NoSecondG0 {},
+                )),
+                "no_second",
+            ),
+            (
+                Some(TeletextSecondaryDefaultAgreement::new(
+                    TeletextSecondaryDefaultChoice::Designated {
+                        designation: TeletextPageCharsetDesignation::new(0x37).unwrap(),
+                    },
+                )),
+                "designated",
+            ),
+        ] {
+            data.authoring[0].secondary_default_agreement = agreement;
+            let html = context.with(|| secondary_defaults::forms(&data, &observation).to_html());
+            assert!(html.contains("/admin-api/teletext/design/choose-secondary-default"));
+            assert!(html.contains(&format!("value=\"{selected}\" selected")));
+            assert!(html.contains("synthetic&lt;source&gt;"));
+            assert!(html.contains(tr(TextKey::TeletextSecondaryDefaultHelp)));
+            assert!(!html.contains("<fieldset disabled"));
+        }
+        data.revision -= 1;
+        let html = context.with(|| secondary_defaults::forms(&data, &observation).to_html());
+        assert!(html.contains("<fieldset disabled"));
+        assert!(html.contains("value=\"37\""));
+        data.authoring[0].secondary_default_context = false;
+        assert!(!context
+            .with(|| secondary_defaults::forms(&data, &observation).to_html())
+            .contains("teletext-secondary-default-form"));
     }
 
     #[test]
