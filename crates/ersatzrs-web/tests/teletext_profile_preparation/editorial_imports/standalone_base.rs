@@ -8,6 +8,12 @@ use serde_json::{json, Value};
 #[path = "standalone_base/complete_set.rs"]
 mod complete_set;
 
+// Intentional Linux-x64 manual receiver preparation using the existing pinned
+// external decoder; native Windows/ARM keep their separate acceptance owners.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "standalone_base/client_controls.rs"]
+mod client_controls;
+
 #[path = "standalone_base/national_editor.rs"]
 mod national_editor;
 

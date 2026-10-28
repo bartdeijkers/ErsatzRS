@@ -944,8 +944,9 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
     const holdSeconds = Number(process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_HOLD_SECONDS ?? 75);
     expect(Number.isInteger(holdSeconds) && holdSeconds >= 75 && holdSeconds <= 600).toBe(true);
     test.setTimeout(Math.max(180_000, (holdSeconds + 120) * 1000));
+    const clientControls = process.env.ERSATZRS_TELETEXT_CLIENT_LEVEL15_CONTROLS === '1';
     const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath,
-      { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH!,
+      { authoredPages: true, standaloneLevel15: true, clientControls, playback: { ffmpeg: process.env.FFMPEG_PATH!,
         durationSeconds: process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_HOLD_SECONDS ? holdSeconds : 60 } });
     fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
     const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, viewport: { width: 1280, height: 900 } });
@@ -978,6 +979,11 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
       expect(authoredPackets).toBeGreaterThan(0);
       fixture.resetSourceStart();
       writeFileSync(join(external!, 'host-ready.json'), JSON.stringify({ probe_version: 1, url, channel,
+        fixture_kind: clientControls ? 'level15-controls' : 'standalone-base',
+        client_controls: clientControls ? { steady: [5, 8], conceal: [7, 8], flash: [9, 8], double_height: [11, 8],
+          contiguous: [14, 8], separated: [15, 8], update: [17, 15], boxed: [19, 8],
+          source_audio: ['eng:440Hz', 'nld:660Hz'], selected_audio: 'nld',
+          keyboard_defaults: { open: 'V', reveal: 'I', pages: 'Up/Down', subpages: 'Left/Right' } } : null,
         host: isolatedWebHost.processIdentity(), scope: 'Real ordinary standalone base URL; native rendering/navigation acceptance is separate.' }, null, 2));
       await expect.poll(() => existsSync(join(external!, 'client-complete.json')), { timeout: holdSeconds * 1000 }).toBe(true);
       const completed = JSON.parse(readFileSync(join(external!, 'client-complete.json'), 'utf8'));

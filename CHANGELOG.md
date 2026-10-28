@@ -704,6 +704,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Extend the isolated Level 1.5 receiver fixture with conceal, flash, double-height
+  text and mosaics, with independently checked ordinary-stream delivery and
+  selected alternate audio; keep the original fixture and production paths intact.
+
 - Keep implemented Level 2.5 teletext available as experimental, with localized
   notices in the authoring and preview admin. Phase 9A now
   requires fully verified Level 1/1.5 and shared playback/platform safeguards;

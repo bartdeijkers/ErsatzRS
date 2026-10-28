@@ -95,9 +95,28 @@ function editorPages(theme: 'day' | 'night', operand = false): unknown {
   };
 }
 
-function standalonePages(theme: 'day' | 'night'): unknown {
+function standalonePages(theme: 'day' | 'night', clientControls = false): unknown {
   const path = fileURLToPath(new URL('../../../crates/ersatzrs-web/tests/fixtures/teletext-level15-restart-v2.json', pathToFileURL(__filename)));
   const service = JSON.parse(readFileSync(path, 'utf8'));
+  if (clientControls) {
+    // Keep the frozen restart fixture/default path unchanged. These ordinary
+    // spacing attributes expose the missing receiver controls on the same
+    // original200/0000,200/0020,201/0000 page identities; no optional banks.
+    const style = { foreground: 'white', background: 'black', height: 'normal', boxed: false, flash: false, conceal: false };
+    for (const page of service.pages) {
+      const text = (row: number, content: string, effects: Record<string, unknown> = {}) => ({
+        row, runs: [{ column: 8, style: { ...style, ...effects }, content: { kind: 'text', text: content } }],
+      });
+      page.rows.push(text(5, 'STEADY'), text(7, 'HIDDEN', { conceal: true }),
+        text(9, 'FLASH', { flash: true }), text(11, 'DOUBLE', { height: 'double' }),
+        text(17, theme === 'day' ? 'UPDATE A' : 'UPDATE B'), text(19, 'BOXED', { boxed: true }));
+      for (const [row, foreground, separated] of [[14, 'magenta', false], [15, 'cyan', true]] as const) {
+        page.rows.push({ row, runs: [{ column: 8, style: { ...style, foreground },
+          content: { kind: 'mosaics', cells: [63, 21, 42], separated } }] });
+      }
+      page.rows.sort((left: { row: number }, right: { row: number }) => left.row - right.row);
+    }
+  }
   for (const page of service.pages) for (const row of page.rows) for (const run of row.runs) {
     if (run.style.foreground === 'red' && theme === 'night') run.style.foreground = 'blue';
   }
@@ -132,11 +151,14 @@ export class TeletextChannelFixture {
   private readonly packageFiles = new Map<string, Buffer>();
   private readonly authoredPages: boolean;
   private readonly playback: boolean;
+  private readonly clientControls: boolean;
   private readonly playbackDurationSeconds: number;
   private scripted = false;
 
-  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; playback?: { ffmpeg: string; durationSeconds?: number } } = {}) {
+  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; clientControls?: boolean; playback?: { ffmpeg: string; durationSeconds?: number } } = {}) {
     this.authoredPages = options.authoredPages === true;
+    this.clientControls = options.clientControls === true;
+    if (this.clientControls && (!options.standaloneLevel15 || !options.playback)) throw new Error('Client controls require standalone base pages and the owned playback fixture.');
     if (options.editorPages && !this.authoredPages) throw new Error('Synthetic editor requires the authored producer.');
     if (options.editorOperand && !options.editorPages) throw new Error('Synthetic operand editor requires editor pages.');
     if (options.standaloneLevel15 && (!this.authoredPages || options.editorPages)) throw new Error('Standalone base fixture requires the original V2 producer.');
@@ -194,7 +216,7 @@ export class TeletextChannelFixture {
     this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? producerScript : scriptBody));
     if (this.authoredPages) {
       for (const theme of ['day', 'night'] as const) {
-        const response = options.standaloneLevel15 ? standalonePages(theme) : options.editorPages ? editorPages(theme, options.editorOperand) : themedPages(theme);
+        const response = options.standaloneLevel15 ? standalonePages(theme, this.clientControls) : options.editorPages ? editorPages(theme, options.editorOperand) : themedPages(theme);
         this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(response)));
       }
     }
@@ -234,9 +256,13 @@ export class TeletextChannelFixture {
     const source = join(this.root, 'synthetic-client-source.ts');
     const bytes = execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin',
       '-f', 'lavfi', '-i', 'color=c=red:size=160x90:rate=25',
-      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', String(durationSeconds),
-      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'mpeg2video', '-b:v', '1000k',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
+      ...(this.clientControls ? ['-f', 'lavfi', '-i', 'sine=frequency=660:sample_rate=48000'] : []),
+      '-t', String(durationSeconds),
+      '-map', '0:v:0', '-map', '1:a:0', ...(this.clientControls ? ['-map', '2:a:0'] : []),
+      '-c:v', 'mpeg2video', '-b:v', '1000k',
       '-c:a', 'aac', '-b:a', '128k', '-metadata:s:a:0', 'language=eng',
+      ...(this.clientControls ? ['-metadata:s:a:1', 'language=nld'] : []),
       '-muxrate', '4953600', '-pcr_period', '20', '-mpegts_start_pid', '256',
       '-mpegts_pmt_start_pid', '4096', '-f', 'mpegts', 'pipe:1'],
     { timeout: 30_000, maxBuffer: (durationSeconds <= 12 ? 8 : durationSeconds <= 60 ? 40 : 384) * 1024 * 1024, killSignal: 'SIGKILL' });
@@ -276,7 +302,7 @@ export class TeletextChannelFixture {
       this.database.prepare('INSERT INTO "PlexLibrary" ("Id","ShouldSyncItems") VALUES (?,1)').run(id);
       this.database.prepare('INSERT INTO "LibraryPath" ("Id","LibraryId","Path") VALUES (?,?,?)').run(id, id, this.root);
       for (const channel of this.channels) {
-        this.database.prepare('UPDATE "Channel" SET "FFmpegProfileId"=?,"StreamingMode"=1,"StreamingEngine"=0,"PreferredAudioLanguageCode"=\'eng\',"SubtitleMode"=0 WHERE "Id"=?').run(id, channel);
+        this.database.prepare('UPDATE "Channel" SET "FFmpegProfileId"=?,"StreamingMode"=1,"StreamingEngine"=0,"PreferredAudioLanguageCode"=?,"SubtitleMode"=0 WHERE "Id"=?').run(id, this.clientControls ? 'nld' : 'eng', channel);
         const schedule = join(this.root, `synthetic-client-schedule-${channel}.json`);
         this.database.prepare('INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","ScheduleFile","Seed") VALUES (?,?,20,?,0)').run(channel, channel, schedule);
       }

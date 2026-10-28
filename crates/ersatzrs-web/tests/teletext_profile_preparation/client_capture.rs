@@ -661,6 +661,30 @@ pub(super) async fn verify_transport_with_qualified_authored_pts_gaps(
     report_destination: Option<&Path>,
     full_warm_capture: bool,
 ) -> Vec<u8> {
+    verify_transport_for_audio(
+        tsanalyze,
+        ffprobe,
+        bytes,
+        qualified_authored_pts_gaps,
+        report_destination,
+        full_warm_capture,
+        "eng",
+    )
+    .await
+}
+
+/// Preserve every transport oracle while selecting the fixture's literal audio
+/// language. Existing callers retain English and their exact gap/discovery policy.
+pub(super) async fn verify_transport_for_audio(
+    tsanalyze: &str,
+    ffprobe: &str,
+    bytes: &[u8],
+    qualified_authored_pts_gaps: usize,
+    report_destination: Option<&Path>,
+    full_warm_capture: bool,
+    audio_language: &str,
+) -> Vec<u8> {
+    assert!(matches!(audio_language, "eng" | "nld"));
     let original_report = probe(tsanalyze, &["--json"], bytes, 262_144).await;
     if let Some(path) = report_destination {
         use std::io::Write as _;
@@ -697,7 +721,7 @@ pub(super) async fn verify_transport_with_qualified_authored_pts_gaps(
     assert_eq!(authored["pes-stream-id"], 0xbd);
     assert_eq!(
         pids.iter().find(|pid| pid["id"] == 257).unwrap()["language"],
-        "eng"
+        audio_language
     );
     for expected in [256, 257, 512] {
         assert_eq!(
@@ -858,6 +882,19 @@ pub(super) async fn verify_av_with_audio_bound(
     delivered: &[u8],
     maximum_audio_bytes: usize,
 ) {
+    verify_av_with_tone(ffmpeg, source, delivered, maximum_audio_bytes, 440).await;
+}
+
+/// Same calibration/video/PCM bounds, with an explicit second-source audio
+/// oracle for the standalone client fixture. No source/profile policy changes.
+pub(super) async fn verify_av_with_tone(
+    ffmpeg: &str,
+    source: &[u8],
+    delivered: &[u8],
+    maximum_audio_bytes: usize,
+    expected_frequency: usize,
+) {
+    assert!(matches!(expected_frequency, 440 | 660));
     let hashes: BTreeSet<_> = video_hashes(ffmpeg, source).await.into_iter().collect();
     let actual = video_hashes(ffmpeg, delivered).await;
     assert!(actual.len() >= 20);
@@ -902,12 +939,13 @@ pub(super) async fn verify_av_with_audio_bound(
                 .filter(|pair| (pair[0] < 0) != (pair[1] < 0))
                 .count();
             let frequency = crossings * 48_000 / (2 * chunk.len());
-            frequency.abs_diff(440) <= 20 && chunk.iter().any(|sample| sample.unsigned_abs() > 100)
+            frequency.abs_diff(expected_frequency) <= 20
+                && chunk.iter().any(|sample| sample.unsigned_abs() > 100)
         })
         .count();
     assert!(
         tones >= 10,
-        "actual audio must retain at least one second of the literal 440Hz source tone"
+        "actual audio must retain at least one second of the literal {expected_frequency}Hz source tone"
     );
 }
 
