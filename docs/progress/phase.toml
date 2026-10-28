@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — Approve exact runtime publication mapping'
+current_focus = 'p9a-managed-adoption — Final accepted production selection and gates'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,36 +62,33 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-managed-adoption — exact runtime publication/adoption mapping.
-Next finite action: obtain maintainer review/authority for the prepared exact mapping
-at local-promotion/publication-review/qualification.json. Proposed prerelease tags:
-Next next-0.2.3-54c6cb9-ersatzrs.7 at public95206a8; FFmpeg runtime-candidate-2.0.7-457453f at local457453f, exposing21 local source ancestors through that new tag only.
-Do not move remote/main or activate Docker/package rebuilds. Eight runtime archives
-and fourteen Next source/patch/manifest assets are exact-hash verified. No publication
-or source/tag push is authorized yet. After approval only: affected actual managed
-published-byte/download/Health/playback checks in isolated state; stable/default
-production selection and remaining final gates stay separate. No rebuild/repack.
-Existing local candidate source/output/platform/installer/Health components stay closed.
+Current package: p9a-managed-adoption — final accepted production selection/gates.
+Next finite action: resolve final default/stable runtime selection against the
+published exact candidates, then run only affected exact-byte application/Health/
+playback/platform gates. Publication is complete; do not repeat it. Existing
+production/default pins stay unchanged. An explicit candidate pin is not default
+accepted release selection.
 
-Complete p9a-author-base: authorized separate Table25/35/36 reference closes the
-four original header observations;128 external-decoder base positives are reused.
-Canonical provider-scan/ab5-decoder-capability-20261028/header-reference/
-qualification.json owns unchanged original factory units/masks, pinned external
-reader/fonts,4 header+4 body counterexamples,7 regressions and11 rejected negatives.
-No full external-renderer repair, new HTTP capture or client-header acceptance.
-Original negative ledger and enhanced66 observations remain unchanged.
+Canonical local-promotion/publication-review/execution/qualification.json owns
+public Next next-0.2.3-54c6cb9-ersatzrs.7 and FFmpeg runtime-candidate-2.0.7-457453f,
+27 exact assets, authorized tags/source exposure and unchanged remote/main refs.
+Published-download/qualification.json owns four real Next acquisitions/source/
+lock/compiler/payload checks through the unchanged candidate-configured stager.
+Actual-ffmpeg-managed/qualification.json owns real GitHub -> Linux product-manager
+install, exact binary/tag and download-disabled cached startup; healthz200,
+source=downloaded/managed and both hosts exit0. Frozen Linux startup only, not
+completed persisted Health, playback, clean-HEAD or nativeWindows adoption.
+Preserve observer/API failures; do not repeat successful transfers.
 
-Complete p9a-client-base: actual Kodi21.2/Android, IPTV Simple21.11.0 and FFmpeg
-Direct21.3.8 pass the fixed ordinary-control boundary with teletext/all-stream
--timeshift enabled. Joint receipts own photographed G3, AV/navigation/reveal/
-timed flash/height/mosaics/box/update/AV-return and joined cleanup; all own
-processes are terminal and8409 free. No source/fixture/runtime change or all-
-client/13bit assertion. Reuse independent/transport/audio proof within exact scope.
-
-Managed adoption is the only pending required primary functional leaf; final
-base/shared full gates follow it. Preserve known client limits, experimental2.5/
-optional CI, enhanced-only/Mac/nativeARM deferrals, original proof SHAs, parallel
-edits and every negative observation. Push or publish nothing.
+Author-base and fixed Kodi receiver-control owners are Complete within their
+recorded scopes; reuse independent/transport/audio/editor/admin/safety proof.
+Managed-adoption is the remaining required primary functional owner, followed by
+final base/shared gates. Future Windows-package trial requires120 minutes; no
+new Windows package/guided trial started tonight. No operator input is needed
+for the completed television/publication work. All own processes are terminal.
+Preserve client limits, experimental2.5/optional CI, enhanced-only/Mac/nativeARM
+deferrals, original proof SHAs and parallel changes. No further main push, stable
+promotion or application/Docker release is authorized.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
