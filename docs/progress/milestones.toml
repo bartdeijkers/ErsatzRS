@@ -16730,6 +16730,23 @@ Smallest necessary work: Finish only named changed base flows using shared app v
 Testable stop condition: Every changed applicable base admin flow and agent file action shares validation and broadcast model, passes all supported cultures and required headed/browser modes, and leaves broadcast unchanged until explicit publication.
 '''
 evidence = '''
+Completed experimental2.5 admin classification2026-10-28: canonical
+provider-scan/experimental-level25-admin/qualification.json owns18 appended
+help texts in9 cultures, retaining their original wording and all existing
+controls. Source map: /channels/{id}/teletext; teletext.rs channel_page and
+teletext_drafts.rs authoring_controls/TeletextDraftPreview; same data/functions,
+SSR/no-JS HTML, islands and primitives. No validation/publication/runtime change.
+Matched local Leptos SSR/WASM build, strict web all-target Clippy, formatting
+and hydration-lint pass. Eight headed browser cases pass (four functional cases
+with all9 cultures, four existing visual cases); four targeted existing visual
+cases add16 actual notice viewports. Chromium/Firefox each cover JS-light and
+noJS-dark. Four original notice PNGs are inspected at full resolution. Profile
+controls/isolation, keyboard/responsive and console/page-error assertions pass.
+This closes the newly requested A1 experimental classification within its text/UI
+boundary; existing A1 receipts remain closed. The shared dirty-worktree build is
+not clean-HEAD, native Windows, release/runtime adoption or client acceptance.
+No new editor/stream/platform chain or experimental2.5 conformance run. Other
+base author/client and shared runtime/final owners retain their exact gaps.
 A1 completed within the shared base admin/agent-file action boundary: profile/design, retained export, pinned-editor concept import, same-model located validation/preview and separate explicit publication. Canonical tmp/phase9-next-local-teletext/provider-scan/identity.json admin_base_join_followup joins completed EB1/EB2 with original actual-QTM/headed evidence. Four Chromium151 and four Firefox153 JS/no-JS/light/dark runs cover all9 cultures; terminal reports and original GUI/manifest pins remain exact. Fourteen route/control/effective-action function bodies match the genuine headed source1e95923b exactly; the fifteenth adds only five enhanced resource forms, owned by A2. All27 applicable strings in9 cultures remain exact. The reference opening now links its already implemented operational file/agent contract instead of calling it internal-only; historical first-adapter negatives remain. No UI, runtime or new full-current browser/client/platform run is claimed. Aggregate status remains In progress because required editor-base/author-base acceptance is open; no extra A1 variant is queued.
 Reuse/closed: Existing nine-culture SSR and headed Chromium/Firefox light/dark/hydrated/no-JS, effective_admin_reuse, actual_output_status_followup, shared-profile browser proof, editor/file validation and completed source-health8headed refresh cases. Lifecycle-base now closes the common application/host controls; do not replay those unchanged paths.
 Missing proof/stop: No A1 action remains within the explicitly joined base boundary; reuse the closed actions and original browser modes. Required upstream milestone dependencies retain their own missing proof. A2 enhanced actions and actual client display remain separately owned; no blanket browser rerun or new editor variant follows.

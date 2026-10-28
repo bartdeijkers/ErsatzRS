@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-level15 — remaining base author/client proof and shared final gates'
+current_focus = 'p9a-author-base — remaining Level 1/1.5 independent proof'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -75,9 +75,12 @@ explicit dispatches. Earlier full2.5 prerequisite wording is superseded for curr
 acceptance only.
 Current acceptance change supersedes historical enhanced-only directions below.
 The installed Kodi version is confirmed21.2; no changed full2.5 capability follows.
-Current package: make the experimental2.5 classification visible in the existing
-localized admin without disabling authoring/validation/preview/publication/output.
-Stop after focused localization/SSR and affected headed browser proof.
+Completed experimental2.5 localized admin classification: provider-scan/
+experimental-level25-admin/qualification.json owns18 help texts in9 cultures,
+matched SSR/WASM, strict lint/format/hydration and8+4 passed headed cases.
+Existing controls/validation/publication/output are unchanged; no extra
+experimental-label variants follow this closed component.
+Current package: p9a-author-base remaining Level1/1.5 independent proof.
 Next finite action: continue the existing p9a-author-base AB5/p9a-client-base
 Level1.5 proof gap using retained exact oracles and the ordinary stream fixture;
 only applicable base capability gaps remain blocking here. No enhanced client

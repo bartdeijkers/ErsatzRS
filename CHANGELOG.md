@@ -704,7 +704,8 @@ release section when tagging a release.
 
 ### Changed
 
-- Keep implemented Level 2.5 teletext available as experimental. Phase 9A now
+- Keep implemented Level 2.5 teletext available as experimental, with localized
+  notices in the authoring and preview admin. Phase 9A now
   requires fully verified Level 1/1.5 and shared playback/platform safeguards;
   remaining enhanced-only acceptance waits for a new maintainer task. Level 2.5
   Rust and browser CI jobs are opt-in; general and Level 1.5 checks remain required.

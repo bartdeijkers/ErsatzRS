@@ -188,6 +188,8 @@ for (const javaScriptEnabled of [true, false]) {
           await ensureFormOpen(addon(page, fixture).locator('[data-testid="teletext-profile-form"][data-profile-id=""]'));
           await expect(addon(page, fixture).getByRole('button', { name: text('TeletextProfileCreate'), exact: true })).toBeVisible();
           await expect(page.getByTestId('channel-teletext-page')).toContainText(text('TeletextChannelBaseHelp'));
+          await expect(page.getByTestId('teletext-authoring')).toContainText(text('TeletextAuthoringHelp'));
+          await expect(page.getByTestId('teletext-draft-preview')).toContainText(text('TeletextPreviewHelp'));
           const profile = addon(page, fixture).locator(`[data-testid="teletext-profile-form"][data-profile-id="${day}"]`);
           await ensureFormOpen(profile);
           await expect(profile.getByLabel(text('TeletextProfileName'), { exact: true })).toHaveValue('Day <synthetic> & profile');
@@ -311,6 +313,16 @@ for (const javaScriptEnabled of [true, false]) {
             await bind(page, fixture, profile, text('TeletextBindingSave'), javaScriptEnabled);
             await expect(page.getByRole('heading', { name: text('TeletextChannelTitle'), exact: true })).toBeVisible();
             await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
+            if (index === 0) {
+              for (const [sectionId, key, name] of [
+                ['teletext-authoring', 'TeletextAuthoringHelp', 'authoring'],
+                ['teletext-draft-preview', 'TeletextPreviewHelp', 'preview'],
+              ] as const) {
+                const notice = page.getByTestId(sectionId).getByText(text(key), { exact: true });
+                await expect(notice).toBeVisible();
+                await captureViewport(page, notice, testInfo.outputPath(`${language}-experimental-${name}.png`));
+              }
+            }
             const section = addon(page, fixture);
             await captureViewport(page, section.getByTestId('teletext-binding-form'), testInfo.outputPath(`${language}-channel-${index + 1}-binding.png`));
             const form = section.locator(`[data-testid="teletext-profile-form"][data-profile-id="${profile}"]`);
