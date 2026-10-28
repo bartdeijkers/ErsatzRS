@@ -301,9 +301,14 @@ A Linux job is not acceptance for the other supported platforms.
 
 ### Teletext CI checks
 
-CI reports **Teletext 1.5** and **Teletext 2.5** as separate Rust jobs.
-Playwright has six serial jobs: **general**, **1.5**, and **2.5**, each in
-Chromium and Firefox, with independent ports and diagnostic artifacts.
+Default required CI runs the **Teletext 1.5** Rust job and four serial browser
+jobs: **general** and **1.5**, each in Chromium and Firefox. **Teletext 2.5**
+Rust and both **2.5** browser jobs are optional experimental checks, selected
+only by explicit `teletext_only=2.5` or `teletext_only=all` dispatch. Push/PR and
+normal dispatch do not schedule them. Tests/selectors remain intact, with
+independent ports and diagnostic artifacts. This follows ADR0123's latest
+2026-10-28 maintainer amendment; full2.5 client conformance is Deferred, not
+accepted. A green default run proves only its revised required scope.
 `scripts/ci-teletext-selection.py` owns the disjoint selectors. General Test
 and Playwright jobs exclude the tests moved to these jobs. Rust integration
 binary names are matched as well as test names, so unnamed tests in teletext
@@ -313,7 +318,8 @@ Shared infrastructure and unclassified teletext tests default to the 1.5 job.
 The 2.5 job owns the named enhanced object/resource/DRCS/palette/panel/context
 families, including their Level 1/1.5 fallback assertions. This is CI ownership,
 not a claim that either level has passed product acceptance. A change to shared
-validation, transport, preview, or fallback can require both jobs. Existing
+validation, transport, preview, or fallback still requires applicable base/general
+regressions; an explicitly selected experimental run can cover both levels. Existing
 opt-in editor, decoder, client and native-platform acceptance remains opt-in;
 this split does not turn unavailable prerequisites into CI successes.
 

@@ -4,7 +4,10 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
 summary    = '''
-ADR0123: full1/1.5/2.5 remains open; P9A-04 owns L15/F/V/X.
+ADR0123 latest2026-10-28 amendment: fully verified1/1.5 and applicable shared
+gates define9A. Implemented2.5 remains available as experimental. Enhanced-only
+acceptance is Deferred until a new maintainer task, never
+accepted by assumption. P9A-04 owns L15/F/V/X and retained evidence.
 EB1/2,EE1..3,A1/scoped A2 are closed. F2 metadata/zones/version and scoped F1
 Main/Base-prefix/position/charset, V30/V31 DRCS attachment/undo, created banks,
 leading AP/calls, Public↔Global and steady-Flash undo are closed. F3 scoped
@@ -19,7 +22,8 @@ package is closed; evidence retained.
 
 Typed service/resource,X26/X27/X28/M29 execution/raster remain partial.
 Original identities/effects/fallback/bounds stay protected.
-A7/A8/C3,foreign-X26,repertoires/fonts,objects/DRCS/panels/receivers remain mandatory.
+Applicable base repertoires/X26 and receiver proof remain mandatory; enhanced-only
+A7/A8/C3/object/DRCS/panel proof is retained at Deferred owners.
 F1/F3 own limits. base_g0_context_followup retains ESC/reset/secondary/Header/POP,
 stock33/38 and five historical disagreements; no invented7F. held_mosaics_followup
 retains controls/reset/glyphs/preview/carrier/zones/captions and QTM/atlas differences.
@@ -28,14 +32,10 @@ historical basic no-response limits, scoped editor/publication/default2 two-chan
 AV/transport. failure_prefix retains failed prefix/unknown EOF without retries.
 Open clauses retain milestone owners. V25–28/root undo:e80c8367.
 
-Profile/theme/mirror/Lua retain P9A-04 actual_output_status Linux/Windows63 and
-X2 startup_health headed/restart/profile/error/recovery scopes (Windows40ad).
-F5 retains Windows Burn/Convert
-8AAC/nld/raw46/46/natural Job and Linux.4 copy86/ordinary8AAC/nld/raw46/46/AV/captions/
-protected SQL/graceful cleanup;20s/12s bounds/negatives. X2 overlay retains4+4
-captures,default640/channel1280x180/SQL320x180,92+92 transport,nldAAC/captions,
-protected SQL/source/overlays/unforced cleanup. managed_qualification_followup/
-overlay-playback owns full scopes/clock guards, without graphics/current-package/adoption.
+Profile/theme/mirror/Lua and Linux/Windows playback/overlay/Health joins retain
+actual_output_status and managed_qualification_followup/overlay-playback proof,
+including caption/audio, exact timing, transport and cleanup boundaries.
+
 F4 closes MOT engine/HTTP/cache and scoped X28-retirement; M29 Header/POP and
 warm-client remain open. F6 default2 Copy/DVB:c07af3a1; canonical
 tmp/phase9-f6-native-carriage/work.json owns87/87 TSDuck.
@@ -56,11 +56,11 @@ ordinary gates. macOS stays deferred under ADR0121.
 
 Base stream/X26/navigation/update/reveal/timedflash remains unqualified.
 No DVBViewer. Kodi21.2 shares retained21.3 decoder hashes/Local/DRCS/panel blockers;
-no full2.5 success expectation or physical GoogleTV trial before the gated joint
-end-trial. X1 bounded qualification resumed; optional X3 waits upstream QTM.
+no full2.5 success expectation. The gated joint physical final now concerns1/1.5;
+enhanced-only readiness is not a prerequisite. Full2.5 X1 work is Deferred until a new task; optional X3 waits upstream QTM.
 No unchanged retries, decoder maintenance or waiver. Four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
 checks remain with their existing owners.
-Production guide follows full independent9A; Phase10 followsP9B-02.
+Production guide follows independently accepted revised9A; Phase10 followsP9B-02.
 '''
 
 [[debt]]

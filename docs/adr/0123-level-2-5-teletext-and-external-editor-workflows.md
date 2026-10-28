@@ -37,6 +37,43 @@ the agreed joint final session. Runtime publication/adoption remains separately
 authorized. Normative lifetime/order and independent-renderer gaps keep their
 existing owners; this amendment does not waive them.
 
+### Current acceptance amendment: experimental Level 2.5 (2026-10-28)
+
+The maintainer explicitly replaces the earlier full-Level-2.5 Phase9A gate.
+Accept Phase9A after complete independent Level1/1.5 verification and every
+applicable source/output, authoring/interchange, metadata/zones, profile/theme,
+Lua/restart, localized admin and currently required platform/runtime gate.
+Applicable Level1.5 X/26 enhancements remain mandatory; base is not just rows.
+Phase9B still follows accepted9A, under this revised acceptance boundary.
+
+Keep the already implemented Level2.5 design, validation, native encoding,
+import/export, preview, publication and carriage available as **experimental**.
+Do not remove or disable it or require optional2.5 banks for valid base pages.
+Retain atomic whole-document validation and reject invalid enhanced content
+explicitly; never strip it to make publication succeed. Preserve essential
+base information/navigation, existing fallback and playback-safety safeguards.
+Experimental means unaccepted/incompletely verified, not correct by assumption.
+
+All remaining enhanced-only implementation/conformance/editor/client acceptance
+work is Deferred by maintainer decision, not Complete, and does not block9A.
+This includes enlarged objects/DRCS/panels, unresolved enhanced semantic oracles
+and full suitable-client display/navigation. Retain their exact owners, gaps,
+source/artifact pins and all positive/negative evidence. Do not seek another
+client, commission a supplier evaluation, repair external decoders or resume
+those trials until the maintainer issues a new task after suitable open-source
+client capability becomes available. Future upstream support is an expectation,
+not verified present support. Kodi21.2 remains the intended base viewing target.
+The retained joint physical-device final session now proves the mandatory
+Level1/1.5 flow; omit deferred enhanced-only assertions and remove the former
+full2.5-readiness prerequisite. Do not start premature physical-device trials.
+
+Keep existing automated2.5 regression tests available; their Rust and browser
+CI jobs become optional explicit dispatches, not default required jobs. General
+and1.5 checks remain required. This does not waive any applicable base, ordinary
+playback, transport, lifecycle or platform proof. No runtime publication or
+source push is authorized by this amendment. Earlier mandatory2.5/9B wording in
+this ADR and linked historical receipts is superseded only within this boundary.
+
 ## Implementation
 
 Partial — a separate typed native new-object-resource intent now admits complete

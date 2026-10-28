@@ -72,7 +72,7 @@ on:
           - all
           - subtitle-nul
       teletext_only:
-        description: Run selected teletext jobs (1.5-rust excludes browsers; partial CI; incompatible with other focused modes)
+        description: Run selected teletext jobs (2.5/all opt into experimental checks; partial CI)
         type: choice
         required: false
         default: none
@@ -641,7 +641,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        level: ${{ fromJSON((inputs.teletext_only == '1.5' || inputs.teletext_only == '1.5-rust') && '["1.5"]' || inputs.teletext_only == '2.5' && '["2.5"]' || '["1.5","2.5"]') }}
+        level: ${{ fromJSON(inputs.teletext_only == 'all' && '["1.5","2.5"]' || inputs.teletext_only == '2.5' && '["2.5"]' || '["1.5"]') }}
     env:
       CARGO_BUILD_JOBS: "1"
       TELETEXT_LEVEL: ${{ matrix.level }}
@@ -731,10 +731,11 @@ jobs:
   hydration:
     name: Playwright E2E (${{ matrix.suite }}, ${{ matrix.project }})
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
-    # All six jobs execute the same verified SSR/WASM build.
+    # Every selected job executes the same verified SSR/WASM build.
     needs: build
     if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
-    # One job per general/1.5/2.5 suite and Playwright project. The suite runs on a single worker because
+    # Default: general and1.5; experimental2.5 requires teletext_only=2.5/all.
+    # One job per selected suite/project. Each suite uses a single worker because
     # it mutates shared application state in its test database (TEST.md): each
     # job runs scripts/e2e/playwright-e2e.sh separately, and that script
     # creates its own temporary database and web host per invocation, so the
@@ -742,7 +743,7 @@ jobs:
     # than by `--shard` also keeps every `mode: 'serial'` group whole inside
     # one job.
     #
-    # All six suite/project combinations run serially within this workflow. Both self-hosted
+    # Selected suite/project combinations run serially within this workflow. Both self-hosted
     # runners share one machine, so simultaneous browser suites compete for
     # CPU and memory; an otherwise
     # unexplained Chromium hydration timeout occurred while both overlapped.
@@ -753,7 +754,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}') }}
+      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}') }}
     env:
       # Keep CI independent from the maintainer's live admin server on 8409.
       ERSATZRS_E2E_PORT: ${{ matrix.port }}

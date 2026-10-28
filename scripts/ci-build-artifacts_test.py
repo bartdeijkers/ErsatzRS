@@ -580,7 +580,8 @@ class FocusedAuditSelection(unittest.TestCase):
         expression = expression.removeprefix("${{").removesuffix("}}").strip()
         expression = expression.replace("&&", " and ").replace("||", " or ")
         for mode, expected in (("1.5-rust", ["1.5"]), ("1.5", ["1.5"]),
-                               ("2.5", ["2.5"]), ("all", ["1.5", "2.5"]), ("none", ["1.5", "2.5"])):
+                               ("2.5", ["2.5"]), ("all", ["1.5", "2.5"]), ("none", ["1.5"]),
+                               ("", ["1.5"]), (None, ["1.5"])):
             actual = eval(expression, {"__builtins__": {}}, {
                 "inputs": SimpleNamespace(teletext_only=mode), "fromJSON": json.loads,
             })
@@ -589,6 +590,25 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertIn('scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL")', self.jobs["teletext"])
         self.assertIn('scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime)', self.jobs["teletext"])
         self.assertIn("format('-teletext-{0}', inputs.teletext_only)", self.workflow)
+
+    def test_experimental_browser_level25_requires_explicit_dispatch(self):
+        expression = re.search(r"^      matrix: (.+)$", self.jobs["hydration"], re.M)[1]
+        expression = expression.removeprefix("${{").removesuffix("}}").strip()
+        expression = expression.replace("&&", " and ").replace("||", " or ")
+        for mode, expected in ((None, {"general", "1.5"}), ("", {"general", "1.5"}),
+                               ("none", {"general", "1.5"}), ("1.5", {"1.5"}),
+                               ("2.5", {"2.5"}), ("all", {"1.5", "2.5"})):
+            with self.subTest(teletext_only=mode):
+                matrix = eval(expression, {"__builtins__": {}}, {
+                    "inputs": SimpleNamespace(teletext_only=mode, browser_only="none"),
+                    "fromJSON": json.loads,
+                })["include"]
+                self.assertEqual({row["suite"] for row in matrix}, expected)
+                self.assertEqual(len(matrix), 2 * len(expected))
+                self.assertEqual(len({row["port"] for row in matrix}), len(matrix))
+                for suite in expected:
+                    self.assertEqual({row["project"] for row in matrix if row["suite"] == suite},
+                                     {"chromium", "firefox"})
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)

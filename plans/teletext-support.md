@@ -22,12 +22,21 @@ lives in
 [`docs/progress/parity/teletext-support.toml`](../docs/progress/parity/teletext-support.toml);
 this plan owns future sequencing and acceptance boundaries.
 
+Current maintainer amendment (2026-10-28), ADR0123: fully verified Level1/1.5
+and all applicable shared gates define9A. Existing2.5 remains available as
+experimental, including authoring/preview/publication/output; all outstanding
+enhanced-only acceptance is Deferred until a new maintainer task after suitable
+open-source client capability becomes available. Do not remove code/evidence or
+weaken base validation/fallback. Dedicated2.5 CI is opt-in. Earlier full2.5
+prerequisite wording below is historical and superseded for current acceptance.
+Production9B still waits for accepted9A under this revised boundary.
+
 ## Goal
 
 Deliver a reusable teletext engine and then an add-on-authored TV guide inspired
-by NOS Teletekst. Authored support must reach EN 300 706 Level 2.5 for design,
-validation, encoding, publication and display, with correct Level 1/1.5 fallback
-and generic lossless authoring/TTI interchange. QTeletextMaker is an optional
+by NOS Teletekst. Fully verify authored EN300706 Level1/1.5 and generic lossless
+authoring/TTI interchange. Preserve implemented2.5 design, validation, encoding,
+publication and display as experimental with protected base fallback. QTeletextMaker is an optional
 example editor under the2026-10-28 amendment in ADR0123; further compatibility
 waits for upstream and does not block9A. Keep three distinct concerns explicit: DVB teletext subtitle
 pages embedded in source transport streams,
@@ -984,7 +993,7 @@ or DVB-subtitle stream.
 3. `p9a-03`: persist source services/pages and expose exact metadata.
 4. `p9a-04`: implement and accept the generic engine and selection/output matrix
    using synthetic pages, including channel profiles, shared admin/Lua controls,
-   full Level 2.5/base fallback, generic TTI/sidecar roundtrip, localized
+   complete Level1/1.5 and protected fallback, generic TTI/sidecar roundtrip, localized
    management, health, independent decoder and suitable-client/runtime proof.
 5. `p9b-01`: implement the single tvguide teletext add-on in ErsatzRS-Addons,
    including its NOS-inspired page structure, host-supplied guide content,

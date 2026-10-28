@@ -7,6 +7,12 @@ by one new tvguide teletext add-on in ErsatzRS-Addons. The maintainer clarified
 that only TV-guide-related NOS Teletekst pages in the 200–299 range serve as
 the example for page presentation and navigation.
 
+Maintainer amendment (2026-10-28), ADR0123: engine-first9A acceptance now requires
+the fully verified Level1/1.5 engine and every applicable shared gate. Existing
+Level2.5 remains available as experimental; its remaining acceptance/client work
+is Deferred until a new maintainer task and does not block9A or subsequent9B.
+This preserves the engine/content split; no experimental2.5 acceptance is claimed.
+
 ## Implementation
 
 Not implemented. Phase 9 milestones and the `teletext-support` parity record

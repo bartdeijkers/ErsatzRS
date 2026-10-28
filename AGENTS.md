@@ -108,14 +108,26 @@ available; this does not authorize paid provisioning or change other deferrals.
 
 Phase 9A may be accepted after all unchanged functional requirements and every
 currently required, non-deferred check for the three Linux targets and Windows
-x64 are proven, with the native ARM assumption explicitly disclosed. Full
-authored Level 2.5, correct Level 1/1.5 fallback, generic lossless authoring/TTI
-interchange and engine-first delivery remain mandatory. By maintainer amendment
+x64 are proven, with the native ARM assumption explicitly disclosed. By the
+latest maintainer amendment (2026-10-28), complete independently verified
+Level1/1.5, applicable generic lossless authoring/TTI, metadata/zones, profiles,
+Lua, admin and playback/platform safety remain mandatory. Keep implemented
+Level2.5 available as **experimental**, including authoring, preview and output;
+do not remove its code or safeguards. Remaining enhanced-only conformance,
+semantic/editor/client acceptance is Deferred, not accepted, and does not block
+9A or subsequent9B. Resume only on a new explicit maintainer task when suitable
+open-source client capability is available; no client hunt, supplier evaluation
+or external decoder maintenance meanwhile. Level1.5 includes applicable X/26;
+never hide invalid enhanced data to publish a document or weaken base fallback.
+Existing2.5 Rust/browser regressions remain available as optional explicit CI
+dispatches; general and1.5 CI remain required. Engine-first delivery still means
+accepting this revised9A boundary before production9B. By maintainer amendment
 (2026-10-28), QTeletextMaker is an optional example editor, not a runtime or
 acceptance dependency. Preserve its qualified workflows and limitations; wait
 for upstream for further QTM capability without local editor maintenance.
-Complete native engine capacity, metadata, validation, preview and explicit
-publication remain required independently of any external editor. This is
+Required base engine capacity, metadata, validation, preview and explicit
+publication remain required independently of any external editor. Retain the
+existing experimental enhanced resource capacities without claiming acceptance. This is
 neither macOS acceptance nor verified six-platform support. See the runtime/platform contract in
 [ADR 0121](docs/adr/0121-teletext-pages-transport-and-addon-contract.md).
 

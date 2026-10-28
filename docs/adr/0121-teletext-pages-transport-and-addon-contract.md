@@ -7,7 +7,10 @@ maintainer-authorized Phase 9 engine-first programme in ADR 0120. The selected
 delivery is genuine DVB teletext for MPEG-TS clients plus an authenticated
 browser viewer. The separate TV-guide add-on still starts after P9A-04.
 ADR 0123 extends the authored target through Level 2.5 and adds external-editor
-interchange; it supersedes the Level 1/1.5-only target below, not the other gates.
+interchange. Its latest2026-10-28 amendment makes complete Level1/1.5 the required
+9A acceptance target and retains implemented Level2.5 as experimental. Remaining
+enhanced-only testing/acceptance is Deferred until a new maintainer task; it is
+not accepted and no longer blocks9A/9B. All applicable shared gates remain.
 
 ## Implementation
 
@@ -769,7 +772,8 @@ non-display resources under [ADR 0123](0123-level-2-5-teletext-and-external-edit
 Preserve this base as fallback; current encoding does not establish that target.
 ADR 0123's 2026-10-19 amendment accepts a standalone Level 1/1.5 delivery first,
 including applicable X/26 data without optional enhanced resource dependencies.
-Complete Level 2.5 and the full generic-engine gate still precede Phase 9B.
+The latest2026-10-28 ADR0123 amendment defers enhanced-only acceptance while
+retaining experimental2.5. The revised generic-engine gate still precedes9B.
 
 The public page model contains typed text/mosaic runs, foreground/background
 colour, boxing, height, flash and conceal attributes, language, national option,
@@ -1198,9 +1202,10 @@ evidence without deliberate incompatibility; additional macOS repair is deferred
 Explicit maintainer permission is necessary to resume, even after a visibility
 change. The existing deferred macOS milestone owners retain future obligations.
 
-P9A acceptance requires all functional requirements, including complete authored
-Level 2.5, correct Level 1/1.5 fallback, generic lossless authoring/interchange and
-engine-first delivery, plus every currently required four-platform check. The
+P9A acceptance requires full Level1/1.5, correct base/fallback behavior, applicable
+generic lossless authoring/interchange and engine-first delivery, plus every
+currently required four-platform check. The latest ADR0123 amendment retains
+implemented2.5 as experimental and defers enhanced-only acceptance. The
 macOS-only amendment originally retained native ARM execution and the Windows
 package trial. The additional explicit maintainer decision below supersedes only
 that native ARM execution requirement. Windows remains required. Neither verified

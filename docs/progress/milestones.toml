@@ -957,6 +957,17 @@ feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p8e-03', 'p8f-01', 'dtx-a-02', 'ucu-09', 'p9a-standards']
 acceptance = '''
+Current maintainer amendment2026-10-28 (ADR0123): fully verified Level1/1.5 and all
+applicable shared source/output, authoring/interchange, metadata/zones,
+profiles/themes/Lua/restart, localized admin and required runtime/platform checks define
+current9A acceptance. Existing Level2.5 stays available as experimental. Remaining
+enhanced-only implementation/conformance/editor/independent/client proof is Deferred,
+not accepted, and excluded from the required9A path; resume only on a new maintainer
+task after suitable open-source client capability becomes available. Preserve all code,
+capacities, validation/fallback/playback safeguards and historical positive/negative
+proof. General/1.5 CI stays required; dedicated2.5 Rust/browser jobs are optional
+explicit dispatches. Earlier full2.5 prerequisite wording is superseded for current
+acceptance only.
 An accepted ADR distinguishes source DVB teletext subtitles, full-page
 browsing, generated channel pages, burn-in, and MPEG-TS carriage; defines the
 supported MPEG-TS/HLS/browser behavior; chooses page/language/region and
@@ -973,18 +984,12 @@ one tvguide teletext add-on; accept the technical page and versioned add-on
 contract, validation, compatibility, bounded refresh/publication, restart and
 visible stale/last-good/failure policy. Full-page support is required. This
 standards gate remains open despite acceptance of the ownership decision.
-ADR 0123 extends authored support through EN 300 706 Level 2.5. Audit the
-normative features and distinguish Level 3.5-only functions, including palettes,
-extended characters/mosaics, non-spacing attributes, DRCS, local/public/global
-objects, side panels and correct Level 1/1.5 fallback. Align typed pages/resources,
-versioned addon payloads, transport and browser rendering. Audit the actual pinned
-example external-editor TTI loader/writer before claiming optional compatibility; define identity/navigation
-mapping, external metadata, edit boundaries and separated design/draft/publication.
-Record a structured agent file/validation/preview workflow. Full Level 2.5 cannot
-be accepted while required functions are missing; necessary engine restrictions
-must be explicitly proposed to the maintainer. Kodi is optional: define TSDuck,
-independent decoding and actual display/navigation in a suitable versioned client
-with recorded feature coverage and limitations. TSDuck alone is insufficient.
+ADR0123 retains the implemented Level2.5 model/encoding/interchange as experimental; its
+remaining enhanced-only audit/conformance/client acceptance is Deferred under the
+latest2026-10-28 maintainer decision. Complete the applicable Level1/1.5 standards and
+source/output contracts; TSDuck, independent decoding and actual suitable-client base
+display/navigation remain required. Optional external-editor compatibility must be
+accurately scoped.
 '''
 evidence = '''
 Maintainer amendment2026-10-28 (ADR0123; canonical decision checks at tmp/phase9-editor-optional-decision/qualification.json): QTM is an optional example editor, not a required component or9A gate. Generic complete native authoring, supported lossless TTI/sidecars, identities/navigation, metadata/zones, protection, concepts/preview/publication/reopen and full2.5/fallback remain required. Retain every scoped QTM positive/negative; wait changed upstream without local extension work. The X1 deferral is lifted only for bounded source/documentation-first qualification, retaining unchanged fixed oracles and all device/maintenance exclusions. Runtime publication remains separately authorized.
@@ -3050,6 +3055,17 @@ feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-03', 'p9a-final-gate']
 acceptance = '''
+Current maintainer amendment2026-10-28 (ADR0123): fully verified Level1/1.5 and all
+applicable shared source/output, authoring/interchange, metadata/zones,
+profiles/themes/Lua/restart, localized admin and required runtime/platform checks define
+current9A acceptance. Existing Level2.5 stays available as experimental. Remaining
+enhanced-only implementation/conformance/editor/independent/client proof is Deferred,
+not accepted, and excluded from the required9A path; resume only on a new maintainer
+task after suitable open-source client capability becomes available. Preserve all code,
+capacities, validation/fallback/playback safeguards and historical positive/negative
+proof. General/1.5 CI stays required; dedicated2.5 Rust/browser jobs are optional
+explicit dispatches. Earlier full2.5 prerequisite wording is superseded for current
+acceptance only.
 ADR0121 private-period amendment (2026-10-26): the three Linux RIDs and Windows
 x64 remain required; both macOS RIDs are Deferred by maintainer decision, not
 accepted. Resumption requires explicit permission. All functional requirements
@@ -3083,15 +3099,10 @@ wrong-add-on, invalid or unavailable profiles cannot activate packages or damage
 ordinary playback. Safe live transitions expose pending/applied state, and browser
 and stream consume identical validated channel generations. Localize these
 controls in every supported culture and prove no-JS/hydrated browser flows.
-Implement the complete authored Level 2.5 target in ADR 0123 with representative
-synthetic palettes, extended characters/mosaics, non-spacing attributes, DRCS,
-local/public/global objects and side panels. Prove correct Level 1/1.5 fallback,
-resource dependencies, bounds, updates and atomic rejection. TSDuck transport
-checks, independent decoding and actual display/page/subpage navigation in a
-demonstrably suitable client are required. Record exact client/decoder versions,
-settings, tested functions and limitations. Kodi is a candidate; equivalent
-suitable clients are allowed. Neither TSDuck alone nor decoder availability
-establishes complete Level 2.5 rendering.
+Complete independently verified Level1/1.5, including applicable X/26, actual base
+client display/page/subpage navigation and required transport/independent proof. Retain
+implemented2.5 as experimental; enhanced-only acceptance is Deferred under ADR0123, not
+a requirement to qualify a full2.5 client.
 Prove editor-independent page/subpage/supported-set
 export -> validated file/native edit/save -> draft import -> validation/preview ->
 explicit publication. Preserve supported content, attributes, identities and
@@ -3103,12 +3114,14 @@ broadcast state. Draft persistence, stale export/revision conflicts and explicit
 publication use application validation shared by admin and agent file workflows.
 Preview uses the broadcast's same validated model and reports page/subpage/position
 encoding failures. Localized headed light/dark and hydrated/no-JS Chromium/Firefox
-proof covers all changed admin. Full engine acceptance stays open until all parts
-are implemented and evidenced; production TV-guide content still waits for it.
+proof covers all changed admin. Current9A acceptance stays open until all required
+base/shared gates are evidenced; production TV-guide content still waits for that
+revised boundary.
 
 Maintainer-authorized delivery order (2026-10-19), ADR 0123: accept standalone
-Level 1/1.5 separately before completing Level 2.5. This is a sub-boundary of
-P9A-04, never completion of P9A-04 or permission to start P9B. All applicable
+Level 1/1.5 separately before completing Level 2.5. The latest2026-10-28 amendment now
+makes this base boundary mandatory for9A, with enhanced-only acceptance Deferred. Base
+success still requires the shared final gate before P9B. All applicable
 existing F/V/X clauses remain required for the base. Require a complete usable
 base flow: design/profile -> validation -> export -> validated file/native
 edit/save -> concept import -> shared-model preview -> explicit publication
@@ -3122,13 +3135,39 @@ Retain generic metadata/templates/zones, per-channel profiles/themes/isolation,
 Lua timing/errors/restart, localized headed admin and AV/subtitle/alternate-audio/
 platform safety. Enhanced-only editor/client limitations do not block this base;
 shared capability gaps do. Record base acceptance only after all L15 rows below
-close with mandatory evidence. Then every2.5 extension must prove its own behavior
-and intended1/1.5 fallback, preferably on the same actual broadcast pages, plus
-standalone base regressions. Essential dual-level information/navigation remains
-in the base; enriched presentation may differ. Complete authored2.5, full agreed
-interchange and every original final9A criterion remain unchanged.
+close with mandatory evidence. Existing experimental2.5 extensions retain base fallback
+and publication safeguards; unfinished enhanced conformance remains at the Deferred
+owners. No full2.5 acceptance claim follows.
 '''
 evidence = '''
+Current maintainer amendment2026-10-28 (ADR0123): fully verified Level1/1.5 and all
+applicable shared source/output, authoring/interchange, metadata/zones,
+profiles/themes/Lua/restart, localized admin and required runtime/platform checks define
+current9A acceptance. Existing Level2.5 stays available as experimental. Remaining
+enhanced-only implementation/conformance/editor/independent/client proof is Deferred,
+not accepted, and excluded from the required9A path; resume only on a new maintainer
+task after suitable open-source client capability becomes available. Preserve all code,
+capacities, validation/fallback/playback safeguards and historical positive/negative
+proof. General/1.5 CI stays required; dedicated2.5 Rust/browser jobs are optional
+explicit dispatches. Earlier full2.5 prerequisite wording is superseded for current
+acceptance only.
+The joint physical Kodi session now concerns mandatory Level1/1.5 and its shared
+requirements; full2.5 readiness is no longer a prerequisite. Preserve the
+no-premature-physical-trial agreement. Historical enhanced-only steps in the retained
+joint-session protocol are Deferred, not required for this base session.
+Amendment verification:13 focused CI scheduling/matrix regressions and9 unchanged
+teletext selector tests pass. Actionlint passes on the modified workflow. The
+existing progress validator passes without code changes. A required-closure
+comparison removes exactly the seven enhanced-only owners and retains all base
+and shared dependencies; no Complete set changes. Optional2.5 tests/selectors
+remain available. No remote workflow was run, no push/publication occurred and
+no product Rust, runtime, wire format or validation behavior changed. Read-only
+GitHub required-status API access returns403 (private-repository plan restriction),
+so no remote branch-policy verification or change is claimed.
+Current direction: finish the existing L15 base author/client and shared adoption/final
+owners. F/V/X enhanced-only rows below retain historical evidence and future closure
+conditions; their Deferred owners are not required9A dependencies. No new full2.5 client
+qualification or physical-device enhanced trial follows.
 Completed approved bounded client prequalification: canonical tmp/phase9-next-local-teletext/level15-progdvb-guided/prequalification-20261028/qualification.json owns primary-document checks, actual official7.73.3 installer pin/seven-file comparison, unchanged help/teletext labels and one source-positive TARA alternative. No client/installer was executed and no existing negative trial replayed. Required actual base/enhanced display/control/warm-stream oracles stay with client-base/client-enhanced; a versioned appropriate runtime/evaluation access is still missing. No new engine defect, suitable-client acceptance or vendor dependency is inferred.
 Maintainer amendment2026-10-28 (ADR0123; canonical decision checks at tmp/phase9-editor-optional-decision/qualification.json): QTM is an optional example editor, not a required component or9A gate. Generic complete native authoring, supported lossless TTI/sidecars, identities/navigation, metadata/zones, protection, concepts/preview/publication/reopen and full2.5/fallback remain required. Retain every scoped QTM positive/negative; wait changed upstream without local extension work. The X1 deferral is lifted only for bounded source/documentation-first qualification, retaining unchanged fixed oracles and all device/maintenance exclusions. Runtime publication remains separately authorized.
 ADR0121 private-period amendment (2026-10-26): the three Linux RIDs and Windows
@@ -16334,16 +16373,24 @@ Missing proof/stop: AB1/2 source eligibility and the fixed remaining independent
 id         = 'p9a-author-enhanced'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete authored Level2.5 lowering and conformance'
-status = 'Blocked'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-author-base']
 acceptance = '''
+Deferred experimental2.5 boundary under the current2026-10-28 maintainer amendment in
+ADR0123. The retained conditions below are future resumption/acceptance conditions, not
+current9A gates. Resume only on a new maintainer task; existing functionality stays
+experimental and available.
 Requirement owner: P9A-01 Level2.5 audit and P9A-04 full authored target; F3/V1 enhanced boundary.
 User action/proof: Publish every agreed2.5 palette, extended repertoire/mosaic, non-spacing attribute, DRCS/object/panel and context behavior with correct intended1/1.5 fallback.
 Smallest necessary work: Resolve only r1-named required Table4/A7/A8/C3 and context/dependency/bounds/update/atomic-rejection cells with exact original lineage, priority, semantic source and native packets. Qualify physical enhanced spacing/fallback without redefining those responses as base requirements. Use editor/client/resource retirement primary owners for their joins.
 Testable stop condition: Every agreed enhanced feature and reconciled combination passes exact model/native/independent bounds, updates, rejection and fallback oracles; no unsupported3.5 behavior, relaxed oracle or static-preview substitute.
 '''
 evidence = '''
+Status amendment2026-10-28: Deferred by explicit maintainer decision; no acceptance is
+inferred. Retain completed components and every missing semantic/implementation/client
+proof below. No further2.5 trial, client search, supplier evaluation or external
+maintenance is queued. Required9A owners do not depend on this enhanced-only package.
 Status: Blocked on the exact remaining normative-order/lifetime interpretation and independent C3 formatter capability. Completed model/native/field components below remain closed. Finite remaining cells (H is tmp/phase9-header-c2/identity.json):
 AE1 intended1/1.5 four-control fallback proof is completed: pinned unchanged imager0.2.0 with its supported black_foreground=false/double_width=false basic profile passes all28 unchanged field expectations in20 level1/1.5 reports, including the22 previously wrong-level points. Same-byte X26/G2 degree is absent at1 and present at1.5; four enhanced guards prove those options do not suppress mandatory2.5 responses. Five current native tests reproduce all10 archived fixtures byte-exact. Canonical provider-scan/identity.json authored_basic_fallback_followup and level25-physical-spacing/basic-profile/qualification.json own exact inputs/configuration/results. The original stock0.2.42 negative remains unchanged and is not rerun or repaired. Reuse completed10 enhanced fixtures/14 fields/four rasters and genuine editor/delivery proof through work.json physical_spacing_followup. No suitable-client/font-pixel/platform acceptance or new product behavior is claimed.
 AE2 coherent Main/resource context is completed within the complete factory and existing carousel boundary: original POP21/2A0 and GPOP21/2B0 retain their exact FG3/FG4 bodies, roots, complete models and fallback. The producer's actual resource-before-display acquisition supplies only this group comparison (B7/C2), not storage order. Both full factories, original/physical FG1 at0,10, observable second invocation FG4 at1,8, native Hamming words, strict standalone refusal and actual carousel order pass.1756 affected teletext tests pass;32 original-identity regressions preserve the unchanged source. Canonical provider-scan/identity.json authored_resource_order_followup owns original Main3 red, prefix OriginAttributes negative, producer/standard qualification, exact independent imager1.5/2.5 fields and scoped stock-decoder results. Stock0.2.42 agrees with POP colours but misses Passive headerA; the explicit-X27 GPOP capture stays entirely Base. Those negative automatic-routing results are preserved, not represented as full client proof or repaired externally.
@@ -16389,16 +16436,24 @@ Missing proof/stop: EB1/EB2 editor actions are closed within the explicit scopes
 id         = 'p9a-editor-enhanced'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete enhanced resource and definition interchange'
-status = 'Blocked'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-author-enhanced', 'p9a-metadata', 'p9a-selection-undo']
 acceptance = '''
+Deferred experimental2.5 boundary under the current2026-10-28 maintainer amendment in
+ADR0123. The retained conditions below are future resumption/acceptance conditions, not
+current9A gates. Resume only on a new maintainer task; existing functionality stays
+experimental and available.
 Requirement owner: P9A-04 complete agreed interchange; F1/V2 enhanced resource/context/definition boundary.
 User action/proof: Losslessly edit complete enhanced resource sets, definitions, selected roles, targets, links and context with full identities and protected consumers retained.
 Smallest necessary work: After r1, finish only named engine/import/export/effective-role/target/resource-call and complete-set/dependency gaps. Keep immutable originals, complete catalogues including dormant/protected definitions, exact root undo, targeted3.5/ambiguous rejection and explicit addon-version/publication authority. Maintainer2026-10-27 explicitly requires unused-object-copy removal before full9A; EE5 below is its implementation/proof owner.
 Testable stop condition: All reconciled enhanced internal interchange cells pass full complete-factory/native/TTI/shared-preview/draft/publication/reopen oracles; the optional QTM upstream-capacity package is not an acceptance dependency.
 '''
 evidence = '''
+Status amendment2026-10-28: Deferred by explicit maintainer decision; no acceptance is
+inferred. Retain completed components and every missing semantic/implementation/client
+proof below. No further2.5 trial, client search, supplier evaluation or external
+maintenance is queued. Required9A owners do not depend on this enhanced-only package.
 Completed generic EE4 supra208-word/full-catalogue file component2026-10-28: canonical tmp/phase9-next-local-teletext/provider-scan/editor-generic-capacity-join/qualification.json owns the existing355-command POP fragment lifecycle expanded with one small uninvoked original definition23. The original large fixture and generated-consumer refusal remain byte-exact. All4 targeted native cases pass on the amended source: full-catalogue fragment import/preview/separate publication/exact native resource reexport/root undo/repeat/cold reopen, unchanged shared-generated-consumer refusal, fitting four-definition/two-document atomic lifecycle and actual complete-set multipart HTTP ownership/head fences. The 355-command request preserves complete current receipt membership and the whole original catalogue; no source, native identity, dormant/protected definition, profile/theme/package or other channel is dropped to fit an external editor. Missing fragment, malformed second document and protected effects still reject atomically. Existing EE1/EE2/EE3/EE5, bank/selection/attachment and localized admin receipts retain their own valid scopes. This is mandatory generic file/native authoring proof under the optional-QTM amendment, not new product functionality or actual GUI/client/stream/platform acceptance. Whole-standard/native-capacity and normative semantics retain author-enhanced/AE5; the355-word representative does not claim exhaustive conformance. No additional editor variants are queued.
 Current boundary2026-10-28: internal EE1/EE2/EE3, generic EE4 file action and EE5 are closed within their stated scopes; QTM-only complete-bank/large-context capability is removed from mandatory9A acceptance, not recorded as passed. Full native engine authoring remains required independently of that optional editor.
 Status: Blocked on required authoring dependencies; EE4/X3 QTM upstream capacity is optional under the2026-10-28 amendment. Internal EE1/EE2/EE3, generic EE4 file action and mandatory EE5 unused-copy removal are completed within their explicit boundaries.
@@ -16591,16 +16646,24 @@ Missing mandatory proof: None within this base application/host component. Actua
 id         = 'p9a-retirement-enhanced'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete enhanced resource retirement and recovery'
-status     = 'Blocked'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-m29-policy', 'p9a-client-enhanced']
 acceptance = '''
+Deferred experimental2.5 boundary under the current2026-10-28 maintainer amendment in
+ADR0123. The retained conditions below are future resumption/acceptance conditions, not
+current9A gates. Resume only on a new maintainer task; existing functionality stays
+experimental and available.
 Requirement owner: F4/V5 enhanced resource/context retirement and P9A-04 dependency/update safety.
 User action/proof: Safely replace or remove agreed enhanced resources on original outputs with complete receiver history, exact owner acknowledgements and immutable source models.
 Smallest necessary work: Use r1 to identify missing enhanced retirement cells, then complete only their owner-history/ACK/current-generation/clock/cleanup proofs. Keep unchanged protective refusal until semantics are established; do not stop independent base profiles/Lua work for an enhanced-only case.
 Testable stop condition: Every reconciled enhanced retirement cell has literal complete transition, receiver-history/ACK/clock/AV/cleanup and required independent/client proof; m29-policy and client-enhanced remain separate final gates.
 '''
 evidence = '''
+Status amendment2026-10-28: Deferred by explicit maintainer decision; no acceptance is
+inferred. Retain completed components and every missing semantic/implementation/client
+proof below. No further2.5 trial, client search, supplier evaluation or external
+maintenance is queued. Required9A owners do not depend on this enhanced-only package.
 Status: Blocked on explicit M29 semantics and suitable enhanced receiver proof, not an unspecified internal variant series.
 Closed engine scopes: tmp/phase9-mot-retirement/identity.json plus ordinary-tcp/automatic/populated-http/warm-qualification/page-retirement receipts prove qualified neutral/populated MOT publication, ordinary HTTP and independent cached-page retirement effects, plus full-C4 X28 primary/palette retirement. Preserve these exact completed boundaries.
 Exact remaining gap: Accepted resource/default update/removal still needs actual suitable-client effects on the original stream and the M29 author/receiver semantics decision. These are primary-owned by client-enhanced and m29-policy. The historical phrase other-resource/context supplies no additional named independently executable engine defect or test cell; a new one needs an existing explicit clause/negative before implementation.
@@ -16611,16 +16674,24 @@ Missing proof/stop: Consume the resolved policy and actual client retirement/rec
 id         = 'p9a-m29-policy'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Resolve the M29 Header POP retirement policy prerequisite'
-status = 'Blocked'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = []
 acceptance = '''
+Deferred experimental2.5 boundary under the current2026-10-28 maintainer amendment in
+ADR0123. The retained conditions below are future resumption/acceptance conditions, not
+current9A gates. Resume only on a new maintainer task; existing functionality stays
+experimental and available.
 Requirement owner: F4 M29-to-Header/POP retirement; ADR0123 original-secondary semantics.
 User action/proof: Retire magazine defaults without changing an original receiver-dependent secondary G0 meaning.
 Smallest necessary work: Keep protective refusal. Present the existing exact policy packet for a maintainer author/receiver decision, or qualify an actually semantics-preserving reset with the unchanged original semantics; no automatic no-G0 substitution or dependency maintenance.
 Testable stop condition: The missing semantics policy/reset is resolved explicitly and then the affected safe-retirement oracles pass. This enhanced-only prerequisite does not by itself block standalone base L15.
 '''
 evidence = '''
+Status amendment2026-10-28: Deferred by explicit maintainer decision; no acceptance is
+inferred. Retain completed components and every missing semantic/implementation/client
+proof below. No further2.5 trial, client search, supplier evaluation or external
+maintenance is queued. Required9A owners do not depend on this enhanced-only package.
 Completed explicit-agreement external-editor component (2026-10-28): canonical tmp/phase9-mot-retirement/m29-policy/editor/qualification.json owns both retained choices through pinned actual QTM1.0/cac2167 edit/Save As, current-receipt concept import, exact reexport, shared preview, separate explicit publication and cold reopen. The genuine no-second save omits default X28/0; the original located Packet failure is retained. Import now reconstructs only that exact trusted policy-derived default packet for an already bound Header/POP consumer, before unchanged protected reconciliation. Designated0x10, changed present packets, nondefault contexts and other missing packets gain no permission. Original Header/DecoderDependent snapshots, ESC/# body, template/zones, companion, profiles/bindings/package/receipts and other channel remain exact.530 affected native controls and the actual bundled editor test pass; same-graph strict Clippy and registration gates are recorded canonically. The no-second GUI result is reused only after exact input/output/tool hashes match; designated0x10 has its new actual GUI save. Both native concepts and publications pass complete cleanup. Native Linux x64 editor/import evidence does not qualify a suitable stream receiver or current platform adoption. Existing admin and ordinary-stream evidence retain their proven scopes. This closes the companion/editor interoperability obligation for this policy, not the full upstream bank/context obligation.
 Completed ordinary-stream agreement component (2026-10-28; new mandatory proof, not new product functionality): canonical tmp/phase9-mot-retirement/m29-policy/handover/qualification.json owns two explicit publications over old M29 on the original Day/Night responses at default capacity2. No-second and exact0x10 contexts survive storage/provider restoration into full own Page X28, retain immutable Header/DecoderDependent provenance and the edited ESC row, and preserve complete/repeated wire cycles. The whole captured successor tail has no M29; own40-column context, source clock/AV/TSDuck, profiles/bindings/package/old originals/receipts/Night, database reopen and unforced owned cleanup pass.19 targeted controls include both G0 intents and separate publication. The retained initial ESC-before-intent refusal is correct DecoderDependentSecondary protection, not an encoder defect. The first actual wire trial reached both transitions and cleanup but exposed a fixture-only56-column assumption; existing strict width-specific480px recovery checks correct it, and the unchanged case then completes all remaining gates. Tools exactly match the earlier ordinary TCP proof. This qualified Linux generated MPEG2/AAC English-tone case does not qualify captions/alternate audio, other RIDs/adoption, external editor or a warm/cold receiver; those existing owners and valid proofs retain scope. No output runtime, decoder, profile or installed-package code changed.
 Completed localized receipt-bound admin component (2026-10-28): canonical tmp/phase9-mot-retirement/m29-policy/admin/qualification.json owns guarded current-owner/head HTTP choice/change/withdrawal, historical controls, exact observation projection and all9 cultures. The existing native POST/303 forms work in actual headed Chromium/Firefox with and without JavaScript, both themes and320/1920px views.83 affected regressions pass. Twelve actual browser-driven revisions and four exact context-only undo operations survive native cold reconstruction and database reopen; original sources, other channel, configuration/provider calls and live pointers remain unchanged. The actual browser negative exposed a missing channel-feedback whitelist entry; the corrected same workflow passes without relaxing the oracle. The initial sandbox bind refusal and deliberately aborted failed-browser marker remain distinct negative evidence. Native application/host/publication evidence from author-action is reused, not a new external-editor/receiver or platform claim.
@@ -16649,6 +16720,10 @@ status     = 'In progress'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-editor-base', 'p9a-lifecycle-base']
 acceptance = '''
+Latest2026-10-28 requirement: label retained Level2.5 functionality as experimental in
+the relevant localized admin, preserving all existing authoring/publication controls and
+base safety. Existing A1 components remain closed within their scopes; this newly
+requested classification needs focused localized/SSR and affected browser evidence.
 Requirement owner: P9A-01 agent workflow and P9A-04 management/publication; V4 and L15-B2/C base boundary.
 User action/proof: Manage design/profile, export/import concept, shared-model preview, explicit publication and pending/applied state through localized admin or the validated agent file workflow.
 Smallest necessary work: Finish only named changed base flows using shared app validation, located encoding errors, persisted draft/revision conflicts, no import activation and immutable packages. Reuse unchanged controls and publication/ordinary transport proof.
@@ -16664,16 +16739,24 @@ Missing proof/stop: No A1 action remains within the explicitly joined base bound
 id         = 'p9a-admin-enhanced'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete localized enhanced resource management'
-status     = 'In progress'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-editor-enhanced', 'p9a-retirement-enhanced']
 acceptance = '''
+Deferred experimental2.5 boundary under the current2026-10-28 maintainer amendment in
+ADR0123. The retained conditions below are future resumption/acceptance conditions, not
+current9A gates. Resume only on a new maintainer task; existing functionality stays
+experimental and available.
 Requirement owner: P9A-04 full enhanced management; V4 enhanced resource/upload/preview/publication boundary.
 User action/proof: Manage supported enhanced resources and complete draft publication through localized admin and the shared agent file contract.
 Smallest necessary work: Verify only r1-named changed enhanced resource/upload/preview/publication/admin boundaries with exact generation/position errors, revision and ownership fences; reuse all unchanged base and earlier enhanced UI evidence.
 Testable stop condition: All reconciled changed enhanced admin actions pass the mandatory localized/browser matrix and shared validation without duplicating unchanged base checks.
 '''
 evidence = '''
+Status amendment2026-10-28: Deferred by explicit maintainer decision; no acceptance is
+inferred. Retain completed components and every missing semantic/implementation/client
+proof below. No further2.5 trial, client search, supplier evaluation or external
+maintenance is queued. Required9A owners do not depend on this enhanced-only package.
 A2 supported resource-file/current-draft actions completed within the source/HTTP/headed join; aggregate status remains In progress for required editor/r1/retirement dependencies. Canonical: tmp/phase9-next-local-teletext/provider-scan/identity.json admin_enhanced_join_followup. Two real Router multipart/SSR cases carry EE1 complete context and EE3 complete resource-set concepts to exact independent native models/units/shared previews. EE1 stale restore returns page124/subcode0020/X26 designation0/word11; invalid EE3 root returns native POP2C0/S1=0/X26 word7, visibly rendered26,7. A demonstrated scalar-to-structural fallback lost that existing packet location; the correction retains it only for an otherwise unlocated same-resource Structure failure. Final error kind, parser causes, existing positions, deadline failures and admission remain unchanged. Foreign ownership, invalid second document and stale revision refuse without changing head/publication or source/profile/package/Night.45 resource controls pass; final2 rechecked after equivalent borrow adjustment; strict affected lib/integration Clippy passes.22 source bodies,12 form/API/CSS files and104 strings in9cultures match corresponding actual headed sources. Eleven base receipt pins plus26 enhanced receipt pins are verified: common4 Chromium/4Firefox JS/noJS/light/dark and four scoped enhanced JS-nl-light/noJS-en-dark pairs retain their exact boundaries; no fresh exact-HEAD full matrix is claimed. EE1/EE3 separate publication/root-undo/cold-reopen and earlier generation/located-diagnostic/admin receipts remain reusable.
 Reuse/closed: Add/Copy, empty-bank/current-draft lifecycle/batch-S1 and four-definition native export/reopen, all earlier9culture/headed/browser modes and base admin actions retain their exact evidence. Parent editor/retirement owners supply the exact changed action; shared obligations stay there.
 Missing proof/stop: No further supported resource-file/current-draft A2 action remains within this joined boundary. Enhanced retirement reporting still waits for the accepted retirement behavior and its mandatory warm/native evidence at p9a-retirement-enhanced; implement/prove only that resulting named action when the prerequisite resolves. Parent dependencies retain their acceptance obligations. Do not invent new admin variants or silently accept retirement from the source/HTTP/headed join.
@@ -16706,16 +16789,24 @@ Status: Blocked on a capability-positive configuration/runtime for the remaining
 id         = 'p9a-client-enhanced'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Qualify suitable full Level2.5 receiver and joint end trial'
-status     = 'Blocked'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = []
 acceptance = '''
+Deferred experimental2.5 boundary under the current2026-10-28 maintainer amendment in
+ADR0123. The retained conditions below are future resumption/acceptance conditions, not
+current9A gates. Resume only on a new maintainer task; existing functionality stays
+experimental and available.
 Requirement owner: P9A-04 actual suitable-client full2.5 display; V3/X1 enhanced boundary.
 User action/proof: View enlarged Local/DRCS, panels, automatic resource/default acquisition, live updates and full page/subpage navigation on the emitted ordinary stream.
 Smallest necessary work: Under2026-10-28 authority, bound source/documentation qualification to one demonstrably promising candidate, reusing negative candidates. Runtime proof requires a concrete capability-positive finding. Then perform the already specified conditional joint2.5 final session with exact device/inputstream/editor/runtime versions and same-page1/1.5 fallback, fixed masks, navigation/reveal/timed flash, AV and cleanup. No DVBViewer, unchanged negative rerun, external maintenance or physical GoogleTV trial before this joint session.
 Testable stop condition: A pinned capability-positive client passes every original enhanced V3/X1 function and the gated joint final session without scope reduction or relaxed fixed oracles.
 '''
 evidence = '''
+Status amendment2026-10-28: Deferred by explicit maintainer decision; no acceptance is
+inferred. Retain completed components and every missing semantic/implementation/client
+proof below. No further2.5 trial, client search, supplier evaluation or external
+maintenance is queued. Required9A owners do not depend on this enhanced-only package.
 Completed bounded candidate-source qualification2026-10-28: the same canonical prequalification-20261028/qualification.json owns the one newly assessed TARA Systems Teletext Classic/Smart Devices alternative. Its primary product page states1.5/2.5, TOP/FLOF/subpage navigation, character repertoires, blinking/hold/conceal/reveal and classic acquisition/decode/render, plus local DVB/IPTV-server input with viewer rendering. This is a source-positive candidate route, not a pinned suitable runtime or proof of our object/DRCS/panel/warm-cache oracles. The page supplies no runnable evaluation artifact, version/digest or reproducible client/decoder identity. Exact external prerequisite: authorized evaluation access/terms and an identified executable client/SDK with normal MPEGTS source hookup and feature confirmation before any runtime experiment. No provider contacted, purchase, paid service, integration, physical device or external decoder maintenance. TARA is not an ErsatzRS dependency and a demonstrably equivalent accessible candidate remains allowed. Resume only with relevant artifact/access or changed capability, then execute the existing unchanged exact feature/stream/AV/cleanup matrix; no source-only acceptance.
 Maintainer2026-10-28 authorizes one bounded capability-positive client qualification after the current base package, not open-ended hunting, decoder repair, DVBViewer or physical Kodi before joint final acceptance. Missing independent/normative oracles retain their existing owners. No suitable client is accepted by this authorization.
 Status: Blocked on identified suitable evaluation-runtime access after completed bounded source qualification under2026-10-28 approval; the earlier2026-10-19 search deferral is superseded only within that boundary; the retained, previously qualified runtimes do not qualify all required functions. Kodi21.2 target shares all three decoder hashes with the retained21.3 source negative, so no positive physical-device expectation exists.
@@ -17218,7 +17309,10 @@ acceptance = '''
 Requirement owner: P9A-04 standalone Level1/1.5 acceptance; all L15-A1/A2/B1/B2/C/D/E1/E2 applicable F/V/X clauses.
 User action/proof: Complete design/profile -> validation -> export -> validated file/native edit/save -> concept/shared preview -> explicit publication -> ordinary stream -> suitable-client base navigation and display.
 Smallest necessary work: Join only missing base integration proofs after primary package cells close, reusing exact unchanged receipts. A valid complete base document must need neither optional2.5 banks nor a2.5 receiver. Reject complete invalid enhanced documents atomically; retain metadata/profiles/themes/Lua/AV/caption/alternate-audio/platform safety.
-Testable stop condition: All base primary packages and mandatory joined proof are complete; record only standalone Level1/1.5 acceptance. P9A-04 and production9B remain open until the full enhanced and final gates also close.
+Testable stop condition: All base primary packages and mandatory joined proof are
+complete; record only standalone Level1/1.5 acceptance. P9A-04 and production9B remain
+open until the required shared final gate closes; enhanced-only acceptance is Deferred
+and does not block them.
 '''
 evidence = '''
 Current2026-10-28 boundary: generic base authoring/interchange remains required; existing EB1/EB2 QTM evidence is reusable but the brand is not a dependency. All independent/client/AV/platform gates remain.
@@ -17234,16 +17328,24 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-level25'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Accept every enhanced Level2.5 extension and full interchange'
-status     = 'Not started'
+status     = 'Deferred'
 feature    = 'teletext-support'
 depends_on = ['p9a-level15', 'p9a-author-enhanced', 'p9a-editor-enhanced', 'p9a-retirement-enhanced', 'p9a-m29-policy', 'p9a-admin-enhanced', 'p9a-client-enhanced']
 acceptance = '''
+Deferred experimental2.5 boundary under the current2026-10-28 maintainer amendment in
+ADR0123. The retained conditions below are future resumption/acceptance conditions, not
+current9A gates. Resume only on a new maintainer task; existing functionality stays
+experimental and available.
 Requirement owner: P9A-04 complete authored2.5/full agreed interchange; enhanced F1/F3/F4/V1..V5/X1; X3 is optional QTM compatibility.
 User action/proof: Use every agreed2.5 extension and complete native authoring resource context on actual broadcast pages while retaining usable intended1/1.5 fallback.
 Smallest necessary work: Join only mandatory missing enhanced integration boundaries after all primary owners close. Prefer same actual pages for enhanced and fallback checks, preserving essential base information/navigation; complete the conditional joint final client session only when its capability/environment/maintainer prerequisites are met.
 Testable stop condition: Every original enhanced requirement has exact implemented/proven primary ownership and the complete generic authoring/client/fallback joins pass; no9B work is admitted by base-only success.
 '''
 evidence = '''
+Status amendment2026-10-28: Deferred by explicit maintainer decision; no acceptance is
+inferred. Retain completed components and every missing semantic/implementation/client
+proof below. No further2.5 trial, client search, supplier evaluation or external
+maintenance is queued. Required9A owners do not depend on this enhanced-only package.
 Current2026-10-28 boundary: editor-upstream/X3 is optional and removed from required dependencies, not passed or waived by fabricated evidence. All native Level2.5 resource capacities and generic lossless supported interchange remain mandatory; client/independent/native safety gates are unchanged.
 Status: Not started. Exact remaining gap: Full2.5 is not accepted; named internal enhanced functionality/proof, deferred suitable client/upstream editor capability and external M29 semantics prerequisite remain.
 Reuse: Primary enhanced packages, all valid historical normative/model/native/TSDuck/independent/editor/browser receipts and the retained conditional joint end-trial protocol in P9A-04.
@@ -17259,21 +17361,38 @@ phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Run the full generic-engine acceptance gate before production content'
 status     = 'Not started'
 feature    = 'teletext-support'
-depends_on = ['p9a-03', 'p9a-level15', 'p9a-level25']
+depends_on = ['p9a-03', 'p9a-level15']
 acceptance = '''
-Native ARM amendment (2026-10-26): native ARM64/ARMv7 execution is Deferred by
-maintainer decision until hardware becomes available, with no known date. Native
-compatibility is provisionally assumed, not verified. ARM build/package, dependency,
-software/emulation and CI checks remain required; only the native execution owner
-is excluded from current required dependencies. All other functional gates remain.
-ADR0121 private-period amendment (2026-10-26): the three Linux RIDs and Windows
-x64 remain required; both macOS RIDs are Deferred by maintainer decision, not
-accepted. Resumption requires explicit permission. All functional requirements
-and engine-first delivery remain mandatory.
-Requirement owner: P9A-04 final full-engine gate; all P9A-01..04 F/V/X and L15 clauses; engine-first ADR0120.
-User action/proof: Begin production teletext content only after the entire generic source/authored base+enhanced engine and all agreed integration gates are accepted.
-Smallest necessary work: Freeze exact source/artifacts and run only outstanding final mandatory gates, retaining valid evidence when code/inputs/assumptions match: strict Clippy, test-closeout, matched Leptos SSR/WASM build, parity/progress checks, changed localized headed/hydrated/no-JS Chromium/Firefox proof, source-subtitle regressions, applicable ordinary smoke and manual TSDuck plus all independent/client/platform gates.
-Testable stop condition: Every unchanged P9A-01..04 clause and mandatory gate passes, every currently required package dependency is Complete and the Deferred native ARM assumption is disclosed, and canonical p9a-04 evidence supports full generic-engine acceptance before any production9B content begins.
+Current maintainer amendment2026-10-28 (ADR0123): fully verified Level1/1.5 and all
+applicable shared source/output, authoring/interchange, metadata/zones,
+profiles/themes/Lua/restart, localized admin and required runtime/platform checks define
+current9A acceptance. Existing Level2.5 stays available as experimental. Remaining
+enhanced-only implementation/conformance/editor/independent/client proof is Deferred,
+not accepted, and excluded from the required9A path; resume only on a new maintainer
+task after suitable open-source client capability becomes available. Preserve all code,
+capacities, validation/fallback/playback safeguards and historical positive/negative
+proof. General/1.5 CI stays required; dedicated2.5 Rust/browser jobs are optional
+explicit dispatches. Earlier full2.5 prerequisite wording is superseded for current
+acceptance only.
+Requirement owner: current P9A-04 required Level1/1.5 plus all applicable shared
+F/V/X/L15 source/output, metadata/zones, profiles/themes/Lua/restart, admin and
+runtime/platform gates; engine-first ADR0120.
+User action/proof: Start production9B only after the independently verified current
+generic9A engine is accepted. Expose implemented2.5 as experimental without claiming
+full enhanced acceptance.
+Smallest necessary work: Freeze exact source/artifacts and run outstanding required
+base/shared final gates, reusing valid unchanged receipts: strict Clippy, standard
+closeout, matched Leptos SSR/WASM build, parity/progress checks, affected localized
+headed/hydrated/no-JS Chromium/Firefox, subtitle regressions, applicable ordinary
+smoke/manual TSDuck, independent/base-client and required four-RID
+runtime/platform/adoption checks. Dedicated enhanced2.5 CI and new full2.5 acceptance
+trials are optional/deferred respectively; keep existing regression code and safety
+guards.
+Testable stop condition: Every current required base/shared package dependency is
+Complete with exact applicable evidence; all deferred2.5, macOS and native ARM
+statuses/assumptions are disclosed. No deferred work is marked accepted. Experimental2.5
+does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close and9B may
+start.
 '''
 evidence = '''
 Status: Not started. Exact remaining gap: Full engine acceptance is open; registry validation and scoped component passes are not a green full CI, complete authored feature or release/publication claim.
@@ -17313,8 +17432,9 @@ package simultaneously serves different channels/profiles without global setting
 mutation. Unknown themes/zones or invalid/oversized values fail visibly without
 truncation; presentation remains add-on-owned within supported teletext encoding.
 Stream and browser use the host's same validated pages.
-The sole production addon uses the engine's accepted Level 2.5/base-fallback
-contract and declares template revisions, dynamic guide fields and free/zone/
+The sole production addon uses the engine's accepted Level1/1.5 contract; any retained
+Level2.5 enrichment is explicitly experimental. It declares template revisions, dynamic
+guide fields and free/zone/
 generated edit permissions for the TTI/sidecar workflow. Preserve profile themes,
 permitted overrides and exact navigation through that workflow. Imported changes
 cannot mutate installed templates or protected generated regions; template
