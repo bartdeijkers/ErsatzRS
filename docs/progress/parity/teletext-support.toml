@@ -57,7 +57,7 @@ ordinary gates. macOS stays deferred under ADR0121.
 Base stream/X26/navigation/update/reveal/timedflash remains unqualified.
 No DVBViewer. Kodi21.2 shares retained21.3 decoder hashes/Local/DRCS/panel blockers;
 no full2.5 success expectation or physical GoogleTV trial before the gated joint
-end-trial. X1 remains deferred; X3 waits upstream QTM complete POP/GPOP/context>208.
+end-trial. X1 bounded qualification resumed; optional X3 waits upstream QTM.
 No unchanged retries, decoder maintenance or waiver. Four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
 checks remain with their existing owners.
 Production guide follows full independent9A; Phase10 followsP9B-02.
@@ -268,7 +268,7 @@ resolved    = false
 [[debt]]
 id          = 'teletext-qtm-national-option-fidelity-is-unproven'
 adr         = '0123'
-description = 'Preserve supported header and enhanced charset semantics through actual pinned QTeletextMaker interchange. Its shared NOS state can alter protected X28 during load/save. Do not silently mask or restore edited packets, change the native header encoder, or accept a permanent authored/editor restriction. General lossless charset interchange remains required.'
+description = 'Preserve supported header and enhanced charset semantics through generic lossless interchange; actual pinned QTeletextMaker compatibility is optional under ADR0123 amendment2026-10-28. Its shared NOS state can alter protected X28 during load/save. Do not silently mask or restore edited packets, change the native header encoder, or accept a permanent authored/editor restriction. General lossless charset interchange remains required.'
 discovered  = '2026-10-13'
 evidence    = 'P9A-04 now owns corrected versioned editor carriers, literal NOS0..7/higher-primary vectors and actual equal NOS1 plus independent fallback1/enhanced0 Save As/import/preview/publication/reopen flows. Existing PS/RE/X28 equality and native raw controls remain exact; complete charset/resource/set fidelity remains unproven. The following exposed legacy counterexample remains historical evidence, not a claim that fresh carriers still have that same defect: P9A-04 owns the actual QTeletextMaker1.0/cac2167 trial. Native file1357 bytes retains numeric PS C0C0 while X28 primary changes1 to4; the constructor copies X28 before header controls, whose setters overwrite m_defaultNOS. Import rejects at page124/subcode32/row28/designation0 and preserves both accepted/pending outputs. A distinct charset-zero original passes the representative native flow; this does not establish general fidelity or full engine/editor acceptance.'
 resolved    = false

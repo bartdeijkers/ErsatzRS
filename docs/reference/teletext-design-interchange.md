@@ -1,5 +1,12 @@
 # Teletext design interchange
 
+QTeletextMaker is an optional example editor under the maintainer amendment
+of 2026-10-28. Its pinned source, supported workflows and limitations below remain
+compatibility evidence, not a complete-editor requirement for Phase 9A. Generic
+native authored capacity and lossless supported TTI/sidecar validation remain
+required independently of that application. Upstream-only QTM capacity work is
+deferred; no local editor maintenance is authorized.
+
 ## Delivery state
 
 Channel teletext administration provides receipt-bound TTI/sidecar export,

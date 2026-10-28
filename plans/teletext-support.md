@@ -27,7 +27,9 @@ this plan owns future sequencing and acceptance boundaries.
 Deliver a reusable teletext engine and then an add-on-authored TV guide inspired
 by NOS Teletekst. Authored support must reach EN 300 706 Level 2.5 for design,
 validation, encoding, publication and display, with correct Level 1/1.5 fallback
-and QTeletextMaker TTI interchange. Keep three distinct concerns explicit: DVB teletext subtitle
+and generic lossless authoring/TTI interchange. QTeletextMaker is an optional
+example editor under the2026-10-28 amendment in ADR0123; further compatibility
+waits for upstream and does not block9A. Keep three distinct concerns explicit: DVB teletext subtitle
 pages embedded in source transport streams,
 interactive full-page teletext browsing, and an authored teletext service
 carried in ErsatzRS output. Scan and persist the accepted source metadata,
@@ -500,7 +502,7 @@ this preparatory editor evidence cannot close the engine or client gate.
   Preserve readable, correctly designated base content. Reject Level 3.5-only
   features with precise diagnostics; no decoder-only or partial-feature acceptance.
 - Export a page, subpages or supported set as editable TTI plus versioned external
-  metadata/dependencies. Pin and verify the real editor version. Restore exact
+  metadata/dependencies. Pin and verify any external editor compatibility claim. Restore exact
   identities/navigation through explicit mapping; reject ambiguous or unsupported
   changes without silent loss. QTeletextMaker's own limitations do not reduce
   the engine target.
@@ -513,7 +515,7 @@ this preparatory editor evidence cannot close the engine or client gate.
   automatically generated guide regions. Validate edit permissions against host
   state, including indirect palette/object/DRCS effects on protected regions;
   template changes require an explicit addon version workflow.
-- Prove export → actual editor open/edit/save → import → validation/preview →
+- Prove export → validated file/native edit/save → import → validation/preview →
   explicit publication. Provide bounded file inputs and structured diagnostics
   for AI agents through the same validation/application functions. Localize all
   changed admin with headed, light/dark, hydrated/no-JS browser evidence.
@@ -982,7 +984,7 @@ or DVB-subtitle stream.
 3. `p9a-03`: persist source services/pages and expose exact metadata.
 4. `p9a-04`: implement and accept the generic engine and selection/output matrix
    using synthetic pages, including channel profiles, shared admin/Lua controls,
-   full Level 2.5/base fallback, QTeletextMaker TTI/sidecar roundtrip, localized
+   full Level 2.5/base fallback, generic TTI/sidecar roundtrip, localized
    management, health, independent decoder and suitable-client/runtime proof.
 5. `p9b-01`: implement the single tvguide teletext add-on in ErsatzRS-Addons,
    including its NOS-inspired page structure, host-supplied guide content,

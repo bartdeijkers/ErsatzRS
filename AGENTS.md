@@ -109,9 +109,14 @@ available; this does not authorize paid provisioning or change other deferrals.
 Phase 9A may be accepted after all unchanged functional requirements and every
 currently required, non-deferred check for the three Linux targets and Windows
 x64 are proven, with the native ARM assumption explicitly disclosed. Full
-authored Level 2.5, correct Level 1/1.5 fallback, QTeletextMaker interchange and
-engine-first delivery remain mandatory. This is neither macOS acceptance nor
-verified six-platform support. See the runtime/platform contract in
+authored Level 2.5, correct Level 1/1.5 fallback, generic lossless authoring/TTI
+interchange and engine-first delivery remain mandatory. By maintainer amendment
+(2026-10-28), QTeletextMaker is an optional example editor, not a runtime or
+acceptance dependency. Preserve its qualified workflows and limitations; wait
+for upstream for further QTM capability without local editor maintenance.
+Complete native engine capacity, metadata, validation, preview and explicit
+publication remain required independently of any external editor. This is
+neither macOS acceptance nor verified six-platform support. See the runtime/platform contract in
 [ADR 0121](docs/adr/0121-teletext-pages-transport-and-addon-contract.md).
 
 **Platform parity rule:** No Rust source file may hard-code an OS or architecture assumption

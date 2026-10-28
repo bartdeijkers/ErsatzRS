@@ -11,6 +11,32 @@ Maintainer amendment (2026-10-19): first accept an independently usable Level
 1/1.5 delivery, then complete Level 2.5 while protecting that base. This changes
 delivery and acceptance order, not the full Phase 9A scope or Phase 9B entry gate.
 
+Maintainer amendment (2026-10-28): QTeletextMaker was an example Level2.5
+editor, not a required ErsatzRS component or acceptance dependency. Its complete
+native-bank/large-context support is no longer a Phase9A dependency. Preserve
+qualified QTM1.0 workflows, pinned evidence and explicit compatibility errors;
+wait for changed upstream capability, without an ErsatzRS-maintained fork or
+local editor-extension feasibility project. Historical QTM-specific mandatory
+wording below is superseded by this amendment, not evidence of passed support.
+
+The complete generic authored1/1.5/2.5 engine, native resource capacities and
+supported lossless TTI/sidecar workflows remain mandatory, including immutable
+sources, identities/navigation, themes/templates/zones/dynamic fields, protected
+consumers, concept persistence, shared validation/preview, explicit publication
+and cold reopen. Native complete banks must not be truncated to an optional
+editor's208-word frame. Generic authoring and the agent/file workflow may prove
+these obligations without that editor. Existing optional QTM evidence is reusable
+only within its qualified scope; no replacement visual editor is required.
+
+The same approval resumes bounded source/documentation-first client qualification:
+base ProgDVB only with a new supported configuration or applicable conformance
+fixture, then one capability-positive full2.5 candidate before a runtime trial.
+Keep all independent decode/standard oracles unchanged. No unchanged negative
+replay, DVBViewer, external decoder maintenance or physical Kodi trial before
+the agreed joint final session. Runtime publication/adoption remains separately
+authorized. Normative lifetime/order and independent-renderer gaps keep their
+existing owners; this amendment does not waive them.
+
 ## Implementation
 
 Partial — a separate typed native new-object-resource intent now admits complete
@@ -1491,8 +1517,8 @@ and preservation of the intended Level 1/1.5 display, preferably using the same
 actually broadcast pages. Essential information and navigation remain accessible
 in the base representation of dual-level designs; enriched appearance may differ.
 Retain standalone base regressions as well as paired fallback checks. Full
-authored Level 2.5, complete QTeletextMaker interchange and all existing final
-criteria remain mandatory. Production TV-guide work still waits for independent
+authored Level 2.5, complete generic authoring/interchange and all other final
+criteria remain mandatory; optional QTM capacity follows the2026-10-28 amendment. Production TV-guide work still waits for independent
 full Phase 9A acceptance, not the standalone base boundary.
 
 ### Explicit built-in MPEG-TS output selection
@@ -1821,7 +1847,7 @@ templates and content; their production TV-guide realization belongs to Phase 9B
 Prove the generic mechanisms in Phase 9A with synthetic fixtures.
 
 P9A-04 F2 requires neither a general visual template/theme editor nor production
-TV-guide design. The complete agreed generic QTeletextMaker workflow, metadata
+TV-guide design. The complete generic authoring/file workflow, metadata
 interchange, Free/Zone/Generated edit boundaries, package immutability and
 explicit addon-version workflow remain mandatory. This clarifies ownership and
 phase boundaries without lowering acceptance criteria or moving necessary
@@ -2072,8 +2098,11 @@ client. Record exact client/decoder versions, settings, functions and limitation
 Kodi or an equivalent suitable client is allowed. TSDuck alone does not establish
 Level 2.5 rendering; an editor preview is not a broadcast-client substitute.
 
-Pin and verify the actual QTeletextMaker artifact for export → visibly open/edit/
-save → import → preview → explicit publication evidence. Localize all changed
+Prove export → edit/save → concept import → preview → explicit publication
+through the validated generic file/native workflow. When claiming optional
+QTeletextMaker compatibility, pin and verify the actual editor artifact and
+its visibly open/edit/save results within the declared supported scope.
+Localize all changed
 admin in every supported culture and retain headed browser, both-theme and
 hydrated/no-JS proof. Provide a structured file/validation/preview workflow for
 AI agents using the same application validation and publication boundary.

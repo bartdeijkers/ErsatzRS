@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-m29-policy — compatible receiver prerequisite'
+current_focus = 'p9a-client-base — bounded supported-configuration qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -207,17 +207,22 @@ m29-policy/editor/qualification.json owns actual pinned QTM saves for no-second
 and exact0x10, restored receipt-bound default packet, concept/preview/reexport,
 separate publication and cold reopen. Shared native/protected regressions pass;
 prior localized admin/ordinary-stream proof is reused within scope.
-Current package: p9a-m29-policy compatible receiver prerequisite.
-Next finite action: resume its exact cold/warm same-response receiver proof only
-when the deferred suitable-client capability/permission changes. The finite list
-establishes no independently executable internal package now. AB5 needs correct
-independent raw-header/secondary decoding; AE5 needs the authoritative lifetime/
-order interpretation and independent C3 formatter; base client needs its remaining
-supported display/control capability. X1 stays deferred; X3 waits upstream native
-banks/context capacity. Managed adoption needs exact public asset/tag mapping and
-separate publication authority before adopted-byte final gates. Existing platform
-and component closures remain closed; do not invent substitute variants.
-No new client search, external decoder maintenance, DVBViewer or physical Kodi.
+Maintainer amendment2026-10-28: QTM is an optional example editor. Its
+native-bank/large-context upstream wait remains Deferred but does not block9A;
+generic full native authoring/TTI/metadata/preview/publication remains required.
+Bounded base and then full2.5 client qualification is now authorized; no fork,
+unlimited hunt, external decoder maintenance, DVBViewer or premature physical
+Kodi trial. Runtime publication/adoption still needs separate authority.
+Current package: p9a-client-base supported-configuration qualification.
+Next finite action: use the existing ProgDVB pins/negative evidence to identify
+one documented supported setting or applicable existing conformance fixture
+before any new runtime trial. Close with correct fixed base display/control
+proof, or stop the candidate with the exact capability gap. Then qualify one
+source-positive full2.5 candidate under p9a-client-enhanced, not unchanged retries.
+Independent AB5 raw-header/secondary and AE5 lifetime/order/C3 obligations keep
+their primary owners and unchanged oracles. Closed components remain closed.
+Only the approved bounded qualification may resume; no open-ended client search,
+external decoder maintenance, DVBViewer or premature physical Kodi trial.
 AE5 still needs the recorded authoritative source-order/lifetime witness and
 independent C3 formatter. That external gate does not reopen source/output.
 Completed: the Native Live HLS/original-PES source-clock application component

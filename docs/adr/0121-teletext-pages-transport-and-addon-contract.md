@@ -1199,12 +1199,14 @@ Explicit maintainer permission is necessary to resume, even after a visibility
 change. The existing deferred macOS milestone owners retain future obligations.
 
 P9A acceptance requires all functional requirements, including complete authored
-Level 2.5, correct Level 1/1.5 fallback, full QTeletextMaker interchange and
+Level 2.5, correct Level 1/1.5 fallback, generic lossless authoring/interchange and
 engine-first delivery, plus every currently required four-platform check. The
 macOS-only amendment originally retained native ARM execution and the Windows
 package trial. The additional explicit maintainer decision below supersedes only
 that native ARM execution requirement. Windows remains required. Neither verified
 macOS support nor six-platform acceptance may be claimed.
+The later2026-10-28 editor amendment in ADR0123 makes QTeletextMaker optional;
+its upstream capacity is not a runtime/platform or Phase9A acceptance gate.
 
 #### Temporary native ARM execution assumption
 
@@ -1225,7 +1227,7 @@ there is no promised date and no unrelated native-platform or hardware claim.
 The current required dependency graph excludes only that deferred native owner.
 No generic Deferred-dependency bypass is introduced: all other required open,
 blocked or deferred owners continue to prevent their parent from being Complete.
-This changes no full authored Level 2.5/fallback, QTeletextMaker, client, semantics,
+This changes no full authored Level 2.5/fallback, generic authoring, client, semantics,
 playback-safety or engine-first requirement and does not authorize paid resources,
 publication or a macOS resumption.
 

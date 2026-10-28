@@ -704,6 +704,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Treat QTeletextMaker as an optional external editor for teletext authoring.
+  Keep generic lossless TTI/metadata workflows and full authored Level 2.5
+  acceptance required independently of upstream editor capacity.
+
 - **Breaking Rust API:** restored base/effective teletext design parts include
   `secondary_default_agreements`; native consumers must apply or explicitly
   reject this intent rather than silently discard it.

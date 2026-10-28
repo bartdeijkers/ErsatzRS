@@ -21,7 +21,7 @@ acceptance from implementation notes or from the presence of a release.
 These plans include proposals and deferred work, not blanket implementation approval.
 
 - [Local replacement workflow](addon-list-replacement-ux.md) — discovery, suggestions and reverse assignment; bulk matching remains a product choice.
-- [Teletext](teletext-support.md) — Phase 9 after UCU-09: accept the expanded Level 2.5 and QTeletextMaker TTI/sidecar contract, prove the generic ErsatzRS engine, then implement one tvguide teletext content add-on in ErsatzRS-Addons, inspired only by NOS Teletekst TV-guide pages 200–299; includes channel profiles, addon themes/zones and shared admin/Lua controls (ADRs 0120/0122/0123), with a suitable client rather than mandatory Kodi.
+- [Teletext](teletext-support.md) — Phase 9 after UCU-09: accept the expanded Level 2.5 and generic TTI/sidecar contract (QTeletextMaker is optional), prove the generic ErsatzRS engine, then implement one tvguide teletext content add-on in ErsatzRS-Addons, inspired only by NOS Teletekst TV-guide pages 200–299; includes channel profiles, addon themes/zones and shared admin/Lua controls (ADRs 0120/0122/0123), with a suitable client rather than mandatory Kodi.
 - [Video jukebox](application-layer-and-video-jukebox.md) — Phase 10, after teletext.
 - [Official add-on distribution and Sources design](official-addon-distribution.md) — OAD-01 through OAD-04, after both teletext and jukebox acceptance; visual design v0.1 is locked, with further refinement in new revisions.
 - [Channel packages](channel-packages.md) — Phase 11 draft; product/feed ADR first.
