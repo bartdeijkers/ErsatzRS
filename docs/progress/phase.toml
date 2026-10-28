@@ -63,10 +63,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 
 next_steps = '''
 Current package: p9a-managed-adoption — exact runtime publication/adoption mapping.
-Next finite action: prepare the concrete tag/asset/source mapping from the existing
-local-promotion inventories for maintainer review. Publication remains unauthorized;
-no pin switch, upload, source push, retag, rebuild or archive repack. Once approved,
-perform only the affected exact published/adopted-byte gates under separate authority.
+Next finite action: obtain maintainer review/authority for the prepared exact mapping
+at local-promotion/publication-review/qualification.json. Proposed prerelease tags:
+Next next-0.2.3-54c6cb9-ersatzrs.7 at public95206a8; FFmpeg runtime-candidate-2.0.7-457453f at local457453f, exposing21 local source ancestors through that new tag only.
+Do not move remote/main or activate Docker/package rebuilds. Eight runtime archives
+and fourteen Next source/patch/manifest assets are exact-hash verified. No publication
+or source/tag push is authorized yet. After approval only: affected actual managed
+published-byte/download/Health/playback checks in isolated state; stable/default
+production selection and remaining final gates stay separate. No rebuild/repack.
 Existing local candidate source/output/platform/installer/Health components stay closed.
 
 Complete p9a-author-base: authorized separate Table25/35/36 reference closes the
