@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — Exact production-promotion prerequisites'
+current_focus = 'p9a-01 — Close the accepted product/standards decision component'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -116,12 +116,19 @@ subtitle body lines only, not row0 cells. Canonical tsduck-header-capability/
 qualification.json retains the source/CLI boundary; the same four semantic
 observations remain external-capability-blocked, with no decoder work or new
 internal glyph/editor variants queued.
-Current package: p9a-managed-adoption exact production-promotion prerequisites.
-Next finite action: confirm current public release/asset availability against the
-already qualified source-adjacent Next/FFmpeg candidates and distinguish an
-available exact publication from a still-required maintainer mapping/authority.
-Read-only release identity; no new runtime build, trial, adoption, push or release
-is commissioned by this prerequisite check.
+Completed managed-publication availability check: canonical local-promotion/
+remote-availability/qualification.json retains current GitHub metadata, exact
+candidate-tag404 and eight archive differences from explicit published baselines.
+All local qualification components stay closed. Managed adoption is Blocked on
+maintainer public-tag/asset policy and publication/adoption authority plus final
+adopted-byte gates; no current source override or metadata check adopts it.
+Current package: existing p9a-01 accepted product/standards decision component.
+Next finite action: compare that unchanged decision acceptance with accepted
+ADRs0120/0121/0123 and completed standards/source-inventory evidence. Close the
+contract component only if every decision clause is already satisfied; retain
+actual engine/client/runtime acceptance under its existing primary owners.
+This is targeted closure of an existing open gate, not a new scope audit or
+permission to change any requirement.
 
 The four independent base raw-header negatives remain author-base-owned; do not
 normalize them or begin external decoder maintenance. Production adoption retains

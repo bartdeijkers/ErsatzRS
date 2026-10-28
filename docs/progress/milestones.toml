@@ -17268,7 +17268,7 @@ Closed/stop met: Every currently applicable independent PS1/PS2 clause has its c
 id         = 'p9a-managed-adoption'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Accept the fully qualified managed runtime'
-status     = 'In progress'
+status     = 'Blocked'
 feature    = 'teletext-support'
 depends_on = ['p9a-source-output', 'p9a-windows-package', 'p9a-platform-safety']
 acceptance = '''
@@ -17287,6 +17287,21 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
+Current production prerequisite confirmed2026-10-28: canonical
+managed-current-candidates/local-promotion/remote-availability/qualification.json
+owns read-only GitHub release projections and exact candidate-tag404 responses.
+The explicit published UCU12 rs.6/FFmpeg2.0.7 archives differ from all eight
+qualified candidate archives across the four required RIDs. Do not infer latest
+from API ordering or absence of every possible alias from the three-entry lists.
+The exact rs.7/local original-PTS tags are not published at the queried endpoints.
+All completed preparation/install/Health/source-output/platform components stay
+closed and reusable; no download/build/runtime trial is repeated. Status is now
+Blocked rather than ongoing local qualification: exact public tag/asset policy,
+explicit publication/adoption authority and final adopted-byte gates are the
+remaining boundary. A local override is not production repair. Resume when that
+maintainer decision/authorized publication is available; change no production
+pin or remote asset now. Existing immutable inventories are the reviewable
+candidate mapping, including composite FFmpeg provenance and retained Mac pins.
 Completed local runtime promotion preparation (2026-10-27):
 managed-current-candidates/local-promotion/qualification.json owns the explicitly
 authorized preparation. The source-adjacent rs.7 candidate manifest now contains
@@ -17421,9 +17436,9 @@ the documented unused default-resolution seed. Native-loopback tools replace the
 unreachable WSL adapter; no firewall/tool installation. These negatives remain.
 Accepted promotion/publication and exact adopted-byte final gates remain owned.
 
-Status: In progress for the existing current-candidate installation/compatibility proof; production adoption remains separately gated. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Source-output and the scoped independent PS1/PS2 artifact/platform joins are now Complete, including current ARM host crossbuilds. Exact remaining work: the separately authorized exact production-promotion boundary and exact adopted-byte final gates. Sustained native cached-HLS history/live qualification is closed above within its exact frozen-source/private-candidate boundary. The four sustained native TS gates are closed within their exact frozen-source/candidate scope. Current Linux/nativeWindows installer/cache/identity and actual startup/persisted Health components above are closed and not commissioned again. Earlier candidate.4 proof remains reusable only within unchanged mechanisms, never as installation of new bytes. Final accepted production promotion/publication requires its separate authority; nothing here changes the production pin. Native ARM execution remains Deferred by the explicit maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
+Status: Blocked at the separately authorized production-promotion boundary; current-candidate installation/compatibility components are complete within their recorded scopes. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Source-output and the scoped independent PS1/PS2 artifact/platform joins are now Complete, including current ARM host crossbuilds. Exact remaining work: the separately authorized exact production-promotion boundary and exact adopted-byte final gates. Sustained native cached-HLS history/live qualification is closed above within its exact frozen-source/private-candidate boundary. The four sustained native TS gates are closed within their exact frozen-source/candidate scope. Current Linux/nativeWindows installer/cache/identity and actual startup/persisted Health components above are closed and not commissioned again. Earlier candidate.4 proof remains reusable only within unchanged mechanisms, never as installation of new bytes. Final accepted production promotion/publication requires its separate authority; nothing here changes the production pin. Native ARM execution remains Deferred by the explicit maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
 Reuse: ucu-12 exact adopted per-platform manifest and its bounded source/software/managed/transport scopes; audio_language_followup earlier reproduced source/lock/four patches, candidate.4 archives, manager identity/corruption/offline checks and scoped Linux/nativeWindows proof retain their historical boundaries. No package/pin is changed by this Phase9 rejoin. Shared obligations remain with the existing owners, not a second adoption matrix.
-Missing mandatory proof: Full exact accepted required four-RID package/host/Health/output qualification and explicit managed adoption; crossbuild/startup/interop/component success cannot substitute.
+Missing mandatory proof: approved production tag/asset mapping, exact published/adopted-byte identity and affected final managed-adoption gates. Completed candidate four-RID package/host/Health/output receipts remain reusable within their exact source/platform scope; they do not themselves prove publication or accepted production selection.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.
