@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — remaining Level 1/1.5 independent proof'
+current_focus = 'p9a-client-base — Level 1/1.5 stream-client qualification'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -80,12 +80,19 @@ experimental-level25-admin/qualification.json owns18 help texts in9 cultures,
 matched SSR/WASM, strict lint/format/hydration and8+4 passed headed cases.
 Existing controls/validation/publication/output are unchanged; no extra
 experimental-label variants follow this closed component.
-Current package: p9a-author-base remaining Level1/1.5 independent proof.
-Next finite action: continue the existing p9a-author-base AB5/p9a-client-base
-Level1.5 proof gap using retained exact oracles and the ordinary stream fixture;
-only applicable base capability gaps remain blocking here. No enhanced client
-hunt, vendor evaluation or external decoder repair. Shared adoption/platform
-obligations retain their owners and separate publication authority.
+Completed AB5 acceptance partition: the original132 Level1/1.5 observations
+retain128 positives and four mandatory raw-header negatives. The66 enhanced
+observations and exact explicit-secondary01 cells are Deferred, not a current
+base capability prerequisite; immutable198-record proof remains canonical at
+ab5-decoder-capability-20261028/qualification.json level15_acceptance_partition.
+Current package: p9a-client-base existing Level1/1.5 stream-client qualification.
+Next finite action: use retained Kodi/VLC sources and the existing base
+conformance fixture to establish the missing operator/navigation/update/reveal/
+timed-flash route before any joint physical-device trial. Do not repeat a known
+negative or qualify full2.5. The independent base raw-header capability gap stays
+with author-base; do not normalize it, change the expected glyph or begin
+external decoder maintenance. Required runtime adoption retains its own owner
+and separate publication authority.
 
 Private-period platform amendment, maintainer decision 2026-10-26: Linux x64,
 ARM64, ARMv7 and Windows x64 remain required. macOS x64/ARM64 are Deferred by
