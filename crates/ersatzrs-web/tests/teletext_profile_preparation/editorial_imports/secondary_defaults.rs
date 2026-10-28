@@ -4,6 +4,8 @@ use super::*;
 
 #[path = "secondary_defaults/admin.rs"]
 mod admin;
+#[path = "secondary_defaults/editor.rs"]
+mod editor;
 #[path = "secondary_defaults/http.rs"]
 mod http;
 use ersatzrs_app::teletext_design_documents::decode_teletext_design_documents;

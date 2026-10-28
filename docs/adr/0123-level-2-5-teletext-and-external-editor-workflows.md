@@ -2024,6 +2024,18 @@ refusal; choosing a context does not rewrite that original provenance. Legacy
 companions without the field remain valid; explicit null and unknown intent
 fail closed.
 
+The pinned QTeletextMaker1.0 `LevelOnePage::packetExists(28,0)` omits a
+presentation packet when panels, screen/row colours, substitution, remapping,
+secondary set and CLUT2/3 are all its defaults. For an already authenticated
+no-second agreement on an original Header/POP consumer, import may restore
+that single omitted packet from the exact retained native context and receipt.
+This is companion-bound reconstruction, never a guessed absent-packet default
+or permission to alter presentation through TTI. A present changed packet,
+designated secondary set, nondefault context, unbound original or other missing
+packet retains the existing protected reconciliation. Preserve the actual
+editor file and its omission as evidence; native preview and separately accepted
+publication use the restored complete context and immutable source provenance.
+
 ### Required unused-object-copy removal
 
 Maintainer clarification (2026-10-27): explicit removal of unused authored object

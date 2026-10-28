@@ -667,10 +667,17 @@ fn reconcile_files(
             let primary = editor_primary_for_page(baseline.original.view(), address)
                 .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
             let expected_status = baseline.carrier.status(mapping.header_controls, primary);
+            let edited_bytes = secondary_context::restore_default_packet(
+                baseline.original.view(),
+                address,
+                (&original.bytes, &edited.bytes),
+                tti,
+                deadline,
+            )?;
             let incoming = reconcile_teletext_editorial_tti_with_operands(
                 mapping,
                 &original.bytes,
-                &edited.bytes,
+                &edited_bytes,
                 tti,
                 deadline,
                 expected_status,

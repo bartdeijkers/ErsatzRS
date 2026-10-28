@@ -1111,6 +1111,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve an explicitly selected no-second-G0 agreement when QTeletextMaker
+  1.0 omits its standard presentation packet on save. Restore only the exact
+  receipt-bound context during concept import; keep changed packets and other
+  missing declarations protected, with publication remaining explicit.
+
 - Preserve partial captures and TSDuck diagnostics when the manual URL gate
   fails with `--keep`, retaining default cleanup and failure exit codes.
 

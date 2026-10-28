@@ -15,6 +15,9 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget;
 
+mod editor_omission;
+pub(super) use editor_omission::restore_default_packet;
+
 /// A historical TTI receipt can still replace ordinary body edits, as before,
 /// but cannot silently replace a newer native-only context decision. The final
 /// existing revision CAS also fences a concurrent decision after this read.
