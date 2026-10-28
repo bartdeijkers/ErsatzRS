@@ -755,7 +755,17 @@ fn capture_producers(
             io::Write::write_all(&mut metadata_bytes, value.as_bytes())
                 .map_err(|_| NativeTeletextExportProjectError::Budget)?;
         }
+        let secondary_default_agreement = original
+            .producers()
+            .get(ordinal)
+            .ok_or(NativeTeletextExportProjectError::Association)?
+            .secondary_default_agreement();
+        if let Some(agreement) = secondary_default_agreement {
+            serde_json::to_writer(&mut metadata_bytes, &agreement)
+                .map_err(|_| NativeTeletextExportProjectError::Budget)?;
+        }
         producers.push(TeletextExportProducer {
+            secondary_default_agreement,
             ordinal,
             addon_id: addon_id.to_owned(),
             contract: contract.schema_version(),

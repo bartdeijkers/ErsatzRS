@@ -59,6 +59,8 @@ const DRCS_PAGE_SELECTION_VERSION: u16 = 30;
 const RETAINED_ROLE_ATTACHMENT_VERSION: u16 = 31;
 #[path = "editorial_overlay/main_program_presence.rs"]
 pub(super) mod main_program_presence;
+#[path = "editorial_overlay/secondary_default_context.rs"]
+mod secondary_default_context;
 use main_program_presence::{BorrowedPresence, OptionalStoredPresence};
 
 #[path = "editorial_overlay/main_resource_invocations.rs"]
@@ -1395,6 +1397,12 @@ fn validate_provenance(
 
 #[derive(Default)]
 pub(super) struct OptionalEditorialOverlay(pub Option<StoredOverlay>);
+impl OptionalEditorialOverlay {
+    pub(super) fn is_absent(&self) -> bool {
+        self.0.is_none()
+    }
+}
+
 impl<'de> Deserialize<'de> for OptionalEditorialOverlay {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         // Only omission selects Default. A present null/sequence is rejected.
@@ -1766,6 +1774,9 @@ impl StoredOverlay {
         documents: &[TeletextProfileDocument],
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+        if self.is_secondary_default_context() {
+            return self.restore_secondary_default_context();
+        }
         self.check_version()?;
         if matches!(
             self.schema_version,

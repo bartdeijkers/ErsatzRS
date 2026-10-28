@@ -41,6 +41,7 @@ fn project() -> TeletextExportProject {
         language: "eng".into(),
         v1_region: None,
         producers: vec![TeletextExportProducer {
+            secondary_default_agreement: None,
             ordinal: 0,
             addon_id: "org.ersatzrs.synthetic-guide".into(),
             contract: 2,
@@ -99,6 +100,34 @@ fn valid_project() -> TeletextExportProject {
 }
 fn as_bytes(v: &Value) -> Vec<u8> {
     serde_json::to_vec(v).unwrap()
+}
+
+#[test]
+fn secondary_default_companion_is_explicit_versioned_and_closed_without_editor_authority() {
+    use ersatzrs_domain::{TeletextSecondaryDefaultAgreement, TeletextSecondaryDefaultChoice};
+    let mut project = valid_project();
+    assert!(serde_json::to_value(&project).unwrap()["producers"][0]
+        .get("secondary_default_agreement")
+        .is_none());
+    project.producers[0].secondary_default_agreement = Some(
+        TeletextSecondaryDefaultAgreement::new(TeletextSecondaryDefaultChoice::NoSecondG0 {}),
+    );
+    let value = serde_json::to_value(&project).unwrap();
+    assert_eq!(
+        parse_teletext_export_project(&as_bytes(&value), budget()).unwrap(),
+        project
+    );
+    for bad in [
+        Value::Null,
+        json!([]),
+        json!({"policy":"future-policy","choice":{"kind":"no_second_g0"}}),
+        json!({"policy":"ersatzrs-secondary-default-v1","choice":{"kind":"no_second_g0","designation":1}}),
+        json!({"policy":"ersatzrs-secondary-default-v1","choice":{"kind":"designated","designation":127}}),
+    ] {
+        let mut changed = value.clone();
+        changed["producers"][0]["secondary_default_agreement"] = bad;
+        assert!(parse_teletext_export_project(&as_bytes(&changed), budget()).is_err());
+    }
 }
 
 #[test]

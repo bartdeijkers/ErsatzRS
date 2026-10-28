@@ -181,6 +181,8 @@ object! {
 object! {
     /// Selected producer identity; omits effective settings and secret references.
     pub struct TeletextExportProducer {
+        #[serde(default, skip_serializing_if="Option::is_none", deserialize_with="effective::optional_object")]
+        pub secondary_default_agreement: Option<ersatzrs_domain::TeletextSecondaryDefaultAgreement>,
         pub ordinal: usize, pub addon_id: String, pub contract: u32,
         #[serde(deserialize_with="nullable")] pub binding_revision: Option<i64>,
         pub profile_id: i64, pub profile_revision: i64,

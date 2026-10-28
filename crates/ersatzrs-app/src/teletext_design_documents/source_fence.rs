@@ -13,6 +13,12 @@ use std::io;
 #[derive(Default)]
 pub(super) struct OptionalGuideSource(pub Option<TeletextGuideSourceFence>);
 
+impl OptionalGuideSource {
+    pub(super) fn is_absent(&self) -> bool {
+        self.0.is_none()
+    }
+}
+
 impl<'de> Deserialize<'de> for OptionalGuideSource {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         // The core DTO accepts only a closed, bounded, validated map. Present

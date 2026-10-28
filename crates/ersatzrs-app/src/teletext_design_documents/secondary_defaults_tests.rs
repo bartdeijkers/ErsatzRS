@@ -13,6 +13,111 @@ fn agreement(secondary: Option<u8>) -> TeletextSecondaryDefaultAgreement {
         },
     ))
 }
+
+#[test]
+fn context_replacement_and_withdrawal_preserve_original_bytes_and_metadata() {
+    let fixture = Fixture::with_authoring();
+    let original = fixture.encoded();
+    let mut current = original.bytes().to_vec();
+    for secondary in [Some(1), Some(0x10)] {
+        let intents = [binding_intent(&fixture, 1, secondary)];
+        let saved =
+            replace_teletext_design_secondary_default_agreements(&current, &intents, budget())
+                .unwrap();
+        let restored = decode_teletext_design_documents(saved.bytes(), budget()).unwrap();
+        assert_eq!(restored.secondary_default_agreements(), intents);
+        assert_eq!(restored.selection(), &fixture.selection);
+        for (source, expected) in restored.sources().iter().zip(&fixture.sources) {
+            assert_eq!(source.bytes(), expected.bytes());
+            assert_eq!(source.authoring(), expected.authoring());
+        }
+        assert_eq!(
+            replace_teletext_design_secondary_default_agreements(saved.bytes(), &intents, budget())
+                .unwrap()
+                .bytes(),
+            saved.bytes()
+        );
+        current = saved.into_bytes();
+    }
+    let cleared =
+        replace_teletext_design_secondary_default_agreements(&current, &[], budget()).unwrap();
+    let restored = decode_teletext_design_documents(cleared.bytes(), budget()).unwrap();
+    assert!(restored.secondary_default_agreements().is_empty());
+    assert!(serde_json::from_slice::<Value>(cleared.bytes())
+        .unwrap()
+        .get("secondary_default_agreements")
+        .is_none());
+    for (source, expected) in restored.sources().iter().zip(&fixture.sources) {
+        assert_eq!(source.bytes(), expected.bytes());
+        assert_eq!(source.authoring(), expected.authoring());
+    }
+    assert_eq!(
+        replace_teletext_design_secondary_default_agreements(original.bytes(), &[], budget())
+            .unwrap()
+            .bytes(),
+        original.bytes()
+    );
+    assert!(replace_teletext_design_secondary_default_agreements(
+        original.bytes(),
+        &[TeletextSavedSecondaryDefaultAgreement::new(
+            1,
+            99,
+            1,
+            agreement(None)
+        )],
+        budget()
+    )
+    .is_err());
+}
+
+#[test]
+fn context_only_receipt_has_its_own_closed_version_without_fake_body_edits() {
+    let fixture = Fixture::mixed();
+    let original = fixture.encoded();
+    let provenance = TeletextSavedEditorialProvenance {
+        export_receipt_id: 17,
+        export_receipt_digest: "a".repeat(64),
+        original_design_id: 9,
+        original_revision: 3,
+        original_digest: "b".repeat(64),
+    };
+    let overlay =
+        TeletextSavedEditorialOverlay::new_secondary_default_context(provenance.clone()).unwrap();
+    let saved =
+        append_teletext_design_editorial_overlay(original.bytes(), &overlay, budget()).unwrap();
+    let restored = decode_teletext_design_documents(saved.bytes(), budget()).unwrap();
+    let actual = restored.editorial_overlay().unwrap();
+    assert_eq!(actual.schema_version(), 32);
+    assert_eq!(actual.provenance(), &provenance);
+    assert!(actual.pages().is_empty());
+    assert!(restored.secondary_default_agreements().is_empty());
+    let value: Value = serde_json::from_slice(saved.bytes()).unwrap();
+    for field in [
+        "local_program_operands",
+        "drcs_bitmap_overlays",
+        "local_object_operands",
+        "local_object_glyph_program_overlays",
+        "main_local_invocation_program_overlays",
+        "main_resource_invocations",
+        "main_program_presence_overlays",
+        "resource_object_operands",
+        "resource_object_program_overlays",
+        "resource_object_definition_additions",
+        "object_resource_additions",
+        "object_subpage_announcements",
+        "object_page_selections",
+        "base_text_edits",
+    ] {
+        let mut changed = value.clone();
+        changed["editorial_overlay"][field] = json!([]);
+        assert!(decode(&changed).is_err(), "accepted {field}");
+    }
+    for version in [1, 33, u16::MAX] {
+        let mut changed = value.clone();
+        changed["editorial_overlay"]["schema_version"] = json!(version);
+        assert!(decode(&changed).is_err(), "accepted version {version}");
+    }
+}
 fn binding_intent(
     fixture: &Fixture,
     producer: usize,

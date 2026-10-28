@@ -82,9 +82,30 @@ fn exact_fence_and_request_bytes_restore_without_current_source_authority() {
             .unwrap();
     let restored = decode_teletext_design_documents(saved.bytes(), budget()).unwrap();
     assert_eq!(restored.guide_source(), Some(&source));
+    let profile = &fixture.selection.bindings[0];
+    let agreement = ersatzrs_domain::TeletextSecondaryDefaultAgreement::new(
+        ersatzrs_domain::TeletextSecondaryDefaultChoice::NoSecondG0 {},
+    );
+    let changed = replace_teletext_design_secondary_default_agreements(
+        saved.bytes(),
+        &[TeletextSavedSecondaryDefaultAgreement::new(
+            0,
+            profile.profile_id,
+            profile.profile_revision,
+            agreement,
+        )],
+        budget(),
+    )
+    .unwrap();
+    let changed = decode_teletext_design_documents(changed.bytes(), budget()).unwrap();
+    assert_eq!(changed.guide_source(), Some(&source));
     for contract in [TeletextPageContract::V1, TeletextPageContract::V2] {
         assert_eq!(
             restored.guide_inputs().unwrap().request(contract),
+            requests.request(contract)
+        );
+        assert_eq!(
+            changed.guide_inputs().unwrap().request(contract),
             requests.request(contract)
         );
     }

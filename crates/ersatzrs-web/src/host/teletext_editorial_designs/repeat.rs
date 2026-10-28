@@ -14,6 +14,10 @@ use super::{
     TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextSavedEditorialOverlay,
     TeletextSavedEditorialProvenance, TeletextSubcode,
 };
+use ersatzrs_app::teletext_design_documents::{
+    replace_teletext_design_secondary_default_agreements,
+    replace_teletext_effective_design_secondary_default_agreements,
+};
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
@@ -133,16 +137,17 @@ pub(super) fn qualify_latest(
     let overlay = parts
         .overlay()
         .ok_or(NativeTeletextEditorialImportError::Association)?;
-    let expected = append_overlay(
-        root.original.view().document_version(),
-        &root.original_document,
+    let previous = from_overlay(overlay);
+    let secondary_default_agreements = parts.secondary_default_agreements().to_vec();
+    let expected = append_bound_overlay(
+        root,
         overlay,
+        &secondary_default_agreements,
         policy.document,
     )?;
     if expected.bytes() != latest.original.document {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let previous = from_overlay(overlay);
 
     let original_document = latest.original.document.clone();
     let original = qualify_rows(
@@ -167,6 +172,7 @@ pub(super) fn qualify_latest(
     }
     Ok((
         QualifiedBaseline {
+            secondary_default_agreements,
             body,
             carrier,
             original,
@@ -1363,6 +1369,11 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
         &prepared.root,
         &prepared.cumulative,
         &prepared.provenance,
+        &prepared
+            .latest
+            .as_ref()
+            .unwrap_or(&prepared.root)
+            .secondary_default_agreements,
         prepared.policy.document,
     )
 }
@@ -1371,36 +1382,69 @@ pub(super) fn encode_cumulative_document(
     root: &QualifiedBaseline,
     changes: &TeletextEditorialChanges,
     provenance: &TeletextSavedEditorialProvenance,
+    agreements: &[ersatzrs_app::teletext_design_documents::TeletextSavedSecondaryDefaultAgreement],
     budget: ersatzrs_app::teletext_design_documents::TeletextDesignDocumentBudget,
 ) -> Result<EncodedStoredDesign> {
-    let document = if changes.is_empty() {
-        // An explicit edit back to the immutable root is still a new concept
-        // revision. Preserve the authenticated original bytes without inventing
-        // a no-op operand or an empty overlay schema.
-        let bytes = root.original_document.clone();
-        match root.original.view().document_version() {
-            ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION => EncodedStoredDesign::Base(
-                super::EncodedTeletextDesignDocuments::from_saved_bytes(bytes, budget)?,
-            ),
+    if changes.is_empty() && agreements == root.secondary_default_agreements {
+        return match root.original.view().document_version() {
+            ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION => Ok(EncodedStoredDesign::Base(
+                super::EncodedTeletextDesignDocuments::from_saved_bytes(
+                    root.original_document.clone(),
+                    budget,
+                )?,
+            )),
             ersatzrs_domain::TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION => {
-                EncodedStoredDesign::Effective(
+                Ok(EncodedStoredDesign::Effective(
                     super::EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(
-                        bytes, budget,
+                        root.original_document.clone(),
+                        budget,
                     )?,
-                )
+                ))
             }
-            _ => return Err(NativeTeletextEditorialImportError::Association),
-        }
+            _ => Err(NativeTeletextEditorialImportError::Association),
+        };
+    }
+    let overlay = if changes.is_empty() {
+        TeletextSavedEditorialOverlay::new_secondary_default_context(provenance.clone())?
     } else {
-        let overlay = cumulative_overlay(provenance, changes)?;
-        append_overlay(
-            root.original.view().document_version(),
-            &root.original_document,
-            &overlay,
-            budget,
-        )?
+        cumulative_overlay(provenance, changes)?
     };
-    Ok(document)
+    append_bound_overlay(root, &overlay, agreements, budget)
+}
+
+/// Replay the exact stored overlay version, including older supported bodies.
+/// Context replacement must not incidentally migrate its schema or provenance.
+pub(super) fn append_bound_overlay(
+    root: &QualifiedBaseline,
+    overlay: &TeletextSavedEditorialOverlay,
+    agreements: &[ersatzrs_app::teletext_design_documents::TeletextSavedSecondaryDefaultAgreement],
+    budget: ersatzrs_app::teletext_design_documents::TeletextDesignDocumentBudget,
+) -> Result<EncodedStoredDesign> {
+    let document = append_overlay(
+        root.original.view().document_version(),
+        &root.original_document,
+        overlay,
+        budget,
+    )?;
+    if agreements == root.secondary_default_agreements {
+        return Ok(document);
+    }
+    Ok(match document {
+        EncodedStoredDesign::Base(value) => {
+            EncodedStoredDesign::Base(replace_teletext_design_secondary_default_agreements(
+                value.bytes(),
+                agreements,
+                budget,
+            )?)
+        }
+        EncodedStoredDesign::Effective(value) => EncodedStoredDesign::Effective(
+            replace_teletext_effective_design_secondary_default_agreements(
+                value.bytes(),
+                agreements,
+                budget,
+            )?,
+        ),
+    })
 }
 
 fn make_document(
@@ -1437,55 +1481,49 @@ fn make_document(
             .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?
     };
     let baseline = prepared.latest.as_ref().unwrap_or(&prepared.root);
-    super::super::teletext_editorial_effects::validate_teletext_editorial_transition_with_operands(
-        baseline
-            .original
-            .view()
-            .encoded()
-            .ok_or(NativeTeletextEditorialImportError::Association)?,
-        edited
-            .view()
-            .encoded()
-            .ok_or(NativeTeletextEditorialImportError::Association)?,
+    super::secondary_context::validate_transition(
+        baseline.original.view(),
+        edited.view(),
         &baseline.body.project,
-        TeletextEditorialEdits {
-            object_resource_additions: &prepared.incoming.object_resource_additions,
-            object_subpage_announcements: &prepared.incoming.object_subpage_announcements,
-            object_page_selections: &prepared.incoming.object_page_selections,
-            main_resource_invocations: &prepared.incoming.main_resource_invocations,
-            base_text_edits: &prepared.incoming.base_text_edits,
-            resource_additions: &prepared.incoming.resource_additions,
-            resource_operands: &prepared.incoming.resource_operands,
-            resource_programs: &prepared.incoming.resource_programs,
-            rows: &prepared.incoming.rows,
-            operands: &prepared.incoming.operands,
-            object_operands: &prepared.incoming.object_operands,
-            object_programs: &prepared.incoming.object_programs,
-            main_presence: &prepared.incoming.main_presence,
-            main_programs: &prepared.incoming.main_programs,
-            bitmaps: &prepared.incoming.bitmaps,
-        },
-        TeletextEditorialEdits {
-            object_resource_additions: &prepared.cumulative.object_resource_additions,
-            object_subpage_announcements: &prepared.cumulative.object_subpage_announcements,
-            object_page_selections: &prepared.cumulative.object_page_selections,
-            main_resource_invocations: &prepared.cumulative.main_resource_invocations,
-            base_text_edits: &prepared.cumulative.base_text_edits,
-            resource_additions: &prepared.cumulative.resource_additions,
-            resource_operands: &prepared.cumulative.resource_operands,
-            resource_programs: &prepared.cumulative.resource_programs,
-            rows: &prepared.cumulative.rows,
-            operands: &prepared.cumulative.operands,
-            object_operands: &prepared.cumulative.object_operands,
-            object_programs: &prepared.cumulative.object_programs,
-            main_presence: &prepared.cumulative.main_presence,
-            main_programs: &prepared.cumulative.main_programs,
-            bitmaps: &prepared.cumulative.bitmaps,
-        },
+        &(
+            TeletextEditorialEdits {
+                object_resource_additions: &prepared.incoming.object_resource_additions,
+                object_subpage_announcements: &prepared.incoming.object_subpage_announcements,
+                object_page_selections: &prepared.incoming.object_page_selections,
+                main_resource_invocations: &prepared.incoming.main_resource_invocations,
+                base_text_edits: &prepared.incoming.base_text_edits,
+                resource_additions: &prepared.incoming.resource_additions,
+                resource_operands: &prepared.incoming.resource_operands,
+                resource_programs: &prepared.incoming.resource_programs,
+                rows: &prepared.incoming.rows,
+                operands: &prepared.incoming.operands,
+                object_operands: &prepared.incoming.object_operands,
+                object_programs: &prepared.incoming.object_programs,
+                main_presence: &prepared.incoming.main_presence,
+                main_programs: &prepared.incoming.main_programs,
+                bitmaps: &prepared.incoming.bitmaps,
+            },
+            TeletextEditorialEdits {
+                object_resource_additions: &prepared.cumulative.object_resource_additions,
+                object_subpage_announcements: &prepared.cumulative.object_subpage_announcements,
+                object_page_selections: &prepared.cumulative.object_page_selections,
+                main_resource_invocations: &prepared.cumulative.main_resource_invocations,
+                base_text_edits: &prepared.cumulative.base_text_edits,
+                resource_additions: &prepared.cumulative.resource_additions,
+                resource_operands: &prepared.cumulative.resource_operands,
+                resource_programs: &prepared.cumulative.resource_programs,
+                rows: &prepared.cumulative.rows,
+                operands: &prepared.cumulative.operands,
+                object_operands: &prepared.cumulative.object_operands,
+                object_programs: &prepared.cumulative.object_programs,
+                main_presence: &prepared.cumulative.main_presence,
+                main_programs: &prepared.cumulative.main_programs,
+                bitmaps: &prepared.cumulative.bitmaps,
+            },
+        ),
         &prepared.policy.encoding.encoding,
         deadline,
-    )
-    .map_err(|error| NativeTeletextEditorialImportError::Effects(Box::new(error)))?;
+    )?;
     validate_reconciled_files(
         baseline,
         &prepared.files,
@@ -1533,6 +1571,14 @@ pub(super) async fn import_and_save(
 ) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
     let (deadline, hold) = admission;
     let name = request.name.clone();
+    super::secondary_context::check_historical_choice(
+        application,
+        &baseline,
+        &head,
+        &policy,
+        (deadline, hold.clone()),
+    )
+    .await?;
     let root = read_root(application, &baseline, &policy, (deadline, hold.clone())).await?;
     let mut prepared = super::super::teletext_work::spawn_blocking(hold.clone(), move || {
         prepare(request, baseline, root, policy, deadline)

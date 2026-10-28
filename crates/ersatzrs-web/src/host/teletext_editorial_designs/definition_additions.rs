@@ -113,7 +113,17 @@ pub use consumer_selections::{
     select_teletext_editorial_object_consumers, NativeTeletextObjectConsumersSelectRequest,
 };
 
+#[path = "definition_additions/secondary_defaults.rs"]
+mod secondary_defaults;
+pub use secondary_defaults::{
+    select_teletext_editorial_secondary_default, NativeTeletextSecondaryDefaultRequest,
+};
+
 enum Action {
+    SecondaryDefault {
+        producer: usize,
+        agreement: Option<ersatzrs_domain::TeletextSecondaryDefaultAgreement>,
+    },
     AttachmentChoices(Vec<TeletextObjectPageChoice>),
     Restorations(
         Vec<(
@@ -171,6 +181,12 @@ fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant
         return Err(NativeTeletextEditorialImportError::Budget);
     }
     let definitions = match &request.action {
+        Action::SecondaryDefault { producer, .. } => {
+            if *producer >= budget.max_records.min(1024) || budget.max_structure_items == 0 {
+                return Err(NativeTeletextEditorialImportError::Budget);
+            }
+            return Ok(());
+        }
         Action::AttachmentChoices(choices) => {
             return choice_resolver::preflight(choices, &[], budget, deadline);
         }
@@ -293,7 +309,8 @@ fn resolve(
 )> {
     check_deadline(deadline)?;
     let (source, new_object_id) = match action {
-        Action::AttachmentChoices(_)
+        Action::SecondaryDefault { .. }
+        | Action::AttachmentChoices(_)
         | Action::Restorations(_)
         | Action::Selections { .. }
         | Action::Choices { .. }
@@ -395,6 +412,8 @@ pub(super) fn authorize(
 }
 
 struct Baselines {
+    secondary_default_agreements:
+        Vec<ersatzrs_app::teletext_design_documents::TeletextSavedSecondaryDefaultAgreement>,
     root: QualifiedBaseline,
     latest: Option<QualifiedBaseline>,
     cumulative: TeletextEditorialChanges,
@@ -434,7 +453,13 @@ fn qualify(
             TeletextEditorialChanges::default(),
         ),
     };
+    let secondary_default_agreements = latest
+        .as_ref()
+        .unwrap_or(&root)
+        .secondary_default_agreements
+        .clone();
     Ok(Baselines {
+        secondary_default_agreements,
         root,
         latest,
         cumulative,
@@ -474,6 +499,24 @@ fn encode_attachments(
 }
 
 fn encode(
+    baselines: Baselines,
+    action: Action,
+    revision: i64,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<(EncodedStoredDesign, String)> {
+    if let Action::SecondaryDefault {
+        producer,
+        agreement,
+    } = action
+    {
+        secondary_defaults::encode(baselines, producer, agreement, revision, policy, deadline)
+    } else {
+        encode_body(baselines, action, revision, policy, deadline)
+    }
+}
+
+fn encode_body(
     mut baselines: Baselines,
     action: Action,
     revision: i64,
@@ -593,6 +636,7 @@ fn compile_cumulative(
         &baselines.root,
         &baselines.cumulative,
         &baselines.provenance,
+        &baselines.secondary_default_agreements,
         policy.document,
     )?;
     let document_digest = digest(document.bytes());
@@ -630,23 +674,14 @@ fn finish_encode(
     let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
     let (document, document_digest, edited) =
         compile_cumulative(baselines, revision, policy, deadline)?;
-    super::super::teletext_editorial_effects::validate_teletext_editorial_transition_with_operands(
-        latest
-            .original
-            .view()
-            .encoded()
-            .ok_or(NativeTeletextEditorialImportError::Association)?,
-        edited
-            .view()
-            .encoded()
-            .ok_or(NativeTeletextEditorialImportError::Association)?,
+    super::secondary_context::validate_transition(
+        latest.original.view(),
+        edited.view(),
         &latest.body.project,
-        incoming.edits(),
-        baselines.cumulative.edits(),
+        &(incoming.edits(), baselines.cumulative.edits()),
         &policy.encoding.encoding,
         deadline,
-    )
-    .map_err(|error| NativeTeletextEditorialImportError::Effects(Box::new(error)))?;
+    )?;
     check_deadline(deadline)?;
     Ok((document, document_digest))
 }

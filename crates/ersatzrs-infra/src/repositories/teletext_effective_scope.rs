@@ -279,7 +279,7 @@ impl Visitor<'_> for Key<'_> {
     }
 }
 
-const ROOT_KEYS: [&str; 13] = [
+const ROOT_KEYS: [&str; 14] = [
     "format_version",
     "effective_selection",
     "producer_bindings",
@@ -296,6 +296,9 @@ const ROOT_KEYS: [&str; 13] = [
     // receipt. Scope association still compares only the complete saved scope;
     // this field cannot replace it or grant current publication authority.
     "editorial_overlay",
+    // Native validation binds this choice to the retained producer/profile.
+    // Recognizing the field never substitutes for exact effective scope/CAS.
+    "secondary_default_agreements",
 ];
 struct Root<'a>(&'a Value);
 impl<'de> DeserializeSeed<'de> for Root<'_> {
@@ -393,5 +396,34 @@ mod tests {
         let mut unknown = original;
         unknown["unknown_overlay"] = json!({});
         assert!(!matches(&serde_json::to_vec(&unknown).unwrap(), &selection));
+    }
+
+    #[test]
+    fn secondary_default_extension_retains_exact_scope_and_duplicate_rejection() {
+        let selection = Selection {
+            channel_id: 9,
+            bindings: vec![],
+            valid_until: None,
+        };
+        let original = json!({"format_version":2,"effective_selection":test_scope(&selection),
+        "secondary_default_agreements":{"schema_version":1,"bindings":[{
+            "producer":0,"profile_id":11,"profile_revision":4,
+            "agreement":{"policy":"ersatzrs-secondary-default-v1","choice":{"kind":"no_second_g0"}}
+        }]}});
+        let bytes = serde_json::to_vec(&original).unwrap();
+        // Scope association is independent of native document admission. This
+        // descriptive field cannot grant a profile, author or publication right.
+        assert!(matches(&bytes, &selection));
+        let mut foreign = selection.clone();
+        foreign.channel_id = 10;
+        assert!(!matches(&bytes, &foreign));
+        let duplicate = format!(
+            "{},\"secondary_default_agreements\":{{}}}}",
+            std::str::from_utf8(&bytes[..bytes.len() - 1]).unwrap()
+        );
+        assert!(!matches(duplicate.as_bytes(), &selection));
+        let mut changed = original;
+        changed["effective_selection"]["valid_until"] = json!("2030-01-01T00:00:00Z");
+        assert!(!matches(&serde_json::to_vec(&changed).unwrap(), &selection));
     }
 }

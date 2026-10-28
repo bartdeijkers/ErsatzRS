@@ -194,9 +194,9 @@ stored_map!(EffectiveEnvelope { format_version: u16, effective_selection: Effect
     entry: Required<Entry>, v1_region: Required<TeletextSavedV1Region>, edit_policy: EditPolicy,
     resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
     guide_inputs: guide_inputs::StoredGuideInputs,
-    #[serde(default)] guide_source: source_fence::OptionalGuideSource,
-    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay,
-    #[serde(default)] secondary_default_agreements: super::secondary_defaults::OptionalAgreements });
+    #[serde(default, skip_serializing_if = "source_fence::OptionalGuideSource::is_absent")] guide_source: source_fence::OptionalGuideSource,
+    #[serde(default, skip_serializing_if = "editorial_overlay::OptionalEditorialOverlay::is_absent")] editorial_overlay: editorial_overlay::OptionalEditorialOverlay,
+    #[serde(default, skip_serializing_if = "super::secondary_defaults::OptionalAgreements::is_absent")] secondary_default_agreements: super::secondary_defaults::OptionalAgreements });
 stored_map!(EffectiveSelection { channel_id: EntityId, bindings: Vec<EffectiveMember>,
     valid_until: Required<DateTime<Utc>> });
 stored_map!(EffectiveMember { origin: String, base: Required<Member>, scripted: Required<Published> });
@@ -765,3 +765,34 @@ fn validate_entry(
 #[cfg(test)]
 #[path = "effective_tests.rs"]
 mod tests;
+
+/// Replace or withdraw the producer/profile-bound context of an effective
+/// concept, retaining Scripted origins, Off members and original source bytes.
+/// Immutable root receipts and native authorization remain caller duties.
+/// # Errors
+/// Rejects foreign associations, malformed originals and existing storage caps.
+pub fn replace_teletext_effective_design_secondary_default_agreements(
+    original_bytes: &[u8],
+    agreements: &[super::TeletextSavedSecondaryDefaultAgreement],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedEffectiveTeletextDesignDocuments, TeletextDesignDocumentError> {
+    let original = decode_teletext_effective_design_documents(original_bytes, budget)?;
+    super::secondary_defaults::validate_effective(
+        agreements,
+        original.selection(),
+        original.producer_bindings(),
+    )?;
+    if original.secondary_default_agreements() == agreements {
+        return EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(
+            original_bytes.to_vec(),
+            budget,
+        );
+    }
+    let mut envelope: EffectiveEnvelope = serde_json::from_slice(original_bytes)
+        .map_err(|_| failure(TeletextDesignDocumentFailure::SecondaryDefaultAgreement))?;
+    envelope.secondary_default_agreements = super::secondary_defaults::replacement(agreements);
+    EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(
+        super::secondary_defaults::rewrite_bytes(&envelope, budget)?,
+        budget,
+    )
+}

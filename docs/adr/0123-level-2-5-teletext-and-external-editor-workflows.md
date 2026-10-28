@@ -1995,6 +1995,26 @@ blocker. If a required original case cannot be preserved through the chosen
 agreement, report that gap for an explicit maintainer decision rather than
 claiming full retirement acceptance or silently narrowing the requirement.
 
+The native author action uses the existing retained export receipt, admitted
+worker and exact-head concept CAS. Choosing, changing or withdrawing intent
+never edits the producer response or selects/publishes a live generation.
+Every affected Header/POP consumer must be present in the trusted receipt;
+full shared-effect checks protect generated and out-of-zone content. Only the
+exact producer-local derived defaults authorize a context transition. Inactive
+panel metadata may be materialized by that full context, but does not authorize
+different visual panels, widths or protected pixels.
+
+Private editorial overlay version32 records a context-only lineage marker;
+it cannot contain body edits or legacy optional edit fields. Cold reconstruction
+replays the actual stored overlay version and the separately bound agreement.
+Restoring the root context and body restores the exact original envelope bytes.
+The external producer companion carries the optional closed, independently
+versioned agreement alongside its existing profile/revision identity. Its echo
+is association evidence, never permission to change the choice through TTI.
+A historical receipt whose context differs from the current concept cannot
+silently replace that native-only choice. Legacy companions without the field
+remain valid; explicit null and unknown intent fail closed.
+
 ### Required unused-object-copy removal
 
 Maintainer clarification (2026-10-27): explicit removal of unused authored object

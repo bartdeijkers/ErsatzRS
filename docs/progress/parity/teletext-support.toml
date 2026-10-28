@@ -47,8 +47,9 @@ managed.1 negatives remain. Baseline: UCU12 FFmpeg207/Next023rs.6; candidate,
 native and adoption differ.
 Closed candidate components: Linux/Windows installer/Health/TS and cached HLS (124 TSDuck/six AV proofs, managed-current-candidates/hls-live-qualification).
 Promotion preparation closed; publication/adopted-byte gates remain.
-EE5/client control and M29 storage/native replay closed; author action next.
-Base application/host lifecycle is closed; quota/cancellation/native receivers
+EE5/client control and M29 storage/native replay closed; native author action
+uses author-action/qualification.json; admin next.
+Base lifecycle is closed; quota/cancellation/native receivers
 and accepted four-RID/platform/adoption joins retain owners. Authorized Windows
 clean34e04/cdf06813 package passes36 admin/32 Health/64 localized cases and
 ordinary gates. macOS stays deferred under ADR0121.
@@ -57,8 +58,7 @@ Base stream/X26/navigation/update/reveal/timedflash remains unqualified.
 No DVBViewer. Kodi21.2 shares retained21.3 decoder hashes/Local/DRCS/panel blockers;
 no full2.5 success expectation or physical GoogleTV trial before the gated joint
 end-trial. X1 remains deferred; X3 waits upstream QTM complete POP/GPOP/context>208.
-No unchanged negative retries, decoder maintenance, base-capability excuse or
-waiver. Required four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
+No unchanged retries, decoder maintenance or waiver. Four-RID P9A-02 Health/licensing/playback/HLS/caption/audio/admin
 checks remain with their existing owners.
 Production guide follows full independent9A; Phase10 followsP9B-02.
 '''

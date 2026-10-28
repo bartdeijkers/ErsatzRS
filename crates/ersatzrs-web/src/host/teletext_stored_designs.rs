@@ -62,6 +62,14 @@ impl StoredDesignParts {
             }),
         }
     }
+    pub(super) fn secondary_default_agreements(
+        &self,
+    ) -> &[ersatzrs_app::teletext_design_documents::TeletextSavedSecondaryDefaultAgreement] {
+        match self {
+            Self::Base(parts) => &parts.secondary_default_agreements,
+            Self::Effective(parts) => &parts.secondary_default_agreements,
+        }
+    }
     pub(super) fn overlay(&self) -> Option<&TeletextSavedEditorialOverlay> {
         match self {
             Self::Base(parts) => parts.editorial_overlay.as_ref(),

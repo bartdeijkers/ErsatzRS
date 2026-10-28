@@ -29,6 +29,9 @@ use ersatzrs_ffmpeg::teletext::{
 
 mod base_text;
 mod charset_context;
+mod secondary_defaults;
+pub(super) use secondary_defaults::SecondaryDefaultContextChange;
+use secondary_defaults::{PacketChanges, SecondaryPacketChange};
 mod compiler_resources;
 mod definition_additions;
 mod lineage;
@@ -140,6 +143,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
 
+#[cfg(test)]
 pub(super) fn validate_teletext_editorial_effects_with_operands(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
@@ -222,8 +226,36 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
     budget: &TeletextAuthoredServiceEncodingBudget,
     deadline: Instant,
 ) -> Result<()> {
+    validate_teletext_editorial_transition_with_contexts(
+        original,
+        edited,
+        project,
+        &(incoming, cumulative, &[]),
+        budget,
+        deadline,
+    )
+}
+
+/// Contexts come only from exact producer snapshots and retained author intent.
+/// The ordinary uploaded-editor adapter continues to pass no such permission.
+pub(super) fn validate_teletext_editorial_transition_with_contexts(
+    original: &EncodedTeletextAuthoredService,
+    edited: &EncodedTeletextAuthoredService,
+    project: &TeletextExportProject,
+    changes: &(
+        TeletextEditorialEdits<'_>,
+        TeletextEditorialEdits<'_>,
+        &[SecondaryDefaultContextChange],
+    ),
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+) -> Result<()> {
+    let &(incoming, cumulative, contexts) = changes;
+    secondary_defaults::check(contexts, original, edited, budget.max_pages)?;
     check_deadline(deadline)?;
-    check_service(original, edited, incoming, cumulative, budget, deadline)?;
+    check_service(
+        original, edited, incoming, cumulative, budget, deadline, contexts,
+    )?;
     let resource_context = resource_objects::checked_context(
         original, edited, incoming, cumulative, budget, deadline,
     )?;
@@ -250,50 +282,18 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             )?;
             continue;
         };
-        let owner = old.owner();
-        let overlay = incoming.rows.iter().find(|value| value.owner() == owner);
-        let base_text_change = incoming
-            .base_text_edits
-            .iter()
-            .any(|value| value.owner() == owner);
-        let operand_change = base_text_change
-            || incoming.operands.iter().any(|value| value.owner() == owner)
-            || incoming
-                .object_operands
-                .iter()
-                .any(|value| value.owner() == owner);
-        let structural_change = structural_change(incoming, owner);
-        let operand_change =
-            operand_change || structural_change || !incoming.resource_operands.is_empty();
-        let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
-        if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() && !compiler_links {
-            if before.data_units() != after.data_units() {
-                return Err(error(
-                    Some(owner),
-                    None,
-                    TeletextEditorialEffectsFailure::ProtectedStructure,
-                ));
-            }
-            continue;
-        }
-        let allowed = permission_mask(project, old.display_geometry(), budget.max_pages)?;
-        check_packets(
-            old_page,
-            new_page,
-            &allowed,
-            operand_change,
-            overlay.is_some() || structural_change || base_text_change,
-            budget.max_units,
-            compiler_links,
+        compare_display(
+            (old_page, old),
+            (new_page, new),
+            project,
+            incoming,
+            budget,
+            deadline,
+            (
+                contexts,
+                compiler_resources::links_changed(original, edited, old.owner())?,
+            ),
         )?;
-        if let Some(overlay) = overlay {
-            check_overlay(old, new, overlay)?;
-        }
-        check_resolved(new, budget, deadline)?;
-        // Inspect every main and panel cell, including attributes extending to
-        // the right and lower-row footprints. The command column is no permit.
-        let lineage = lineage::ProtectedLineage::new(old, new, incoming, budget, deadline)?;
-        compare_protected(old, new, &allowed, &lineage, budget, deadline)?;
     }
     if after_pages.next().is_some() {
         return Err(error(
@@ -303,6 +303,85 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         ));
     }
     check_deadline(deadline)
+}
+
+fn compare_display(
+    before: (&EncodedTeletextPage, &TeletextMainComposition),
+    after: (&EncodedTeletextPage, &TeletextMainComposition),
+    project: &TeletextExportProject,
+    incoming: TeletextEditorialEdits<'_>,
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+    context: (&[SecondaryDefaultContextChange], bool),
+) -> Result<()> {
+    let (contexts, compiler_links) = context;
+    let (old_page, old) = before;
+    let (new_page, new) = after;
+    let owner = old.owner();
+    let context_change = contexts.iter().any(|change| change.owner == owner);
+    let overlay = incoming.rows.iter().find(|value| value.owner() == owner);
+    let base_text_change = incoming
+        .base_text_edits
+        .iter()
+        .any(|value| value.owner() == owner);
+    let operand_change = base_text_change
+        || incoming.operands.iter().any(|value| value.owner() == owner)
+        || incoming
+            .object_operands
+            .iter()
+            .any(|value| value.owner() == owner);
+    let structural_change = structural_change(incoming, owner);
+    let operand_change =
+        operand_change || structural_change || !incoming.resource_operands.is_empty();
+    if overlay.is_none()
+        && !operand_change
+        && incoming.bitmaps.is_empty()
+        && !compiler_links
+        && !context_change
+    {
+        if old_page.data_units() != new_page.data_units() {
+            return Err(error(
+                Some(owner),
+                None,
+                TeletextEditorialEffectsFailure::ProtectedStructure,
+            ));
+        }
+        return Ok(());
+    }
+    let allowed = permission_mask(project, old.display_geometry(), budget.max_pages)?;
+    check_packets(
+        old_page,
+        new_page,
+        &allowed,
+        budget.max_units,
+        PacketChanges {
+            operands: operand_change,
+            repacking: overlay.is_some() || structural_change || base_text_change || context_change,
+            links: compiler_links,
+            secondary: if context_change {
+                SecondaryPacketChange::Authorized
+            } else {
+                SecondaryPacketChange::Unchanged
+            },
+        },
+    )?;
+    if let Some(overlay) = overlay {
+        check_overlay(old, new, overlay)?;
+    }
+    check_resolved(new, budget, deadline)?;
+    // Inspect every main and panel cell, including attributes extending to
+    // the right and lower-row footprints. The command column is no permit.
+    let lineage = lineage::ProtectedLineage::new(old, new, incoming, budget, deadline)?;
+    compare_protected(
+        old,
+        new,
+        &allowed,
+        &lineage,
+        budget,
+        deadline,
+        contexts.iter().find(|change| change.owner == owner),
+    )?;
+    Ok(())
 }
 
 // A checked resource program can change compiler-owned repaint packing for
@@ -468,6 +547,7 @@ fn check_service(
     cumulative: TeletextEditorialEdits<'_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
     deadline: Instant,
+    contexts: &[SecondaryDefaultContextChange],
 ) -> Result<()> {
     check_editorial_budgets(original, edited, incoming, cumulative, budget)?;
     let overlays = cumulative.rows;
@@ -527,6 +607,7 @@ fn check_service(
         incoming,
         cumulative,
         deadline,
+        contexts,
     )?;
     if after.physical_base_overlays().len() != overlays.len() {
         return Err(error(
@@ -732,6 +813,7 @@ fn check_enhancements(
     incoming: TeletextEditorialEdits<'_>,
     cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
+    contexts: &[SecondaryDefaultContextChange],
 ) -> Result<()> {
     let presence = main_presence::check(before, after, incoming, cumulative, deadline)?;
     let mut changes = BTreeMap::new();
@@ -775,7 +857,12 @@ fn check_enhancements(
         };
         let new = after.get(owner).ok_or_else(failure)?;
         if old.address != new.address
-            || old.presentation != new.presentation
+            || (old.presentation != new.presentation
+                && !contexts.iter().any(|change| {
+                    change.owner == *owner
+                        && change.before == old.presentation
+                        && change.after == new.presentation
+                }))
             || !object_page_selections::same_resources(old, new, incoming)
             || new.compositional_links
                 != links.get(owner).copied().unwrap_or(old.compositional_links)
@@ -951,11 +1038,10 @@ fn check_packets(
     old: &EncodedTeletextPage,
     new: &EncodedTeletextPage,
     allowed: &PermissionMask,
-    operand_change: bool,
-    x26_repacking: bool,
     max_units: usize,
-    compiler_links: bool,
+    changes: PacketChanges,
 ) -> Result<()> {
+    let operand_change = changes.operands;
     let owner = old.address();
     let before = project_encoded_teletext_display(old, max_units).map_err(|_| {
         error(
@@ -992,9 +1078,7 @@ fn check_packets(
     // An uploaded X26 edit still needs the original TTI/operand reconciliation.
     // Changed X27/4 bodies have separately matched exact authored links or
     // compiler descriptors; uploaded X27 stays immutable against its old receipt.
-    let protected = |record: &&TeletextEncodedDisplayRecord| {
-        protected_packet(record, x26_repacking, compiler_links)
-    };
+    let protected = |record: &&TeletextEncodedDisplayRecord| changes.protects(record);
     let old_records = before.records.iter().filter(protected);
     let new_records = after.records.iter().filter(protected);
     if old_records.clone().count() != new_records.clone().count() {
@@ -1158,11 +1242,12 @@ fn compare_protected(
     lineage: &lineage::ProtectedLineage<'_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
     deadline: Instant,
+    context: Option<&SecondaryDefaultContextChange>,
 ) -> Result<()> {
     let owner = old.owner();
     let before = old.display_geometry();
     let after = new.display_geometry();
-    if before.panels() != after.panels()
+    if !secondary_defaults::same_panels(before.panels(), after.panels(), context)
         || before.total_width() != after.total_width()
         || old.display_resolution().width() != new.display_resolution().width()
     {

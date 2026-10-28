@@ -57,6 +57,12 @@ impl fmt::Debug for TeletextSavedGuideInputs {
 #[derive(Default)]
 pub(super) struct OptionalGuideInputs(pub Option<StoredGuideInputs>);
 
+impl OptionalGuideInputs {
+    pub(super) fn is_absent(&self) -> bool {
+        self.0.is_none()
+    }
+}
+
 impl<'de> Deserialize<'de> for OptionalGuideInputs {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         StoredGuideInputs::deserialize(deserializer).map(|value| Self(Some(value)))

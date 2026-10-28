@@ -43,7 +43,7 @@ mod secondary_defaults;
 pub use secondary_defaults::{
     append_teletext_design_secondary_default_agreements,
     append_teletext_effective_design_secondary_default_agreements,
-    TeletextSavedSecondaryDefaultAgreement,
+    replace_teletext_design_secondary_default_agreements, TeletextSavedSecondaryDefaultAgreement,
 };
 
 pub(crate) const MAX_BINDINGS: usize = 1024;
@@ -448,10 +448,10 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Required<T> {
 stored_map!(Envelope { format_version: u16, selection: Selection, generation: String,
     entry_addon_id: Required<String>, entry: Required<Entry>, v1_region: Required<TeletextSavedV1Region>,
     edit_policy: EditPolicy, resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
-    #[serde(default)] guide_inputs: guide_inputs::OptionalGuideInputs,
-    #[serde(default)] guide_source: source_fence::OptionalGuideSource,
-    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay,
-    #[serde(default)] secondary_default_agreements: secondary_defaults::OptionalAgreements });
+    #[serde(default, skip_serializing_if = "guide_inputs::OptionalGuideInputs::is_absent")] guide_inputs: guide_inputs::OptionalGuideInputs,
+    #[serde(default, skip_serializing_if = "source_fence::OptionalGuideSource::is_absent")] guide_source: source_fence::OptionalGuideSource,
+    #[serde(default, skip_serializing_if = "editorial_overlay::OptionalEditorialOverlay::is_absent")] editorial_overlay: editorial_overlay::OptionalEditorialOverlay,
+    #[serde(default, skip_serializing_if = "secondary_defaults::OptionalAgreements::is_absent")] secondary_default_agreements: secondary_defaults::OptionalAgreements });
 stored_map!(Selection { channel_id: EntityId, bindings: Vec<Member> });
 stored_map!(Member { contract: u32, channel_id: EntityId, addon_id: String, binding_revision: i64,
     profile_id: EntityId, profile_revision: i64, installation: Installation, effective_settings: Vec<Setting> });
@@ -496,6 +496,7 @@ pub use effective::{
     append_teletext_effective_design_editorial_overlay, decode_teletext_effective_design_documents,
     encode_teletext_effective_design_documents_with_requests,
     encode_teletext_effective_design_documents_with_source,
+    replace_teletext_effective_design_secondary_default_agreements,
     EncodedEffectiveTeletextDesignDocuments, RestoredEffectiveTeletextDesignDocuments,
     TeletextEffectiveDesignDocumentInput, TeletextRestoredEffectiveDesignDocumentParts,
 };

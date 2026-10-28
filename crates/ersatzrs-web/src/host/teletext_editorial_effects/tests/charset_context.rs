@@ -2,6 +2,7 @@
 use super::*;
 
 mod call_lineage;
+mod secondary_defaults;
 
 fn designation(code: u8) -> TeletextColumnOperation {
     TeletextColumnOperation::DesignateCharset {

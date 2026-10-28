@@ -34,9 +34,7 @@ use super::{
     teletext_designs::{
         native_design_confirmation, NativeTeletextDesignError, RestoredOriginalTeletextDesign,
     },
-    teletext_editorial_effects::{
-        validate_teletext_editorial_effects_with_operands, TeletextEditorialEdits,
-    },
+    teletext_editorial_effects::TeletextEditorialEdits,
     teletext_editorial_tti::{
         reconcile_teletext_editorial_tti_with_operands,
         validate_recompiled_teletext_editorial_tti_encoding,
@@ -135,6 +133,7 @@ mod definition_additions;
 mod object_resources;
 #[path = "teletext_editorial_designs/repeat.rs"]
 mod repeat;
+mod secondary_context;
 pub use definition_additions::{
     add_teletext_editorial_object_resources, add_teletext_editorial_resource_definitions,
     announce_teletext_editorial_object_subpages, attach_teletext_editorial_object_pages,
@@ -142,13 +141,14 @@ pub use definition_additions::{
     copy_teletext_editorial_resource_definition,
     remove_unused_teletext_editorial_resource_definition,
     restore_teletext_editorial_page_attachments, select_teletext_editorial_object_consumers,
-    select_teletext_editorial_object_pages, NativeTeletextObjectConsumersChooseRequest,
-    NativeTeletextObjectConsumersSelectRequest, NativeTeletextObjectPagesChooseRequest,
-    NativeTeletextObjectPagesSelectRequest, NativeTeletextObjectResourcesAddRequest,
-    NativeTeletextObjectSubpagesAnnounceRequest, NativeTeletextPageAttachmentsRestoreRequest,
-    NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
-    NativeTeletextResourceDefinitionRemoveRequest, TeletextMainCallChoice,
-    TeletextObjectCallChoice, TeletextObjectPageChoice,
+    select_teletext_editorial_object_pages, select_teletext_editorial_secondary_default,
+    NativeTeletextObjectConsumersChooseRequest, NativeTeletextObjectConsumersSelectRequest,
+    NativeTeletextObjectPagesChooseRequest, NativeTeletextObjectPagesSelectRequest,
+    NativeTeletextObjectResourcesAddRequest, NativeTeletextObjectSubpagesAnnounceRequest,
+    NativeTeletextPageAttachmentsRestoreRequest, NativeTeletextResourceDefinitionAddRequest,
+    NativeTeletextResourceDefinitionCopyRequest, NativeTeletextResourceDefinitionRemoveRequest,
+    NativeTeletextSecondaryDefaultRequest, TeletextMainCallChoice, TeletextObjectCallChoice,
+    TeletextObjectPageChoice,
 };
 
 type Result<T> = std::result::Result<T, NativeTeletextEditorialImportError>;
@@ -253,6 +253,8 @@ pub(super) async fn read_editorial_baseline(
 }
 
 struct QualifiedBaseline {
+    secondary_default_agreements:
+        Vec<ersatzrs_app::teletext_design_documents::TeletextSavedSecondaryDefaultAgreement>,
     body: TeletextExportReceiptBody,
     carrier: TeletextEditorCarrier,
     original: RestoredStoredTeletextDesign,
@@ -292,6 +294,7 @@ fn qualify_baseline(
         .ok_or(NativeTeletextEditorialImportError::Association)?;
     let meta = &baseline.receipt.metadata;
     let parts = StoredDesignParts::decode(&baseline.original, budget)?;
+    let secondary_default_agreements = parts.secondary_default_agreements().to_vec();
     if parts.overlay().is_some() {
         return Err(NativeTeletextEditorialImportError::Association);
     }
@@ -326,6 +329,7 @@ fn qualify_baseline(
         return Err(NativeTeletextEditorialImportError::Association);
     }
     Ok(QualifiedBaseline {
+        secondary_default_agreements,
         body,
         carrier,
         original,
@@ -450,38 +454,31 @@ fn qualify_rows(
         parts.compile_with_resource_intents(stored, policy, deadline, overlays.clone(), resources)
     }
     .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?;
-    validate_teletext_editorial_effects_with_operands(
-        baseline
-            .original
-            .view()
-            .encoded()
-            .ok_or(NativeTeletextEditorialImportError::Association)?,
-        edited
-            .view()
-            .encoded()
-            .ok_or(NativeTeletextEditorialImportError::Association)?,
+    let edits = TeletextEditorialEdits {
+        object_resource_additions: &object_resource_additions,
+        object_subpage_announcements: &object_subpage_announcements,
+        object_page_selections: &object_page_selections,
+        main_resource_invocations: &main_resource_invocations,
+        base_text_edits: &base_text_edits,
+        resource_additions: &resource_additions,
+        resource_operands: &resource_operands,
+        resource_programs: &resource_programs,
+        rows: &overlays,
+        operands: &operands,
+        object_operands: &object_operands,
+        object_programs: &object_programs,
+        main_presence: &main_presence,
+        main_programs: &main_programs,
+        bitmaps: &bitmaps,
+    };
+    secondary_context::validate_transition(
+        baseline.original.view(),
+        edited.view(),
         &baseline.body.project,
-        TeletextEditorialEdits {
-            object_resource_additions: &object_resource_additions,
-            object_subpage_announcements: &object_subpage_announcements,
-            object_page_selections: &object_page_selections,
-            main_resource_invocations: &main_resource_invocations,
-            base_text_edits: &base_text_edits,
-            resource_additions: &resource_additions,
-            resource_operands: &resource_operands,
-            resource_programs: &resource_programs,
-            rows: &overlays,
-            operands: &operands,
-            object_operands: &object_operands,
-            object_programs: &object_programs,
-            main_presence: &main_presence,
-            main_programs: &main_programs,
-            bitmaps: &bitmaps,
-        },
+        &(edits, edits),
         &encoding,
         deadline,
-    )
-    .map_err(|error| NativeTeletextEditorialImportError::Effects(Box::new(error)))?;
+    )?;
     check_deadline(deadline)?;
     Ok(edited)
 }
@@ -546,10 +543,10 @@ fn restore_stored_editorial_design(
     let overlay = parts
         .overlay()
         .ok_or(NativeTeletextEditorialImportError::Association)?;
-    let expected = append_overlay(
-        baseline.original.view().document_version(),
-        &baseline.original_document,
+    let expected = repeat::append_bound_overlay(
+        &baseline,
         overlay,
+        parts.secondary_default_agreements(),
         budget,
     )?;
     if expected.bytes() != stored.document {

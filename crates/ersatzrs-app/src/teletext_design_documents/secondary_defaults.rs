@@ -61,6 +61,12 @@ impl<'de> Deserialize<'de> for TeletextSavedSecondaryDefaultAgreement {
 }
 #[derive(Default, Serialize)]
 pub(super) struct OptionalAgreements(pub Option<StoredAgreements>);
+impl OptionalAgreements {
+    pub(super) fn is_absent(&self) -> bool {
+        self.0.is_none()
+    }
+}
+
 impl<'de> Deserialize<'de> for OptionalAgreements {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         StoredAgreements::deserialize(d).map(|value| Self(Some(value)))
@@ -126,6 +132,75 @@ impl StoredAgreements {
         validate(&self.bindings, identities)?;
         Ok(self.bindings)
     }
+}
+
+pub(super) fn replacement(
+    agreements: &[TeletextSavedSecondaryDefaultAgreement],
+) -> OptionalAgreements {
+    OptionalAgreements((!agreements.is_empty()).then(|| StoredAgreements {
+        schema_version: 1,
+        bindings: agreements.to_vec(),
+    }))
+}
+
+/// Replace or withdraw context intent in a private concept. Original producer
+/// response/request strings remain exact; outer storage spelling may normalize.
+/// Callers retain the immutable root bytes for exact undo and receipt checks.
+/// This function grants no author, current-head or publication authority.
+/// # Errors
+/// Rejects malformed originals, wrong profile associations and trusted limits.
+pub fn replace_teletext_design_secondary_default_agreements(
+    original_bytes: &[u8],
+    agreements: &[TeletextSavedSecondaryDefaultAgreement],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
+    let original = super::decode_teletext_design_documents(original_bytes, budget)?;
+    validate(
+        agreements,
+        original
+            .selection()
+            .bindings
+            .iter()
+            .map(|binding| (binding.profile_id, binding.profile_revision)),
+    )?;
+    if original.secondary_default_agreements() == agreements {
+        return EncodedTeletextDesignDocuments::from_saved_bytes(original_bytes.to_vec(), budget);
+    }
+    let mut envelope: super::Envelope =
+        serde_json::from_slice(original_bytes).map_err(|_| invalid())?;
+    envelope.secondary_default_agreements = replacement(agreements);
+    EncodedTeletextDesignDocuments::from_saved_bytes(rewrite_bytes(&envelope, budget)?, budget)
+}
+
+pub(super) fn rewrite_bytes(
+    value: &impl Serialize,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<Vec<u8>, TeletextDesignDocumentError> {
+    let mut writer = BoundedWriter {
+        bytes: Vec::new(),
+        maximum: budget.max_serialized_bytes,
+        exceeded: false,
+    };
+    serde_json::to_writer(&mut writer, value).map_err(|_| {
+        if writer.exceeded {
+            failure(TeletextDesignDocumentFailure::Budget {
+                dimension: "serialized",
+                count: budget.max_serialized_bytes.saturating_add(1),
+                maximum: budget.max_serialized_bytes,
+            })
+        } else {
+            invalid()
+        }
+    })?;
+    Ok(writer.bytes)
+}
+
+pub(super) fn validate_effective(
+    agreements: &[TeletextSavedSecondaryDefaultAgreement],
+    selection: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+    producers: &[usize],
+) -> Result<(), TeletextDesignDocumentError> {
+    validate(agreements, effective_identities(selection, producers)?)
 }
 fn validate(
     agreements: &[TeletextSavedSecondaryDefaultAgreement],

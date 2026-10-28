@@ -104,6 +104,9 @@ mod resource_bank_admin;
 #[path = "editorial_imports/standalone_base.rs"]
 mod standalone_base;
 
+#[path = "editorial_imports/secondary_defaults.rs"]
+mod secondary_defaults;
+
 pub(super) fn policy() -> NativeTeletextExportPolicy {
     NativeTeletextExportPolicy {
         document: designs::budget(),

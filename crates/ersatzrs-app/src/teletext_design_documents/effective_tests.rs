@@ -292,6 +292,71 @@ fn secondary_default_agreement_follows_producer_mapping_and_scripted_profile() {
 }
 
 #[test]
+fn effective_context_replacement_preserves_scripted_off_requests_and_sources() {
+    use super::super::{
+        replace_teletext_effective_design_secondary_default_agreements,
+        TeletextSavedSecondaryDefaultAgreement,
+    };
+    use ersatzrs_domain::{TeletextSecondaryDefaultAgreement, TeletextSecondaryDefaultChoice};
+    let fixture = Fixture::mixed();
+    let original = fixture.encode();
+    let intent = TeletextSavedSecondaryDefaultAgreement::new(
+        1,
+        12,
+        5,
+        TeletextSecondaryDefaultAgreement::new(TeletextSecondaryDefaultChoice::NoSecondG0 {}),
+    );
+    let saved = replace_teletext_effective_design_secondary_default_agreements(
+        original.bytes(),
+        &[intent],
+        budget(),
+    )
+    .unwrap();
+    let cleared = replace_teletext_effective_design_secondary_default_agreements(
+        saved.bytes(),
+        &[],
+        budget(),
+    )
+    .unwrap();
+    for bytes in [saved.bytes(), cleared.bytes()] {
+        let restored = decode_teletext_effective_design_documents(bytes, budget()).unwrap();
+        assert_eq!(restored.selection(), &fixture.selection);
+        assert_eq!(restored.producer_bindings(), fixture.producers);
+        for (source, expected) in restored.sources().iter().zip(&fixture.sources) {
+            assert_eq!(source.bytes(), expected.bytes());
+            assert_eq!(source.authoring(), expected.authoring());
+        }
+        let root = decode_teletext_effective_design_documents(original.bytes(), budget()).unwrap();
+        for contract in [
+            TeletextPageContract::V1,
+            TeletextPageContract::V2,
+            TeletextPageContract::V3,
+        ] {
+            assert_eq!(
+                restored.guide_inputs().unwrap().request(contract),
+                root.guide_inputs().unwrap().request(contract)
+            );
+        }
+    }
+    assert_eq!(
+        replace_teletext_effective_design_secondary_default_agreements(
+            original.bytes(),
+            &[],
+            budget()
+        )
+        .unwrap()
+        .bytes(),
+        original.bytes()
+    );
+    assert!(
+        decode_teletext_effective_design_documents(cleared.bytes(), budget())
+            .unwrap()
+            .secondary_default_agreements()
+            .is_empty()
+    );
+}
+
+#[test]
 fn saved_effective_bytes_retain_noncanonical_spelling_and_decoder_limits() {
     let encoded = Fixture::mixed().encode();
     let value: Value = serde_json::from_slice(encoded.bytes()).unwrap();
