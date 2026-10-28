@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'Phase 9A handoff — Keep the current direction unambiguous'
+current_focus = 'p9a-client-base — Joint Level1/1.5 receiver trial readiness'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,781 +62,32 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current maintainer amendment2026-10-28 (ADR0123): fully verified Level1/1.5 and all
-applicable shared source/output, authoring/interchange, metadata/zones,
-profiles/themes/Lua/restart, localized admin and required runtime/platform checks define
-current9A acceptance. Existing Level2.5 stays available as experimental. Remaining
-enhanced-only implementation/conformance/editor/independent/client proof is Deferred,
-not accepted, and excluded from the required9A path; resume only on a new maintainer
-task after suitable open-source client capability becomes available. Preserve all code,
-capacities, validation/fallback/playback safeguards and historical positive/negative
-proof. General/1.5 CI stays required; dedicated2.5 Rust/browser jobs are optional
-explicit dispatches. Earlier full2.5 prerequisite wording is superseded for current
-acceptance only.
-Current acceptance change supersedes historical enhanced-only directions below.
-The installed Kodi version is confirmed21.2; no changed full2.5 capability follows.
-Completed experimental2.5 localized admin classification: provider-scan/
-experimental-level25-admin/qualification.json owns18 help texts in9 cultures,
-matched SSR/WASM, strict lint/format/hydration and8+4 passed headed cases.
-Existing controls/validation/publication/output are unchanged; no extra
-experimental-label variants follow this closed component.
-Completed AB5 acceptance partition: the original132 Level1/1.5 observations
-retain128 positives and four mandatory raw-header negatives. The66 enhanced
-observations and exact explicit-secondary01 cells are Deferred, not a current
-base capability prerequisite; immutable198-record proof remains canonical at
-ab5-decoder-capability-20261028/qualification.json level15_acceptance_partition.
-Completed p9a-client-base ordinary control-fixture preparation is retained
-within its encoded-page/transport/AV boundary. Canonical level15-client-controls/
-qualification.json joins two headed ordinary preparations, two independent native
-capture checks, original440Hz and selected660Hz Dutch audio, three page/subpage
-identities, conceal/flash/mosaics/height and unchanged frozen default fixture.
-Actual visible timing/reveal/update/navigation and native Kodi AV remain due.
-Completed LAN handoff preparation: canonical level15-client-controls/lan-forwarding/
-qualification.json owns three pre-host rejections, unchanged default-loopback
-and explicit-LAN headed trials, actual Windows-origin ordinary-prefix transport/
-independent-page/AV/selected-Dutch proof and normal owned host cleanup. Existing
-Windows forwarding/firewall and production state are unchanged.
-Completed playlist-input boundary: playlist-input/qualification.json retains
-actual Kodi-UA Windows playlist -> advertised ordinary Legacy URL -> strict
-independent-page/transport/AV/Dutch audio proof with unchanged channel/profile.
-Pinned IPTV Simple21.11.0/ffmpegdirect21.3.8/Kodi21.2 sources support the native
-teletext input path; installed identities/settings still require the joint session.
-Completed explicit live-update preparation: live-publication/qualification.json
-owns generation1->2 on one Windows ordinary response, unchanged profile/binding/
-package and old histories, independent A/B at all three page identities, every
-one of19273 transport packets, video/660Hz Dutch audio, reused English baseline,
-strict checks and actual owned cleanup. Its existing fixture marker requests
-publication explicitly; no source timeout/byte limit or production path changes.
-The finite joint receiver protocol is prepared; actual Kodi/IPTV Simple/inputstream
-identities and page/subpage/X26/geometry/update/reveal/timed-flash/AV observations
-await the maintainer. Existing600s human hold starts only when present. No device
-access now or inference that representative preparation accepts all1.5 behavior.
-Completed existing-tool AB5 header eligibility: installed TSDuck3.44-4676 exposes
-subtitle body lines only, not row0 cells. Canonical tsduck-header-capability/
-qualification.json retains the source/CLI boundary; the same four semantic
-observations remain external-capability-blocked, with no decoder work or new
-internal glyph/editor variants queued.
-Completed managed-publication availability check: canonical local-promotion/
-remote-availability/qualification.json retains current GitHub metadata, exact
-candidate-tag404 and eight archive differences from explicit published baselines.
-All local qualification components stay closed. Managed adoption is Blocked on
-maintainer public-tag/asset policy and publication/adoption authority plus final
-adopted-byte gates; no current source override or metadata check adopts it.
-Completed P9A-01 decision gate: the accepted technical ADRs, completed standards
-S1/S2/S3 clause ownership and five completed prerequisites satisfy that contract
-component. Canonical identity.json case_reconciliation_followup.contract_gate_closeout
-retains source hashes/chronology and every remaining primary proof owner.
-P9A-02/03 are dependency-blocked aggregates, not new runtime/scanner variant work.
-Current package: existing Phase9A handoff correctness under the authorized regie
-scope. A fresh progress-next query printed historical SO4 next-action paragraphs
-alongside the current direction; next_steps/handoff text totals over300k characters.
-Next finite action: make the existing current-step record/query unambiguous while
-preserving exact historical source/evidence and parallel edits. Reuse the existing
-format/tool; add only the smallest necessary presentation support and focused
-regressions. Stop when default next reports one current direction and historical
-handoff remains explicitly retrievable; no product/acceptance requirement changes.
+Current package: p9a-client-base — joint Level1/1.5 receiver trial.
+Next finite action: when the maintainer is present, record installed Kodi21.2,
+IPTV Simple and inputstream versions/settings, then run the prepared joint
+control protocol in canonical tmp/phase9-next-local-teletext/level15-client-controls/
+live-publication/qualification.json. Use the existing600s human hold only after
+operator readiness. No physical-device trial while the maintainer is away.
 
-The four independent base raw-header negatives remain author-base-owned; do not
-normalize them or begin external decoder maintenance. Production adoption retains
-its own authority and current enhanced-only tasks remain Deferred.
+Completed preparation: actual playlist -> ordinary Legacy TS -> independent
+base pages, source video and selected Dutch audio; explicit UPDATE A->B on one
+Windows response, strict whole-capture transport and joined cleanup. The original
+English/default capture and all prior closed components remain reusable.
 
-Private-period platform amendment, maintainer decision 2026-10-26: Linux x64,
-ARM64, ARMv7 and Windows x64 remain required. macOS x64/ARM64 are Deferred by
-maintainer decision, not accepted, and outside the current required matrix.
-No macOS builds/crossbuilds/packages/toolchain installs/runtime/acceptance trials
-or paid runners/services may start. Preserve code, guards, artifacts and evidence;
-resume only with explicit permission, not merely a visibility change. All
-functional Level 2.5/fallback/QTeletextMaker and engine-first gates stay mandatory.
-Native ARM amendment (maintainer decision 2026-10-26): actual ARM64/ARMv7
-execution is Deferred until suitable hardware becomes available, date unknown.
-Compatibility is provisionally assumed, not native-verified. Build/package,
-dependency, software/emulation and CI remain required; p9a-native-arm retains
-future native obligations but no longer blocks current acceptance.
-Completed p9a-source-output: the finite SO1..SO5 Linux/software source-output
-component is closed by existing exact route/clock/AV/audio/cleanup proof. Canonical
-provider-scan/identity.json source_output_closure_followup joins13 terminal runtime
-receipts,14 byte-valid captures/266 transport checks and36 unchanged implementation
-hashes. This closes a mandatory proof join, not new runtime functionality, a
-production pin or platform acceptance. Historical component negatives remain.
-Completed p9a-platform-safety PS1/PS2 independent join: exact four-RID runtime
-artifact/software, Linux/Windows headed Health and current ARM host crossbuild
-proof are closed within their declared source/runtime boundaries. ARM64/ARMv7
-web/scanner/healthcheck builds pass55m58s/61m28s: six fresh ELFs,2848 unchanged
-inputs and declared glibc2.39 baseline; both own containers are removed. Native
-ARM is assumed, not verified. No production adoption or fresh full CI is inferred.
-Canonical provider-scan/platform-safety-closeout/qualification.json owns proof.
-Completed current Next023rs7 install/cache/identity component: canonical
-provider-scan/managed-current-candidates/qualification.json owns four existing
-passed tests, two each on Linux/nativeWindows. Both hosts validate all four
-required RIDs' install/relocation/bundle; their real local-HTTP install, exact
-offline reuse, version/identity-before-execution, corruption refusal and lease
-release pass. Native clean34e04 critical sources match current; all source bytes
-stay unchanged. The Windows Job is fully emptied with one forced unclassified
-descendant termination; no natural-exit attribution is claimed. No full global
-startup, persisted Health, production pin or accepted adoption is inferred.
-Completed original-PTS FFmpeg installer/cache/identity component: canonical
-provider-scan/managed-current-candidates/ffmpeg/qualification.json joins composed
-15 Linux/14 nativeWindows controls and final real-archive passes on both hosts.
-Staged/promoted installed-layout capabilities, original-PES PTS, offline reuse, exact
-non-null publication hashes and wrong-checksum preservation pass. Existing
-production bytes/pins/policy remain unchanged. Strict crate lint passes; native
-source is restored, full bounded Job cleanup is confirmed with forced unclassified
-descendants, never natural exit. This closed component is not commissioned again.
-Completed exact-candidate actual startup/persisted Health component: canonical
-provider-scan/managed-current-candidates/startup-health/qualification.json owns
-six actual Linux/nativeWindows starts and eight exact profile/Health outcomes.
-Managed original-PTS FFmpeg including Windows colocation, explicit rs7 Next,
-non-null identities, persisted managed paths/summaries, exact unsupported-profile
-Fail/restored Pass and cold restart pass; offline metadata stays Warning.
-Six hosts exit0 unforced, owned groups/Job empty naturally and native source is
-unchanged. Retained exact artifacts match ten current startup/Health sources;
-no fresh full-source/matched-bundle/browser or accepted production-pin claim.
-The one-off HTML parser negative is retained and corrected without product edits.
-Completed two native Windows current-rs7 ordinary output gates: canonical
-provider-scan/managed-current-candidates/windows-output/qualification.json owns
-Burn/Convert passes with original-PTS FFmpeg, unchanged source/AV/caption/nld/
-wrapper/cache/reconnect/idle oracles, ten metadata probes and twelve natural fully
-empty Jobs. Eight captures retain exact native hashes; source/package stay
-unchanged and isolated copied hosts/tools are removed. The stale helper-tool
-hash preflight is retained; only the qualified archive input was corrected.
-Completed sustained native TS component: canonical
-provider-scan/managed-current-candidates/native-transport/qualification.json
-owns four20s normal/cached Burn/
-Convert captures,88 unchanged TSDuck checks and four independent exact AV/caption/
-nld880Hz proofs. Both hosts exit0 unforced and whole Job empty naturally; source/
-package exact, copied roots removed. The one-line URL --keep fix preserves early
-failure evidence with default cleanup and failure codes unchanged. Existing smoke
-oracles, consistent SQLite backups and native installed tools retain their limits.
-Completed native cached-HLS history/live component (2026-10-27): canonical
-provider-scan/managed-current-candidates/hls-live-qualification/qualification.json
-owns124 unchanged TSDuck checks and six independent AV/caption/nld880–882Hz
-proofs for Burn/Convert, exact live-byte membership in fully retained history,
-selected configuration/source identity and natural complete owned cleanup.
-All initial cached sequences and the declared boundary remain strictly checked;
-RFC8216 live entry does not hide the history. Original generic URL negatives and
-tool-guard/log-path negatives remain. The earlier diagnostic group log has38
-checks, correcting the prior uncommitted44-check handoff. No product repair,
-production pin, publication, current full CI or broader source-build claim.
-Local runtime-promotion preparation is completed at
-provider-scan/managed-current-candidates/local-promotion/qualification.json:
-complete source-adjacent Next rs.7 required-four-RID pins, retained Mac records,
-four existing-stager checks/wrong-RID rejection,10+28 source/stager regressions
-and four exact FFmpeg archive/source inventories. Production selection/defaults
-remain unchanged; final public FFmpeg tag/asset mapping and publication/adopted-byte
-gates remain separately authorized steps. No rebuild or repeated runtime gate.
-Completed guided Windows manual-control component: canonical
-level15-progdvb-guided/identity.json owns actual pinned native200/201 display,
-manual T/200, operator-reported subpage20 and unchanged20 shared files. The
-ordinary Linux host/native client close normally with exact package/profile
-and producer guards. Source/schedule600s supports the bounded human window;
-default75s/60s and capture/product deadlines remain exact. Initial module-load
-and short-programme503 negatives are retained. No whole-base client acceptance:
-actual native images retain fallbackZZZ while the same ordinary prefix correctly
-decodes £/Á and Ä/é independently. Missing X26/configuration, full repertoire and
-flash/reveal/update proof remain client-base-owned; no own subpage20 image.
-The operator-ready barrier is closed, not a decoder or native-audio/full-TS gate.
-M29 policy decision is accepted by the maintainer2026-10-27 in ADR0123,
-authorreceiver-policy-for-magazine-default-retirement. Proposal qualification
-remains at tmp/phase9-mot-retirement/m29-policy/proposal/qualification.json;
-no runtime implementation or receiver acceptance is inferred from approval.
-Completed p9a-editor-enhanced EE5 unused-copy removal, mandatory before9A:
-engine59c41697 and native host21f1fa7e remain closed. The localized HTTP/admin
-join is completed at unused-copy-removal/admin/qualification.json:53 SSR/i18n
-passes, actual POST and six atomic invalid controls, both headed browsers across
-all9 cultures/themes and JS/no-JS, four exact undo revisions, complete native
-models/units/shared preview, separate publication/cold reopen and preserved
-source/package/Night/config. Strict web all-target lint and hydration/format pass.
-The editor-enhanced owner is Blocked only on required parent/EE4 dependencies;
-EE1/2/3/5 are closed. Reopen only for a concrete regression. No adjacent variants.
-Completed M29 typed/native core: implementation/qualification.json owns27 model
-controls,10 native/presentation controls and the final applicable1.5 Local/G2
-extension. Header/POP enrollment retains original DecoderDependent snapshots,
-resources/defaults and every non-X28/M29 unit. Version/choice/alias rejection,
-complete page contexts and existing budgets are preserved. The original-only
-consumer now refuses unsupported bound intent; agreement is retained in parts.
-Completed M29 private storage/native reconstruction: binding/qualification.json
-owns269 app/native/admission controls, strict app/web lint and exact unchanged core reuse.
-Versioned intent binds the exact selected profile/revision and producer mapping,
-including Scripted Off separation. Original bytes/metadata and unknown snapshots
-survive append, existing concept overlays and native reopen; retained root remains
-unbound. The first21/22 native negative identified an empty-resource shortcut
-silently skipping the new intent; the corrected full path passes unchanged oracles.
-Completed M29 native author-action component: author-action/qualification.json
-owns receipt-bound explicit choice/change/withdrawal, cold concept reconstruction,
-exact context-only root undo, retained body edits and separate publication.
-Original producers/profile revisions/source fences and unknown snapshots survive;
-historical TTI cannot silently erase a newer native-only choice. Export companion
-intent is an exact association echo, never uploaded edit authority. Strict
-protected-effect and closed-format rejection retain their existing boundaries.
-Completed M29 localized author/admin enrollment: admin/qualification.json owns
-three explicit choices, current-head HTTP authority, historical disabled forms,
-83 affected native/SSR/i18n controls and both actual headed browsers. JS/no-JS,
-all9 cultures/both themes,12 concept changes/four exact undo operations and cold
-reopen retain original sources, Night, configuration and live pointers. The real
-browser found and verified the corrected channel-feedback whitelist gap.
-Completed M29 ordinary-stream component: handover/qualification.json owns both
-explicit no-second and exact0x10 choices over old M29 on the same two responses
-at capacity2. Full/repeated cycles, complete M29-free captured tail, own Header
-contexts/ESC intent, source clock/AV/TSDuck, immutable profiles/sources/Night,
-durable reopen and unforced owned cleanup pass. This is Linux native output
-proof, not suitable-client display or platform/adoption acceptance.
-Completed explicit-policy external-editor component: canonical
-m29-policy/editor/qualification.json owns actual pinned QTM saves for no-second
-and exact0x10, restored receipt-bound default packet, concept/preview/reexport,
-separate publication and cold reopen. Shared native/protected regressions pass;
-prior localized admin/ordinary-stream proof is reused within scope.
-Maintainer amendment2026-10-28: QTM is an optional example editor. Its
-native-bank/large-context upstream wait remains Deferred but does not block9A;
-generic full native authoring/TTI/metadata/preview/publication remains required.
-Bounded base and then full2.5 client qualification is now authorized; no fork,
-unlimited hunt, external decoder maintenance, DVBViewer or premature physical
-Kodi trial. Runtime publication/adoption still needs separate authority.
-Completed bounded client-source qualification: canonical tmp/phase9-next-local-teletext/
-level15-progdvb-guided/prequalification-20261028/qualification.json
-owns official ProgDVB7.73.3 read-only package comparison and primary options docs.
-Changed binaries do not establish a relevant enhancement fix; identical help and
-teletext labels provide no new capability-positive configuration. No trial replay.
-One newly assessed TARA Classic/Smart Devices route advertises1.5/2.5, required
-controls and DVB/IPTV acquisition, but is not a pinned suitable runtime.
-Completed generic large-catalogue file/native authoring component: canonical
-provider-scan/editor-generic-capacity-join/qualification.json owns the existing
-355-command lifecycle with dormant original23, complete-set/multipart atomicity,
-exact models/resources/preview/reexport, separate publication/root undo/repeat/
-cold reopen and isolation. All4 targeted cases pass; original large fixture and
-protected-consumer oracle stay exact. No QTM, stream/client/platform or full
-normative-capacity acceptance is inferred. Existing EE1..3/EE5 remain closed;
-no additional editor variants follow this completed generic EE4 boundary.
-Historical network/client preparation: Windows-to-WSL HTTP routing is closed at
-level15-output-status/kodi212-source-qualification/lan-route/qualification.json.
-Kodi21.2 is confirmed; full2.5 capability/evaluation access is now Deferred by
-the latest maintainer amendment, not the current package. Keep all receipts.
-Completed bounded AB5 source eligibility check: provider-scan/
-ab5-decoder-capability-20261028/qualification.json confirms the original Table25
-header exception and preserves the exact fixtures/test oracle. Existing Tuxtxt
-and optional QTM lack a suitable header path; newer imager ff17d78c retains all
-three relevant files byte-for-byte; current libzvbi34bb6f66 retains both complete
-responsible functions unchanged. No build, replay or external decoder repair.
-AB5 needs genuinely correct independent header+secondary capability; AE5 retains
-authoritative lifetime/order interpretation and independent C3 proof. These keep
-their existing owners; closed component boundaries are not reopened.
-Only the approved bounded qualification may resume; no open-ended client search,
-external decoder maintenance, DVBViewer or premature physical Kodi trial.
-AE5 still needs the recorded authoritative source-order/lifetime witness and
-independent C3 formatter. That external gate does not reopen source/output.
-Completed: the Native Live HLS/original-PES source-clock application component
-within the unpublished Linux x64 software candidate. Canonical current receipt:
-tmp/phase9-next-local-teletext/provider-scan/so2-live-url/native-hls-caption/original-pts-application/qualification.json.
-It owns exact runtime/source hashes, complete same-response EOF cue/clear/reentry,
-ordinary HTTP/RTSP/HLS/Native HLS,nld660Hz,default2,joined cleanup and old-runtime
-AV preservation. Final focused controls, strict all-target lint and fresh-host
-ordinary smoke pass; other source/editor/F6/isolation receipts retain scope.
-Completed PS1 exact original-PTS Linux package/Bookworm component: canonical
-original-pts-runtime/package/qualification.json binds archiveae83ecf2, all10421
-source-file comparisons/strict patch replay, accepted207 dependency/license
-records, existing safe package/relocation/wrong-pin guards and actual baseline
-compatibility/56PTS/sparse400frame,nld879.94Hz proof. Container cleanup passed.
-Completed PS1 first-party source-input integration:457453f retains accepted207
-and original-clock histories, all50 exact package inputs, the default-ROOT
-verifier and wrong-patch guard, unchanged17 generic helper controls and all
-Mac code/current explicit workflow deferral. Canonical source-join.json under
-the same package receipt owns exact parents, refusals and scoped reuse.
-Completed PS1 remaining original-PTS artifacts/software: canonical
-original-pts-runtime/other-rids/qualification.json binds source457453f and
-archives8cd65f48(ARM64),9649af9b(ARMv7),a4ac2ed2(Windows), unchanged accepted inputs,
-exact compiler/patch/dependency identities and strict existing package guards.
-ARM QEMU/native Windows bare tools pass original56PTS,graphics/WebP and sparse
-400frame/16s,nld879.94Hz gates with joined cleanup. The initial Windows wrapper
-cmdlet failure is retained; the existing Python hash mechanism fixes only it.
-Completed PS2 current optional-clock Linux headed Health/admin: canonical
-original-pts-runtime/health-admin/qualification.json owns16 Chromium/Firefox
-tests/32 EN/NL scenarios, both themes/hydrated/no-JS Refresh persistence,
-old false/Info versus new true/Pass and exact two-tool diagnostics identity.
-One matched current SSR/WASM bundle is byte-identical across both runtime cases;
-unchanged native/source/AV/editor/client evidence is reused within its scope.
-Completed p9a-windows-package: canonical provider-scan/windows-current-clean-
-package/qualification.json owns clean34e04/cdf06813, four native MSVC release
-binaries and matching release frontend, independent archive/bundle, packaged
-launcher/bootstrap/restart,36 per-runtime/browser admin cases (32 Health/64 EN-NL
-scenarios,4 Next-navigation) and three strict native output gates/8 AAC-nld
-captures. Exact old207 false/Info and candidate true/Pass identities pass.
-The verified existing CLI mode isolates browser projects: the same live host,
-PID/database/port passes Chromium9 then Firefox9 without fixture reset. Other
-candidate client cells are composed from their exact passed receipts. No new
-full combined-CLI green is claimed: original stalls remain retained. The tested
-JS ownership guard did not close that combined mode and is rejected, not staged.
-No product/browser/time/oracle change, compiler natural-cleanup or graceful
-tray-menu claim. Windows package is closed within this scope; source-output,
-applicable platform/candidate-adoption and other owners retain their boundaries.
-Other exact prerequisites retain their primary records: author-enhanced AE5
-needs authoritative A8(2) same-cell/empty-NoDirectAddress order/lifetime semantics
-and independent C3 capability; author-base AB5 needs correct raw-header/secondary
-independent decoding; m29-policy needs an accepted author/receiver CoP or exact
-semantics-preserving reset. Client gates retain X1 deferral/no DVBViewer/no physical
-Kodi before the agreed joint final; editor-upstream retains X3 upstream banks/
-over208-context capacity. Native ARM execution is maintainer-deferred, with
-provisional compatibility assumed and its future proof retained.
-Source-output and independent platform-safety components are closed. Runtime
-adoption and dependent aggregate/final gates stay open with all their clauses.
-No Mac execution, CI, push or publication is authorized.
-The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.
-Older six-platform next actions below are historical where this scope supersedes
-them; retain all valid evidence and independently required Windows/ARM work.
+External prerequisites, not parallel internal work: author-base retains four
+fixed independent raw-header observations; available pinned decoders and the
+installed TSDuck body-only interface cannot close them. Resume only with relevant
+changed capability or explicit maintainer direction. Managed adoption retains
+approved public tag/asset mapping, publication authority and final adopted-byte
+gates. Qualified local components remain closed; no source override is accepted
+as production repair. These primary owners retain their exact canonical evidence.
 
-UCU-12 is Complete through fixed v26.11.4/row254. All18ordered rows have
-accepted dispositions and the authoritative pin advances with them. Milestone
-ucu-12 owns exact identities, complete component history and composed CI proof.
-Four qualified Next rs.6 platforms and FFmpeg2.0.7 pass source/package/managed
-startup, decoded playback and transport acceptance; macOS retains exact rs.4
-identities and approved unverified runtime debt. Hardware debt remains unverified.
-Focused CI recovers the original failures without repeated compilation: full
-Firefox57/7existing skips; current browser10Chromium/9Firefox with existing
-skips;1955workspace+17Next Level1.5 passes; Next451passes plus one unchanged
-NUL-fixture recovery and both required smokes. Original negatives remain retained;
-the SQLite fixture race is a documented possibility, not a claimed product fix.
-Required earlier workspace gates and corrected-source checks retain their scope.
-That UCU12 closeout authorized source delivery only; it did not accept Phase9.
-The maintainer now explicitly resumes the separate Phase9 goal after controlled
-mergee0c4fc8d, preserving all six local commits and ten uncommitted files.
-
-SO2-H/R Native MPEG-TS HTTP/RTSP caption delivery is completed at58fbc948
-within Linux x86_64/software FFmpeg207. The HLS manifest/actual-EOF correction
-now passes ordinary HLS-input Off/Burn, same-response raw EOF with late888 and
-Dutch660Hz, and two complete Native HLS raw-source AV segments with cleanup.
-Canonical direct_url_qualification.hls_eof_followup owns29 focused regressions,
-152 transport controls (133new/19reused), preserved negatives and scoped reuse.
-Strict affected lint and fresh-host Legacy/Hybrid MPEG-TS/HLS-output smoke pass;
-this closes the named HLS input/EOF component within Linux/software207.
-The new Native HLS test restores product default60s startup, retaining client20s;
-its inherited5s refusal and UTC control remain negative evidence. Public PDT
-projection already handles upstream clocks; no decoder/runtime repair is started.
-Other completed source, scheduler, editor and F6 components stay closed.
-
-SO2-N ordinary Native Live route integration is completed within Linux
-x86_64/software accepted FFmpeg2.0.7. One held producer/request delivers Off/Burn,
-observed888 versus200/plain and Dutch660Hz with unchanged generation/addon calls,
-defaultcapacity2 and joined cleanup. Three helper/six retained-owner regressions,
-the actual grouped HTTP route,19 transport controls per capture, strict affected
-Clippy, format, architecture and fresh-binary ordinary MPEG-TS/HLS smoke pass.
-Canonical scheduler_recovery_followup.native_adoption owns exact final-source
-receipts, reuse and preserved negatives. Other native/adoption owners stay open.
-
-SO3-R/SO4-R current-Next source/runtime compatibility is completed within Linux
-x86_64/software unpublished023 rs.7 plus accepted FFmpeg2.0.7. All seven accepted
-patches/compiler/lock remain exact; only three existing corrections are ported.
-Fresh preparation,374 source tests,10 prepare guards, strict lint/format and
-three original ordinary-route tests/five captures pass95 transport controls.
-Both2164/2143 retain176 output/166 source frames, exact889/clear/Dutch audio,
-one provider response,grant410 and zero owners. Copy Off and immutable prepared
-Burn/Convert retain their unchanged AV/audio/cue/cleanup oracles. Accepted rs.6
-fails the explicit absent-cut qualification before physical coverage, not a new
-physical-output counterexample. Canonical next023_source_output_followup owns
-receipts and candidate archivec6765c48/payload552d6e0f. No production pin changed.
-
-PS1 current023 Linux candidate package/Bookworm component is completed.
-Canonical next023_source_output_followup.linux_package_bookworm owns exact
-archive/origin/payload/license equality, unchanged production-candidate refusal,
-nine package guards and actual pinned Debian12/glibc2.36 worker/FFmpeg207 execution.
-The existing finite software oracle proves200frames/160x90, selected nld880Hz,
-48 caption-reference pixels and error0.438 versus plain66.062. Host decoding uses
-the same pinned fontconfig with mount-to-host path mapping; initial default-font
-comparison remains retained. Normal exit/container removal pass. Current source,
-ordinary-route/95transport and unchanged FFmpeg compatibility receipts are reused.
-
-PS1 current023 ARM64/ARMv7 artifact and emulated-software components are completed.
-Canonical next023_source_output_followup.arm_artifact_qualification owns exact
-source/lock/compiler/ten-patch/privateMPP/notice/package pins, warm-cache builds,
-68 affected controls per architecture and actual generic200frame/160x90/nld880Hz/
-caption software output. Native-host decoding uses identical pinned font context
-and original strict oracles. Finite workers exit normally; six containers are
-absent. This is QEMU/software/artifact proof, not native ARM or source-output
-route acceptance; those exact required proofs retain their primary owner.
-
-PS1 current023 Windows bare-worker artifact component is completed. Canonical
-next023_source_output_followup.windows_worker_artifact owns exact native MSVC
-source/compiler/lock/ten-patch/VPL/package pins,54+14 native source controls,
-synthetic FFmpeg207 discovery and zero owned remaining processes. Original rs.6
-payload hashes remain exact. Available non-Mac worker artifact components are
-closed within their explicit source/startup/software scopes. The separate full
-current Windows application-package trial remains deferred with120minutes
-reserved; native ARM/Mac, missing Mac artifacts, final Health and explicit managed
-adoption retain their existing owners. No publication/production pin changed.
-
-AE5 original CrossEmitterOrder bounded source assessment is completed; its
-conformance requirement remains blocked. Canonical authored_cross_emitter_followup
-.normative_order_assessment owns EN13.3/13.7 and additional TR100287V1.2.1 review.
-Active visual equivalence/AP restoration supplies neither the missing same-cell
-control lifetime/order nor an empty object's explicit endpoint. The original16
-invocations/17 actions, known lower-bound1/pending17 and normative expectations
-remain unchanged. Resume only with an authoritative/standards-supported rule for
-the exact original trace; no guessed order, new restriction, test relaxation or
-unchanged hypothesis replay. Other completed AE5 components stay closed.
-
-SO1 current FFmpeg207 Native public-HLS compatibility is completed. Canonical
-native_public_hls_followup.current_runtime_207 owns the unchanged three-case
-segmenter-Off/Burn/direct-Burn receipt, exact original source/test body,
-888/200/plain raster,nld660Hz,joined cleanup and57 transport passes. Earlier
-SO1 and unrelated source/lint/editor/client evidence retain their scope.
-
-Historical prepared-capacity/HLS timing investigation is closed within its
-current Linux candidate boundary. Checkpoint200dcf52 retains admission ownership;
-original-pts-application/qualification.json supersedes the former uncommitted
-HLS/clock next actions with complete same-response cue/clear/reentry proof.
-All original plain-Burn, frame75, direct-file-reference and sparse-mux-alone
-negatives remain canonical; none establishes a new current work direction.
-Preserve all ten foreign edits. No push/publication or Cartesian variant queue.
-
-The separate120minute full Windows-package trial remains maintainer-deferred;
-its explicit resumption question is pending and does not block this independent
-work. AE5 normative, AB5/C3 formatter, native/Mac, X1/X3 and policy prerequisites
-retain their existing owners. No publication, production pin or new variant queue.
-
-PS1 corrected Linux package/Bookworm component is completed. Canonical
-scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
-FFmpeg80e3502c, unchangedffprobe3e0a8c01, exact source/patch/dependency/license
-provenance, existing layout/safe extraction and wrong-pin refusal. Pinned
-Bookworm3783cc01/glibc2.36 passes actual graphics/twoAV1 encoders/SVG/twelveWebP
-cases and sparsePGS400frames/16s/Dutch879.94Hz; decoder options remain available.
-All affected processes/container are joined/removed. This is one unpublished
-incremental Linux archive, not a rewritten four-RID manifest or managed adoption.
-No nativeWindows/ARM/macOS/hardware proof is inferred.
-
-Fixed AB1..4 independent glyph/context obligations are completed. Canonical
-provider-scan/identity.json authored_base_imager_correspondence_followup owns the
-unchanged imager0.2.0/2b0125b7 actual renderer/source proof: national30/30,
-alpha24/24, original spacing90/90, Cyrillicbreve/pound30/30 and multiplication6/6.
-Literal sources and basic fallback stay exact across1/1.5/2.5, with/withoutX28.
-All198 actual paints equal their pinned source fonts;190 exact field/glyph
-expectations pass. The initial Latinunderscore tuple assumption is retained and
-corrected from original X26mode10/data5F, without changed scalar/glyph/wire.
-
-AB5 is externally capability-blocked: six raw header# cells paint Englishpound;
-two explicit secondary01 German5B cells paint PolishstrokedZ. Pinned imager
-nationalises row0 like the body and mis-splits the seven-bit secondary charset.
-Both already qualified stock0.2.42 and imager0.2.0 lack correct AB5 decoding.
-Resume only when those exact independent capabilities demonstrably change; no
-unchanged replay, external decoder repair or new client search. All old scalar
-and glyph negatives remain, not normalized. Source mappings/publication AB1/2
-and AB3..5 attribution stay closed; full-client/editor/native gates retain
-existing owners. X1 deferral/X3 upstream wait are unchanged.
-
-AB6 original separated-margin font attribution/equivalence is completed:
-all three observed stock masks match their pinned stock font; all three product
-expectations match the pinned MIT import/current embedded masks. G.2 and existing
-ADR0123 permit non-DRCS font appearance choices. Original21 functional observations,
-nine held/source equalities and all three strict pixel differences are preserved;
-no cross-font pixel equality or other-glyph equivalence is claimed. Immutable
-import and the current64-pattern/both-spacings product test pass. Canonical
-level15-held-mosaics/identity.json font_equivalence_followup owns the closure.
-
-AE5 CrossEmitterOrder remains a named source-order qualification gap. The exact
-original full-factory witness preserves lower-bound1/all17 pending points and
-known-open1/pending15 in both original and physical output. It does not supply a
-total same-cell opening/reset order or an empty-object lifetime certificate.
-Canonical authored_cross_emitter_followup retains this bounded observation;
-no guessed order, publication restriction or source modification follows.
-SO2 scheduler recovery/Linux native and Bookworm package components stay closed; other native
-RID/Health/adoption and route enablement retain their existing owners.
-
-AE5 A7 source/type/interleaving conformance is completed within model/native and
-independent-field boundaries. Ten focused controls cover seven positive full
-factories and eight original refusals. Four disjoint Active attribute types
-combine; all-type overlap keeps Passive priority in both call orders; allowed
-Active/Passive/unchanged-Adaptive/mixed interleaving retains exact scopes. Each
-same-type Active group conflict and any changed Adaptive interleaving group
-keeps its located original refusal. All native calls/definitions, original IDs/
-roots and Base packets survive. Pinned imager passes45 fixed cell/attribute
-observations over1/1.5/2.5; final native files remain byte-exact. Existing raw
-address/panel/compound masks and resource/default/nested receipts supply the
-other A7 clauses;1774 prior regressions remain valid with production unchanged.
-Canonical provider-scan/identity.json authored_a7_conformance_followup owns the
-clause map and hashes. Receiver/navigation/platform gates keep their owners.
-
-A8(2) mixed>15 NoDirectAddress remains a normative interpretation prerequisite:
-initial AP and coded termination are not a proven last explicitly addressed
-position. This reuses the already recorded8b38282a classification, not new proof.
-No endpoint, source rewrite or publication restriction was introduced. Resume
-only with an authoritative/source-supported lifetime rule; an interim restriction
-would need explicit maintainer approval and cannot close the final requirement.
-
-AE5 C3 factory source/size proof is completed: the original double-size conflict
-keeps requestedDS but effectiveDH in both full models, exact Main source/root6,
-unchanged Base packets and the actual nativeDS word. Both original illegal
-row23-DH/column39-DW cases retain complete-factory refusals at Main/root2 and
-their exact raw/visual positions. Four focused controls and strict Clippy pass;
-1774 prior regressions remain valid because production code/input is unchanged.
-Independent enhanced reduction proof remains blocked: pinned imager0.2.0 and
-stock libzvbi0.2.42 both overwrite the earlier A bottom at2,9 with B's right
-fragment instead of preserving the required C3(2,3) width-only reduction. Base
-observations pass. Original norm/goldens are unchanged; no decoder repair,
-new client search or false full-C3 acceptance follows. Resume that exact proof
-only with a changed, demonstrably suitable decoder; X1/X3 decisions remain.
-Canonical provider-scan/identity.json authored_size_conformance_followup owns
-factory/native fields, both decoder negatives and the exact missing capability.
-
-AE5 inherited Adaptive double-width non-origin behavior is completed: the
-original row1/9 source no longer fails the full factory as unresolved. C3(2,4)
-retains the earlier lower L/red origin over both width fragments; the hidden
-Adaptive A/green candidate keeps its exact source/root/instance and requested
-width. Native words retain its invocation and complete original definition;
-all fallback packets are byte-exact.1774 affected tests, seven focused controls,
-final factory export and strict Clippy pass. Unchanged pinned independent imager
-confirms1.5 ZZ and2.5 L/red left/right fragments; a wrong-overlay oracle fails.
-Canonical provider-scan/identity.json authored_adaptive_nonorigin_followup owns
-original reds and receipt hashes. Explicit overrides/deferred attributes remain
-strict; other inherited axes and client display gain no acceptance here.
-
-AE5 ancestor-bound deferred-write diagnosis is completed: the original parent
-plus15 empty children already exceeds A8(3), with or without its later row25
-write. The tail previously hid that source error, although the factory still
-refused later at unresolved physical comparison. Both now retain the same
-original child-command14/root0/instance15/AP1,0 refusal. The shorter prefix
-retains max15 and all16 unplaced/reset witnesses.1773 affected teletext tests,
-18 focused controls and strict Clippy pass. Canonical provider-scan/identity.json
-authored_deferred_source_prefix_followup owns negatives and the bounded source
-correction. This closes source diagnosis, not a publication escape or stream
-repair. The current package at the start of next_steps supersedes this historical follow-up.
-
-AE5 explicit Main/child prefix admission is completed: original domain/factory
-reds and retained16-call bytes show that a child write hid its invoking Main
-opening. Original Local roots now bound a positioned Main-only prefix before
-every possible reset, including that root call. Earlier writers retain17 pending
-facts and a lower bound1. Full-factory15/native/fallback and independent1.5/2.5
-fields pass;1771 affected tests pass. Canonical provider-scan/identity.json
-authored_main_child_prefix_followup owns native/source/work proof and final lint.
-No default/nested/unpositioned clock or full admission is inferred. The only
-current package at the start of next_steps supersedes this historical follow-up.
-
-AE5 same-emitter definite-run admission is completed: domain and complete factory
-reds prove that an unpositioned colour write hid sixteen successive empty calls.
-When all relevant actions share one actual emitter, original ordinals now retain
-definite runs on either side of conservative possible-reset barriers. Pending
-reset facts remain; mixed emitters keep existing scan/C2 uncertainty. Grouped
-screen/row/header-colour cases and whole-factory before/after refusals preserve
-exact sources and existing fifteen-call native proof.1769 affected tests pass;
-canonical provider-scan/identity.json authored_successive_source_followup owns
-scope/source/work fences and final controls. No plane cell, actual-write certainty
-or full-A8/client claim is invented. The only current action is CrossEmitterOrder
-above.
-
-AE5 backwards-interval classification is completed: nonnegative validated origin
-modifiers and relative coordinates cannot place a direct endpoint before its
-caller. Existing A4 negative/source/wide controls retain their strict outcomes.
-The paired complete models and actual native words also retain fifteen empty
-Passive calls, exact originals/Base and endpoint=None facts; sixteen keep the
-located original A8(3) refusal. Six focused tests and strict Clippy pass; no
-production change. Canonical provider-scan/identity.json
-authored_empty_bound_followup owns source pins and the closed total-instance
-bound. Mixed services above fifteen total calls with endpoint-free instances
-still need exact A8(2) lifetime proof; no point/page-end endpoint or silent
-restriction is assumed. The only current action is A8(3) above.
-
-AE5 known off-screen endpoint admission is completed: the original factory's
-sixteen-open-object escape is corrected by counting exact original endpoints
-independently of visibility, with tuple order instead of fixed-width aliases.
-Fifteen remain valid; sixteen reject at the original call. Distinct-row intervals
-remain disjoint; unplaced visual diagnostics and all original provenance remain.
-The1764 unchanged passes and one corrected known-endpoint expectation compose
-1765 unique affected teletext regressions; canonical provider-scan/identity.json
-authored_open_interval_followup owns red/green receipts and exact scope.
-The later empty-bound classification above owns the remaining endpoint-free
-case. No invented endpoints or full-admission/client claim.
-
-AE4 original sparse-default/selected nested dependency resolution is completed:
-paired full factories retain native defaults without X26 and checked foreign-root
-realization with compatibility X26. Five original roots/children retain exact
-slots/parents/source/offsets; original resource bytes, Base and X27/X28 are unchanged.
-Six focused tests and strict Clippy pass. Actual compiled carousel/received banks
-pass14 fixed independent1.5/2.5 tuples and three wrong/missing-bank negatives.
-Canonical provider-scan/identity.json authored_default_dependency_followup owns
-this completed model/native-byte/field join. Automatic MOT/X27 acquisition and
-client/editor/platform evidence stay with their existing owners; no stock retry
-or runtime/product change. The only current action is AE5 above.
-
-AE1 intended four-control1/1.5 fallback is completed as new evidence: the unchanged
-pinned imager's supported basic black_foreground=false/double_width=false profile
-passes28 original field oracles in20 reports, including the22 retained stock
-mismatches. Applicable X26/G2 remains present at1.5 and absent at1. Four same-API
-controls retain mandatory2.5 behavior. Five current native tests reproduce all10
-original fixtures byte-exact; enhanced14-field/four-raster and actual editor/
-delivery proof is reused. Canonical provider-scan/identity.json
-authored_basic_fallback_followup owns configuration, source guards and exact
-joins. Stock0.2.42's original negative stays preserved; no product/decoder change
-or suitable-client/font/platform claim. The only current action is AE4 above.
-
-AE2/AE3 original well-positioned resource witnesses are completed:11 cases show
-A7 Passive priority, mixed/complementary attributes, direct/nested same-definition
-repeats and located forbidden-overlap refusal, without a new resource clock.
-Full models/roots/effects/fallback and unchanged resource payloads pass. Nine
-actual carousel captures pass pinned independent1.5/2.5 cells/counts, including
-actual S1=5 execution with no character write. Seven focused controls and strict
-Clippy pass; unchanged b18eace4 production and1756 regressions are reused.
-Canonical provider-scan/identity.json authored_resource_contention_followup owns
-exact inputs, negative guards and proof. AE4 owns default/dependency joins; AE5
-retains full A7/A8/C3 and unpositioned/inherited conformance. No client retry,
-external decoder maintenance or new product behavior is claimed.
-
-AE2 Main/resource context is completed in the complete factory/carousel boundary:
-coherent B7 acquisition supplies only authenticated resource-before-display order.
-POP/GPOP original bodies, full source, header/tail, observable second invocation,
-actual native words and all base packets pass.1756 affected regressions and32
-identity regressions are green. Independent pinned imager1.5/2.5 agrees with all
-fixed fields. Stock0.2.42 supplies only partial POP evidence and negative GPOP
-routing evidence; no suitable-client claim follows. The unused-capability identity
-regression and all earlier negatives remain in provider-scan/identity.json
-authored_resource_order_followup. Standalone, default/generated and unrelated
-resource-page order stay strict; no editor/HTTP/platform replay or acceptance.
-
-AE3 distinct-root Local repetition is completed: a real complete-factory red at
-Main3 is corrected by binding both instances to one original native definition.
-Original roots1/5, FG3/4 Hamming words, original/physical FG4 and all base packets
-are retained. Explicit evidence compares shared words equally; it does not rank
-instances. Wrong aliases and ambiguous nested roots refuse; default/resource
-uncertainties remain.1753 affected teletext regressions and29 focused controls
-(including two pinned independent1.5/2.5 cases) pass; three wrong colour goldens
-fail. Canonical provider-scan/identity.json authored_repeated_order_followup owns
-receipts and the bounded scope. AE4/AE5 retain default/dependency and unpositioned/
-inherited conformance; no new editor/stream/client/platform acceptance is claimed.
-
-A2 supported resource-file/current-draft admin actions are completed within the
-joined boundary. Real multipart Router probes carry the closed EE1 and complete
-EE3 concepts to exact native previews; foreign/stale/invalid inputs preserve
-publication and stored source/profile/package/Night state. A demonstrated
-structural-fallback diagnostic loss is corrected without changing admission:
-retain the actual refused scalar packet coordinates only for an otherwise
-unlocated same-resource structural refusal. Deadlines, existing coordinates,
-causes and error kinds remain unchanged. Actual SSR renders show native resource
-2C0 and26,7.45 resource controls pass, with the final2 repeated after an equivalent
-borrow correction; strict affected Clippy passes.22 shared bodies,12 form/API/CSS
-files and104 strings in9cultures match the actual headed sources. Reuse the
-common4+4 browser matrix and four scoped enhanced pairs, not a fresh full-current
-browser run. Canonical provider-scan/identity.json admin_enhanced_join_followup
-owns exact receipts and negatives. A2 retirement reporting remains dependent on
-its existing retirement owner; no substitute UI variant follows.
-
-EE3 internal complete-set correspondence is completed: two fitting resource
-context documents edit a GPOP-to-POP call origin and its shared Passive glyph
-in one atomic concept. The complete four-definition catalogue includes an
-uninvoked protected definition, all three consumers and defaults. Independent
-native model/units/positions, unchanged complete display/fallback packets,
-preview, every re-exported file, explicit publication/cold reopen and exact
-root-document undo/republication pass. A malformed second document refuses the
-whole set. Every fresh export snapshots the current complete catalogue; undo
-changes only its two editable root words. The discarded frozen-sibling export
-expectation and compiler/lint corrections remain in canonical provider-scan/
-identity.json editor_complete_set_followup. Final focused native proof and strict
-Clippy pass; this is new internal proof, not new product/runtime/client behavior.
-EE1..3 internal actions are closed; final editor capacity/aggregate and deferred
-optionality remain with their existing owners. No adjacent variants follow.
-
-EE1 complete context correspondence is completed: trusted Main6/Local5 boundaries
-and native marker relocation preserve full original Local identities, all five
-catalogue definitions, owner126 defaults and generated Base intent. Native Greek
-same-packing/Latin repacking, exact model/units/fallback/TTI, concept fence,
-reexport, publication and root undo/cold reopen pass. Genuine pinned headed
-QTM1.0 Greek SaveAs/disk reload joins unchanged saved bytes to the native flow;
-stock libzvbi0.2.42 passes12 fixed observations plus3 negative goldens.
-Reuse154 parser controls;4 affected native regressions and strict Clippy pass.
-The full-capture helper now uses the existing2MiB project bound, retaining the
-single-TTI limit. Canonical provider-scan/identity.json editor_complete_context_followup
-owns exact receipts, provenance joins and negatives. EE2 positions/root undo are
-proved for this action; EE3's complete-set obligation remains separate.
-
-A1 base admin/agent-file action join is completed:14 shared route/control/action
-bodies and27 strings across9 cultures remain exact to the genuine headed source;
-the sole wrapper delta inserts enhanced forms owned by A2. Original4 Chromium
-and4 Firefox JS/no-JS/light/dark/all9-culture receipts join closed EB1/EB2.
-The existing reference now correctly exposes its operational transfer contract,
-retaining historical negatives. No UI/runtime change or new all-current browser
-run. Canonical provider-scan/identity.json admin_base_join_followup owns pins
-and the bounded source/receipt join; required parent dependencies stay open.
-
-EB1 direct ArabicG0 cell editing is completed for47/57: actual pinned headed
-QTM1.0 native code H changes physical G0/47 to48 while original X26/G2 sentinels
-stay unchanged. Native3 controls and real saves/concept/preview/reexport,
-explicit publication/two cold reopens pass. The driver now targets the actual
-modal X11 window; both original inputs save, first byte-identical. Global-pointer
-and fixed-DPI focus negatives remain. Arabic Unicode keymapping is unsupported,
-not claimed; no editor/product repair or new stream/client/platform acceptance.
-Canonical provider-scan/identity.json editor_arabic_g0_followup owns proof.
-EB1/EB2 actions are closed; required author-base acceptance retains its owner.
-
-EB2 complete plain-base-set interchange is completed: actual headed pinned
-QTM1.0 saves124/32,124/33,125/32, followed by one complete-set concept,
-shared preview, separate explicit publication, exact reexport and cold reopen.
-Raw subcodes/navigation/sidecar, package and other channel remain unchanged.
-Native regression, actual editor run, strict focused lint and formatting pass;
-three saved-window images were inspected. Canonical provider-scan/identity.json
-editor_base_set_followup owns pins, receipts and test-only future-boxing reuse.
-No production/runtime change or new stream/client/platform claim.
-
-Completed standards S1/S2/S3 and AB7/AE5 inventory trace stay closed in
-case_reconciliation_followup.standards_s2_s3; actual conformance remains with
-author-base/enhanced. EE2 shares EE1/EE3 without a separate variant queue.
-
-SO2 owned observed-page selection/consumer binding is completed within Linux
-x86_64/software FFmpeg9: one producer, opportunistic prefix at most64KiB,
-current PSI/complete PES/header identity, exact final shared-input command,
-ordinary AV fallback and joined cancellation.19 regressions/snapshot, actual
-API888/Dutch660Hz before EOF and19 TSDuck controls pass. The original f9ee21ee
-report-only prefix/replay component remains closed. Canonical provider-scan/
-identity.json native_streaming_lifecycle_followup.route_join_followup owns receipts.
-
-SO2 scheduler cause/correction and ordinary-route candidate proof are completed
-within Linux x86_64/software scope. An unchoked teletext decoder was stranded
-with760 overflow packets; video232/audio446 stayed buffered. The exact upstream
-FFmpeg revert43284b61 removes that decoder-overflow mechanism. Runtime source
-checkpoint b434264 and its exact FFmpeg9 candidate pass the original identical
-source/argv and ordinary Off/Burn request proof: exact888/200/plain pixels,
-Dutch660Hz, one producer/request, unchanged generation and defaultcapacity2
-cleanup. Direct/Off/Burn each pass19 existing TSDuck controls. The permanent
-owned regression now covers unpaced input; the paced companion retains its
-original arguments. A grouped app-directory collision is retained separately.
-Canonical scheduler_recovery_followup owns the exact candidate identities and
-receipts. Earlier pacing/duration/GENPTS/heartbeat negatives remain valid.
-Those four route sources were historically preserved outside the product path
-on uncorrected FFmpeg2.0.6; the current SO2-N completion above now adopts them
-on accepted FFmpeg2.0.7. The local Linux package/Bookworm component stays closed.
-Other native/platform/adoption owners remain; SO3 components keep their scope.
-
-SO1 public native HLS source-caption integration is completed within Linux
-x86_64/software FFmpeg9: actual ordinary segmenter-Off, segmenter-Burn and
-direct-Burn pass exact888/200/plain raster, Dutch AAC660Hz and joined session/
-capacity/work cleanup.57 existing TSDuck structural/clock/continuity controls
-pass on the delivered original public TS segments. No product correction was
-needed; public master/session routes are tested, not Hybrid internals.
-Canonical provider-scan/identity.json native_public_hls_followup owns identities,
-receipts, bounded scope and lint. No opt-in raw-direct claim is made. Full-source
-seek/EOF, other native RIDs, client display and managed adoption retain their owners.
-
-Source inventory SI1..4 is completed: SI4 joins advertised/observed distinctions,
-alias/page identity, typed raw/context persistence and actual Local/provider
-scan, rescan, missing/restored and version-selection receipts. Existing source
-hashes and original test cases confirm valid reuse; no new product or test run
-is claimed. P9A-03 retains its open P9A-02 runtime/platform dependency.
-Canonical provider-scan/identity.json source_inventory_closure_followup owns the
-clause map. Source output and runtime/native adoption keep their own gates.
-
-SO4 seek2164/out9200 and original2143 regression is completed within Linux
-x86_64/software unpublished Next.6. Both ordinary HLS captures preserve176 output
-frames/166 complete source frames, exact889 transitions/clear, Dutch AAC,
-one provider acquisition, grant410 and zero actual work/capacity/storage.
-Both pass19 existing TSDuck structural/clock/continuity controls;2143 remains
-byte-exact to its original success.341 Next tests, eight web controls and the
-native cache/ownership/fallback group pass. Reuse3aacbd09's40 focused controls
-and actual incident-source proof. Runtime negotiation binds the cutoff to the
-same source/video/outpoint before conversion, keeping SRT cache/profile/encoder,
-exact-t and final publication fences. Unqualified observations do not guess an
-endpoint or exclude a source. Canonical provider-scan/identity.json
-burn_shared_clock_correction.finite_outpoint_followup.route_correction owns all
-receipts, scoped reuse, preserved negatives and final closeout.
-
-This closes the named two-interval regression, not all SO4/output/adoption.
-Managed.1, other native RIDs and remaining SO2..3 keep their existing owners.
-SI1/2, SI3 PES/PMT/initial-inventory/M2TS components, SO5 and F6 stay closed.
-Ordinary milestones remain the sole completion collection. Preserve external
-deferrals and parallel edits; no push/publication or production9B before full
-independent9A acceptance.
-
+P9A-01's accepted decision contract is Complete. Runtime/scanner aggregates are
+blocked on their existing dependencies. Final1.5/9A closeout follows the remaining
+required owners; no substitute glyph/editor variants or unchanged negative
+client replays are queued. Existing Level2.5 stays experimental with optional CI;
+resume enhanced-only work only on a new task. Preserve Mac/nativeARM deferrals,
+all evidence and parallel edits. Push or publish nothing.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
@@ -4283,10 +3534,789 @@ Deferred maintainer tooling (retained from the former plan index): evaluate
 mdBook or another documentation build system, and validate the Claude hook
 schema before enabling further hook automation. Neither item is active product
 scope or a prerequisite for the current corrective milestone.
+
+Superseded Phase9 next_steps through checkpoint85245fa2; preserved verbatim
+for historical lookup only. Current direction is the separate next_steps field.
+
+Current maintainer amendment2026-10-28 (ADR0123): fully verified Level1/1.5 and all
+applicable shared source/output, authoring/interchange, metadata/zones,
+profiles/themes/Lua/restart, localized admin and required runtime/platform checks define
+current9A acceptance. Existing Level2.5 stays available as experimental. Remaining
+enhanced-only implementation/conformance/editor/independent/client proof is Deferred,
+not accepted, and excluded from the required9A path; resume only on a new maintainer
+task after suitable open-source client capability becomes available. Preserve all code,
+capacities, validation/fallback/playback safeguards and historical positive/negative
+proof. General/1.5 CI stays required; dedicated2.5 Rust/browser jobs are optional
+explicit dispatches. Earlier full2.5 prerequisite wording is superseded for current
+acceptance only.
+Current acceptance change supersedes historical enhanced-only directions below.
+The installed Kodi version is confirmed21.2; no changed full2.5 capability follows.
+Completed experimental2.5 localized admin classification: provider-scan/
+experimental-level25-admin/qualification.json owns18 help texts in9 cultures,
+matched SSR/WASM, strict lint/format/hydration and8+4 passed headed cases.
+Existing controls/validation/publication/output are unchanged; no extra
+experimental-label variants follow this closed component.
+Completed AB5 acceptance partition: the original132 Level1/1.5 observations
+retain128 positives and four mandatory raw-header negatives. The66 enhanced
+observations and exact explicit-secondary01 cells are Deferred, not a current
+base capability prerequisite; immutable198-record proof remains canonical at
+ab5-decoder-capability-20261028/qualification.json level15_acceptance_partition.
+Completed p9a-client-base ordinary control-fixture preparation is retained
+within its encoded-page/transport/AV boundary. Canonical level15-client-controls/
+qualification.json joins two headed ordinary preparations, two independent native
+capture checks, original440Hz and selected660Hz Dutch audio, three page/subpage
+identities, conceal/flash/mosaics/height and unchanged frozen default fixture.
+Actual visible timing/reveal/update/navigation and native Kodi AV remain due.
+Completed LAN handoff preparation: canonical level15-client-controls/lan-forwarding/
+qualification.json owns three pre-host rejections, unchanged default-loopback
+and explicit-LAN headed trials, actual Windows-origin ordinary-prefix transport/
+independent-page/AV/selected-Dutch proof and normal owned host cleanup. Existing
+Windows forwarding/firewall and production state are unchanged.
+Completed playlist-input boundary: playlist-input/qualification.json retains
+actual Kodi-UA Windows playlist -> advertised ordinary Legacy URL -> strict
+independent-page/transport/AV/Dutch audio proof with unchanged channel/profile.
+Pinned IPTV Simple21.11.0/ffmpegdirect21.3.8/Kodi21.2 sources support the native
+teletext input path; installed identities/settings still require the joint session.
+Completed explicit live-update preparation: live-publication/qualification.json
+owns generation1->2 on one Windows ordinary response, unchanged profile/binding/
+package and old histories, independent A/B at all three page identities, every
+one of19273 transport packets, video/660Hz Dutch audio, reused English baseline,
+strict checks and actual owned cleanup. Its existing fixture marker requests
+publication explicitly; no source timeout/byte limit or production path changes.
+The finite joint receiver protocol is prepared; actual Kodi/IPTV Simple/inputstream
+identities and page/subpage/X26/geometry/update/reveal/timed-flash/AV observations
+await the maintainer. Existing600s human hold starts only when present. No device
+access now or inference that representative preparation accepts all1.5 behavior.
+Completed existing-tool AB5 header eligibility: installed TSDuck3.44-4676 exposes
+subtitle body lines only, not row0 cells. Canonical tsduck-header-capability/
+qualification.json retains the source/CLI boundary; the same four semantic
+observations remain external-capability-blocked, with no decoder work or new
+internal glyph/editor variants queued.
+Completed managed-publication availability check: canonical local-promotion/
+remote-availability/qualification.json retains current GitHub metadata, exact
+candidate-tag404 and eight archive differences from explicit published baselines.
+All local qualification components stay closed. Managed adoption is Blocked on
+maintainer public-tag/asset policy and publication/adoption authority plus final
+adopted-byte gates; no current source override or metadata check adopts it.
+Completed P9A-01 decision gate: the accepted technical ADRs, completed standards
+S1/S2/S3 clause ownership and five completed prerequisites satisfy that contract
+component. Canonical identity.json case_reconciliation_followup.contract_gate_closeout
+retains source hashes/chronology and every remaining primary proof owner.
+P9A-02/03 are dependency-blocked aggregates, not new runtime/scanner variant work.
+Current package: existing Phase9A handoff correctness under the authorized regie
+scope. A fresh progress-next query printed historical SO4 next-action paragraphs
+alongside the current direction; next_steps/handoff text totals over300k characters.
+Next finite action: make the existing current-step record/query unambiguous while
+preserving exact historical source/evidence and parallel edits. Reuse the existing
+format/tool; add only the smallest necessary presentation support and focused
+regressions. Stop when default next reports one current direction and historical
+handoff remains explicitly retrievable; no product/acceptance requirement changes.
+
+The four independent base raw-header negatives remain author-base-owned; do not
+normalize them or begin external decoder maintenance. Production adoption retains
+its own authority and current enhanced-only tasks remain Deferred.
+
+Private-period platform amendment, maintainer decision 2026-10-26: Linux x64,
+ARM64, ARMv7 and Windows x64 remain required. macOS x64/ARM64 are Deferred by
+maintainer decision, not accepted, and outside the current required matrix.
+No macOS builds/crossbuilds/packages/toolchain installs/runtime/acceptance trials
+or paid runners/services may start. Preserve code, guards, artifacts and evidence;
+resume only with explicit permission, not merely a visibility change. All
+functional Level 2.5/fallback/QTeletextMaker and engine-first gates stay mandatory.
+Native ARM amendment (maintainer decision 2026-10-26): actual ARM64/ARMv7
+execution is Deferred until suitable hardware becomes available, date unknown.
+Compatibility is provisionally assumed, not native-verified. Build/package,
+dependency, software/emulation and CI remain required; p9a-native-arm retains
+future native obligations but no longer blocks current acceptance.
+Completed p9a-source-output: the finite SO1..SO5 Linux/software source-output
+component is closed by existing exact route/clock/AV/audio/cleanup proof. Canonical
+provider-scan/identity.json source_output_closure_followup joins13 terminal runtime
+receipts,14 byte-valid captures/266 transport checks and36 unchanged implementation
+hashes. This closes a mandatory proof join, not new runtime functionality, a
+production pin or platform acceptance. Historical component negatives remain.
+Completed p9a-platform-safety PS1/PS2 independent join: exact four-RID runtime
+artifact/software, Linux/Windows headed Health and current ARM host crossbuild
+proof are closed within their declared source/runtime boundaries. ARM64/ARMv7
+web/scanner/healthcheck builds pass55m58s/61m28s: six fresh ELFs,2848 unchanged
+inputs and declared glibc2.39 baseline; both own containers are removed. Native
+ARM is assumed, not verified. No production adoption or fresh full CI is inferred.
+Canonical provider-scan/platform-safety-closeout/qualification.json owns proof.
+Completed current Next023rs7 install/cache/identity component: canonical
+provider-scan/managed-current-candidates/qualification.json owns four existing
+passed tests, two each on Linux/nativeWindows. Both hosts validate all four
+required RIDs' install/relocation/bundle; their real local-HTTP install, exact
+offline reuse, version/identity-before-execution, corruption refusal and lease
+release pass. Native clean34e04 critical sources match current; all source bytes
+stay unchanged. The Windows Job is fully emptied with one forced unclassified
+descendant termination; no natural-exit attribution is claimed. No full global
+startup, persisted Health, production pin or accepted adoption is inferred.
+Completed original-PTS FFmpeg installer/cache/identity component: canonical
+provider-scan/managed-current-candidates/ffmpeg/qualification.json joins composed
+15 Linux/14 nativeWindows controls and final real-archive passes on both hosts.
+Staged/promoted installed-layout capabilities, original-PES PTS, offline reuse, exact
+non-null publication hashes and wrong-checksum preservation pass. Existing
+production bytes/pins/policy remain unchanged. Strict crate lint passes; native
+source is restored, full bounded Job cleanup is confirmed with forced unclassified
+descendants, never natural exit. This closed component is not commissioned again.
+Completed exact-candidate actual startup/persisted Health component: canonical
+provider-scan/managed-current-candidates/startup-health/qualification.json owns
+six actual Linux/nativeWindows starts and eight exact profile/Health outcomes.
+Managed original-PTS FFmpeg including Windows colocation, explicit rs7 Next,
+non-null identities, persisted managed paths/summaries, exact unsupported-profile
+Fail/restored Pass and cold restart pass; offline metadata stays Warning.
+Six hosts exit0 unforced, owned groups/Job empty naturally and native source is
+unchanged. Retained exact artifacts match ten current startup/Health sources;
+no fresh full-source/matched-bundle/browser or accepted production-pin claim.
+The one-off HTML parser negative is retained and corrected without product edits.
+Completed two native Windows current-rs7 ordinary output gates: canonical
+provider-scan/managed-current-candidates/windows-output/qualification.json owns
+Burn/Convert passes with original-PTS FFmpeg, unchanged source/AV/caption/nld/
+wrapper/cache/reconnect/idle oracles, ten metadata probes and twelve natural fully
+empty Jobs. Eight captures retain exact native hashes; source/package stay
+unchanged and isolated copied hosts/tools are removed. The stale helper-tool
+hash preflight is retained; only the qualified archive input was corrected.
+Completed sustained native TS component: canonical
+provider-scan/managed-current-candidates/native-transport/qualification.json
+owns four20s normal/cached Burn/
+Convert captures,88 unchanged TSDuck checks and four independent exact AV/caption/
+nld880Hz proofs. Both hosts exit0 unforced and whole Job empty naturally; source/
+package exact, copied roots removed. The one-line URL --keep fix preserves early
+failure evidence with default cleanup and failure codes unchanged. Existing smoke
+oracles, consistent SQLite backups and native installed tools retain their limits.
+Completed native cached-HLS history/live component (2026-10-27): canonical
+provider-scan/managed-current-candidates/hls-live-qualification/qualification.json
+owns124 unchanged TSDuck checks and six independent AV/caption/nld880–882Hz
+proofs for Burn/Convert, exact live-byte membership in fully retained history,
+selected configuration/source identity and natural complete owned cleanup.
+All initial cached sequences and the declared boundary remain strictly checked;
+RFC8216 live entry does not hide the history. Original generic URL negatives and
+tool-guard/log-path negatives remain. The earlier diagnostic group log has38
+checks, correcting the prior uncommitted44-check handoff. No product repair,
+production pin, publication, current full CI or broader source-build claim.
+Local runtime-promotion preparation is completed at
+provider-scan/managed-current-candidates/local-promotion/qualification.json:
+complete source-adjacent Next rs.7 required-four-RID pins, retained Mac records,
+four existing-stager checks/wrong-RID rejection,10+28 source/stager regressions
+and four exact FFmpeg archive/source inventories. Production selection/defaults
+remain unchanged; final public FFmpeg tag/asset mapping and publication/adopted-byte
+gates remain separately authorized steps. No rebuild or repeated runtime gate.
+Completed guided Windows manual-control component: canonical
+level15-progdvb-guided/identity.json owns actual pinned native200/201 display,
+manual T/200, operator-reported subpage20 and unchanged20 shared files. The
+ordinary Linux host/native client close normally with exact package/profile
+and producer guards. Source/schedule600s supports the bounded human window;
+default75s/60s and capture/product deadlines remain exact. Initial module-load
+and short-programme503 negatives are retained. No whole-base client acceptance:
+actual native images retain fallbackZZZ while the same ordinary prefix correctly
+decodes £/Á and Ä/é independently. Missing X26/configuration, full repertoire and
+flash/reveal/update proof remain client-base-owned; no own subpage20 image.
+The operator-ready barrier is closed, not a decoder or native-audio/full-TS gate.
+M29 policy decision is accepted by the maintainer2026-10-27 in ADR0123,
+authorreceiver-policy-for-magazine-default-retirement. Proposal qualification
+remains at tmp/phase9-mot-retirement/m29-policy/proposal/qualification.json;
+no runtime implementation or receiver acceptance is inferred from approval.
+Completed p9a-editor-enhanced EE5 unused-copy removal, mandatory before9A:
+engine59c41697 and native host21f1fa7e remain closed. The localized HTTP/admin
+join is completed at unused-copy-removal/admin/qualification.json:53 SSR/i18n
+passes, actual POST and six atomic invalid controls, both headed browsers across
+all9 cultures/themes and JS/no-JS, four exact undo revisions, complete native
+models/units/shared preview, separate publication/cold reopen and preserved
+source/package/Night/config. Strict web all-target lint and hydration/format pass.
+The editor-enhanced owner is Blocked only on required parent/EE4 dependencies;
+EE1/2/3/5 are closed. Reopen only for a concrete regression. No adjacent variants.
+Completed M29 typed/native core: implementation/qualification.json owns27 model
+controls,10 native/presentation controls and the final applicable1.5 Local/G2
+extension. Header/POP enrollment retains original DecoderDependent snapshots,
+resources/defaults and every non-X28/M29 unit. Version/choice/alias rejection,
+complete page contexts and existing budgets are preserved. The original-only
+consumer now refuses unsupported bound intent; agreement is retained in parts.
+Completed M29 private storage/native reconstruction: binding/qualification.json
+owns269 app/native/admission controls, strict app/web lint and exact unchanged core reuse.
+Versioned intent binds the exact selected profile/revision and producer mapping,
+including Scripted Off separation. Original bytes/metadata and unknown snapshots
+survive append, existing concept overlays and native reopen; retained root remains
+unbound. The first21/22 native negative identified an empty-resource shortcut
+silently skipping the new intent; the corrected full path passes unchanged oracles.
+Completed M29 native author-action component: author-action/qualification.json
+owns receipt-bound explicit choice/change/withdrawal, cold concept reconstruction,
+exact context-only root undo, retained body edits and separate publication.
+Original producers/profile revisions/source fences and unknown snapshots survive;
+historical TTI cannot silently erase a newer native-only choice. Export companion
+intent is an exact association echo, never uploaded edit authority. Strict
+protected-effect and closed-format rejection retain their existing boundaries.
+Completed M29 localized author/admin enrollment: admin/qualification.json owns
+three explicit choices, current-head HTTP authority, historical disabled forms,
+83 affected native/SSR/i18n controls and both actual headed browsers. JS/no-JS,
+all9 cultures/both themes,12 concept changes/four exact undo operations and cold
+reopen retain original sources, Night, configuration and live pointers. The real
+browser found and verified the corrected channel-feedback whitelist gap.
+Completed M29 ordinary-stream component: handover/qualification.json owns both
+explicit no-second and exact0x10 choices over old M29 on the same two responses
+at capacity2. Full/repeated cycles, complete M29-free captured tail, own Header
+contexts/ESC intent, source clock/AV/TSDuck, immutable profiles/sources/Night,
+durable reopen and unforced owned cleanup pass. This is Linux native output
+proof, not suitable-client display or platform/adoption acceptance.
+Completed explicit-policy external-editor component: canonical
+m29-policy/editor/qualification.json owns actual pinned QTM saves for no-second
+and exact0x10, restored receipt-bound default packet, concept/preview/reexport,
+separate publication and cold reopen. Shared native/protected regressions pass;
+prior localized admin/ordinary-stream proof is reused within scope.
+Maintainer amendment2026-10-28: QTM is an optional example editor. Its
+native-bank/large-context upstream wait remains Deferred but does not block9A;
+generic full native authoring/TTI/metadata/preview/publication remains required.
+Bounded base and then full2.5 client qualification is now authorized; no fork,
+unlimited hunt, external decoder maintenance, DVBViewer or premature physical
+Kodi trial. Runtime publication/adoption still needs separate authority.
+Completed bounded client-source qualification: canonical tmp/phase9-next-local-teletext/
+level15-progdvb-guided/prequalification-20261028/qualification.json
+owns official ProgDVB7.73.3 read-only package comparison and primary options docs.
+Changed binaries do not establish a relevant enhancement fix; identical help and
+teletext labels provide no new capability-positive configuration. No trial replay.
+One newly assessed TARA Classic/Smart Devices route advertises1.5/2.5, required
+controls and DVB/IPTV acquisition, but is not a pinned suitable runtime.
+Completed generic large-catalogue file/native authoring component: canonical
+provider-scan/editor-generic-capacity-join/qualification.json owns the existing
+355-command lifecycle with dormant original23, complete-set/multipart atomicity,
+exact models/resources/preview/reexport, separate publication/root undo/repeat/
+cold reopen and isolation. All4 targeted cases pass; original large fixture and
+protected-consumer oracle stay exact. No QTM, stream/client/platform or full
+normative-capacity acceptance is inferred. Existing EE1..3/EE5 remain closed;
+no additional editor variants follow this completed generic EE4 boundary.
+Historical network/client preparation: Windows-to-WSL HTTP routing is closed at
+level15-output-status/kodi212-source-qualification/lan-route/qualification.json.
+Kodi21.2 is confirmed; full2.5 capability/evaluation access is now Deferred by
+the latest maintainer amendment, not the current package. Keep all receipts.
+Completed bounded AB5 source eligibility check: provider-scan/
+ab5-decoder-capability-20261028/qualification.json confirms the original Table25
+header exception and preserves the exact fixtures/test oracle. Existing Tuxtxt
+and optional QTM lack a suitable header path; newer imager ff17d78c retains all
+three relevant files byte-for-byte; current libzvbi34bb6f66 retains both complete
+responsible functions unchanged. No build, replay or external decoder repair.
+AB5 needs genuinely correct independent header+secondary capability; AE5 retains
+authoritative lifetime/order interpretation and independent C3 proof. These keep
+their existing owners; closed component boundaries are not reopened.
+Only the approved bounded qualification may resume; no open-ended client search,
+external decoder maintenance, DVBViewer or premature physical Kodi trial.
+AE5 still needs the recorded authoritative source-order/lifetime witness and
+independent C3 formatter. That external gate does not reopen source/output.
+Completed: the Native Live HLS/original-PES source-clock application component
+within the unpublished Linux x64 software candidate. Canonical current receipt:
+tmp/phase9-next-local-teletext/provider-scan/so2-live-url/native-hls-caption/original-pts-application/qualification.json.
+It owns exact runtime/source hashes, complete same-response EOF cue/clear/reentry,
+ordinary HTTP/RTSP/HLS/Native HLS,nld660Hz,default2,joined cleanup and old-runtime
+AV preservation. Final focused controls, strict all-target lint and fresh-host
+ordinary smoke pass; other source/editor/F6/isolation receipts retain scope.
+Completed PS1 exact original-PTS Linux package/Bookworm component: canonical
+original-pts-runtime/package/qualification.json binds archiveae83ecf2, all10421
+source-file comparisons/strict patch replay, accepted207 dependency/license
+records, existing safe package/relocation/wrong-pin guards and actual baseline
+compatibility/56PTS/sparse400frame,nld879.94Hz proof. Container cleanup passed.
+Completed PS1 first-party source-input integration:457453f retains accepted207
+and original-clock histories, all50 exact package inputs, the default-ROOT
+verifier and wrong-patch guard, unchanged17 generic helper controls and all
+Mac code/current explicit workflow deferral. Canonical source-join.json under
+the same package receipt owns exact parents, refusals and scoped reuse.
+Completed PS1 remaining original-PTS artifacts/software: canonical
+original-pts-runtime/other-rids/qualification.json binds source457453f and
+archives8cd65f48(ARM64),9649af9b(ARMv7),a4ac2ed2(Windows), unchanged accepted inputs,
+exact compiler/patch/dependency identities and strict existing package guards.
+ARM QEMU/native Windows bare tools pass original56PTS,graphics/WebP and sparse
+400frame/16s,nld879.94Hz gates with joined cleanup. The initial Windows wrapper
+cmdlet failure is retained; the existing Python hash mechanism fixes only it.
+Completed PS2 current optional-clock Linux headed Health/admin: canonical
+original-pts-runtime/health-admin/qualification.json owns16 Chromium/Firefox
+tests/32 EN/NL scenarios, both themes/hydrated/no-JS Refresh persistence,
+old false/Info versus new true/Pass and exact two-tool diagnostics identity.
+One matched current SSR/WASM bundle is byte-identical across both runtime cases;
+unchanged native/source/AV/editor/client evidence is reused within its scope.
+Completed p9a-windows-package: canonical provider-scan/windows-current-clean-
+package/qualification.json owns clean34e04/cdf06813, four native MSVC release
+binaries and matching release frontend, independent archive/bundle, packaged
+launcher/bootstrap/restart,36 per-runtime/browser admin cases (32 Health/64 EN-NL
+scenarios,4 Next-navigation) and three strict native output gates/8 AAC-nld
+captures. Exact old207 false/Info and candidate true/Pass identities pass.
+The verified existing CLI mode isolates browser projects: the same live host,
+PID/database/port passes Chromium9 then Firefox9 without fixture reset. Other
+candidate client cells are composed from their exact passed receipts. No new
+full combined-CLI green is claimed: original stalls remain retained. The tested
+JS ownership guard did not close that combined mode and is rejected, not staged.
+No product/browser/time/oracle change, compiler natural-cleanup or graceful
+tray-menu claim. Windows package is closed within this scope; source-output,
+applicable platform/candidate-adoption and other owners retain their boundaries.
+Other exact prerequisites retain their primary records: author-enhanced AE5
+needs authoritative A8(2) same-cell/empty-NoDirectAddress order/lifetime semantics
+and independent C3 capability; author-base AB5 needs correct raw-header/secondary
+independent decoding; m29-policy needs an accepted author/receiver CoP or exact
+semantics-preserving reset. Client gates retain X1 deferral/no DVBViewer/no physical
+Kodi before the agreed joint final; editor-upstream retains X3 upstream banks/
+over208-context capacity. Native ARM execution is maintainer-deferred, with
+provisional compatibility assumed and its future proof retained.
+Source-output and independent platform-safety components are closed. Runtime
+adoption and dependent aggregate/final gates stay open with all their clauses.
+No Mac execution, CI, push or publication is authorized.
+The Mac scope amendment6095aa09 is completed policy/CI work, not acceptance.
+Older six-platform next actions below are historical where this scope supersedes
+them; retain all valid evidence and independently required Windows/ARM work.
+
+UCU-12 is Complete through fixed v26.11.4/row254. All18ordered rows have
+accepted dispositions and the authoritative pin advances with them. Milestone
+ucu-12 owns exact identities, complete component history and composed CI proof.
+Four qualified Next rs.6 platforms and FFmpeg2.0.7 pass source/package/managed
+startup, decoded playback and transport acceptance; macOS retains exact rs.4
+identities and approved unverified runtime debt. Hardware debt remains unverified.
+Focused CI recovers the original failures without repeated compilation: full
+Firefox57/7existing skips; current browser10Chromium/9Firefox with existing
+skips;1955workspace+17Next Level1.5 passes; Next451passes plus one unchanged
+NUL-fixture recovery and both required smokes. Original negatives remain retained;
+the SQLite fixture race is a documented possibility, not a claimed product fix.
+Required earlier workspace gates and corrected-source checks retain their scope.
+That UCU12 closeout authorized source delivery only; it did not accept Phase9.
+The maintainer now explicitly resumes the separate Phase9 goal after controlled
+mergee0c4fc8d, preserving all six local commits and ten uncommitted files.
+
+SO2-H/R Native MPEG-TS HTTP/RTSP caption delivery is completed at58fbc948
+within Linux x86_64/software FFmpeg207. The HLS manifest/actual-EOF correction
+now passes ordinary HLS-input Off/Burn, same-response raw EOF with late888 and
+Dutch660Hz, and two complete Native HLS raw-source AV segments with cleanup.
+Canonical direct_url_qualification.hls_eof_followup owns29 focused regressions,
+152 transport controls (133new/19reused), preserved negatives and scoped reuse.
+Strict affected lint and fresh-host Legacy/Hybrid MPEG-TS/HLS-output smoke pass;
+this closes the named HLS input/EOF component within Linux/software207.
+The new Native HLS test restores product default60s startup, retaining client20s;
+its inherited5s refusal and UTC control remain negative evidence. Public PDT
+projection already handles upstream clocks; no decoder/runtime repair is started.
+Other completed source, scheduler, editor and F6 components stay closed.
+
+SO2-N ordinary Native Live route integration is completed within Linux
+x86_64/software accepted FFmpeg2.0.7. One held producer/request delivers Off/Burn,
+observed888 versus200/plain and Dutch660Hz with unchanged generation/addon calls,
+defaultcapacity2 and joined cleanup. Three helper/six retained-owner regressions,
+the actual grouped HTTP route,19 transport controls per capture, strict affected
+Clippy, format, architecture and fresh-binary ordinary MPEG-TS/HLS smoke pass.
+Canonical scheduler_recovery_followup.native_adoption owns exact final-source
+receipts, reuse and preserved negatives. Other native/adoption owners stay open.
+
+SO3-R/SO4-R current-Next source/runtime compatibility is completed within Linux
+x86_64/software unpublished023 rs.7 plus accepted FFmpeg2.0.7. All seven accepted
+patches/compiler/lock remain exact; only three existing corrections are ported.
+Fresh preparation,374 source tests,10 prepare guards, strict lint/format and
+three original ordinary-route tests/five captures pass95 transport controls.
+Both2164/2143 retain176 output/166 source frames, exact889/clear/Dutch audio,
+one provider response,grant410 and zero owners. Copy Off and immutable prepared
+Burn/Convert retain their unchanged AV/audio/cue/cleanup oracles. Accepted rs.6
+fails the explicit absent-cut qualification before physical coverage, not a new
+physical-output counterexample. Canonical next023_source_output_followup owns
+receipts and candidate archivec6765c48/payload552d6e0f. No production pin changed.
+
+PS1 current023 Linux candidate package/Bookworm component is completed.
+Canonical next023_source_output_followup.linux_package_bookworm owns exact
+archive/origin/payload/license equality, unchanged production-candidate refusal,
+nine package guards and actual pinned Debian12/glibc2.36 worker/FFmpeg207 execution.
+The existing finite software oracle proves200frames/160x90, selected nld880Hz,
+48 caption-reference pixels and error0.438 versus plain66.062. Host decoding uses
+the same pinned fontconfig with mount-to-host path mapping; initial default-font
+comparison remains retained. Normal exit/container removal pass. Current source,
+ordinary-route/95transport and unchanged FFmpeg compatibility receipts are reused.
+
+PS1 current023 ARM64/ARMv7 artifact and emulated-software components are completed.
+Canonical next023_source_output_followup.arm_artifact_qualification owns exact
+source/lock/compiler/ten-patch/privateMPP/notice/package pins, warm-cache builds,
+68 affected controls per architecture and actual generic200frame/160x90/nld880Hz/
+caption software output. Native-host decoding uses identical pinned font context
+and original strict oracles. Finite workers exit normally; six containers are
+absent. This is QEMU/software/artifact proof, not native ARM or source-output
+route acceptance; those exact required proofs retain their primary owner.
+
+PS1 current023 Windows bare-worker artifact component is completed. Canonical
+next023_source_output_followup.windows_worker_artifact owns exact native MSVC
+source/compiler/lock/ten-patch/VPL/package pins,54+14 native source controls,
+synthetic FFmpeg207 discovery and zero owned remaining processes. Original rs.6
+payload hashes remain exact. Available non-Mac worker artifact components are
+closed within their explicit source/startup/software scopes. The separate full
+current Windows application-package trial remains deferred with120minutes
+reserved; native ARM/Mac, missing Mac artifacts, final Health and explicit managed
+adoption retain their existing owners. No publication/production pin changed.
+
+AE5 original CrossEmitterOrder bounded source assessment is completed; its
+conformance requirement remains blocked. Canonical authored_cross_emitter_followup
+.normative_order_assessment owns EN13.3/13.7 and additional TR100287V1.2.1 review.
+Active visual equivalence/AP restoration supplies neither the missing same-cell
+control lifetime/order nor an empty object's explicit endpoint. The original16
+invocations/17 actions, known lower-bound1/pending17 and normative expectations
+remain unchanged. Resume only with an authoritative/standards-supported rule for
+the exact original trace; no guessed order, new restriction, test relaxation or
+unchanged hypothesis replay. Other completed AE5 components stay closed.
+
+SO1 current FFmpeg207 Native public-HLS compatibility is completed. Canonical
+native_public_hls_followup.current_runtime_207 owns the unchanged three-case
+segmenter-Off/Burn/direct-Burn receipt, exact original source/test body,
+888/200/plain raster,nld660Hz,joined cleanup and57 transport passes. Earlier
+SO1 and unrelated source/lint/editor/client evidence retain their scope.
+
+Historical prepared-capacity/HLS timing investigation is closed within its
+current Linux candidate boundary. Checkpoint200dcf52 retains admission ownership;
+original-pts-application/qualification.json supersedes the former uncommitted
+HLS/clock next actions with complete same-response cue/clear/reentry proof.
+All original plain-Burn, frame75, direct-file-reference and sparse-mux-alone
+negatives remain canonical; none establishes a new current work direction.
+Preserve all ten foreign edits. No push/publication or Cartesian variant queue.
+
+The separate120minute full Windows-package trial remains maintainer-deferred;
+its explicit resumption question is pending and does not block this independent
+work. AE5 normative, AB5/C3 formatter, native/Mac, X1/X3 and policy prerequisites
+retain their existing owners. No publication, production pin or new variant queue.
+
+PS1 corrected Linux package/Bookworm component is completed. Canonical
+scheduler_recovery_followup.linux_package_bookworm owns archive7466c8bd,
+FFmpeg80e3502c, unchangedffprobe3e0a8c01, exact source/patch/dependency/license
+provenance, existing layout/safe extraction and wrong-pin refusal. Pinned
+Bookworm3783cc01/glibc2.36 passes actual graphics/twoAV1 encoders/SVG/twelveWebP
+cases and sparsePGS400frames/16s/Dutch879.94Hz; decoder options remain available.
+All affected processes/container are joined/removed. This is one unpublished
+incremental Linux archive, not a rewritten four-RID manifest or managed adoption.
+No nativeWindows/ARM/macOS/hardware proof is inferred.
+
+Fixed AB1..4 independent glyph/context obligations are completed. Canonical
+provider-scan/identity.json authored_base_imager_correspondence_followup owns the
+unchanged imager0.2.0/2b0125b7 actual renderer/source proof: national30/30,
+alpha24/24, original spacing90/90, Cyrillicbreve/pound30/30 and multiplication6/6.
+Literal sources and basic fallback stay exact across1/1.5/2.5, with/withoutX28.
+All198 actual paints equal their pinned source fonts;190 exact field/glyph
+expectations pass. The initial Latinunderscore tuple assumption is retained and
+corrected from original X26mode10/data5F, without changed scalar/glyph/wire.
+
+AB5 is externally capability-blocked: six raw header# cells paint Englishpound;
+two explicit secondary01 German5B cells paint PolishstrokedZ. Pinned imager
+nationalises row0 like the body and mis-splits the seven-bit secondary charset.
+Both already qualified stock0.2.42 and imager0.2.0 lack correct AB5 decoding.
+Resume only when those exact independent capabilities demonstrably change; no
+unchanged replay, external decoder repair or new client search. All old scalar
+and glyph negatives remain, not normalized. Source mappings/publication AB1/2
+and AB3..5 attribution stay closed; full-client/editor/native gates retain
+existing owners. X1 deferral/X3 upstream wait are unchanged.
+
+AB6 original separated-margin font attribution/equivalence is completed:
+all three observed stock masks match their pinned stock font; all three product
+expectations match the pinned MIT import/current embedded masks. G.2 and existing
+ADR0123 permit non-DRCS font appearance choices. Original21 functional observations,
+nine held/source equalities and all three strict pixel differences are preserved;
+no cross-font pixel equality or other-glyph equivalence is claimed. Immutable
+import and the current64-pattern/both-spacings product test pass. Canonical
+level15-held-mosaics/identity.json font_equivalence_followup owns the closure.
+
+AE5 CrossEmitterOrder remains a named source-order qualification gap. The exact
+original full-factory witness preserves lower-bound1/all17 pending points and
+known-open1/pending15 in both original and physical output. It does not supply a
+total same-cell opening/reset order or an empty-object lifetime certificate.
+Canonical authored_cross_emitter_followup retains this bounded observation;
+no guessed order, publication restriction or source modification follows.
+SO2 scheduler recovery/Linux native and Bookworm package components stay closed; other native
+RID/Health/adoption and route enablement retain their existing owners.
+
+AE5 A7 source/type/interleaving conformance is completed within model/native and
+independent-field boundaries. Ten focused controls cover seven positive full
+factories and eight original refusals. Four disjoint Active attribute types
+combine; all-type overlap keeps Passive priority in both call orders; allowed
+Active/Passive/unchanged-Adaptive/mixed interleaving retains exact scopes. Each
+same-type Active group conflict and any changed Adaptive interleaving group
+keeps its located original refusal. All native calls/definitions, original IDs/
+roots and Base packets survive. Pinned imager passes45 fixed cell/attribute
+observations over1/1.5/2.5; final native files remain byte-exact. Existing raw
+address/panel/compound masks and resource/default/nested receipts supply the
+other A7 clauses;1774 prior regressions remain valid with production unchanged.
+Canonical provider-scan/identity.json authored_a7_conformance_followup owns the
+clause map and hashes. Receiver/navigation/platform gates keep their owners.
+
+A8(2) mixed>15 NoDirectAddress remains a normative interpretation prerequisite:
+initial AP and coded termination are not a proven last explicitly addressed
+position. This reuses the already recorded8b38282a classification, not new proof.
+No endpoint, source rewrite or publication restriction was introduced. Resume
+only with an authoritative/source-supported lifetime rule; an interim restriction
+would need explicit maintainer approval and cannot close the final requirement.
+
+AE5 C3 factory source/size proof is completed: the original double-size conflict
+keeps requestedDS but effectiveDH in both full models, exact Main source/root6,
+unchanged Base packets and the actual nativeDS word. Both original illegal
+row23-DH/column39-DW cases retain complete-factory refusals at Main/root2 and
+their exact raw/visual positions. Four focused controls and strict Clippy pass;
+1774 prior regressions remain valid because production code/input is unchanged.
+Independent enhanced reduction proof remains blocked: pinned imager0.2.0 and
+stock libzvbi0.2.42 both overwrite the earlier A bottom at2,9 with B's right
+fragment instead of preserving the required C3(2,3) width-only reduction. Base
+observations pass. Original norm/goldens are unchanged; no decoder repair,
+new client search or false full-C3 acceptance follows. Resume that exact proof
+only with a changed, demonstrably suitable decoder; X1/X3 decisions remain.
+Canonical provider-scan/identity.json authored_size_conformance_followup owns
+factory/native fields, both decoder negatives and the exact missing capability.
+
+AE5 inherited Adaptive double-width non-origin behavior is completed: the
+original row1/9 source no longer fails the full factory as unresolved. C3(2,4)
+retains the earlier lower L/red origin over both width fragments; the hidden
+Adaptive A/green candidate keeps its exact source/root/instance and requested
+width. Native words retain its invocation and complete original definition;
+all fallback packets are byte-exact.1774 affected tests, seven focused controls,
+final factory export and strict Clippy pass. Unchanged pinned independent imager
+confirms1.5 ZZ and2.5 L/red left/right fragments; a wrong-overlay oracle fails.
+Canonical provider-scan/identity.json authored_adaptive_nonorigin_followup owns
+original reds and receipt hashes. Explicit overrides/deferred attributes remain
+strict; other inherited axes and client display gain no acceptance here.
+
+AE5 ancestor-bound deferred-write diagnosis is completed: the original parent
+plus15 empty children already exceeds A8(3), with or without its later row25
+write. The tail previously hid that source error, although the factory still
+refused later at unresolved physical comparison. Both now retain the same
+original child-command14/root0/instance15/AP1,0 refusal. The shorter prefix
+retains max15 and all16 unplaced/reset witnesses.1773 affected teletext tests,
+18 focused controls and strict Clippy pass. Canonical provider-scan/identity.json
+authored_deferred_source_prefix_followup owns negatives and the bounded source
+correction. This closes source diagnosis, not a publication escape or stream
+repair. The current package at the start of next_steps supersedes this historical follow-up.
+
+AE5 explicit Main/child prefix admission is completed: original domain/factory
+reds and retained16-call bytes show that a child write hid its invoking Main
+opening. Original Local roots now bound a positioned Main-only prefix before
+every possible reset, including that root call. Earlier writers retain17 pending
+facts and a lower bound1. Full-factory15/native/fallback and independent1.5/2.5
+fields pass;1771 affected tests pass. Canonical provider-scan/identity.json
+authored_main_child_prefix_followup owns native/source/work proof and final lint.
+No default/nested/unpositioned clock or full admission is inferred. The only
+current package at the start of next_steps supersedes this historical follow-up.
+
+AE5 same-emitter definite-run admission is completed: domain and complete factory
+reds prove that an unpositioned colour write hid sixteen successive empty calls.
+When all relevant actions share one actual emitter, original ordinals now retain
+definite runs on either side of conservative possible-reset barriers. Pending
+reset facts remain; mixed emitters keep existing scan/C2 uncertainty. Grouped
+screen/row/header-colour cases and whole-factory before/after refusals preserve
+exact sources and existing fifteen-call native proof.1769 affected tests pass;
+canonical provider-scan/identity.json authored_successive_source_followup owns
+scope/source/work fences and final controls. No plane cell, actual-write certainty
+or full-A8/client claim is invented. The only current action is CrossEmitterOrder
+above.
+
+AE5 backwards-interval classification is completed: nonnegative validated origin
+modifiers and relative coordinates cannot place a direct endpoint before its
+caller. Existing A4 negative/source/wide controls retain their strict outcomes.
+The paired complete models and actual native words also retain fifteen empty
+Passive calls, exact originals/Base and endpoint=None facts; sixteen keep the
+located original A8(3) refusal. Six focused tests and strict Clippy pass; no
+production change. Canonical provider-scan/identity.json
+authored_empty_bound_followup owns source pins and the closed total-instance
+bound. Mixed services above fifteen total calls with endpoint-free instances
+still need exact A8(2) lifetime proof; no point/page-end endpoint or silent
+restriction is assumed. The only current action is A8(3) above.
+
+AE5 known off-screen endpoint admission is completed: the original factory's
+sixteen-open-object escape is corrected by counting exact original endpoints
+independently of visibility, with tuple order instead of fixed-width aliases.
+Fifteen remain valid; sixteen reject at the original call. Distinct-row intervals
+remain disjoint; unplaced visual diagnostics and all original provenance remain.
+The1764 unchanged passes and one corrected known-endpoint expectation compose
+1765 unique affected teletext regressions; canonical provider-scan/identity.json
+authored_open_interval_followup owns red/green receipts and exact scope.
+The later empty-bound classification above owns the remaining endpoint-free
+case. No invented endpoints or full-admission/client claim.
+
+AE4 original sparse-default/selected nested dependency resolution is completed:
+paired full factories retain native defaults without X26 and checked foreign-root
+realization with compatibility X26. Five original roots/children retain exact
+slots/parents/source/offsets; original resource bytes, Base and X27/X28 are unchanged.
+Six focused tests and strict Clippy pass. Actual compiled carousel/received banks
+pass14 fixed independent1.5/2.5 tuples and three wrong/missing-bank negatives.
+Canonical provider-scan/identity.json authored_default_dependency_followup owns
+this completed model/native-byte/field join. Automatic MOT/X27 acquisition and
+client/editor/platform evidence stay with their existing owners; no stock retry
+or runtime/product change. The only current action is AE5 above.
+
+AE1 intended four-control1/1.5 fallback is completed as new evidence: the unchanged
+pinned imager's supported basic black_foreground=false/double_width=false profile
+passes28 original field oracles in20 reports, including the22 retained stock
+mismatches. Applicable X26/G2 remains present at1.5 and absent at1. Four same-API
+controls retain mandatory2.5 behavior. Five current native tests reproduce all10
+original fixtures byte-exact; enhanced14-field/four-raster and actual editor/
+delivery proof is reused. Canonical provider-scan/identity.json
+authored_basic_fallback_followup owns configuration, source guards and exact
+joins. Stock0.2.42's original negative stays preserved; no product/decoder change
+or suitable-client/font/platform claim. The only current action is AE4 above.
+
+AE2/AE3 original well-positioned resource witnesses are completed:11 cases show
+A7 Passive priority, mixed/complementary attributes, direct/nested same-definition
+repeats and located forbidden-overlap refusal, without a new resource clock.
+Full models/roots/effects/fallback and unchanged resource payloads pass. Nine
+actual carousel captures pass pinned independent1.5/2.5 cells/counts, including
+actual S1=5 execution with no character write. Seven focused controls and strict
+Clippy pass; unchanged b18eace4 production and1756 regressions are reused.
+Canonical provider-scan/identity.json authored_resource_contention_followup owns
+exact inputs, negative guards and proof. AE4 owns default/dependency joins; AE5
+retains full A7/A8/C3 and unpositioned/inherited conformance. No client retry,
+external decoder maintenance or new product behavior is claimed.
+
+AE2 Main/resource context is completed in the complete factory/carousel boundary:
+coherent B7 acquisition supplies only authenticated resource-before-display order.
+POP/GPOP original bodies, full source, header/tail, observable second invocation,
+actual native words and all base packets pass.1756 affected regressions and32
+identity regressions are green. Independent pinned imager1.5/2.5 agrees with all
+fixed fields. Stock0.2.42 supplies only partial POP evidence and negative GPOP
+routing evidence; no suitable-client claim follows. The unused-capability identity
+regression and all earlier negatives remain in provider-scan/identity.json
+authored_resource_order_followup. Standalone, default/generated and unrelated
+resource-page order stay strict; no editor/HTTP/platform replay or acceptance.
+
+AE3 distinct-root Local repetition is completed: a real complete-factory red at
+Main3 is corrected by binding both instances to one original native definition.
+Original roots1/5, FG3/4 Hamming words, original/physical FG4 and all base packets
+are retained. Explicit evidence compares shared words equally; it does not rank
+instances. Wrong aliases and ambiguous nested roots refuse; default/resource
+uncertainties remain.1753 affected teletext regressions and29 focused controls
+(including two pinned independent1.5/2.5 cases) pass; three wrong colour goldens
+fail. Canonical provider-scan/identity.json authored_repeated_order_followup owns
+receipts and the bounded scope. AE4/AE5 retain default/dependency and unpositioned/
+inherited conformance; no new editor/stream/client/platform acceptance is claimed.
+
+A2 supported resource-file/current-draft admin actions are completed within the
+joined boundary. Real multipart Router probes carry the closed EE1 and complete
+EE3 concepts to exact native previews; foreign/stale/invalid inputs preserve
+publication and stored source/profile/package/Night state. A demonstrated
+structural-fallback diagnostic loss is corrected without changing admission:
+retain the actual refused scalar packet coordinates only for an otherwise
+unlocated same-resource structural refusal. Deadlines, existing coordinates,
+causes and error kinds remain unchanged. Actual SSR renders show native resource
+2C0 and26,7.45 resource controls pass, with the final2 repeated after an equivalent
+borrow correction; strict affected Clippy passes.22 shared bodies,12 form/API/CSS
+files and104 strings in9cultures match the actual headed sources. Reuse the
+common4+4 browser matrix and four scoped enhanced pairs, not a fresh full-current
+browser run. Canonical provider-scan/identity.json admin_enhanced_join_followup
+owns exact receipts and negatives. A2 retirement reporting remains dependent on
+its existing retirement owner; no substitute UI variant follows.
+
+EE3 internal complete-set correspondence is completed: two fitting resource
+context documents edit a GPOP-to-POP call origin and its shared Passive glyph
+in one atomic concept. The complete four-definition catalogue includes an
+uninvoked protected definition, all three consumers and defaults. Independent
+native model/units/positions, unchanged complete display/fallback packets,
+preview, every re-exported file, explicit publication/cold reopen and exact
+root-document undo/republication pass. A malformed second document refuses the
+whole set. Every fresh export snapshots the current complete catalogue; undo
+changes only its two editable root words. The discarded frozen-sibling export
+expectation and compiler/lint corrections remain in canonical provider-scan/
+identity.json editor_complete_set_followup. Final focused native proof and strict
+Clippy pass; this is new internal proof, not new product/runtime/client behavior.
+EE1..3 internal actions are closed; final editor capacity/aggregate and deferred
+optionality remain with their existing owners. No adjacent variants follow.
+
+EE1 complete context correspondence is completed: trusted Main6/Local5 boundaries
+and native marker relocation preserve full original Local identities, all five
+catalogue definitions, owner126 defaults and generated Base intent. Native Greek
+same-packing/Latin repacking, exact model/units/fallback/TTI, concept fence,
+reexport, publication and root undo/cold reopen pass. Genuine pinned headed
+QTM1.0 Greek SaveAs/disk reload joins unchanged saved bytes to the native flow;
+stock libzvbi0.2.42 passes12 fixed observations plus3 negative goldens.
+Reuse154 parser controls;4 affected native regressions and strict Clippy pass.
+The full-capture helper now uses the existing2MiB project bound, retaining the
+single-TTI limit. Canonical provider-scan/identity.json editor_complete_context_followup
+owns exact receipts, provenance joins and negatives. EE2 positions/root undo are
+proved for this action; EE3's complete-set obligation remains separate.
+
+A1 base admin/agent-file action join is completed:14 shared route/control/action
+bodies and27 strings across9 cultures remain exact to the genuine headed source;
+the sole wrapper delta inserts enhanced forms owned by A2. Original4 Chromium
+and4 Firefox JS/no-JS/light/dark/all9-culture receipts join closed EB1/EB2.
+The existing reference now correctly exposes its operational transfer contract,
+retaining historical negatives. No UI/runtime change or new all-current browser
+run. Canonical provider-scan/identity.json admin_base_join_followup owns pins
+and the bounded source/receipt join; required parent dependencies stay open.
+
+EB1 direct ArabicG0 cell editing is completed for47/57: actual pinned headed
+QTM1.0 native code H changes physical G0/47 to48 while original X26/G2 sentinels
+stay unchanged. Native3 controls and real saves/concept/preview/reexport,
+explicit publication/two cold reopens pass. The driver now targets the actual
+modal X11 window; both original inputs save, first byte-identical. Global-pointer
+and fixed-DPI focus negatives remain. Arabic Unicode keymapping is unsupported,
+not claimed; no editor/product repair or new stream/client/platform acceptance.
+Canonical provider-scan/identity.json editor_arabic_g0_followup owns proof.
+EB1/EB2 actions are closed; required author-base acceptance retains its owner.
+
+EB2 complete plain-base-set interchange is completed: actual headed pinned
+QTM1.0 saves124/32,124/33,125/32, followed by one complete-set concept,
+shared preview, separate explicit publication, exact reexport and cold reopen.
+Raw subcodes/navigation/sidecar, package and other channel remain unchanged.
+Native regression, actual editor run, strict focused lint and formatting pass;
+three saved-window images were inspected. Canonical provider-scan/identity.json
+editor_base_set_followup owns pins, receipts and test-only future-boxing reuse.
+No production/runtime change or new stream/client/platform claim.
+
+Completed standards S1/S2/S3 and AB7/AE5 inventory trace stay closed in
+case_reconciliation_followup.standards_s2_s3; actual conformance remains with
+author-base/enhanced. EE2 shares EE1/EE3 without a separate variant queue.
+
+SO2 owned observed-page selection/consumer binding is completed within Linux
+x86_64/software FFmpeg9: one producer, opportunistic prefix at most64KiB,
+current PSI/complete PES/header identity, exact final shared-input command,
+ordinary AV fallback and joined cancellation.19 regressions/snapshot, actual
+API888/Dutch660Hz before EOF and19 TSDuck controls pass. The original f9ee21ee
+report-only prefix/replay component remains closed. Canonical provider-scan/
+identity.json native_streaming_lifecycle_followup.route_join_followup owns receipts.
+
+SO2 scheduler cause/correction and ordinary-route candidate proof are completed
+within Linux x86_64/software scope. An unchoked teletext decoder was stranded
+with760 overflow packets; video232/audio446 stayed buffered. The exact upstream
+FFmpeg revert43284b61 removes that decoder-overflow mechanism. Runtime source
+checkpoint b434264 and its exact FFmpeg9 candidate pass the original identical
+source/argv and ordinary Off/Burn request proof: exact888/200/plain pixels,
+Dutch660Hz, one producer/request, unchanged generation and defaultcapacity2
+cleanup. Direct/Off/Burn each pass19 existing TSDuck controls. The permanent
+owned regression now covers unpaced input; the paced companion retains its
+original arguments. A grouped app-directory collision is retained separately.
+Canonical scheduler_recovery_followup owns the exact candidate identities and
+receipts. Earlier pacing/duration/GENPTS/heartbeat negatives remain valid.
+Those four route sources were historically preserved outside the product path
+on uncorrected FFmpeg2.0.6; the current SO2-N completion above now adopts them
+on accepted FFmpeg2.0.7. The local Linux package/Bookworm component stays closed.
+Other native/platform/adoption owners remain; SO3 components keep their scope.
+
+SO1 public native HLS source-caption integration is completed within Linux
+x86_64/software FFmpeg9: actual ordinary segmenter-Off, segmenter-Burn and
+direct-Burn pass exact888/200/plain raster, Dutch AAC660Hz and joined session/
+capacity/work cleanup.57 existing TSDuck structural/clock/continuity controls
+pass on the delivered original public TS segments. No product correction was
+needed; public master/session routes are tested, not Hybrid internals.
+Canonical provider-scan/identity.json native_public_hls_followup owns identities,
+receipts, bounded scope and lint. No opt-in raw-direct claim is made. Full-source
+seek/EOF, other native RIDs, client display and managed adoption retain their owners.
+
+Source inventory SI1..4 is completed: SI4 joins advertised/observed distinctions,
+alias/page identity, typed raw/context persistence and actual Local/provider
+scan, rescan, missing/restored and version-selection receipts. Existing source
+hashes and original test cases confirm valid reuse; no new product or test run
+is claimed. P9A-03 retains its open P9A-02 runtime/platform dependency.
+Canonical provider-scan/identity.json source_inventory_closure_followup owns the
+clause map. Source output and runtime/native adoption keep their own gates.
+
+SO4 seek2164/out9200 and original2143 regression is completed within Linux
+x86_64/software unpublished Next.6. Both ordinary HLS captures preserve176 output
+frames/166 complete source frames, exact889 transitions/clear, Dutch AAC,
+one provider acquisition, grant410 and zero actual work/capacity/storage.
+Both pass19 existing TSDuck structural/clock/continuity controls;2143 remains
+byte-exact to its original success.341 Next tests, eight web controls and the
+native cache/ownership/fallback group pass. Reuse3aacbd09's40 focused controls
+and actual incident-source proof. Runtime negotiation binds the cutoff to the
+same source/video/outpoint before conversion, keeping SRT cache/profile/encoder,
+exact-t and final publication fences. Unqualified observations do not guess an
+endpoint or exclude a source. Canonical provider-scan/identity.json
+burn_shared_clock_correction.finite_outpoint_followup.route_correction owns all
+receipts, scoped reuse, preserved negatives and final closeout.
+
+This closes the named two-interval regression, not all SO4/output/adoption.
+Managed.1, other native RIDs and remaining SO2..3 keep their existing owners.
+SI1/2, SI3 PES/PMT/initial-inventory/M2TS components, SO5 and F6 stay closed.
+Ordinary milestones remain the sole completion collection. Preserve external
+deferrals and parallel edits; no push/publication or production9B before full
+independent9A acceptance.
+
 '''
 
 [[blocking_decision]]
-note = 'P9A-01 is reopened for ADR 0123 full Level 2.5 and QTeletextMaker TTI/sidecar contracts. P9A-04 requires independent enhanced engine/editor/suitable-client acceptance before the sole NOS-guide-inspired production addon starts. Kodi is optional; existing source/output/platform and ADR 0122 profile/Lua gates remain.'
+note = 'Current9A requires complete Level1/1.5 and shared safety/platform proof; existing Level2.5 is experimental and enhanced-only proof is Deferred until a new task. Remaining primary prerequisites: actual joint Kodi base-client observations, four independent raw-header observations, and approved managed-runtime publication/adoption. P9A-01 contract decisions and all completed scoped components remain closed. QTeletextMaker is optional; no DVBViewer or premature physical-device trial.'
 
 [[blocking_decision]]
 note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'
