@@ -16808,6 +16808,24 @@ Smallest necessary work: Obtain that supported operator/control capability and r
 Testable stop condition: A supported operator-controlled pinned suitable base receiver passes every mandatory D/V3/base-X1 display/navigation/update/reveal/timed-flash and AV oracle with exact versions/settings and cleanup.
 '''
 evidence = '''
+Completed ordinary playlist-input boundary2026-10-28: canonical
+level15-client-controls/playlist-input/qualification.json owns the actual Windows
+Kodi-UA playlist and the TS URL selected from that response, not a substituted
+raw endpoint. Both local preparation and Windows acquisition use the advertised
+Legacy URL. Existing source/profile/encoder configuration stays unchanged:
+persisted mode1 already means TransportStream; the rejected mode0 test assumption
+and its500/cleanup are retained separately. The actual5577-packet Windows prefix
+passes unchanged strict transport, independent three-page controls and AV/660Hz
+Dutch audio checks. The bounded official input-source trace is canonical at
+level15-output-status/kodi212-source-qualification/inputstream-route/qualification.json:
+reference IPTV Simple21.11.0 respects the chosen inputstream, ffmpegdirect21.3.8
+exports native teletext with enableTeletext defaulttrue, and Kodi21.2 preserves
+that type. These pinned references do not identify installed add-on binaries or
+settings. No decoder maintenance, install or physical-device access.
+Next bounded preparation gap: this held fixture only supports a completion marker;
+allow one explicit existing-profile update within the same ordinary reader and
+verify the new UPDATE B sentinel without changing AV/transport/cleanup oracles.
+Actual joint receiver/display/control proof remains reserved for the maintainer.
 Completed LAN handoff preparation2026-10-28: canonical
 level15-client-controls/lan-forwarding/qualification.json owns the dedicated
 opt-in ERSATZRS_TELETEXT_EXTERNAL_CLIENT_PORT isolated-host port, scoped by
@@ -16821,9 +16839,9 @@ attribute/AV/660Hz Dutch audio/TSDuck oracle. Owned hosts stop normally and the
 LAN test address closes afterwards. No firewall/portproxy, production database,
 television or Kodi setting changed. This closes fixture reachability, not actual
 receiver rendering/navigation/reveal/timed flash or native-Windows server proof.
-Next bounded action: prepare the already selected Kodi21.2/IPTV Simple input
-and joint base-control steps from existing source/evidence, retaining its exact
-known capability limits; run the physical trial only with the maintainer present.
+The selected Kodi input path is now source-qualified and its actual advertised
+URL is verified by the receipt above. Run the physical trial only with the
+maintainer present; retain exact source limitations and installed-state gaps.
 Completed ordinary control-fixture preparation2026-10-28: canonical
 tmp/phase9-next-local-teletext/level15-client-controls/qualification.json owns
 two terminal-green headed existing-host/profile/preview/explicit-publication/

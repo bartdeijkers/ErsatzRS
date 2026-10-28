@@ -967,7 +967,18 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
       const safe = restartSafety(fixture);
       copyFileSync(join(fixture.root, 'synthetic-client-source.ts'), join(external!, 'source.ts'));
       fixture.resetSourceStart();
-      const url = `${isolatedWebHost.baseURL}/iptv/hls-direct/${channel}.ts`;
+      let url = `${isolatedWebHost.baseURL}/iptv/hls-direct/${channel}.ts`;
+      if (clientControls) {
+        const playlist = await page.request.get('/iptv/channels.m3u', { headers: { 'User-Agent': 'Kodi/21.2' } });
+        expect(playlist.ok()).toBe(true);
+        const body = await playlist.text();
+        expect(body).toContain('#KODIPROP:inputstream=inputstream.ffmpegdirect');
+        expect(body).toContain('#KODIPROP:mimetype=video/mp2t');
+        const advertised = body.split(/\r?\n/).find(line => line.startsWith(`${isolatedWebHost.baseURL}/iptv/channel/${channel}.ts`));
+        expect(advertised).toBe(`${isolatedWebHost.baseURL}/iptv/channel/${channel}.ts?mode=ts-legacy`);
+        url = advertised!;
+        writeFileSync(join(external!, 'playlist.m3u'), body);
+      }
       const prefix = await captureTeletextChannelTs(url, join(external!, 'ordinary-prefix.ts'),
         { maximumBytes: Math.floor(1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
       expect(prefix.ended).toBe('byte-limit');
