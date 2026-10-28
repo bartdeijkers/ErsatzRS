@@ -88,6 +88,14 @@ required owners; no substitute glyph/editor variants or unchanged negative
 client replays are queued. Existing Level2.5 stays experimental with optional CI;
 resume enhanced-only work only on a new task. Preserve Mac/nativeARM deferrals,
 all evidence and parallel edits. Push or publish nothing.
+
+Checkpoint metadata is repaired under the unchanged commit policy. Every code
+tree, author/committer and message wording is preserved; scopes and one body
+line-wrap are normalized. Canonical provider-scan/commit-scope-repair/full-range.json
+maps retained original proof SHAs to the corrected local chain. Both original
+chains remain reachable under phase9a-before-commit-scope-repair-20261028 and
+phase9a-before-full-commit-policy-repair-20261028. This is local commitlint proof,
+not a source push or a fresh full CI run.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
