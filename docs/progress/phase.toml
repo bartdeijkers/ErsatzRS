@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-author-base — Resolve the independent header capability prerequisite'
+current_focus = 'p9a-managed-adoption — Approve exact runtime publication mapping'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,28 +62,30 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-author-base — four original independent raw-header observations.
-Next finite action: present the exact independent-decoder capability prerequisite
-and bounded available direction to the maintainer. Product expectation/input stays
-unchanged; resume trials only on relevant changed capability or explicit direction.
-Do not repeat unchanged negative decoders or manufacture more internal variants.
+Current package: p9a-managed-adoption — exact runtime publication/adoption mapping.
+Next finite action: prepare the concrete tag/asset/source mapping from the existing
+local-promotion inventories for maintainer review. Publication remains unauthorized;
+no pin switch, upload, source push, retag, rebuild or archive repack. Once approved,
+perform only the affected exact published/adopted-byte gates under separate authority.
+Existing local candidate source/output/platform/installer/Health components stay closed.
 
-Completed p9a-client-base: installed Kodi21.2/Android GoogleTV, IPTV Simple21.11.0,
-FFmpeg Direct21.3.8 with teletext and all-stream timeshift enabled pass the fixed
-ordinary receiver-control boundary. Canonical level15-client-controls/joint-kodi-
-g3-20261028/qualification.json closes the original photographed G3 raster and
-installed settings; earlier joint receipts own AV/navigation/reveal/timed flash/
-height/mosaics/box/live update/AV return. Final two headed tests exit0 with normal
-joined cleanup and8409 free; retain the first600s operator-handshake timeout.
-No product/fixture/runtime change or all-client/all-repertoire/13bit assertion.
-Existing independent/transport/audio proof remains reusable within exact scope.
+Complete p9a-author-base: authorized separate Table25/35/36 reference closes the
+four original header observations;128 external-decoder base positives are reused.
+Canonical provider-scan/ab5-decoder-capability-20261028/header-reference/
+qualification.json owns unchanged original factory units/masks, pinned external
+reader/fonts,4 header+4 body counterexamples,7 regressions and11 rejected negatives.
+No full external-renderer repair, new HTTP capture or client-header acceptance.
+Original negative ledger and enhanced66 observations remain unchanged.
 
-The only remaining required primary functional leaves are author-base's four
-raw-header decoder observations and managed-adoption's approved public tag/asset
-mapping, publication authority and final adopted-byte gates. Local qualified
-components remain closed; source overrides are not production adoption. Final
-base/shared full gates follow those prerequisites. P9A-01 decision contract is
-Complete. Preserve source-known Kodi header/high-subcode limits, experimental2.5/
+Complete p9a-client-base: actual Kodi21.2/Android, IPTV Simple21.11.0 and FFmpeg
+Direct21.3.8 pass the fixed ordinary-control boundary with teletext/all-stream
+-timeshift enabled. Joint receipts own photographed G3, AV/navigation/reveal/
+timed flash/height/mosaics/box/update/AV-return and joined cleanup; all own
+processes are terminal and8409 free. No source/fixture/runtime change or all-
+client/13bit assertion. Reuse independent/transport/audio proof within exact scope.
+
+Managed adoption is the only pending required primary functional leaf; final
+base/shared full gates follow it. Preserve known client limits, experimental2.5/
 optional CI, enhanced-only/Mac/nativeARM deferrals, original proof SHAs, parallel
 edits and every negative observation. Push or publish nothing.
 '''
