@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-client-base — Close the remaining original G3 display witness'
+current_focus = 'p9a-author-base — Resolve the independent header capability prerequisite'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,32 +62,30 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-client-base — remaining original G3 display witness.
-Next finite action: obtain the original code47 G3 shape observation on the
-existing200/0000 ordinary page, with any necessary installed-state recording,
-while the maintainer is available. Do not repeat completed controls or expand
-into repertoire/editor variants. Keep known header/high-subcode capability
-limits explicit; the representative joint result is not all-base conformance.
+Current package: p9a-author-base — four original independent raw-header observations.
+Next finite action: present the exact independent-decoder capability prerequisite
+and bounded available direction to the maintainer. Product expectation/input stays
+unchanged; resume trials only on relevant changed capability or explicit direction.
+Do not repeat unchanged negative decoders or manufacture more internal variants.
 
-Complete within scope: actual Android GoogleTV/Kodi21.2, IPTV Simple21.11.0,
-FFmpeg Direct21.3.8 ordinary AV,200/201 and0020 navigation, requested national/X26
-glyphs, Info reveal, timed flash/steady, double height, contiguous/separated
-mosaics/box, retained-player UPDATE A->B and return-to-AV/client stop. Canonical
-level15-client-controls/joint-kodi-20261028/qualification.json retains the first
-600s handshake timeout and successful observations; joint-kodi-navigation-20261028/
-qualification.json owns the second headed exit0, safety guards and joined cleanup.
-No source/fixture/runtime changed; reuse existing whole-response transport/AV/
-independent proof. All own processes are terminal and8409 is free.
+Completed p9a-client-base: installed Kodi21.2/Android GoogleTV, IPTV Simple21.11.0,
+FFmpeg Direct21.3.8 with teletext and all-stream timeshift enabled pass the fixed
+ordinary receiver-control boundary. Canonical level15-client-controls/joint-kodi-
+g3-20261028/qualification.json closes the original photographed G3 raster and
+installed settings; earlier joint receipts own AV/navigation/reveal/timed flash/
+height/mosaics/box/live update/AV return. Final two headed tests exit0 with normal
+joined cleanup and8409 free; retain the first600s operator-handshake timeout.
+No product/fixture/runtime change or all-client/all-repertoire/13bit assertion.
+Existing independent/transport/audio proof remains reusable within exact scope.
 
-External prerequisites retain their primary owners: author-base's four original
-independent raw-header observations require relevant changed decoder capability
-or explicit maintainer direction. Managed adoption requires approved public tag/
-asset mapping, publication authority and final adopted-byte gates; local candidate
-components stay closed. No source override is accepted as production adoption.
-P9A-01 decision contract is Complete; final gates follow remaining required owners.
-Existing2.5 remains experimental, enhanced-only proof Deferred, and dedicated2.5
-CI optional. Preserve Mac/nativeARM deferrals, original proof SHAs/backup refs,
-parallel edits and all negative evidence. Push or publish nothing.
+The only remaining required primary functional leaves are author-base's four
+raw-header decoder observations and managed-adoption's approved public tag/asset
+mapping, publication authority and final adopted-byte gates. Local qualified
+components remain closed; source overrides are not production adoption. Final
+base/shared full gates follow those prerequisites. P9A-01 decision contract is
+Complete. Preserve source-known Kodi header/high-subcode limits, experimental2.5/
+optional CI, enhanced-only/Mac/nativeARM deferrals, original proof SHAs, parallel
+edits and every negative observation. Push or publish nothing.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
