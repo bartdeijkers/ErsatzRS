@@ -3,7 +3,7 @@
   "upstream_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
   "source_archive_sha256": "746842f4b1fd1d15d3d0a5b01a11efa971c4cecdd466223a64be2237ddf61dbd",
   "source_lock_sha256": "164069dedea697b103bfa3b45968a42881f152090b498bcbe89f6eb9bc9cc66e",
-  "distribution_version": "0.2.3-54c6cb9-ersatzrs.6",
+  "distribution_version": "0.2.3-54c6cb9-ersatzrs.7",
   "rust_toolchain": "1.99.0",
   "adr": "0128",
   "patches": [
@@ -64,9 +64,36 @@
       "unpatched_regression": "Published rs.4 fails the unchanged Teletext1.5 active Next-viewer language assertion. Exact retained source AAC has eng, while the pre-wrapper Next HLS segment and delivered MPEG-TS prefix have no language. Captured worker argv maps 0:1 with acodec copy and suppresses metadata without restoring the selected stream. The existing ADR0117 v0.2.2 correction applies cleanly to pinned 54c6cb9 and covers copied, filtered, alternate-index, separate and generated audio.",
       "evidence": "docs/progress/milestones.toml (ucu-12); retained Teletext1.5 active Next-viewer source/Next-segment/served-prefix probes",
       "reused_from": "v0.2.2/0004-preserve-selected-audio-metadata.patch"
+    },
+    {
+      "file": "0008-preserve-subtitle-burn-input-clock.patch",
+      "sha256": "04793915c118dd26382b8e9f2daacb646a19e7ab7f6c57e867626acc819c7bee",
+      "retire_when": "Unpatched upstream passes the unchanged text-subtitle Burn regressions while preserving the incoming post-seek AV clock, including late decoded video start, the original selected source outpoint, exact caption transitions/clear, selected alternate audio and source ownership/cleanup, plus relevant compatibility/platform acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "unpatched_regression": "Reviewed accepted Next023/source54c6cb9 still wraps text Burn in setpts=PTS+seek/TB followed by PTS-STARTPTS. The original022 same-block physical overrun remains in p9a-source-output; current023 source regressions and strict ordinary2164/2143 routes pass only the candidate-qualified contract here. No new isolated current023 physical-overrun control is claimed.",
+      "evidence": "docs/progress/milestones.toml (p9a-source-output SO3-R/SO4-R); canonical provider-scan/identity.json next023_source_output_followup",
+      "reused_from": "v0.2.2/0005-preserve-subtitle-burn-input-clock.patch"
+    },
+    {
+      "file": "0009-qualify-source-frame-cutoff.patch",
+      "sha256": "8d2454a66ca3298edfc928d1946bd5dac0fc259b9ce0a3d9ec8235de9f54bcb6",
+      "retire_when": "Unpatched upstream passes exact source-complete seek2164/out9200 and seek2143/out9200 Burn regressions with unchanged encoder/profile, exact caption transitions and clear, selected alternate audio, strict transport, callback negotiation, bounded ownership and cleanup, plus compatibility/platform acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "unpatched_regression": "Actual accepted023 rs.6/FFmpeg2.0.7 comparison fails the unchanged seek2164 test at the explicit required source-bound-cut assertion: no finite-video-cut-v1 capability. This control stops before physical output coverage. Original022 physical failure and exact candidate correction remain canonical; current023 candidate passes both unchanged interval/frame/caption/audio/cleanup oracles.",
+      "evidence": "docs/progress/milestones.toml (p9a-source-output SO3-R/SO4-R); canonical provider-scan/identity.json next023_source_output_followup",
+      "reused_from": "v0.2.2/0006-qualify-source-frame-cutoff.patch"
+    },
+    {
+      "file": "0010-preserve-single-use-copy-input.patch",
+      "sha256": "58c5fdd00765e326deb5fbd36c17aa4c4b0117e77c5ebb6db88513cd4bf74da1",
+      "retire_when": "Unpatched upstream passes ordinary single-use Copy Off/Convert and selected independent Burn caption delivery without consuming probes, provider reopening or weakened source/AV/audio/caption clocks, and preserves unknown-start fallback, truthful finite timing, long-interval ownership and joined cleanup. Remove this patch, not the tests.",
+      "upstream_review_revision": "54c6cb9ec03b7bd259144896c625c06fda09b3d0",
+      "unpatched_regression": "Reviewed accepted023 channel_session still preflights copied input without x-ersatzrs-next-single-use qualification. The original022 actual consume-once/double-claim negative remains canonical, and this source block still lacks that contract. Current023 candidate passes the unchanged one-producer/GET200/coded-video/Dutch-AAC Off plus prepared Burn/Convert routes; no separate new accepted023 double-claim runtime negative is claimed.",
+      "evidence": "docs/progress/milestones.toml (p9a-source-output SO3-R/SO4-R); canonical provider-scan/identity.json next023_source_output_followup",
+      "reused_from": "v0.2.2/0007-preserve-single-use-copy-input.patch"
     }
   ],
-  "publication": "Published four-platform rs.6 distribution; anonymous downloads match all approved checksums. macOS retains original published rs.4 packages and explicit unverified UCU-12 acceptance debt.",
+  "publication": "Published four-required-platform rs.7 prerelease; exact archives/source/patch provenance qualified and downloaded. Local application pin selects these bytes; final managed adoption and application gates remain separately recorded. macOS retains exact deferred rs.4 identities without new builds or acceptance.",
   "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/54c6cb9ec03b7bd259144896c625c06fda09b3d0",
   "windows_companions_sha256": {
     "libvpl.dll": "d08c89d30705315a783ae59dbb21bf66a045f3a968d101190ac577baaa5b1b6b",
@@ -80,83 +107,89 @@
     "librockchip_mpp-README.txt": "d2abb2750659d7336d54a522e613bdfe407a54ead4bcf8a3143527654add51a2",
     "librockchip_mpp-rk_mpi.h": "96dbae7d90e91baaac38821fc06c74a327cac888007841fe5937798259193646"
   },
+  "private_mpp_source": {
+    "revision": "a9380ef333102ac318628f83b5f7a460d377749e",
+    "archive_asset": "rockchip-mpp-source-a9380ef.tar.gz",
+    "archive_sha256": "68da788139ea4187c249001fa523a98d567e2caa6cfcdd3a5171e0c998c8202b",
+    "recipe_asset": "rockchip-mpp-build-recipe.tar.gz",
+    "recipe_sha256": "dd14d5a64ee64f5055bd9684435e1d5215df0f472da7f0a065c013b5761bdebd"
+  },
   "distribution_repository": "bartdeijkers/ErsatzRS-next",
-  "distribution_tag": "next-54c6cb9-ersatzrs.6",
+  "distribution_tag": "next-0.2.3-54c6cb9-ersatzrs.7",
   "artifact_sha256": {
-    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-linux-x64.tar.gz": "4750ce97ba58746c7b26ecb7ccdfcf3a68475ed1b5ca963bd251fc8f8b4db8d9",
-    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-linux-arm64.tar.gz": "2a7c06df22e4416ab26db485e4042237f51f61221bb698d1b1f60211243d0288",
-    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-linux-arm.tar.gz": "c009e3e3475836949ab3db69bde465992df68f5744d59ed25b95ea7b837cc7aa",
-    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-win-x64.zip": "0eae950cf467ecf9628f09cea5132a5e6ea83e9458c868782f07b22a6f765821",
-    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.4-osx-x64.tar.gz": "6c1e5b321f7a04d9ce4b34b211024e8be344e7470c4a5e1f81c0d8958fc32c57",
-    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.4-osx-arm64.tar.gz": "97c343f4d4013cd1de275f8d337e8f5cd94b09d40ab36f5623ebb707609c5ac7",
+    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-linux-x64.tar.gz": "c6765c487e3ffb73f2641ccad9bfa440882e633e72eab874577cc92cb57ea14e",
+    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-linux-arm64.tar.gz": "9499b4eb53e3d365c876af9f7c27106090e18958d3665a7bea1b3926f4c724db",
+    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-linux-arm.tar.gz": "fd26e14b9bce8f348943298cbc32e8f75d5c718c31d000850688ffc6d6a3dda1",
+    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-win-x64.zip": "9df0d8442cce5a3e587d0dc81693e556bd9a4ec3a335737dda2eb584ce317c1d",
     "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
-    "provenance.json": "a50cf710751e96905d965ff85601426ce8fe983d8eb4dea0b6f2c2b6278a1f00"
+    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.4-osx-x64.tar.gz": "6c1e5b321f7a04d9ce4b34b211024e8be344e7470c4a5e1f81c0d8958fc32c57",
+    "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.4-osx-arm64.tar.gz": "97c343f4d4013cd1de275f8d337e8f5cd94b09d40ab36f5623ebb707609c5ac7"
   },
   "runtime_packages": {
     "linux-x64": {
       "target": "x86_64-unknown-linux-gnu",
       "platform": "linux-x64",
-      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-linux-x64.tar.gz",
+      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-linux-x64.tar.gz",
       "payload_sha256": {
-        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
-        "ersatztv-channel": "bb2800927331a3b41046518d584b57503f08f437df88d4e32138924ba9005ed0"
+        "ersatztv-channel": "552d6e0f43c34e01fbe0978778914cba15c8d8adec6eb8d2a9578cf8c870b50e",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
       },
       "payload_bytes": {
-        "LICENSE": 1067,
-        "ersatztv-channel": 12944928
+        "ersatztv-channel": 12992184,
+        "LICENSE": 1067
       }
     },
     "linux-arm64": {
       "target": "aarch64-unknown-linux-gnu",
       "platform": "linux-arm64",
-      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-linux-arm64.tar.gz",
+      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-linux-arm64.tar.gz",
       "payload_sha256": {
-        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
-        "ersatztv-channel": "2f4a40c56b6d979c1278078acd1cc3e7afa4bfb06c2324a35d31cd5f24b7f6a0",
+        "ersatztv-channel": "448c1d3ff925381805e316bf728c4051d8a06aebd6034b8f568d215478818a2a",
         "librockchip_mpp-LICENSE-Apache-2.0.txt": "ed57d96d27be775b22f9571d3724ef84e0d0b8f24b805ec7f87a32189de19a9c",
         "librockchip_mpp-LICENSE-MIT.txt": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
         "librockchip_mpp-README.txt": "d2abb2750659d7336d54a522e613bdfe407a54ead4bcf8a3143527654add51a2",
         "librockchip_mpp-rk_mpi.h": "96dbae7d90e91baaac38821fc06c74a327cac888007841fe5937798259193646",
-        "librockchip_mpp.so.1": "9a7bf791e3c3206a21c79d3c4121d590e297abce98a8c8c19f9012ba83483412"
+        "librockchip_mpp.so.1": "9a7bf791e3c3206a21c79d3c4121d590e297abce98a8c8c19f9012ba83483412",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
       },
       "payload_bytes": {
-        "LICENSE": 1067,
-        "ersatztv-channel": 12085376,
+        "ersatztv-channel": 12172280,
         "librockchip_mpp-LICENSE-Apache-2.0.txt": 9805,
         "librockchip_mpp-LICENSE-MIT.txt": 1372,
         "librockchip_mpp-README.txt": 18011,
         "librockchip_mpp-rk_mpi.h": 11490,
-        "librockchip_mpp.so.1": 2974208
+        "librockchip_mpp.so.1": 2974208,
+        "LICENSE": 1067
       }
     },
     "linux-arm": {
       "target": "armv7-unknown-linux-gnueabihf",
       "platform": "linux-arm",
-      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-linux-arm.tar.gz",
+      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-linux-arm.tar.gz",
       "payload_sha256": {
-        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
-        "ersatztv-channel": "cdd459d78b773e587feecece24911d1abb050a5b5e29a5230bc8b6b63ca3ee22"
+        "ersatztv-channel": "44d3e37738ea0e90cfb3a562b78cc03ad985e6a426f76f07ad014ef099e3c087",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
       },
       "payload_bytes": {
-        "LICENSE": 1067,
-        "ersatztv-channel": 10280696
+        "ersatztv-channel": 10337196,
+        "LICENSE": 1067
       }
     },
     "win-x64": {
       "target": "x86_64-pc-windows-msvc",
-      "platform": "windows-amd64",
-      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.6-win-x64.zip",
+      "platform": "win-x64",
+      "asset": "ersatzrs-next-0.2.3-54c6cb9-ersatzrs.7-win-x64.zip",
       "payload_sha256": {
-        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
-        "ersatztv-channel.exe": "1ab984fdf0819380761d15647148b0a56b656fadbc102b9e61717172d9084106",
+        "ersatztv-channel.exe": "560e246b470a7d0153780f439debcb42239690b6264881dfad572d65ee6158ca",
+        "libvpl.dll": "d08c89d30705315a783ae59dbb21bf66a045f3a968d101190ac577baaa5b1b6b",
         "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677",
-        "libvpl.dll": "d08c89d30705315a783ae59dbb21bf66a045f3a968d101190ac577baaa5b1b6b"
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
       },
       "payload_bytes": {
-        "LICENSE": 1067,
-        "ersatztv-channel.exe": 9433600,
+        "ersatztv-channel.exe": 9474048,
+        "libvpl.dll": 558352,
         "libvpl-LICENSE.txt": 1074,
-        "libvpl.dll": 558352
+        "LICENSE": 1067
       }
     },
     "osx-x64": {
@@ -273,12 +306,5 @@
         }
       ]
     }
-  },
-  "private_mpp_source": {
-    "revision": "a9380ef333102ac318628f83b5f7a460d377749e",
-    "archive_asset": "rockchip-mpp-source-a9380ef.tar.gz",
-    "archive_sha256": "68da788139ea4187c249001fa523a98d567e2caa6cfcdd3a5171e0c998c8202b",
-    "recipe_asset": "rockchip-mpp-build-recipe.tar.gz",
-    "recipe_sha256": "dd14d5a64ee64f5055bd9684435e1d5215df0f472da7f0a065c013b5761bdebd"
   }
 }

@@ -1,0 +1,648 @@
+diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-channel/src/channel_session.rs
+--- a/crates/ersatztv-channel/src/channel_session.rs
++++ b/crates/ersatztv-channel/src/channel_session.rs
+@@ -21,6 +21,7 @@
+ use ffpipeline::input::{
+     FfmpegInputArgs, GraphicsInput, HttpInputOptions, HttpInputSource, InputSettings, InputSource,
+     LavfiInputSource, LocalInputSource, ProbedInput, RtspInputOptions, RtspInputSource,
++    SourceFrameCut,
+ };
+ use ffpipeline::keyframe_seek::{
+     CopySeekRequest, InputStart, Keyframe, KeyframeLocator, plan_copy_seek,
+@@ -752,7 +753,13 @@
+             channel_number: Some(self.channel_config.number().to_owned()),
+             video_copy_seek: None,
+             video_copy_blockers: Vec::new(),
+-        };
++            source_frame_cut: None,
++        };
++        input_settings.source_frame_cut = selected_source_frame_cut(
++            current_item,
++            &video_source,
++            input_settings.select_video_stream()?.stream_index,
++        )?;
+ 
+         let copy_timing = if output_settings.video.copy.is_some()
+             && !is_live
+@@ -1480,6 +1487,13 @@
+                     .format(&time::format_description::well_known::Rfc3339)?,
+             )
+             .map_err(|e| ChannelError::DynamicSourceFailure(format!("bad time value: {e}")))?,
++        );
++
++        // Runtime-owned support must override any configured source header;
++        // hosts must not advertise this on behalf of an older runtime.
++        header_map.insert(
++            HeaderName::from_static("x-ersatzrs-next-features"),
++            HeaderValue::from_static("finite-video-cut-v1"),
+         );
+ 
+         let policy = RetryPolicy::new(*timeout_us, *retry_budget_ms, *retry_backoff_ms);
+@@ -2021,6 +2035,45 @@
+     )
+ }
+ 
++fn selected_source_frame_cut(
++    item: &PlayoutItem,
++    video_source: &PlayoutItemSource,
++    selected_index: u32,
++) -> Result<Option<SourceFrameCut>, ChannelError> {
++    let Some(hint) = video_source.probe_hint() else {
++        return Ok(None);
++    };
++    let mut required = hint
++        .video
++        .iter()
++        .filter(|video| video.source_frame_cut.is_some());
++    let Some(video) = required.next() else {
++        return Ok(None);
++    };
++    if required.next().is_some()
++        || video.stream_index != selected_index
++        || hint
++            .video
++            .iter()
++            .filter(|video| video.stream_index == selected_index)
++            .count()
++            != 1
++    {
++        return Err(FFPipelineError::InvalidSourceFrameCut.into());
++    }
++    let cut = video
++        .source_frame_cut
++        .as_ref()
++        .ok_or(ChannelError::ProbeHintFailure)?;
++    if cut.version != 1 || source_points_ms(item, video_source).1 != cut.out_point_ms {
++        return Err(FFPipelineError::InvalidSourceFrameCut.into());
++    }
++    Ok(Some(SourceFrameCut::new(
++        cut.out_point_ms,
++        cut.first_excluded_pts_90k,
++    )?))
++}
++
+ fn probe_hint_to_result(hint: &ProbeHint, path: String) -> ProbeResult {
+     let video = hint.video.iter().map(|v| {
+         ProbeResultStream::Video(Box::new(ProbeResultVideoStream {
+@@ -2092,6 +2145,115 @@
+     use ffpipeline::output_format::OutputFormat;
+     use serde_json::json;
+     use time::macros::datetime;
++
++    fn source_cut_fixture() -> (PlayoutItem, PlayoutItemSource) {
++        let start = datetime!(2026-01-01 12:00 UTC);
++        let item = PlayoutItem::new(
++            "cut-boundary".into(),
++            start,
++            start + time::Duration::seconds(8),
++            Some(Duration::from_millis(2131)),
++            Some(Duration::from_millis(9200)),
++            Path::new("fixture/video.ts"),
++        )
++        .unwrap();
++        let hint = serde_json::from_value(json!({
++            "video":[{"codec":"h264","width":320,"height":180,"pix_fmt":"yuv420p",
++                "stream_index":0,"source_frame_cut":{"version":1,"out_point_ms":9200,
++                "first_excluded_pts_90k":827946}}],
++            "audio":[],"subtitle":[],"format_name":"mpegts","duration_ms":20000
++        }))
++        .unwrap();
++        let source = PlayoutItemSource::Local {
++            path: "fixture/video.ts".into(),
++            in_point_ms: Some(2131),
++            out_point_ms: Some(9200),
++            probe_hint: Some(hint),
++        };
++        (item, source)
++    }
++
++    #[test]
++    fn source_frame_cut_hint_binds_actual_selected_video_and_original_outpoint() {
++        let (item, mut source) = source_cut_fixture();
++        let cut = selected_source_frame_cut(&item, &source, 0)
++            .unwrap()
++            .unwrap();
++        assert_eq!(cut.out_point_ms(), 9200);
++        assert_eq!(cut.first_excluded_pts_90k(), 827946);
++        assert!(selected_source_frame_cut(&item, &source, 3).is_err());
++        if let PlayoutItemSource::Local { out_point_ms, .. } = &mut source {
++            *out_point_ms = Some(9201);
++        }
++        assert!(selected_source_frame_cut(&item, &source, 0).is_err());
++    }
++
++    #[test]
++    fn source_frame_cut_hint_refuses_wrong_version_values_and_ambiguous_video_identity() {
++        for scenario in 0..6 {
++            let (item, mut source) = source_cut_fixture();
++            let PlayoutItemSource::Local {
++                probe_hint: Some(hint),
++                ..
++            } = &mut source
++            else {
++                unreachable!()
++            };
++            match scenario {
++                0 => hint.video[0].source_frame_cut.as_mut().unwrap().version = 2,
++                1 => {
++                    hint.video[0]
++                        .source_frame_cut
++                        .as_mut()
++                        .unwrap()
++                        .out_point_ms = 0
++                }
++                2 => {
++                    hint.video[0]
++                        .source_frame_cut
++                        .as_mut()
++                        .unwrap()
++                        .first_excluded_pts_90k = 0
++                }
++                3 => {
++                    hint.video[0]
++                        .source_frame_cut
++                        .as_mut()
++                        .unwrap()
++                        .first_excluded_pts_90k = -1
++                }
++                4 => hint.video.push(hint.video[0].clone()),
++                _ => {
++                    let mut other = hint.video[0].clone();
++                    other.source_frame_cut = None;
++                    hint.video.push(other);
++                }
++            }
++            assert!(
++                selected_source_frame_cut(&item, &source, 0).is_err(),
++                "scenario {scenario}"
++            );
++        }
++    }
++
++    #[test]
++    fn source_frame_cut_hint_none_preserves_old_source_and_rejects_unknown_cut_fields() {
++        let (item, mut source) = source_cut_fixture();
++        if let PlayoutItemSource::Local {
++            probe_hint: Some(hint),
++            ..
++        } = &mut source
++        {
++            hint.video[0].source_frame_cut = None;
++        }
++        assert_eq!(selected_source_frame_cut(&item, &source, 0).unwrap(), None);
++        let unknown = json!({"version":1,"out_point_ms":9200,"first_excluded_pts_90k":827946,
++            "assumed_frame_rate":25});
++        assert!(
++            serde_json::from_value::<ersatztv_playout::playout::SourceFrameCutHint>(unknown)
++                .is_err()
++        );
++    }
+ 
+     use super::*;
+ 
+@@ -2302,6 +2464,7 @@
+             channel_number: None,
+             video_copy_seek: None,
+             video_copy_blockers: Vec::new(),
++            source_frame_cut: None,
+         };
+         let output = OutputSettings {
+             audio,
+diff --git a/crates/ersatztv-playout/src/playout.rs b/crates/ersatztv-playout/src/playout.rs
+--- a/crates/ersatztv-playout/src/playout.rs
++++ b/crates/ersatztv-playout/src/playout.rs
+@@ -344,6 +344,17 @@
+     pub has_hdr10_metadata: Option<bool>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub rotation: Option<i32>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub source_frame_cut: Option<SourceFrameCutHint>,
++}
++
++/// Required selected-video source boundary, understood only by advertised runtimes.
++#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
++#[serde(deny_unknown_fields)]
++pub struct SourceFrameCutHint {
++    pub version: u8,
++    pub out_point_ms: u64,
++    pub first_excluded_pts_90k: i64,
+ }
+ 
+ impl VideoHint {
+diff --git a/crates/ersatztv-playout-generator/src/generate.rs b/crates/ersatztv-playout-generator/src/generate.rs
+--- a/crates/ersatztv-playout-generator/src/generate.rs
++++ b/crates/ersatztv-playout-generator/src/generate.rs
+@@ -221,6 +221,7 @@
+                                     dv_profile: v.dv_profile,
+                                     has_hdr10_metadata: Some(v.color_params.has_hdr10_metadata),
+                                     rotation: v.rotation,
++                                    source_frame_cut: None,
+                                 })
+                             } else {
+                                 None
+diff --git a/crates/ffpipeline/src/error.rs b/crates/ffpipeline/src/error.rs
+--- a/crates/ffpipeline/src/error.rs
++++ b/crates/ffpipeline/src/error.rs
+@@ -2,6 +2,8 @@
+ 
+ #[derive(Error, Debug)]
+ pub enum FFPipelineError {
++    #[error("required source frame cutoff is invalid for the selected video pass")]
++    InvalidSourceFrameCut,
+     #[error("unable to locate a usable video stream for graphics layer {0}")]
+     GraphicsStreamNotFound(usize),
+     #[error("error detecting ffmpeg capabilities: {0}")]
+diff --git a/crates/ffpipeline/src/input.rs b/crates/ffpipeline/src/input.rs
+--- a/crates/ffpipeline/src/input.rs
++++ b/crates/ffpipeline/src/input.rs
+@@ -28,6 +28,43 @@
+     pub video_copy_seek: Option<CopySeek>,
+     /// Blockers that need a dry run, so only the caller can find them
+     pub video_copy_blockers: Vec<CopyBlocker>,
++    /// Required original source boundary, separate from a partial pass end.
++    pub source_frame_cut: Option<SourceFrameCut>,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct SourceFrameCut {
++    out_point_ms: u64,
++    first_excluded_pts_90k: i64,
++}
++
++impl SourceFrameCut {
++    pub fn new(out_point_ms: u64, first_excluded_pts_90k: i64) -> Result<Self, FFPipelineError> {
++        if out_point_ms == 0 || first_excluded_pts_90k <= 0 {
++            return Err(FFPipelineError::InvalidSourceFrameCut);
++        }
++        Ok(Self {
++            out_point_ms,
++            first_excluded_pts_90k,
++        })
++    }
++
++    pub const fn out_point_ms(self) -> u64 {
++        self.out_point_ms
++    }
++
++    pub const fn first_excluded_pts_90k(self) -> i64 {
++        self.first_excluded_pts_90k
++    }
++
++    pub(crate) fn validate_video_pass(self, video: &ProbedInput) -> Result<(), FFPipelineError> {
++        if video.in_point >= video.out_point
++            || video.out_point > Duration::from_millis(self.out_point_ms)
++        {
++            return Err(FFPipelineError::InvalidSourceFrameCut);
++        }
++        Ok(())
++    }
+ }
+ 
+ impl InputSettings {
+diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.rs
+--- a/crates/ffpipeline/src/pipeline.rs
++++ b/crates/ffpipeline/src/pipeline.rs
+@@ -22,7 +22,7 @@
+ use crate::hw_accel::{HardwareAccel, HwAccel};
+ use crate::input::{
+     CanvasLayout, FfmpegInputArgs, FfmpegInputRequestContext, GraphicsInput, GraphicsKind,
+-    InputSettings, InputSource, ProbedInput,
++    InputSettings, InputSource, ProbedInput, SourceFrameCut,
+ };
+ use crate::output_option::OutputOption;
+ use crate::output_settings::{
+@@ -37,8 +37,9 @@
+ use crate::video_filter::{
+     ClipFilter, ColorChannelMixerFilter, CropFilter, DeinterlaceFilter, Dv5WorkaroundFilter,
+     EnsureAlphaFilter, FadeFilter, FormatFilter, FpsFilter, LoopFilter, PadFilter, ScaleFilter,
+-    SoftwareDeinterlaceFilter, SoftwareDeinterlaceOptions, SubtitleImageScaleFilter,
+-    SubtitlesFilter, ToneMapFilter, TransposeDir, TransposeFilter, VideoFilter,
++    SoftwareDeinterlaceFilter, SoftwareDeinterlaceOptions, SourceFrameCutFilter,
++    SubtitleImageScaleFilter, SubtitlesFilter, ToneMapFilter, TransposeDir, TransposeFilter,
++    VideoFilter,
+ };
+ 
+ pub const KEYFRAME_INTERVAL_SECONDS: u32 = 2;
+@@ -379,6 +380,9 @@
+         mut input_settings: InputSettings,
+         output_settings: OutputSettings,
+     ) -> Result<Pipeline, FFPipelineError> {
++        if let Some(cut) = input_settings.source_frame_cut {
++            cut.validate_video_pass(&input_settings.video_input)?;
++        }
+         let mut final_output_settings = output_settings;
+ 
+         // A live RTSP reader cannot work ahead to fill the default ten-second
+@@ -469,6 +473,18 @@
+                 )
+             }
+         };
++
++        let source_frame_cut = validate_source_frame_cut(
++            &input_settings,
++            &final_output_settings,
++            &video_encoder,
++            subtitle_burn.as_ref(),
++        )?;
++        let cut_ends_final_pass = source_frame_cut.is_some_and(|cut| {
++            input_settings.video_input.out_point == Duration::from_millis(cut.out_point_ms())
++                && duration
++                    == input_settings.video_input.out_point - input_settings.video_input.in_point
++        });
+ 
+         let mut pts_offset = final_output_settings.pts_offset;
+         let mut video_seek = input_settings.video_input.in_point;
+@@ -570,6 +586,16 @@
+             PipelineFilter::Audio(AudioFilter::Resample),
+             PipelineFilter::Audio(AudioFilter::Pad),
+         ];
++
++        if let Some(cut) = source_frame_cut {
++            filters.push(PipelineFilter::Video(
++                SourceFrameCutFilter {
++                    cut,
++                    seek: video_seek,
++                }
++                .into(),
++            ));
++        }
+ 
+         filters.extend([
+             PipelineFilter::Video(
+@@ -1093,8 +1119,10 @@
+                 OutputOption::VideoBuffer(final_output_settings.video.transcode.buffer),
+                 OutputOption::DoNotMapMetadata,
+                 OutputOption::Duration(duration),
+-                // apad does not end; stop at the end of video
+-                OutputOption::Shortest(shortest_buffer),
++            ])
++            // apad does not end; retain shortest except for an exact final cut.
++            .chain((!cut_ends_final_pass).then_some(OutputOption::Shortest(shortest_buffer)))
++            .chain([
+                 OutputOption::TsOffset(pts_offset),
+                 OutputOption::VideoTrackTimeScale(90_000),
+                 OutputOption::FrameRate(output_frame_rate),
+@@ -1488,6 +1516,26 @@
+     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+         write!(f, "args: {}", self.args().join(" "))
+     }
++}
++
++fn validate_source_frame_cut(
++    input: &InputSettings,
++    output: &OutputSettings,
++    video_encoder: &VideoEncoder,
++    subtitle_burn: Option<&SubtitleBurn<'_>>,
++) -> Result<Option<SourceFrameCut>, FFPipelineError> {
++    let Some(cut) = input.source_frame_cut else {
++        return Ok(None);
++    };
++    if output.is_live
++        || *video_encoder == VideoEncoder::Copy
++        || !matches!(subtitle_burn, Some(SubtitleBurn::Text { .. }))
++        || input.video_input.out_point > Duration::from_millis(cut.out_point_ms())
++        || input.video_input.in_point >= input.video_input.out_point
++    {
++        return Err(FFPipelineError::InvalidSourceFrameCut);
++    }
++    Ok(Some(cut))
+ }
+ 
+ // PGS is 1080p. With no size, ffmpeg uses the video size (e.g. 4K) and scales that canvas on
+@@ -1592,6 +1640,136 @@
+ mod tests {
+     use super::*;
+ 
++    fn finite_cut_input(cut: bool) -> InputSettings {
++        let mut input = multichannel_ac3_input("main.ts");
++        for source in [&mut input.video_input, &mut input.audio_input] {
++            source.in_point = Duration::from_millis(2164);
++            source.out_point = Duration::from_millis(9200);
++        }
++        let mut subtitle = multichannel_ac3_input("captions.srt").video_input;
++        subtitle.in_point = input.video_input.in_point;
++        subtitle.out_point = input.video_input.out_point;
++        subtitle.probe_result.streams.truncate(1);
++        if let crate::probe::ProbeResultStream::Video(stream) =
++            &mut subtitle.probe_result.streams[0]
++        {
++            stream.codec_type = crate::probe::CodecType::Subtitle;
++            stream.codec = "subrip".into();
++        }
++        input.subtitle_input = Some(subtitle);
++        input.source_frame_cut = cut.then(|| SourceFrameCut::new(9200, 827946).unwrap());
++        input
++    }
++
++    fn finite_cut_args(input: InputSettings, output: OutputSettings) -> ArgVec {
++        let mut pipeline = Pipeline::full(&FfmpegInfo::default(), input, output).unwrap();
++        pipeline.optimize();
++        pipeline.args()
++    }
++
++    #[test]
++    fn source_frame_cut_changes_only_required_filter_and_final_shortest() {
++        let mut before = finite_cut_args(finite_cut_input(false), stereo_output());
++        let after = finite_cut_args(finite_cut_input(true), stereo_output());
++        assert!(before.iter().any(|arg| arg == "-shortest"));
++        assert!(!after.iter().any(|arg| arg == "-shortest"));
++        assert_eq!(arg_value(&after, "-t"), Some("7036ms"));
++        let prefix = "settb=expr=1/90000,setpts=PTS+round(2.164/TB),trim=end_pts=827946,setpts=PTS-round(2.164/TB),";
++        assert!(filter_complex(&after).contains(prefix));
++        before.retain(|arg| arg != "-shortest");
++        let restored: Vec<String> = after.iter().map(|arg| arg.replace(prefix, "")).collect();
++        let expected: Vec<&str> = before.iter().map(|arg| arg.as_ref()).collect();
++        assert_eq!(restored, expected);
++    }
++
++    #[test]
++    fn source_frame_cut_retains_shortest_for_partial_or_audio_shorter_pass() {
++        for (video_out, audio_out) in [(6000, 9200), (9200, 6000)] {
++            let mut input = finite_cut_input(true);
++            input.video_input.out_point = Duration::from_millis(video_out);
++            input.audio_input.out_point = Duration::from_millis(audio_out);
++            let args = finite_cut_args(input, stereo_output());
++            assert!(args.iter().any(|arg| arg == "-shortest"));
++            assert!(filter_complex(&args).contains("trim=end_pts=827946"));
++            assert_eq!(arg_value(&args, "-t"), Some("3836ms"));
++        }
++    }
++
++    #[test]
++    fn source_frame_cut_preserves_explicit_fps_mpeg2_and_audio_choices() {
++        for format in [EncodeFormat::H264, EncodeFormat::Mpeg2Video] {
++            let mut input = finite_cut_input(true);
++            if let crate::probe::ProbeResultStream::Video(stream) =
++                &mut input.video_input.probe_result.streams[0]
++            {
++                stream.field_order = Some("tt".into());
++            }
++            let mut output = stereo_output();
++            output.video.transcode.format = format;
++            output.frame_rate = FrameRate::parse_target("25");
++            let info = FfmpegInfo {
++                video_filters: [crate::ffmpeg_info::KnownVideoFilter::Yadif.to_string()].into(),
++                ..Default::default()
++            };
++            let mut pipeline = Pipeline::full(&info, input, output).unwrap();
++            pipeline.optimize();
++            let args = pipeline.args();
++            let filter = filter_complex(&args);
++            assert!(filter.find("trim=end_pts=").unwrap() < filter.find("yadif").unwrap());
++            assert!(filter.find("yadif").unwrap() < filter.find("fps=25").unwrap());
++            assert_eq!(arg_value(&args, "-r"), Some("25"));
++            assert_eq!(arg_value(&args, "-fps_mode"), Some("cfr"));
++            assert_eq!(arg_value(&args, "-acodec"), Some("aac"));
++            assert_eq!(
++                arg_value(&args, "-vcodec"),
++                Some(match format {
++                    EncodeFormat::H264 => "libx264",
++                    EncodeFormat::Mpeg2Video => "mpeg2video",
++                    EncodeFormat::Hevc => unreachable!(),
++                })
++            );
++        }
++    }
++
++    #[test]
++    fn source_frame_cut_refuses_unsupported_mode_live_copy_and_outpoint_drift() {
++        for scenario in 0..6 {
++            let mut input = finite_cut_input(true);
++            let mut output = stereo_output();
++            match scenario {
++                0 => output.subtitle_mode = SubtitleMode::Convert,
++                1 => input.subtitle_input = None,
++                2 => output.is_live = true,
++                3 => input.video_input.out_point = Duration::from_millis(9201),
++                4 => input.video_input.in_point = Duration::from_millis(9200),
++                _ => {
++                    if let Some(subtitle) = &mut input.subtitle_input {
++                        if let crate::probe::ProbeResultStream::Video(stream) =
++                            &mut subtitle.probe_result.streams[0]
++                        {
++                            stream.codec = "hdmv_pgs_subtitle".into();
++                        }
++                    }
++                }
++            }
++            assert!(
++                matches!(
++                    Pipeline::full(&FfmpegInfo::default(), input, output),
++                    Err(FFPipelineError::InvalidSourceFrameCut)
++                ),
++                "scenario {scenario}"
++            );
++        }
++        for (out, pts) in [(0, 1), (9200, 0), (9200, -1)] {
++            assert!(SourceFrameCut::new(out, pts).is_err());
++        }
++        let input = finite_cut_input(true);
++        assert!(matches!(
++            validate_source_frame_cut(&input, &stereo_output(), &VideoEncoder::Copy, None),
++            Err(FFPipelineError::InvalidSourceFrameCut)
++        ));
++    }
++
+     #[test]
+     fn video_format_parses_ffmpeg_codec_names() {
+         for (codec, format) in [
+@@ -1674,6 +1852,7 @@
+             channel_number: None,
+             video_copy_seek: None,
+             video_copy_blockers: Vec::new(),
++            source_frame_cut: None,
+         }
+     }
+ 
+diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video_filter.rs
+--- a/crates/ffpipeline/src/video_filter.rs
++++ b/crates/ffpipeline/src/video_filter.rs
+@@ -47,6 +47,7 @@
+     Pad(PadFilter),
+     Loop(LoopFilter),
+     Fps(FpsFilter),
++    SourceFrameCut(SourceFrameCutFilter),
+     Format(FormatFilter),
+     ToneMap(ToneMapFilter),
+     Deinterlace(DeinterlaceFilter),
+@@ -95,6 +96,42 @@
+ 
+ // --- Software filter structs ---
+ 
++/// Timestamp-only source clipping before geometry or frame-rate conversion.
++#[derive(Debug, Clone)]
++pub struct SourceFrameCutFilter {
++    pub cut: crate::input::SourceFrameCut,
++    pub seek: Duration,
++}
++
++impl VideoFilterOp for SourceFrameCutFilter {
++    fn evaluate(&self, _state: &FrameState, _info: &FfmpegInfo) -> Option<VideoFilter> {
++        Some(self.clone().into())
++    }
++
++    fn apply_to(&self, _state: &mut FrameState) {}
++
++    fn required_surface(&self) -> Option<FrameSurface> {
++        None
++    }
++
++    fn passes_frames_through(&self, _state: &FrameState) -> bool {
++        true
++    }
++
++    fn as_arg(&self) -> Option<String> {
++        let cut = self.cut.first_excluded_pts_90k();
++        let trim = format!("trim=end_pts={cut}");
++        if self.seek.is_zero() {
++            Some(format!("settb=expr=1/90000,{trim}"))
++        } else {
++            let shift = format!("round({}/TB)", self.seek.as_secs_f64());
++            Some(format!(
++                "settb=expr=1/90000,setpts=PTS+{shift},{trim},setpts=PTS-{shift}"
++            ))
++        }
++    }
++}
++
+ #[derive(Debug, Clone)]
+ pub struct HwUploadFilter {
+     pub target_surface: FrameSurface,
+@@ -996,6 +1033,26 @@
+     use time::{Date, Month, Time, UtcOffset};
+ 
+     use super::*;
++
++    #[test]
++    fn source_frame_cut_filter_preserves_source_clock_and_seek_rounding() {
++        let cut = crate::input::SourceFrameCut::new(9200, 827946).unwrap();
++        for (seek, expected) in [
++            (Duration::ZERO, "settb=expr=1/90000,trim=end_pts=827946"),
++            (
++                Duration::from_millis(2164),
++                "settb=expr=1/90000,setpts=PTS+round(2.164/TB),trim=end_pts=827946,setpts=PTS-round(2.164/TB)",
++            ),
++            (
++                Duration::from_millis(2143),
++                "settb=expr=1/90000,setpts=PTS+round(2.143/TB),trim=end_pts=827946,setpts=PTS-round(2.143/TB)",
++            ),
++        ] {
++            let filter = SourceFrameCutFilter { cut, seek };
++            assert_eq!(filter.as_arg().as_deref(), Some(expected));
++            assert_eq!(filter.required_surface(), None);
++        }
++    }
+ 
+     #[test]
+     fn text_subtitle_seek_borrows_and_restores_the_same_rounded_tick_offset() {
+diff --git a/crates/ffpipeline/tests/common/mod.rs b/crates/ffpipeline/tests/common/mod.rs
+--- a/crates/ffpipeline/tests/common/mod.rs
++++ b/crates/ffpipeline/tests/common/mod.rs
+@@ -1035,6 +1035,7 @@
+         channel_number: None,
+         video_copy_seek: None,
+         video_copy_blockers: Vec::new(),
++        source_frame_cut: None,
+     }
+ }
+ 

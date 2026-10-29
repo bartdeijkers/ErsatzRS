@@ -43,6 +43,15 @@ Per-RID version, release tag and patch identity are resolved together for
 download, cache, provenance and reported runtime version; they do not weaken
 archive or payload checks. Application adoption and affected CI remain pending.
 
+Phase9A local selection amendment, 2026-10-29: the four required Next RIDs now
+select the published rs.7 prerelease by exact archive, payload and source/patch
+identity. This adds the previously qualified burn-clock, source-frame-cut and
+single-use-input corrections to automatic acquisition and release staging.
+Retained macOS rs.4 identities are unchanged. This local application pin does
+not promote either public release to stable/latest, change the FFmpeg default
+or establish final managed adoption. `p9a-managed-adoption` owns the remaining
+application gates and any separately authorized stable FFmpeg publication.
+
 UCU-12 acceptance is complete within that approved scope. Source-bound local
 and CI evidence is recorded in milestone ucu-12; the deferred macOS component
 and unavailable hardware remain unverified. This does not turn the partial

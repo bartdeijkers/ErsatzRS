@@ -23,7 +23,7 @@ release section when tagging a release.
   [RUSTSEC-2026-0386](https://rustsec.org/advisories/RUSTSEC-2026-0386.html)
   without changing dependency features or audit policy.
 
-- Pin the published Next 0.2.3 worker (rs.6 on Linux/Windows, retained rs.4 on
+- Pin the published Next 0.2.3 worker (rs.7 on Linux/Windows, retained rs.4 on
   macOS) with fixed TLS and
   Tokio dependencies and a non-yanked crypto crate. Require the original and
   patched lockfile checksums during source preparation and packaging. Managed
@@ -839,10 +839,12 @@ release section when tagging a release.
   while preserving the accepted runtime defaults. Keep exact patch and package
   provenance; candidate builds do not activate or publish a runtime.
 
-- Adopt the published Linux/Windows Next rs.6 packages. They cap copied-video
+- Select the published Linux/Windows Next rs.7 packages. They cap copied-video
   captions at the original subtitle source outpoint while retaining keyframe
   and pass alignment, and preserve the selected audio stream's metadata through
-  copy and filtering.
+  copy and filtering, preserve subtitle burn input clocks, enforce qualified
+  source-frame cutoffs and avoid consuming single-use copied inputs twice.
+  Final managed-runtime adoption remains subject to its application gates.
   Keep macOS on its original rs.4 package identity, without claiming these
   fixes there. Verify each platform's version, release tag and patch provenance
   together during acquisition and staging.
