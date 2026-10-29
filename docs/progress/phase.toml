@@ -71,8 +71,9 @@ the composed13 Rust manager controls (12 unchanged plus corrected prose guard).
 No application rebuild or automatic rs.7 host adoption is inferred. FFmpeg
 default remains v2.0.7; candidate publication alone does not select it automatically.
 Publication and Linux published-byte persisted Health are closed; do not repeat.
-Base editor owner is now Complete: EB1/EB2 receipts remain valid and the former
-author-base prerequisite is closed. No further base-editor variants are pending.
+Base editor and admin owners are Complete: EB1/EB2, original localized file/action
+and current experimental-notice receipts remain valid; former dependencies are
+closed. No further base-editor/admin variants are pending.
 The exact four-archive FFmpeg stable2.0.8 proposal is prepared in
 next-default-selection/qualification.json; explicit maintainer approval is pending.
 

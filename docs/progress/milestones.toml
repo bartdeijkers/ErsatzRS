@@ -16815,7 +16815,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-admin-base'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete localized base management and agent file workflow'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-editor-base', 'p9a-lifecycle-base']
 acceptance = '''
@@ -16829,6 +16829,21 @@ Smallest necessary work: Finish only named changed base flows using shared app v
 Testable stop condition: Every changed applicable base admin flow and agent file action shares validation and broadcast model, passes all supported cultures and required headed/browser modes, and leaves broadcast unchanged until explicit publication.
 '''
 evidence = '''
+Complete2026-10-29 within the required localized base admin/agent-file boundary.
+Canonical identity.json admin_base_join_followup.base_owner_closure qualifies
+the original browser pins and current source reuse. All three dependencies are
+Complete: r1-cases, lifecycle-base and editor-base. Fourteen complete base
+function bodies remain exact to the original headed source; the shared container
+adds only two enhanced forms since its A1 checkpoint. Both full current SSR files,
+nine language files and the existing profile browser spec match the completed
+classification trial below. Its eight functional/visual and four notice cases
+retain zero unexpected/skipped/flaky results; all16 notice-image hashes remain
+exact. The original11 browser/GUI/report pins remain exact. A1 stored function
+hashes use a different extraction scope from the existing A2 helper, so direct
+same-helper old/current body equality establishes reuse; retain that observer
+negative and original hashes. No new UI/source behavior or blanket browser run.
+This closes the aggregate's stale dependency blocker. Managed adoption and final
+shared/base application gates remain separately owned.
 Completed experimental2.5 admin classification2026-10-28: canonical
 provider-scan/experimental-level25-admin/qualification.json owns18 appended
 help texts in9 cultures, retaining their original wording and all existing
@@ -16846,9 +16861,13 @@ boundary; existing A1 receipts remain closed. The shared dirty-worktree build is
 not clean-HEAD, native Windows, release/runtime adoption or client acceptance.
 No new editor/stream/platform chain or experimental2.5 conformance run. Other
 base author/client and shared runtime/final owners retain their exact gaps.
-A1 completed within the shared base admin/agent-file action boundary: profile/design, retained export, pinned-editor concept import, same-model located validation/preview and separate explicit publication. Canonical tmp/phase9-next-local-teletext/provider-scan/identity.json admin_base_join_followup joins completed EB1/EB2 with original actual-QTM/headed evidence. Four Chromium151 and four Firefox153 JS/no-JS/light/dark runs cover all9 cultures; terminal reports and original GUI/manifest pins remain exact. Fourteen route/control/effective-action function bodies match the genuine headed source1e95923b exactly; the fifteenth adds only five enhanced resource forms, owned by A2. All27 applicable strings in9 cultures remain exact. The reference opening now links its already implemented operational file/agent contract instead of calling it internal-only; historical first-adapter negatives remain. No UI, runtime or new full-current browser/client/platform run is claimed. Aggregate status remains In progress because required editor-base/author-base acceptance is open; no extra A1 variant is queued.
+A1 completed within the shared base admin/agent-file action boundary: profile/design, retained export, pinned-editor concept import, same-model located validation/preview and separate explicit publication. Canonical tmp/phase9-next-local-teletext/provider-scan/identity.json admin_base_join_followup joins completed EB1/EB2 with original actual-QTM/headed evidence. Four Chromium151 and four Firefox153 JS/no-JS/light/dark runs cover all9 cultures; terminal reports and original GUI/manifest pins remain exact. Fourteen route/control/effective-action function bodies match the genuine headed source1e95923b exactly; the fifteenth originally added five enhanced resource forms, owned by A2. All27 applicable strings in9 cultures retained their original values at that checkpoint; the later experimental notice amendment and browser proof above qualify its appended text. The reference opening links its already implemented operational file/agent contract instead of calling it internal-only; historical first-adapter negatives remain. No new runtime/client/platform run is claimed. Former editor-base/author-base blockers are now Complete; no extra A1 variant is queued.
 Reuse/closed: Existing nine-culture SSR and headed Chromium/Firefox light/dark/hydrated/no-JS, effective_admin_reuse, actual_output_status_followup, shared-profile browser proof, editor/file validation and completed source-health8headed refresh cases. Lifecycle-base now closes the common application/host controls; do not replay those unchanged paths.
-Missing proof/stop: No A1 action remains within the explicitly joined base boundary; reuse the closed actions and original browser modes. Required upstream milestone dependencies retain their own missing proof. A2 enhanced actions and actual client display remain separately owned; no blanket browser rerun or new editor variant follows.
+Missing proof/stop: None within this required base admin/agent-file owner. Reuse
+the closed actions and original qualified browser modes. Enhanced-only A2 proof
+and ordinary client/transport/runtime requirements keep their separate owners;
+no blanket browser rerun or new editor variant follows. Reopen only for a
+concrete relevant regression with evidence.
 '''
 
 [[milestone]]
