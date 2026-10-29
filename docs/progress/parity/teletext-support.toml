@@ -8,7 +8,7 @@ ADR0123 latest2026-10-28 amendment: fully verified1/1.5 and applicable shared
 gates define9A. Implemented2.5 remains available as experimental. Enhanced-only
 acceptance is Deferred until a new maintainer task, never
 accepted by assumption. P9A-04 owns L15/F/V/X and retained evidence.
-EB1/2,EE1..3,A1/scoped A2 are closed. F2 metadata/zones/version and scoped F1
+Base editor/EE1..3/A1/scoped A2 closed. F2 metadata/zones/version and scoped F1
 Main/Base-prefix/position/charset, V30/V31 DRCS attachment/undo, created banks,
 leading AP/calls, Public↔Global and steady-Flash undo are closed. F3 scoped
 C2/Local/Main/resource,A7,A8 spacing/default tails/inherited width and C3 size

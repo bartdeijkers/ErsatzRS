@@ -16499,7 +16499,7 @@ Missing proof/stop: AE1 four-control fallback and the named AE2..4 context/order
 id         = 'p9a-editor-base'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Complete the fitting base editor and complete-set workflow'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'teletext-support'
 depends_on = ['p9a-r1-cases', 'p9a-author-base', 'p9a-metadata', 'p9a-generated-base', 'p9a-selection-undo']
 acceptance = '''
@@ -16510,11 +16510,25 @@ Testable stop condition: Every reconciled base B2/F1/V2 cell passes actual pinne
 '''
 evidence = '''
 The2026-10-28 optional-editor amendment preserves completed EB1/EB2 actual QTM receipts as scoped proof of the generic workflow. No brand-specific additional trial or substitute visual editor is required. Existing author-base/client and other dependencies remain unchanged.
-Status: In progress because required author-base acceptance is open. EB1/EB2 actions below are completed within their explicit scopes:
+Status: Complete2026-10-29 within the required generic base workflow. The former
+author-base prerequisite is now Complete, as are r1-cases, metadata, generated-base
+and selection-undo. Canonical identity.json editor_base_set_followup.base_owner_closure
+records exact saved-file/receipt/image hashes and bounded source-delta review.
+EB1/EB2 source bodies and accepted saves retain their functional proof: later
+changes add separate test modules, Linux receiver controls and an unrelated
+default-disabled complete-Main driver mode. No editor chain is repeated or new
+editor capability inferred. Original negative/frozen-driver receipts remain.
+The completed author-base independently reconciles the required generic character/
+context proof; no new glyph or editor variants are assigned here. The remaining
+managed-adoption/final gates retain their separate owners. EB1/EB2 actions:
 EB1 completed within direct ArabicG0 cell editing for47/57: pinned headed QTM1.0/cac2167/af7cb genuinely changes physical row1/column8 from G0/47 to48. Existing X26/G2 sentinels remain byte-exact; the edited cell is not a generated-G2 substitution. Complete records/context/metadata/original sources, shared preview locality, concept fence, reexport, explicit publication and two cold reopens pass; page125, other channel and package remain unchanged. Three native tests cover the new two-context flow and original four G0/four G2 contexts; strict focused Clippy/formatting pass. Canonical tmp/phase9-next-local-teletext/provider-scan/identity.json editor_arabic_g0_followup retains source/editor/driver/save pins and inspected images. QTM has no Arabic Unicode keymap; its existing native-code H keyboard path edits Table44/48. No Unicode keyboard, new stream/client or platform claim. The SaveAs WSLg pointer defect was confined to the test driver: actual modal-window-relative X11 targeting passes both original inputs, preserving all focus/save/content oracles and a byte-identical first saved file. Global-pointer and fixed-DPI negatives remain.
 EB2 completed within plain complete-base-set interchange: actual pinned headed QTM1.0/cac2167/af7cb saves all three original identities124/32,124/33,125/32. One complete-set concept preserves exact raw subcodes, navigation, attributes and versioned sidecar; shared preview changes only the three editable cells. Explicit publication and two cold reopens preserve package/other-channel state. Native preflight and actual editor run pass; strict focused Clippy and formatting pass after boxing only test futures. Canonical tmp/phase9-next-local-teletext/provider-scan/identity.json editor_base_set_followup owns receipts and inspected saved-window images. Editor presentation2.5 of plain base inputs supplies no enhanced rendering/client/platform claim. No production correction or optional resource bank was required.
 Reuse/closed: W=tmp/phase9-next-local-teletext/work.json standalone_level15_followup: native_main_capacity; repertoire_editor_interop; native_editor_interop; generated_g2_editor/implementation_followup; arabic_editor generatedG2; held_mosaics_followup/editor; native_spelling_followup/integration. Complete metadata/generated-base/selection-undo owners, and header-c2 main-presence/generated_compatibility_followup, coordinated-positions and main-contexts retain exact root-undo, actual save/import/preview/reopen/publication scopes.
-Missing proof/stop: EB1/EB2 editor actions are closed within the explicit scopes above; no extra editor variant follows. The required author-base dependency remains open at AB1..5; shared localized end-proof remains owned by admin-base A1. Reuse the completed editor actions there. No2.5 bank/client or over208-word requirement is imposed on a valid base page; no blanket editor-chain replay.
+Missing proof/stop: None within this owner. EB1/EB2 and all five required
+dependencies are Complete; shared localized admin-base A1 is also Complete.
+No extra editor variant or blanket editor-chain replay follows. No2.5 bank/client
+or over208-word requirement is imposed on a valid base page. Reopen this component
+only for a concrete relevant regression with evidence.
 '''
 
 [[milestone]]
