@@ -81,6 +81,12 @@ and current experimental-notice receipts remain valid; former dependencies are
 closed. No further base-editor/admin variants are pending.
 The exact four-archive FFmpeg stable2.0.8 proposal is prepared in
 next-default-selection/qualification.json; explicit maintainer approval is pending.
+The final-gate shared Rust component is Complete within current Linux/shared-source
+scope:8273 tests pass/516 skipped, doctest phase exits0 with zero examples, strict
+workspace all-target Clippy and format pass; all3949 tracked inputs remain exact.
+Canonical final-gate/shared-rust-20261029/qualification.json owns logs/source pins.
+No full CI/clean-HEAD/other-platform claim. Only affected revalidation follows a
+relevant change; do not replay these unchanged checks for another green result.
 
 Canonical local-promotion/publication-review/execution/qualification.json owns
 public Next next-0.2.3-54c6cb9-ersatzrs.7 and FFmpeg runtime-candidate-2.0.7-457453f,

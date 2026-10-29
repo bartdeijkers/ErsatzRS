@@ -17749,7 +17749,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-final-gate'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Run the full generic-engine acceptance gate before production content'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'teletext-support'
 depends_on = ['p9a-03', 'p9a-level15']
 acceptance = '''
@@ -17785,9 +17785,31 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
-Status: Not started. Exact remaining gap: Full engine acceptance is open; registry validation and scoped component passes are not a green full CI, complete authored feature or release/publication claim.
+Completed shared Rust component2026-10-29: canonical
+tmp/phase9-next-local-teletext/provider-scan/final-gate/shared-rust-20261029/
+qualification.json binds the current shared-source Linux x64 workspace at
+459fcaeb with its preserved parallel deltas. All3949 tracked inputs remain exact
+through the checks. Standard ./run.sh test-closeout exits0:8273 nextest tests
+pass,516 are skipped by the unchanged ordinary selection, two are reported slow;
+the workspace doctest phase exits0 with zero examples. Strict workspace/all-target
+Clippy with -D warnings and cargo fmt --all -- --check also exit0. Original
+logs and source hashes are retained. The dependency future-compatibility notice
+for proc-macro-error2 is not a current lint failure or future-toolchain acceptance.
+The quiet compilation was qualified once as two CPU-active compiler workers;
+the original process completed without restart/retry or changed test selection.
+No new Rust/browser/runtime implementation or mandatory ignored native trial is
+inferred. This closes the standard shared Rust component within its source/host
+boundary. Final managed selection, exact adopted-byte application/platform gates,
+remaining final controls and typed dependencies stay open. A later relevant
+source/input change requires affected revalidation; this is not a green exact-SHA
+GitHub CI, clean-HEAD or all-platform claim.
+Status: In progress. Exact remaining gap: Full engine acceptance is open; registry validation and scoped component passes are not a green full CI, complete authored feature or release/publication claim.
 Reuse: Primary package receipts and unchanged full-gate evidence only when exact scope is valid; same-generation preview is never carriage proof. P9B still depends on parent p9a-04.
-Missing mandatory proof: All outstanding final full-engine/full-gate evidence after both base and enhanced aggregates, with exact current source/platform/runtime/client/editor identity and no waived acceptance.
+Missing mandatory proof: The remaining final base/shared evidence and required
+runtime adoption after the current required aggregates, with exact applicable
+source/platform/runtime/client/interchange identity. Enhanced-only acceptance
+remains Deferred under the current amendment, not a required aggregate or waived
+base/shared obligation. Reuse the completed Rust component above within scope.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.
