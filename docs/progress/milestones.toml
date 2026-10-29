@@ -17423,6 +17423,22 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
+Completed exact local stable-publication payload preparation2026-10-29:
+canonical provider-scan/managed-current-candidates/local-promotion/
+publication-review/execution/stable-ffmpeg/qualification.json owns six staged
+assets, release notes and an unapplied one-line fallback source diff for the
+proposed FFmpeg distribution2.0.8 at already-public457453f. All four qualified
+runtime archives retain exact names/bytes/source records and use hard links;
+only provenance.release_tag changes. All five SHA256SUMS entries pass and all
+six asset hashes are recorded. The fallback diff passes git apply --check;
+actual runtime.rs/default remains v2.0.7. The immutable source release workflow's
+v*.*.* trigger does not match numeric2.0.8, preserving no-rebuild preparation.
+This closes local preparation only: no new tag, release, upload, source/main
+push, workflow or fallback change. Explicit stable/Latest approval remains
+pending; the next external action requires fresh destination/tag preflight
+before mutation. Final current-source build/adopted-byte gates follow the
+approved selection, including the recorded Markdown security patch. Reuse the
+closed runtime/source/editor/client components; no replacement variants follow.
 Completed actual automatic Next application component2026-10-29: canonical
 provider-scan/managed-current-candidates/local-promotion/publication-review/execution/
 automatic-next-host/qualification.json binds a fresh matched Leptos SSR/WASM build,

@@ -79,8 +79,12 @@ Publication and Linux published-byte persisted Health are closed; do not repeat.
 Base editor and admin owners are Complete: EB1/EB2, original localized file/action
 and current experimental-notice receipts remain valid; former dependencies are
 closed. No further base-editor/admin variants are pending.
-The exact four-archive FFmpeg stable2.0.8 proposal is prepared in
-next-default-selection/qualification.json; explicit maintainer approval is pending.
+Execution/stable-ffmpeg/qualification.json closes the exact local FFmpeg2.0.8
+publication payload: six assets, five checksum controls, notes and an unapplied
+one-line fallback diff pass. Archives/names remain exact; actual fallback remains
+v2.0.7. Explicit stable/Latest approval is pending. No tag/release/upload or remote
+mutation occurred. Next action is that decision, followed by fresh destination
+preflight and the approved selection's final current-source build/adoption gates.
 The final-gate shared Rust component is Complete within its0daa8dfc Linux/shared-source
 scope:8273 tests pass/516 skipped, doctest phase exits0 with zero examples, strict
 workspace all-target Clippy and format pass; all3949 tracked inputs remain exact.
