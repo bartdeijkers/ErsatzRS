@@ -110,6 +110,32 @@ mod tests {
     }
 
     #[test]
+    fn release_markdown_wikilink_does_not_duplicate_following_content() {
+        // RUSTSEC-2026-0414: a piped wikilink must not retain sibling nodes
+        // inside its label when the renderer enables every Markdown option.
+        let html = render_markdown("[[page|label]] after [next](https://example.com/next)");
+        assert!(html.contains("href=\"page\""));
+        assert_eq!(html.matches(">label<").count(), 1);
+        assert_eq!(html.matches(" after ").count(), 1);
+        assert_eq!(html.matches(">next<").count(), 1);
+    }
+
+    #[test]
+    fn release_markdown_adversarial_wikilinks_have_bounded_events() {
+        let markdown = "[[[[^(\n|]]]]=]]]]]]]]\n".repeat(10);
+        let limit = markdown.len() * 8;
+        // Cap consumption so the affected dependency fails without expanding
+        // the adversarial event graph indefinitely or relying on a timeout.
+        let events = pulldown_cmark::Parser::new_ext(&markdown, pulldown_cmark::Options::all())
+            .take(limit + 1)
+            .count();
+        assert!(
+            events <= limit,
+            "wikilink event count exceeds the linear fixture bound"
+        );
+    }
+
+    #[test]
     fn release_section_selects_the_exact_installed_beta() {
         let changelog = "## [Unreleased]\n\nCurrent\n\n## [1.0.37-beta] - 2026-09-22\n\nInstalled\n\n## [1.0.35-beta] - 2026-09-16\n\nOld\n";
         let section = release_section(changelog, "1.0.37-beta").unwrap();

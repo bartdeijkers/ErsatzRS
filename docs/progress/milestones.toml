@@ -17785,6 +17785,27 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Completed source-contract/policy component and concrete security repair2026-10-29:
+canonical tmp/phase9-next-local-teletext/provider-scan/final-gate/
+shared-contract-20261029/qualification.json owns selected parity progress,
+architecture and hydration controls, with reuse of the valid Rust/build steps.
+Architecture reports zero new boundary violations; hydration retains its31
+existing baseline suppressions and no new finding. Fresh cargo deny exposes
+RUSTSEC-2026-0414 in pulldown-cmark0.13.4. The release-notes renderer enables the
+affected option through Options::all(); its input is the compiled trusted
+CHANGELOG, not a claimed arbitrary remote Markdown surface. The precise0.13.5
+minimum/lock update changes only this package; all other lock entries, features,
+Markdown options, sanitization and audit policy remain unchanged. Two targeted
+regressions retain bounded event consumption: original4-case run passes3/fails1;
+the identical source/oracles pass4/4 after the patch. Fresh strict web all-target
+Clippy, format, selected parity and all cargo-deny categories pass. Preserve
+the original advisory/test negatives and policy warnings. Target growth to61GiB
+required the existing60GiB cache cleanup; frozen qualified host/site, runtime
+archives, logs and progress helper were preserved outside target. No current
+application bundle was rebuilt after this patch: final matched current-source
+build/adoption must include the changed lock and compiled CHANGELOG together
+with the final accepted runtime selection. Earlier scoped component proof is
+retained; no new full-workspace, full CI, clean-HEAD or all-platform claim.
 Completed shared Rust component2026-10-29: canonical
 tmp/phase9-next-local-teletext/provider-scan/final-gate/shared-rust-20261029/
 qualification.json binds the current shared-source Linux x64 workspace at
