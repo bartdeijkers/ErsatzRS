@@ -63,9 +63,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 
 next_steps = '''
 Current package: p9a-managed-adoption — final accepted production selection/gates.
-Next finite action: resolve final default/stable runtime selection against the
-published exact candidates, then run only affected exact-byte application/Health/
-playback/platform gates. Publication is complete; do not repeat it. Existing
+Next finite action: prepare the smallest exact default-selection change against
+the published candidates, distinguish local selection from public stable promotion,
+then run only affected application/playback/platform gates. Publication and Linux
+published-byte persisted Health are complete; do not repeat them. Existing
 production/default pins stay unchanged. An explicit candidate pin is not default
 accepted release selection.
 
@@ -76,8 +77,12 @@ Published-download/qualification.json owns four real Next acquisitions/source/
 lock/compiler/payload checks through the unchanged candidate-configured stager.
 Actual-ffmpeg-managed/qualification.json owns real GitHub -> Linux product-manager
 install, exact binary/tag and download-disabled cached startup; healthz200,
-source=downloaded/managed and both hosts exit0. Frozen Linux startup only, not
-completed persisted Health, playback, clean-HEAD or nativeWindows adoption.
+source=downloaded/managed and both hosts exit0. Published-health/qualification.json
+additionally closes one persisted Health run: FFmpeg/Next/teletext Pass, exact
+decoder hashes/original_pts, zero errors and one software-acceleration warning;
+host exit0 unforced and process group absent. Ten relevant Health sources match.
+Frozen Linux host and explicit Next override, not default selection, playback,
+clean-HEAD or nativeWindows adoption.
 Preserve observer/API failures; do not repeat successful transfers.
 
 Author-base and fixed Kodi receiver-control owners are Complete within their
