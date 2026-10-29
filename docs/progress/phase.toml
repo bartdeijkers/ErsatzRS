@@ -68,8 +68,13 @@ then run only affected adopted-byte application/playback/platform gates. The
 Next source manifest now selects the four published rs.7 packages locally;
 next-default-selection/qualification.json closes source preparation/staging and
 the composed13 Rust manager controls (12 unchanged plus corrected prose guard).
-No application rebuild or automatic rs.7 host adoption is inferred. FFmpeg
-default remains v2.0.7; candidate publication alone does not select it automatically.
+Automatic-next-host/qualification.json now closes a fresh matched shared-source
+Linux application build, actual automatic rs.7 public acquisition and managed
+cache restart, both published_pin_verified=true and complete persisted Health.
+Exact Next origin/payload and FFmpeg decoder identities, original rs.6 cache and
+all2888 compiled inputs remain exact; both hosts exit0 unforced, groups absent.
+This is not clean-HEAD/nativeWindows, new playback or whole-host offline proof.
+FFmpeg default remains v2.0.7; publication alone does not select it automatically.
 Publication and Linux published-byte persisted Health are closed; do not repeat.
 Base editor and admin owners are Complete: EB1/EB2, original localized file/action
 and current experimental-notice receipts remain valid; former dependencies are
