@@ -2298,7 +2298,7 @@ same-process reload gates passed with ErsatzRS FFmpeg 9 on Windows and WSL/Linux
 id         = 'p9a-02'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Package and probe teletext decoding'
-status     = 'Blocked'
+status     = 'Complete'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-01', 'p9a-windows-package', 'p9a-platform-safety', 'p9a-managed-adoption']
@@ -2322,6 +2322,17 @@ acquisition and probes. UCU-specific platform/hardware exceptions do not waive
 these teletext gates without a separate accepted decision.
 '''
 evidence = '''
+Current required runtime acceptance completed (2026-10-30): p9a-managed-adoption
+owns the exact four-RID public/default/source/license/dependency/build/Health/
+applicable playback join at managed-current-candidates/final-adoption/
+accepted-join/qualification.json, including its explicit parent-clause map.
+All typed prerequisites are Complete. Optional/operator capability reports and
+ordinary playback preservation reuse their unchanged primary source/proof.
+Mac and native ARM decisions remain deferred/assumed, not accepted as native;
+implemented enhanced-only Level2.5 retains its separate experimental boundary.
+This closes P9A-02, not the shared final gate or production9B prerequisite.
+Historical evidence and its earlier candidate limitations follow unchanged.
+
 Current2026-10-28 runtime aggregate is Blocked on p9a-managed-adoption.
 The decision contract and completed candidate/platform/package components remain
 closed; actual approved production selection and final adopted-byte gates remain.
@@ -17404,7 +17415,7 @@ Closed/stop met: Every currently applicable independent PS1/PS2 clause has its c
 id         = 'p9a-managed-adoption'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Accept the fully qualified managed runtime'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'teletext-support'
 depends_on = ['p9a-source-output', 'p9a-windows-package', 'p9a-platform-safety']
 acceptance = '''
@@ -17423,6 +17434,28 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
+Accepted managed runtime/application join (2026-10-30):
+managed-current-candidates/final-adoption/accepted-join/qualification.json closes
+this owner and the required P9A-02 runtime boundary. Published/default FFmpeg
+2.0.8 and pinned Next023 rs.7 match all eight source/lock/license/payload-qualified
+archives. Actual clean Linux public cold/cache/v207 upgrade and native Windows
+cold/cache/upgrade/explicit-choice Health proofs join the unchanged source/output
+controls, sustained TS/HLS/Dutch-audio/caption receipts and current six ARM host
+builds. Native ARM remains provisionally assumed/deferred; QEMU is emulation.
+Both Mac targets remain deferred. The explicit consumer-source comparison joins
+current clean Rust/manifests to Linux97720 and native Windows97720 plus the
+verified launcher. This is a qualified modular application, not a newly rebuilt
+single-source archive: compiled changelog stays at97720 and the launcher has its
+own pinned native inputs. No current whole-source release, new trial or CI claim.
+The later source-output summary includes three foreign working hashes; actual
+clean34/97720 producer inventories match current clean consumers. Streaming
+RemoteStream fixtures bypass the changed prepared earlier-revision selector and
+publication recovery; no foreign AMM change is adopted. Source/body/AV oracles
+stay unchanged. New localization/authoring proof keeps its completed owners.
+All three typed prerequisites are Complete; exact receipts and clause mappings
+are bound in the canonical result. Current remaining work belongs to standalone
+base aggregation and the shared final gate, not this completed runtime owner.
+
 Completed current clean-source ARM application builds (2026-10-30):
 managed-current-candidates/final-adoption/current-artifacts/qualification.json
 closes the missing current ARM host-build component. Clean checkpoint b5b18778,
@@ -17437,8 +17470,8 @@ This removes the current ARM host-build gap below; older PS1 builds stay closed
 at their original source. It is build/identity proof, not native ARM execution,
 a new runtime/client trial or Mac acceptance. Existing runtime software/QEMU,
 Linux/native-Windows adoption/Health/output and public/default eight-archive
-receipts retain their explicit scopes. Next: finish the existing accepted
-runtime/application join against those exact consumer-source boundaries.
+receipts retain their explicit scopes; the accepted runtime/application join
+is completed above against those exact consumer-source boundaries.
 
 Completed public/default four-RID runtime identity join (2026-10-30):
 managed-current-candidates/final-adoption/four-rid-join/qualification.json closes
@@ -17553,9 +17586,9 @@ including JS/no-JS, hydration, responsive menu and no console/page errors.
 All three hosts exit0 under normal SIGTERM without force; groups are absent.
 This closes Linux actual default acquisition/update/cache/Health/web integration,
 not fresh output/nativeWindows/ARM or full CI acceptance. Reuse earlier exact-byte
-output and platform proof where inputs remain valid. Next finite join: final
-native Windows package/default adoption, reserving120 minutes; remaining platform
-and final-gate obligations retain their existing owners.
+output and platform proof where inputs remain valid. The native Windows package/
+default-adoption component is now closed at its exact receipts above. Any later
+Windows package trial retains 120 minutes; shared final-gate proof keeps its owner.
 Completed authorized stable publication/local fallback component2026-10-30:
 canonical provider-scan/managed-current-candidates/local-promotion/
 publication-review/execution/stable-ffmpeg/publication/qualification.json owns
@@ -17838,10 +17871,10 @@ the documented unused default-resolution seed. Native-loopback tools replace the
 unreachable WSL adapter; no firewall/tool installation. These negatives remain.
 Accepted promotion/publication and exact adopted-byte final gates remain owned.
 
-Current status: In progress. Stable publication, Linux default adoption, Windows artifact/cold acquisition, managed-colocation restart/update and native runtime-version UI are completed within their explicit scopes. The public/default four-RID runtime byte join is completed above. The current ARM application build gap is closed above. Remaining: finish the accepted runtime/application join against the exact applicable consumer-source boundaries, without replaying closed runtime components.
+Current status: Complete within the current required four-RID boundary. Public/default runtime identities, exact modular application consumers, applicable Health/output and current ARM builds are joined above. Shared final-gate/CI and base aggregate acceptance retain their owners.
 Historical pre-publication status (superseded by the completed components above): Blocked at the separately authorized production-promotion boundary; current-candidate installation/compatibility components are complete within their recorded scopes. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Source-output and the scoped independent PS1/PS2 artifact/platform joins are now Complete, including current ARM host crossbuilds. Exact remaining work: the separately authorized exact production-promotion boundary and exact adopted-byte final gates. Sustained native cached-HLS history/live qualification is closed above within its exact frozen-source/private-candidate boundary. The four sustained native TS gates are closed within their exact frozen-source/candidate scope. Current Linux/nativeWindows installer/cache/identity and actual startup/persisted Health components above are closed and not commissioned again. Earlier candidate.4 proof remains reusable only within unchanged mechanisms, never as installation of new bytes. Final accepted production promotion/publication requires its separate authority; nothing here changes the production pin. Native ARM execution remains Deferred by the explicit maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
 Reuse: ucu-12 exact adopted per-platform manifest and its bounded source/software/managed/transport scopes; audio_language_followup earlier reproduced source/lock/four patches, candidate.4 archives, manager identity/corruption/offline checks and scoped Linux/nativeWindows proof retain their historical boundaries. No package/pin is changed by this Phase9 rejoin. Shared obligations remain with the existing owners, not a second adoption matrix.
-Missing mandatory proof: the final accepted runtime/application join against exact applicable consumer-source boundaries. The public/default four-RID runtime byte join and current clean-source ARM application builds are Complete above. Stable publication, clean Linux cold/cache/upgrade and current Windows artifact/cold acquisition are completed above and must not be reopened without a concrete regression. Reuse valid source/platform/output components within their explicit scopes.
+Missing mandatory proof within this owner: none. Native ARM/Mac deferrals and the modular application source boundary above are explicit. Standalone base aggregation and shared final-gate/CI are not claimed complete here.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.

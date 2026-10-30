@@ -43,10 +43,9 @@ tmp/phase9-f6-native-carriage/work.json owns87/87 TSDuck.
 P9A-03 owns acquisition/leases: descriptors/PTS/NotAcquired are not readiness.
 Local888/889 and Linux/nativeWindows EOF cuts retain F5 scope. Historical
 candidate.4 language/four-package/prepared/manager/startup/Health proof and
-managed.1 negatives remain. Baseline: UCU12 FFmpeg207/Next023rs.6; candidate,
-native and adoption differ.
+managed.1 negatives remain. FFmpeg2.0.8/Next023rs.7: p9a-managed-adoption.
 Closed candidate components: Linux/Windows installer/Health/TS and cached HLS (124 TSDuck/six AV proofs, managed-current-candidates/hls-live-qualification).
-Rust/contracts/Linux rs.7/stable publication closed; final adoption remains.
+Runtime/ARM builds closed; shared final-gate/CI remains.
 EE5/client control and M29 author/admin closed: author-action/,admin/qualification.json.
 Handover/editor and fixed ordinary receiver controls are Complete
 (p9a-client-base). Generic conformance remains separately owned.
@@ -202,7 +201,9 @@ id          = 'teletext-runtime-capability-is-unproven'
 description = 'The selected-runtime capability report has bounded decoder-option and functional text/bitmap probes, localized Health guidance and runtime-bound troubleshooting export, but first-party FFmpeg packages are not yet independently accepted across the three required Linux RIDs and Windows x64. Both macOS RIDs are Deferred by maintainer decision (2026-10-26), not accepted; preserve their code/evidence and resume only with explicit permission. Complete required dependency/licensing and remaining four-platform evidence without making missing optional support fatal to unrelated playback.'
 discovered  = '2026-08-07'
 evidence    = 'p9a-source-output now owns optional original-PES runtime component4a206f08, isolated Linux candidate26a01625: direct/HLS preserve all four tracks and complete declared-clock caption/video rasters; RTSP preserves56 packets with one source and joined cleanup. Exact-runtime application capability/Health, producer/consumer integration, required platforms and adoption remain open. P9A-02 evidence owns the bounded probe in `teletext_probe.rs`, its `version.rs` integration, exact v2.0.6 package hashes and functional Linux x64/Windows plus emulated ARM64/ARMv7 proof, Health/troubleshooting checks and remaining required four-platform acceptance. The separate macOS artifact/native milestones retain deferred future proof obligations outside the current required graph. Package presence and UCU exceptions do not satisfy required four-RID acceptance.'
-resolved    = false
+resolved    = true
+
+resolution  = 'P9A-02 and p9a-managed-adoption accept the required four-RID FFmpeg2.0.8/Next023rs7 runtime boundary at managed-current-candidates/final-adoption/accepted-join/qualification.json. Exact public source/license/build/functional decoder/Health/ordinary output joins close this debt; historical candidate evidence remains above. Mac/native ARM and enhanced-only deferrals retain their explicit status; no full9A or green CI claim.'
 
 [[debt]]
 id          = 'teletext-stream-and-page-metadata-is-not-modeled'
