@@ -62,20 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-final-gate — shared exact-source final checks/CI.
-Next finite action: compare the existing shared Rust/contracts/matched-bundle
-receipts to the accepted clean application inputs; run only a concrete missing
-or affected required check. Prepare the exact reviewable source/artifact and
-required general/1.5 CI boundary. Root push is not commissioned: any missing
-remote CI needs explicit authorization for the concrete prepared SHA/destination.
-Do not call focused runs full green CI or start9B before revised9A is accepted.
-Completed: standalone p9a-level15 and P9A-03, canonical provider-scan/
-level15-acceptance/qualification.json. Every L15-A..E primary owner is Complete;
-128 original decoder positives plus four authorized header reference cases retain
-their different scopes, actual Kodi controls stay representative, and ARM native
-remains assumed/deferred. Shared final gate is the sole current engine direction.
-All own checks terminal; no active test host/build. Preserve foreign changes,
-historical negatives and experimental2.5/Mac/native-ARM/editor deferrals.
+Current package: p9a-final-gate — exact prepared CI and final acceptance boundary.
+Next finite action: read failed-job logs from the retained full CI40036778866
+on3e6fead9 and map each required failure to a verified current correction or a
+concrete remaining defect. Keep optional2.5 scope distinct. Then prepare the
+reviewable exact current SHA/destination and required general/1.5 CI obligation;
+Root push/dispatch is not commissioned, so obtain explicit authorization for
+that concrete prepared action. Never use an old-SHA rerun to verify new code.
+Clean-source shared Rust delta is Complete at final-gate/clean-current-20261030/
+qualification.json:33 affected infra tests, strict infra all-target Clippy and
+whole clean format pass; source/foreign bytes exact. Existing8273 workspace and
+separately verified Markdown/runtime/launcher checks remain reusable at scope.
+Remote origin/main f68f444c is already an ancestor; no merge is needed.
+Base/runtime/source/platform owners remain closed. Full9A and production9B wait
+for the shared final gate. All own checks terminal, no active host/build. Preserve
+foreign work, negative evidence and current experimental/platform/editor deferrals.
 No application/Docker release or further runtime publication is commissioned.
 '''
 

@@ -18041,6 +18041,26 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Completed clean-source shared Rust delta (2026-10-30): canonical provider-scan/
+final-gate/clean-current-20261030/qualification.json closes the three remaining
+parallel-working-source input differences in the earlier shared Rust round.
+Existing prepared/subtitle-selection and managed-library-operation modules pass
+33/33 from clean b5b18778 with the original configured target; strict infra
+all-target Clippy and complete clean-workspace format also exit0. All3950 clean
+inputs and every foreign working byte stay exact; no production code changes.
+The original8273-pass/516-skip workspace/doctest round remains valid in its
+recorded scope, combined with separately verified Markdown0.13.5 four-oracle,
+FFmpeg208 fourteen-case and launcher seven Linux/native-case/lint source deltas.
+Their actual source pins agree. This is affected-source revalidation/reuse, not
+a fresh whole-workspace closeout or exact-SHA green GitHub CI. Native runtime,
+UI, transport and accepted base owners stay closed without repeated chains.
+Read-only remote check: origin/main f68f444c is already a local ancestor; no
+additional merge is needed. The most recent full CI40036778866 on old3e6fead9
+failed. Its exact job list is retained in prior-ci-jobs.json. Next bounded action:
+account for those original failures against current fixes before preparing the
+current exact-SHA required general/1.5 CI boundary. Do not rerun the old SHA as
+proof of a new correction. No Root push or workflow dispatch is commissioned.
+
 Completed source-contract/policy component and concrete security repair2026-10-29:
 canonical tmp/phase9-next-local-teletext/provider-scan/final-gate/
 shared-contract-20261029/qualification.json owns selected parity progress,
@@ -18082,11 +18102,12 @@ source/input change requires affected revalidation; this is not a green exact-SH
 GitHub CI, clean-HEAD or all-platform claim.
 Status: In progress. Exact remaining gap: Full engine acceptance is open; registry validation and scoped component passes are not a green full CI, complete authored feature or release/publication claim.
 Reuse: Primary package receipts and unchanged full-gate evidence only when exact scope is valid; same-generation preview is never carriage proof. P9B still depends on parent p9a-04.
-Missing mandatory proof: The remaining final base/shared evidence and required
-runtime adoption after the current required aggregates, with exact applicable
-source/platform/runtime/client/interchange identity. Enhanced-only acceptance
-remains Deferred under the current amendment, not a required aggregate or waived
-base/shared obligation. Reuse the completed Rust component above within scope.
+Missing mandatory proof: current exact-SHA required general/1.5 CI and final
+acceptance join after accounting for prior failed jobs. Standalone base, source
+metadata/output, accepted runtime and required applicable platform owners are
+Complete; local shared Rust/contract/build/manual runtime proofs retain their
+explicit source boundaries above. Enhanced-only acceptance remains Deferred,
+not a required aggregate or waived base/shared obligation. No full9A claim yet.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.
