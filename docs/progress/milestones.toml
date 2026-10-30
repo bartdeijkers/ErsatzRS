@@ -18041,6 +18041,35 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Completed local Next NUL-fixture repair component (2026-10-30): canonical
+provider-scan/final-gate/ci-runtime-pin-20261030/qualification.json,
+next_fixture_followup, owns the actual current CI failure and bounded correction.
+On exact pushed74526def, full CI41085584960 passes general4062, Level1.5
+workspace2339 plus17 source/Next controls; all five original teletext failure
+identities now pass. General Chromium356 pass/5 explicit skips/zero flaky, with
+the unchanged original mobile add-on case passing on attempt0. Its older stall
+remains unclassified. Next451/452 fails with no such table Subtitle during the
+NUL-caption proof; its subsequent ordinary HTTP/Hybrid smoke steps are skipped,
+not passed. Remaining original browser jobs continue and must retain their scope.
+The one-connection in-memory test fixture is reproducibly erased by connection
+retirement: a new deterministic persisted-caption guard first fails with the
+same missing-table error. Locked SQLx0.9 pool docs describe cancelled-acquire
+connection retirement; the precise original cancellation point is inferred,
+not instrumented. Reuse existing file-backed per-test SQLite and fixture seeding,
+keeping max_connections1. The shared schedule body and every existing caption,
+selected-audio, malformed-cache negative, repair/idempotency and cleanup oracle
+are byte-identical; only fixture construction changes. No production code,
+FFmpeg argv, runtime contract, timeout or platform guard changes.
+Isolated exact74526def plus these two test files passes the new guard and the
+unchanged real Native/Next case2/2 using hash-verified public FFmpeg208/Nextrs7.
+The first runtime attempt reached callback bind but sandbox networking denied
+it; preserve that separate environment negative. Same source/oracles with local
+sockets allowed pass unforced. Strict infra/all-target Clippy and complete format
+pass on the original configured target; foreign work and frozen sources remain
+preserved. This completes local fixture correctness, not new-SHA CI or full9A.
+Next: finish the original unaffected browser jobs, then push the local correction
+and inspect required full CI on its new exact SHA; do not rerun745 to prove it.
+
 Completed accepted-runtime CI selection component (2026-10-30): canonical
 provider-scan/final-gate/ci-runtime-pin-20261030/qualification.json retains all
 seven failed-job logs from full CI40036778866 at3e6fead9 and maps their actual

@@ -1141,6 +1141,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve Native/Next caption CI fixture data across replaced database
+  connections, keeping extraction and legacy NUL-cache repair assertions intact.
+
 - Run Next, teletext and browser CI against the accepted FFmpeg 2.0.8 runtime,
   with a regression check that keeps these jobs aligned with the managed default.
 

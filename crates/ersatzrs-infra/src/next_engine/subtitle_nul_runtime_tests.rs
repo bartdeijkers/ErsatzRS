@@ -22,7 +22,7 @@ async fn real_native_next_nul_extraction_and_existing_cache_preserve_selected_ca
         video_buffer_size: 2000,
         ..Default::default()
     };
-    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+    let (pool, locker) = prepare_nul_schedule(&root, &clip, &profile).await;
     prepare_subtitle(&pool).await;
     crate::subtitles::extract_embedded_playout_subtitles(&pool, 1)
         .await
@@ -107,6 +107,49 @@ async fn real_native_next_nul_extraction_and_existing_cache_preserve_selected_ca
         .await;
         callback.stop().await;
     }
+}
+
+async fn prepare_nul_schedule(
+    root: &Path,
+    clip: &Path,
+    profile: &FFmpegProfile,
+) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
+    // Cancelled callbacks may retire the pool's only connection. Persist this
+    // session-spanning fixture so its caption rows survive connection replacement.
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(root.join("captions.sqlite"))
+                .create_if_missing(true),
+        )
+        .await
+        .unwrap();
+    let pool = selection::tests::seed_fixture_pool(pool).await;
+    prepare_schedule_with_pool(pool, clip, false, profile).await
+}
+
+#[tokio::test]
+async fn nul_caption_fixture_survives_connection_replacement() {
+    let root = tempfile::tempdir().unwrap();
+    let (pool, _) = prepare_nul_schedule(
+        root.path(),
+        &root.path().join("fixture.mkv"),
+        &FFmpegProfile::default(),
+    )
+    .await;
+    prepare_subtitle(&pool).await;
+    let sql = r#"SELECT "StreamIndex", "Codec", "Language", "IsExtracted"
+                 FROM "Subtitle" WHERE "MovieMetadataId"=20"#;
+    let before: (i32, String, String, i64) = sqlx::query_as(sql).fetch_one(&pool).await.unwrap();
+
+    // Cancellation may retire a connection; persisted caption selection must survive it.
+    pool.acquire().await.unwrap().close().await.unwrap();
+
+    let after: (i32, String, String, i64) = sqlx::query_as(sql).fetch_one(&pool).await.unwrap();
+    assert_eq!(after, before);
+    assert_eq!(after, (3, "ass".into(), "nld".into(), 0));
+    pool.close().await;
 }
 
 async fn nul_copy_bytes(ffmpeg: &Path, clip: &Path, root: &Path, clean: &[u8]) -> Vec<u8> {

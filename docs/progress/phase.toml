@@ -62,24 +62,26 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-final-gate — exact prepared CI and final acceptance boundary.
-Next finite action: obtain explicit authorization for the concrete prepared Root
-SHA to origin/main with required full general/1.5 CI, then inspect every applicable
-job on that exact SHA. No Root push/dispatch is commissioned by the stable runtime
-publication request. A focused or old-SHA rerun cannot establish full green CI.
-Accepted-runtime CI selection is Complete at final-gate/ci-runtime-pin-20261030/
-qualification.json: three old v2.0.7 overrides now match accepted2.0.8; original
-three-pin red regression,37 artifact/workflow and12 selection green cases, plus
-workflow lint. All seven failures from full CI40036778866 are accounted with
-original logs retained. Its general Chromium mobile hydration stall remains
-unclassified and must be assessed by the new full run; no timeout/retry change.
-Clean-source shared Rust delta remains Complete at final-gate/clean-current-
-20261030/qualification.json:33 affected tests, strict infra Clippy and clean format;
-valid original8273 workspace and scoped Markdown/runtime/launcher checks reused.
-Base/runtime/source/platform owners stay closed; full9A/9B waits for final gate.
-No active owned host/build/check. Preserve foreign work, negative evidence and
-experimental/platform/editor deferrals. No application/Docker release or further
-runtime publication is commissioned.
+Current package: p9a-final-gate — verify the local Next NUL-fixture repair in CI.
+Next finite action: finish the remaining unaffected browser jobs in full
+CI41085584960 on74526def, preserving their results. The local fixture correction
+is Complete: deterministic connection retirement reproduces no such table
+Subtitle, then the persistent per-test database guard and unchanged real
+Native/Next caption proof pass2/2; strict infra Clippy and format pass.
+Canonical ci-runtime-pin-20261030/qualification.json next_fixture_followup owns
+source/oracle equivalence, public208/rs7 hashes and the separate sandbox bind
+negative. Local checkout tmp/worktrees/p9a-next-nul-fixture excludes foreign Rust.
+Then push the verified correction to origin/main under the authorized CI repair
+scope and inspect full required general/1.5 CI on the new exact SHA. The old
+Next451/452 failure skipped its ordinary HTTP/Hybrid smoke steps; those remain
+mandatory in the new run. An old-SHA or focused rerun is not full new-SHA green.
+Current original run:9/13 required jobs succeed; Next failed; three browser jobs
+remain. General Chromium356 pass/5 explicit skips/zero flaky, including original
+mobile case on attempt0; its earlier stall stays unclassified. Monitor live
+run41085584960 through session12265. All local checks terminal.
+Accepted base/runtime/source/platform owners stay closed. Full9A/9B waits for
+final gate. Preserve foreign work, negative proof and current experimental,
+platform and optional-editor decisions. No release/publication commissioned.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

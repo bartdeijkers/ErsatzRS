@@ -251,11 +251,21 @@ async fn prepare_schedule(
     muted: bool,
     profile: &FFmpegProfile,
 ) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
+    let pool = selection::tests::fixture_pool().await;
+    prepare_schedule_with_pool(pool, clip, muted, profile).await
+}
+
+async fn prepare_schedule_with_pool(
+    pool: crate::db::DbPool,
+    clip: &Path,
+    muted: bool,
+    profile: &FFmpegProfile,
+) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
     use ersatzrs_core::repositories::{
         ChannelRepository, FfmpegProfileRepository, PlayoutRepository,
     };
     use ersatzrs_domain::{ChannelSubtitleMode, PinnedStreamSelection};
-    let (pool, locker, mut channel, _) = schedule::tests::fixture().await;
+    let (pool, locker, mut channel, _) = schedule::tests::fixture_with_pool(pool).await;
     sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
         .execute(&pool)
         .await
