@@ -17423,6 +17423,23 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
+Completed current clean-source ARM application builds (2026-10-30):
+managed-current-candidates/final-adoption/current-artifacts/qualification.json
+closes the missing current ARM host-build component. Clean checkpoint b5b18778,
+tree 8e5ec5f6 and all 3,950 tracked input hashes remain exact before/after both
+builds. The existing pinned cross images and release recipe produce all six
+web/scanner/healthcheck executables: AArch64 and ARMv7 EABI hard-float. Full
+artifact hashes/headers are frozen; GLIBC maxima remain 2.39 for web/scanner and
+2.34 for healthcheck, matching the prior baseline. Both release builds and
+controller session 36698 exit 0; both exact build containers are removed
+without forced cleanup, and every foreign working byte remains unchanged.
+This removes the current ARM host-build gap below; older PS1 builds stay closed
+at their original source. It is build/identity proof, not native ARM execution,
+a new runtime/client trial or Mac acceptance. Existing runtime software/QEMU,
+Linux/native-Windows adoption/Health/output and public/default eight-archive
+receipts retain their explicit scopes. Next: finish the existing accepted
+runtime/application join against those exact consumer-source boundaries.
+
 Completed public/default four-RID runtime identity join (2026-10-30):
 managed-current-candidates/final-adoption/four-rid-join/qualification.json closes
 this byte/source-equivalence component. Fresh GitHub metadata confirms stable
@@ -17436,12 +17453,11 @@ and launcher test-dependency lock changes differ. Linux/default/native-Windows
 acquisition/update/Health and scoped transport receipts are reused, not replayed;
 ARM runtime software proof remains QEMU, not native. Primary receipt hashes are
 bound in the canonical result; no new runtime trial, CI or publication claim.
-Exact remaining application boundary: the old ARM host build inventory has74
-changed regular inputs, including45 production Rust files under the recorded
-classification. Those completed PS1 builds remain valid at their original source;
-they do not establish a current-source build. Next finite work is the existing
-final-gate clean application source/artifact join for the required targets, using
-existing build/package recipes and retaining the120-minute Windows allocation.
+Historical application gap, now closed by the current ARM component above: the old ARM host build inventory has74
+changed regular inputs, including 45 Rust files under the recorded comparison.
+The completed PS1 builds remain valid at their original source. The current
+component above supplies the missing builds without reclassifying old evidence.
+Any later native Windows package trial retains the 120-minute allocation.
 No new feature or platform requirement is introduced.
 
 Completed native Firefox runtime-version UI proof2026-10-30:
@@ -17822,10 +17838,10 @@ the documented unused default-resolution seed. Native-loopback tools replace the
 unreachable WSL adapter; no firewall/tool installation. These negatives remain.
 Accepted promotion/publication and exact adopted-byte final gates remain owned.
 
-Current status: In progress. Stable publication, Linux default adoption, Windows artifact/cold acquisition, managed-colocation restart/update and native runtime-version UI are completed within their explicit scopes. The public/default four-RID runtime byte join is completed above. Remaining: qualify outstanding current-clean-source application artifacts and compose the final application/platform join without replaying closed runtime components.
+Current status: In progress. Stable publication, Linux default adoption, Windows artifact/cold acquisition, managed-colocation restart/update and native runtime-version UI are completed within their explicit scopes. The public/default four-RID runtime byte join is completed above. The current ARM application build gap is closed above. Remaining: finish the accepted runtime/application join against the exact applicable consumer-source boundaries, without replaying closed runtime components.
 Historical pre-publication status (superseded by the completed components above): Blocked at the separately authorized production-promotion boundary; current-candidate installation/compatibility components are complete within their recorded scopes. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Source-output and the scoped independent PS1/PS2 artifact/platform joins are now Complete, including current ARM host crossbuilds. Exact remaining work: the separately authorized exact production-promotion boundary and exact adopted-byte final gates. Sustained native cached-HLS history/live qualification is closed above within its exact frozen-source/private-candidate boundary. The four sustained native TS gates are closed within their exact frozen-source/candidate scope. Current Linux/nativeWindows installer/cache/identity and actual startup/persisted Health components above are closed and not commissioned again. Earlier candidate.4 proof remains reusable only within unchanged mechanisms, never as installation of new bytes. Final accepted production promotion/publication requires its separate authority; nothing here changes the production pin. Native ARM execution remains Deferred by the explicit maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
 Reuse: ucu-12 exact adopted per-platform manifest and its bounded source/software/managed/transport scopes; audio_language_followup earlier reproduced source/lock/four patches, candidate.4 archives, manager identity/corruption/offline checks and scoped Linux/nativeWindows proof retain their historical boundaries. No package/pin is changed by this Phase9 rejoin. Shared obligations remain with the existing owners, not a second adoption matrix.
-Missing mandatory proof: outstanding current-clean-source application artifact builds and their final application/platform join; the public/default four-RID runtime byte/source-equivalence join is Complete above. Stable publication, clean Linux cold/cache/upgrade and current Windows artifact/cold acquisition are completed above and must not be reopened without a concrete regression. Reuse valid source/platform/output components within their explicit scopes.
+Missing mandatory proof: the final accepted runtime/application join against exact applicable consumer-source boundaries. The public/default four-RID runtime byte join and current clean-source ARM application builds are Complete above. Stable publication, clean Linux cold/cache/upgrade and current Windows artifact/cold acquisition are completed above and must not be reopened without a concrete regression. Reuse valid source/platform/output components within their explicit scopes.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.

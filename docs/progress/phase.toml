@@ -62,25 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-managed-adoption / p9a-final-gate — current clean-source
-application artifact join for the four required RIDs.
-Next finite action: freeze the current clean checkpoint, excluding preserved
-foreign changes, and qualify outstanding current-source host artifact builds
-using existing recipes/caches. Reuse matched Linux/native Windows runtime,
-launcher, UI, source-output and transport proof within its exact source boundary;
-retain the120-minute Windows-package allocation. The old ARM host builds are
-Complete at their older source, but74 regular inputs (45 production Rust files)
-now differ, so they cannot establish current-source artifacts. Do not reopen
-completed platform or source-output components or add unrelated variants.
-Completed runtime byte/source-equivalence join: final-adoption/four-rid-join/
-qualification.json; all eight published/default FFmpeg2.0.8 and Next023rs7
-archives/payloads/source/licenses match, ten startup/Health sources remain exact.
-Native Firefox runtime UI, Linux cold/cache/upgrade and Windows managed
-cache/update/explicit-choice components remain Complete at their canonical
-final-adoption receipts. All owned checks are terminal; no active product host.
-No Root push, application/Docker release or further runtime publication is
-commissioned. Keep foreign changes and all historical negatives. Retain revised
-Level1/1.5 acceptance, experimental2.5/upstream-editor/Mac/native-ARM deferrals.
+Current package: p9a-managed-adoption — close the accepted runtime/application join.
+Next finite action: compare current clean consumer inputs to the completed Linux
+97720 and native-Windows 97720 plus verified launcher receipts, and compose their
+exact public/default/runtime/Health/output joins with the completed current ARM
+builds. Mark this owner Complete only when its existing four-RID criterion is
+proved; identify a concrete missing clause if any, without inventing variants or
+reopening closed components. Shared final-gate obligations keep their owner.
+Current ARM host-build component is Complete: final-adoption/current-artifacts/
+qualification.json, clean b5b18778/tree 8e5ec5f6, 3,950 exact inputs, all six correct
+ELFs and baseline GLIBC maxima, both builds/controller exit 0 and both owned
+containers removed unforced. The old-source/current-source ARM build gap is gone.
+Native ARM remains assumed/deferred, not tested; existing QEMU is emulation.
+All own checks are terminal; no active product host/build remains. Root push,
+application/Docker release and further runtime publication are not commissioned.
+Preserve foreign changes, historical negatives and all current deferrals.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
