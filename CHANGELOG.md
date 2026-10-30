@@ -1144,8 +1144,9 @@ release section when tagging a release.
 - Preserve Native/Next caption CI fixture data across replaced database
   connections, keeping extraction and legacy NUL-cache repair assertions intact.
 
-- Run Next, teletext and browser CI against the accepted FFmpeg 2.0.8 runtime,
-  with a regression check that keeps these jobs aligned with the managed default.
+- Run Next, teletext and browser CI against the accepted FFmpeg 2.0.8 runtime.
+  Keep runtime selection aligned with the managed default and verify browser
+  Health against its independently qualified clock capability and tool hashes.
 
 - Keep automatically downloaded Windows FFmpeg tools managed across tray-launcher
   restarts, so update checks and installed-version Health reporting remain active.

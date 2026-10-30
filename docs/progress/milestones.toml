@@ -18041,6 +18041,28 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Completed browser Health expectation component (2026-10-30): canonical
+ci-runtime-pin-20261030/qualification.json health_expectation_followup preserves
+four original Chromium failures from full CI41085584960 at74526def. That job
+passes58, skips3 and fails only the four decoder-Health cases: it expects Info
+because the test defaults to an unqualified original_pts=false, but independently
+qualified public FFmpeg2.0.8 correctly reports Pass. Declare the existing expected
+capability=true and independently verified Linux x64 FFmpeg/ffprobe payload hashes
+in browser CI; do not infer expectations from Health under test. Product code,
+all status/message/clock/identity/contrast/console assertions and timeouts remain
+unchanged; only the stale explanatory test comment changes.
+The added workflow regression first fails against missing declarations, then all
+38 artifact/workflow and12 selection cases plus actionlint pass. Reuse exact745
+CI matched server/site from the existing same-host cache, verifying its logged
+archive digest and every payload through existing strict restore/prebuilt paths.
+Unchanged Health assertions pass8/8 in Chromium/Firefox (EN/NL, JS/no-JS,
+light/dark) with no skips/flaky cases, including exact qualified tool hashes.
+Existing wrapper exits0 and removes its owned temporary host/site/database.
+This closes local configuration correctness; no new full-CI green claim.
+Next: retain the final original Firefox job conclusion, then push both verified
+local corrections and inspect every required job on the new exact SHA.
+
+
 Completed local Next NUL-fixture repair component (2026-10-30): canonical
 provider-scan/final-gate/ci-runtime-pin-20261030/qualification.json,
 next_fixture_followup, owns the actual current CI failure and bounded correction.

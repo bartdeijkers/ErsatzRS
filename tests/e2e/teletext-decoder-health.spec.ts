@@ -2,8 +2,8 @@ import { expect, Locator, test } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
 
 const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
-// The published runtime lacks the optional Live-clock contract. Candidate runs
-// must declare their independently qualified expectation rather than infer it
+// Default to the unqualified Live-clock contract. Qualified runtime runs must
+// declare their independently established expectation rather than infer it
 // from the Health result being tested.
 const originalPtsSetting = process.env.ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS ?? 'false';
 if (!['true', 'false'].includes(originalPtsSetting)) {

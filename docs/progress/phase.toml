@@ -62,26 +62,26 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-final-gate — verify the local Next NUL-fixture repair in CI.
-Next finite action: finish the remaining unaffected browser jobs in full
-CI41085584960 on74526def, preserving their results. The local fixture correction
-is Complete: deterministic connection retirement reproduces no such table
-Subtitle, then the persistent per-test database guard and unchanged real
-Native/Next caption proof pass2/2; strict infra Clippy and format pass.
-Canonical ci-runtime-pin-20261030/qualification.json next_fixture_followup owns
-source/oracle equivalence, public208/rs7 hashes and the separate sandbox bind
-negative. Local checkout tmp/worktrees/p9a-next-nul-fixture excludes foreign Rust.
-Then push the verified correction to origin/main under the authorized CI repair
-scope and inspect full required general/1.5 CI on the new exact SHA. The old
-Next451/452 failure skipped its ordinary HTTP/Hybrid smoke steps; those remain
-mandatory in the new run. An old-SHA or focused rerun is not full new-SHA green.
-Current original run:9/13 required jobs succeed; Next failed; three browser jobs
-remain. General Chromium356 pass/5 explicit skips/zero flaky, including original
-mobile case on attempt0; its earlier stall stays unclassified. Monitor live
-run41085584960 through session12265. All local checks terminal.
+Current package: p9a-final-gate — verify the local CI corrections on a new SHA.
+Next finite action: let the remaining original Level1.5 Firefox job in full
+CI41085584960 at74526def finish and preserve its actual conclusion. Then push
+verified local Next NUL-fixture and browser Health-expectation corrections to
+origin/main under the authorized CI-repair scope; inspect all required general/
+1.5 jobs on the new exact SHA, including ordinary Next HTTP/Hybrid smoke skipped
+by the old failure. A focused or old-SHA rerun is not full new-SHA green.
+Completed locally: persistent per-test NUL fixture2/2 real Native/Next and guard,
+strict infra Clippy/format; explicit independently qualified public208 clock and
+payload expectations, red-to-green workflow regression,38 artifact/workflow and
+12 selection controls, actionlint, unchanged Health8/8 Chromium/Firefox EN/NL,
+JS/no-JS and light/dark. Canonical final-gate/ci-runtime-pin-20261030/
+qualification.json next_fixture_followup and health_expectation_followup own proof.
+Current original run:10/13 required jobs succeed; Next and Level1.5 Chromium fail;
+Level1.5 Firefox is still running. Chromium58 pass/3 skip/4 Health failures;
+general Chromium356/5 skip and Firefox331/30 skip, both zero flaky, retained.
+No product Health weakening, new runtime publication or application release.
 Accepted base/runtime/source/platform owners stay closed. Full9A/9B waits for
-final gate. Preserve foreign work, negative proof and current experimental,
-platform and optional-editor decisions. No release/publication commissioned.
+final gate. Preserve foreign work, negatives and all experimental/platform/editor
+decisions. No active owned local host/check; original remote CI remains active.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

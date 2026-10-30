@@ -564,6 +564,16 @@ class FocusedAuditSelection(unittest.TestCase):
                 self.assertEqual(pins, [default[1]],
                                  "runtime CI must exercise the accepted application default")
 
+    def test_browser_health_declares_independently_qualified_runtime(self):
+        # Health must be checked against the published payload qualification,
+        # not used to derive its own expected capability or executable identity.
+        environment = self.jobs["hydration"].split("    steps:\n", 1)[0]
+        self.assertRegex(environment,
+                         r'(?m)^      ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS: "true"$')
+        for binary in ("FFMPEG", "FFPROBE"):
+            self.assertRegex(environment,
+                             rf'(?m)^      ERSATZRS_TELETEXT_E2E_{binary}_SHA256: [a-f0-9]{{64}}$')
+
     def test_audit_recovery_runs_only_preflight_format_and_audit(self):
         self.assertEqual(self.scheduled(audit_only=True), {"preflight", "fmt", "deny"})
 

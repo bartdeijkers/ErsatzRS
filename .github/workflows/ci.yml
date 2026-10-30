@@ -762,6 +762,11 @@ jobs:
       # from test-results/.
       ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.suite }}-${{ matrix.project }}
       ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.8
+      # Independently qualified Linux x64 2.0.8 payloads; never infer the
+      # expected capability or identity from the Health result under test.
+      ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS: "true"
+      ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256: 26a01625635b3ac5832cb3967d877ca9317976ff03739ec8fc1b528e4ae4b094
+      ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256: bd22c12f30641250c72980473a6f97726db980455f3c4355f7781d84782095db
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local web artifact
