@@ -18041,6 +18041,23 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Current completed-CI boundary (2026-10-31): canonical ci-runtime-pin-20261030/
+qualification.json corrected_ci now owns all14 terminal jobs of full push
+CI41116298317 at exact2da9fa56:12 required successes, one general Chromium failure
+and the expected push-event commitlint skip. Next453 and both formerly skipped
+ordinary HTTP/Hybrid smokes pass. Both required1.5 browsers now pass all eight
+original Health failures on first attempt with unchanged qualified clock/hash
+oracles; full reports are62/3skip Chromium and57/8skip Firefox, zero flaky.
+The sole red is the independently trace-proven responsive-selection test race,
+corrected locally in2212fa9f with4/4 existing headed localized flows and all
+mobile/selection assertions retained. Original failures stay preserved; no job
+retry, cancellation or source-independent green claim. Completed round review
+finds no additional justified change beyond that correction: observed same-host
+artifact reuse and required serialized browser coverage remain intact.
+Next: inspect every applicable job in full CI on the isolated repair's exact
+pushed revision. Only that current full gate can close9A; no production9B yet.
+
+
 Completed responsive selection CI synchronization component (2026-10-30):
 canonical ci-runtime-pin-20261030/qualification.json nav_drawer_followup owns
 full CI41116298317 at2da9fa56 general Chromium355 pass/1fail/5skip and its trace.
