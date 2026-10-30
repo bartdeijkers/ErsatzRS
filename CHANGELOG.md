@@ -1128,7 +1128,9 @@ release section when tagging a release.
   pending; generic engine acceptance still precedes the single TV-guide add-on.
 - Plan Phase 9 as a generic teletext engine followed by one new TV-guide
   teletext add-on in ErsatzRS-Addons, with pages and navigation inspired only
-  by the TV-guide-related NOS Teletekst pages 200–299.
+  by the TV-guide-related NOS Teletekst pages 200–299. Require configurable
+  output page ranges and index pages per profile, matching navigation and visible
+  rejection of collisions or insufficient capacity; these are planned Phase 9B requirements.
   Require independent engine acceptance before content work and integrated
   host/add-on proof before phase closeout; runtime behavior is unchanged.
 

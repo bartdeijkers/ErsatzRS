@@ -18340,6 +18340,22 @@ and unrelated information pages are excluded. The add-on owns the numbered
 page map, index/subpage navigation, layout and TV-guide content, using host-supplied
 read-only programme context. The host retains generic validation, publication,
 rendering and delivery; no hard-coded TV-guide content or external renderer.
+The operator configures the inclusive output page range and an index page inside
+that range in each named TV-guide profile, using the existing profile-scoped
+settings mechanism. NOS 200–299 is reference material, not a fixed output range;
+for example, separate profiles may publish the guide at 200–299 or 400–499.
+The same installed addon supports these different assignments on different
+channels simultaneously without rewriting global addon settings or templates.
+The addon builds its complete page map and internal index, previous/next and
+colour-key navigation from the selected range and index. Subpage identities and
+links remain consistent; generated pages and internal navigation stay within
+the configured range. Reject invalid ranges, an index outside the range,
+collisions with another enabled addon on the same channel, and insufficient
+capacity for the complete guide visibly before publication. Never silently
+truncate the guide, renumber outside the range or replace another addon's pages.
+Rejected settings/output retain the last accepted generation and ordinary
+playback under the existing atomic publication and failure policy. Localize the
+range/index controls and validation messages in every supported admin culture.
 Prove current/next/continuing and Later Today, filler, empty guides, long titles,
 multilingual text and timezone/DST behavior. Exact compatible host and package
 revisions demonstrate explicit install/enable, guide-driven page refresh and
@@ -18392,6 +18408,19 @@ Existing workspace closeout, Clippy, Leptos, parity-check, smoke, changed-output
 TSDuck and progress validation gates remain required.
 With the exact production package, prove different themes simultaneously on
 two channels, independent binding toggles, profile edits and mirror isolation.
+With the exact production addon, use two channel profiles with distinct output
+ranges (for example 200–299 and 400–499) and index pages. Prove simultaneous
+isolation, matching browser/stream page identities and working page/subpage,
+index, previous/next and colour-key navigation in each configured map. Change
+one profile's range/index through localized admin, validate and preview before
+explicit publication; the other channel and global package settings stay
+unchanged. Prove the assignment survives restart and subsequent guide refresh.
+Reject invalid ranges, out-of-range indexes, same-channel addon collisions and
+insufficient guide capacity with actionable localized errors, no silent
+truncation and no publication of a partial map; retain the prior accepted pages
+and ordinary AV/selected subtitle/audio behavior. Demonstrate that the same
+numbers on separate channels do not create a false collision. These proofs are
+part of the existing localized browser, transport and suitable-client gates.
 Exercise Lua profile/on/off transitions, interval expiry and Continue, handled
 invalid profiles, failed-script rollback, restart during/after overrides and
 Refresh/Reset boundaries. Compare actual stream/browser generation and content,
