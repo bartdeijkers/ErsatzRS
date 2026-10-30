@@ -18041,6 +18041,30 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Completed accepted-runtime CI selection component (2026-10-30): canonical
+provider-scan/final-gate/ci-runtime-pin-20261030/qualification.json retains all
+seven failed-job logs from full CI40036778866 at3e6fead9 and maps their actual
+failures to current fixes/evidence. The remaining concrete configuration defect
+is corrected: Next, teletext and browser jobs now pin the accepted public2.0.8,
+matching DEFAULT_MANAGED_FFMPEG_TAG rather than overriding it with v2.0.7.
+One existing-workflow regression fails at all three old pins, then passes after
+the three-line correction. All37 artifact/workflow and12 teletext-selection
+regressions pass; actionlint passes. General/1.5 coverage and optional2.5 dispatch,
+producer/consumer boundaries, assertions and timeouts remain unchanged. The first
+linter attempt failed before execution on the filesystem sandbox's Snap runtime
+directory; the identical installed linter exits0 outside that sandbox.
+Old cargo-deny CLI and read-only transaction-lint failures have current policy/
+architecture proof; the three original Next troubleshooting cases and original
+shared editor case pass in the retained full Rust round. Runtime outpoint/audio
+fixes and provisioning aliases are joined to the accepted runtime receipts.
+The old general Chromium mobile add-on hydration stall remains unclassified:
+scoped later browser passes do not explain it. Preserve the negative and assess
+that unchanged case in the next required full CI; no retry/timeout relaxation.
+This closes configuration drift and prior-failure accounting, not exact-SHA CI.
+Next: authorize the concrete prepared Root SHA to origin/main and run required
+full general/1.5 CI; inspect every applicable job on that SHA before final join.
+No Root push, dispatch, application/Docker release or new publication performed.
+
 Completed clean-source shared Rust delta (2026-10-30): canonical provider-scan/
 final-gate/clean-current-20261030/qualification.json closes the three remaining
 parallel-working-source input differences in the earlier shared Rust round.
@@ -18057,8 +18081,8 @@ UI, transport and accepted base owners stay closed without repeated chains.
 Read-only remote check: origin/main f68f444c is already a local ancestor; no
 additional merge is needed. The most recent full CI40036778866 on old3e6fead9
 failed. Its exact job list is retained in prior-ci-jobs.json. Next bounded action:
-account for those original failures against current fixes before preparing the
-current exact-SHA required general/1.5 CI boundary. Do not rerun the old SHA as
+the newer accepted-runtime CI component above completes that accounting;
+prepare the current exact-SHA required general/1.5 CI boundary. Do not rerun the old SHA as
 proof of a new correction. No Root push or workflow dispatch is commissioned.
 
 Completed source-contract/policy component and concrete security repair2026-10-29:
@@ -18103,7 +18127,8 @@ GitHub CI, clean-HEAD or all-platform claim.
 Status: In progress. Exact remaining gap: Full engine acceptance is open; registry validation and scoped component passes are not a green full CI, complete authored feature or release/publication claim.
 Reuse: Primary package receipts and unchanged full-gate evidence only when exact scope is valid; same-generation preview is never carriage proof. P9B still depends on parent p9a-04.
 Missing mandatory proof: current exact-SHA required general/1.5 CI and final
-acceptance join after accounting for prior failed jobs. Standalone base, source
+acceptance join. Prior failed jobs are accounted above, with the original
+Chromium stall explicitly unclassified pending that full run. Standalone base, source
 metadata/output, accepted runtime and required applicable platform owners are
 Complete; local shared Rust/contract/build/manual runtime proofs retain their
 explicit source boundaries above. Enhanced-only acceptance remains Deferred,

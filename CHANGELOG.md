@@ -1141,6 +1141,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Run Next, teletext and browser CI against the accepted FFmpeg 2.0.8 runtime,
+  with a regression check that keeps these jobs aligned with the managed default.
+
 - Keep automatically downloaded Windows FFmpeg tools managed across tray-launcher
   restarts, so update checks and installed-version Health reporting remain active.
   Preserve distinct manually colocated tools and explicit environment choices.

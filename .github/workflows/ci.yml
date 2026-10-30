@@ -521,7 +521,7 @@ jobs:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
       # Runtime fixtures share channel1's report path in this owned app-data root.
       NEXTEST_TEST_THREADS: "1"
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.7
+      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.8
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -646,7 +646,7 @@ jobs:
       CARGO_BUILD_JOBS: "1"
       TELETEXT_LEVEL: ${{ matrix.level }}
       NEXTEST_TEST_THREADS: "4"
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.7
+      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.8
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -761,7 +761,7 @@ jobs:
       # Keep each project's result JSON and host log separate; both jobs upload
       # from test-results/.
       ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.suite }}-${{ matrix.project }}
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.7
+      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.8
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local web artifact

@@ -63,21 +63,23 @@ backup, rollback, quarantine and expanded administration, not defers them.
 
 next_steps = '''
 Current package: p9a-final-gate — exact prepared CI and final acceptance boundary.
-Next finite action: read failed-job logs from the retained full CI40036778866
-on3e6fead9 and map each required failure to a verified current correction or a
-concrete remaining defect. Keep optional2.5 scope distinct. Then prepare the
-reviewable exact current SHA/destination and required general/1.5 CI obligation;
-Root push/dispatch is not commissioned, so obtain explicit authorization for
-that concrete prepared action. Never use an old-SHA rerun to verify new code.
-Clean-source shared Rust delta is Complete at final-gate/clean-current-20261030/
-qualification.json:33 affected infra tests, strict infra all-target Clippy and
-whole clean format pass; source/foreign bytes exact. Existing8273 workspace and
-separately verified Markdown/runtime/launcher checks remain reusable at scope.
-Remote origin/main f68f444c is already an ancestor; no merge is needed.
-Base/runtime/source/platform owners remain closed. Full9A and production9B wait
-for the shared final gate. All own checks terminal, no active host/build. Preserve
-foreign work, negative evidence and current experimental/platform/editor deferrals.
-No application/Docker release or further runtime publication is commissioned.
+Next finite action: obtain explicit authorization for the concrete prepared Root
+SHA to origin/main with required full general/1.5 CI, then inspect every applicable
+job on that exact SHA. No Root push/dispatch is commissioned by the stable runtime
+publication request. A focused or old-SHA rerun cannot establish full green CI.
+Accepted-runtime CI selection is Complete at final-gate/ci-runtime-pin-20261030/
+qualification.json: three old v2.0.7 overrides now match accepted2.0.8; original
+three-pin red regression,37 artifact/workflow and12 selection green cases, plus
+workflow lint. All seven failures from full CI40036778866 are accounted with
+original logs retained. Its general Chromium mobile hydration stall remains
+unclassified and must be assessed by the new full run; no timeout/retry change.
+Clean-source shared Rust delta remains Complete at final-gate/clean-current-
+20261030/qualification.json:33 affected tests, strict infra Clippy and clean format;
+valid original8273 workspace and scoped Markdown/runtime/launcher checks reused.
+Base/runtime/source/platform owners stay closed; full9A/9B waits for final gate.
+No active owned host/build/check. Preserve foreign work, negative evidence and
+experimental/platform/editor deferrals. No application/Docker release or further
+runtime publication is commissioned.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

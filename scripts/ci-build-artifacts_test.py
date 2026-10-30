@@ -552,6 +552,18 @@ class FocusedAuditSelection(unittest.TestCase):
     def test_default_manual_run_keeps_every_job(self):
         self.assertEqual(self.scheduled(), set(self.jobs))
 
+    def test_runtime_jobs_match_the_managed_ffmpeg_default(self):
+        runtime = (Path(__file__).resolve().parents[1]
+                   / "crates/ersatzrs-ffmpeg/src/runtime.rs").read_text()
+        default = re.search(r'DEFAULT_MANAGED_FFMPEG_TAG: &str = "([^"]+)"', runtime)
+        self.assertIsNotNone(default, "the managed runtime default must be explicit")
+        for job in ("next_engine", "teletext", "hydration"):
+            with self.subTest(job=job):
+                pins = re.findall(r"^      ERSATZRS_FFMPEG_RELEASE_TAG: (\S+)$",
+                                  self.jobs[job], re.M)
+                self.assertEqual(pins, [default[1]],
+                                 "runtime CI must exercise the accepted application default")
+
     def test_audit_recovery_runs_only_preflight_format_and_audit(self):
         self.assertEqual(self.scheduled(audit_only=True), {"preflight", "fmt", "deny"})
 
