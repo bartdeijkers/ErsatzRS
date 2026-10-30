@@ -17423,6 +17423,27 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
+Completed native Firefox runtime-version UI proof2026-10-30:
+canonical final-adoption/windows/firefox-resize-qualification/qualification.json
+under provider-scan/managed-current-candidates owns one unchanged required headed
+next-version.spec.ts on the corrected launcher4f2035f8/frozen97720 server/site.
+Firefox1538/version153.0 and Playwright1.62.1 pass in6.9s,1 expected/0 skipped/
+failed/flaky: JS/no-JS, exact rs.7 content, actual1280x900→390x844 viewport change,
+hydration, responsive drawer/settings navigation and zero console/page errors.
+The390x844 screenshot is hash-bound and visually checked; runtime Health/decoder,
+managed cache, config/assets and original evidence remain exact. The complete
+native Job exits0 naturally and fully empty. Earlier Chromium proof is reused;
+this is composed per-browser proof, not a new combined-CLI round.
+The initial layered-run viewport stall remains unclassified and preserved. Trace
+shows hydration succeeds before setViewportSize stops completing. Source229 is
+pagehide cleanup on shutdown, not a resize handler; the earlier association was
+incorrect. One independent same-version headed blank-page viewport control passes
+with actual geometry and clean cleanup, then the mandatory standalone spec passes
+on the changed selection candidate. No browser/product JS, preference, assertion
+or30s deadline changed. This closes the named current native UI proof, not an
+underlying Firefox repair, fresh whole-source archive or full9A. Next: compose
+the remaining required four-RID public/default/adopted-byte joins from existing
+primary receipts; reopen only a concrete missing mandatory boundary.
 Completed managed Windows launcher restart/update repair2026-10-30:
 canonical final-adoption/windows/selection-fix/qualification.json under
 provider-scan/managed-current-candidates owns the corrected launcher4f2035f8.
@@ -17780,10 +17801,10 @@ the documented unused default-resolution seed. Native-loopback tools replace the
 unreachable WSL adapter; no firewall/tool installation. These negatives remain.
 Accepted promotion/publication and exact adopted-byte final gates remain owned.
 
-Current status: In progress. Stable publication, Linux default adoption, Windows artifact/cold acquisition and managed-colocation restart/update repair are completed within their explicit scopes. Remaining: bounded native Firefox resize qualification and applicable final adopted-byte/application/platform joins.
+Current status: In progress. Stable publication, Linux default adoption, Windows artifact/cold acquisition, managed-colocation restart/update and native runtime-version UI are completed within their explicit scopes. Remaining: compose the applicable final four-RID public/default/adopted-byte/application/platform joins from their primary receipts.
 Historical pre-publication status (superseded by the completed components above): Blocked at the separately authorized production-promotion boundary; current-candidate installation/compatibility components are complete within their recorded scopes. Current general baseline is accepted UCU12 FFmpeg2.0.7 and four-platform Next023 rs.6, with exact retained Mac rs.4; milestone ucu-12 owns public source/package/managed startup, selected-audio/caption and applicable transport receipts. This supersedes historical022 managed.1 and does not retrospectively adopt earlier Phase9 candidates. Current published rs.6 retains the earlier copied-caption outpoint and selected-audio corrections but lacks the three later source-output contracts. The unpublished current023 rs.7 Linux/software compatibility component is now completed at source-output, canonical next023_source_output_followup; it does not change the production pin. Source-output and the scoped independent PS1/PS2 artifact/platform joins are now Complete, including current ARM host crossbuilds. Exact remaining work: the separately authorized exact production-promotion boundary and exact adopted-byte final gates. Sustained native cached-HLS history/live qualification is closed above within its exact frozen-source/private-candidate boundary. The four sustained native TS gates are closed within their exact frozen-source/candidate scope. Current Linux/nativeWindows installer/cache/identity and actual startup/persisted Health components above are closed and not commissioned again. Earlier candidate.4 proof remains reusable only within unchanged mechanisms, never as installation of new bytes. Final accepted production promotion/publication requires its separate authority; nothing here changes the production pin. Native ARM execution remains Deferred by the explicit maintainer amendment; build/package/emulation checks remain required. The separate current clean-source Windows package trial is completed at p9a-windows-package; it does not adopt the unpublished later source-output contracts. The private-period Mac deferral is explicit; UCU12 hardware debt does not waive required Phase9 checks.
 Reuse: ucu-12 exact adopted per-platform manifest and its bounded source/software/managed/transport scopes; audio_language_followup earlier reproduced source/lock/four patches, candidate.4 archives, manager identity/corruption/offline checks and scoped Linux/nativeWindows proof retain their historical boundaries. No package/pin is changed by this Phase9 rejoin. Shared obligations remain with the existing owners, not a second adoption matrix.
-Missing mandatory proof: native Firefox resize qualification and applicable final adopted-byte/application/platform joins; compose the required four-RID and final gates from their primary receipts. Stable publication, clean Linux cold/cache/upgrade and current Windows artifact/cold acquisition are completed above and must not be reopened without a concrete regression. Reuse valid source/platform/output components within their explicit scopes.
+Missing mandatory proof: applicable final four-RID public/default/adopted-byte/application/platform joins; compose existing required receipts and source-equivalence boundaries without replaying closed components. Stable publication, clean Linux cold/cache/upgrade and current Windows artifact/cold acquisition are completed above and must not be reopened without a concrete regression. Reuse valid source/platform/output components within their explicit scopes.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.
