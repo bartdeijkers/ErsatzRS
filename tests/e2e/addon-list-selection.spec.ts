@@ -108,7 +108,7 @@ for (const javaScriptEnabled of [false, true]) {
       if (javaScriptEnabled) {
         await page.setViewportSize({ width: 390, height: 844 });
         const navigation = page.locator('#nav-toggle');
-        if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+        // Resizing closes the drawer asynchronously; a toggle can reopen it.
         await expect(navigation).toHaveAttribute('aria-expanded', 'false');
         await expect.poll(() => page.locator('[data-nav-drawer]')
           .evaluate(element => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);

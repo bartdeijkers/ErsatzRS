@@ -18041,6 +18041,26 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Completed responsive selection CI synchronization component (2026-10-30):
+canonical ci-runtime-pin-20261030/qualification.json nav_drawer_followup owns
+full CI41116298317 at2da9fa56 general Chromium355 pass/1fail/5skip and its trace.
+The Dutch hydrated selection test reads drawer=true after resize; the actual
+trace then records false before its conditional click and true after that click.
+The responsive handler correctly closes the drawer; the test reopens it.
+Remove only that redundant click, matching existing responsive playout tests.
+Retain closed aria state, offscreen drawer, mobile content bounds and every
+selection preview/save/rejection/import/persistence oracle and timeout.
+The four affected existing headed EN/NL Chromium/Firefox flows pass4/4 with
+zero skipped/flaky cases. Reuse strict matched745 artifact/source qualification:
+production navigation and fixture helpers are unchanged at2da/a66; subsequent
+Rust differences are separately CI-proven test fixtures. Existing no-JS proof
+remains valid. No product UI, translations, runtime or acceptance changes.
+Prepare the repair from pushed2da in the existing owned checkout, keeping the
+parallel locala66 9B planning commit and foreign work separate. The old full
+round's remaining browser jobs must finish before the next exact-SHA push/CI;
+local focused proof does not establish full new-SHA CI green.
+
+
 Completed browser Health expectation component (2026-10-30): canonical
 ci-runtime-pin-20261030/qualification.json health_expectation_followup preserves
 four original Chromium failures from full CI41085584960 at74526def. That job
