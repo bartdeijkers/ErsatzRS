@@ -23,7 +23,7 @@ use crate::version::{
 /// First-party `FFmpeg` build repository used by ADR 0008 runtime acquisition.
 pub const ERSATZRS_FFMPEG_REPOSITORY: &str = "bartdeijkers/ErsatzRS-ffmpeg";
 /// Known-good `ErsatzRS-ffmpeg` release tag used when no runtime is available.
-pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "v2.0.7";
+pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "2.0.8";
 /// Optional operator pin for the managed `FFmpeg` release tag.
 pub const MANAGED_FFMPEG_TAG_ENV_VAR: &str = "ERSATZRS_FFMPEG_RELEASE_TAG";
 /// Set to `0`, `false`, or `no` to forbid startup downloads.
@@ -1379,7 +1379,7 @@ mod tests {
     fn default_manager_uses_ffmpeg_nine_package_line() {
         let config = FfmpegRuntimeManagerConfig::new("/tmp/ersatzrs-ffmpeg-test");
 
-        assert_eq!(config.release_tag, "v2.0.7");
+        assert_eq!(config.release_tag, "2.0.8");
         assert!(!config.release_tag_pinned);
     }
 
@@ -1403,43 +1403,48 @@ mod tests {
 
     #[tokio::test]
     async fn outdated_managed_runtime_downloads_update() {
-        let temp = tempfile::tempdir().expect("temp");
-        seed_managed_runtime(temp.path(), "v1.0.1");
-        let rid = current_ersatzrs_ffmpeg_rid().expect("rid");
-        let archive = package_zip();
-        let checksum = sha256_hex(&archive);
-        let archive_name = format!("ersatzrs-ffmpeg-1.0.2-{rid}.zip");
-        let archive_url = "https://example.test/update.zip";
-        let checksum_url = "https://example.test/update.zip.sha256";
-        let release =
-            release_with_package("v1.0.2", &archive_name, archive_url, checksum_url, None);
-        let config = FfmpegRuntimeManagerConfig::new(temp.path());
-        let client = FakeClient::with_latest_release(release);
-        client.add_download(archive_url, archive);
-        client.add_download(
-            checksum_url,
-            format!("{checksum}  {archive_name}\n").into_bytes(),
-        );
-        let validator = FakeValidator::default();
+        for (installed, latest, archive_version) in [
+            ("v1.0.1", "v1.0.2", "1.0.2"),
+            ("v2.0.7", "2.0.8", "2.0.7-teletext-pts-local"),
+        ] {
+            let temp = tempfile::tempdir().expect("temp");
+            seed_managed_runtime(temp.path(), installed);
+            let rid = current_ersatzrs_ffmpeg_rid().expect("rid");
+            let archive = package_zip();
+            let checksum = sha256_hex(&archive);
+            let archive_name = format!("ersatzrs-ffmpeg-{archive_version}-{rid}.zip");
+            let archive_url = "https://example.test/update.zip";
+            let checksum_url = "https://example.test/update.zip.sha256";
+            let release =
+                release_with_package(latest, &archive_name, archive_url, checksum_url, None);
+            let config = FfmpegRuntimeManagerConfig::new(temp.path());
+            let client = FakeClient::with_latest_release(release);
+            client.add_download(archive_url, archive);
+            client.add_download(
+                checksum_url,
+                format!("{checksum}  {archive_name}\n").into_bytes(),
+            );
+            let validator = FakeValidator::default();
 
-        let report =
-            resolve_or_acquire_ffmpeg_runtime_with(&config, None, None, &client, &validator)
-                .await
-                .expect("runtime");
+            let report =
+                resolve_or_acquire_ffmpeg_runtime_with(&config, None, None, &client, &validator)
+                    .await
+                    .expect("runtime");
 
-        assert_eq!(report.acquisition.source, FfmpegRuntimeSource::Downloaded);
-        assert!(report.acquisition.downloaded_update);
-        assert_eq!(report.acquisition.previous_tag.as_deref(), Some("v1.0.1"));
-        assert_eq!(report.acquisition.latest_tag.as_deref(), Some("v1.0.2"));
-        assert!(Path::new(&report.ffmpeg.path).starts_with(temp.path().join(CURRENT_DIR_NAME)));
-        assert!(Path::new(&report.ffprobe.path).starts_with(temp.path().join(CURRENT_DIR_NAME)));
-        assert!(!report.acquisition.update_available);
-        assert_eq!(
-            fs::read_to_string(temp.path().join(CURRENT_TAG_FILE))
-                .expect("current tag")
-                .as_str(),
-            "v1.0.2"
-        );
+            assert_eq!(report.acquisition.source, FfmpegRuntimeSource::Downloaded);
+            assert!(report.acquisition.downloaded_update);
+            assert_eq!(report.acquisition.previous_tag.as_deref(), Some(installed));
+            assert_eq!(report.acquisition.latest_tag.as_deref(), Some(latest));
+            assert!(Path::new(&report.ffmpeg.path).starts_with(temp.path().join(CURRENT_DIR_NAME)));
+            assert!(Path::new(&report.ffprobe.path).starts_with(temp.path().join(CURRENT_DIR_NAME)));
+            assert!(!report.acquisition.update_available);
+            assert_eq!(
+                fs::read_to_string(temp.path().join(CURRENT_TAG_FILE))
+                    .expect("current tag")
+                    .as_str(),
+                latest
+            );
+        }
     }
 
     #[tokio::test]

@@ -47,16 +47,31 @@ Phase9A local selection amendment, 2026-10-29: the four required Next RIDs now
 select the published rs.7 prerelease by exact archive, payload and source/patch
 identity. This adds the previously qualified burn-clock, source-frame-cut and
 single-use-input corrections to automatic acquisition and release staging.
-Retained macOS rs.4 identities are unchanged. This local application pin does
-not promote either public release to stable/latest, change the FFmpeg default
+Retained macOS rs.4 identities are unchanged. At that checkpoint the local pin
+did not promote a public release to stable/latest, change the FFmpeg default
 or establish final managed adoption. `p9a-managed-adoption` owns the remaining
 application gates and any separately authorized stable FFmpeg publication.
+
+Phase9A stable distribution amendment, 2026-10-30: the maintainer separately
+approved FFmpeg distribution `2.0.8` as stable/Latest. The six published assets
+retain the four qualified runtime archives and their composite source identity;
+archive names and embedded historical2.0.7/local labels remain unchanged.
+Only release-specific provenance and checksums describe the new distribution.
+The numeric tag at `457453f` avoids the existing `v*.*.*` rebuild trigger and
+compares newer than `v2.0.7` under the unchanged updater. The application fallback
+now selects `2.0.8`; latest-stable priority, explicit pins, download policy and
+PATH fallback are unchanged. Existing upgrade coverage also proves this tag
+transition with the historical archive name. Publication and local source
+selection do not establish final application adoption: `p9a-managed-adoption`
+still owns exact adopted-byte Health/output and required platform gates. Keep
+the existing macOS/native-ARM deferrals and all experimental2.5 boundaries.
 
 UCU-12 acceptance is complete within that approved scope. Source-bound local
 and CI evidence is recorded in milestone ucu-12; the deferred macOS component
 and unavailable hardware remain unverified. This does not turn the partial
-six-platform implementation into verified all-platform delivery. Latest
-maintainer scope permits CI and source merge only, without further releases.
+six-platform implementation into verified all-platform delivery. At UCU-12
+closure, maintainer scope permitted CI/source merge only; separately authorized
+Phase9A publications are recorded above.
 
 ## Context
 

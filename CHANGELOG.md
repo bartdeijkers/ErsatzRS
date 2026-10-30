@@ -708,6 +708,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Select the stable FFmpeg 2.0.8 runtime distribution for managed startup and
+  fallback, retaining FFmpeg 9, qualified original-teletext-clock support and
+  existing override, update and offline behavior.
+
 - Extend the isolated Level 1.5 receiver fixture with conceal, flash, double-height
   text and mosaics, with independently checked ordinary-stream delivery and
   selected alternate audio. An explicit owned-client port supports existing LAN

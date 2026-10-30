@@ -17404,7 +17404,7 @@ Closed/stop met: Every currently applicable independent PS1/PS2 clause has its c
 id         = 'p9a-managed-adoption'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Accept the fully qualified managed runtime'
-status     = 'Blocked'
+status     = 'In progress'
 feature    = 'teletext-support'
 depends_on = ['p9a-source-output', 'p9a-windows-package', 'p9a-platform-safety']
 acceptance = '''
@@ -17423,6 +17423,24 @@ Smallest necessary work: After every typed prerequisite closes, perform the exis
 Testable stop condition: The exact adopted runtime satisfies every required four-RID/platform/Health/source-output gate and accepted selected-audio behavior, with authorization and identity recorded; no unpublished candidate is described as production repair.
 '''
 evidence = '''
+Completed authorized stable publication/local fallback component2026-10-30:
+canonical provider-scan/managed-current-candidates/local-promotion/
+publication-review/execution/stable-ffmpeg/publication/qualification.json owns
+fresh destination preflight, tag2.0.8 at457453f, release428817975 and stable/Latest
+verification. All six draft and public/Latest asset sizes/SHA256s match the exact
+prepared payload before/after publication. FFmpeg main remains1126837; no main,
+Docker or application push/release, rebuild or workflow dispatch. Qualified
+archive bytes/names/source records remain exact; only provenance.release_tag
+changes. The former external publication decision is now resolved by explicit
+maintainer approval. Local runtime fallback is2.0.8; auto-Latest/pin/offline/PATH
+policy is unchanged. Fourteen focused runtime-manager tests pass, retaining
+all original upgrade/checksum/failure/cache cases and adding v2.0.7→2.0.8 with
+the historical2.0.7-teletext-pts-local archive name to the existing upgrade case.
+Strict affected all-target Clippy and format pass. These are policy/installer
+controls, not a fresh actual adopted application/Health/playback or nativeWindows
+trial. Remaining: freeze the final source/artifacts and complete the required
+adopted-byte application/platform joins. Preserve/reuse scoped runtime/source/
+client/editor receipts; a future Windows-package trial retains120 minutes.
 Completed exact local stable-publication payload preparation2026-10-29:
 canonical provider-scan/managed-current-candidates/local-promotion/
 publication-review/execution/stable-ffmpeg/qualification.json owns six staged

@@ -46,7 +46,7 @@ candidate.4 language/four-package/prepared/manager/startup/Health proof and
 managed.1 negatives remain. Baseline: UCU12 FFmpeg207/Next023rs.6; candidate,
 native and adoption differ.
 Closed candidate components: Linux/Windows installer/Health/TS and cached HLS (124 TSDuck/six AV proofs, managed-current-candidates/hls-live-qualification).
-Rust/contracts/Linux rs.7/stable-payload prep closed; final owners remain.
+Rust/contracts/Linux rs.7/stable publication closed; final adoption remains.
 EE5/client control and M29 author/admin closed: author-action/,admin/qualification.json.
 Handover/editor and fixed ordinary receiver controls are Complete
 (p9a-client-base). Generic conformance remains separately owned.
