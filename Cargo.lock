@@ -1259,6 +1259,7 @@ dependencies = [
  "open",
  "process_path",
  "static_vcruntime",
+ "tempfile",
  "tray-item",
  "windows-sys 0.61.2",
 ]

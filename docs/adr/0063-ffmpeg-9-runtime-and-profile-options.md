@@ -34,6 +34,17 @@ incompatible command-line changes. Persisting downloaded paths as ordinary
 operator overrides would also pin an old managed runtime and prevent the
 runtime manager from selecting an update on the next startup.
 
+The Windows tray launcher follows that same ownership boundary: colocated tools
+that exactly match both executables in the tagged managed cache are generated
+copies, not new operator overrides. Leave their selection to the runtime manager
+on restart so update checks and installed-version Health remain active. Compare
+complete regular-file contents with bounded buffers; names, timestamps or a
+matching prefix do not prove identity. Missing, incomplete or different managed
+copies retain manual colocation behavior. Explicit environment choices keep
+precedence, including when a colocated companion completes a partial choice.
+Use the existing state-root override/default layout and normal runtime validation;
+introduce no new marker store, download policy or runtime wire contract.
+
 ## Decision
 
 ErsatzRS supports FFmpeg and ffprobe **9.x**. Startup rejects versions below 9

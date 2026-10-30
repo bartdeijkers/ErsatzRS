@@ -10,6 +10,11 @@
 //! stays green on the Linux CI; the launcher is only meaningful on Windows.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+// The Windows command-selection policy is filesystem-only and intentionally
+// tested on every host; non-Windows production builds retain their no-op main.
+#[cfg(any(windows, test))]
+mod ffmpeg_selection;
+
 #[cfg(not(windows))]
 fn main() {
     println!("ErsatzRS launcher is Windows-only; run ersatzrs-web directly on this platform.");
@@ -159,16 +164,13 @@ mod windows_launcher {
             .stderr(Stdio::null())
             .creation_flags(CREATE_NO_WINDOW);
 
-        // Env var names match ersatzrs-ffmpeg's path resolution (version.rs).
-        set_env_if_file(
+        let (state_dir, explicit_ffmpeg, explicit_ffprobe) = ffmpeg_startup_selection();
+        crate::ffmpeg_selection::configure_colocated_tools(
             &mut command,
-            "ERSATZRS_FFMPEG__PATH",
-            exe_dir.join("ffmpeg.exe"),
-        );
-        set_env_if_file(
-            &mut command,
-            "ERSATZRS_FFPROBE__PATH",
-            exe_dir.join("ffprobe.exe"),
+            exe_dir,
+            &state_dir,
+            explicit_ffmpeg,
+            explicit_ffprobe,
         );
 
         // Point Leptos at the bundled hydration assets (staged under `site/`) so
@@ -190,10 +192,37 @@ mod windows_launcher {
         command.spawn()
     }
 
-    fn set_env_if_file(command: &mut Command, key: &str, path: PathBuf) {
-        if path.is_file() {
-            command.env(key, path);
-        }
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "Windows launcher startup reads the child environment before spawning; no process-global mutation"
+    )]
+    fn ffmpeg_startup_selection() -> (PathBuf, bool, bool) {
+        // Keep the existing state layout from
+        // ersatzrs_infra::file_system_layout::app_state_folder without adding
+        // an infrastructure dependency to this standalone launcher.
+        let state = std::env::var_os("ERSATZRS_APP_STATE_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                directories::BaseDirs::new().map_or_else(
+                    || PathBuf::from("."),
+                    |dirs| dirs.home_dir().join(".ersatzrs"),
+                )
+            });
+        let explicit = |keys: &[&str]| {
+            keys.iter().any(|key| {
+                std::env::var_os(key)
+                    .and_then(|value| value.into_string().ok())
+                    .is_some_and(|value| !value.trim().is_empty())
+            })
+        };
+        // Windows environment names are case-insensitive, including the
+        // mixed-case ErsatzRS aliases recognized by the runtime manager.
+        (
+            state,
+            explicit(&["ERSATZRS_FFMPEG__PATH", "FFMPEG_PATH"]),
+            explicit(&["ERSATZRS_FFPROBE__PATH", "FFPROBE_PATH", "ERSATZRS_FFPROBE"]),
+        )
     }
 
     /// Resolve `%LOCALAPPDATA%\ErsatzRS\logs`, matching

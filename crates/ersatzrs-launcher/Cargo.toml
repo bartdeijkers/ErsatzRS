@@ -36,6 +36,9 @@ windows-sys = { version = "0.61", features = [
 embed-resource = "3"
 static_vcruntime = "3"
 
+[dev-dependencies]
+tempfile = "3.27.0"
+
 # This crate is the intentional exception to the workspace-wide
 # `unsafe_code = "forbid"` lint. It makes a few small Win32 FFI calls that have
 # no safe wrapper: console control (AttachConsole + GenerateConsoleCtrlEvent) to

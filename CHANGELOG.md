@@ -1141,6 +1141,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep automatically downloaded Windows FFmpeg tools managed across tray-launcher
+  restarts, so update checks and installed-version Health reporting remain active.
+  Preserve distinct manually colocated tools and explicit environment choices.
+
 - Preserve an explicitly selected no-second-G0 agreement when QTeletextMaker
   1.0 omits its standard presentation packet on save. Restore only the exact
   receipt-bound context during concept import; keep changed packets and other
