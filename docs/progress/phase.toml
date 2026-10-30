@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-managed-adoption — Final adopted application and platform gates'
+current_focus = 'p9a-final-gate — Final shared checks for the accepted base engine'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,21 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-level15 — standalone base userflow acceptance aggregate.
-Next finite action: join the completed primary base packages against the existing
-L15-A..E acceptance: design/profile, validation, native/TTI file editing, concept
-preview, explicit publication, ordinary stream and independently verified client
-navigation/display, with metadata/zones/isolation/Lua/lifecycle/playback safeguards.
-Use canonical proof and exact source boundaries; do not replay unaffected chains
-or invent variants. Close this aggregate only when every mandatory base clause
-is proved. Shared final-gate/CI and p9a-03 keep their existing owners.
-Completed runtime owners: p9a-managed-adoption and p9a-02, canonical final-adoption/
-accepted-join/qualification.json. All eight public/default runtime archives,
-applicable current consumer source/Health/output and six current ARM host builds
-are joined. Native ARM remains assumed/deferred; Mac and enhanced-only acceptance
-remain deferred. No active own host/build; all current checks are terminal.
-No Root push, application/Docker release or further publication is commissioned.
-Preserve foreign changes and historical positive/negative proof.
+Current package: p9a-final-gate — shared exact-source final checks/CI.
+Next finite action: compare the existing shared Rust/contracts/matched-bundle
+receipts to the accepted clean application inputs; run only a concrete missing
+or affected required check. Prepare the exact reviewable source/artifact and
+required general/1.5 CI boundary. Root push is not commissioned: any missing
+remote CI needs explicit authorization for the concrete prepared SHA/destination.
+Do not call focused runs full green CI or start9B before revised9A is accepted.
+Completed: standalone p9a-level15 and P9A-03, canonical provider-scan/
+level15-acceptance/qualification.json. Every L15-A..E primary owner is Complete;
+128 original decoder positives plus four authorized header reference cases retain
+their different scopes, actual Kodi controls stay representative, and ARM native
+remains assumed/deferred. Shared final gate is the sole current engine direction.
+All own checks terminal; no active test host/build. Preserve foreign changes,
+historical negatives and experimental2.5/Mac/native-ARM/editor deferrals.
+No application/Docker release or further runtime publication is commissioned.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

@@ -2427,7 +2427,7 @@ pending; source changes are not package or Phase 9 acceptance.
 id         = 'p9a-03'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Scan and persist teletext services and pages'
-status     = 'Blocked'
+status     = 'Complete'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-02', 'p9a-source-inventory']
@@ -2442,6 +2442,18 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+Current source-metadata acceptance completed (2026-10-30): the unchanged entire
+functional P9A-03 contract is proven by Complete p9a-source-inventory/SI1..4;
+its final p9a-02 runtime prerequisite is now Complete. The source clause map and
+clean producer/consumer boundaries are joined at provider-scan/level15-acceptance/
+qualification.json, with runtime authority at p9a-managed-adoption. Distinct
+page/program/PID/language/role/context/source/version identities, conservative
+observed-versus-advertised facts, Local/mapped-provider scans, SQL reopen/rescan/
+replacement/missing-file behavior and retained subtitle/audio identities keep
+their exact primary proof. No guessed complete-service readiness or extra
+container restriction is introduced. Full9A still requires the shared final gate.
+Historical component evidence and earlier runtime blockers follow unchanged.
+
 Current2026-10-28 scanner aggregate is Blocked on runtime owner p9a-02.
 Its source-inventory/metadata component is already Complete; no new scan variant
 is queued. Runtime/managed adoption remains required before this aggregate closes.
@@ -3177,6 +3189,16 @@ and publication safeguards; unfinished enhanced conformance remains at the Defer
 owners. No full2.5 acceptance claim follows.
 '''
 evidence = '''
+Current standalone base acceptance (2026-10-30): p9a-level15 and P9A-03 are
+Complete at provider-scan/level15-acceptance/qualification.json. The current
+L15-A..E/F/V/X primary owners are all Complete within their explicit source,
+independent normative-reference, actual client and four-RID/deferred-native
+boundaries. Historical partial flags/tables below retain their original dates
+and do not reopen a completed base component. Full revised9A remains with
+p9a-final-gate: required shared final checks/CI are not claimed complete here.
+Production9B still waits for that gate. Implemented2.5 remains experimental;
+enhanced-only, Mac, native ARM and optional editor decisions stay unchanged.
+
 Current maintainer amendment2026-10-28 (ADR0123): fully verified Level1/1.5 and all
 applicable shared source/output, authoring/interchange, metadata/zones,
 profiles/themes/Lua/restart, localized admin and required runtime/platform checks define
@@ -16248,7 +16270,7 @@ Smallest necessary work: Use r1 to name only the existing missing local/remote o
 Testable stop condition: Every unchanged P9A-03 clause is regression-proven on the reconciled finite source inventory, with no guessed descriptor equivalence or lost provider track, ordinary subtitle or alternate-audio identity.
 '''
 evidence = '''
-Status: Complete within the unchanged functional source-inventory acceptance. SI1..4 are closed on the reconciled finite source inputs; platform/runtime adoption remains owned separately, and P9A-03 retains its open P9A-02 dependency. Scoped component receipts follow:
+Status: Complete within the unchanged functional source-inventory acceptance. SI1..4 are closed on the reconciled finite source inputs; platform/runtime adoption remains owned separately. P9A-02 is now Complete and the P9A-03 aggregate closes at the standalone base join. Scoped component receipts follow:
 SI1 implementation completed within bounded observed-transmission/context persistence: exact raw bodies, repeated header/subcode/update positions, page/magazine context provenance and conservative acquisition facts survive the existing source-bound SQL transaction and database reopen. Unknown/default context, prior-state/open pages, protection problems and capacity exhaustion stay explicit; header-only state never gains decoded-page/playback authority. Raw/typed facts replay consistently at write/read; old parent sentinel0/header schema1 remain unchanged. Focused136 including migration/SQL negatives, actual Local4/provider6 scans and strict domain/ffmpeg/infra/scanner/web all-target Clippy pass. Equivalent lint/test-helper spelling and boxing preserve those functional receipts.
 SI1 public retained-source HLS clock proof is complete on Linux x86_64/software candidate.5 with per-test CPU0 affinity for deterministic derivative byte joins. Three focused regressions/snapshot and the actual ordinary public HLS route pass. The original multi-CPU encoder nondeterminism and single-CPU prefix refusal are preserved: the latter assumed upstream lookahead must all reach the sink. The strict replacement joins the entire common prefix, requires every delivered frame plus the next outpoint witness, equal raw/filter counts and full raw source-clock membership/cadence. All public/baseline/taps/debug TS bytes match; original889 independent cues, every-frame glyph/clear, selected audio/AV transport, exact source/filter/encoder/mux clocks, source out9.2s bracket(9.1994/9.2394), one upstream fetch/ranged grants, revoked410 and zero active work/capacity/retained-source cleanup pass. Strict web all-target Clippy passes. Canonical provider-scan/identity.json source_inventory_readiness_followup.clock_prefix_correction owns exact identities, receipts, primary FFmpeg9 sink/encoder semantics and the preserved negatives. This is new mandatory evidence/test-oracle correction, not new product behavior, implicit SQL readiness, broader platform/client or managed-runtime adoption. Original scoped SO4 proof stays closed; remaining source inventory still belongs to SI3/SI4 under unchanged P9A-03/ADR0121.
 SI2 completed within persistent identity/invalidation proof. Reuse SI1 focused136 database reopen/current-parent/claim/cascade tests, actual Local4 same-file/renamed-source rescans and six mapped-provider/targeted-show source-revision replacements. Two new closing regressions pass: selected_versions_keep_their_own_reports_and_survive_other_file_deletion selects both exact version/file/stream/revision page sets and preserves the other version/ordinary stream IDs/codec/default/forced on deletion; native_missing_source_rescan_preserves_tracks_and_restores_fresh_page_identity proves real State0->1->0, no qualified caption from a missing input, Dutch ordinary-caption fallback, zero active preparation, restored item/version/file identity, fresh report revision and unchanged ordinary tracks/subtitles. Strict affected all-target Clippy passes. Canonical provider-scan/identity.json source_inventory_identity_followup owns exact logs, inputs, reuse mapping and the preserved test-compile negative. No product change, decoded-page readiness, broader clock proof or platform/adoption claim; SI1/SI3 retain their separate requirements.
@@ -16259,7 +16281,7 @@ SI3 initial source-inventory epoch component completed. The owned held-file read
 SI3 M2TS framing component completed within Linux owned inventory/snapshot/native-clock scope. Strict ffmpeg/infra/scanner/web all-target Clippy and fresh-binary ordinary legacy/default MPEG-TS plus HLS smoke pass. The preserved outer preparation timeout ran no playback; the successful existing --server-bin smoke keeps its90s runtime oracle. The existing reader now detects physical188/192 frames without resynchronizing, retains opaque prefixes in every snapshot/hash/coverage claim, and maps native positions to exact frame starts. The ordinary span constructor remains TS188; explicit interior spans never borrow earlier bytes. Prefixes grant no clock, PSI or readiness authority. Detection restores the cursor on success and read failure, including Windows seek_read semantics; Windows native acceptance stays separately open. Focused88 and final cursor4 regressions, actual pinned-probe managed Local scan/rescan and independent libzvbi requested-cue decoding pass. The native cue preserves pages888/200, exact40..52 and prior43..52 state/bookends; out-of-cue payload and prefix mutations invalidate full-source evidence even with restored metadata. Malformed/ambiguous/shifted/truncated/wrong-format and existing188/refusal/owner controls remain strict. Canonical provider-scan/identity.json source_inventory_format_followup.framing_qualification owns exact inputs, hashes, final receipts and original negative165963ed. The retained candidate.5 ordinary Next M2TS Burn negative preserves captions, selected Dutch AAC and exact public/baseline/taps/debug TS bytes but fails complete-outpoint coverage at seek2164/out9200; the concrete regression is now closed separately by SO4/0f8e1289 on Linux unpublishedNext.6. The original188 input produces exactly the same175 frames and output SHA256 under the saved argv, excluding framing corruption; that concrete candidate.5 defect is owned by source-output/SO4. No complete runtime/platform/adoption claim or permanent source exclusion follows. Optional-PES, PMT-definition/PID and initial-inventory components stay closed.
 SI4 completed: source_inventory_closure_followup in canonical provider-scan/identity.json joins every existing P9A-03 functional clause to five related receipt groups. Observed-versus-advertised page/program/PID/index/language/role and raw ordinals are proven by source-pages-focused-2.log136, including delayed descriptor-only requests with zero observed headers and no readiness promotion. selection-policy-current.log17 proves aliases fold the same exact page without hiding distinct pages. Actual Local4 and mapped-provider6 scans retain raw body/context provenance and explicit absent/unknown/exhausted facts; unchanged SQL codecs/reopen/corruption/claim tests protect persistence. SI2 version/missing-restored proofs and SI3 actual optional-PES/PMT/initial-epoch/TS188-M2TS receipts close their exact joins. Production persistence/discovery/domain/page-validator hashes match the original SI1 receipt; later changes only add the already proven SI2 test and SI3 source-epoch constructor/callers. No new tests or product functionality are claimed. Historical other-formats wording supplies no additional named case or accepted permanent source restriction; no full-service decoded readiness follows. Source output, managed/runtime and native RID proof keep their existing mandatory owners.
 Reuse/closed: tmp/phase9-next-local-teletext/provider-scan/identity.json mapped_provider_actions (six native/56compatibility cases and targeted-show acquisition), remote_only_boundary.source_identity_followup and native local inventory receipts. Reports/ephemeral playback intents alone do not certify complete persistent readiness. Retained-source/public-HLS/Health component owners stay Complete.
-Closed/stop met: every unchanged P9A-03 functional clause is receipt-bound on the existing finite source inventory. No independent inventory implementation/proof cell remains. P9A-03 is not completed because P9A-02 runtime/platform acceptance is still open; no dependency or acceptance condition is waived. Raw descriptors, charset guesses and ephemeral caption success remain insufficient. Retain all original negative proofs and component boundaries.
+Closed/stop met: every unchanged P9A-03 functional clause is receipt-bound on the existing finite source inventory. No independent inventory implementation/proof cell remains. P9A-03 is now Complete after its P9A-02 runtime prerequisite closed; no dependency or acceptance condition is waived. Raw descriptors, charset guesses and ephemeral caption success remain insufficient. Retain all original negative proofs and component boundaries.
 '''
 
 [[milestone]]
@@ -17884,7 +17906,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-level15'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Accept the complete standalone Level1 and1.5 engine'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'teletext-support'
 depends_on = ['p9a-standards', 'p9a-source-inventory', 'p9a-source-output', 'p9a-author-base', 'p9a-editor-base', 'p9a-metadata', 'p9a-generated-base', 'p9a-selection-undo', 'p9a-handoff', 'p9a-lifecycle-base', 'p9a-admin-base', 'p9a-client-base', 'p9a-managed-adoption', 'p9a-platform-safety']
 acceptance = '''
@@ -17897,6 +17919,39 @@ open until the required shared final gate closes; enhanced-only acceptance is De
 and does not block them.
 '''
 evidence = '''
+Accepted standalone Level1/1.5 userflow (2026-10-30): canonical provider-scan/
+level15-acceptance/qualification.json joins every L15-A1/A2/B1/B2/C/D/E1/E2 clause
+to its completed primary owners and unchanged source/artifacts. Design/profile,
+validation, export, genuine qualified editor/native file save, concept/shared
+preview, explicit publication, ordinary stream and suitable base-client
+navigation/display are covered. Related variants reuse the same typed model
+and qualified boundaries; no whole-chain replay or new product functionality.
+A1/A2: all132 original base observations have scoped proof:128 unchanged external
+decoder field/glyph positives plus four expressly authorized independent normative
+header references, with four body counterexamples and11 retained CLI negatives.
+This is not132 full-renderer passes; original stock failures remain unchanged.
+B1/B2: generated Text/G2, exact root undo and generic native/TTI/sidecar page/set/
+subpage/context/navigation, protected zones/template version and package/channel
+isolation retain their actual saved-file, publication and cold-reopen receipts.
+The fitting complete base set uses no optional resource banks. Whole invalid
+complete documents still refuse atomically; no enhanced data is hidden to publish.
+C: the completed primary clause join covers multibinding/profile/theme/mirror
+isolation, actual requested/applied generations and all named Lua precedence,
+Continue/Refresh/Reset/error/expiry/host-restart cases at their original safe
+output/time/cleanup bounds. No package activation is added.
+D: actual Kodi21.2/Android, IPTV21.11.0/FFmpegDirect21.3.8/Harmony navigation,
+national/X26/G3, reveal, timed flash/steady, layout, updates and AV return/stop
+remain qualified at their representative fixed scope. No all-client/all13-bit
+subcode or complete enhanced rendering claim follows.
+E1/E2: complete SI1..4, SO1..5, F6 and accepted public FFmpeg208/Nextrs7 application/
+platform joins retain strict source/frame/caption/selected-audio/transport and
+worker/lease/cleanup proof. Current ARM builds pass; native ARM remains assumed/
+deferred, Mac remains deferred. P9A-03's final runtime prerequisite is now closed.
+Every typed primary dependency is Complete. Standalone base is accepted; shared
+final-gate/CI is still required before full revised9A and production9B. Existing
+Level2.5 stays experimental; enhanced-only acceptance and optional editor upstream
+work retain their explicit deferrals. No new client trial, CI or publication.
+
 Completed mandatory CI selection correction2026-10-28: canonical provider-scan/
 identity.json experimental_base_ci_followup reproduces the concrete shared
 profile test being wrongly assigned to the now optional2.5 job. Generic
@@ -17907,9 +17962,9 @@ native binary metadata retains497 test identities with exactly one owner:
 This is filter/coverage metadata verification, not execution of497 tests or
 fresh full CI. Existing source/decoder/client oracles and tests remain unchanged.
 Current2026-10-28 boundary: generic base authoring/interchange remains required; existing EB1/EB2 QTM evidence is reusable but the brand is not a dependency. All independent/client/AV/platform gates remain.
-Status: Not started. Exact remaining gap: Standalone L15 is not accepted. Base repertoire/editor/lifecycle/source-output/localized workflow/client/platform/adoption proof all remain required beyond the completed scoped components.
+Status: Complete within standalone Level1/1.5 acceptance. All primary base packages and mandatory joined proof are complete; the exact source/client/reference/platform limits are recorded above.
 Reuse: All Complete components and primary base packages above, canonical standalone_level15_followup and historical base receipts; no full-chain replay solely for chronology.
-Missing mandatory proof: Every applicable L15 row and base F/V/X clause, including actual X26/page/subpage/update/reveal/timed flash and native platform/accepted-runtime safety. This aggregate has no dependency on enhanced-only client/editor/M29 gates.
+Missing mandatory proof within standalone base: none. Shared final-gate/CI remains owned by p9a-final-gate; no full9A or production9B acceptance is inferred. Enhanced-only client/editor/M29 gates remain deferred.
 Dependencies are the typed depends_on edges; internal unfinished dependencies
 are not external blockers. Shared obligations stay with their primary owners
 in the P9A-04 ownership map; this package does not duplicate those trials.
