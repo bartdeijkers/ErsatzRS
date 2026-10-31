@@ -62,21 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-01 — production guide/runtime compatibility component is closed
-locally at addon18496b1 (0.1.1). Canonical tmp/phase9-tvguide-addon/qualification.json
-owns exact28-file ZIP308d1d2c, twelve existing tests on local Deno/Node and both
-required ARM software/emulation runtimes, plus actual final native Linux x64
-install/enable/two-profile validation/encoding/raster. Native ARM stays Deferred.
-Next finite action: verify exact-SHA addon CI41174756415 and full host CI41172081790;
-then connect the same package to actual guide refresh/restart and existing
-admin/TTI/explicit-publication flow before ordinary two-channel stream/client proof.
-Addon0.1.0 full CI41172082123 is green; final0.1.1 and host jobs are pending,
-not full-green. No release/tag/publication; validation dispatch omits release_tag.
-Accepted9A remains closed at802c8a10 with full exact218 CI41153570313 green.
-P9B-01/02 retain all remaining integrated acceptance. Do not reopen closed
-producer/runtime components without a concrete regression. Preserve foreign Root
-changes and unpublished UCU710; deliver scoped changes only. Experimental2.5,
-optional editor and platform maintainer decisions remain unchanged.
+Current package: p9b-01 — production SQL-guide/saved-intent integration completed
+locally. Canonical tmp/phase9-tvguide-addon/qualification.json source_binding owns
+five focused passes: exact production0.1.1 SQL capture/two saved profile maps,
+source/metadata/encoded/preview reopen equality, old-guide rejection and explicit
+revision2 replacement intent surviving restart. No live activation claim.
+Producer/runtime component remains closed at addon18496b1; final0.1.1 Windows/
+Linux CI41174756415 is green, including Node12/12 and matching28-file artifact.
+Next finite action: finish local checkpoint checks/commit; retain full host
+CI41172081790 on exactb1772473 until terminal. A new Rust-source push would cancel
+that required run, so queue the next scoped push until its results are known.
+Then activate this production package through existing publication/output,
+TTI/sidecar and localized admin boundaries before simultaneous ordinary streams/
+client/transport/playback integration. P9B-01/02 retain these remaining gates.
+Accepted9A remains closed at802c8a10 with exact218 full CI41153570313 green.
+No release/tag/publication; source checkpoints only. Preserve parallel Root changes
+and local UCU710. Experimental2.5/editor/platform decisions remain unchanged.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

@@ -20,6 +20,9 @@ use ersatzrs_web::host::teletext_documents::{
 
 const TVGUIDE: &str = "org.ersatzrs.addon.tvguide-teletext";
 
+#[path = "tvguide_candidate/source_binding.rs"]
+mod source_binding;
+
 async fn profile(fixture: &Fixture, name: &str, entries: &[(&str, &str)]) -> TeletextProfile {
     let installation = fixture
         .state
