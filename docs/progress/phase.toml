@@ -62,21 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-01 — close delivery/CI for the completed production guide component.
+Current package: p9b-01 — production guide/runtime compatibility component is closed
+locally at addon18496b1 (0.1.1). Canonical tmp/phase9-tvguide-addon/qualification.json
+owns exact28-file ZIP308d1d2c, twelve existing tests on local Deno/Node and both
+required ARM software/emulation runtimes, plus actual final native Linux x64
+install/enable/two-profile validation/encoding/raster. Native ARM stays Deferred.
+Next finite action: verify exact-SHA addon CI41174756415 and full host CI41172081790;
+then connect the same package to actual guide refresh/restart and existing
+admin/TTI/explicit-publication flow before ordinary two-channel stream/client proof.
+Addon0.1.0 full CI41172082123 is green; final0.1.1 and host jobs are pending,
+not full-green. No release/tag/publication; validation dispatch omits release_tag.
 Accepted9A remains closed at802c8a10 with full exact218 CI41153570313 green.
-Canonical tmp/phase9-tvguide-addon/qualification.json owns final source/bundle
-74b30ae2,12 green producer tests, real disabled-install/explicit-enable/two-profile
-native validation/encoding/raster, strict affected test lint and preserved negatives.
-Next finite action: commit/push only the coherent addon and host-test/registration
-files; inspect exact-SHA applicable CI before claiming green. Retain foreign
-Root changes, separate local commits and all proof. No release/tag/publication.
-After delivery, qualify the existing JS runtime on the required Linux/Windows
-RIDs; do not assume new addon runtime/platform compatibility from9A fixtures.
-P9B-01 stays open; P9B-02 owns real guide refresh/restart, headed localized admin,
-TTI/sidecar, explicit publication and simultaneous ordinary stream/client/
-transport/playback integration. No further variants inside the closed producer
-component without a concrete regression. Experimental2.5/editor/platform
-maintainer decisions remain unchanged. Current local checks are terminal.
+P9B-01/02 retain all remaining integrated acceptance. Do not reopen closed
+producer/runtime components without a concrete regression. Preserve foreign Root
+changes and unpublished UCU710; deliver scoped changes only. Experimental2.5,
+optional editor and platform maintainer decisions remain unchanged.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
