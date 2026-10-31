@@ -70,8 +70,29 @@ pub struct AcceptedTeletextOutputCandidate {
     generation: TeletextAcceptedGeneration,
     selection: TeletextChannelSelectionSnapshot,
     service: Arc<EncodedTeletextAuthoredService>,
+    guide: Option<Box<super::teletext_guide_generations::GuideOutputQualification>>,
 }
 impl AcceptedTeletextOutputCandidate {
+    pub(crate) fn guide_qualification(
+        &self,
+    ) -> Option<&super::teletext_guide_generations::GuideOutputQualification> {
+        self.guide.as_deref()
+    }
+
+    pub(super) fn from_guide(
+        generation: TeletextAcceptedGeneration,
+        selection: TeletextChannelSelectionSnapshot,
+        service: Arc<EncodedTeletextAuthoredService>,
+        guide: super::teletext_guide_generations::GuideOutputQualification,
+    ) -> Self {
+        Self {
+            generation,
+            selection,
+            service,
+            guide: Some(Box::new(guide)),
+        }
+    }
+
     #[must_use]
     pub const fn generation(&self) -> &TeletextAcceptedGeneration {
         &self.generation
@@ -100,9 +121,24 @@ pub(crate) struct PreparedTeletextOutputCandidate {
     generation: TeletextAcceptedGeneration,
     selection: TeletextChannelSelectionSnapshot,
     service: Arc<EncodedTeletextAuthoredService>,
+    guide: Option<Box<super::teletext_guide_generations::GuideOutputQualification>>,
 }
 
 impl PreparedTeletextOutputCandidate {
+    pub(super) fn from_guide(
+        generation: TeletextAcceptedGeneration,
+        selection: TeletextChannelSelectionSnapshot,
+        service: Arc<EncodedTeletextAuthoredService>,
+        guide: super::teletext_guide_generations::GuideOutputQualification,
+    ) -> Self {
+        Self {
+            generation,
+            selection,
+            service,
+            guide: Some(Box::new(guide)),
+        }
+    }
+
     pub(crate) const fn generation(&self) -> &TeletextAcceptedGeneration {
         &self.generation
     }
@@ -117,9 +153,35 @@ impl PreparedTeletextOutputCandidate {
         deadline: Instant,
     ) -> Result<Option<AcceptedTeletextOutputCandidate>, NativeTeletextGenerationError> {
         check_deadline(deadline)?;
-        let confirmed = application
-            .confirm_current_teletext_generation(&self.generation, &self.selection, maximum)
-            .await?;
+        let confirmed = match &self.guide {
+            Some(guide) => {
+                if Instant::now() >= guide.deadline {
+                    return Ok(None);
+                }
+                let guard =
+                    super::teletext_work::begin(application, Some(deadline.min(guide.deadline)))
+                        .await
+                        .map_err(NativeTeletextDesignError::from)?;
+                application
+                    .confirm_current_guide_teletext_generation(
+                        &self.generation,
+                        &self.selection,
+                        &guide.qualification,
+                        ersatzrs_core::repositories::TeletextGuideGenerationCheck {
+                            limits: guide.limits,
+                            deadline: deadline.min(guide.deadline),
+                            hold: guard.hold_work(),
+                        },
+                        maximum,
+                    )
+                    .await?
+            }
+            None => {
+                application
+                    .confirm_current_teletext_generation(&self.generation, &self.selection, maximum)
+                    .await?
+            }
+        };
         check_deadline(deadline)?;
         if !matches!(confirmed, M::Accepted(())) {
             return Ok(None);
@@ -128,6 +190,7 @@ impl PreparedTeletextOutputCandidate {
             generation: self.generation,
             selection: self.selection,
             service: self.service,
+            guide: self.guide,
         }))
     }
 }
@@ -351,7 +414,7 @@ async fn fingerprint(
 
 /// Existing explicit acceptance target plus a channel-scoped route fence.
 /// Absence is used only by the compatible historical public entrypoint.
-pub(super) struct TeletextGenerationAcceptanceTarget {
+pub(crate) struct TeletextGenerationAcceptanceTarget {
     pub(super) target: TeletextGenerationTarget,
     pub(super) expected_channel_id: Option<EntityId>,
 }
@@ -464,6 +527,7 @@ pub(super) async fn accept_original_teletext_generation_with_hold(
         M::Accepted(generation) => M::Accepted(AcceptedTeletextOutputCandidate {
             generation,
             selection,
+            guide: None,
             service: Arc::new(
                 design
                     .into_encoded_service()
@@ -550,6 +614,7 @@ pub(crate) async fn prepare_accepted_teletext_generation(
     Ok(Some(PreparedTeletextOutputCandidate {
         generation,
         selection,
+        guide: None,
         service: Arc::new(
             design
                 .into_encoded_service()

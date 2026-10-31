@@ -6,7 +6,8 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
 summary    = '''
 P9A-04/p9a-final-gate Complete2026-10-31: exact218 full CI41153570313
 passes all13 required general/1.5 jobs; unchanged canonical receipt/source joins
-retain actual client/platform scopes. Next: P9B-01/P9B-02 production addon.
+retain actual client/platform scopes. P9B-01 guide activation: proven Linux x64;
+automatic freshness/integration remain open.
 ADR0123 keeps2.5 experimental/enhanced acceptance Deferred, QTM optional/upstream-
 wait, macOS Deferred and native ARM assumed from required cross/QEMU proof.
 P9A-04 owns L15/F/V/X and retained history; closed owners stay closed.

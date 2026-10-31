@@ -186,13 +186,16 @@ pub use troubleshooting::{
 pub use watermark::WatermarkRepository;
 
 pub use teletext_generations::{
-    TeletextEffectiveGenerationSave, TeletextGenerationMutation, TeletextGenerationRejection,
-    TeletextGenerationRepository, TeletextGenerationSave,
+    TeletextEffectiveGenerationSave, TeletextEffectiveGuideGenerationSave,
+    TeletextGenerationMutation, TeletextGenerationRejection, TeletextGenerationRepository,
+    TeletextGenerationSave, TeletextGuideGenerationCheck, TeletextGuideGenerationSave,
     TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
-    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION, TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 pub use teletext_guide_source::{
+    TeletextGuideGenerationQualification, TeletextGuideQualificationError,
     TeletextGuideSourceCheckLimits, TeletextGuideSourceFence, TeletextGuideSourceFenceError,
     MAX_TELETEXT_GUIDE_SOURCE_CHANNELS, MAX_TELETEXT_GUIDE_SOURCE_TEXT_BYTES,
     TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION, TELETEXT_GUIDE_SOURCE_FENCE_VERSION,

@@ -4853,9 +4853,21 @@ detached header list. A version 3 fingerprint requires that plan, while a versio
 Effective artifact version 2 retains its original explicit service/absence role
 and nested version 1 fingerprint. Version 4 keeps the same role framing with
 version 4 and uses the nested version 3 fingerprint for a present service.
-Explicit absence has no fabricated service or resource plan. Base storage reads
-only1/3; effective storage reads only2/4. The compatibility migration preserves
-all historical rows and both current-pointer families.
+Explicit absence has no fabricated service or resource plan. Frozen admission
+retains Base1/3 and Effective2/4. Source-aware Base5 and Effective6 are separate
+roles: metadata readers recognize them, but static validators still refuse them.
+The guide-role CHECK migration preserves all historical rows, both pointer
+families, the advanced sequence and immutable-history triggers; version7 remains
+invalid. Older runtimes reject5/6 rather than treating them as frozen output.
+
+Guide5/6 fingerprints use the `ErsatzRS.Teletext.GuideCompiledService` domain,
+two-byte role version, the ASCII native lifecycle3 service digest, source and
+context-digest versions,32-byte source digest, ordered channel IDs, original
+capture/window/expiry instants and exact locale/timezone strings. Counts and
+string lengths use fixed eight-byte big-endian unsigned framing; IDs and instant
+seconds use eight-byte signed framing, with four-byte subsecond nanoseconds.
+No fresh qualification timestamp or process-monotonic deadline enters the hash.
+Thus an unchanged immutable original reconstructs the same artifact on restart.
 
 At a valid acknowledged cycle boundary, the carousel selects an authorized first
 and repeat header using its own completed resource bodies/counters. Equal
@@ -5139,6 +5151,16 @@ The synthetic test fixture `crates/ersatzrs-web/tests/fixtures/teletext-output-p
 documents the schema and a finite test envelope; it is not a deployment recommendation.
 Unknown fields, duplicate fields, missing/null work credits, invalid source
 limits and configuration larger than 65,536 UTF-8 bytes are rejected.
+
+Runtime policy version2 retains its explicit `live_updates` timings and static
+accepted-output contract. Version3 additionally requires a closed `guide_limits`
+object with `max_records`, `max_source_bytes`, `max_model_nodes`, `max_model_bytes`,
+`max_digest_fields` and `max_digest_bytes`. All six limits are explicit nonnegative
+integers; zero is restrictive. Version3 also requires `live_updates`; no source
+budgets are inferred from transport limits or authoring policy. Versions1/2 reject
+the new field, and older runtimes reject version3. Guide5/6 recovery requires these
+explicit dependencies and fresh source/role checks; legacy static output remains
+independent. A missing or invalid optional policy preserves ordinary AV.
 Entry, resource lifecycle and saved V1 encoding region cannot be overridden;
 the saved revision supplies them. Actual source PSI supplies program/PCR IDs.
 
@@ -5276,8 +5298,9 @@ An explicit source selection under authoring policy version 2 instead captures
 those channels from the host guide for the current three civil dates. The host
 supplies the locale, named clock and capture instant. No channel is implicitly
 included, and neither path installs packages or publishes output. Source-bound
-guide concepts are historical snapshots: they can be saved and previewed, but
-current-role qualification remains required before live guide publication.
+guide concepts remain historical snapshots. Separate explicit Request and Publish
+actions can activate their exact content only after current-role qualification;
+neither action reruns the addon or changes the reviewed original.
 
 Configure explicit version-1 `teletext.authoring.policy` limits through the existing
 application configuration mechanism. Its required `design`, `input`, `validation`,
@@ -5316,8 +5339,8 @@ Trusted limits and per-channel content are separate. Native form submission carr
 a draft name, the exact opaque selection observation, an explicit opening-page
 addon, decimal page, hexadecimal subcode, V1 character region and unchanged resource
 lifecycle JSON. No opening addon/page/subcode, resource update counter or last-subpage
-flag is inferred. The current checked V1 lift supports `western_latin`; all existing
-full standards/region/fallback criteria remain open. Required lifecycle arrays use
+flag is inferred. The checked V1 lift field accepts `western_latin`; version2/3 documents retain
+their explicit repertoire and enhancement declarations. Required lifecycle arrays use
 the saved identity's `logical_subpage` spelling, independent of addon V2 wire
 `subpage`. An explicit `[]` is valid for resource-free pages. Duplicate, unknown,
 invalid or excessive fields reject without publishing. The UI retains safe profile
@@ -5349,21 +5372,34 @@ For an agent-driven file workflow, keep the authored addon response and the clos
 versioned per-channel input as separate files, use the same existing policy parser
 and native controller, retain the immutable saved identity, then validate/preview
 that exact page/subcode before a separate explicit publication request. Raw inputs
-are never a validated generation. The QTeletextMaker TTI/metadata/edit-ownership
-round trip remains its own required workflow; this original-only connection does
-not claim it. P9A-04 owns current native/headed evidence, missing served-host
-publication/client proof and all remaining engine/editor/Lua/platform gates.
+are never a validated generation. The generic lossless TTI/metadata/edit-ownership round trip remains separate;
+QTeletextMaker is an optional qualified example editor. P9A-04 owns the accepted
+revised generic-engine boundary; P9B-01/02 own production-addon integration,
+refresh and actual served/client evidence. Experimental2.5 remains deferred.
 
 The admin exposes separate pending-request and acceptance actions with the exact
 rendered design digest/revision, live head revision, pending request and accepted
 generation CAS tokens. Properly saved static
 `channels: []` originals already qualify for the existing frozen-original
-publisher. Legacy absent guide inputs, guide-bearing inputs and source-associated
-designs still require current-role freshness; no synthetic fence substitutes for
-it. Version-1 ordinary output retains its startup-only base role. Explicit
-version-2 policy connects the bounded live monitor and safe-boundary adoption;
-complete receiver-cache transitions remain required acceptance work. A selected
-durable pointer alone does not prove that any running client applied it.
+publisher. Legacy absent guide inputs cannot acquire source authority by omission.
+Guide-bearing originals require authoring policy2 and the distinct source-aware
+controller; the existing static-only native APIs continue to refuse them.
+The native host rebuilds complete saved requests against the actual snapshot at
+the original capture, including programme/segment facts and all role/ambiguity
+fields. The publication transaction separately rechecks raw-source digest2 and
+exact pending/head/selection/accepted-pointer fences. Pending Request retains
+historical source semantics and the original actual-worker hold; it is not an
+active-generation grant.
+
+Current-role validity ends at the first programme or segment start/finish after
+the original capture, or next local civil midnight, whichever is earlier. A
+Scripted original also retains any earlier original scope expiry. Capture-time
+rewind or a reached boundary rejects activation/recovery without rewriting
+pointers. Polling cannot renew the native candidate's conservative monotonic
+expiry. Public runtime policy3 enables source-aware ordinary recovery, while
+versions1/2 keep their existing static startup/live contracts. A durable pointer
+alone does not prove delivery. This initial qualification does not implement the
+separate automatic-refresh/stale-Health policy or establish its final evidence.
 
 ### Effective Scripted original drafts
 

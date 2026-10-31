@@ -132,7 +132,7 @@ async fn admit(
     Ok(Ok(tx))
 }
 
-async fn insert(
+pub(super) async fn insert(
     mut tx: Transaction<'_, Db>,
     save: &TeletextEffectiveGenerationSave,
     deadline: Instant,

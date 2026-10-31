@@ -107,11 +107,11 @@ pub async fn request_publication(
     State(state): State<AppState>,
     Form(pairs): Form<Pairs>,
 ) -> Response {
-    publication_action(&state.application, pairs, PublicationAction::Request).await
+    publication_action(&state, pairs, PublicationAction::Request).await
 }
 
 pub async fn publish_design(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
-    publication_action(&state.application, pairs, PublicationAction::Publish).await
+    publication_action(&state, pairs, PublicationAction::Publish).await
 }
 
 #[derive(Clone, Copy)]
@@ -126,14 +126,9 @@ struct PublicationCommand {
     owner: Option<ersatzrs_domain::TeletextPageAddress>,
 }
 
-async fn publication_action(
-    application: &ApplicationServices,
-    pairs: Pairs,
-    action: PublicationAction,
-) -> Response {
+async fn publication_action(state: &AppState, pairs: Pairs, action: PublicationAction) -> Response {
     use crate::host::teletext_authoring::{
-        publish_static_teletext_generation, request_static_teletext_publication,
-        TeletextAuthoringPublishTarget,
+        publish_teletext_generation, request_teletext_publication, TeletextAuthoringPublishTarget,
     };
     let channel = redirect_channel(&pairs);
     let deadline = std::time::Instant::now()
@@ -147,13 +142,11 @@ async fn publication_action(
     };
     let identity = command.target.identity;
     let result = match action {
-        PublicationAction::Request => {
-            request_static_teletext_publication(application, command.target, deadline)
-                .await
-                .map(|_| "publication-requested")
-        }
-        PublicationAction::Publish => publish_static_teletext_generation(
-            application,
+        PublicationAction::Request => request_teletext_publication(state, command.target, deadline)
+            .await
+            .map(|_| "publication-requested"),
+        PublicationAction::Publish => publish_teletext_generation(
+            state,
             TeletextAuthoringPublishTarget {
                 publication: command.target,
                 expected_generation_id: command.expected_generation_id,

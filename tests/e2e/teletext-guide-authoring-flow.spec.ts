@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitForHydration } from './hydration';
 import { addonContentHash } from './fixtures/addon-metadata';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
+import { captureTeletextChannelTs } from './helpers/teletext-stream-capture';
 
 // Manual exact-package gate. CI still classifies this base/shared spec as 1.5;
 // absent package evidence is an explicit skip, never a synthetic replacement.
@@ -344,3 +345,201 @@ for (const js of [true, false]) {
     }
   });
 }
+
+// A real Reset owns programme publication. No synthetic SQL guide rows, source
+// clock rewrites, teletext Lua overrides or producer replay are used here.
+async function resetGuidePlayout(page: Page, fixture: TeletextChannelFixture, channel: number): Promise<void> {
+  const text = translation('en_us');
+  const previous = fixture.database.prepare('SELECT LastBuild FROM PlayoutBuildStatus WHERE PlayoutId=?')
+    .get(channel) as { LastBuild: string } | undefined;
+  fixture.writeScriptedControls(channel, undefined, 3);
+  await page.goto('/playouts'); await ready(page, true);
+  const name = fixture.database.prepare('SELECT Name FROM Channel WHERE Id=?').get(channel) as { Name: string };
+  await page.getByPlaceholder(text('SearchForPlayouts'), { exact: true }).fill(name.Name);
+  const row = page.getByRole('row').filter({ has: page.locator(`a[href="/playouts/scripted/${channel}"]`) });
+  await expect(row).toHaveCount(1);
+  await row.getByRole('button', { name: text('RebuildPlayout'), exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: text('RebuildPlayout'), exact: true });
+  await dialog.getByLabel(text('PlayoutRebuildMode'), { exact: true }).selectOption('reset');
+  await dialog.getByRole('checkbox', { name: text('KeepCurrentProgramme'), exact: true }).uncheck();
+  const posted = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname.startsWith('/admin-api/rebuild_playout'));
+  await dialog.getByRole('button', { name: text('QueuePlayoutBuild'), exact: true }).click();
+  const response = await posted;
+  expect(response.status()).toBe(200);
+  const fields = new URLSearchParams(response.request().postData() ?? '');
+  expect(fields.get('id')).toBe(String(channel));
+  expect(fields.get('mode')).toBe('reset');
+  expect(fields.get('preserve_current')).toBe('false');
+  expect(await response.json()).toEqual({ accepted: 1, coalesced: 0 });
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => {
+    const status = fixture.database.prepare('SELECT Success,LastBuild,LastSuccessfulBuild FROM PlayoutBuildStatus WHERE PlayoutId=?')
+      .get(channel) as { Success: number; LastBuild: string; LastSuccessfulBuild: string } | undefined;
+    const items = fixture.database.prepare('SELECT COUNT(*) AS count FROM PlayoutItem WHERE PlayoutId=?').get(channel) as { count: number };
+    return status?.Success === 1 && status.LastBuild !== previous?.LastBuild
+      && status.LastSuccessfulBuild === status.LastBuild && items.count === 3
+      && fixture.scriptedIntervals(channel).length === 0;
+  }, { timeout: 45_000 }).toBe(true);
+  const spans = fixture.database.prepare('SELECT Start,Finish FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
+    .all(channel) as { Start: string; Finish: string }[];
+  for (const span of spans) expect(utc(span.Finish) - utc(span.Start)).toBe(180_000);
+}
+
+function utc(value: string): number {
+  const normalized = value.replace(' ', 'T');
+  const time = Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
+  if (!Number.isFinite(time)) throw new Error('Published guide programme has an invalid UTC boundary.');
+  return time;
+}
+
+function originalBytes(fixture: TeletextChannelFixture, channel: number): Buffer {
+  const design = fixture.designs(channel)[0];
+  const row = fixture.database.prepare('SELECT Document FROM TeletextDesignRevision WHERE DesignId=? AND Revision=?')
+    .get(design.Id, design.Revision) as { Document: Uint8Array };
+  return Buffer.from(row.Document);
+}
+
+function acceptedGuide(fixture: TeletextChannelFixture, channel: number): Record<string, unknown> {
+  const row = fixture.database.prepare(`SELECT g.*,r.DesignId,r.Revision FROM TeletextAcceptedGenerationCurrent c
+    JOIN TeletextAcceptedGeneration g ON g.Id=c.GenerationId
+    JOIN TeletextPublicationRequest r ON r.Id=g.RequestId WHERE c.ChannelId=?`).get(channel);
+  expect(row).toBeDefined();
+  expect(row!.ArtifactVersion).toBe(5);
+  return row!;
+}
+
+async function rasterBytes(page: Page): Promise<Buffer> {
+  const image = page.getByTestId('teletext-preview-model').locator('img');
+  await expect(image).toBeVisible();
+  const source = (await image.getAttribute('src'))!;
+  const data = source.match(/^data:image\/[^;,]+;base64,(.+)$/);
+  expect(data, 'The native preview must retain its exact inline raster bytes.').not.toBeNull();
+  return Buffer.from(data![1], 'base64');
+}
+
+test('production TV-guide explicit publication and paired ordinary stream output', async ({ browser, baseURL }, info) => {
+  test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+  test.setTimeout(300_000);
+  info.annotations.push({ type: 'browser-version', description: browser.version() },
+    { type: 'production-package', description: `${addonId}0.1.1; repositoryZIP SHA256 ${candidateDigest}; contentSHA256 ${installed.ContentSha256}` });
+  const fixture = new TeletextChannelFixture(databasePath!, {
+    authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
+  });
+  let context: BrowserContext | undefined;
+  try {
+    fixture.configureScripted();
+    const policy = JSON.parse(readFileSync(fileURLToPath(new URL(
+      '../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl,
+    )), 'utf8'));
+    const guideLimits = { max_records: 1000, max_source_bytes: 1_048_576,
+      max_model_nodes: 10_000, max_model_bytes: 16_777_216,
+      max_digest_fields: 100_000, max_digest_bytes: 16_777_216 };
+    const authoring = { ...policy, version: 2, operation_timeout_ms: 30_000, guide_limits: guideLimits,
+      preview: { max_pages: 16, max_model_records: 32_768, max_pixels: 168_000, max_diagnostics: 1400, max_work: 50_000_000 } };
+    delete authoring.source; delete authoring.recovery_timeout_ms;
+    fixture.setAuthoringPolicy(JSON.stringify(authoring));
+    fixture.setOutputPolicy(JSON.stringify({ ...policy, version: 3, guide_limits: guideLimits,
+      live_updates: { poll_interval_ms: 25, recovery_timeout_ms: 2000 } }));
+    fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run('teletext.work.max_concurrent', '1');
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    // Locale remains fixed: it is part of guide source authority, not just UI.
+    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
+    for (const channel of fixture.channels) await resetGuidePlayout(page, fixture, channel);
+    const currentSource = fixture.database.prepare(`SELECT Id,Start,Finish,MediaItemId FROM PlayoutItem
+      WHERE PlayoutId=? AND julianday(Start)<=julianday(?) AND julianday(Finish)>julianday(?) ORDER BY Start LIMIT 1`)
+      .get(fixture.channels[1], new Date().toISOString(), new Date().toISOString()) as { Id: number; Start: string; Finish: string; MediaItemId: number };
+    expect(currentSource).toBeDefined();
+    const originals: Buffer[] = [];
+    const rasters: Buffer[] = [];
+    const accepted: Record<string, unknown>[] = [];
+    const urls: string[] = [];
+    const text = translation('en_us');
+    for (const [index, channel] of fixture.channels.entries()) {
+      await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+      const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+      await binding.locator('[name="profile_choice"]').selectOption(`${profiles[index]}:1`);
+      await submit(page, binding, text('TeletextBindingSave'), true);
+      const form = page.getByTestId('teletext-authoring-form');
+      await form.locator('[name="name"]').fill(`Production live guide ${channel}`);
+      await form.locator('[name="entry_addon_id"]').selectOption(addonId);
+      await form.locator('[name="entry_page"]').fill(index ? '410' : '200');
+      await form.locator('[name="entry_subcode"]').fill('0000');
+      await form.locator('[name="v1_region"]').selectOption('western_latin');
+      await form.locator('[name="resource_transmissions"]').fill('[]');
+      await form.locator('[name="guide_channel_id"]').selectOption(String(fixture.channels[1]));
+      await submit(page, form, text('TeletextValidateSaveDraft'), true);
+      await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
+      await expect(page.getByTestId('teletext-preview-model')).toHaveAttribute('data-page', index ? '410' : '200');
+      await expect(page.getByTestId('teletext-preview-theme')).toHaveText(index ? 'night' : 'classic');
+      const original = savedOriginal(fixture, channel);
+      expect(original.guide_source.channel_ids).toEqual([fixture.channels[1]]);
+      expect(JSON.parse(original.guide_inputs.v3).channels.map((entry: { id: number }) => entry.id)).toEqual([fixture.channels[1]]);
+      expect(original.documents[0].response).toContain('Synthetic red video and tone');
+      originals.push(originalBytes(fixture, channel)); rasters.push(await rasterBytes(page)); urls.push(page.url());
+      await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'unrequested');
+      await submit(page, page.getByTestId('teletext-publication-request-form'), text('TeletextPublicationRequest'), true);
+      await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'pending');
+      expect(originalBytes(fixture, channel)).toEqual(originals[index]);
+      expect(await rasterBytes(page)).toEqual(rasters[index]);
+      await submit(page, page.getByTestId('teletext-publication-publish-form'), text('TeletextPublicationPublish'), true);
+      await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'publication-selected');
+      await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+      expect(originalBytes(fixture, channel)).toEqual(originals[index]);
+      expect(await rasterBytes(page)).toEqual(rasters[index]);
+      accepted.push(acceptedGuide(fixture, channel));
+      await page.getByTestId('teletext-publication').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: info.outputPath(`production-guide-${index ? 'night' : 'day'}-published.png`) });
+    }
+    // Both selected originals must remain inside the genuine programme role
+    // boundary throughout the bounded pair of HTTP observations.
+    expect(utc(currentSource.Finish) - Date.now()).toBeGreaterThan(30_000);
+    const paths = fixture.channels.map((_, index) => info.outputPath(`production-guide-${index ? 'night' : 'day'}.ts`));
+    const captures = await Promise.all(fixture.channels.map((channel, index) => captureTeletextChannelTs(
+      `${baseURL}/iptv/hls-direct/${channel}.ts`, paths[index],
+      { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 },
+    )));
+    for (const [index, capture] of captures.entries()) {
+      expect(capture.ended).toBe('byte-limit');
+      expect(capture.bytes.length % 188).toBe(0);
+      const pids = new Set<number>();
+      let malformed = 0;
+      for (let offset = 0; offset < capture.bytes.length; offset += 188) {
+        if (capture.bytes[offset] !== 0x47 || (capture.bytes[offset + 1] & 0x80) !== 0) malformed++;
+        pids.add(((capture.bytes[offset + 1] & 0x1f) << 8) | capture.bytes[offset + 2]);
+      }
+      expect(malformed).toBe(0);
+      for (const pid of [0, 256, 257, 512]) expect(pids.has(pid)).toBe(true);
+      execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+        '-i', paths[index], '-t', '1', '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
+      { timeout: 30_000, maxBuffer: 65_536 });
+      expect(acceptedGuide(fixture, fixture.channels[index])).toEqual(accepted[index]);
+      expect(originalBytes(fixture, fixture.channels[index])).toEqual(originals[index]);
+      await page.goto(urls[index]); await ready(page, true);
+      expect(await rasterBytes(page)).toEqual(rasters[index]);
+    }
+    expect(fixture.setting('teletext.work.max_concurrent')).toBe('1');
+    for (const channel of fixture.channels) expect(fixture.scriptedIntervals(channel)).toEqual([]);
+    expect(fixture.database.prepare('SELECT COUNT(*) AS count FROM ChannelTeletextBinding WHERE AddonId=?').get(fixture.addonId)).toEqual({ count: 0 });
+    expect(fixture.database.prepare('SELECT COUNT(*) AS count FROM AddonSetting WHERE AddonId=?').get(addonId)).toEqual({ count: 0 });
+    expect(fixture.calls()).toEqual([]);
+    expect(installation()).toEqual(installed); compareInstalledFiles(); expect(errors).toEqual([]);
+    writeFileSync(info.outputPath('production-guide-publication-identity.json'), JSON.stringify({
+      repository_zip_sha256: candidateDigest, installation: { version: installed.Version,
+        source_id: installed.SourceId, state_revision: installed.StateRevision,
+        package_sha256: installed.PackageSha256, content_sha256: installed.ContentSha256 }, output_channels: fixture.channels,
+      source_channels: [fixture.channels[1]], source_programme: currentSource, profiles,
+      accepted_generations: accepted, original_sha256: originals.map(sha256), raster_sha256: rasters.map(sha256),
+      captures: captures.map((capture, index) => ({ channel: fixture.channels[index], sha256: sha256(capture.bytes),
+        bytes: capture.bytes.length, ended: capture.ended })), javaScriptEnabled: true,
+    }, null, 2));
+  } finally {
+    try { await context?.close(); } finally { fixture.close(); }
+  }
+});

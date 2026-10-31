@@ -410,6 +410,31 @@ capability refuses guide preparation while retaining static controls and ordinar
 playback. P9B-01 owns implementation/proof; the interchange reference owns numeric
 fields and compatibility. Current-role activation/refresh remains separate.
 
+Source-aware immutable-original activation uses distinct Base5 and Effective6
+artifact roles. Frozen Base1/3 and Effective2/4 admission remains unchanged;
+source metadata is never relabelled as frozen authority. Before promotion, the
+native host rebuilds each saved request context at its original capture and
+compares complete programme facts and Current/Next/Continuing/Later Today roles.
+The write transaction independently rechecks the exact raw-source context and
+current selection, pending/head/accepted-pointer fences. Validity starts at the
+original capture and ends at the first programme start/stop, segment start/finish
+or next named-clock civil midnight; an earlier Scripted expiry also applies.
+Clock rewind or a reached boundary rejects activation without changing retained
+pointers. Reload never renews that interval or invokes the producer.
+
+Guide artifacts bind the exact immutable service, source and derived expiry;
+fresh wall-clock qualification timestamps are not part of their stable digest.
+A separate monotonic deadline caps response-owned delivery and survives cheap
+metadata observations. Source hashing retains the same work hold through actual
+worker completion, including after caller cancellation. Explicit runtime policy3
+supplies guide-source limits; older policy and artifact readers reject these new
+roles rather than interpreting them as static output. The retained SQLite CHECK
+must explicitly admit5/6 through the existing ADR0124/0126 deferred-FK rebuild
+pattern, preserving rows, identities, pointers, advanced sequence and immutability
+triggers. No new columns or logical table/identity removal is required. This
+initial activation boundary does not implement the refresh/stale-Health coordinator
+or change its independently required debounce, cadence and retention policy.
+
 The native command component now carries one explicit source page on its selected
 logical stream and applies bitmap decoder options to the first matching physical
 input, preserving a shared one-shot AV read. It follows the existing single

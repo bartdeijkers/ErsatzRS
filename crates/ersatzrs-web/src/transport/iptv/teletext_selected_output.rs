@@ -5,9 +5,10 @@ use std::{sync::Arc, time::Instant};
 use chrono::{DateTime, Utc};
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
 use ersatzrs_core::repositories::{
-    TeletextGenerationMutation, TeletextProfileMutation,
+    TeletextGenerationMutation, TeletextGuideGenerationCheck, TeletextGuideSourceCheckLimits,
+    TeletextProfileMutation, TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
-    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION, TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::{TeletextAcceptedGeneration, TeletextEffectiveBindingSnapshot};
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
@@ -18,7 +19,19 @@ use crate::host::{
         reload_accepted_effective_teletext_generation, AcceptedEffectiveTeletextOutputCandidate,
     },
     teletext_generations::{reload_accepted_teletext_generation, AcceptedTeletextOutputCandidate},
+    teletext_guide_generations::{
+        reload_accepted_effective_guide_teletext_generation,
+        reload_accepted_guide_teletext_generation, GuideOutputQualification,
+    },
 };
+
+/// Explicit version-3 runtime source checking, owned by one response context.
+/// Absence keeps the historical static contract and never guesses source bounds.
+#[derive(Clone)]
+pub(super) struct GuideRuntime {
+    pub(super) pool: ersatzrs_infra::db::DbPool,
+    pub(super) limits: TeletextGuideSourceCheckLimits,
+}
 
 /// Only existing sealed native candidates can construct these role variants.
 /// Scoped absence is retained for caching/confirmation, rather than interpreted
@@ -35,9 +48,23 @@ pub(crate) enum SelectedTeletextOutputCandidate {
 }
 
 impl SelectedTeletextOutputCandidate {
-    pub(crate) const fn next_transition(&self) -> Option<tokio::time::Instant> {
-        match self {
+    pub(crate) fn next_transition(&self) -> Option<tokio::time::Instant> {
+        let scope = match self {
             Self::Base(_, next) | Self::Effective(_, next) => *next,
+        };
+        let guide = self
+            .guide_qualification()
+            .map(|proof| tokio::time::Instant::from_std(proof.deadline));
+        match (scope, guide) {
+            (Some(scope), Some(guide)) => Some(scope.min(guide)),
+            (scope, guide) => scope.or(guide),
+        }
+    }
+
+    pub(super) fn guide_qualification(&self) -> Option<&GuideOutputQualification> {
+        match self {
+            Self::Base(candidate, _) => candidate.guide_qualification(),
+            Self::Effective(candidate, _) => candidate.guide_qualification(),
         }
     }
 
@@ -87,6 +114,8 @@ impl SelectedTeletextOutputCandidate {
                 successor.artifact_version,
                 TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
                     | TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+                    | TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION
+                    | TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
             )
             || successor.request.channel_id != self.channel_id()
             || self
@@ -113,7 +142,46 @@ impl SelectedTeletextOutputCandidate {
             return false;
         }
         let confirmation = async {
-            match self {
+            // Transaction-owned source hashing must retain the same admission
+            // after cancellation. Static confirmations perform no guide CPU work.
+            if let Some(proof) = self.guide_qualification() {
+                let Ok(guard) =
+                    crate::host::teletext_work::begin(application, Some(deadline)).await
+                else {
+                    return false;
+                };
+                let check = TeletextGuideGenerationCheck {
+                    limits: proof.limits,
+                    deadline,
+                    hold: guard.hold_work(),
+                };
+                let result = match self {
+                    Self::Base(candidate, _) => {
+                        application
+                            .confirm_current_guide_teletext_generation(
+                                generation,
+                                candidate.selection(),
+                                &proof.qualification,
+                                check,
+                                maximum,
+                            )
+                            .await
+                    }
+                    Self::Effective(candidate, _) => {
+                        application
+                            .confirm_current_effective_guide_teletext_generation(
+                                generation,
+                                candidate.selection(),
+                                &proof.qualification,
+                                check,
+                                maximum,
+                            )
+                            .await
+                    }
+                };
+                return matches!(result, Ok(TeletextGenerationMutation::Accepted(())));
+            }
+            let result = match self {
                 Self::Base(candidate, _) => {
                     application
                         .confirm_current_teletext_generation(
@@ -133,11 +201,12 @@ impl SelectedTeletextOutputCandidate {
                         )
                         .await
                 }
-            }
+            };
+            matches!(result, Ok(TeletextGenerationMutation::Accepted(())))
         };
         matches!(
             tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), confirmation).await,
-            Ok(Ok(TeletextGenerationMutation::Accepted(())))
+            Ok(true)
         ) && Instant::now() < deadline
     }
 }
@@ -211,27 +280,92 @@ pub(crate) async fn load_selected_teletext_output_candidate(
     encoding: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> Result<Option<Arc<SelectedTeletextOutputCandidate>>, SelectedTeletextReadFailure> {
+    load_selected_teletext_output_candidate_with_guide(
+        application,
+        channel_id,
+        budget,
+        encoding,
+        deadline,
+        None,
+    )
+    .await
+}
+
+pub(super) async fn load_selected_teletext_output_candidate_with_guide(
+    application: &ApplicationServices,
+    channel_id: i64,
+    budget: TeletextDesignDocumentBudget,
+    encoding: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    guide: Option<&GuideRuntime>,
+) -> Result<Option<Arc<SelectedTeletextOutputCandidate>>, SelectedTeletextReadFailure> {
     let work = async {
         let observation = observe_selected_teletext_output(application, channel_id).await?;
         if observation.generation.is_none() {
             return Ok(None);
         }
         let candidate = if observation.effective {
-            reload_accepted_effective_teletext_generation(
-                application,
-                channel_id,
-                budget,
-                encoding,
-                deadline,
-            )
-            .await
-            .map_err(|_| SelectedTeletextReadFailure)?
-            .map(|candidate| {
-                SelectedTeletextOutputCandidate::Effective(candidate, observation.next_transition)
-            })
-        } else {
-            reload_accepted_teletext_generation(application, channel_id, budget, encoding, deadline)
+            let guide_role = observation.generation.as_ref().is_some_and(|g| {
+                g.artifact_version == TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
+            });
+            let recovered = if guide_role {
+                let guide = guide.ok_or(SelectedTeletextReadFailure)?;
+                reload_accepted_effective_guide_teletext_generation(
+                    application,
+                    &guide.pool,
+                    channel_id,
+                    budget,
+                    encoding,
+                    guide.limits,
+                    deadline,
+                )
                 .await
+            } else {
+                reload_accepted_effective_teletext_generation(
+                    application,
+                    channel_id,
+                    budget,
+                    encoding,
+                    deadline,
+                )
+                .await
+            };
+            recovered
+                .map_err(|_| SelectedTeletextReadFailure)?
+                .map(|candidate| {
+                    SelectedTeletextOutputCandidate::Effective(
+                        candidate,
+                        observation.next_transition,
+                    )
+                })
+        } else {
+            let guide_role = observation
+                .generation
+                .as_ref()
+                .is_some_and(|g| g.artifact_version == TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION);
+            let recovered = if guide_role {
+                let guide = guide.ok_or(SelectedTeletextReadFailure)?;
+                reload_accepted_guide_teletext_generation(
+                    application,
+                    &guide.pool,
+                    channel_id,
+                    budget,
+                    encoding,
+                    guide.limits,
+                    deadline,
+                )
+                .await
+            } else {
+                reload_accepted_teletext_generation(
+                    application,
+                    channel_id,
+                    budget,
+                    encoding,
+                    deadline,
+                )
+                .await
+            };
+            recovered
                 .map_err(|_| SelectedTeletextReadFailure)?
                 .map(|candidate| {
                     SelectedTeletextOutputCandidate::Base(
@@ -242,7 +376,7 @@ pub(crate) async fn load_selected_teletext_output_candidate(
         };
         Ok(candidate.map(Arc::new))
     };
-    match tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), work).await {
+    match tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), Box::pin(work)).await {
         Ok(result) if Instant::now() < deadline => result,
         _ => Err(SelectedTeletextReadFailure),
     }

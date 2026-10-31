@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
-    TeletextEffectivePublicationRequestSave, TeletextGuideSourceCheckLimits,
-    TeletextGuideSourceFence, TeletextPublicationMutation, TeletextPublicationRepository,
-    TeletextPublicationRequestSave,
+    TeletextEffectivePublicationRequestSave, TeletextGuideGenerationCheck,
+    TeletextGuideSourceCheckLimits, TeletextGuideSourceFence, TeletextPublicationMutation,
+    TeletextPublicationRepository, TeletextPublicationRequestSave,
 };
 use ersatzrs_domain::{EntityId, TeletextPublicationRequest};
 use std::time::Instant;
@@ -84,6 +84,65 @@ pub enum TeletextPublicationStoreError {
 }
 
 impl ApplicationServices {
+    /// Request exact historical source-bound originals while retaining actual
+    /// hash-worker ownership after caller cancellation. No live role is granted.
+    /// # Errors
+    /// Rejects unsupported held ports, missing native proof or expired admission.
+    pub async fn request_source_bound_teletext_design_publication_with_work(
+        &self,
+        request: TeletextPublicationRequestSave,
+        validator: &dyn TeletextPublicationValidator,
+        fence: &TeletextGuideSourceFence,
+        check: TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<
+        TeletextPublicationMutation<TeletextPublicationRequest>,
+        TeletextPublicationStoreError,
+    > {
+        let repository = self
+            .ports()
+            .teletext_publications()
+            .ok_or(TeletextPublicationStoreError::Unavailable)?;
+        check_source_deadline(check.deadline)?;
+        validator
+            .confirm_request_with_source(&request, fence)
+            .await?;
+        check_source_deadline(check.deadline)?;
+        repository
+            .request_with_source_held(&request, fence, &check, max_document_bytes)
+            .await
+            .map_err(|_| TeletextPublicationStoreError::StorageUnavailable)
+    }
+
+    /// Scoped historical request with the same retained actual-work ownership.
+    /// # Errors
+    /// Rejects unsupported held ports, missing native proof or expired admission.
+    pub async fn request_source_bound_effective_teletext_design_publication_with_work(
+        &self,
+        request: TeletextEffectivePublicationRequestSave,
+        validator: &dyn TeletextEffectivePublicationValidator,
+        fence: &TeletextGuideSourceFence,
+        check: TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<
+        TeletextPublicationMutation<TeletextPublicationRequest>,
+        TeletextPublicationStoreError,
+    > {
+        let repository = self
+            .ports()
+            .teletext_publications()
+            .ok_or(TeletextPublicationStoreError::Unavailable)?;
+        check_source_deadline(check.deadline)?;
+        validator
+            .confirm_request_with_source(&request, fence, check.deadline)
+            .await?;
+        check_source_deadline(check.deadline)?;
+        repository
+            .request_effective_with_source_held(&request, fence, &check, max_document_bytes)
+            .await
+            .map_err(|_| TeletextPublicationStoreError::StorageUnavailable)
+    }
+
     /// Request exact effective originals through independent scoped pointer CAS.
     /// No base configuration, accepted output or live stream changes. Once the
     /// repository admits a write, its atomic settlement result remains truthful.

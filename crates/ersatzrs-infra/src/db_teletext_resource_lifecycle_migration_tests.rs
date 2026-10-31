@@ -1,6 +1,9 @@
 //! Artifact role widening preserves old immutable output and both pointer roles.
 use super::*;
 
+#[path = "db_teletext_guide_artifact_migration_tests.rs"]
+mod guide_artifacts;
+
 const LIFECYCLE_VERSION: i64 = 202_610_160_134;
 
 async fn legacy() -> (tempfile::TempDir, DbPool) {

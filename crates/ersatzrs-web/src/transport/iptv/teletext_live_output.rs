@@ -97,9 +97,20 @@ impl TeletextLiveOutputIntent {
                 encoding,
                 source,
                 timing,
+                guide: None,
             },
             initial,
         })
+    }
+
+    /// Opt in to independently bounded guide-source recovery; legacy constructors
+    /// remain static-only unless the composition root supplies these dependencies.
+    pub(super) fn with_guide_runtime(
+        mut self,
+        guide: Option<Arc<super::teletext_selected_output::GuideRuntime>>,
+    ) -> Self {
+        self.context.guide = guide;
+        self
     }
 
     pub(in crate::transport::iptv) const fn trace_id(&self) -> uuid::Uuid {

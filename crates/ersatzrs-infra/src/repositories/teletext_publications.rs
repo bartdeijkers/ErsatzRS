@@ -36,6 +36,48 @@ pub(super) mod effective_scope;
 
 #[async_trait]
 impl TeletextPublicationRepository for SqliteTeletextPublicationRepository {
+    async fn request_with_source_held(
+        &self,
+        save: &TeletextPublicationRequestSave,
+        fence: &TeletextGuideSourceFence,
+        check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<M<TeletextPublicationRequest>> {
+        self.request_checked(
+            save,
+            max_document_bytes,
+            Some(SourceCheck {
+                fence,
+                limits: check.limits,
+                deadline: check.deadline,
+                hold: Some(check.hold.clone()),
+            }),
+        )
+        .await
+    }
+
+    async fn request_effective_with_source_held(
+        &self,
+        save: &ersatzrs_core::repositories::TeletextEffectivePublicationRequestSave,
+        fence: &TeletextGuideSourceFence,
+        check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<M<TeletextPublicationRequest>> {
+        effective::request(
+            &self.0,
+            save,
+            max_document_bytes,
+            check.deadline,
+            Some(SourceCheck {
+                fence,
+                limits: check.limits,
+                deadline: check.deadline,
+                hold: Some(check.hold.clone()),
+            }),
+        )
+        .await
+    }
+
     async fn request_effective(
         &self,
         save: &ersatzrs_core::repositories::TeletextEffectivePublicationRequestSave,
@@ -62,6 +104,7 @@ impl TeletextPublicationRepository for SqliteTeletextPublicationRepository {
                 fence,
                 limits,
                 deadline,
+                hold: None,
             }),
         )
         .await
@@ -102,6 +145,7 @@ impl TeletextPublicationRepository for SqliteTeletextPublicationRepository {
                 fence,
                 limits,
                 deadline,
+                hold: None,
             }),
         )
         .await
@@ -121,6 +165,7 @@ struct SourceCheck<'a> {
     fence: &'a TeletextGuideSourceFence,
     limits: TeletextGuideSourceCheckLimits,
     deadline: Instant,
+    hold: Option<ersatzrs_core::locking::TeletextWorkHold>,
 }
 
 impl SqliteTeletextPublicationRepository {
@@ -264,6 +309,57 @@ async fn check_source(
     tx: &mut Transaction<'_, Db>,
     check: SourceCheck<'_>,
 ) -> std::result::Result<(), R> {
+    check_source_inner(tx, check, false).await.map(|_| ())
+}
+
+/// Reuse the same transaction-owned source capture/hash, independently deriving
+/// original-capture current-role validity from its bounded native occurrences.
+pub(super) async fn check_current_source(
+    tx: &mut Transaction<'_, Db>,
+    fence: &TeletextGuideSourceFence,
+    check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+) -> std::result::Result<
+    ersatzrs_core::repositories::TeletextGuideGenerationQualification,
+    ersatzrs_core::repositories::TeletextGenerationRejection,
+> {
+    use ersatzrs_core::repositories::TeletextGenerationRejection as G;
+    let checked = check_source_inner(
+        tx,
+        SourceCheck {
+            fence,
+            limits: check.limits,
+            deadline: check.deadline,
+            hold: Some(check.hold.clone()),
+        },
+        true,
+    )
+    .await
+    .map_err(G::Publication)?;
+    let qualification = checked
+        .qualification
+        .ok_or(G::GuideFreshnessRequired)?
+        .map_err(|_| G::GuideFreshnessRequired)?;
+    qualification
+        .validate_current(chrono::Utc::now())
+        .map_err(|_| G::GuideFreshnessRequired)?;
+    Ok(qualification)
+}
+
+struct SourceProof {
+    digest: [u8; 32],
+    qualification: Option<
+        std::result::Result<
+            ersatzrs_core::repositories::TeletextGuideGenerationQualification,
+            ersatzrs_core::repositories::TeletextGuideQualificationError,
+        >,
+    >,
+}
+
+async fn check_source_inner(
+    tx: &mut Transaction<'_, Db>,
+    check: SourceCheck<'_>,
+    current_role: bool,
+) -> std::result::Result<SourceProof, R> {
     if Instant::now() >= check.deadline {
         return Err(R::GuideTimedOut);
     }
@@ -311,9 +407,12 @@ async fn check_source(
     };
     let deadline = check.deadline;
     let digest_version = check.fence.context_digest_version;
+    let current_source = current_role.then(|| check.fence.clone());
+    let hold = check.hold.clone();
     // Move the exact transaction-owned capture into a joined bounded CPU worker.
     // Caller cancellation does not turn a partial hash into successful admission.
     let mut task = PendingHash(tokio::task::spawn_blocking(move || {
+        let _hold = hold;
         if Instant::now() >= deadline {
             return Err(R::GuideTimedOut);
         }
@@ -323,19 +422,34 @@ async fn check_source(
         if Instant::now() >= deadline {
             return Err(R::GuideTimedOut);
         }
-        Ok(digest)
+        let qualification = current_source.map(|source| {
+            source.qualify_current(
+                snapshot
+                    .channels()
+                    .iter()
+                    .flat_map(crate::xmltv::CapturedGuideChannel::occurrences),
+                chrono::Utc::now(),
+            )
+        });
+        if Instant::now() >= deadline {
+            return Err(R::GuideTimedOut);
+        }
+        Ok(SourceProof {
+            digest,
+            qualification,
+        })
     }));
     let actual = (&mut task.0).await.map_err(|_| R::GuideUnavailable)??;
     if Instant::now() >= check.deadline {
         return Err(R::GuideTimedOut);
     }
-    if actual != check.fence.context_digest {
+    if actual.digest != check.fence.context_digest {
         return Err(R::GuideChanged);
     }
-    Ok(())
+    Ok(actual)
 }
 
-struct PendingHash(tokio::task::JoinHandle<std::result::Result<[u8; 32], R>>);
+struct PendingHash(tokio::task::JoinHandle<std::result::Result<SourceProof, R>>);
 impl Drop for PendingHash {
     fn drop(&mut self) {
         // Deadline/caller cancellation aborts queued CPU work. Already running

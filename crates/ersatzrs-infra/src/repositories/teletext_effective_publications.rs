@@ -246,4 +246,4 @@ pub(in crate::repositories) async fn current_in_transaction(
 
 #[cfg(test)]
 #[path = "teletext_effective_publication_tests.rs"]
-mod tests;
+pub(in crate::repositories) mod tests;

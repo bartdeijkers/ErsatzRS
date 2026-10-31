@@ -25,8 +25,9 @@ use crate::host::{
         accept_effective_original_teletext_generation_with_hold, frozen_original,
     },
     teletext_effective_publications::{
-        request_effective_original_publication_with_hold, NativeEffectiveTeletextPublicationError,
-        TeletextEffectivePublicationTarget,
+        request_effective_original_publication_with_hold,
+        request_source_bound_effective_original_publication_with_hold,
+        NativeEffectiveTeletextPublicationError, TeletextEffectivePublicationTarget,
     },
     teletext_runtime_policy::NativeTeletextAuthoringInput,
 };
@@ -271,6 +272,7 @@ fn render_original(
         },
         digest: restored.digest().to_owned(),
         static_original: frozen_original(restored),
+        guide_original: restored.guide_source().is_some() && restored.encoded().is_some(),
         selection: AuthoringSelection::Effective(restored.selection().clone()),
         publication: None,
         raster,
@@ -383,6 +385,97 @@ pub(super) async fn publish_generation(
     )
     .await
     .map_err(generation_error)?;
+    match mutation {
+        TeletextGenerationMutation::Accepted(accepted) => Ok(TeletextAuthoringSelected {
+            identity: publication.identity,
+            request_id: accepted.generation().request.id,
+            generation_id: accepted.generation().id,
+        }),
+        TeletextGenerationMutation::Rejected(reason) => Err(match reason {
+            TeletextGenerationRejection::Publication(reason) => publication_rejection(reason),
+            TeletextGenerationRejection::GuideFreshnessRequired => {
+                failure(TeletextAuthoringStatus::SelectionUnavailable)
+            }
+            TeletextGenerationRejection::GenerationConflict
+            | TeletextGenerationRejection::AlreadyAccepted => {
+                failure(TeletextAuthoringStatus::SelectionChanged)
+            }
+        }),
+    }
+}
+
+pub(super) async fn request_guide_publication(
+    application: &ApplicationServices,
+    target: TeletextAuthoringPublicationTarget,
+    operation: &Operation,
+) -> Result<TeletextAuthoringPending, TeletextAuthoringError> {
+    let identity = target.identity;
+    let limits = operation
+        .policy
+        .guide_limits
+        .ok_or_else(|| failure(TeletextAuthoringStatus::SelectionUnavailable))?;
+    let mutation = request_source_bound_effective_original_publication_with_hold(
+        application,
+        TeletextEffectivePublicationTarget {
+            channel_id: identity.channel_id,
+            design_id: identity.design_id,
+            revision: identity.revision,
+            expected_digest: target.digest,
+            expected_design_head: target.expected_design_head,
+            expected_request_id: target.expected_request_id,
+        },
+        operation.policy.design,
+        operation.policy.reload_encoding_policy(),
+        limits,
+        operation.deadline,
+        operation.guard.hold_work(),
+    )
+    .await
+    .map_err(|error| match error {
+        NativeEffectiveTeletextPublicationError::Design(error) => design_error(error),
+        NativeEffectiveTeletextPublicationError::Storage(error) => {
+            publication_error(super::NativeTeletextPublicationError::Request(error))
+        }
+        NativeEffectiveTeletextPublicationError::GuideFreshnessRequired => {
+            failure(TeletextAuthoringStatus::SelectionUnavailable)
+        }
+    })?;
+    match mutation {
+        TeletextPublicationMutation::Requested(requested) => Ok(TeletextAuthoringPending {
+            identity,
+            request_id: requested.request().id,
+        }),
+        TeletextPublicationMutation::Rejected(reason) => Err(publication_rejection(reason)),
+    }
+}
+
+pub(super) async fn publish_guide_generation(
+    state: &crate::host::state::AppState,
+    target: TeletextAuthoringPublishTarget,
+    operation: &Operation,
+) -> Result<TeletextAuthoringSelected, TeletextAuthoringError> {
+    let publication = target.publication;
+    let request = before(
+        operation.deadline,
+        state
+            .application
+            .effective_teletext_publication_request(publication.identity.channel_id),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?
+    .filter(|request| Some(request.id) == publication.expected_request_id)
+    .ok_or_else(|| failure(TeletextAuthoringStatus::SelectionChanged))?;
+    if !matches_original(&request, publication.identity, &publication.digest) {
+        return Err(failure(TeletextAuthoringStatus::SelectionChanged));
+    }
+    let mutation = crate::host::teletext_guide_generations::accept_effective_original_guide_teletext_generation_with_hold(
+        super::guide_generation_context(state, operation)?,
+        TeletextGenerationTarget {
+            request,
+            expected_design_head: publication.expected_design_head,
+            expected_generation_id: target.expected_generation_id,
+        },
+    ).await.map_err(generation_error)?;
     match mutation {
         TeletextGenerationMutation::Accepted(accepted) => Ok(TeletextAuthoringSelected {
             identity: publication.identity,

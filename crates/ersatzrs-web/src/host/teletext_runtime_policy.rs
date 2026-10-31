@@ -44,6 +44,7 @@ pub(crate) struct NativeTeletextRuntimePolicy {
     pub(crate) source: TeletextSourcePolicy,
     pub(crate) recovery_timeout: Duration,
     pub(crate) live_updates: Option<TeletextAcceptedUpdatePolicy>,
+    pub(crate) guide_limits: Option<TeletextGuideSourceCheckLimits>,
 }
 
 /// Static errors deliberately exclude raw configuration or Serde payloads.
@@ -76,14 +77,22 @@ pub(crate) fn parse_native_teletext_runtime_policy(
     let live_updates = match (dto.version, dto.live_updates.0) {
         (1, None) => None,
         // Version 1 retains its closed schema and startup-only behavior.
-        (1, Some(_)) | (2, None) => return Err(TeletextRuntimePolicyError::InvalidJson),
-        (2, Some(limits)) => Some(
+        (1, Some(_)) | (2 | 3, None) => return Err(TeletextRuntimePolicyError::InvalidJson),
+        (2 | 3, Some(limits)) => Some(
             TeletextAcceptedUpdatePolicy::new(
                 Duration::from_millis(limits.poll_interval_ms),
                 Duration::from_millis(limits.recovery_timeout_ms),
             )
             .map_err(|_| TeletextRuntimePolicyError::InvalidLiveUpdateTiming)?,
         ),
+        _ => return Err(TeletextRuntimePolicyError::UnsupportedVersion),
+    };
+    let guide_limits = match (dto.version, dto.guide_limits.0) {
+        (1 | 2, None) => None,
+        (3, Some(limits)) => Some(limits.into()),
+        (1 | 2, Some(_)) | (3, None) => {
+            return Err(TeletextRuntimePolicyError::InvalidJson);
+        }
         _ => return Err(TeletextRuntimePolicyError::UnsupportedVersion),
     };
     let recovery_timeout = Duration::from_millis(dto.recovery_timeout_ms);
@@ -111,6 +120,7 @@ pub(crate) fn parse_native_teletext_runtime_policy(
         source,
         recovery_timeout,
         live_updates,
+        guide_limits,
     })
 }
 
@@ -482,7 +492,8 @@ struct LifecycleInput {
 // usize deserialization rejects values not representable on the current target,
 // including supported 32-bit native targets. No casts or architecture guesses.
 // Existing DTO fields are mandatory; null/missing/duplicate/unknown fields fail.
-// live_updates is absent in version 1 and required in version 2, never null.
+// Version 1 is static; versions 2/3 require live_updates. Only version 3
+// accepts explicit guide-source limits; old runtimes reject the new version.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RuntimePolicy {
@@ -496,6 +507,8 @@ struct RuntimePolicy {
     source: SourceLimits,
     #[serde(default)]
     live_updates: OptionalLiveUpdates,
+    #[serde(default)]
+    guide_limits: OptionalGuideLimits,
 }
 
 #[derive(Default)]
@@ -1393,6 +1406,48 @@ mod tests {
     }
 
     #[test]
+    fn guide_runtime_version_three_requires_explicit_closed_limits_and_live_updates() {
+        let mut value = fixture();
+        value["version"] = json!(3);
+        assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+        value["live_updates"] = json!({"poll_interval_ms":1000,"recovery_timeout_ms":2000});
+        assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+        let guide = guide_authoring_fixture()["guide_limits"].clone();
+        value["guide_limits"] = guide.clone();
+        assert_eq!(
+            parse(&value).guide_limits,
+            authoring_policy(&guide_authoring_fixture()).guide_limits
+        );
+        for version in [1, 2] {
+            let mut legacy = value.clone();
+            legacy["version"] = json!(version);
+            assert_error(&legacy, TeletextRuntimePolicyError::InvalidJson);
+        }
+        for invalid in [Value::Null, json!([]), json!({}), json!({"max_records":1})] {
+            value["guide_limits"] = invalid;
+            assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+        }
+        value["guide_limits"] = guide;
+        let key = "max_digest_bytes";
+        for invalid in [Value::Null, json!(-1), json!(1.5)] {
+            value["guide_limits"][key] = invalid;
+            assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+        }
+        let mut zero = guide_authoring_fixture()["guide_limits"].clone();
+        for field in zero.as_object_mut().unwrap().values_mut() {
+            *field = json!(0);
+        }
+        value["guide_limits"] = zero;
+        assert_eq!(parse(&value).guide_limits.unwrap().max_records, 0);
+        let raw = value.to_string();
+        let duplicate = raw.replace("\"guide_limits\":", "\"guide_limits\":{},\"guide_limits\":");
+        assert!(matches!(
+            parse_native_teletext_runtime_policy(&duplicate),
+            Err(TeletextRuntimePolicyError::InvalidJson)
+        ));
+    }
+
+    #[test]
     fn live_version_two_requires_a_closed_nonnull_object_without_timing_defaults() {
         let mut baseline = fixture();
         baseline["version"] = json!(2);
@@ -1450,7 +1505,7 @@ mod tests {
 
     #[test]
     fn version_schema_and_duplicates_are_rejected_without_defaults() {
-        for version in [0, 3, u32::MAX] {
+        for version in [0, 4, u32::MAX] {
             let mut value = fixture();
             value["version"] = json!(version);
             assert_error(&value, TeletextRuntimePolicyError::UnsupportedVersion);

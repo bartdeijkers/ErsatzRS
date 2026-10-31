@@ -8,7 +8,10 @@ use ersatzrs_domain::{
     TeletextEffectiveChannelSelectionSnapshot, TeletextPublicationRequest,
 };
 
-use super::{RepositoryError, Result, TeletextPublicationRejection};
+use super::{
+    RepositoryError, Result, TeletextGuideGenerationQualification, TeletextGuideSourceCheckLimits,
+    TeletextPublicationRejection,
+};
 
 /// Original strict native wire fingerprint, independent of documents.
 pub const TELETEXT_GENERATION_ARTIFACT_VERSION: u16 = 1;
@@ -18,6 +21,33 @@ pub const TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION: u16 = 2;
 pub const TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION: u16 = 3;
 /// Scoped counterpart, retaining the explicit service/absence role.
 pub const TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION: u16 = 4;
+/// Source-aware Base lifecycle artifact with deterministic current-role validity.
+pub const TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION: u16 = 5;
+/// Source-aware scoped lifecycle artifact, also bounded by saved Scripted expiry.
+pub const TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION: u16 = 6;
+
+/// Ephemeral trusted operation bounds. The actual blocking source worker must
+/// retain a cloned hold even after cancellation of the awaiting caller.
+#[derive(Clone)]
+pub struct TeletextGuideGenerationCheck {
+    pub limits: TeletextGuideSourceCheckLimits,
+    pub deadline: Instant,
+    pub hold: crate::locking::TeletextWorkHold,
+}
+
+/// Additive source-aware Base acceptance; static saves retain their old role.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TeletextGuideGenerationSave {
+    pub original: TeletextGenerationSave,
+    pub qualification: TeletextGuideGenerationQualification,
+}
+
+/// Additive source-aware scoped acceptance, independent of the Base pointer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TeletextEffectiveGuideGenerationSave {
+    pub original: TeletextEffectiveGenerationSave,
+    pub qualification: TeletextGuideGenerationQualification,
+}
 
 /// Fresh promotion target and independent accepted-pointer CAS.
 #[derive(Clone, PartialEq, Eq)]
@@ -97,6 +127,65 @@ pub enum TeletextGenerationMutation<T> {
 /// Atomic durable publication and exact read-only runtime revalidation.
 #[async_trait]
 pub trait TeletextGenerationRepository: Send + Sync {
+    /// Accept an exact guide-bearing Base original after trusted native role
+    /// proof, independently recapturing source and finite validity in the same
+    /// request/head/selection/pointer transaction. Old ports fail closed.
+    async fn accept_guide(
+        &self,
+        _save: &TeletextGuideGenerationSave,
+        _check: &TeletextGuideGenerationCheck,
+        _max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<TeletextAcceptedGeneration>> {
+        Err(RepositoryError::unavailable(
+            "guide teletext generation acceptance",
+            "guide generation selection is unsupported",
+        ))
+    }
+
+    /// Scoped counterpart; source validity is capped by the saved scope expiry.
+    async fn accept_effective_guide(
+        &self,
+        _save: &TeletextEffectiveGuideGenerationSave,
+        _check: &TeletextGuideGenerationCheck,
+        _max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<TeletextAcceptedGeneration>> {
+        Err(RepositoryError::unavailable(
+            "effective guide teletext generation acceptance",
+            "effective guide generation selection is unsupported",
+        ))
+    }
+
+    /// Confirm exact accepted Base identity/source/current role in one read
+    /// snapshot. New drafts or pending requests do not replace accepted output.
+    async fn confirm_current_guide(
+        &self,
+        _generation: &TeletextAcceptedGeneration,
+        _selection: &TeletextChannelSelectionSnapshot,
+        _qualification: &TeletextGuideGenerationQualification,
+        _check: &TeletextGuideGenerationCheck,
+        _max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<()>> {
+        Err(RepositoryError::unavailable(
+            "guide teletext generation confirmation",
+            "guide generation confirmation is unsupported",
+        ))
+    }
+
+    /// Confirm exact accepted scoped identity/source before either role expires.
+    async fn confirm_current_effective_guide(
+        &self,
+        _generation: &TeletextAcceptedGeneration,
+        _selection: &TeletextEffectiveChannelSelectionSnapshot,
+        _qualification: &TeletextGuideGenerationQualification,
+        _check: &TeletextGuideGenerationCheck,
+        _max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<()>> {
+        Err(RepositoryError::unavailable(
+            "effective guide teletext generation confirmation",
+            "effective guide generation confirmation is unsupported",
+        ))
+    }
+
     /// Accept scoped originals after native proof under independent scoped CAS.
     /// The write transaction repeats exact current scope/expiry, version-2
     /// revision, request and artifact fences. Admission uses the deadline;

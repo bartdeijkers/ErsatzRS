@@ -9,8 +9,8 @@ use ersatzrs_domain::{
 };
 
 use super::{
-    RepositoryError, Result, TeletextGuideSourceCheckLimits, TeletextGuideSourceFence,
-    TeletextProfileRejection,
+    RepositoryError, Result, TeletextGuideGenerationCheck, TeletextGuideSourceCheckLimits,
+    TeletextGuideSourceFence, TeletextProfileRejection,
 };
 
 /// Exact target and complete current-selection fence for a pending request.
@@ -116,6 +116,35 @@ pub enum TeletextPublicationMutation<T> {
 /// Pending intents with atomic design, whole-channel and current-request fences.
 #[async_trait]
 pub trait TeletextPublicationRepository: Send + Sync {
+    /// Historical source-aware Base pending intent with actual worker ownership.
+    /// The hold adds no current-guide authority; unsupported ports fail closed.
+    async fn request_with_source_held(
+        &self,
+        _save: &TeletextPublicationRequestSave,
+        _fence: &TeletextGuideSourceFence,
+        _check: &TeletextGuideGenerationCheck,
+        _max_document_bytes: usize,
+    ) -> Result<TeletextPublicationMutation<TeletextPublicationRequest>> {
+        Err(RepositoryError::unavailable(
+            "held source-bound teletext publication request",
+            "held source publication is unsupported",
+        ))
+    }
+
+    /// Scoped pending counterpart, retaining the same original worker hold.
+    async fn request_effective_with_source_held(
+        &self,
+        _save: &TeletextEffectivePublicationRequestSave,
+        _fence: &TeletextGuideSourceFence,
+        _check: &TeletextGuideGenerationCheck,
+        _max_document_bytes: usize,
+    ) -> Result<TeletextPublicationMutation<TeletextPublicationRequest>> {
+        Err(RepositoryError::unavailable(
+            "held source-bound effective teletext publication request",
+            "held effective source publication is unsupported",
+        ))
+    }
+
     /// Request version-2 originals under exact current effective scope and an
     /// independent scoped pointer. Check scope/expiry, design and CAS in the
     /// same write transaction. The deadline bounds admission; an admitted commit

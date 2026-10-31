@@ -25,6 +25,9 @@ use std::{collections::BTreeMap, time::Instant};
 
 const POLICY: &str = "teletext.authoring.policy";
 
+#[path = "admin_preparation/live_publication.rs"]
+mod live_publication;
+
 fn policy() -> Value {
     let mut value = authoring::policy();
     value["version"] = json!(2);
@@ -140,7 +143,11 @@ async fn http_prepare(fixture: &Fixture) -> TeletextAuthoringIdentity {
     )
     .await;
     let redirect = editorial_http::redirect(&response, 1);
-    assert_eq!(redirect["saved"], "draft");
+    assert_eq!(
+        redirect.get("saved").map(String::as_str),
+        Some("draft"),
+        "production guide preparation redirect: {redirect:?}"
+    );
     assert!(!redirect.contains_key("error"));
     TeletextAuthoringIdentity {
         channel_id: 1,
@@ -262,9 +269,11 @@ async fn proof(
     let publication = preview.publication().unwrap();
     assert_eq!(
         publication.state,
-        TeletextAuthoringPublicationState::Unavailable
+        TeletextAuthoringPublicationState::Unrequested
     );
-    assert!(!publication.can_request && !publication.can_publish);
+    // The additive source-aware publication controller now offers an explicit
+    // request; this optimistic flag still grants no active generation.
+    assert!(publication.can_request && !publication.can_publish);
     assert!(preview.raster().unwrap().diagnostics().is_empty());
     assert!(!preview.authoring().is_empty());
     Proof {

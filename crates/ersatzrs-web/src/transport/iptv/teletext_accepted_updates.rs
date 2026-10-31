@@ -16,8 +16,9 @@ use std::{
 
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
 use ersatzrs_core::repositories::{
+    TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
-    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION, TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::TeletextAcceptedGeneration;
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextServiceDescriptor};
@@ -36,8 +37,9 @@ use crate::transport::iptv::{
         TeletextOutputUpdate,
     },
     teletext_selected_output::{
-        load_selected_teletext_output_candidate, observe_selected_teletext_output,
-        SelectedTeletextOutputCandidate,
+        load_selected_teletext_output_candidate,
+        load_selected_teletext_output_candidate_with_guide, observe_selected_teletext_output,
+        GuideRuntime, SelectedTeletextOutputCandidate,
     },
     teletext_source_policy::TeletextSourcePolicy,
 };
@@ -86,6 +88,7 @@ pub(super) struct TeletextAcceptedUpdatesContext {
     pub(super) encoding: TeletextChannelDocumentEncodingPolicy,
     pub(super) source: TeletextSourcePolicy,
     pub(super) timing: TeletextAcceptedUpdatePolicy,
+    pub(super) guide: Option<Arc<GuideRuntime>>,
 }
 
 /// Dropping the actual response owner ends its monitor. Existing native recovery
@@ -164,6 +167,14 @@ pub(super) fn start_accepted_updates(
             NativeBackend {
                 trace_id,
                 expiry_preparation: Mutex::new(None),
+                guide_validity: Mutex::new(initial.as_ref().and_then(|candidate| {
+                    candidate.guide_qualification().map(|proof| {
+                        (
+                            candidate.generation().clone(),
+                            Instant::from_std(proof.deadline),
+                        )
+                    })
+                })),
                 next_transition: Mutex::new(
                     initial
                         .as_ref()
@@ -262,11 +273,35 @@ trait UpdateBackend: Send + Sync + 'static {
     }
 }
 
+/// Preserve a native-qualified guide boundary across cheap metadata polling.
+/// A new identity must obtain its own native proof; old expiry cannot authorize it.
+fn guide_observation_transition(
+    observed: Option<&TeletextAcceptedGeneration>,
+    retained: Option<&(TeletextAcceptedGeneration, Instant)>,
+    scope: Option<Instant>,
+    now: Instant,
+) -> (bool, Option<Instant>) {
+    let guide = retained
+        .filter(|(generation, _)| observed == Some(generation))
+        .map(|(_, boundary)| *boundary);
+    if guide.is_some_and(|boundary| now >= boundary) {
+        return (true, scope);
+    }
+    (
+        false,
+        match (scope, guide) {
+            (Some(scope), Some(guide)) => Some(scope.min(guide)),
+            (scope, guide) => scope.or(guide),
+        },
+    )
+}
+
 struct NativeBackend {
     trace_id: uuid::Uuid,
     context: TeletextAcceptedUpdatesContext,
     next_transition: Mutex<Option<Instant>>,
     expiry_preparation: Mutex<Option<ExpiryPreparation>>,
+    guide_validity: Mutex<Option<(TeletextAcceptedGeneration, Instant)>>,
 }
 
 #[async_trait::async_trait]
@@ -320,8 +355,17 @@ impl UpdateBackend for NativeBackend {
             observe_selected_teletext_output(&self.context.application, self.context.channel_id)
                 .await
                 .map_err(|_| ReadFailure)?;
-        *self.next_transition.lock().map_err(|_| ReadFailure)? = observed.next_transition;
-        Ok(observed.generation)
+        let retained = self.guide_validity.lock().map_err(|_| ReadFailure)?;
+        let (expired, next) = guide_observation_transition(
+            observed.generation.as_ref(),
+            retained.as_ref(),
+            observed.next_transition,
+            Instant::now(),
+        );
+        *self.next_transition.lock().map_err(|_| ReadFailure)? = next;
+        // Absent after expiry without rescheduling a past deadline. The retained
+        // record is diagnostic metadata, never renewed current-guide authority.
+        Ok(if expired { None } else { observed.generation })
     }
 
     async fn confirm(
@@ -342,16 +386,35 @@ impl UpdateBackend for NativeBackend {
         if let Some(candidate) = self.recover_prepared_expiry(deadline).await? {
             return Ok(Some(candidate));
         }
-        let candidate = load_selected_teletext_output_candidate(
-            &self.context.application,
-            self.context.channel_id,
-            self.context.budget,
-            self.context.encoding.clone(),
-            deadline.into_std(),
-        )
-        .await
+        let candidate = if let Some(guide) = &self.context.guide {
+            load_selected_teletext_output_candidate_with_guide(
+                &self.context.application,
+                self.context.channel_id,
+                self.context.budget,
+                self.context.encoding.clone(),
+                deadline.into_std(),
+                Some(guide),
+            )
+            .await
+        } else {
+            load_selected_teletext_output_candidate(
+                &self.context.application,
+                self.context.channel_id,
+                self.context.budget,
+                self.context.encoding.clone(),
+                deadline.into_std(),
+            )
+            .await
+        }
         .map_err(|_| ReadFailure)?;
         if let Some(candidate) = &candidate {
+            *self.guide_validity.lock().map_err(|_| ReadFailure)? =
+                candidate.guide_qualification().map(|proof| {
+                    (
+                        candidate.generation().clone(),
+                        Instant::from_std(proof.deadline),
+                    )
+                });
             trace_native_candidate(candidate, self.trace_id, "monitor_recovered");
         }
         Ok(candidate)
@@ -627,6 +690,8 @@ async fn authorize_handover<B: UpdateBackend>(
             successor.artifact_version,
             TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
                 | TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+                | TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION
+                | TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
         )
         || B::service(cached).is_none_or(|service| service.resource_lifecycle_variants().is_none())
     {
@@ -824,6 +889,51 @@ mod tests {
                 crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(3),
             ),
         }
+    }
+
+    #[test]
+    fn guide_metadata_polls_preserve_original_expiry_without_renewal_or_busy_loop() {
+        let current = candidate(1, 3).identity;
+        let successor = candidate(2, 3).identity;
+        let now = Instant::now();
+        let boundary = now + Duration::from_secs(5);
+        let later_scope = now + Duration::from_secs(15);
+        let retained = (current.clone(), boundary);
+        assert_eq!(
+            guide_observation_transition(Some(&current), Some(&retained), None, now),
+            (false, Some(boundary))
+        );
+        assert_eq!(
+            guide_observation_transition(Some(&current), Some(&retained), Some(later_scope), now),
+            (false, Some(boundary))
+        );
+        let earlier_scope = now + Duration::from_secs(2);
+        assert_eq!(
+            guide_observation_transition(Some(&current), Some(&retained), Some(earlier_scope), now),
+            (false, Some(earlier_scope))
+        );
+        assert_eq!(
+            guide_observation_transition(Some(&current), Some(&retained), None, boundary),
+            (true, None)
+        );
+        assert_eq!(
+            guide_observation_transition(
+                Some(&current),
+                Some(&retained),
+                Some(later_scope),
+                boundary
+            ),
+            (true, Some(later_scope))
+        );
+        // Another generation is not qualified by its predecessor's proof.
+        assert_eq!(
+            guide_observation_transition(Some(&successor), Some(&retained), None, boundary),
+            (false, None)
+        );
+        assert_eq!(
+            guide_observation_transition(None, Some(&retained), None, boundary),
+            (false, None)
+        );
     }
 
     #[test]

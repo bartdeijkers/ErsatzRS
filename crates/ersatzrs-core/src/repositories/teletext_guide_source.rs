@@ -11,6 +11,10 @@ use serde::{
 
 use crate::programme::ProgrammeClock;
 
+#[path = "teletext_guide_source_current.rs"]
+mod current;
+pub use current::{TeletextGuideGenerationQualification, TeletextGuideQualificationError};
+
 /// Private guide-source receipt version, independent of page contracts.
 pub const TELETEXT_GUIDE_SOURCE_FENCE_VERSION: u16 = 1;
 /// Latest context fingerprint: v2 also retains exact accepted document bytes.

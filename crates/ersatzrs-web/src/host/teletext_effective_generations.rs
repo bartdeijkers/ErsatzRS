@@ -43,8 +43,29 @@ pub struct AcceptedEffectiveTeletextOutputCandidate {
     generation: TeletextAcceptedGeneration,
     selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
     service: Option<Arc<EncodedTeletextAuthoredService>>,
+    guide: Option<Box<super::teletext_guide_generations::GuideOutputQualification>>,
 }
 impl AcceptedEffectiveTeletextOutputCandidate {
+    pub(crate) fn guide_qualification(
+        &self,
+    ) -> Option<&super::teletext_guide_generations::GuideOutputQualification> {
+        self.guide.as_deref()
+    }
+
+    pub(super) fn from_guide(
+        generation: TeletextAcceptedGeneration,
+        selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
+        service: Arc<EncodedTeletextAuthoredService>,
+        guide: super::teletext_guide_generations::GuideOutputQualification,
+    ) -> Self {
+        Self {
+            generation,
+            selection,
+            service: Some(service),
+            guide: Some(Box::new(guide)),
+        }
+    }
+
     #[must_use]
     pub const fn generation(&self) -> &TeletextAcceptedGeneration {
         &self.generation
@@ -301,6 +322,7 @@ pub(super) async fn accept_effective_original_teletext_generation_with_hold(
         M::Accepted(generation) => M::Accepted(AcceptedEffectiveTeletextOutputCandidate {
             generation,
             selection,
+            guide: None,
             service: design.into_encoded_service().map(Arc::new),
         }),
         M::Rejected(reason) => M::Rejected(reason),
@@ -378,6 +400,7 @@ pub async fn reload_accepted_effective_teletext_generation(
     Ok(Some(AcceptedEffectiveTeletextOutputCandidate {
         generation,
         selection,
+        guide: None,
         service: design.into_encoded_service().map(Arc::new),
     }))
 }

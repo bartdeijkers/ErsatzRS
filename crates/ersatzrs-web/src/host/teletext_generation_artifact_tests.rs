@@ -167,3 +167,94 @@ fn lifecycle_artifact_binds_body_and_authored_seed_even_with_identical_header_fa
         ))
     ));
 }
+
+fn guide_qualification() -> ersatzrs_core::repositories::TeletextGuideGenerationQualification {
+    use chrono::TimeZone as _;
+    use ersatzrs_core::{
+        programme::ProgrammeClock,
+        repositories::{
+            TeletextGuideSourceFence, TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION,
+            TELETEXT_GUIDE_SOURCE_FENCE_VERSION,
+        },
+    };
+    use std::num::NonZeroU8;
+    let captured = chrono::Utc
+        .with_ymd_and_hms(2026, 10, 28, 12, 0, 0)
+        .unwrap();
+    let (start, finish) = ProgrammeClock::named("UTC")
+        .unwrap()
+        .calendar_day_bounds(captured, NonZeroU8::new(3).unwrap())
+        .unwrap();
+    TeletextGuideSourceFence {
+        version: TELETEXT_GUIDE_SOURCE_FENCE_VERSION,
+        context_digest_version: TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION,
+        context_digest: [7; 32],
+        channel_ids: vec![1, 2],
+        captured_at: captured,
+        start,
+        finish,
+        locale: "en-us".to_owned(),
+        timezone: "UTC".to_owned(),
+    }
+    .qualify_current(std::iter::empty(), captured)
+    .unwrap()
+}
+
+#[test]
+fn guide_artifact_binds_immutable_source_role_expiry_and_native_lifecycle() {
+    use ersatzrs_core::repositories::{
+        TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
+        TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION,
+    };
+    let qualification = guide_qualification();
+    let baseline = service(1, 0x801)
+        .with_resource_lifecycle_variants(deadline())
+        .unwrap();
+    let digest = |service: &EncodedTeletextAuthoredService,
+                  proof: &ersatzrs_core::repositories::TeletextGuideGenerationQualification,
+                  role| {
+        super::super::teletext_guide_generations::fingerprint(service, proof, role, deadline())
+            .unwrap()
+    };
+    let guide_digest =
+        |service: &EncodedTeletextAuthoredService,
+         proof: &ersatzrs_core::repositories::TeletextGuideGenerationQualification| {
+            digest(service, proof, TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION)
+        };
+    let original = guide_digest(&baseline, &qualification);
+    assert_eq!(original, guide_digest(&baseline, &qualification));
+    assert_ne!(
+        original,
+        artifact_digest_for_version(&baseline, 3, deadline()).unwrap()
+    );
+    assert_ne!(
+        original,
+        digest(
+            &baseline,
+            &qualification,
+            TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
+        )
+    );
+    let mut changed_source = qualification.clone();
+    changed_source.source.context_digest[0] ^= 1;
+    let mut changed_order = qualification.clone();
+    changed_order.source.channel_ids.reverse();
+    let mut changed_capture = qualification.clone();
+    changed_capture.source.captured_at += chrono::Duration::nanoseconds(1);
+    let mut changed_expiry = qualification.clone();
+    changed_expiry.valid_until -= chrono::Duration::nanoseconds(1);
+    for changed in [
+        changed_source,
+        changed_order,
+        changed_capture,
+        changed_expiry,
+    ] {
+        assert_ne!(original, guide_digest(&baseline, &changed));
+    }
+    for (counter, pixels) in [(1, 0x803), (2, 0x801)] {
+        let changed = service(counter, pixels)
+            .with_resource_lifecycle_variants(deadline())
+            .unwrap();
+        assert_ne!(original, guide_digest(&changed, &qualification));
+    }
+}

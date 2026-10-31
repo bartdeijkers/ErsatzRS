@@ -155,7 +155,7 @@ async fn interval(
         .execute(&base.repo.0).await.unwrap();
 }
 
-async fn design(
+pub(in crate::repositories) async fn design(
     base: &BaseFixture,
     selection: Selection,
     document: &[u8],
@@ -198,17 +198,17 @@ async fn design(
     }
 }
 
-struct Fixture {
-    base: BaseFixture,
+pub(in crate::repositories) struct Fixture {
+    pub(in crate::repositories) base: BaseFixture,
     profiles: SqliteTeletextProfileRepository,
     generations: SqliteTeletextGenerationRepository,
     base_request: TeletextPublicationRequest,
-    base_generation: TeletextAcceptedGeneration,
-    save: TeletextEffectivePublicationRequestSave,
+    pub(in crate::repositories) base_generation: TeletextAcceptedGeneration,
+    pub(in crate::repositories) save: TeletextEffectivePublicationRequestSave,
 }
 
 impl Fixture {
-    async fn new(enabled: bool) -> Self {
+    pub(in crate::repositories) async fn new(enabled: bool) -> Self {
         let base = BaseFixture::new().await;
         let profiles = SqliteTeletextProfileRepository(base.repo.0.clone());
         let generations = SqliteTeletextGenerationRepository(base.repo.0.clone());

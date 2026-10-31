@@ -28,9 +28,67 @@ pub struct SqliteTeletextGenerationRepository(pub DbPool);
 
 #[path = "teletext_effective_generations.rs"]
 mod effective;
+#[path = "teletext_guide_generations.rs"]
+mod guide;
 
 #[async_trait]
 impl TeletextGenerationRepository for SqliteTeletextGenerationRepository {
+    async fn accept_guide(
+        &self,
+        save: &ersatzrs_core::repositories::TeletextGuideGenerationSave,
+        check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<M<TeletextAcceptedGeneration>> {
+        guide::accept_base(&self.0, save, check, max_document_bytes).await
+    }
+
+    async fn accept_effective_guide(
+        &self,
+        save: &ersatzrs_core::repositories::TeletextEffectiveGuideGenerationSave,
+        check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<M<TeletextAcceptedGeneration>> {
+        guide::accept_effective(&self.0, save, check, max_document_bytes).await
+    }
+
+    async fn confirm_current_guide(
+        &self,
+        generation: &TeletextAcceptedGeneration,
+        selection: &TeletextChannelSelectionSnapshot,
+        qualification: &ersatzrs_core::repositories::TeletextGuideGenerationQualification,
+        check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<M<()>> {
+        guide::confirm_base(
+            &self.0,
+            generation,
+            selection,
+            qualification,
+            check,
+            max_document_bytes,
+        )
+        .await
+    }
+
+    async fn confirm_current_effective_guide(
+        &self,
+        generation: &TeletextAcceptedGeneration,
+        selection: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+        qualification: &ersatzrs_core::repositories::TeletextGuideGenerationQualification,
+        check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<M<()>> {
+        guide::confirm_effective(
+            &self.0,
+            generation,
+            selection,
+            qualification,
+            check,
+            max_document_bytes,
+        )
+        .await
+    }
+
     async fn accept_effective(
         &self,
         save: &ersatzrs_core::repositories::TeletextEffectiveGenerationSave,
@@ -303,7 +361,9 @@ fn decode_generation_for_version(
         u16::try_from(number("ArtifactVersion")?).map_err(|_| corrupt("artifact version"))?;
     let artifact_digest: Option<String> = row.try_get("ArtifactDigest").repository()?;
     let artifact_digest = artifact_digest.ok_or_else(|| corrupt("artifact digest"))?;
-    if !valid_artifact_role(artifact_version, expected_version) || !valid_digest(&artifact_digest) {
+    if !valid_stored_artifact_role(artifact_version, expected_version)
+        || !valid_digest(&artifact_digest)
+    {
         return Err(corrupt("artifact metadata"));
     }
     let digest: Option<String> = row.try_get("Digest").repository()?;
@@ -332,6 +392,24 @@ fn valid_digest(digest: &str) -> bool {
 }
 fn valid_artifact(version: u16, digest: &str) -> bool {
     valid_artifact_role(version, TELETEXT_GENERATION_ARTIFACT_VERSION) && valid_digest(digest)
+}
+
+fn valid_stored_artifact_role(version: u16, role: u16) -> bool {
+    use ersatzrs_core::repositories::{
+        TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
+        TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION,
+    };
+    valid_artifact_role(version, role)
+        || matches!(
+            (role, version),
+            (
+                TELETEXT_GENERATION_ARTIFACT_VERSION,
+                TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION
+            ) | (
+                TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+                TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
+            )
+        )
 }
 fn valid_artifact_role(version: u16, role: u16) -> bool {
     match role {

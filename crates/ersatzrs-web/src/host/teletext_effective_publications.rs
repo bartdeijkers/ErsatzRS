@@ -14,7 +14,8 @@ use ersatzrs_app::{
 use ersatzrs_core::{
     locking::TeletextWorkHold,
     repositories::{
-        TeletextEffectivePublicationRequestSave, TeletextPublicationMutation as M,
+        TeletextEffectivePublicationRequestSave, TeletextGuideSourceCheckLimits,
+        TeletextGuideSourceFence, TeletextPublicationMutation as M,
         TeletextPublicationRejection as R,
     },
 };
@@ -127,6 +128,52 @@ impl TeletextEffectivePublicationValidator for NativeEffectivePublicationConfirm
     }
 }
 
+// A distinct source role cannot confirm a static-only request. The existing
+// frozen validator above remains unchanged for all legacy callers.
+struct NativeSourceEffectivePublicationConfirmation<'a> {
+    design: &'a RestoredEffectiveOriginalDesign,
+    deadline: Instant,
+}
+
+#[async_trait]
+impl TeletextEffectivePublicationValidator for NativeSourceEffectivePublicationConfirmation<'_> {
+    async fn confirm_request(
+        &self,
+        _request: &TeletextEffectivePublicationRequestSave,
+        _deadline: Instant,
+    ) -> Result<(), TeletextPublicationValidationError> {
+        Err(TeletextPublicationValidationError::Association)
+    }
+
+    async fn confirm_request_with_source(
+        &self,
+        request: &TeletextEffectivePublicationRequestSave,
+        source: &TeletextGuideSourceFence,
+        deadline: Instant,
+    ) -> Result<(), TeletextPublicationValidationError> {
+        if Instant::now() >= self.deadline.min(deadline) {
+            return Err(TeletextPublicationValidationError::TimedOut);
+        }
+        if !compiled_shape(self.design)
+            || self.design.encoded().is_none()
+            || self.design.guide_source() != Some(source)
+            || !crate::admin::languages::LANGUAGES
+                .iter()
+                .any(|language| language.code == source.locale)
+            || request.design_id != self.design.design_id()
+            || request.revision != self.design.revision()
+            || request.digest != self.design.digest()
+            || request.selection != *self.design.selection()
+        {
+            return Err(TeletextPublicationValidationError::Association);
+        }
+        if Instant::now() >= self.deadline.min(deadline) {
+            return Err(TeletextPublicationValidationError::TimedOut);
+        }
+        Ok(())
+    }
+}
+
 /// Recompile and explicitly request a scoped pending intent under fresh admission,
 /// capped by the original saved transition boundary. No producer or Lua runs.
 /// # Errors
@@ -211,6 +258,81 @@ pub(super) async fn request_effective_original_publication_with_hold(
             &validator,
             budget.max_serialized_bytes,
             deadline,
+        )
+        .await?;
+    drop(hold);
+    Ok(match mutation {
+        M::Requested(request) => {
+            M::Requested(RequestedEffectiveTeletextPublication { request, design })
+        }
+        M::Rejected(reason) => M::Rejected(reason),
+    })
+}
+
+/// Request an exact guide-bearing scoped original without relabelling static
+/// validation. The repository rechecks its historical source and all CAS fences;
+/// this pending intent grants no present-role or active-output authority.
+pub(super) async fn request_source_bound_effective_original_publication_with_hold(
+    application: &ApplicationServices,
+    target: TeletextEffectivePublicationTarget,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    limits: TeletextGuideSourceCheckLimits,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<M<RequestedEffectiveTeletextPublication>, NativeEffectiveTeletextPublicationError> {
+    if !target.valid() {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
+    let deadline = operation_deadline(deadline)?;
+    let Some((design, deadline)) = reload_effective_original_for_publication_with_hold(
+        application,
+        target.design_id,
+        target.revision,
+        budget,
+        policy,
+        deadline,
+        hold.clone(),
+    )
+    .await?
+    else {
+        return Ok(M::Rejected(R::MissingRevision));
+    };
+    if design.selection().channel_id != target.channel_id {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
+    if design.digest() != target.expected_digest {
+        return Ok(M::Rejected(R::DigestConflict));
+    }
+    let Some(source) = design.guide_source() else {
+        return Ok(M::Rejected(R::GuideFenceRequired));
+    };
+    if !compiled_shape(&design) || design.encoded().is_none() {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
+    let request = TeletextEffectivePublicationRequestSave {
+        design_id: target.design_id,
+        revision: target.revision,
+        digest: target.expected_digest,
+        expected_design_head: target.expected_design_head,
+        expected_request_id: target.expected_request_id,
+        selection: design.selection().clone(),
+    };
+    let validator = NativeSourceEffectivePublicationConfirmation {
+        design: &design,
+        deadline,
+    };
+    let mutation = application
+        .request_source_bound_effective_teletext_design_publication_with_work(
+            request,
+            &validator,
+            source,
+            ersatzrs_core::repositories::TeletextGuideGenerationCheck {
+                limits,
+                deadline,
+                hold: hold.clone(),
+            },
+            budget.max_serialized_bytes,
         )
         .await?;
     drop(hold);

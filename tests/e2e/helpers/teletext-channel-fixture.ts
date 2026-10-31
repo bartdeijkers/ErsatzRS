@@ -334,7 +334,8 @@ export class TeletextChannelFixture {
       this.database.prepare('INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (?,?,0)').run(id, id);
       this.database.prepare('INSERT INTO "Movie" ("Id") VALUES (?)').run(id);
       this.database.prepare('INSERT INTO "MovieMetadata" ("DateAdded","DateUpdated","MetadataKind","MovieId","Title") VALUES (\'2026-01-01\',\'2026-01-01\',0,?,\'Synthetic red video and tone\')').run(id);
-      this.database.prepare('INSERT INTO "MediaVersion" ("Id","DateAdded","DateUpdated","Duration","Height","MovieId","Name","RFrameRate","VideoScanKind","Width") VALUES (?,\'2026-01-01\',\'2026-01-01\',\'00:00:12\',90,?,\'Synthetic\',\'25/1\',1,160)').run(id, id);
+      const duration = new Date(this.playbackDurationSeconds * 1000).toISOString().slice(11, 19);
+      this.database.prepare('INSERT INTO "MediaVersion" ("Id","DateAdded","DateUpdated","Duration","Height","MovieId","Name","RFrameRate","VideoScanKind","Width") VALUES (?,\'2026-01-01\',\'2026-01-01\',?,90,?,\'Synthetic\',\'25/1\',1,160)').run(id, duration, id);
       this.database.prepare('INSERT INTO "MediaFile" ("MediaVersionId","Path","PathHash") VALUES (?,?,?)').run(id, join(this.root, 'synthetic-client-source.ts'), `synthetic-${id}`);
       this.database.prepare('INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Channels","Default","Forced","MediaVersionId","PixelFormat") VALUES (0,\'mpeg2video\',1,0,1,0,?,\'yuv420p\')').run(id);
       this.database.prepare('INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Default","Forced","MediaVersionId") VALUES (1,\'aac\',2,\'eng\',1,1,0,?)').run(id);

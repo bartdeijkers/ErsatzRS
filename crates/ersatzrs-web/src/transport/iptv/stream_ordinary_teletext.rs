@@ -16,7 +16,10 @@ use super::super::{
     teletext_accepted_output::load_accepted_teletext_output_intent,
     teletext_binding::{TeletextOutputAdmission, TeletextOutputRole},
     teletext_live_output::TeletextLiveOutputIntent,
-    teletext_selected_output::load_selected_teletext_output_candidate,
+    teletext_selected_output::{
+        load_selected_teletext_output_candidate,
+        load_selected_teletext_output_candidate_with_guide, GuideRuntime,
+    },
 };
 
 /// No producer invocation, publication, queue or independently renewed startup
@@ -41,15 +44,33 @@ pub(super) async fn recover_optional_output(
         .live_updates
         .map(|timing| (timing, policy.encoding.clone()));
     if let Some((timing, encoding)) = live {
-        let initial = if let Ok(candidate) = load_selected_teletext_output_candidate(
-            &state.application,
-            channel_id,
-            policy.design,
-            policy.encoding,
-            bounded_deadline.into_std(),
-        )
-        .await
-        {
+        let guide = policy.guide_limits.map(|limits| {
+            Arc::new(GuideRuntime {
+                pool: state.pool.clone(),
+                limits,
+            })
+        });
+        let recovered = if let Some(guide) = &guide {
+            load_selected_teletext_output_candidate_with_guide(
+                &state.application,
+                channel_id,
+                policy.design,
+                policy.encoding,
+                bounded_deadline.into_std(),
+                Some(guide),
+            )
+            .await
+        } else {
+            load_selected_teletext_output_candidate(
+                &state.application,
+                channel_id,
+                policy.design,
+                policy.encoding,
+                bounded_deadline.into_std(),
+            )
+            .await
+        };
+        let initial = if let Ok(candidate) = recovered {
             candidate
         } else {
             tracing::warn!(
@@ -67,7 +88,8 @@ pub(super) async fn recover_optional_output(
             timing,
             initial,
         )
-        .ok()?;
+        .ok()?
+        .with_guide_runtime(guide);
         tracing::debug!(
             target: "ersatzrs_web::transport::iptv::teletext_provenance",
             event = "ordinary_live_intent",

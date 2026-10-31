@@ -1042,13 +1042,16 @@ pub(super) async fn request_original_publication_with_hold(
     let mutation = match (design.guide_source(), source_limits) {
         (Some(source), Some(limits)) => {
             application
-                .request_source_bound_teletext_design_publication(
+                .request_source_bound_teletext_design_publication_with_work(
                     request,
                     &validator,
                     source,
-                    limits,
+                    ersatzrs_core::repositories::TeletextGuideGenerationCheck {
+                        limits,
+                        deadline,
+                        hold: hold.clone(),
+                    },
                     budget.max_serialized_bytes,
-                    deadline,
                 )
                 .await?
         }

@@ -44,14 +44,41 @@ impl NativeBackend {
                 prepared: None,
             });
         }
-        let prepared = prepare_accepted_teletext_generation(
-            &self.context.application,
-            self.context.channel_id,
-            self.context.budget,
-            self.context.encoding.clone(),
-            deadline.min(*boundary).into_std(),
-        )
-        .await
+        let guide_base = if self.context.guide.is_some() {
+            self.context
+                .application
+                .accepted_teletext_generation(self.context.channel_id)
+                .await
+                .map_err(|_| ReadFailure)?
+                .is_some_and(|generation| {
+                    generation.artifact_version
+                        == ersatzrs_core::repositories::TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION
+                })
+        } else {
+            false
+        };
+        let prepared = if guide_base {
+            let guide = self.context.guide.as_ref().ok_or(ReadFailure)?;
+            crate::host::teletext_guide_generations::prepare_accepted_guide_teletext_generation(
+                &self.context.application,
+                &guide.pool,
+                self.context.channel_id,
+                self.context.budget,
+                self.context.encoding.clone(),
+                guide.limits,
+                deadline.min(*boundary).into_std(),
+            )
+            .await
+        } else {
+            prepare_accepted_teletext_generation(
+                &self.context.application,
+                self.context.channel_id,
+                self.context.budget,
+                self.context.encoding.clone(),
+                deadline.min(*boundary).into_std(),
+            )
+            .await
+        }
         .map_err(|_| ReadFailure)?;
         tracing::debug!(
             target: "ersatzrs_web::transport::iptv::teletext_provenance",
@@ -120,6 +147,14 @@ impl NativeBackend {
             ))
         });
         if let Some(candidate) = &candidate {
+            *self.guide_validity.lock().map_err(|_| ReadFailure)? =
+                candidate.guide_qualification().map(|proof| {
+                    (
+                        candidate.generation().clone(),
+                        Instant::from_std(proof.deadline),
+                    )
+                });
+            *self.next_transition.lock().map_err(|_| ReadFailure)? = candidate.next_transition();
             super::trace_native_candidate(candidate, self.trace_id, "expiry_base_confirmed");
         }
         Ok(candidate)

@@ -2,8 +2,10 @@
 
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
-    TeletextEffectiveGenerationSave, TeletextGenerationMutation, TeletextGenerationRepository,
-    TeletextGenerationSave,
+    TeletextEffectiveGenerationSave, TeletextEffectiveGuideGenerationSave,
+    TeletextGenerationMutation, TeletextGenerationRepository, TeletextGenerationSave,
+    TeletextGuideGenerationCheck, TeletextGuideGenerationQualification,
+    TeletextGuideGenerationSave,
 };
 use ersatzrs_domain::{
     EntityId, TeletextAcceptedGeneration, TeletextChannelSelectionSnapshot,
@@ -41,6 +43,34 @@ pub trait TeletextEffectiveGenerationValidator: Send + Sync {
     ) -> Result<(), TeletextPublicationValidationError>;
 }
 
+/// Complete native Base guide-role/source/artifact proof, separate from static
+/// original validators. The repository independently recaptures current source.
+#[async_trait]
+pub trait TeletextGuideGenerationValidator: Send + Sync {
+    /// Confirm the exact immutable original, canonical saved role semantics and
+    /// deterministic finite validity under the original operation deadline.
+    /// # Errors
+    /// Rejects missing/mismatched native proof, expired admission or guide roles.
+    async fn confirm_guide_generation(
+        &self,
+        save: &TeletextGuideGenerationSave,
+        deadline: Instant,
+    ) -> Result<(), TeletextPublicationValidationError>;
+}
+
+/// Exact native scoped guide proof, additionally bound to the Scripted interval.
+#[async_trait]
+pub trait TeletextEffectiveGuideGenerationValidator: Send + Sync {
+    /// Confirm exact scope/native artifact and original source/current roles.
+    /// # Errors
+    /// Rejects missing/mismatched proof, expired guide/scope or admission.
+    async fn confirm_guide_generation(
+        &self,
+        save: &TeletextEffectiveGuideGenerationSave,
+        deadline: Instant,
+    ) -> Result<(), TeletextPublicationValidationError>;
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum TeletextGenerationStoreError {
     #[error("durable teletext generation selection is unavailable")]
@@ -52,6 +82,120 @@ pub enum TeletextGenerationStoreError {
 }
 
 impl ApplicationServices {
+    /// Accept reviewed Base guide output only after native current-role proof
+    /// and transactional source/request/head/selection/accepted-pointer checks.
+    /// # Errors
+    /// Reports unsupported ports, expired admission or redacted proof/storage failures.
+    pub async fn accept_guide_teletext_generation(
+        &self,
+        save: TeletextGuideGenerationSave,
+        validator: &dyn TeletextGuideGenerationValidator,
+        check: TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<TeletextAcceptedGeneration>, TeletextGenerationStoreError>
+    {
+        let repository = self
+            .ports()
+            .teletext_generations()
+            .ok_or(TeletextGenerationStoreError::Unavailable)?;
+        check_guide_admission(&save.qualification, check.deadline)?;
+        validator
+            .confirm_guide_generation(&save, check.deadline)
+            .await?;
+        check_guide_admission(&save.qualification, check.deadline)?;
+        repository
+            .accept_guide(&save, &check, max_document_bytes)
+            .await
+            .map_err(|_| TeletextGenerationStoreError::StorageUnavailable)
+    }
+
+    /// Scoped guide counterpart; native and repository proof retain both expiry
+    /// boundaries without changing the independent accepted Base pointer.
+    /// # Errors
+    /// Reports unsupported ports, expired admission or redacted proof/storage failures.
+    pub async fn accept_effective_guide_teletext_generation(
+        &self,
+        save: TeletextEffectiveGuideGenerationSave,
+        validator: &dyn TeletextEffectiveGuideGenerationValidator,
+        check: TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<TeletextAcceptedGeneration>, TeletextGenerationStoreError>
+    {
+        let repository = self
+            .ports()
+            .teletext_generations()
+            .ok_or(TeletextGenerationStoreError::Unavailable)?;
+        check_guide_admission(&save.qualification, check.deadline)?;
+        validator
+            .confirm_guide_generation(&save, check.deadline)
+            .await?;
+        check_guide_admission(&save.qualification, check.deadline)?;
+        repository
+            .accept_effective_guide(&save, &check, max_document_bytes)
+            .await
+            .map_err(|_| TeletextGenerationStoreError::StorageUnavailable)
+    }
+
+    /// Confirm an exact accepted guide without renewing its original role bound.
+    /// # Errors
+    /// Reports unsupported ports or redacted storage/admission failures.
+    pub async fn confirm_current_guide_teletext_generation(
+        &self,
+        generation: &TeletextAcceptedGeneration,
+        selection: &TeletextChannelSelectionSnapshot,
+        qualification: &TeletextGuideGenerationQualification,
+        check: TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<()>, TeletextGenerationStoreError> {
+        let repository = self
+            .ports()
+            .teletext_generations()
+            .ok_or(TeletextGenerationStoreError::Unavailable)?;
+        check_guide_admission(qualification, check.deadline)?;
+        let result = repository
+            .confirm_current_guide(
+                generation,
+                selection,
+                qualification,
+                &check,
+                max_document_bytes,
+            )
+            .await
+            .map_err(|_| TeletextGenerationStoreError::StorageUnavailable)?;
+        check_guide_admission(qualification, check.deadline)?;
+        Ok(result)
+    }
+
+    /// Confirm current scoped guide output; an expired scope is never Base fallback.
+    /// # Errors
+    /// Reports unsupported ports or redacted storage/admission failures.
+    pub async fn confirm_current_effective_guide_teletext_generation(
+        &self,
+        generation: &TeletextAcceptedGeneration,
+        selection: &TeletextEffectiveChannelSelectionSnapshot,
+        qualification: &TeletextGuideGenerationQualification,
+        check: TeletextGuideGenerationCheck,
+        max_document_bytes: usize,
+    ) -> Result<TeletextGenerationMutation<()>, TeletextGenerationStoreError> {
+        let repository = self
+            .ports()
+            .teletext_generations()
+            .ok_or(TeletextGenerationStoreError::Unavailable)?;
+        check_guide_admission(qualification, check.deadline)?;
+        let result = repository
+            .confirm_current_effective_guide(
+                generation,
+                selection,
+                qualification,
+                &check,
+                max_document_bytes,
+            )
+            .await
+            .map_err(|_| TeletextGenerationStoreError::StorageUnavailable)?;
+        check_guide_admission(qualification, check.deadline)?;
+        Ok(result)
+    }
+
     /// Accept native-qualified scoped output under independent scoped CAS.
     /// Deadline checks bound native validation and repository admission; an
     /// admitted write returns its truthful commit result. Base pointers are retained.
@@ -191,6 +335,16 @@ fn check_effective_deadline(deadline: Instant) -> Result<(), TeletextPublication
     } else {
         Ok(())
     }
+}
+
+fn check_guide_admission(
+    qualification: &TeletextGuideGenerationQualification,
+    deadline: Instant,
+) -> Result<(), TeletextPublicationValidationError> {
+    check_effective_deadline(deadline)?;
+    qualification
+        .validate_current(chrono::Utc::now())
+        .map_err(|_| TeletextPublicationValidationError::Association)
 }
 
 #[cfg(test)]
