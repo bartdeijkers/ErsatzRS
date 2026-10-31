@@ -62,28 +62,30 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-final-gate — full CI for the isolated responsive-selection repair.
-Next finite action: verify every applicable job in full required general/1.5 CI
-on the exact revision pushed from the prepared repair checkout. Canonical final-
-gate/ci-runtime-pin-20261030/qualification.json owns the concrete prepared/pushed
-SHA, run/monitor identities, every job and the final acceptance-reuse join.
-The repair is2212fa9f based only on pushed2da9fa56: remove the test click that
-reopens navigation after correct asynchronous mobile closure; preserve all
-closed/offscreen/mobile bounds, selection DB oracles and timeouts. Four existing
-headed EN/NL Chromium/Firefox flows pass4/4; progress and commitlint pass.
-Full original CI41116298317 at2da is terminal:12 required successes, one explained
-general Chromium race (355 pass/1fail/5skip), one expected push commitlint skip.
-Next453/453 plus both ordinary HTTP/Hybrid smokes pass; general Rust4062 and
-Level1.5 Rust2339+17 pass. General Firefox331/30skip and base Chromium62/3skip,
-Firefox57/8skip are first-attempt passes with zero flaky; all eight original
-Health cases now pass independent208 clock/hash assertions. Original logs,
-artifacts and negatives remain canonical. Full-round review justifies no further
-change beyond the test race repair. An old-SHA or focused pass is not new-SHA
-full green. Aggregate watcher HTTP502 was observation failure, not a test result;
-the individual monitor completed normally without any CI rerun/cancel/restart.
-Separate parallel local9B/UCU documentation commits and all foreign working
-changes remain preserved outside this repair series. Accepted base/runtime/
-source/platform owners stay closed; no production9B before accepted final gate.
+Current package: p9a-final-gate — finish the verified installation reload CI repair.
+Next finite action: commit/push the verified isolated installation-reload test
+repair/current handoff, then inspect all required jobs in full new-SHA CI. That
+push supersedes known-red CI41143145016 at95a2bf21; its two unfinished base-browser
+selections are unchanged by this general-only spec correction. Preserve the red
+and partial results; claim no95 full green or success for unfinished jobs. Canonical final-gate/ci-runtime-pin-20261030/qualification.json
+addon_reload_followup/nav_repair_ci owns source/checkpoint/run/monitor identity.
+The new general Firefox red is a proven test document race: a hydration check
+runs before the pending same-URL install reload finishes. Arm main-frame
+navigation before keyboard install confirmation; wait load/fresh hydration before
+Enable. All keyboard/dialog/DB oracles and120s timeout remain. Existing headed
+Chromium/Firefox x800x513/320x800 cases pass4/4 against strictly verified exact95
+server/site, using the isolated wrapper and natural cleanup. No product/helper/
+translation/runtime change. Root parallel commits and foreign work stay preserved.
+Navigation component stays Complete on95: general Chromium356/5 explicit skips/
+zero flaky, including all four selection cases first attempt; no reopening absent
+regression. Next453 and both ordinary HTTP/Hybrid smokes, general Rust4062,
+base Rust2339+17 and the shared producer/static/lint gates pass. Original Firefox has
+329 pass/one fail/30 explicit skips/one serial not run; retain its trace and report.
+The new full CI must include both base browsers. Local focused proof cannot establish new-
+SHA CI green. No blanket retries or timeout increases; existing push concurrency
+supersedes the old known-red round, never converting it into a successful run.
+Accepted base/runtime/source/platform owners stay closed; no production9B before
+accepted final gate. Preserve negatives and experimental/platform/editor decisions.
 No active owned local host/test. No application or new runtime publication.
 '''
 

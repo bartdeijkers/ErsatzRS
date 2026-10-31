@@ -529,10 +529,14 @@ external_commands = []
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('button', { name: 'Confirm', exact: true })).toBeInViewport();
     await dialog.getByRole('button', { name: 'Confirm', exact: true }).focus();
-    await page.keyboard.press('Enter');
+    await Promise.all([
+      page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+      page.keyboard.press('Enter'),
+    ]);
     await expect.poll(installed).toEqual({ Enabled: 0 });
-    // Installation redirects after committing; observe that transition rather
-    // than racing it with a test-driven reload as soon as the row exists.
+    // Installation reloads the same URL after committing. Check hydration in
+    // that new document, not the still-visible pre-installation page.
+    await page.waitForLoadState('load');
     await expect(page.getByRole('button', { name: 'Enable', exact: true })).toBeVisible();
     await waitForHydration(page);
     await page.getByRole('button', { name: 'Enable', exact: true }).click();

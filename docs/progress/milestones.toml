@@ -18041,6 +18041,28 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Completed local add-on installation reload synchronization component (2026-10-31):
+canonical ci-runtime-pin-20261030/qualification.json addon_reload_followup owns
+actual general Firefox failure in full CI41143145016 at95a2bf21:329 pass, one
+failure,30 explicit skips and one serial case not run. This is independent of the
+closed navigation repair (general Chromium356/5skip, all selection cases pass).
+The trace reads hydration=true in the old document at958252, then records install
+reload navigation finishing at958274 before the Enable click at958387. Enable is
+already visible on the old page; visibility does not establish new-document
+readiness. No enable POST follows the premature click, and Confirm never appears.
+Arm the existing main-frame navigation barrier before keyboard confirmation of
+installation, then observe load and hydration in the new document. Preserve
+keyboard/focus, modal visibility/confirmation, missing/installed-disabled/enabled
+DB assertions and the120s timeout. No product, shared helper or UI change.
+The four existing headed Chromium/Firefox x800x513/320x800 workflows pass4/4,
+zero skipped/flaky cases, against the strictly verified matched95 CI artifact
+through the existing isolated wrapper, with natural cleanup. Other valid proof
+is reused. The changed spec belongs only to general browsers. Push the verified
+correction and require full new-SHA CI; that push supersedes the already-red95
+round, including two unfinished unchanged base-browser selections. Preserve the
+original red and partial proof; never claim the unfinished checks passed.
+
+
 Current completed-CI boundary (2026-10-31): canonical ci-runtime-pin-20261030/
 qualification.json corrected_ci now owns all14 terminal jobs of full push
 CI41116298317 at exact2da9fa56:12 required successes, one general Chromium failure

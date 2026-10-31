@@ -1141,8 +1141,9 @@ release section when tagging a release.
 
 ### Fixed
 
-- Make responsive selection browser checks wait for the automatic mobile
-  navigation transition, avoiding a race that reopened the drawer.
+- Synchronize browser checks with automatic mobile navigation and
+  post-installation page reloads, avoiding reopened drawers and clicks
+  before fresh-document hydration.
 
 - Preserve Native/Next caption CI fixture data across replaced database
   connections, keeping extraction and legacy NUL-cache repair assertions intact.
