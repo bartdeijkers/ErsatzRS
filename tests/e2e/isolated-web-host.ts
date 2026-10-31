@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, mkdirSync, mkdtempSync, openSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
+import { snapshotOwnedStartup, startupOwner } from './helpers/isolated-host-startup';
 
 type HostIdentity = { pid: number; generation: number };
 type HostStop = {
@@ -124,17 +125,28 @@ export const test = base.extend<{ isolatedWebHost: IsolatedWebHost }>({
       try { child = spawn(server, [], { cwd: process.cwd(), windowsHide: true,
         env: environment, stdio: ['ignore', log, log] }); }
       finally { closeSync(log); }
+      const startupIdentity = startupOwner(child.pid);
       const owner: OwnedHost = { child, generation: ++generation, closed: false,
         exited: Promise.resolve() };
       owner.exited = new Promise<void>(resolve => child.once('close', () => { owner.closed = true; resolve(); }));
       child.on('error', error => { owner.spawnError = error; });
       host = owner;
-      await expect.poll(async () => {
-        if (owner.spawnError) throw owner.spawnError;
-        if (!running(owner)) throw new Error('Isolated host exited; inspect isolated-settings-host.log');
-        try { return (await request.get(`${baseURL}/healthz`, { timeout: 1000 })).ok(); }
-        catch { return false; }
-      }, { timeout: 15000 }).toBe(true);
+      try {
+        await expect.poll(async () => {
+          if (owner.spawnError) throw owner.spawnError;
+          if (!running(owner)) throw new Error('Isolated host exited; inspect isolated-settings-host.log');
+          try { return (await request.get(`${baseURL}/healthz`, { timeout: 1000 })).ok(); }
+          catch { return false; }
+        }, { timeout: 15000 }).toBe(true);
+      } catch (error) {
+        // Failure-only, before owned cleanup removes the waiting runtime child.
+        // Diagnostic errors must never replace the original readiness failure.
+        try {
+          writeFileSync(info.outputPath(`isolated-host-startup-${owner.generation}.json`),
+            JSON.stringify(snapshotOwnedStartup(startupIdentity), null, 2));
+        } catch { /* Best-effort evidence cannot hide the original exception. */ }
+        throw error;
+      }
     };
     const processIdentity = (): HostIdentity => {
       if (!host || !running(host) || !host.child.pid) throw new Error('Owned isolated host is not running.');
@@ -164,7 +176,7 @@ export const test = base.extend<{ isolatedWebHost: IsolatedWebHost }>({
       if (restarting) await restarting.catch(() => undefined);
       if (host) await stopOwned(host, stops, evidence);
     }
-  // Teardown can await 15s remaining startup plus 40s bounded owned shutdown.
+  // Teardown can await 15s startup, 3s failure snapshot and 40s bounded owned shutdown.
   // Keep the existing startup bound; allow cleanup to finish before fixture expiry.
   }, { timeout: 60_000 }],
 });

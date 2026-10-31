@@ -712,6 +712,8 @@ release section when tagging a release.
 
 ### Changed
 
+- Preserve bounded, redacted owned-process evidence when an isolated browser
+  test host fails startup, retaining the original readiness and cleanup bounds.
 - Accept the independently verified generic Level 1/1.5 teletext engine and its
   required authoring, channel, playback and runtime safeguards. Production
   TV-guide content follows in Phase 9B; retained Level 2.5 remains experimental.
