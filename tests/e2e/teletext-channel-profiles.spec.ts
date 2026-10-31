@@ -51,6 +51,8 @@ async function submit(page: Page, form: Locator, button: string, code: string, j
   await form.getByRole('button', { name: button, exact: true }).click();
   expect((await posted).status()).toBe(303);
   await navigated;
+  // Native redirects commit before the in-order SSR document body is ready.
+  await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', code);
   if (javaScriptEnabled) await waitForHydration(page);
 }

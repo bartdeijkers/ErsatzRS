@@ -62,36 +62,42 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 required CI failure on exact3cf12e52.
-Full run41217162921 is terminalred: only Firefox1.5/job124593763968 failed;
-12 applicable jobs pass, push commitlint skipped, optional2.5 unselected.
-Read its retained exact failure and correct the concrete cause before the next
-scoped sourcepush/newSHA fullCI. SameSHA rerun only if an explained unchanged
-failure merits it; neverpresent a targeted rerun as full green. No general audit,
-extra builds or CI measurement program. Existing critical-path timings justify
-no further speed change. Preserve original failed-run logs/artifacts.
+Current package: P9B-02 updated-host Linux ARM runtime/platform qualification.
+Use existing four-RID/source/package/software receipts and tools, beginning with
+ARMv7's production0.1.1 Node fallback. First identify the exact current-host
+cross/package/emulation gap and smallest existing-container trial; do not repeat
+closed nativeLinux/Windows/editor components or start a general audit. Stop this
+component at exact-source package/dependency identity, actual owned host/producer
+profile/validation/preview/publication/ordinary-route and cleanup within the
+proved software boundary. NativeARM remains assumed/deferred, not native accepted;
+macOS remains deferred. Retained Windows663 component is separate from adoption
+of the new timeout repair; reserve120min for any later Windows-package trial.
+Other configuration/package/base-context/Lua/range/client clauses retain owners.
 
-Closed package: actual0.1.1 producer timeout on native Linux x64 candidate.
-One qualified pidfd Deno stop at the unchanged30s expiry reproduced false
-quarantine/missing failure bookkeeping. One existing10s terminal allowance now
-joins actual settlement and same-owner failure CAS without renewing production,
-source/lease/role/stale authority.4unit, strict all-target Clippy/fmt, matched
-Leptos,1headed native case, fullAV/libzvbi/19TSDuck and ordinary Legacy/Hybrid/
-bothHLS smoke pass.43observed native identities drain; failed lease clears,
-original60sretry/caps/history and cap1 admission hold. Canonical qualification.json
- guide_command_timeout retains tool-negative/product-red/green and screenshot
-scope. New repair is not Windows/ARM adoption or a whole package-fault matrix.
-Reuse closed Windows663 package/guide component5bf, Linux663 footer/restart and
-31monitor/admission proofs within scopes. Other P9B-01/02 clauses keep owners;
-resume the existing production configuration/package/base-context/Lua/range/
-platform/client list only after the delivery blocker is resolved.
+Delivery gate: finish local CI-lifecycle checkpoint and push only the scoped
+663/5bf/d959/test-fix chain from this checkout, without skipCI or releases, then
+monitor exactnewSHA/allrequiredgeneral+1.5 jobs. Full original3cf run41217162921
+is terminalred only in Firefox1.5;12 applicable jobs pass. Trace proves premature
+feedback checking before native document completion, not a hydration fault or
+known server-latency cause. One existing DOMContentLoaded barrier preserves
+feedback/hydration/navigation limits. Whole8case Firefox plus2 ChromiumJS/noJS
+cases pass;13/11 observed native identities drain. OriginalCI and zero-selection
+Chromium tool-negative remain. Canonical qualification.json ci.current_profile_redirect.
+These local checks are not a new fullgreenCI. Original local artifact transfer
+worked; existing timings justify no additional CI speed changes/measurements.
 
-Delivery:3cf remains remote/main. Verified663 and5bf local checkpoints plus the
-current repair await authorized scoped source delivery; neverpush Root/main
-wholesale. Root preserves unpublished UCU710/6256,12foreign dirtypaths/stashes.
-FFmpegfe972060 source-only is remote; stable2.0.8tag457 unchanged. Addons18496b1/
-Next95206a8 stay equal remote. No new release/tag/publication, macOS, physicalKodi,
-DVBViewer or client hunt. Existing native ARM deferral/assumption remains.
+Closed producer-timeout component d959: actual pidfd production red→green,
+one existing10s terminal drain/failure-CAS allowance; unchanged original30s/
+source/lease/role/stale authority.4unit, strictClippy/fmt, matched Leptos,
+1headed/AV/libzvbi/19TSDuck and ordinarysmoke pass;43observed processes drain,
+original60sretry/caps/history and cap1 admission hold. Windows component5bf
+and Linux663 footer/restart/31monitor proofs retain recorded boundaries.
+
+Origin/main freshlyverified3cf. Neverpush Root/main wholesale: retain unpublished
+UCU710/6256,12foreign dirtypaths/stashes. FFmpegfe972060/Addons18496b1/Next95206a8
+have no local changes or ahead commits; no sibling sourcepush needed. Stable
+runtime tags remain unchanged. No new release/tag/publication, physicalKodi,
+DVBViewer, client hunt, macOS or nativeARM hardware claim.
 
 '''
 

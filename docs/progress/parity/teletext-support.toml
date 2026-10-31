@@ -59,7 +59,8 @@ ordinary gates. macOS stays deferred under ADR0121.
 Kodi21.2 base controls are Complete: p9a-client-base owns the actual G3
 photo/settings. No DVBViewer, client hunt or decoder repair. Four-RID P9A-02
 Health/licensing/playback/HLS/caption/audio/admin checks are Complete.
-Production guide follows independently accepted revised9A; Phase10 followsP9B-02.
+Production guide follows accepted revised9A; Phase10 followsP9B-02. Native-form
+readiness:8Firefox/2Chromium; newSHA fullCI required.
 '''
 
 [[debt]]
