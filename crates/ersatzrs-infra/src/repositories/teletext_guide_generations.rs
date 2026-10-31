@@ -2,7 +2,7 @@
 
 use super::{
     check_selection, current_in_transaction, current_request, effective, head_in_transaction,
-    insert_generation, revision_in_transaction, stored_fence, valid_digest, valid_request,
+    insert_generation_seeded, revision_in_transaction, stored_fence, valid_digest, valid_request,
     valid_selection,
 };
 use crate::db::{Db, DbPool};
@@ -105,7 +105,7 @@ pub(super) async fn accept_base(
             if let Err(reason) = check_time(&save.qualification, target.scope, deadline) {
                 return Ok(M::Rejected(reason));
             }
-            insert_generation(tx, original).await
+            insert_generation_seeded(tx, original, Some(&save.qualification)).await
         }
     }
 }
@@ -132,7 +132,7 @@ pub(super) async fn accept_effective(
             if let Err(reason) = check_time(&save.qualification, target.scope, deadline) {
                 return Ok(M::Rejected(reason));
             }
-            effective::insert(tx, original, deadline).await
+            effective::insert_seeded(tx, original, deadline, Some(&save.qualification)).await
         }
     }
 }

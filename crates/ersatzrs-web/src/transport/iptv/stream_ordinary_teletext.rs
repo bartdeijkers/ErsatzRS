@@ -48,6 +48,7 @@ pub(super) async fn recover_optional_output(
             Arc::new(GuideRuntime {
                 pool: state.pool.clone(),
                 limits,
+                refresh: policy.guide_refresh,
             })
         });
         let recovered = if let Some(guide) = &guide {

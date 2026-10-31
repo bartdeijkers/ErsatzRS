@@ -19,7 +19,7 @@ fn backend_with_successor(
     successor: Candidate,
 ) -> (
     Backend,
-    MonitorState<Candidate>,
+    MonitorState<Candidate, u64>,
     watch::Sender<Option<TeletextOutputUpdate>>,
     TeletextOutputControl,
 ) {
@@ -62,6 +62,74 @@ async fn same_selection_checked_content_replacement_emits_one_replace_without_wi
     backend.store.lock().unwrap().accepted = Some(checked(3, 1));
     assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
     assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 2);
+}
+
+fn checked_guide(context: u64) -> Candidate {
+    let mut candidate = checked(1, 1);
+    candidate.identity.artifact_version = TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION;
+    candidate.guide_context = Some(context);
+    candidate
+}
+
+#[tokio::test(start_paused = true)]
+async fn same_manual_root_new_guide_snapshot_uses_one_confirmed_atomic_replacement() {
+    let initial = checked_guide(10);
+    let root = initial.identity.clone();
+    let mut successor = checked_guide(11);
+    successor.service = Arc::new(
+        crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(4)
+            .with_resource_lifecycle_variants(std::time::Instant::now() + Duration::from_secs(30))
+            .unwrap(),
+    );
+    let (backend, mut state, updates, _control) = backend_with_successor(initial, successor);
+    assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+    assert_eq!(state.cached.as_ref().unwrap().identity, root);
+    assert_eq!(state.cached.as_ref().unwrap().guide_context, Some(11));
+    assert_eq!(state.proposal_context, Some(11));
+    assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 1);
+    assert!(format!("{:?}", updates.borrow().as_ref().unwrap()).contains("replacement: true"));
+    assert_eq!(backend.handover_checks.load(Ordering::SeqCst), 1);
+    assert_eq!(*backend.confirmations.lock().unwrap(), vec![root.id]);
+    assert!(
+        !state.handover_confirmed,
+        "proposal is not an applied acknowledgement"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn guide_snapshot_handover_keeps_selection_off_expiry_and_final_current_failure_fences() {
+    for mode in 0..5 {
+        let mut initial = checked_guide(10);
+        let mut successor = checked_guide(11);
+        if mode == 0 {
+            successor.selection_context = 2;
+        }
+        if mode == 1 {
+            successor.service_present = false;
+        }
+        if mode == 4 {
+            initial.original_transition = Some(Instant::now());
+        }
+        let (backend, mut state, updates, _control) = backend_with_successor(initial, successor);
+        match mode {
+            2 => backend.store.lock().unwrap().eligible = false,
+            3 => backend.store.lock().unwrap().recovery = RecoveryScenario::Unavailable,
+            _ => {}
+        }
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        if mode == 0 {
+            // A different selection must first withdraw, then independently
+            // validate/reannounce the new profile through normal recovery.
+            assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 2);
+        } else if mode == 1 {
+            assert!(!state.active);
+            // Preserve the separate identified Off receipt after withdrawal.
+            assert_withdrawal(&updates, 2);
+        } else {
+            assert!(!state.active);
+            assert_withdrawal(&updates, 1);
+        }
+    }
 }
 
 #[tokio::test(start_paused = true)]

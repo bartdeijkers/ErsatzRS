@@ -4,6 +4,10 @@ use ersatzrs_domain::{TeletextNavigationLink, TeletextPageAddress};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[path = "teletext_current_guide.rs"]
+mod current_guide;
+pub use current_guide::{load_current_teletext_guide_preview, TeletextCurrentGuidePreviewData};
+
 /// Read-only choices from the complete admitted native service; never edit authority.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextObjectChoicesObservation {
@@ -219,9 +223,36 @@ async fn load_preview(
 fn project_preview(
     preview: &crate::host::teletext_authoring::TeletextAuthoringPreview,
 ) -> Result<TeletextDraftPreviewData, crate::host::teletext_authoring::TeletextAuthoringError> {
-    use ersatzrs_ffmpeg::teletext::TeletextRasterCellFailure as Failure;
     let raster = preview.raster();
-    let diagnostics = raster
+    let diagnostics = raster_diagnostics(raster);
+    Ok(TeletextDraftPreviewData {
+        channel_id: preview.identity.channel_id,
+        design_id: preview.identity.design_id,
+        revision: preview.identity.revision,
+        owner: raster.map(ersatzrs_ffmpeg::teletext::TeletextRaster::owner),
+        image_url: raster.map(raster_image).transpose()?,
+        effective: preview.scope()
+            == crate::host::teletext_authoring::TeletextAuthoringScope::Effective,
+        valid_until: preview.valid_until().map(|until| until.to_rfc3339()),
+        pages: preview.pages().to_vec(),
+        resource_objects: preview.resource_objects().to_vec(),
+        removable_resource_objects: preview.removable_resource_objects().to_vec(),
+        object_resources: preview.object_resources().to_vec(),
+        object_choices: preview.object_choices().clone(),
+        navigation: preview.navigation().to_vec(),
+        diagnostics,
+        authoring: preview.authoring().iter().map(project_authoring).collect(),
+        publication: preview.publication().map(project_publication),
+        outputs: None,
+    })
+}
+
+#[cfg(feature = "ssr")]
+fn raster_diagnostics(
+    raster: Option<&ersatzrs_ffmpeg::teletext::TeletextRaster>,
+) -> Vec<TeletextDraftDiagnosticData> {
+    use ersatzrs_ffmpeg::teletext::TeletextRasterCellFailure as Failure;
+    raster
         .into_iter()
         .flat_map(ersatzrs_ffmpeg::teletext::TeletextRaster::diagnostics)
         .map(|diagnostic| {
@@ -246,27 +277,7 @@ fn project_preview(
                     .map(ersatzrs_domain::TeletextSpatialInvocationId::get),
             }
         })
-        .collect();
-    Ok(TeletextDraftPreviewData {
-        channel_id: preview.identity.channel_id,
-        design_id: preview.identity.design_id,
-        revision: preview.identity.revision,
-        owner: raster.map(ersatzrs_ffmpeg::teletext::TeletextRaster::owner),
-        image_url: raster.map(raster_image).transpose()?,
-        effective: preview.scope()
-            == crate::host::teletext_authoring::TeletextAuthoringScope::Effective,
-        valid_until: preview.valid_until().map(|until| until.to_rfc3339()),
-        pages: preview.pages().to_vec(),
-        resource_objects: preview.resource_objects().to_vec(),
-        removable_resource_objects: preview.removable_resource_objects().to_vec(),
-        object_resources: preview.object_resources().to_vec(),
-        object_choices: preview.object_choices().clone(),
-        navigation: preview.navigation().to_vec(),
-        diagnostics,
-        authoring: preview.authoring().iter().map(project_authoring).collect(),
-        publication: preview.publication().map(project_publication),
-        outputs: None,
-    })
+        .collect()
 }
 
 #[cfg(feature = "ssr")]

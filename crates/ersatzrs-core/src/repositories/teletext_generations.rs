@@ -127,6 +127,11 @@ pub enum TeletextGenerationMutation<T> {
 /// Atomic durable publication and exact read-only runtime revalidation.
 #[async_trait]
 pub trait TeletextGenerationRepository: Send + Sync {
+    /// Optional durable refresh capability; existing adapters remain unsupported.
+    fn guide_refresh(&self) -> Option<&dyn super::TeletextGuideRefreshRepository> {
+        None
+    }
+
     /// Accept an exact guide-bearing Base original after trusted native role
     /// proof, independently recapturing source and finite validity in the same
     /// request/head/selection/pointer transaction. Old ports fail closed.

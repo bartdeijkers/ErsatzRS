@@ -1,5 +1,7 @@
 //! Read-only per-output receipts, deliberately separate from publication forms.
 
+use std::fmt::Write as _;
+
 use super::TeletextDraftPreviewData;
 use crate::admin::i18n::{tr, TextKey};
 use ersatzrs_domain::{
@@ -30,7 +32,9 @@ pub(super) fn view(data: &TeletextDraftPreviewData) -> AnyView {
         view! {
             <li data-testid="teletext-output" data-output=output.epoch.to_string() data-state=state
                 data-requested-generation=output.requested.generation.as_ref().map(|generation| generation.generation_id)
-                data-applied-generation=output.applied.as_ref().and_then(|selection| selection.generation.as_ref()).map(|generation| generation.generation_id)>
+                data-applied-generation=output.applied.as_ref().and_then(|selection| selection.generation.as_ref()).map(|generation| generation.generation_id)
+                data-requested-guide-snapshot=output.requested.generation.as_ref().and_then(|generation| generation.guide_refresh.as_ref()).and_then(|refresh| refresh.snapshot_id)
+                data-applied-guide-snapshot=output.applied.as_ref().and_then(|selection| selection.generation.as_ref()).and_then(|generation| generation.guide_refresh.as_ref()).and_then(|refresh| refresh.snapshot_id)>
                 <h4>{format!("{} {}", tr(TextKey::TeletextDeliveryLabel), index + 1)}</h4>
                 <p role="status">{tr(key)}</p>
                 <dl>
@@ -53,11 +57,29 @@ pub(super) fn view(data: &TeletextDraftPreviewData) -> AnyView {
 
 fn selection(selection: &TeletextOutputSelectionObservation) -> String {
     let generation = selection.generation.as_ref().map(|generation| {
-        format!(
+        let mut label = format!(
             "{} {}",
             tr(TextKey::TeletextDeliveryGeneration),
             generation.generation_id
-        )
+        );
+        if let Some(refresh) = &generation.guide_refresh {
+            let snapshot = refresh.snapshot_id.map_or_else(
+                || tr(TextKey::TeletextGuideInitialSeed).to_owned(),
+                |id| format!("{} {id}", tr(TextKey::TeletextGuideRuntimeSnapshot)),
+            );
+            let freshness = tr(if refresh.stale {
+                TextKey::TeletextGuideStale
+            } else {
+                TextKey::TeletextGuideFresh
+            });
+            let _ = write!(
+                label,
+                " · {snapshot} · {freshness} · {} {}",
+                tr(TextKey::TeletextGuideCapturedAt),
+                refresh.captured_at.to_rfc3339(),
+            );
+        }
+        label
     });
     if selection.authored {
         generation.unwrap_or_else(|| tr(TextKey::TeletextDeliveryUnavailable).to_owned())

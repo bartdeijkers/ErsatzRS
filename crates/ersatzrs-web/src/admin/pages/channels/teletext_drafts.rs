@@ -21,7 +21,7 @@ mod resource_remove;
 mod resource_selection;
 mod secondary_defaults;
 
-stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
+stylance::import_crate_style!(pub(super) style, "src/admin/pages/channels/teletext_drafts.module.css");
 
 pub(super) fn draft_status_text(code: &str) -> &'static str {
     tr(match code {
@@ -699,7 +699,7 @@ fn navigation_link(data: &TeletextDraftPreviewData, link: &TeletextNavigationLin
         .into_any()
 }
 
-fn preview_legend() -> AnyView {
+pub(super) fn preview_legend() -> AnyView {
     view! {
         <ul class=style::legend aria-label=tr(TextKey::TeletextPreviewDiagnostics)>
             <li><span class=style::header_pattern aria-hidden="true"></span>{tr(TextKey::TeletextPreviewReceiverHeader)}</li>
@@ -709,7 +709,7 @@ fn preview_legend() -> AnyView {
     }.into_any()
 }
 
-fn diagnostic_list(diagnostics: &[TeletextDraftDiagnosticData]) -> AnyView {
+pub(super) fn diagnostic_list(diagnostics: &[TeletextDraftDiagnosticData]) -> AnyView {
     let entries = diagnostics.iter().map(|diagnostic| {
         let original = diagnostic.original_position.map(|(row, column)| format!("{row}, {column}"));
         view! {
@@ -860,6 +860,7 @@ mod tests {
             authoring_error: None,
             effective_authoring: None,
             effective_authoring_error: None,
+            current_guide_available: Some(false),
             guide_channels: Some(vec![
                 crate::admin::server_fns::teletext::TeletextGuideChannelData {
                     id: 12,
@@ -904,6 +905,53 @@ mod tests {
         }
     }
 
+    fn assert_guide_runtime_receipts(data: &mut TeletextDraftPreviewData, language: &str) {
+        use ersatzrs_domain::TeletextOutputObservationPhase as Phase;
+        // A derived snapshot is a separate identity. Retain the old
+        // sink acknowledgement while showing a new requested snapshot.
+        let observation = &mut data.outputs.as_mut().unwrap().outputs[0];
+        observation.phase = Phase::Waiting;
+        observation.requested.authored = true;
+        let refresh = ersatzrs_domain::TeletextGuideRefreshOutputObservation {
+            seed_id: 7,
+            snapshot_id: Some(42),
+            revision: 6,
+            captured_at: chrono::DateTime::from_timestamp(1_800_000_000, 0).unwrap(),
+            stale: false,
+        };
+        observation
+            .requested
+            .generation
+            .as_mut()
+            .unwrap()
+            .guide_refresh = Some(refresh.clone());
+        observation
+            .applied
+            .as_mut()
+            .unwrap()
+            .generation
+            .as_mut()
+            .unwrap()
+            .guide_refresh = Some(ersatzrs_domain::TeletextGuideRefreshOutputObservation {
+            snapshot_id: None,
+            stale: true,
+            ..refresh
+        });
+        let html = output_status::view(data).to_html();
+        for key in [
+            TextKey::TeletextGuideRuntimeSnapshot,
+            TextKey::TeletextGuideInitialSeed,
+            TextKey::TeletextGuideFresh,
+            TextKey::TeletextGuideStale,
+            TextKey::TeletextGuideCapturedAt,
+        ] {
+            assert!(html.contains(tr(key)), "{language}");
+        }
+        assert!(html.contains("data-requested-guide-snapshot=\"42\""));
+        assert!(!html.contains("data-applied-guide-snapshot="));
+        assert!(!html.contains("<form"));
+    }
+
     #[test]
     fn output_status_is_localized_read_only_and_preserves_historical_receipts() {
         use ersatzrs_domain::{
@@ -935,6 +983,7 @@ mod tests {
                         design_id: 8,
                         revision: 3,
                         effective: false,
+                        guide_refresh: None,
                     }),
                     authored: true,
                 };
@@ -972,6 +1021,8 @@ mod tests {
                 let html = output_status::view(&data).to_html();
                 assert!(html.contains(tr(TextKey::TeletextDeliveryAbsent)));
                 assert!(html.contains(tr(TextKey::TeletextDeliveryApplied)));
+
+                assert_guide_runtime_receipts(&mut data, language);
             });
         }
     }

@@ -1,17 +1,24 @@
 //! Sealed base or scoped output, selected without producer/Lua replay.
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use chrono::{DateTime, Utc};
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
 use ersatzrs_core::repositories::{
-    TeletextGenerationMutation, TeletextGuideGenerationCheck, TeletextGuideSourceCheckLimits,
-    TeletextProfileMutation, TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
+    TeletextGenerationMutation, TeletextGuideGenerationCheck, TeletextGuideRefreshCurrentMetadata,
+    TeletextGuideRefreshOutputCheck, TeletextGuideRefreshOutputConfirmation,
+    TeletextGuideRefreshRole, TeletextGuideRefreshSelection, TeletextGuideRefreshStatus,
+    TeletextGuideRuntimeSnapshot, TeletextGuideRuntimeSnapshotMetadata,
+    TeletextGuideSourceCheckLimits, TeletextProfileMutation,
+    TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION, TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::{TeletextAcceptedGeneration, TeletextEffectiveBindingSnapshot};
-use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
+use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextServiceDescriptor};
 
 use crate::host::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
@@ -23,14 +30,34 @@ use crate::host::{
         reload_accepted_effective_guide_teletext_generation,
         reload_accepted_guide_teletext_generation, GuideOutputQualification,
     },
+    teletext_guide_refresh_native::{
+        reload_current_guide_refresh, reload_guide_refresh_seed, GuideRefreshReloadContext,
+        NativeGuideRuntimeOutput,
+    },
 };
+
+#[path = "teletext_cached_guide_admission.rs"]
+mod cached_admission;
+
+#[path = "teletext_guide_output_identity.rs"]
+mod guide_identity;
+pub(super) use guide_identity::GuideOutputIdentity;
 
 /// Explicit version-3 runtime source checking, owned by one response context.
 /// Absence keeps the historical static contract and never guesses source bounds.
 #[derive(Clone)]
-pub(super) struct GuideRuntime {
-    pub(super) pool: ersatzrs_infra::db::DbPool,
-    pub(super) limits: TeletextGuideSourceCheckLimits,
+pub(crate) struct GuideRuntime {
+    pub(crate) pool: ersatzrs_infra::db::DbPool,
+    pub(crate) limits: TeletextGuideSourceCheckLimits,
+    pub(crate) refresh: bool,
+}
+
+pub(crate) struct GuideTeletextOutputCandidate {
+    native: Arc<NativeGuideRuntimeOutput>,
+    identity: GuideOutputIdentity,
+    confirmation: TeletextGuideRefreshOutputConfirmation,
+    limits: TeletextGuideSourceCheckLimits,
+    deadline: Instant,
 }
 
 /// Only existing sealed native candidates can construct these role variants.
@@ -45,16 +72,18 @@ pub(crate) enum SelectedTeletextOutputCandidate {
         AcceptedEffectiveTeletextOutputCandidate,
         Option<tokio::time::Instant>,
     ),
+    Guide(
+        Box<GuideTeletextOutputCandidate>,
+        Option<tokio::time::Instant>,
+    ),
 }
 
 impl SelectedTeletextOutputCandidate {
     pub(crate) fn next_transition(&self) -> Option<tokio::time::Instant> {
         let scope = match self {
-            Self::Base(_, next) | Self::Effective(_, next) => *next,
+            Self::Base(_, next) | Self::Effective(_, next) | Self::Guide(_, next) => *next,
         };
-        let guide = self
-            .guide_qualification()
-            .map(|proof| tokio::time::Instant::from_std(proof.deadline));
+        let guide = self.guide_deadline();
         match (scope, guide) {
             (Some(scope), Some(guide)) => Some(scope.min(guide)),
             (scope, guide) => scope.or(guide),
@@ -65,13 +94,94 @@ impl SelectedTeletextOutputCandidate {
         match self {
             Self::Base(candidate, _) => candidate.guide_qualification(),
             Self::Effective(candidate, _) => candidate.guide_qualification(),
+            Self::Guide(..) => None,
         }
+    }
+
+    pub(super) fn guide_deadline(&self) -> Option<tokio::time::Instant> {
+        match self {
+            Self::Guide(candidate, _) => Some(candidate.deadline.into()),
+            _ => self
+                .guide_qualification()
+                .map(|proof| proof.deadline.into()),
+        }
+    }
+
+    pub(super) fn guide_identity(&self) -> Option<&GuideOutputIdentity> {
+        match self {
+            Self::Guide(candidate, _) => Some(&candidate.identity),
+            _ => None,
+        }
+    }
+
+    pub(super) fn guide_refresh_confirmation(
+        &self,
+    ) -> Option<&TeletextGuideRefreshOutputConfirmation> {
+        match self {
+            Self::Guide(candidate, _) => Some(&candidate.confirmation),
+            _ => None,
+        }
+    }
+
+    /// A prepared current successor can replace this exact selection without
+    /// relabelling the superseded body's old source proof as current or fresh.
+    pub(super) fn can_bridge_guide_successor(&self, successor: &Self) -> bool {
+        let (Self::Guide(previous, _), Self::Guide(next, _)) = (self, successor) else {
+            return false;
+        };
+        previous.identity != next.identity
+            && previous.confirmation.seed == next.confirmation.seed
+            && previous.confirmation.selection == next.confirmation.selection
+            && previous
+                .confirmation
+                .qualification
+                .validate_current(Utc::now())
+                .is_ok()
+            && Instant::now() < previous.deadline
+            && Instant::now() < next.deadline
+            && TeletextServiceDescriptor::from_authored_service(previous.native.service())
+                == TeletextServiceDescriptor::from_authored_service(next.native.service())
+    }
+
+    pub(super) fn effective_valid_until(&self) -> Option<DateTime<Utc>> {
+        match self {
+            Self::Base(..) => None,
+            Self::Effective(candidate, _) => candidate.selection().valid_until,
+            Self::Guide(candidate, _) => match candidate.native.selection() {
+                TeletextGuideRefreshSelection::Base(_) => None,
+                TeletextGuideRefreshSelection::Effective(scope) => scope.valid_until,
+            },
+        }
+    }
+
+    pub(super) fn output_generation_observation(
+        &self,
+    ) -> Option<ersatzrs_domain::TeletextOutputGenerationObservation> {
+        let mut observation = super::teletext_output_observation::generation(self.generation())?;
+        if let Some(confirmation) = self.guide_refresh_confirmation() {
+            observation.guide_refresh =
+                Some(ersatzrs_domain::TeletextGuideRefreshOutputObservation {
+                    seed_id: confirmation.seed.id,
+                    snapshot_id: confirmation.runtime.as_ref().map(|runtime| runtime.id),
+                    revision: confirmation.current_revision,
+                    captured_at: confirmation.qualification.source.captured_at,
+                    stale: confirmation.status == TeletextGuideRefreshStatus::Stale,
+                });
+        }
+        Some(observation)
+    }
+
+    pub(crate) fn output_observation(
+        &self,
+    ) -> Option<ersatzrs_domain::TeletextOutputGenerationObservation> {
+        self.output_generation_observation()
     }
 
     pub(crate) fn generation(&self) -> &TeletextAcceptedGeneration {
         match self {
             Self::Base(candidate, _) => candidate.generation(),
             Self::Effective(candidate, _) => candidate.generation(),
+            Self::Guide(candidate, _) => &candidate.native.seed().generation,
         }
     }
 
@@ -79,6 +189,7 @@ impl SelectedTeletextOutputCandidate {
         match self {
             Self::Base(candidate, _) => candidate.selection().channel_id,
             Self::Effective(candidate, _) => candidate.selection().channel_id,
+            Self::Guide(candidate, _) => candidate.native.seed().generation.request.channel_id,
         }
     }
 
@@ -86,6 +197,7 @@ impl SelectedTeletextOutputCandidate {
         match self {
             Self::Base(candidate, _) => Some(candidate.service()),
             Self::Effective(candidate, _) => candidate.service(),
+            Self::Guide(candidate, _) => Some(candidate.native.service()),
         }
     }
 
@@ -95,20 +207,131 @@ impl SelectedTeletextOutputCandidate {
         maximum: usize,
         deadline: Instant,
     ) -> bool {
-        self.confirm_selection_for(self.generation(), application, maximum, deadline)
+        self.confirm_with_wait(application, maximum, deadline, None)
             .await
+    }
+
+    pub(super) async fn confirm_cached(
+        &self,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+        cadence: Duration,
+    ) -> bool {
+        self.confirm_with_wait(application, maximum, deadline, Some(cadence))
+            .await
+    }
+
+    async fn confirm_with_wait(
+        &self,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+        wait_cadence: Option<Duration>,
+    ) -> bool {
+        if let Self::Guide(candidate, _) = self {
+            return candidate
+                .confirm(application, maximum, deadline, None, wait_cadence)
+                .await;
+        }
+        self.confirm_selection_for(
+            self.generation(),
+            application,
+            maximum,
+            deadline,
+            wait_cadence,
+        )
+        .await
+    }
+
+    /// Reauthorize already compiled content, never reset its original deadline.
+    pub(super) async fn reauthorize_guide(
+        &self,
+        metadata: &TeletextGuideRefreshCurrentMetadata,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+    ) -> Option<Arc<Self>> {
+        self.reauthorize_guide_with_wait(metadata, application, maximum, deadline, None)
+            .await
+    }
+
+    pub(super) async fn reauthorize_guide_cached(
+        &self,
+        metadata: &TeletextGuideRefreshCurrentMetadata,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+        cadence: Duration,
+    ) -> Option<Arc<Self>> {
+        self.reauthorize_guide_with_wait(metadata, application, maximum, deadline, Some(cadence))
+            .await
+    }
+
+    async fn reauthorize_guide_with_wait(
+        &self,
+        metadata: &TeletextGuideRefreshCurrentMetadata,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+        wait_cadence: Option<Duration>,
+    ) -> Option<Arc<Self>> {
+        let Self::Guide(previous, scope) = self else {
+            return None;
+        };
+        if previous.identity != GuideOutputIdentity::from_metadata(metadata)
+            || previous.confirmation.seed != metadata.seed
+            || previous.confirmation.runtime != metadata.runtime
+        {
+            return None;
+        }
+        let monotonic = Instant::now();
+        let now = Utc::now();
+        let status = metadata.status(now);
+        if !matches!(
+            status,
+            TeletextGuideRefreshStatus::Fresh | TeletextGuideRefreshStatus::Stale
+        ) {
+            return None;
+        }
+        let available_until = metadata.available_until();
+        let remaining = available_until.signed_duration_since(now).to_std().ok()?;
+        let capped = monotonic.checked_add(remaining)?.min(previous.deadline);
+        let mut confirmation = previous.confirmation.clone();
+        confirmation.current_revision = metadata.revision;
+        confirmation.status = status;
+        confirmation.available_until = available_until;
+        let candidate = GuideTeletextOutputCandidate {
+            native: previous.native.clone(),
+            identity: previous.identity.clone(),
+            confirmation,
+            limits: previous.limits,
+            deadline: capped,
+        };
+        if !candidate
+            .confirm(application, maximum, deadline, None, wait_cadence)
+            .await
+        {
+            return None;
+        }
+        Some(Arc::new(Self::Guide(Box::new(candidate), *scope)))
     }
 
     /// Retain already active content only while a same-role successor is
     /// recovered under this exact still-current selection and original expiry.
     /// This never confirms the successor's native artifact or renews old scope.
-    pub(crate) async fn confirm_successor_selection(
+    pub(super) async fn confirm_successor_selection_cached(
         &self,
         successor: &TeletextAcceptedGeneration,
         application: &ApplicationServices,
         maximum: usize,
         deadline: Instant,
+        cadence: Duration,
     ) -> bool {
+        if matches!(self, Self::Guide(..)) {
+            // A manual successor cannot attest a separate runtime snapshot.
+            return false;
+        }
         if successor.artifact_version != self.generation().artifact_version
             || !matches!(
                 successor.artifact_version,
@@ -124,7 +347,7 @@ impl SelectedTeletextOutputCandidate {
         {
             return false;
         }
-        self.confirm_selection_for(successor, application, maximum, deadline)
+        self.confirm_selection_for(successor, application, maximum, deadline, Some(cadence))
             .await
     }
 
@@ -134,6 +357,7 @@ impl SelectedTeletextOutputCandidate {
         application: &ApplicationServices,
         maximum: usize,
         deadline: Instant,
+        wait_cadence: Option<Duration>,
     ) -> bool {
         let deadline = self
             .next_transition()
@@ -145,8 +369,7 @@ impl SelectedTeletextOutputCandidate {
             // Transaction-owned source hashing must retain the same admission
             // after cancellation. Static confirmations perform no guide CPU work.
             if let Some(proof) = self.guide_qualification() {
-                let Ok(guard) =
-                    crate::host::teletext_work::begin(application, Some(deadline)).await
+                let Ok(guard) = admit_confirmation(application, deadline, wait_cadence).await
                 else {
                     return false;
                 };
@@ -178,6 +401,7 @@ impl SelectedTeletextOutputCandidate {
                             )
                             .await
                     }
+                    Self::Guide(..) => return false,
                 };
                 return matches!(result, Ok(TeletextGenerationMutation::Accepted(())));
             }
@@ -201,6 +425,7 @@ impl SelectedTeletextOutputCandidate {
                         )
                         .await
                 }
+                Self::Guide(..) => return false,
             };
             matches!(result, Ok(TeletextGenerationMutation::Accepted(())))
         };
@@ -208,6 +433,78 @@ impl SelectedTeletextOutputCandidate {
             tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), confirmation).await,
             Ok(true)
         ) && Instant::now() < deadline
+    }
+}
+
+impl GuideTeletextOutputCandidate {
+    async fn confirm(
+        &self,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+        admission: Option<ersatzrs_core::locking::TeletextWorkHold>,
+        wait_cadence: Option<Duration>,
+    ) -> bool {
+        let deadline = deadline.min(self.deadline);
+        if Instant::now() >= deadline {
+            return false;
+        }
+        let guard = if self.confirmation.status == TeletextGuideRefreshStatus::Fresh
+            && admission.is_none()
+        {
+            match admit_confirmation(application, deadline, wait_cadence).await {
+                Ok(guard) => Some(guard),
+                Err(_) => return false,
+            }
+        } else {
+            None
+        };
+        let check = match self.confirmation.status {
+            TeletextGuideRefreshStatus::Fresh => {
+                let Some(source_hold) = admission.or_else(|| {
+                    guard
+                        .as_ref()
+                        .map(ersatzrs_core::locking::TeletextWorkGuard::hold_work)
+                }) else {
+                    return false;
+                };
+                TeletextGuideRefreshOutputCheck::Fresh(TeletextGuideGenerationCheck {
+                    limits: self.limits,
+                    deadline,
+                    hold: source_hold,
+                })
+            }
+            TeletextGuideRefreshStatus::Stale => {
+                TeletextGuideRefreshOutputCheck::Stale { deadline }
+            }
+            _ => return false,
+        };
+        let result = tokio::time::timeout_at(
+            deadline.into(),
+            application.confirm_guide_refresh_output(
+                &self.confirmation,
+                Utc::now(),
+                check,
+                maximum,
+            ),
+        )
+        .await;
+        matches!(result, Ok(Ok(TeletextGenerationMutation::Accepted(()))))
+            && Instant::now() < deadline
+    }
+}
+
+async fn admit_confirmation(
+    application: &ApplicationServices,
+    deadline: Instant,
+    wait_cadence: Option<Duration>,
+) -> Result<ersatzrs_core::locking::TeletextWorkGuard, crate::host::teletext_work::TeletextWorkError>
+{
+    match wait_cadence {
+        Some(cadence) => {
+            cached_admission::begin_cached_confirmation(application, deadline, cadence).await
+        }
+        None => crate::host::teletext_work::begin(application, Some(deadline)).await,
     }
 }
 
@@ -219,6 +516,14 @@ pub(crate) struct SelectedTeletextObservation {
     pub(crate) generation: Option<TeletextAcceptedGeneration>,
     pub(crate) effective: bool,
     pub(crate) next_transition: Option<tokio::time::Instant>,
+    pub(super) guide_refresh: Option<TeletextGuideRefreshCurrentMetadata>,
+}
+impl SelectedTeletextObservation {
+    pub(super) fn guide_identity(&self) -> Option<GuideOutputIdentity> {
+        self.guide_refresh
+            .as_ref()
+            .map(GuideOutputIdentity::from_metadata)
+    }
 }
 
 /// Preserve a conservative monotonic boundary from the original observed clock.
@@ -242,6 +547,15 @@ pub(crate) async fn observe_selected_teletext_output(
     application: &ApplicationServices,
     channel_id: i64,
 ) -> Result<SelectedTeletextObservation, SelectedTeletextReadFailure> {
+    observe_selected_teletext_output_with_guide(application, channel_id, None, 0).await
+}
+
+pub(super) async fn observe_selected_teletext_output_with_guide(
+    application: &ApplicationServices,
+    channel_id: i64,
+    guide: Option<&GuideRuntime>,
+    maximum: usize,
+) -> Result<SelectedTeletextObservation, SelectedTeletextReadFailure> {
     let monotonic = tokio::time::Instant::now();
     let observed = Utc::now();
     let scope = application
@@ -263,10 +577,36 @@ pub(crate) async fn observe_selected_teletext_output(
         application.accepted_teletext_generation(channel_id).await
     }
     .map_err(|_| SelectedTeletextReadFailure)?;
+    let guide_role = generation
+        .as_ref()
+        .and_then(|generation| match generation.artifact_version {
+            TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION => Some(TeletextGuideRefreshRole::Base),
+            TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION => {
+                Some(TeletextGuideRefreshRole::Effective)
+            }
+            _ => None,
+        });
+    let guide_refresh = if guide.is_some_and(|guide| guide.refresh) {
+        if let Some(role) = guide_role {
+            Some(
+                application
+                    .observe_current_guide_refresh(channel_id, role, maximum)
+                    .await
+                    .map_err(|_| SelectedTeletextReadFailure)?
+                    .filter(|current| Some(&current.seed.generation) == generation.as_ref())
+                    .ok_or(SelectedTeletextReadFailure)?,
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     Ok(SelectedTeletextObservation {
         generation,
         effective,
         next_transition: transition_deadline(monotonic, observed, scope.valid_until),
+        guide_refresh,
     })
 }
 
@@ -291,7 +631,7 @@ pub(crate) async fn load_selected_teletext_output_candidate(
     .await
 }
 
-pub(super) async fn load_selected_teletext_output_candidate_with_guide(
+pub(crate) async fn load_selected_teletext_output_candidate_with_guide(
     application: &ApplicationServices,
     channel_id: i64,
     budget: TeletextDesignDocumentBudget,
@@ -300,86 +640,346 @@ pub(super) async fn load_selected_teletext_output_candidate_with_guide(
     guide: Option<&GuideRuntime>,
 ) -> Result<Option<Arc<SelectedTeletextOutputCandidate>>, SelectedTeletextReadFailure> {
     let work = async {
-        let observation = observe_selected_teletext_output(application, channel_id).await?;
+        let observation = observe_selected_teletext_output_with_guide(
+            application,
+            channel_id,
+            guide,
+            budget.max_serialized_bytes,
+        )
+        .await?;
         if observation.generation.is_none() {
             return Ok(None);
         }
-        let candidate = if observation.effective {
-            let guide_role = observation.generation.as_ref().is_some_and(|g| {
-                g.artifact_version == TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
-            });
-            let recovered = if guide_role {
-                let guide = guide.ok_or(SelectedTeletextReadFailure)?;
-                reload_accepted_effective_guide_teletext_generation(
-                    application,
-                    &guide.pool,
-                    channel_id,
-                    budget,
-                    encoding,
-                    guide.limits,
-                    deadline,
-                )
-                .await
-            } else {
-                reload_accepted_effective_teletext_generation(
-                    application,
-                    channel_id,
-                    budget,
-                    encoding,
-                    deadline,
-                )
-                .await
-            };
-            recovered
-                .map_err(|_| SelectedTeletextReadFailure)?
-                .map(|candidate| {
-                    SelectedTeletextOutputCandidate::Effective(
-                        candidate,
-                        observation.next_transition,
-                    )
-                })
-        } else {
-            let guide_role = observation
-                .generation
-                .as_ref()
-                .is_some_and(|g| g.artifact_version == TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION);
-            let recovered = if guide_role {
-                let guide = guide.ok_or(SelectedTeletextReadFailure)?;
-                reload_accepted_guide_teletext_generation(
-                    application,
-                    &guide.pool,
-                    channel_id,
-                    budget,
-                    encoding,
-                    guide.limits,
-                    deadline,
-                )
-                .await
-            } else {
-                reload_accepted_teletext_generation(
-                    application,
-                    channel_id,
-                    budget,
-                    encoding,
-                    deadline,
-                )
-                .await
-            };
-            recovered
-                .map_err(|_| SelectedTeletextReadFailure)?
-                .map(|candidate| {
-                    SelectedTeletextOutputCandidate::Base(
-                        Arc::new(candidate),
-                        observation.next_transition,
-                    )
-                })
-        };
-        Ok(candidate.map(Arc::new))
+        if let Some(metadata) = &observation.guide_refresh {
+            let runtime = guide.ok_or(SelectedTeletextReadFailure)?;
+            return load_guide_refresh_output(
+                application,
+                channel_id,
+                metadata,
+                runtime,
+                budget,
+                encoding,
+                deadline,
+                observation.next_transition,
+                true,
+                None,
+            )
+            .await;
+        }
+        load_historical_selected_output(
+            application,
+            channel_id,
+            budget,
+            encoding,
+            deadline,
+            guide,
+            observation,
+        )
+        .await
     };
     match tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), Box::pin(work)).await {
         Ok(result) if Instant::now() < deadline => result,
         _ => Err(SelectedTeletextReadFailure),
     }
+}
+
+async fn load_historical_selected_output(
+    application: &ApplicationServices,
+    channel_id: i64,
+    budget: TeletextDesignDocumentBudget,
+    encoding: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    guide: Option<&GuideRuntime>,
+    observation: SelectedTeletextObservation,
+) -> Result<Option<Arc<SelectedTeletextOutputCandidate>>, SelectedTeletextReadFailure> {
+    let candidate = if observation.effective {
+        let guide_role = observation.generation.as_ref().is_some_and(|g| {
+            g.artifact_version == TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
+        });
+        let recovered = if guide_role {
+            let guide = guide.ok_or(SelectedTeletextReadFailure)?;
+            reload_accepted_effective_guide_teletext_generation(
+                application,
+                &guide.pool,
+                channel_id,
+                budget,
+                encoding,
+                guide.limits,
+                deadline,
+            )
+            .await
+        } else {
+            reload_accepted_effective_teletext_generation(
+                application,
+                channel_id,
+                budget,
+                encoding,
+                deadline,
+            )
+            .await
+        };
+        recovered
+            .map_err(|_| SelectedTeletextReadFailure)?
+            .map(|candidate| {
+                SelectedTeletextOutputCandidate::Effective(candidate, observation.next_transition)
+            })
+    } else {
+        let guide_role = observation
+            .generation
+            .as_ref()
+            .is_some_and(|g| g.artifact_version == TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION);
+        let recovered = if guide_role {
+            let guide = guide.ok_or(SelectedTeletextReadFailure)?;
+            reload_accepted_guide_teletext_generation(
+                application,
+                &guide.pool,
+                channel_id,
+                budget,
+                encoding,
+                guide.limits,
+                deadline,
+            )
+            .await
+        } else {
+            reload_accepted_teletext_generation(application, channel_id, budget, encoding, deadline)
+                .await
+        };
+        recovered
+            .map_err(|_| SelectedTeletextReadFailure)?
+            .map(|candidate| {
+                SelectedTeletextOutputCandidate::Base(
+                    Arc::new(candidate),
+                    observation.next_transition,
+                )
+            })
+    };
+    Ok(candidate.map(Arc::new))
+}
+
+fn snapshot_metadata(
+    snapshot: &TeletextGuideRuntimeSnapshot,
+) -> TeletextGuideRuntimeSnapshotMetadata {
+    TeletextGuideRuntimeSnapshotMetadata {
+        id: snapshot.id,
+        seed_id: snapshot.seed_id,
+        version: snapshot.saved.version,
+        document_version: snapshot.saved.document_version,
+        document_digest: snapshot.saved.document_digest.clone(),
+        qualification: snapshot.saved.qualification.clone(),
+        artifact_digest: snapshot.saved.artifact_digest.clone(),
+    }
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "One loader shares the caller's exact source, scope, budgets and original deadline across cold and warm recovery"
+)]
+async fn load_guide_refresh_output(
+    application: &ApplicationServices,
+    channel_id: i64,
+    metadata: &TeletextGuideRefreshCurrentMetadata,
+    runtime: &GuideRuntime,
+    budget: TeletextDesignDocumentBudget,
+    encoding: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    scope: Option<tokio::time::Instant>,
+    confirm: bool,
+    wait_cadence: Option<Duration>,
+) -> Result<Option<Arc<SelectedTeletextOutputCandidate>>, SelectedTeletextReadFailure> {
+    let now = Utc::now();
+    let status = metadata.status(now);
+    if !matches!(
+        status,
+        TeletextGuideRefreshStatus::Fresh | TeletextGuideRefreshStatus::Stale
+    ) {
+        return Ok(None);
+    }
+    let guard = admit_confirmation(application, deadline, wait_cadence)
+        .await
+        .map_err(|_| SelectedTeletextReadFailure)?;
+    // The initial seed needs no runtime BLOB. A separately published runtime
+    // document is fetched only for a genuinely new content identity.
+    let snapshot = load_snapshot_for_metadata(
+        application,
+        channel_id,
+        metadata,
+        budget.max_serialized_bytes,
+        now,
+    )
+    .await?;
+    let context = GuideRefreshReloadContext {
+        application,
+        pool: &runtime.pool,
+        budget,
+        encoding,
+        limits: runtime.limits,
+        deadline,
+        hold: guard.hold_work(),
+    };
+    let native = match snapshot.as_ref() {
+        Some(snapshot) => {
+            reload_current_guide_refresh(
+                &metadata.seed,
+                snapshot,
+                status,
+                metadata.available_until(),
+                context,
+            )
+            .await
+        }
+        None => {
+            reload_guide_refresh_seed(&metadata.seed, status, metadata.available_until(), context)
+                .await
+        }
+    }
+    .map_err(|_| SelectedTeletextReadFailure)?;
+    if native.seed() != &metadata.seed
+        || native.snapshot().map(snapshot_metadata) != metadata.runtime
+        || native.status() != status
+        || native.available_until() != metadata.available_until()
+    {
+        return Err(SelectedTeletextReadFailure);
+    }
+    let qualification = metadata.runtime.as_ref().map_or_else(
+        || metadata.seed.qualification.clone(),
+        |snapshot| snapshot.qualification.clone(),
+    );
+    let confirmation = TeletextGuideRefreshOutputConfirmation {
+        seed: metadata.seed.clone(),
+        current_revision: metadata.revision,
+        runtime: metadata.runtime.clone(),
+        selection: native.selection().clone(),
+        qualification,
+        status,
+        available_until: metadata.available_until(),
+    };
+    let candidate = GuideTeletextOutputCandidate {
+        deadline: scope.map_or(native.output_deadline(), |scope| {
+            native.output_deadline().min(scope.into_std())
+        }),
+        identity: GuideOutputIdentity::from_confirmation(&confirmation),
+        native: Arc::new(native),
+        confirmation,
+        limits: runtime.limits,
+    };
+    // Reuse the original admission, including the final source transaction.
+    if confirm
+        && !candidate
+            .confirm(
+                application,
+                budget.max_serialized_bytes,
+                deadline,
+                Some(guard.hold_work()),
+                None,
+            )
+            .await
+    {
+        return Err(SelectedTeletextReadFailure);
+    }
+    Ok(Some(Arc::new(SelectedTeletextOutputCandidate::Guide(
+        Box::new(candidate),
+        scope,
+    ))))
+}
+
+async fn load_snapshot_for_metadata(
+    application: &ApplicationServices,
+    channel_id: i64,
+    metadata: &TeletextGuideRefreshCurrentMetadata,
+    maximum: usize,
+    now: DateTime<Utc>,
+) -> Result<Option<TeletextGuideRuntimeSnapshot>, SelectedTeletextReadFailure> {
+    let status = metadata.status(now);
+    Ok(if let Some(expected) = &metadata.runtime {
+        let current = application
+            .guide_refresh_current(channel_id, metadata.seed.role, maximum)
+            .await
+            .map_err(|_| SelectedTeletextReadFailure)?
+            .ok_or(SelectedTeletextReadFailure)?;
+        if current.seed != metadata.seed
+            || current.revision != metadata.revision
+            || current.runtime.as_ref().map(snapshot_metadata).as_ref() != Some(expected)
+            || current.status(now) != status
+            || current.available_until() != metadata.available_until()
+        {
+            return Err(SelectedTeletextReadFailure);
+        }
+        current.runtime
+    } else {
+        None
+    })
+}
+
+/// Prepare independent Base bytes before a Scripted expiry, granting no output
+/// authority. The existing expiry recovery must confirm the current Base later.
+pub(super) async fn prepare_guide_refresh_base_output(
+    application: &ApplicationServices,
+    channel_id: i64,
+    budget: TeletextDesignDocumentBudget,
+    encoding: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    runtime: &GuideRuntime,
+) -> Result<Option<Arc<SelectedTeletextOutputCandidate>>, SelectedTeletextReadFailure> {
+    let metadata = application
+        .observe_current_guide_refresh(
+            channel_id,
+            TeletextGuideRefreshRole::Base,
+            budget.max_serialized_bytes,
+        )
+        .await
+        .map_err(|_| SelectedTeletextReadFailure)?;
+    let Some(metadata) = metadata else {
+        return Ok(None);
+    };
+    load_guide_refresh_output(
+        application,
+        channel_id,
+        &metadata,
+        runtime,
+        budget,
+        encoding,
+        deadline,
+        None,
+        false,
+        None,
+    )
+    .await
+}
+
+/// Prepare the actual current runtime inside one existing monitor recovery.
+/// Cold recovery remains immediate; only this bounded warm attempt may wait.
+pub(super) async fn prepare_current_guide_successor(
+    application: &ApplicationServices,
+    channel_id: i64,
+    budget: TeletextDesignDocumentBudget,
+    encoding: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    runtime: &GuideRuntime,
+    cadence: Duration,
+) -> Result<Option<Arc<SelectedTeletextOutputCandidate>>, SelectedTeletextReadFailure> {
+    let observed = observe_selected_teletext_output_with_guide(
+        application,
+        channel_id,
+        Some(runtime),
+        budget.max_serialized_bytes,
+    )
+    .await?;
+    let Some(metadata) = observed.guide_refresh.as_ref() else {
+        return Ok(None);
+    };
+    load_guide_refresh_output(
+        application,
+        channel_id,
+        metadata,
+        runtime,
+        budget,
+        encoding,
+        deadline,
+        observed.next_transition,
+        true,
+        Some(cadence),
+    )
+    .await
 }
 
 #[cfg(test)]

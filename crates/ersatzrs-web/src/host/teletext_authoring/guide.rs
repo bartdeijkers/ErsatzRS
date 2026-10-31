@@ -17,7 +17,10 @@ use crate::host::{
         capture_source_bound_teletext_guide_with_hold, CapturedTeletextGuide,
         TeletextGuideCaptureError,
     },
-    teletext_runtime_policy::NativeTeletextAuthoringInput,
+    teletext_runtime_policy::{NativeTeletextAuthoringInput, NativeTeletextAuthoringPolicy},
+};
+use ersatzrs_core::{
+    locking::TeletextWorkHold, repositories::TeletextGuideGenerationQualification,
 };
 use ersatzrs_infra::{
     db::DbPool,
@@ -26,6 +29,24 @@ use ersatzrs_infra::{
         GuideSnapshotFailure,
     },
 };
+use std::time::Instant;
+
+/// Borrow trusted bounds and an already admitted operation; never reacquire work.
+pub(super) struct GuidePreparationContext<'a> {
+    pub(super) policy: &'a NativeTeletextAuthoringPolicy,
+    pub(super) deadline: Instant,
+    pub(super) hold: TeletextWorkHold,
+}
+
+impl<'a> GuidePreparationContext<'a> {
+    fn from_operation(operation: &'a Operation) -> Self {
+        Self {
+            policy: &operation.policy,
+            deadline: operation.deadline,
+            hold: operation.guard.hold_work(),
+        }
+    }
+}
 
 fn capture_error(error: TeletextGuideCaptureError) -> TeletextAuthoringError {
     use TeletextGuideCaptureError as E;
@@ -50,7 +71,7 @@ fn capture_error(error: TeletextGuideCaptureError) -> TeletextAuthoringError {
 async fn capture(
     pool: &DbPool,
     input: &NativeTeletextAuthoringInput,
-    operation: &Operation,
+    operation: &GuidePreparationContext<'_>,
 ) -> Result<(CapturedTeletextGuide, GuideReadBudget), TeletextAuthoringError> {
     let limits = operation
         .policy
@@ -79,7 +100,7 @@ async fn capture(
             max_fields: limits.max_digest_fields,
             max_bytes: limits.max_digest_bytes,
         },
-        operation.guard.hold_work(),
+        operation.hold.clone(),
     )
     .await
     .map_err(capture_error)?;
@@ -93,6 +114,62 @@ pub(super) async fn prepare_base(
     selection: &TeletextChannelSelectionSnapshot,
     operation: &Operation,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, TeletextAuthoringError> {
+    let context = GuidePreparationContext::from_operation(operation);
+    let (candidate, _) = Box::pin(prepare_base_inner(
+        application,
+        pool,
+        input,
+        selection,
+        &context,
+    ))
+    .await?;
+    Ok(candidate)
+}
+
+pub(super) async fn prepare_base_current(
+    application: &ApplicationServices,
+    pool: &DbPool,
+    input: &NativeTeletextAuthoringInput,
+    selection: &TeletextChannelSelectionSnapshot,
+    context: &GuidePreparationContext<'_>,
+) -> Result<
+    (
+        EncodedChannelTeletextDocumentCandidate,
+        TeletextGuideGenerationQualification,
+    ),
+    TeletextAuthoringError,
+> {
+    let (candidate, captured) = Box::pin(prepare_base_inner(
+        application,
+        pool,
+        input,
+        selection,
+        context,
+    ))
+    .await?;
+    let deadline = context.deadline;
+    let qualification =
+        crate::host::teletext_work::spawn_blocking(context.hold.clone(), move || {
+            current_qualification(&captured, None, deadline)
+        })
+        .await
+        .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))??;
+    Ok((candidate, qualification))
+}
+
+async fn prepare_base_inner(
+    application: &ApplicationServices,
+    pool: &DbPool,
+    input: &NativeTeletextAuthoringInput,
+    selection: &TeletextChannelSelectionSnapshot,
+    operation: &GuidePreparationContext<'_>,
+) -> Result<
+    (
+        EncodedChannelTeletextDocumentCandidate,
+        CapturedTeletextGuide,
+    ),
+    TeletextAuthoringError,
+> {
     let (captured, mut read) = capture(pool, input, operation).await?;
     captured
         .recheck_context(&mut read)
@@ -116,7 +193,7 @@ pub(super) async fn prepare_base(
             deadline: operation.deadline,
         },
         policy,
-        operation.guard.hold_work(),
+        operation.hold.clone(),
     )
     .await
     .map_err(channel_error)?;
@@ -127,7 +204,8 @@ pub(super) async fn prepare_base(
     let source = captured
         .guide_source()
         .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?;
-    Ok(candidate.with_guide_source(source.clone()))
+    let candidate = candidate.with_guide_source(source.clone());
+    Ok((candidate, captured))
 }
 
 pub(super) async fn prepare_effective(
@@ -137,6 +215,63 @@ pub(super) async fn prepare_effective(
     selection: &TeletextEffectiveChannelSelectionSnapshot,
     operation: &Operation,
 ) -> Result<EncodedEffectiveChannelTeletextDocumentCandidate, TeletextAuthoringError> {
+    let context = GuidePreparationContext::from_operation(operation);
+    let (candidate, _) = Box::pin(prepare_effective_inner(
+        application,
+        pool,
+        input,
+        selection,
+        &context,
+    ))
+    .await?;
+    Ok(candidate)
+}
+
+pub(super) async fn prepare_effective_current(
+    application: &ApplicationServices,
+    pool: &DbPool,
+    input: &NativeTeletextAuthoringInput,
+    selection: &TeletextEffectiveChannelSelectionSnapshot,
+    context: &GuidePreparationContext<'_>,
+) -> Result<
+    (
+        EncodedEffectiveChannelTeletextDocumentCandidate,
+        TeletextGuideGenerationQualification,
+    ),
+    TeletextAuthoringError,
+> {
+    let (candidate, captured) = Box::pin(prepare_effective_inner(
+        application,
+        pool,
+        input,
+        selection,
+        context,
+    ))
+    .await?;
+    let deadline = context.deadline;
+    let scope_expiry = selection.valid_until;
+    let qualification =
+        crate::host::teletext_work::spawn_blocking(context.hold.clone(), move || {
+            current_qualification(&captured, scope_expiry, deadline)
+        })
+        .await
+        .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))??;
+    Ok((candidate, qualification))
+}
+
+async fn prepare_effective_inner(
+    application: &ApplicationServices,
+    pool: &DbPool,
+    input: &NativeTeletextAuthoringInput,
+    selection: &TeletextEffectiveChannelSelectionSnapshot,
+    operation: &GuidePreparationContext<'_>,
+) -> Result<
+    (
+        EncodedEffectiveChannelTeletextDocumentCandidate,
+        CapturedTeletextGuide,
+    ),
+    TeletextAuthoringError,
+> {
     let (captured, mut read) = capture(pool, input, operation).await?;
     captured
         .recheck_context(&mut read)
@@ -157,7 +292,7 @@ pub(super) async fn prepare_effective(
         &context,
         policy,
         selection,
-        (operation.deadline, operation.guard.hold_work()),
+        (operation.deadline, operation.hold.clone()),
     )
     .await
     .map_err(channel_error)?;
@@ -168,5 +303,35 @@ pub(super) async fn prepare_effective(
     let source = captured
         .guide_source()
         .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?;
-    Ok(candidate.with_guide_source(source.clone()))
+    let candidate = candidate.with_guide_source(source.clone());
+    Ok((candidate, captured))
+}
+
+fn current_qualification(
+    captured: &CapturedTeletextGuide,
+    scope_expiry: Option<chrono::DateTime<Utc>>,
+    deadline: Instant,
+) -> Result<TeletextGuideGenerationQualification, TeletextAuthoringError> {
+    super::check_deadline(deadline)?;
+    let source = captured
+        .guide_source()
+        .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?;
+    let mut qualification = source
+        .qualify_current(
+            captured
+                .snapshot()
+                .channels()
+                .iter()
+                .flat_map(ersatzrs_infra::xmltv::CapturedGuideChannel::occurrences),
+            Utc::now(),
+        )
+        .map_err(|_| failure(TeletextAuthoringStatus::SelectionChanged))?;
+    if let Some(expiry) = scope_expiry {
+        qualification.valid_until = qualification.valid_until.min(expiry);
+    }
+    qualification
+        .validate_current(Utc::now())
+        .map_err(|_| failure(TeletextAuthoringStatus::SelectionChanged))?;
+    super::check_deadline(deadline)?;
+    Ok(qualification)
 }

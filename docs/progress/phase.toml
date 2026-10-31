@@ -62,37 +62,44 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-01 — automatic TV-guide regeneration/freshness.
-Completed: source-aware concepts93f0b2df and initial explicit Base5/effective6
-activation (current checkpoint). Exact reviewed originals can be requested,
-published and selected by ordinary output only under exact source/current-role
-proof; static paths and original expiry/cancellation/CAS fences remain intact.
-Canonical tmp/phase9-tvguide-addon/qualification.json production_activation owns
-backend77, web/native66 by composition, final30, strict lint and matched headed
-Chromium/Firefox paired streams,76 TSDuck checks, independent decoding and smoke.
-Next finite action: connect the existing selected guide/source binding to bounded
-regeneration at the accepted cadence, retaining immutable concepts and preview,
-last-good/stale/withdrawal policy and visible Health. Stop when actual source/
-clock change reaches refreshed accepted output and failure/off/restart cleanup
-is proven within this owner. Reuse closed activation and generic9A evidence.
-Delivery: exact53daf0dc full required CI41185760621 still runs with one Next
-failure (452/453pass; positive Burn-cache fixture hit its artificial I/O budget).
-Initial activation is committed f15a6b4d. The isolated fixture-only correction
-passes all13 cache cases by composition,24 clock/deadline repetitions and strict
-infra Clippy; canonical ci.current_required_failure retains the original error.
-Burn-cache correction is local a3151acc. The subsequent exact53 Chromium1.5
-failure exposed one stale authoring inventory assertion (7 expected,8 actual
-after the source selector). Its focused headed Chromium control passes42.6s
-with all8 disabled and the source selector checked explicitly. Canonical
-ci.current_required_failure.browser_failure retains the original negative.
-Commit that fixture correction, wait remaining exact53 Firefox1.5, then push
-verified source checkpoints with fullCI on their newSHA. Do not cancel existing browser evidence
-or claim an old-SHA rerun validates changed code. No release/tag.
-Old b177 full run41172081790 is terminalred in both1.5 browser jobs; preserve its
-pre-listener negatives. No blind retry, changed timeout or root-cause claim.
-Root preserves unpublished UCU710, parallel edits and retained overlap stashes;
-only the scoped delivery checkout is eligible for authorized source push with CI.
-No new client/platform hunt, tag or release.
+Current package: p9b-01 — failed-guide-refresh last-good/recovery.
+Closed components: source-aware concepts93f0b2df, explicit Base5/effective6
+activation f15a6b4d, and this successful automatic SQL-guide update checkpoint.
+Policy4 seeds/runtime snapshots preserve manual history.76 focused controls by
+composition plus latest29 monitor/3 admission and final current-preview SSR
+checks qualify bounded ownership, editorial effects and failure fences.
+Canonical tmp/phase9-tvguide-addon/qualification.json guide_refresh owns exact
+source/bundle/test receipts and every historical negative. Strict affected lint,
+architecture/hydration/progress checks and ordinary playback smoke pass.
+
+Actual headed Chromium2/2: same addon/two profiles/themes under cap1; real
+successful host replacement; genuine SQL change/one-minute coalescing; old→new
+page201 on ONE ordinary HTTP response; changed current raster and immutable
+historical original/raster/manual pointer; explicit Off revocation metadata.
+Three8MiB prefixes pass57 TSDuck checks and retain authored PMT after activation.
+All46 observed exact native processes drain. Original51-withdrawal and later
+one-gap captures are preserved; bounded cached admission plus validated warm
+successor replacement close those demonstrated defects. Final wording-only
+current-preview button correction reuses the existing nine-culture label.
+This is native Linux x64 component proof, not whole9B/platform/client acceptance.
+
+Next finite action: qualify failed source/refresh with the real production addon
+and existing isolated host/stream helpers. Keep the guide-source channel separate
+from the output channel so source unavailability can prove last-good/stale Health,
+ordinary AV and bounded recovery without damaging its playback source. First
+confirm the concrete fault path; retain original debounce, timing, capacity,
+source/scope and cleanup oracles. Stop when the named failure/recovery behavior
+is proven, or record the exact defect and smallest correction. Do not start
+adjacent editor variants or a general audit. Other P9B-01/02 clauses retain owners.
+
+Delivery: f15a6b4d/a3151acc/e8821bbf are pushed at exact
+ e8821bbfc220b4712a2775dfe24d2607f9f3d93f. Full required CI41199534104 has passed
+Next and both general browsers; Level1.5 browser jobs remain pending. Canonical
+ci receipt is authoritative; no full-green claim or cancellation. Prepare the
+verified local checkpoint, then deliver scoped source with CI when the prior
+run is terminal. Root retains unpublished UCU710, foreign changes and overlap
+stashes; neverpush Root/main wholesale. No tag/release/publication.
+
 '''
 
 # Preserved historical handoffs; excluded from progress next.

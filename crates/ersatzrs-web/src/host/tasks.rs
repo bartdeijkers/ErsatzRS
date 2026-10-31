@@ -265,6 +265,11 @@ pub fn spawn_background_tasks(
             maintenance.application.clone(),
             shutdown.clone(),
         )),
+        tokio::spawn(super::teletext_guide_refresh::run_teletext_guide_refresh(
+            maintenance.application.clone(),
+            maintenance.pool.clone(),
+            shutdown.clone(),
+        )),
         tokio::spawn(run_addon_item_operations(
             maintenance.pool.clone(),
             shutdown.clone(),

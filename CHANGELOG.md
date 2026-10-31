@@ -53,7 +53,12 @@ release section when tagging a release.
   through localized native admin forms, with bounded source capture, immutable
   storage and exact preview. Explicit source-qualified publication preserves the
   reviewed pages and rejects changed or expired guide context; opt-in runtime
-  policy3 bounds guide recovery. Automatic guide refresh remains separate.
+  policy3 bounds guide recovery. Opt-in policy4 adds durable, bounded automatic
+  guide regeneration without rewriting reviewed originals, a separate current
+  preview, and localized freshness/review Health reporting. Reapply authenticated
+  custom-zone intent only when protected content and attribute provenance remain
+  intact; failed refresh retains the last qualified output within its original
+  scope and stale deadline.
 - Save explicit secondary-G0 agreements as receipt-bound teletext concepts
   through localized draft-preview forms, with a populated no-JavaScript path,
   preserving source documents, protected content and exact root undo. Reopening,

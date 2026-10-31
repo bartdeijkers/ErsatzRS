@@ -1648,6 +1648,19 @@ pub enum TextKey {
     TeletextDeliveryUnconfirmed,
     TeletextDeliveryAbsent,
     TeletextDeliveryGeneration,
+    TeletextGuideRuntimeSnapshot,
+    TeletextGuideInitialSeed,
+    TeletextGuideFresh,
+    TeletextGuideStale,
+    TeletextGuideCapturedAt,
+    TeletextGuideCurrentPreview,
+    TeletextGuideCurrentPreviewHelp,
+    TeletextGuideMaintenanceTitle,
+    TeletextGuideMaintenanceDisabled,
+    TeletextGuideMaintenanceEmpty,
+    TeletextGuideMaintenanceSummary,
+    TeletextGuideMaintenanceUnavailable,
+    TeletextGuideMissingAuthorization,
     TeletextPublicationTitle,
     TeletextPublicationHelp,
     TeletextPublicationUnrequested,
@@ -4100,6 +4113,19 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TeletextDeliveryUnconfirmed,
     TextKey::TeletextDeliveryAbsent,
     TextKey::TeletextDeliveryGeneration,
+    TextKey::TeletextGuideRuntimeSnapshot,
+    TextKey::TeletextGuideInitialSeed,
+    TextKey::TeletextGuideFresh,
+    TextKey::TeletextGuideStale,
+    TextKey::TeletextGuideCapturedAt,
+    TextKey::TeletextGuideCurrentPreview,
+    TextKey::TeletextGuideCurrentPreviewHelp,
+    TextKey::TeletextGuideMaintenanceTitle,
+    TextKey::TeletextGuideMaintenanceDisabled,
+    TextKey::TeletextGuideMaintenanceEmpty,
+    TextKey::TeletextGuideMaintenanceSummary,
+    TextKey::TeletextGuideMaintenanceUnavailable,
+    TextKey::TeletextGuideMissingAuthorization,
     TextKey::TeletextPublicationTitle,
     TextKey::TeletextPublicationHelp,
     TextKey::TeletextPublicationUnrequested,
@@ -5519,6 +5545,9 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         "Scanner worker" => text(language, TextKey::ScanWorkerTitle).to_owned(),
         "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
         "Teletext work configuration" => text(language, TextKey::TeletextWorkTitle).to_owned(),
+        "Teletext guide maintenance" => {
+            text(language, TextKey::TeletextGuideMaintenanceTitle).to_owned()
+        }
         "Teletext output configuration" => text(language, TextKey::TeletextOutputTitle).to_owned(),
         "Teletext authoring configuration" => {
             text(language, TextKey::TeletextAuthoringHealthTitle).to_owned()
@@ -5999,12 +6028,97 @@ fn teletext_decoder_health_message(language: UiLanguage, message: &str) -> Optio
     Some(text(language, key))
 }
 
+fn teletext_guide_maintenance_message(language: UiLanguage, message: &str) -> String {
+    match message {
+        "Automatic guide maintenance requires runtime policy version 4; this check does not activate it." => {
+            return text(language, TextKey::TeletextGuideMaintenanceDisabled).to_owned();
+        }
+        "No registered guide maintenance origins." => {
+            return text(language, TextKey::TeletextGuideMaintenanceEmpty).to_owned();
+        }
+        _ => {}
+    }
+    localize_guide_maintenance_authorization(language, message)
+        .unwrap_or_else(|| text(language, TextKey::TeletextGuideMaintenanceUnavailable).to_owned())
+}
+
+fn localize_guide_maintenance_authorization(language: UiLanguage, message: &str) -> Option<String> {
+    let Some((base, suffix)) = message.split_once(" Missing Base guide refresh authorization: ")
+    else {
+        return localize_guide_maintenance_counts(language, message);
+    };
+    let count = suffix.strip_suffix(". Reprepare the Base guide, request publication and publish explicitly; ordinary audio/video playback remains available.")?;
+    if count.is_empty() || !count.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let count = count.parse::<u64>().ok()?;
+    if count == 0 || count > i64::MAX.unsigned_abs() {
+        return None;
+    }
+    let base = localize_guide_maintenance_counts(language, base)?;
+    let instruction = text(language, TextKey::TeletextGuideMissingAuthorization)
+        .replace("{count}", &count.to_string());
+    Some(format!("{base} {instruction}"))
+}
+
+fn localize_guide_maintenance_counts(language: UiLanguage, message: &str) -> Option<String> {
+    let body = message
+        .strip_prefix("Stored guide maintenance: ")?
+        .strip_suffix(". This is not stream delivery or client-display evidence.")?
+        .replace("; jobs: ", ", ")
+        .replace("; ", ", ");
+    let fields: Vec<_> = body.split(", ").collect();
+    let names = [
+        "fresh",
+        "stale",
+        "unavailable",
+        "revoked",
+        "needs-review",
+        "owned",
+        "invalid metadata",
+        "incomplete",
+    ];
+    if fields.len() != names.len() {
+        return None;
+    }
+    let mut result = text(language, TextKey::TeletextGuideMaintenanceSummary).to_owned();
+    for (field, name) in fields.into_iter().zip(names) {
+        let (key, value) = field.split_once('=')?;
+        if key != name {
+            return None;
+        }
+        let localized = if name == "incomplete" {
+            text(
+                language,
+                match value {
+                    "true" => TextKey::Yes,
+                    "false" => TextKey::No,
+                    _ => return None,
+                },
+            )
+            .to_owned()
+        } else {
+            if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+                return None;
+            }
+            let count = value.parse::<u16>().ok()?;
+            if count > 256 {
+                return None;
+            }
+            count.to_string()
+        };
+        result = result.replace(&format!("{{{name}}}"), &localized);
+    }
+    Some(result)
+}
+
 fn teletext_configuration_health_message(
     language: UiLanguage,
     title: &str,
     message: &str,
 ) -> Option<String> {
     match title {
+        "Teletext guide maintenance" => Some(teletext_guide_maintenance_message(language, message)),
         "Teletext decoding" => Some(
             teletext_decoder_health_message(language, message)
                 .unwrap_or(message)
@@ -7682,6 +7796,56 @@ mod tests {
                     assert_ne!(canonical, localized);
                 }
             }
+        }
+    }
+    #[test]
+    fn guide_maintenance_health_localizes_bounded_counts_without_leaking_unknown_payloads() {
+        let canonical = "Stored guide maintenance: fresh=1, stale=2, unavailable=3, revoked=4; jobs: needs-review=5, owned=6; invalid metadata=7, incomplete=true. This is not stream delivery or client-display evidence.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = "Teletext guide maintenance";
+            assert_eq!(
+                health_check_title_text(language, title),
+                text(language, TextKey::TeletextGuideMaintenanceTitle)
+            );
+            let localized = teletext_guide_maintenance_message(language, canonical);
+            assert!(!localized.contains('{'));
+            for value in [
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                text(language, TextKey::Yes),
+            ] {
+                assert!(localized.contains(value), "{}", definition.code);
+            }
+            let missing = format!("{canonical} Missing Base guide refresh authorization: 17. Reprepare the Base guide, request publication and publish explicitly; ordinary audio/video playback remains available.");
+            let localized_missing = teletext_guide_maintenance_message(language, &missing);
+            assert!(localized_missing.contains(
+                &text(language, TextKey::TeletextGuideMissingAuthorization)
+                    .replace("{count}", "17")
+            ));
+            assert!(!localized_missing.contains('{'));
+            for input in [
+                "synthetic-private-payload".to_owned(),
+                canonical.replace("fresh=1", "fresh=257"),
+                canonical.replace("incomplete=true", "incomplete=unknown"),
+            ] {
+                assert_eq!(
+                    teletext_guide_maintenance_message(language, &input),
+                    text(language, TextKey::TeletextGuideMaintenanceUnavailable)
+                );
+            }
+            assert_eq!(
+                teletext_guide_maintenance_message(
+                    language,
+                    "No registered guide maintenance origins."
+                ),
+                text(language, TextKey::TeletextGuideMaintenanceEmpty)
+            );
         }
     }
 }

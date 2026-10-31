@@ -178,6 +178,15 @@ impl OperationCoordinator {
         TeletextWorkGuard::try_acquire(&self.locker, maximum)
     }
 
+    /// Actual worker-owned capacity release on the same shared process locker.
+    /// This signal grants no admission: pin/enable it before retrying the
+    /// immediate operation under its unchanged original deadline and policy.
+    pub fn teletext_work_released(
+        &self,
+    ) -> ersatzrs_core::locking::TeletextWorkReleaseNotification<'_> {
+        self.locker.teletext_work_released()
+    }
+
     /// Attempt to acquire one operation command.
     #[must_use]
     pub fn begin(&self, command: BeginOperation) -> BeginOperationOutcome {

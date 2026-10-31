@@ -11,7 +11,8 @@ use crate::admin::server_fns::teletext::{
     TeletextSettingData, TeletextSettingValueData,
 };
 use crate::admin::server_fns::teletext_drafts::{
-    load_teletext_draft_preview, TeletextDraftErrorLocation, TeletextDraftPreviewResult,
+    load_current_teletext_guide_preview, load_teletext_draft_preview,
+    TeletextCurrentGuidePreviewData, TeletextDraftErrorLocation, TeletextDraftPreviewResult,
 };
 use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::{
@@ -39,6 +40,7 @@ pub fn ChannelTeletextPage() -> impl IntoView {
             (
                 channel_id(),
                 query.with(super::teletext_drafts::preview_query),
+                query.with(super::teletext_current_guide::query),
             )
         },
         load_channel_page,
@@ -51,8 +53,8 @@ pub fn ChannelTeletextPage() -> impl IntoView {
                 data.get().map(|result| admin_result_view(
                     result.map_err(|_| tr(TextKey::TeletextAdminUnavailable).to_owned()),
                     |data| match data {
-                        Some((data, preview)) => channel_page(
-                            data, &error, &saved, preview,
+                        Some((data, preview, current)) => channel_page(
+                            data, &error, &saved, preview, current,
                             query.with(|values| values.get("design_id").is_some()),
                             query.with(super::teletext_drafts::redirected_error_location),
                         ),
@@ -67,10 +69,15 @@ pub fn ChannelTeletextPage() -> impl IntoView {
 type ChannelPageData = (
     ChannelTeletextData,
     Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
+    Option<Result<TeletextCurrentGuidePreviewData, ServerFnError>>,
 );
 
 async fn load_channel_page(
-    (channel_id, preview): (i64, Option<super::teletext_drafts::PreviewQuery>),
+    (channel_id, preview, current): (
+        i64,
+        Option<super::teletext_drafts::PreviewQuery>,
+        Option<Result<ersatzrs_domain::TeletextPageAddress, ()>>,
+    ),
 ) -> Result<Option<ChannelPageData>, ServerFnError> {
     let Some(channel) = load_channel_teletext(channel_id).await? else {
         return Ok(None);
@@ -84,7 +91,12 @@ async fn load_channel_page(
         ),
         None => None,
     };
-    Ok(Some((channel, preview)))
+    let current = match current {
+        Some(Ok(owner)) => Some(load_current_teletext_guide_preview(channel_id, owner).await),
+        Some(Err(())) => Some(Err(ServerFnError::new("invalid-input"))),
+        None => None,
+    };
+    Ok(Some((channel, preview, current)))
 }
 
 fn channel_page(
@@ -92,6 +104,7 @@ fn channel_page(
     error: &str,
     saved: &str,
     preview: Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
+    current: Option<Result<TeletextCurrentGuidePreviewData, ServerFnError>>,
     requested: bool,
     redirected: Option<TeletextDraftErrorLocation>,
 ) -> AnyView {
@@ -152,6 +165,15 @@ fn channel_page(
     };
     let channel_id = data.channel_id;
     let empty = data.addons.is_empty();
+    let guide_available = data.current_guide_available == Some(true);
+    let guide_unreadable = data.current_guide_available.is_none();
+    let current_guide = (guide_available || current.is_some() || guide_unreadable).then(|| {
+        super::teletext_current_guide::view(
+            channel_id,
+            guide_available,
+            current.or_else(|| guide_unreadable.then(|| Err(ServerFnError::new("unavailable")))),
+        )
+    });
     let authoring = super::teletext_drafts::authoring_controls(&data);
     let effective_authoring = super::teletext_drafts::effective_authoring_controls(&data);
     view! {
@@ -170,6 +192,7 @@ fn channel_page(
             {data.addons.into_iter().map(|addon| addon_section(channel_id, &addon)).collect_view()}
             {authoring}
             {effective_authoring}
+            {current_guide}
             <super::teletext_drafts::TeletextDraftPreview preview=preview requested=requested redirected=redirected/>
         </div>
     }
@@ -604,10 +627,20 @@ mod tests {
             effective_authoring: None,
             effective_authoring_error: None,
             guide_channels: Some(Vec::new()),
+            current_guide_available: Some(false),
             addons: Vec::new(),
         };
         let html = owner.with(|| {
-            channel_page(data, "secondary-default-invalid", "", None, false, None).to_html()
+            channel_page(
+                data,
+                "secondary-default-invalid",
+                "",
+                None,
+                None,
+                false,
+                None,
+            )
+            .to_html()
         });
         assert!(html.contains("data-code=\"secondary-default-invalid\""));
         assert!(html.contains(tr(TextKey::TeletextSecondaryDefaultInvalid)));

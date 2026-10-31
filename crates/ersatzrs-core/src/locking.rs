@@ -265,6 +265,7 @@ struct EntityLockerInner {
     locked_playouts: Mutex<HashMap<EntityId, PlayoutLockState>>,
     locked_libraries: Mutex<HashSet<EntityId>>,
     active_teletext_work: Mutex<usize>,
+    teletext_work_released: tokio::sync::Notify,
 }
 
 #[derive(Debug, Default)]
@@ -286,6 +287,14 @@ impl EntityLocker {
     #[must_use]
     pub fn active_teletext_work(&self) -> usize {
         *recover(self.inner.active_teletext_work.lock())
+    }
+
+    /// Observe an actual teletext lease release, not admission or a reservation.
+    /// Pin and enable the notification before trying immediate admission to
+    /// close the release-before-await race. Capacity-policy changes still need
+    /// the caller's existing bounded polling fallback.
+    pub fn teletext_work_released(&self) -> tokio::sync::futures::Notified<'_> {
+        self.inner.teletext_work_released.notified()
     }
 
     /// Try to acquire the lock for a playout.
@@ -383,6 +392,9 @@ fn recover<'a, T>(
     result.unwrap_or_else(PoisonError::into_inner)
 }
 
+/// Release observation only; it never reserves or transfers work capacity.
+pub type TeletextWorkReleaseNotification<'a> = tokio::sync::futures::Notified<'a>;
+
 /// One admitted teletext operation, independent of playback and entity locks.
 /// Admission is immediate with no waiting queue. The caller supplies a trusted
 /// process policy; this count is not a CPU-time or memory-consumption guarantee.
@@ -432,6 +444,15 @@ impl TeletextWorkGuard {
             lease: self.lease.clone(),
         }
     }
+
+    /// Observe settlement of this specific operation after its owning future
+    /// and all caller contexts have been dropped. Keep the guard private and
+    /// issue no new holds after cancellation before relying on this result.
+    /// A quarantined operation never reports confirmed settlement.
+    #[must_use]
+    pub fn is_settled(&self) -> bool {
+        Arc::strong_count(&self.lease) == 1 && self.lease.release_on_drop.load(Ordering::Acquire)
+    }
 }
 
 impl TeletextWorkHold {
@@ -452,8 +473,15 @@ impl Drop for TeletextWorkLease {
         let mut active = recover(self.locker.inner.active_teletext_work.lock());
         // Only a successful admission can construct a lease, and its private
         // Arc releases once. Preserve nonnegative state if that invariant changes.
-        if let Some(remaining) = active.checked_sub(1) {
+        let released = if let Some(remaining) = active.checked_sub(1) {
             *active = remaining;
+            true
+        } else {
+            false
+        };
+        drop(active);
+        if released {
+            self.locker.inner.teletext_work_released.notify_one();
         }
     }
 }
@@ -633,13 +661,81 @@ mod tests {
             released.recv().unwrap();
         });
         started.recv().unwrap();
+        assert!(!guard.is_settled());
         drop(guard);
         assert_eq!(locker.active_teletext_work(), 1);
         assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
         release.send(()).unwrap();
         worker.join().unwrap();
         assert_eq!(locker.active_teletext_work(), 0);
-        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_some());
+        let completed = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let joined_hold = completed.hold_work();
+        assert!(!completed.is_settled());
+        drop(joined_hold);
+        assert!(completed.is_settled());
+    }
+
+    #[tokio::test]
+    async fn teletext_release_signal_tracks_actual_worker_exit_and_never_quarantine() {
+        use std::future::Future as _;
+        use std::task::{Context, Waker};
+
+        let locker = EntityLocker::new();
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let hold = guard.hold_work();
+        let (ready, started) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn(async move {
+            let _hold = hold;
+            ready.send(()).unwrap();
+            released.await.unwrap();
+        });
+        started.await.unwrap();
+        let signal = locker.teletext_work_released();
+        tokio::pin!(signal);
+        assert!(!signal.as_mut().enable());
+        drop(guard);
+        tokio::task::yield_now().await;
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        assert!(signal
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending());
+        release.send(()).unwrap();
+        worker.await.unwrap();
+        assert_eq!(locker.active_teletext_work(), 0);
+        assert!(signal
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_ready());
+
+        // A real release before a waiter exists retains exactly one permit.
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        drop(guard);
+        let early = locker.teletext_work_released();
+        tokio::pin!(early);
+        assert!(early.as_mut().enable());
+        assert!(early
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_ready());
+
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let hold = guard.hold_work();
+        let quarantined = locker.teletext_work_released();
+        tokio::pin!(quarantined);
+        assert!(!quarantined.as_mut().enable());
+        hold.retain_until_restart();
+        drop(guard);
+        drop(hold);
+        tokio::task::yield_now().await;
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        assert!(quarantined
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending());
     }
 
     #[test]
@@ -700,10 +796,12 @@ mod tests {
         let worker = hold.clone();
         worker.retain_until_restart();
         hold.retain_until_restart();
+        assert!(!quarantined.is_settled());
         assert_eq!(locker.active_teletext_work(), 2);
-        drop(quarantined);
         drop(hold);
         drop(worker);
+        assert!(!quarantined.is_settled());
+        drop(quarantined);
         assert_eq!(shared.active_teletext_work(), 2);
         drop(normal);
         assert_eq!(locker.active_teletext_work(), 1);

@@ -27,6 +27,7 @@ mod program_schedule;
 mod saved_search;
 mod teletext_designs;
 mod teletext_generations;
+mod teletext_guide_refresh;
 mod teletext_guide_source;
 mod teletext_profiles;
 mod teletext_publications;
@@ -193,6 +194,16 @@ pub use teletext_generations::{
     TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
     TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION, TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+};
+pub use teletext_guide_refresh::{
+    teletext_guide_refresh_stale_ceiling, teletext_guide_refresh_status,
+    TeletextGuideRefreshCandidate, TeletextGuideRefreshClaim, TeletextGuideRefreshCurrent,
+    TeletextGuideRefreshCurrentMetadata, TeletextGuideRefreshFailure,
+    TeletextGuideRefreshOutputCheck, TeletextGuideRefreshOutputConfirmation,
+    TeletextGuideRefreshRepository, TeletextGuideRefreshRole, TeletextGuideRefreshSeed,
+    TeletextGuideRefreshSelection, TeletextGuideRefreshStatus, TeletextGuideRuntimeSnapshot,
+    TeletextGuideRuntimeSnapshotMetadata, TeletextGuideRuntimeSnapshotSave,
+    MAX_TELETEXT_GUIDE_REFRESH_BATCH, TELETEXT_GUIDE_RUNTIME_SNAPSHOT_VERSION,
 };
 pub use teletext_guide_source::{
     TeletextGuideGenerationQualification, TeletextGuideQualificationError,

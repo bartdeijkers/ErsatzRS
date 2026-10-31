@@ -277,6 +277,60 @@ pub async fn save_effective_original_teletext_design_candidate(
     .await
 }
 
+/// Encode exact candidate sources without creating a manual design or pointer.
+/// The caller must retain its existing native work hold while this CPU work runs.
+pub(super) fn encode_effective_candidate_document(
+    candidate: &EncodedEffectiveChannelTeletextDocumentCandidate,
+    budget: TeletextDesignDocumentBudget,
+    deadline: Instant,
+) -> Result<(EncodedEffectiveTeletextDesignDocuments, String), NativeTeletextDesignError> {
+    check_deadline(deadline)?;
+    if candidate.transmissions().len() > budget.max_resource_transmissions {
+        return Err(NativeTeletextDesignError::LifecycleBudget);
+    }
+    let transmissions = candidate
+        .transmissions()
+        .iter()
+        .map(|r| TeletextSavedResourceTransmission {
+            resource: r.resource,
+            counter: r.counter,
+            last_subpage: r.last_subpage,
+            update: match r.update {
+                TeletextResourceFullUpdate::Changed => TeletextSavedResourceUpdate::Changed,
+                TeletextResourceFullUpdate::Unchanged => TeletextSavedResourceUpdate::Unchanged,
+            },
+        })
+        .collect::<Vec<_>>();
+    let input = TeletextEffectiveDesignDocumentInput {
+        selection: candidate.selection(),
+        producer_bindings: candidate.producer_bindings(),
+        generation: candidate.generation(),
+        sources: candidate.sources(),
+        entry_addon_id: candidate.entry_addon_id(),
+        entry: candidate.metadata().map(|m| m.entry),
+        v1_region: candidate.v1_region().map(|r| match r {
+            TeletextEncodingRegion::WesternLatin => TeletextSavedV1Region::WesternLatin,
+        }),
+        resource_transmissions: &transmissions,
+    };
+    let document = match candidate.guide_source() {
+        Some(source) => encode_teletext_effective_design_documents_with_source(
+            input,
+            candidate.requests(),
+            source,
+            budget,
+        )?,
+        None => encode_teletext_effective_design_documents_with_requests(
+            input,
+            candidate.requests(),
+            budget,
+        )?,
+    };
+    let hash = digest(document.bytes());
+    check_deadline(deadline)?;
+    Ok((document, hash))
+}
+
 pub(super) async fn save_effective_original_teletext_design_candidate_with_hold(
     application: &ApplicationServices,
     name: String,
@@ -290,52 +344,8 @@ pub(super) async fn save_effective_original_teletext_design_candidate_with_hold(
     check_deadline(deadline)?;
     let (candidate, document, hash) =
         super::teletext_work::spawn_blocking(hold.clone(), move || {
-            check_deadline(deadline)?;
-            if candidate.transmissions().len() > budget.max_resource_transmissions {
-                return Err(NativeTeletextDesignError::LifecycleBudget);
-            }
-            let transmissions = candidate
-                .transmissions()
-                .iter()
-                .map(|r| TeletextSavedResourceTransmission {
-                    resource: r.resource,
-                    counter: r.counter,
-                    last_subpage: r.last_subpage,
-                    update: match r.update {
-                        TeletextResourceFullUpdate::Changed => TeletextSavedResourceUpdate::Changed,
-                        TeletextResourceFullUpdate::Unchanged => {
-                            TeletextSavedResourceUpdate::Unchanged
-                        }
-                    },
-                })
-                .collect::<Vec<_>>();
-            let input = TeletextEffectiveDesignDocumentInput {
-                selection: candidate.selection(),
-                producer_bindings: candidate.producer_bindings(),
-                generation: candidate.generation(),
-                sources: candidate.sources(),
-                entry_addon_id: candidate.entry_addon_id(),
-                entry: candidate.metadata().map(|m| m.entry),
-                v1_region: candidate.v1_region().map(|r| match r {
-                    TeletextEncodingRegion::WesternLatin => TeletextSavedV1Region::WesternLatin,
-                }),
-                resource_transmissions: &transmissions,
-            };
-            let document = match candidate.guide_source() {
-                Some(source) => encode_teletext_effective_design_documents_with_source(
-                    input,
-                    candidate.requests(),
-                    source,
-                    budget,
-                )?,
-                None => encode_teletext_effective_design_documents_with_requests(
-                    input,
-                    candidate.requests(),
-                    budget,
-                )?,
-            };
-            let hash = digest(document.bytes());
-            check_deadline(deadline)?;
+            let (document, hash) =
+                encode_effective_candidate_document(&candidate, budget, deadline)?;
             Ok::<_, NativeTeletextDesignError>((candidate, document, hash))
         })
         .await

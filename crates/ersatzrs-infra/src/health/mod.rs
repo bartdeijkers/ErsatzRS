@@ -21,6 +21,7 @@ use checks::{
 };
 mod coordinator;
 
+pub use checks::TeletextGuideRefreshHealthCheck;
 pub use coordinator::{HealthCheckCoordinator, HealthRunError};
 
 use checks::{
@@ -64,7 +65,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 50] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 51] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -75,6 +76,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 50] = [
     "FFmpeg Capabilities",
     "Teletext decoding",
     "Teletext work configuration",
+    "Teletext guide maintenance",
     "FFmpeg Reports",
     "Dynamic Text Graphics",
     "Next Runtime Availability",
@@ -271,6 +273,7 @@ fn registered_health_checks(
                 .with_channel_delivery(pool.clone(), &ffmpeg_runtime.capabilities),
         ),
         Box::new(TeletextWorkHealthCheck::new(pool.clone())),
+        Box::new(TeletextGuideRefreshHealthCheck::new(pool.clone())),
         Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
         Box::new(DynamicTextGraphicsHealthCheck::new(pool.clone())),
         Box::new(NextRuntimeHealthCheck::new(pool.clone())),

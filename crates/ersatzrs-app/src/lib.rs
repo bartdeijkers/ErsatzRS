@@ -24,6 +24,7 @@ pub mod teletext_effective_profiles;
 pub mod teletext_export_project;
 pub mod teletext_generations;
 pub mod teletext_guide;
+pub mod teletext_guide_refresh;
 pub mod teletext_pages;
 pub mod teletext_pages_v2;
 pub mod teletext_pages_v3;

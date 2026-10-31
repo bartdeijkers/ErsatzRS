@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::EntityId;
 
-/// A sealed generation associated with a proposal by the native runtime.
+/// The selected manual origin, with an optional derived guide runtime snapshot.
+/// These diagnostics do not grant publication or source authority.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextOutputGenerationObservation {
     pub generation_id: EntityId,
@@ -12,6 +13,19 @@ pub struct TeletextOutputGenerationObservation {
     pub design_id: EntityId,
     pub revision: i64,
     pub effective: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guide_refresh: Option<TeletextGuideRefreshOutputObservation>,
+}
+
+/// Explicit automatic-guide association, separate from manual generation IDs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextGuideRefreshOutputObservation {
+    pub seed_id: EntityId,
+    /// Absence means the retained initial seed, not a fabricated runtime ID.
+    pub snapshot_id: Option<EntityId>,
+    pub revision: i64,
+    pub captured_at: chrono::DateTime<chrono::Utc>,
+    pub stale: bool,
 }
 
 /// Requested or last acknowledged output, including explicit absence.

@@ -17,6 +17,9 @@ pub struct ChannelTeletextData {
     pub effective_authoring_error: Option<String>,
     /// Explicit source choices only; absence means the source list is unavailable.
     pub guide_channels: Option<Vec<TeletextGuideChannelData>>,
+    /// Read-only preview availability; never publication or delivery authority.
+    #[serde(default)]
+    pub current_guide_available: Option<bool>,
     pub addons: Vec<TeletextAddonData>,
 }
 
@@ -211,6 +214,21 @@ pub async fn load_channel_teletext_for_application(
         } else {
             None
         };
+    let current_guide_available = match application
+        .get_optional_setting(
+            crate::host::teletext_runtime_policy::NATIVE_TELETEXT_RUNTIME_POLICY_SETTING,
+        )
+        .await
+    {
+        Ok(None) => Some(false),
+        Ok(Some(raw)) => {
+            match crate::host::teletext_runtime_policy::parse_native_teletext_runtime_policy(&raw) {
+                Ok(policy) => Some(policy.guide_refresh),
+                Err(_) => None,
+            }
+        }
+        Err(_) => None,
+    };
     Ok(Some(ChannelTeletextData {
         channel_id,
         channel_number: channel.form.number,
@@ -221,6 +239,7 @@ pub async fn load_channel_teletext_for_application(
         effective_authoring,
         effective_authoring_error,
         guide_channels,
+        current_guide_available,
         addons,
     }))
 }

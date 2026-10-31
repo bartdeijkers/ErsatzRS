@@ -59,6 +59,11 @@ use super::teletext_work::{self, TeletextWorkError};
 
 mod effective;
 mod guide;
+mod refresh;
+pub(super) use refresh::prepare_baseline as prepare_guide_refresh_baseline;
+pub(crate) use refresh::{
+    observe_guide_refresh_seed_configuration_with_charge, GuideRefreshPreparationContext,
+};
 mod metadata;
 mod object_choices;
 mod object_removals;

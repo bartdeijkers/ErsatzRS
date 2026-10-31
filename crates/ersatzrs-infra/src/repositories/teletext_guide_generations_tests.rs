@@ -40,9 +40,15 @@ fn check() -> TeletextGuideGenerationCheck {
 }
 
 async fn qualification(fixture: &Fixture) -> TeletextGuideGenerationQualification {
+    qualification_at(fixture, Utc::now()).await
+}
+
+async fn qualification_at(
+    fixture: &Fixture,
+    at: chrono::DateTime<Utc>,
+) -> TeletextGuideGenerationQualification {
     let check = check();
     let clock = ProgrammeClock::system().unwrap();
-    let at = Utc::now();
     let (start, finish) = clock
         .calendar_day_bounds(at, NonZeroU8::new(3).unwrap())
         .unwrap();
@@ -83,7 +89,7 @@ async fn qualification(fixture: &Fixture) -> TeletextGuideGenerationQualificatio
                 .channels()
                 .iter()
                 .flat_map(crate::xmltv::CapturedGuideChannel::occurrences),
-            Utc::now(),
+            at,
         )
         .unwrap()
 }
@@ -383,3 +389,6 @@ async fn source_guide_effective_keeps_base_and_exact_original_scope_expiry() {
         M::Rejected(R::Publication(P::InvalidValues))
     );
 }
+
+#[path = "teletext_guide_refresh_tests.rs"]
+mod refresh;

@@ -119,13 +119,15 @@ pub(super) fn generation(
 ) -> Option<TeletextOutputGenerationObservation> {
     use ersatzrs_core::repositories::{
         TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION as LEGACY_EFFECTIVE,
+        TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION as GUIDE_EFFECTIVE,
         TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION as EFFECTIVE,
         TELETEXT_GENERATION_ARTIFACT_VERSION as LEGACY_BASE,
+        TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION as GUIDE_BASE,
         TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION as BASE,
     };
     let effective = match identity.artifact_version {
-        EFFECTIVE | LEGACY_EFFECTIVE => true,
-        BASE | LEGACY_BASE => false,
+        EFFECTIVE | LEGACY_EFFECTIVE | GUIDE_EFFECTIVE => true,
+        BASE | LEGACY_BASE | GUIDE_BASE => false,
         _ => return None,
     };
     Some(TeletextOutputGenerationObservation {
@@ -134,6 +136,7 @@ pub(super) fn generation(
         design_id: identity.request.design_id,
         revision: identity.request.revision,
         effective,
+        guide_refresh: None,
     })
 }
 
@@ -230,7 +233,14 @@ mod tests {
             artifact_version: 0,
             artifact_digest: "b".repeat(64),
         };
-        for (version, effective) in [(1, false), (2, true), (3, false), (4, true)] {
+        for (version, effective) in [
+            (1, false),
+            (2, true),
+            (3, false),
+            (4, true),
+            (5, false),
+            (6, true),
+        ] {
             identity.artifact_version = version;
             let observed = generation(&identity).unwrap();
             assert_eq!(
@@ -244,7 +254,7 @@ mod tests {
             );
             assert_eq!(observed.effective, effective);
         }
-        for version in [0, 5, u16::MAX] {
+        for version in [0, 7, u16::MAX] {
             identity.artifact_version = version;
             assert!(generation(&identity).is_none());
         }

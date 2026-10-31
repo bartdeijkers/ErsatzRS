@@ -435,6 +435,71 @@ triggers. No new columns or logical table/identity removal is required. This
 initial activation boundary does not implement the refresh/stale-Health coordinator
 or change its independently required debounce, cadence and retention policy.
 
+Automatic guide regeneration uses additive durable state rather than broadening
+manual5/6 authority. Three narrow SQLite tables retain an immutable explicitly
+selected guide seed, immutable validated runtime snapshots with separate framing,
+and one owner-/revision-fenced current/work record per channel and Base/effective
+role. Seed registration is atomic with explicit guide acceptance. Runtime
+successors never rewrite the reviewed design, its head, pending request or manual
+accepted pointer. They retain the seed lineage and are adopted only while the
+originating manual authority, actual selection, source and owner fences agree.
+
+Automatic runtime blobs use rolling retention: keep the current and one previous
+snapshot per seed under the configured per-document/source byte bounds. Promotion
+prunes only older runtime-only snapshots in its same transaction; the current
+pointer remains deletion-protected and failed promotion prunes nothing. Manual
+designs, revisions, requests, accepted generations and immutable seed origins
+remain retained. This bounds background-time growth independently of the retained
+human publication history and preserves last-good diagnostics.
+
+The host resumes this work asynchronously through existing task/shutdown and
+teletext work-admission mechanisms. Debounce cannot postpone the five-minute
+ceiling; restart retains due/lease/failure state, and lease loss or cancellation
+cannot promote a stale completion. The first failure establishes a non-renewable
+15-minute ceiling, additionally capped by original role and Scripted expiry.
+An explicit Stale status may retain verified immutable last-good content after a
+source failure within that bound; it never asserts fresh-current source equality,
+renews expired Current/Next roles or survives incompatible selection/package state.
+Fresh/Stale/Unavailable and NeedsReview states feed shared Health/admin evidence.
+
+An already-serving source-aware monitor must distinguish occupied work capacity
+from failed source/selection validation. Its cached confirmation may wait in place
+for admission within the existing original recovery deadline, additionally capped
+by the sealed candidate's role and scope expiry. After admission it performs the
+same source hash and final current-selection checks; waiting grants no fresh
+source proof and cannot publish a replacement. Initial recovery and the global
+immediate-admission API retain their existing behavior. Failure or expiry still
+withdraws optional teletext while ordinary audio/video continues.
+
+A changed runtime snapshot under the same immutable manual origin uses the
+existing warm-replacement path: load and fully confirm the actual successor
+before replacing active content. Require the same seed, exact typed selection,
+scope and descriptor, and retain the old original deadline throughout. One
+response-local, take-once prepared successor avoids a duplicate reload; final
+exact-current confirmation still immediately precedes the atomic proposal.
+No superseded content receives renewed source authority. Changed selection,
+Off, expiry or failed successor confirmation retains withdrawal semantics.
+
+The existing core work counter provides a capacity-release notification only
+after its actual last lease/worker hold releases the count. Caller cancellation
+and quarantined cleanup cannot signal capacity. A waiter registers before trying
+admission, then observes actual release or the existing poll cadence under that
+same deadline; it retries only saturation. This adds no producer queue, capacity
+increase, deadline renewal or admission transfer. Core uses only the already
+locked Tokio package's runtime-independent `sync` feature; the application
+coordinator forwards the core notification type without adding an application
+runtime dependency. The normal platform and actual-worker ownership gates remain.
+
+Refresh snapshot/stale authority requires a new explicit runtime policy4; policy3
+and manual5/6 continue their strict current-source meaning. Old runtimes reject
+the new policy rather than silently ignoring required snapshot metadata. Runtime
+snapshots contain a separately versioned native envelope of the fresh baseline
+and authenticated prior editorial intent. Free/Zone intent is rebound only after
+stable template/theme/page/region/binding compatibility and complete effect
+validation. Reusing full old rows, relabelling old export receipts, silently
+losing edits or mutating installed packages is forbidden; incompatibility retains
+originals and fails visibly. Existing exact-original replay guards stay unchanged.
+
 The native command component now carries one explicit source page on its selected
 logical stream and applies bitmap decoder options to the first matching physical
 input, preserving a shared one-shot AV read. It follows the existing single

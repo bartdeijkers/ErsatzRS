@@ -133,9 +133,18 @@ async fn admit(
 }
 
 pub(super) async fn insert(
+    tx: Transaction<'_, Db>,
+    save: &TeletextEffectiveGenerationSave,
+    deadline: Instant,
+) -> Result<M<TeletextAcceptedGeneration>> {
+    insert_seeded(tx, save, deadline, None).await
+}
+
+pub(super) async fn insert_seeded(
     mut tx: Transaction<'_, Db>,
     save: &TeletextEffectiveGenerationSave,
     deadline: Instant,
+    qualification: Option<&ersatzrs_core::repositories::TeletextGuideGenerationQualification>,
 ) -> Result<M<TeletextAcceptedGeneration>> {
     if Instant::now() >= deadline {
         return Ok(M::Rejected(timeout()));
@@ -150,13 +159,24 @@ pub(super) async fn insert(
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "TeletextEffectiveAcceptedGenerationCurrent" ("ChannelId","GenerationId") VALUES (?,?) ON CONFLICT("ChannelId") DO UPDATE SET "GenerationId"=excluded."GenerationId""#)
         .bind(save.request.channel_id).bind(id).execute(&mut *tx).await.repository()?;
-    tx.commit().await.repository()?;
-    Ok(M::Accepted(TeletextAcceptedGeneration {
+    let generation = TeletextAcceptedGeneration {
         id,
         request: save.request.clone(),
         artifact_version: save.artifact_version,
         artifact_digest: save.artifact_digest.clone(),
-    }))
+    };
+    if let Some(qualification) = qualification {
+        super::refresh::register(
+            &mut tx,
+            &generation,
+            save.expected_design_head,
+            qualification,
+            ersatzrs_core::repositories::TeletextGuideRefreshRole::Effective,
+        )
+        .await?;
+    }
+    tx.commit().await.repository()?;
+    Ok(M::Accepted(generation))
 }
 
 pub(super) async fn confirm(

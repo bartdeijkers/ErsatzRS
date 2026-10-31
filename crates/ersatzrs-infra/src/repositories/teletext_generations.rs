@@ -30,9 +30,17 @@ pub struct SqliteTeletextGenerationRepository(pub DbPool);
 mod effective;
 #[path = "teletext_guide_generations.rs"]
 mod guide;
+#[path = "teletext_guide_refresh.rs"]
+mod refresh;
 
 #[async_trait]
 impl TeletextGenerationRepository for SqliteTeletextGenerationRepository {
+    fn guide_refresh(
+        &self,
+    ) -> Option<&dyn ersatzrs_core::repositories::TeletextGuideRefreshRepository> {
+        Some(self)
+    }
+
     async fn accept_guide(
         &self,
         save: &ersatzrs_core::repositories::TeletextGuideGenerationSave,
@@ -289,8 +297,16 @@ async fn check_revision_for_version(
 }
 
 async fn insert_generation(
+    transaction: Transaction<'_, Db>,
+    save: &TeletextGenerationSave,
+) -> Result<M<TeletextAcceptedGeneration>> {
+    insert_generation_seeded(transaction, save, None).await
+}
+
+async fn insert_generation_seeded(
     mut transaction: Transaction<'_, Db>,
     save: &TeletextGenerationSave,
+    qualification: Option<&ersatzrs_core::repositories::TeletextGuideGenerationQualification>,
 ) -> Result<M<TeletextAcceptedGeneration>> {
     let result = sqlx::query(r#"INSERT INTO "TeletextAcceptedGeneration" ("ChannelId","RequestId","ArtifactVersion","ArtifactDigest") VALUES (?,?,?,?)"#)
         .bind(save.request.channel_id).bind(save.request.id)
@@ -299,13 +315,24 @@ async fn insert_generation(
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "TeletextAcceptedGenerationCurrent" ("ChannelId","GenerationId") VALUES (?,?) ON CONFLICT("ChannelId") DO UPDATE SET "GenerationId"=excluded."GenerationId""#)
         .bind(save.request.channel_id).bind(id).execute(&mut *transaction).await.repository()?;
-    transaction.commit().await.repository()?;
-    Ok(M::Accepted(TeletextAcceptedGeneration {
+    let generation = TeletextAcceptedGeneration {
         id,
         request: save.request.clone(),
         artifact_version: save.artifact_version,
         artifact_digest: save.artifact_digest.clone(),
-    }))
+    };
+    if let Some(qualification) = qualification {
+        refresh::register(
+            &mut transaction,
+            &generation,
+            save.expected_design_head,
+            qualification,
+            ersatzrs_core::repositories::TeletextGuideRefreshRole::Base,
+        )
+        .await?;
+    }
+    transaction.commit().await.repository()?;
+    Ok(M::Accepted(generation))
 }
 
 async fn current_in_transaction(

@@ -309,7 +309,7 @@ async fn check_source(
     tx: &mut Transaction<'_, Db>,
     check: SourceCheck<'_>,
 ) -> std::result::Result<(), R> {
-    check_source_inner(tx, check, false).await.map(|_| ())
+    check_source_inner(tx, check, false, None).await.map(|_| ())
 }
 
 /// Reuse the same transaction-owned source capture/hash, independently deriving
@@ -318,6 +318,30 @@ pub(super) async fn check_current_source(
     tx: &mut Transaction<'_, Db>,
     fence: &TeletextGuideSourceFence,
     check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+) -> std::result::Result<
+    ersatzrs_core::repositories::TeletextGuideGenerationQualification,
+    ersatzrs_core::repositories::TeletextGenerationRejection,
+> {
+    check_current_source_clock(tx, fence, check, None).await
+}
+
+pub(super) async fn check_current_source_at(
+    tx: &mut Transaction<'_, Db>,
+    fence: &TeletextGuideSourceFence,
+    check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+    now: chrono::DateTime<chrono::Utc>,
+) -> std::result::Result<
+    ersatzrs_core::repositories::TeletextGuideGenerationQualification,
+    ersatzrs_core::repositories::TeletextGenerationRejection,
+> {
+    check_current_source_clock(tx, fence, check, Some(now)).await
+}
+
+async fn check_current_source_clock(
+    tx: &mut Transaction<'_, Db>,
+    fence: &TeletextGuideSourceFence,
+    check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
+    now: Option<chrono::DateTime<chrono::Utc>>,
 ) -> std::result::Result<
     ersatzrs_core::repositories::TeletextGuideGenerationQualification,
     ersatzrs_core::repositories::TeletextGenerationRejection,
@@ -332,6 +356,7 @@ pub(super) async fn check_current_source(
             hold: Some(check.hold.clone()),
         },
         true,
+        now,
     )
     .await
     .map_err(G::Publication)?;
@@ -340,7 +365,7 @@ pub(super) async fn check_current_source(
         .ok_or(G::GuideFreshnessRequired)?
         .map_err(|_| G::GuideFreshnessRequired)?;
     qualification
-        .validate_current(chrono::Utc::now())
+        .validate_current(now.unwrap_or_else(chrono::Utc::now))
         .map_err(|_| G::GuideFreshnessRequired)?;
     Ok(qualification)
 }
@@ -359,6 +384,7 @@ async fn check_source_inner(
     tx: &mut Transaction<'_, Db>,
     check: SourceCheck<'_>,
     current_role: bool,
+    now: Option<chrono::DateTime<chrono::Utc>>,
 ) -> std::result::Result<SourceProof, R> {
     if Instant::now() >= check.deadline {
         return Err(R::GuideTimedOut);
@@ -428,7 +454,7 @@ async fn check_source_inner(
                     .channels()
                     .iter()
                     .flat_map(crate::xmltv::CapturedGuideChannel::occurrences),
-                chrono::Utc::now(),
+                now.unwrap_or_else(chrono::Utc::now),
             )
         });
         if Instant::now() >= deadline {

@@ -81,6 +81,16 @@ impl TeletextOutputUpdate {
         self
     }
 
+    /// Diagnostic association follows the actual native proposal/ACK; it grants
+    /// no publication authority and never fabricates a manual generation ID.
+    pub(in crate::transport::iptv) fn with_generation_observation(
+        mut self,
+        observation: Option<TeletextOutputGenerationObservation>,
+    ) -> Self {
+        self.generation = observation;
+        self
+    }
+
     fn observation(&self) -> TeletextOutputSelectionObservation {
         TeletextOutputSelectionObservation {
             sequence: self.sequence(),

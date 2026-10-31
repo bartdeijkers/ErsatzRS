@@ -1,4 +1,5 @@
-import { BrowserContext, expect, Locator, Page, test } from '@playwright/test';
+import { Browser, BrowserContext, expect, Locator, Page } from '@playwright/test';
+import { test } from './isolated-web-host';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -42,14 +43,14 @@ function sha256(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function database(): DatabaseSync {
-  const db = new DatabaseSync(databasePath!);
+function database(selectedPath = databasePath!): DatabaseSync {
+  const db = new DatabaseSync(selectedPath);
   db.exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON;');
   return db;
 }
 
-function installation(): Installation | undefined {
-  const db = database();
+function installation(selectedPath = databasePath!): Installation | undefined {
+  const db = database(selectedPath);
   try {
     return db.prepare(`SELECT Version,Enabled,SourceId,StateRevision,PackageSha256,
       ContentSha256,InstallPath FROM AddonInstallation WHERE AddonId=?`).get(addonId) as Installation | undefined;
@@ -82,7 +83,7 @@ async function submit(page: Page, form: Locator, button: string, js: boolean): P
   await ready(page, js);
 }
 
-function compareInstalledFiles(): void {
+function compareInstalledFiles(selected = installed): void {
   // Compare actual installed payloads to the frozen input archive. PackageSha256
   // is the host's per-addon archive digest, not the complete repository ZIP hash.
   execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['-c', [
@@ -92,8 +93,8 @@ function compareInstalledFiles(): void {
     ' expected={name[len(prefix):]:archive.read(name) for name in archive.namelist() if name.startswith(prefix) and not name.endswith("/")}',
     ' actual={p.relative_to(root).as_posix():p.read_bytes() for p in root.rglob("*") if p.is_file()}',
     ' assert expected and expected==actual, "Installed production payload differs from frozen candidate"',
-  ].join('\n'), installed.InstallPath, candidateZip!, addonId], { timeout: 10_000 });
-  expect(addonContentHash(installed.InstallPath)).toBe(installed.ContentSha256);
+  ].join('\n'), selected.InstallPath, candidateZip!, addonId], { timeout: 10_000 });
+  expect(addonContentHash(selected.InstallPath)).toBe(selected.ContentSha256);
   expect(sha256(readFileSync(candidateZip!))).toBe(candidateDigest);
 }
 
@@ -109,7 +110,14 @@ test.beforeAll(async ({ browser, baseURL }) => {
     originalLanguage = setting('pages.language');
     originalDark = setting('pages.is_dark_mode');
     settingsCaptured = true;
-    expect(installation(), 'Use the wrapper clean disposable database; do not replace an existing production install.').toBeUndefined();
+  } finally { db.close(); }
+  installed = await installProduction(browser, baseURL, databasePath!);
+});
+
+async function installProduction(browser: Browser, baseURL: string | undefined, selectedPath: string): Promise<Installation> {
+  expect(installation(selectedPath), 'Use a clean disposable database; do not replace an existing production install.').toBeUndefined();
+  const db = database(selectedPath);
+  try {
     db.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run('addons.allow_unverified_sources', 'false');
   } finally { db.close(); }
   const context = await browser.newContext({ baseURL, javaScriptEnabled: true });
@@ -131,7 +139,7 @@ test.beforeAll(async ({ browser, baseURL }) => {
     await page.getByRole('button', { name: 'Add repository', exact: true }).click();
     const feedback = page.locator('#repository-package-feedback');
     await expect(feedback).toContainText('Official ErsatzRS add-ons');
-    expect(installation()).toBeUndefined();
+    expect(installation(selectedPath)).toBeUndefined();
     await feedback.getByRole('link').click();
     await waitForHydration(page);
     await page.getByTestId('available-addon-row').filter({ hasText: 'TV-guide teletext' }).getByRole('link').click();
@@ -144,22 +152,23 @@ test.beforeAll(async ({ browser, baseURL }) => {
       page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
       page.keyboard.press('Enter'),
     ]);
-    await expect.poll(() => installation()?.Enabled).toBe(0);
+    await expect.poll(() => installation(selectedPath)?.Enabled).toBe(0);
     await page.waitForLoadState('load');
     await expect(page.getByRole('button', { name: 'Enable', exact: true })).toBeVisible();
     await waitForHydration(page);
     await page.getByRole('button', { name: 'Enable', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
-    await expect.poll(() => installation()?.Enabled).toBe(1);
-    installed = installation()!;
-    expect(installed.Version).toBe('0.1.1');
-    expect(installed.SourceId).toBeTruthy();
-    expect(installed.StateRevision).toBeTruthy();
-    expect(installed.PackageSha256).toMatch(/^[a-f0-9]{64}$/);
-    compareInstalledFiles();
+    await expect.poll(() => installation(selectedPath)?.Enabled).toBe(1);
+    const selected = installation(selectedPath)!;
+    expect(selected.Version).toBe('0.1.1');
+    expect(selected.SourceId).toBeTruthy();
+    expect(selected.StateRevision).toBeTruthy();
+    expect(selected.PackageSha256).toMatch(/^[a-f0-9]{64}$/);
+    compareInstalledFiles(selected);
     expect(errors).toEqual([]);
+    return selected;
   } finally { await context.close(); }
-});
+}
 
 test.afterAll(() => {
   if (!databasePath || !candidateZip || !settingsCaptured) return;
@@ -418,6 +427,21 @@ async function rasterBytes(page: Page): Promise<Buffer> {
   return Buffer.from(data![1], 'base64');
 }
 
+function assertContinuousAuthoredPmt(capturePath: string, jsonPath: string, textPath: string): void {
+  execFileSync('tstables', ['--tid', '2', '--json-output', jsonPath,
+    '--text-output', textPath, capturePath], { timeout: 30_000, maxBuffer: 65_536 });
+  const tables = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
+    '#name': string; version: number; '#nodes': { '#name': string; elementary_pid?: number }[];
+  }[];
+  let authoredSeen = false;
+  for (const table of tables.filter(table => table['#name'] === 'PMT')) {
+    const present = table['#nodes'].some(node => node['#name'] === 'component' && node.elementary_pid === 512);
+    if (authoredSeen) expect(present, `Unexpected authored teletext withdrawal at PMT version ${table.version}`).toBe(true);
+    authoredSeen ||= present;
+  }
+  expect(authoredSeen).toBe(true);
+}
+
 test('production TV-guide explicit publication and paired ordinary stream output', async ({ browser, baseURL }, info) => {
   test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
   test.setTimeout(300_000);
@@ -516,6 +540,8 @@ test('production TV-guide explicit publication and paired ordinary stream output
       }
       expect(malformed).toBe(0);
       for (const pid of [0, 256, 257, 512]) expect(pids.has(pid)).toBe(true);
+      assertContinuousAuthoredPmt(paths[index], info.outputPath(`production-guide-${index ? 'night' : 'day'}.pmt.json`),
+        info.outputPath(`production-guide-${index ? 'night' : 'day'}.pmt.txt`));
       execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
         '-i', paths[index], '-t', '1', '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
       { timeout: 30_000, maxBuffer: 65_536 });
@@ -539,6 +565,157 @@ test('production TV-guide explicit publication and paired ordinary stream output
       captures: captures.map((capture, index) => ({ channel: fixture.channels[index], sha256: sha256(capture.bytes),
         bytes: capture.bytes.length, ended: capture.ended })), javaScriptEnabled: true,
     }, null, 2));
+  } finally {
+    try { await context?.close(); } finally { fixture.close(); }
+  }
+});
+
+// One actual automatic-refresh boundary; unchanged editor/theme/isolation
+// matrices retain their own canonical evidence instead of multiplying cases.
+test('production TV-guide automatic source refresh on one ordinary HTTP response', async ({ browser, isolatedWebHost }, info) => {
+  test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+  test.setTimeout(300_000);
+  const baseURL = isolatedWebHost.baseURL;
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, {
+    authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
+  });
+  let context: BrowserContext | undefined;
+  try {
+    const selectedInstallation = await installProduction(browser, baseURL, isolatedWebHost.databasePath);
+    fixture.configureScripted();
+    const policy = JSON.parse(readFileSync(fileURLToPath(new URL(
+      '../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl,
+    )), 'utf8'));
+    const guideLimits = { max_records: 1000, max_source_bytes: 1_048_576,
+      max_model_nodes: 10_000, max_model_bytes: 16_777_216,
+      max_digest_fields: 100_000, max_digest_bytes: 16_777_216 };
+    const authoring = { ...policy, version: 2, operation_timeout_ms: 30_000, guide_limits: guideLimits,
+      preview: { max_pages: 16, max_model_records: 32_768, max_pixels: 168_000, max_diagnostics: 1400, max_work: 50_000_000 } };
+    delete authoring.source; delete authoring.recovery_timeout_ms;
+    fixture.setAuthoringPolicy(JSON.stringify(authoring));
+    fixture.setOutputPolicy(JSON.stringify({ ...policy, version: 4, guide_limits: guideLimits,
+      live_updates: { poll_interval_ms: 25, recovery_timeout_ms: 2000 } }));
+    fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run('teletext.work.max_concurrent', '1');
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    let page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const text = translation('en_us');
+    await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    const channel = fixture.channels[0];
+    const source = fixture.channels[1];
+    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    const profile = await createProfile(page, fixture, 'classic', true);
+    for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
+    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+    await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
+    await submit(page, binding, text('TeletextBindingSave'), true);
+    const form = page.getByTestId('teletext-authoring-form');
+    for (const [name, value] of [['name', 'Production refresh original'], ['entry_page', '200'],
+      ['entry_subcode', '0000'], ['resource_transmissions', '[]']] as const) {
+      await form.locator(`[name="${name}"]`).fill(value);
+    }
+    await form.locator('[name="entry_addon_id"]').selectOption(addonId);
+    await form.locator('[name="v1_region"]').selectOption('western_latin');
+    await form.locator('[name="guide_channel_id"]').selectOption(String(source));
+    await submit(page, form, text('TeletextValidateSaveDraft'), true);
+    await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
+    const historical = new URL(page.url());
+    historical.searchParams.set('page', '201'); historical.searchParams.set('subcode', '0000');
+    await submit(page, page.getByTestId('teletext-publication-request-form'), text('TeletextPublicationRequest'), true);
+    await submit(page, page.getByTestId('teletext-publication-publish-form'), text('TeletextPublicationPublish'), true);
+    const accepted = acceptedGuide(fixture, channel);
+    const original = originalBytes(fixture, channel);
+    const initialHost = isolatedWebHost.processIdentity();
+    await context.close();
+    const restarted = await isolatedWebHost.restart();
+    expect(restarted.before).toEqual(initialHost);
+    expect(restarted.stop.closed).toBe(true);
+    expect(restarted.stop.forced).toBe(false);
+    expect(restarted.stop.exitCode).toBe(0);
+    expect(restarted.stop.signalCode).toBeNull();
+    expect(restarted.after.pid).toBeGreaterThan(0);
+    expect(restarted.after.pid).not.toBe(initialHost.pid);
+    expect(restarted.after.generation).toBeGreaterThan(initialHost.generation);
+    expect(isolatedWebHost.processIdentity()).toEqual(restarted.after);
+    expect(originalBytes(fixture, channel)).toEqual(original);
+    expect(acceptedGuide(fixture, channel)).toEqual(accepted);
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    page = await context.newPage();
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(historical.toString()); await ready(page, true);
+    const originalRaster = await rasterBytes(page);
+    const currentUrl = `/channels/${channel}/teletext?guide_preview=1&guide_page=201&guide_subcode=0000`;
+    await page.goto(currentUrl); await ready(page, true);
+    const currentModel = page.getByTestId('teletext-current-guide-model');
+    await expect(currentModel).toBeVisible();
+    expect(Buffer.from((await currentModel.locator('img').getAttribute('src'))!.split(',')[1], 'base64')).toEqual(originalRaster);
+    const current = () => fixture.database.prepare('SELECT * FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
+      .get(channel) as { SeedId: number; RuntimeId: number | null; Revision: number; NextDueAt: string; ChangedAt: string | null; Revoked: number };
+    const before = current();
+    expect(before.RuntimeId).toBeNull();
+    const programme = fixture.database.prepare(`SELECT MediaItemId,Finish FROM PlayoutItem WHERE PlayoutId=?
+      AND julianday(Start)<=julianday(?) AND julianday(Finish)>julianday(?) ORDER BY Start LIMIT 1`)
+      .get(source, new Date().toISOString(), new Date().toISOString()) as { MediaItemId: number; Finish: string };
+    const updatedTitle = 'Updated guide programme';
+    expect(fixture.database.prepare('UPDATE MovieMetadata SET Title=? WHERE MovieId=?')
+      .run(updatedTitle, programme.MediaItemId).changes).toBe(1);
+    await expect.poll(() => current().ChangedAt !== null, { timeout: 10_000 }).toBe(true);
+    const changed = current();
+    expect(utc(changed.NextDueAt) - utc(changed.ChangedAt!)).toBeGreaterThanOrEqual(59_999);
+    expect(utc(programme.Finish) - utc(changed.NextDueAt)).toBeGreaterThan(30_000);
+    // Wait BEFORE opening the response. Preserve the established 30s/8MiB
+    // observation bounds, genuine debounce and source/role clocks.
+    await expect.poll(() => utc(changed.NextDueAt) - Date.now() <= 1500, { timeout: 65_000, intervals: [100] }).toBe(true);
+    const path = info.outputPath('production-guide-automatic-refresh.ts');
+    const capture = await captureTeletextChannelTs(`${baseURL}/iptv/hls-direct/${channel}.ts`, path,
+      { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+    expect(capture.ended).toBe('byte-limit');
+    assertContinuousAuthoredPmt(path, info.outputPath('production-guide-automatic-refresh.pmt.json'),
+      info.outputPath('production-guide-automatic-refresh.pmt.txt'));
+    const after = current();
+    expect(after.SeedId).toBe(before.SeedId);
+    expect(after.RuntimeId).not.toBeNull();
+    const snapshot = fixture.database.prepare('SELECT Document,DocumentDigest FROM TeletextGuideRuntimeSnapshot WHERE Id=? AND SeedId=?')
+      .get(after.RuntimeId!, after.SeedId) as { Document: Uint8Array; DocumentDigest: string };
+    const runtimeBytes = Buffer.from(snapshot.Document);
+    expect(sha256(runtimeBytes)).toBe(snapshot.DocumentDigest);
+    expect(runtimeBytes.toString()).toContain(updatedTitle);
+    const decoded = execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+      '-txt_format', 'text', '-txt_page', '201', '-txt_duration', '1000', '-i', path,
+      '-map', '0:s:0', '-c:s', 'srt', '-f', 'srt', '-'], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }).toString();
+    writeFileSync(info.outputPath('production-guide-automatic-refresh.srt'), decoded);
+    expect(decoded).toContain('Now: Synthetic red video and tone');
+    expect(decoded).toContain(`Now: ${updatedTitle}`);
+    expect(decoded.indexOf('Now: Synthetic red video and tone')).toBeLessThan(decoded.indexOf(`Now: ${updatedTitle}`));
+    execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', path,
+      '-t', '1', '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'], { timeout: 30_000, maxBuffer: 65_536 });
+    await page.goto(currentUrl); await ready(page, true);
+    await expect(currentModel).toHaveAttribute('data-snapshot', String(after.RuntimeId));
+    const freshRaster = Buffer.from((await currentModel.locator('img').getAttribute('src'))!.split(',')[1], 'base64');
+    expect(freshRaster).not.toEqual(originalRaster);
+    await currentModel.locator('img').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath('production-guide-automatic-current.png') });
+    await page.goto(historical.toString()); await ready(page, true);
+    expect(await rasterBytes(page)).toEqual(originalRaster);
+    expect(originalBytes(fixture, channel)).toEqual(original);
+    expect(acceptedGuide(fixture, channel)).toEqual(accepted);
+    await submit(page, page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-disable-form"]`), text('TeletextBindingOff'), true);
+    await expect.poll(() => current().Revoked, { timeout: 10_000 }).toBe(1);
+    expect(originalBytes(fixture, channel)).toEqual(original);
+    expect(acceptedGuide(fixture, channel)).toEqual(accepted);
+    expect(fixture.setting('teletext.work.max_concurrent')).toBe('1');
+    expect(errors).toEqual([]);
+    expect(installation(isolatedWebHost.databasePath)).toEqual(selectedInstallation);
+    compareInstalledFiles(selectedInstallation);
+    writeFileSync(info.outputPath('production-guide-refresh-identity.json'), JSON.stringify({ repository_zip_sha256: candidateDigest,
+      installation: selectedInstallation, restart: restarted,
+      channel, source, profile, before, changed, after, accepted_generation: accepted,
+      original_sha256: sha256(original), original_raster_sha256: sha256(originalRaster),
+      fresh_raster_sha256: sha256(freshRaster), runtime_document_sha256: snapshot.DocumentDigest,
+      capture: { bytes: capture.bytes.length, ended: capture.ended, sha256: sha256(capture.bytes) },
+      scope: 'Explicit publication retained across a closed graceful host restart, one actual SQL change, one same-response ordinary stream update, independent page201 text decoding, shared current raster, immutable historical original and explicit Off. Not full restart/platform/client acceptance.' }, null, 2));
   } finally {
     try { await context?.close(); } finally { fixture.close(); }
   }

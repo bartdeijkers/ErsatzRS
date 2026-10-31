@@ -45,6 +45,9 @@ pub(crate) struct NativeTeletextRuntimePolicy {
     pub(crate) recovery_timeout: Duration,
     pub(crate) live_updates: Option<TeletextAcceptedUpdatePolicy>,
     pub(crate) guide_limits: Option<TeletextGuideSourceCheckLimits>,
+    /// Version 4 explicitly admits separately framed refresh snapshots/stale state.
+    /// Versions 1..3 retain their original exact-generation recovery semantics.
+    pub(crate) guide_refresh: bool,
 }
 
 /// Static errors deliberately exclude raw configuration or Serde payloads.
@@ -77,8 +80,8 @@ pub(crate) fn parse_native_teletext_runtime_policy(
     let live_updates = match (dto.version, dto.live_updates.0) {
         (1, None) => None,
         // Version 1 retains its closed schema and startup-only behavior.
-        (1, Some(_)) | (2 | 3, None) => return Err(TeletextRuntimePolicyError::InvalidJson),
-        (2 | 3, Some(limits)) => Some(
+        (1, Some(_)) | (2..=4, None) => return Err(TeletextRuntimePolicyError::InvalidJson),
+        (2..=4, Some(limits)) => Some(
             TeletextAcceptedUpdatePolicy::new(
                 Duration::from_millis(limits.poll_interval_ms),
                 Duration::from_millis(limits.recovery_timeout_ms),
@@ -89,8 +92,8 @@ pub(crate) fn parse_native_teletext_runtime_policy(
     };
     let guide_limits = match (dto.version, dto.guide_limits.0) {
         (1 | 2, None) => None,
-        (3, Some(limits)) => Some(limits.into()),
-        (1 | 2, Some(_)) | (3, None) => {
+        (3 | 4, Some(limits)) => Some(limits.into()),
+        (1 | 2, Some(_)) | (3 | 4, None) => {
             return Err(TeletextRuntimePolicyError::InvalidJson);
         }
         _ => return Err(TeletextRuntimePolicyError::UnsupportedVersion),
@@ -121,6 +124,7 @@ pub(crate) fn parse_native_teletext_runtime_policy(
         recovery_timeout,
         live_updates,
         guide_limits,
+        guide_refresh: dto.version == 4,
     })
 }
 
@@ -1448,6 +1452,38 @@ mod tests {
     }
 
     #[test]
+    fn refresh_version_four_is_explicit_and_reuses_closed_guide_and_output_bounds() {
+        let mut value = fixture();
+        assert!(!parse(&value).guide_refresh);
+        value["version"] = json!(2);
+        value["live_updates"] = json!({"poll_interval_ms":1000,"recovery_timeout_ms":2000});
+        assert!(!parse(&value).guide_refresh);
+        value["version"] = json!(3);
+        value["guide_limits"] = guide_authoring_fixture()["guide_limits"].clone();
+        let legacy = parse(&value);
+        assert!(!legacy.guide_refresh);
+        value["version"] = json!(4);
+        let refreshed = parse(&value);
+        assert!(refreshed.guide_refresh);
+        assert_eq!(refreshed.guide_limits, legacy.guide_limits);
+        assert_eq!(credits(&refreshed), credits(&legacy));
+        assert_eq!(refreshed.source.limits(), legacy.source.limits());
+        for field in ["guide_limits", "live_updates"] {
+            let mut missing = value.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert_error(&missing, TeletextRuntimePolicyError::InvalidJson);
+            value[field] = Value::Null;
+            assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+            value = fixture();
+            value["version"] = json!(4);
+            value["live_updates"] = json!({"poll_interval_ms":1000,"recovery_timeout_ms":2000});
+            value["guide_limits"] = guide_authoring_fixture()["guide_limits"].clone();
+        }
+        value["refresh"] = json!({"unreviewed_default":true});
+        assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+    }
+
+    #[test]
     fn live_version_two_requires_a_closed_nonnull_object_without_timing_defaults() {
         let mut baseline = fixture();
         baseline["version"] = json!(2);
@@ -1505,7 +1541,7 @@ mod tests {
 
     #[test]
     fn version_schema_and_duplicates_are_rejected_without_defaults() {
-        for version in [0, 4, u32::MAX] {
+        for version in [0, 5, u32::MAX] {
             let mut value = fixture();
             value["version"] = json!(version);
             assert_error(&value, TeletextRuntimePolicyError::UnsupportedVersion);

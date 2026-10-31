@@ -20,7 +20,7 @@ use ersatzrs_core::repositories::{
     TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION, TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
-use ersatzrs_domain::TeletextAcceptedGeneration;
+use ersatzrs_domain::{TeletextAcceptedGeneration, TeletextOutputGenerationObservation};
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextServiceDescriptor};
 use tokio::{sync::watch, task::JoinHandle, time::Instant};
 use tracing::Instrument;
@@ -39,7 +39,8 @@ use crate::transport::iptv::{
     teletext_selected_output::{
         load_selected_teletext_output_candidate,
         load_selected_teletext_output_candidate_with_guide, observe_selected_teletext_output,
-        GuideRuntime, SelectedTeletextOutputCandidate,
+        observe_selected_teletext_output_with_guide, GuideOutputIdentity, GuideRuntime,
+        SelectedTeletextOutputCandidate,
     },
     teletext_source_policy::TeletextSourcePolicy,
 };
@@ -57,6 +58,11 @@ pub struct TeletextAcceptedUpdatePolicy {
 pub struct TeletextAcceptedUpdatesConfigurationError;
 
 impl TeletextAcceptedUpdatePolicy {
+    /// Share the explicitly configured observation cadence with guide maintenance.
+    pub(crate) const fn poll_interval(self) -> Duration {
+        self.poll_interval
+    }
+
     /// Reject zero and unrepresentable timings before any task or read exists.
     /// # Errors
     /// Rejects zero or unrepresentable polling/recovery durations.
@@ -145,9 +151,9 @@ pub(super) fn start_accepted_updates(
             channel_id,
             initial: ersatzrs_domain::TeletextOutputSelectionObservation {
                 sequence: 0,
-                generation: initial.as_ref().and_then(|candidate| {
-                    super::super::teletext_output_observation::generation(candidate.generation())
-                }),
+                generation: initial
+                    .as_ref()
+                    .and_then(|candidate| candidate.output_generation_observation()),
                 authored: initial
                     .as_ref()
                     .is_some_and(|candidate| candidate.service().is_some()),
@@ -168,13 +174,16 @@ pub(super) fn start_accepted_updates(
                 trace_id,
                 expiry_preparation: Mutex::new(None),
                 guide_validity: Mutex::new(initial.as_ref().and_then(|candidate| {
-                    candidate.guide_qualification().map(|proof| {
+                    candidate.guide_deadline().map(|deadline| {
                         (
                             candidate.generation().clone(),
-                            Instant::from_std(proof.deadline),
+                            candidate.guide_identity().cloned(),
+                            deadline,
                         )
                     })
                 })),
+                latest_guide: Mutex::new(None),
+                prepared_handover: Mutex::new(None),
                 next_transition: Mutex::new(
                     initial
                         .as_ref()
@@ -204,10 +213,7 @@ fn trace_native_candidate(
     event: &'static str,
 ) {
     let identity = candidate.generation();
-    let valid_until = match candidate {
-        SelectedTeletextOutputCandidate::Base(..) => None,
-        SelectedTeletextOutputCandidate::Effective(selected, _) => selected.selection().valid_until,
-    };
+    let valid_until = candidate.effective_valid_until();
     let now = Instant::now();
     tracing::debug!(
         target: "ersatzrs_web::transport::iptv::teletext_provenance",
@@ -236,6 +242,29 @@ struct ReadFailure;
 #[async_trait::async_trait]
 trait UpdateBackend: Send + Sync + 'static {
     type Candidate: Clone + Send + Sync + 'static;
+    type ContextIdentity: Clone + Eq + Send + Sync + 'static;
+
+    fn candidate_context(_candidate: &Self::Candidate) -> Option<Self::ContextIdentity> {
+        None
+    }
+    fn current_context(&self) -> Option<Self::ContextIdentity> {
+        None
+    }
+    fn generation_observation(
+        candidate: &Self::Candidate,
+    ) -> Option<TeletextOutputGenerationObservation> {
+        super::super::teletext_output_observation::generation(Self::identity(candidate))
+    }
+    async fn reauthorize_cached(
+        &self,
+        candidate: &Self::Candidate,
+        deadline: Instant,
+    ) -> Result<Option<Self::Candidate>, ReadFailure> {
+        Ok(self
+            .confirm(candidate, deadline)
+            .await?
+            .then(|| candidate.clone()))
+    }
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration;
     fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>>;
@@ -296,17 +325,153 @@ fn guide_observation_transition(
     )
 }
 
+fn guide_context_observation_transition<I: Eq>(
+    observed: Option<&TeletextAcceptedGeneration>,
+    context: Option<&I>,
+    retained: Option<&(TeletextAcceptedGeneration, Option<I>, Instant)>,
+    scope: Option<Instant>,
+    now: Instant,
+) -> (bool, Option<Instant>) {
+    let matching = retained
+        .filter(|(_, previous, _)| previous.as_ref() == context)
+        .map(|(generation, _, deadline)| (generation.clone(), *deadline));
+    guide_observation_transition(observed, matching.as_ref(), scope, now)
+}
+
 struct NativeBackend {
     trace_id: uuid::Uuid,
     context: TeletextAcceptedUpdatesContext,
     next_transition: Mutex<Option<Instant>>,
     expiry_preparation: Mutex<Option<ExpiryPreparation>>,
-    guide_validity: Mutex<Option<(TeletextAcceptedGeneration, Instant)>>,
+    guide_validity: Mutex<
+        Option<(
+            TeletextAcceptedGeneration,
+            Option<GuideOutputIdentity>,
+            Instant,
+        )>,
+    >,
+    latest_guide: Mutex<Option<ersatzrs_core::repositories::TeletextGuideRefreshCurrentMetadata>>,
+    prepared_handover: Mutex<Option<Arc<SelectedTeletextOutputCandidate>>>,
+}
+
+impl NativeBackend {
+    async fn prepare_guide_handover(
+        &self,
+        cached: &SelectedTeletextOutputCandidate,
+        successor: &TeletextAcceptedGeneration,
+        deadline: Instant,
+    ) -> Result<bool, ReadFailure> {
+        let Some(guide) = self.context.guide.as_deref().filter(|guide| guide.refresh) else {
+            return Ok(false);
+        };
+        if cached.generation() != successor || cached.guide_identity().is_none() {
+            return Ok(false);
+        }
+        let deadline = cached
+            .next_transition()
+            .map_or(deadline, |cap| deadline.min(cap));
+        if Instant::now() >= deadline {
+            return Ok(false);
+        }
+        let prepared: Option<Arc<SelectedTeletextOutputCandidate>> =
+            crate::transport::iptv::teletext_selected_output::prepare_current_guide_successor(
+                &self.context.application,
+                self.context.channel_id,
+                self.context.budget,
+                self.context.encoding.clone(),
+                deadline.into_std(),
+                guide,
+                self.context.timing.poll_interval,
+            )
+            .await
+            .map_err(|_| ReadFailure)?;
+        let Some(prepared) = prepared else {
+            return Ok(false);
+        };
+        if Instant::now() >= deadline
+            || !cached.can_bridge_guide_successor(&prepared)
+            || prepared.guide_identity().cloned() != self.current_context()
+        {
+            return Ok(false);
+        }
+        // This is one already compiled, currently confirmed successor, not an
+        // authority for old bytes. Recovery consumes it once and confirms again.
+        *self.prepared_handover.lock().map_err(|_| ReadFailure)? = Some(prepared);
+        Ok(true)
+    }
+
+    pub(super) fn record_guide_validity(
+        &self,
+        candidate: &SelectedTeletextOutputCandidate,
+    ) -> Result<(), ReadFailure> {
+        *self.guide_validity.lock().map_err(|_| ReadFailure)? =
+            candidate.guide_deadline().map(|deadline| {
+                (
+                    candidate.generation().clone(),
+                    candidate.guide_identity().cloned(),
+                    deadline,
+                )
+            });
+        // A stale reauthorization can shorten its cap during this very poll.
+        // Wake at that already qualified bound rather than one poll after it.
+        if let Some(cap) = candidate.next_transition() {
+            let mut next = self.next_transition.lock().map_err(|_| ReadFailure)?;
+            *next = Some(next.map_or(cap, |previous| previous.min(cap)));
+        }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
 impl UpdateBackend for NativeBackend {
     type Candidate = Arc<SelectedTeletextOutputCandidate>;
+    type ContextIdentity = GuideOutputIdentity;
+    fn candidate_context(candidate: &Self::Candidate) -> Option<Self::ContextIdentity> {
+        candidate.guide_identity().cloned()
+    }
+    fn current_context(&self) -> Option<Self::ContextIdentity> {
+        self.latest_guide
+            .lock()
+            .ok()
+            .and_then(|metadata| metadata.as_ref().map(GuideOutputIdentity::from_metadata))
+    }
+    fn generation_observation(
+        candidate: &Self::Candidate,
+    ) -> Option<TeletextOutputGenerationObservation> {
+        candidate.output_generation_observation()
+    }
+    async fn reauthorize_cached(
+        &self,
+        candidate: &Self::Candidate,
+        deadline: Instant,
+    ) -> Result<Option<Self::Candidate>, ReadFailure> {
+        if candidate.guide_identity().is_some() {
+            let metadata = self
+                .latest_guide
+                .lock()
+                .map_err(|_| ReadFailure)?
+                .clone()
+                .ok_or(ReadFailure)?;
+            let candidate = candidate
+                .reauthorize_guide_cached(
+                    &metadata,
+                    &self.context.application,
+                    self.context.budget.max_serialized_bytes,
+                    deadline.into_std(),
+                    self.context.timing.poll_interval,
+                )
+                .await;
+            if let Some(candidate) = &candidate {
+                self.record_guide_validity(candidate)?;
+            }
+            Ok(candidate)
+        } else {
+            Ok(self
+                .confirm(candidate, deadline)
+                .await?
+                .then(|| candidate.clone()))
+        }
+    }
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration {
         candidate.generation()
@@ -326,12 +491,18 @@ impl UpdateBackend for NativeBackend {
         successor: &TeletextAcceptedGeneration,
         deadline: Instant,
     ) -> Result<bool, ReadFailure> {
+        if cached.guide_identity().is_some() {
+            return self
+                .prepare_guide_handover(cached, successor, deadline)
+                .await;
+        }
         Ok(cached
-            .confirm_successor_selection(
+            .confirm_successor_selection_cached(
                 successor,
                 &self.context.application,
                 self.context.budget.max_serialized_bytes,
                 deadline.into_std(),
+                self.context.timing.poll_interval,
             )
             .await)
     }
@@ -351,17 +522,29 @@ impl UpdateBackend for NativeBackend {
     }
 
     async fn current(&self) -> Result<Option<TeletextAcceptedGeneration>, ReadFailure> {
-        let observed =
-            observe_selected_teletext_output(&self.context.application, self.context.channel_id)
-                .await
-                .map_err(|_| ReadFailure)?;
+        // Cancelled or superseded warm attempts cannot survive a new observation.
+        self.prepared_handover
+            .lock()
+            .map_err(|_| ReadFailure)?
+            .take();
+        let observed = observe_selected_teletext_output_with_guide(
+            &self.context.application,
+            self.context.channel_id,
+            self.context.guide.as_deref(),
+            self.context.budget.max_serialized_bytes,
+        )
+        .await
+        .map_err(|_| ReadFailure)?;
+        let context = observed.guide_identity();
         let retained = self.guide_validity.lock().map_err(|_| ReadFailure)?;
-        let (expired, next) = guide_observation_transition(
+        let (expired, next) = guide_context_observation_transition(
             observed.generation.as_ref(),
+            context.as_ref(),
             retained.as_ref(),
             observed.next_transition,
             Instant::now(),
         );
+        *self.latest_guide.lock().map_err(|_| ReadFailure)? = observed.guide_refresh;
         *self.next_transition.lock().map_err(|_| ReadFailure)? = next;
         // Absent after expiry without rescheduling a past deadline. The retained
         // record is diagnostic metadata, never renewed current-guide authority.
@@ -374,15 +557,26 @@ impl UpdateBackend for NativeBackend {
         deadline: Instant,
     ) -> Result<bool, ReadFailure> {
         Ok(candidate
-            .confirm(
+            .confirm_cached(
                 &self.context.application,
                 self.context.budget.max_serialized_bytes,
                 deadline.into_std(),
+                self.context.timing.poll_interval,
             )
             .await)
     }
 
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure> {
+        let prepared = self
+            .prepared_handover
+            .lock()
+            .map_err(|_| ReadFailure)?
+            .take();
+        if let Some(prepared) = prepared {
+            self.record_guide_validity(&prepared)?;
+            trace_native_candidate(&prepared, self.trace_id, "monitor_recovered");
+            return Ok(Some(prepared));
+        }
         if let Some(candidate) = self.recover_prepared_expiry(deadline).await? {
             return Ok(Some(candidate));
         }
@@ -408,13 +602,7 @@ impl UpdateBackend for NativeBackend {
         }
         .map_err(|_| ReadFailure)?;
         if let Some(candidate) = &candidate {
-            *self.guide_validity.lock().map_err(|_| ReadFailure)? =
-                candidate.guide_qualification().map(|proof| {
-                    (
-                        candidate.generation().clone(),
-                        Instant::from_std(proof.deadline),
-                    )
-                });
+            self.record_guide_validity(candidate)?;
             trace_native_candidate(candidate, self.trace_id, "monitor_recovered");
         }
         Ok(candidate)
@@ -429,12 +617,14 @@ impl UpdateBackend for NativeBackend {
     }
 }
 
-struct MonitorState<C> {
+struct MonitorState<C, I = ()> {
     cached: Option<C>,
     active: bool,
     sequence: u64,
     proposal: Option<(u64, Option<TeletextAcceptedGeneration>)>,
     rejected: Option<TeletextAcceptedGeneration>,
+    proposal_context: Option<I>,
+    rejected_context: Option<I>,
     // Seeded content is already installed. Later proposals gain this witness
     // only through Applied for their exact sequence, never cached/Waiting state.
     handover_confirmed: bool,
@@ -444,7 +634,7 @@ struct MonitorState<C> {
     observed_absence: Option<i64>,
 }
 
-impl<C> MonitorState<C> {
+impl<C, I: Clone> MonitorState<C, I> {
     fn new(initial: Option<C>) -> Self {
         Self {
             active: initial.is_some(),
@@ -453,6 +643,8 @@ impl<C> MonitorState<C> {
             sequence: 0,
             proposal: None,
             rejected: None,
+            proposal_context: None,
+            rejected_context: None,
             expiry_replacement: false,
             observed_absence: None,
         }
@@ -493,6 +685,7 @@ impl<C> MonitorState<C> {
             "teletext monitor proposed withdrawal"
         );
         self.proposal = Some((sequence, None));
+        self.proposal_context = None;
         updates.send_replace(Some(update));
         true
     }
@@ -502,6 +695,8 @@ impl<C> MonitorState<C> {
         updates: &watch::Sender<Option<TeletextOutputUpdate>>,
         identity: &TeletextAcceptedGeneration,
         service: Arc<EncodedTeletextAuthoredService>,
+        context: Option<I>,
+        observation: Option<TeletextOutputGenerationObservation>,
     ) -> bool {
         // Reserve the last representable sequence for fail-closed withdrawal.
         let Some(sequence) = self
@@ -519,7 +714,7 @@ impl<C> MonitorState<C> {
         let Ok(update) = update else {
             return false;
         };
-        let update = update.with_generation(identity);
+        let update = update.with_generation_observation(observation);
         self.sequence = sequence;
         self.active = true;
         self.observed_absence = None;
@@ -534,6 +729,7 @@ impl<C> MonitorState<C> {
             "teletext monitor proposed a recovered generation"
         );
         self.proposal = Some((sequence, Some(identity.clone())));
+        self.proposal_context = context;
         updates.send_replace(Some(update));
         true
     }
@@ -573,6 +769,7 @@ impl<C> MonitorState<C> {
         );
         if let Some(identity) = identity {
             self.rejected = Some(identity.clone());
+            self.rejected_context = self.proposal_context.clone();
             // A rejected replacement leaves the old service in the gate. The
             // newer withdrawal retires that unauthorized service safely.
             self.withdraw(updates)
@@ -606,7 +803,7 @@ async fn bounded<T>(
 
 async fn reconcile<B: UpdateBackend>(
     backend: &B,
-    state: &mut MonitorState<B::Candidate>,
+    state: &mut MonitorState<B::Candidate, B::ContextIdentity>,
     updates: &watch::Sender<Option<TeletextOutputUpdate>>,
     channel_id: i64,
     deadline: Instant,
@@ -631,31 +828,50 @@ async fn reconcile<B: UpdateBackend>(
         }
         _ => return state.withdraw(updates),
     };
-    if state.rejected.as_ref() == Some(&identity) {
+    let context = backend.current_context();
+    if state.rejected.as_ref() == Some(&identity)
+        && state.rejected_context.as_ref() == context.as_ref()
+    {
         return state.withdraw(updates);
     }
-    if state
-        .cached
-        .as_ref()
-        .is_some_and(|candidate| B::identity(candidate) == &identity)
-    {
-        let candidate = state.cached.as_ref();
-        let Some(candidate) = candidate else {
+    if state.cached.as_ref().is_some_and(|candidate| {
+        B::identity(candidate) == &identity && B::candidate_context(candidate) == context
+    }) {
+        let Some(candidate) = state.cached.as_ref() else {
             return false;
         };
-        let Some(confirmed) =
-            bounded(updates, deadline, backend.confirm(candidate, deadline)).await
+        let previous = B::generation_observation(candidate);
+        let Some(confirmed) = bounded(
+            updates,
+            deadline,
+            backend.reauthorize_cached(candidate, deadline),
+        )
+        .await
         else {
             return false;
         };
-        return match confirmed {
-            Ok(true) => match B::service(candidate) {
-                Some(_) if state.active => true,
-                Some(service) => state.replace(updates, &identity, service),
-                None => state.withdraw_with_identity(updates, Some(&identity)),
-            },
-            _ => state.withdraw(updates),
+        let Ok(Some(candidate)) = confirmed else {
+            return state.withdraw(updates);
         };
+        if B::identity(&candidate) != &identity || B::candidate_context(&candidate) != context {
+            return state.withdraw(updates);
+        }
+        let observation = B::generation_observation(&candidate);
+        let result = match B::service(&candidate) {
+            Some(_) if state.active && observation == previous => true,
+            Some(service) => state.replace(
+                updates,
+                &identity,
+                service,
+                B::candidate_context(&candidate),
+                observation,
+            ),
+            None => state.withdraw_with_identity(updates, Some(&identity)),
+        };
+        if result {
+            state.cached = Some(candidate);
+        }
+        return result;
     }
     let retain = authorize_handover(backend, state, updates, &identity, deadline).await;
     // All legacy, Off, changed-selection and unproven cases still withdraw
@@ -672,7 +888,7 @@ async fn reconcile<B: UpdateBackend>(
 
 async fn authorize_handover<B: UpdateBackend>(
     backend: &B,
-    state: &MonitorState<B::Candidate>,
+    state: &MonitorState<B::Candidate, B::ContextIdentity>,
     updates: &watch::Sender<Option<TeletextOutputUpdate>>,
     successor: &TeletextAcceptedGeneration,
     deadline: Instant,
@@ -681,10 +897,10 @@ async fn authorize_handover<B: UpdateBackend>(
         return false;
     };
     if !state.handover_confirmed
-        || state
-            .proposal
-            .as_ref()
-            .is_some_and(|(_, identity)| identity.as_ref() != Some(B::identity(cached)))
+        || state.proposal.as_ref().is_some_and(|(_, identity)| {
+            identity.as_ref() != Some(B::identity(cached))
+                || state.proposal_context != B::candidate_context(cached)
+        })
         || B::identity(cached).artifact_version != successor.artifact_version
         || !matches!(
             successor.artifact_version,
@@ -710,7 +926,7 @@ async fn authorize_handover<B: UpdateBackend>(
 
 async fn recover_successor<B: UpdateBackend>(
     backend: &B,
-    state: &mut MonitorState<B::Candidate>,
+    state: &mut MonitorState<B::Candidate, B::ContextIdentity>,
     updates: &watch::Sender<Option<TeletextOutputUpdate>>,
     channel_id: i64,
     observed: &TeletextAcceptedGeneration,
@@ -727,8 +943,11 @@ async fn recover_successor<B: UpdateBackend>(
         }
         _ => return state.withdraw(updates),
     };
-    if state.rejected.as_ref() == Some(B::identity(&candidate))
-        || (retain && B::identity(&candidate) != observed)
+    if (state.rejected.as_ref() == Some(B::identity(&candidate))
+        && state.rejected_context == B::candidate_context(&candidate))
+        || (retain
+            && (B::identity(&candidate) != observed
+                || B::candidate_context(&candidate) != backend.current_context()))
     {
         return state.withdraw(updates);
     }
@@ -759,12 +978,19 @@ async fn recover_successor<B: UpdateBackend>(
     }
     // No await separates exact full-artifact/current confirmation from proposal.
     let replacement = match B::service(&candidate) {
-        Some(service) => state.replace(updates, B::identity(&candidate), service),
+        Some(service) => state.replace(
+            updates,
+            B::identity(&candidate),
+            service,
+            B::candidate_context(&candidate),
+            B::generation_observation(&candidate),
+        ),
         None => state.withdraw_with_identity(updates, Some(B::identity(&candidate))),
     };
     if replacement {
         state.cached = Some(candidate);
         state.rejected = None;
+        state.rejected_context = None;
     }
     replacement
 }
@@ -866,6 +1092,9 @@ mod tests {
         service_present: bool,
         original_transition: Option<Instant>,
         selection_context: u8,
+        guide_context: Option<u64>,
+        guide_revision: i64,
+        guide_stale: bool,
     }
 
     fn candidate(id: i64, channel_id: i64) -> Candidate {
@@ -885,6 +1114,9 @@ mod tests {
             service_present: true,
             original_transition: None,
             selection_context: 1,
+            guide_context: None,
+            guide_revision: 1,
+            guide_stale: false,
             service: Arc::new(
                 crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(3),
             ),
@@ -1025,6 +1257,65 @@ mod tests {
     #[async_trait::async_trait]
     impl UpdateBackend for Backend {
         type Candidate = Candidate;
+        type ContextIdentity = u64;
+        fn candidate_context(candidate: &Candidate) -> Option<u64> {
+            candidate.guide_context
+        }
+        fn current_context(&self) -> Option<u64> {
+            self.store
+                .lock()
+                .unwrap()
+                .accepted
+                .as_ref()
+                .and_then(|candidate| candidate.guide_context)
+        }
+        fn generation_observation(
+            candidate: &Candidate,
+        ) -> Option<TeletextOutputGenerationObservation> {
+            let mut observation =
+                super::super::super::teletext_output_observation::generation(&candidate.identity)?;
+            observation.guide_refresh = candidate.guide_context.map(|snapshot| {
+                ersatzrs_domain::TeletextGuideRefreshOutputObservation {
+                    seed_id: 1,
+                    snapshot_id: Some(i64::try_from(snapshot).unwrap()),
+                    revision: candidate.guide_revision,
+                    captured_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+                    stale: candidate.guide_stale,
+                }
+            });
+            Some(observation)
+        }
+        async fn reauthorize_cached(
+            &self,
+            candidate: &Candidate,
+            deadline: Instant,
+        ) -> Result<Option<Candidate>, ReadFailure> {
+            if candidate.guide_context.is_some() {
+                let store = self.store.lock().unwrap();
+                Ok(store
+                    .accepted
+                    .as_ref()
+                    .filter(|current| {
+                        store.eligible
+                            && current.identity == candidate.identity
+                            && current.guide_context == candidate.guide_context
+                    })
+                    .map(|current| {
+                        let mut current = current.clone();
+                        current.original_transition =
+                            match (candidate.original_transition, current.original_transition) {
+                                (Some(old), Some(new)) => Some(old.min(new)),
+                                (old, new) => old.or(new),
+                            };
+                        current
+                    }))
+            } else {
+                Ok(self
+                    .confirm(candidate, deadline)
+                    .await?
+                    .then(|| candidate.clone()))
+            }
+        }
 
         fn identity(candidate: &Candidate) -> &TeletextAcceptedGeneration {
             &candidate.identity
@@ -1117,10 +1408,10 @@ mod tests {
                 .push(candidate.identity.id);
             let store = self.store.lock().unwrap();
             Ok(store.eligible
-                && store
-                    .accepted
-                    .as_ref()
-                    .is_some_and(|current| current.identity == candidate.identity))
+                && store.accepted.as_ref().is_some_and(|current| {
+                    current.identity == candidate.identity
+                        && current.guide_context == candidate.guide_context
+                }))
         }
         async fn recover(&self, _deadline: Instant) -> Result<Option<Candidate>, ReadFailure> {
             self.recoveries.fetch_add(1, Ordering::SeqCst);
@@ -1454,5 +1745,125 @@ mod tests {
     }
     mod expiry_preparation {
         include!("tests/expiry_preparation.rs");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_new_runtime_under_the_same_manual_root_is_recovered_without_old_expiry_poisoning() {
+        let mut initial = candidate(1, 9);
+        initial.guide_context = Some(10);
+        initial.identity.artifact_version = TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION;
+        let old_cap = Instant::now() + Duration::from_secs(1);
+        let retained = (initial.identity.clone(), Some(10_u64), old_cap);
+        assert_eq!(
+            guide_context_observation_transition(
+                Some(&initial.identity),
+                Some(&11),
+                Some(&retained),
+                None,
+                old_cap
+            ),
+            (false, None)
+        );
+        assert_eq!(
+            guide_context_observation_transition(
+                Some(&initial.identity),
+                Some(&10),
+                Some(&retained),
+                None,
+                old_cap
+            ),
+            (true, None)
+        );
+        let backend = Backend::new(Some(initial.clone()));
+        let (updates, _control, _) = teletext_output_control_channel();
+        let mut state = MonitorState::new(Some(initial.clone()));
+        let mut successor = initial;
+        successor.guide_context = Some(11);
+        successor.service = Arc::new(
+            crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(
+                4,
+            ),
+        );
+        backend.store.lock().unwrap().accepted = Some(successor);
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        assert_eq!(state.cached.as_ref().unwrap().guide_context, Some(11));
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 1);
+        assert_eq!(state.proposal_context, Some(11));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_rejected_runtime_does_not_reject_the_next_snapshot_of_the_same_manual_root() {
+        let mut initial = candidate(1, 9);
+        initial.guide_context = Some(10);
+        let backend = Backend::new(Some(initial.clone()));
+        let (updates, _control, _) = teletext_output_control_channel();
+        let mut state = MonitorState::new(Some(initial));
+        backend
+            .store
+            .lock()
+            .unwrap()
+            .accepted
+            .as_mut()
+            .unwrap()
+            .guide_context = Some(11);
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        let sequence = state.sequence;
+        assert!(state.observe_rejection(
+            Some((
+                sequence,
+                TeletextOutputTransitionPhase::Rejected(
+                    crate::transport::iptv::teletext_binding::TeletextOutputTransitionRejection::Proposal
+                )
+            )),
+            &updates,
+            9
+        ));
+        assert_eq!(state.rejected_context, Some(11));
+        backend
+            .store
+            .lock()
+            .unwrap()
+            .accepted
+            .as_mut()
+            .unwrap()
+            .guide_context = Some(12);
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        assert_eq!(state.cached.as_ref().unwrap().guide_context, Some(12));
+        assert!(state.rejected.is_none());
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cached_guide_stale_reauthorization_requires_no_recovery_and_keeps_its_original_cap() {
+        let mut initial = candidate(1, 9);
+        initial.guide_context = Some(10);
+        let cap = Instant::now() + Duration::from_secs(30);
+        initial.original_transition = Some(cap);
+        let backend = Backend::new(Some(initial.clone()));
+        let (updates, _control, _) = teletext_output_control_channel();
+        let mut state = MonitorState::new(Some(initial));
+        {
+            let mut store = backend.store.lock().unwrap();
+            let current = store.accepted.as_mut().unwrap();
+            current.guide_stale = true;
+            current.guide_revision = 2;
+            current.original_transition = Some(cap + Duration::from_secs(30));
+        }
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        let cached = state.cached.as_ref().unwrap();
+        assert!(cached.guide_stale);
+        assert_eq!(cached.original_transition, Some(cap));
+        let observed = Backend::generation_observation(cached)
+            .unwrap()
+            .guide_refresh
+            .unwrap();
+        assert_eq!(observed.snapshot_id, Some(10));
+        assert_eq!(observed.revision, 2);
+        assert!(observed.stale);
+        assert_eq!(state.sequence, 1);
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 0);
+        assert!(backend.confirmations.lock().unwrap().is_empty());
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        assert_eq!(state.sequence, 1);
     }
 }

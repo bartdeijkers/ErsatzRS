@@ -96,7 +96,7 @@ fn check_deadline(deadline: Instant) -> Result<(), NativeTeletextGenerationError
     }
 }
 
-async fn capture(
+pub(super) async fn capture(
     operation: &GuideGenerationContext<'_>,
     source: &TeletextGuideSourceFence,
 ) -> Result<CapturedTeletextGuide, NativeTeletextGenerationError> {
@@ -146,7 +146,7 @@ fn capture_error(
     }
 }
 
-fn qualify(
+pub(super) fn qualify(
     captured: &CapturedTeletextGuide,
     source: &TeletextGuideSourceFence,
     inputs: Option<&TeletextSavedGuideInputs>,

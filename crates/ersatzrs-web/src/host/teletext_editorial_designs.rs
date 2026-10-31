@@ -538,6 +538,24 @@ fn restore_stored_editorial_design(
     policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> Result<RestoredStoredTeletextDesign> {
+    qualify_refresh_editorial_seed(stored, parts, baseline, budget, policy, deadline)
+        .map(|(_, edited, _)| edited)
+}
+
+/// Reuse exact stored-byte, receipt and complete-effect authentication for a
+/// historical refresh seed. This grants no current source or publication role.
+pub(super) fn qualify_refresh_editorial_seed(
+    stored: TeletextDesignRevision,
+    parts: StoredDesignParts,
+    baseline: EditorialBaseline,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<(
+    RestoredStoredTeletextDesign,
+    RestoredStoredTeletextDesign,
+    ersatzrs_app::teletext_export_project::TeletextExportProject,
+)> {
     let (project, tti) = reload_limits(budget, &policy);
     let baseline = qualify_baseline(baseline, budget, policy.clone(), project, tti, deadline)?;
     let overlay = parts
@@ -552,7 +570,8 @@ fn restore_stored_editorial_design(
     if expected.bytes() != stored.document {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    qualify_rows(stored, parts, &baseline, policy, deadline)
+    let edited = qualify_rows(stored, parts, &baseline, policy, deadline)?;
+    Ok((baseline.original, edited, baseline.body.project))
 }
 
 fn check_request(

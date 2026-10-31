@@ -18466,8 +18466,11 @@ that original log/trace/stops remain canonical. The old full round is terminalre
 in both1.5 browser jobs;11 other applicable jobs succeeded, commitlint skipped.
 Closed53daf0dc retains bounded failure-only startup observations without changing
 readiness/shutdown limits or claiming a root-cause repair. Exact full required
-CI41185760621 on53daf0dc still runs; canonical CI receipt owns exact job status.
-Its Next job passes452/453 and fails the positive Burn-cache restart/lease
+CI41185760621 on53daf0dc completed red in Next and both1.5 browsers; canonical
+qualification.json ci preserves every original failure and scoped correction.
+Corrections a3151acc/e8821bbf are pushed on exact e8821bbf; full run41199534104
+has passed Next and general Chromium, with remaining browser jobs pending.
+The old Next job passed452/453 and failed the positive Burn-cache restart/lease
 fixture at its artificial5s filesystem budget. This is not a demonstrated cache
 corruption defect. A bounded fixture-only correction keeps paused Tokio time
 runnable during external I/O; production deadlines and all original identity/
@@ -18508,6 +18511,33 @@ bounded ownership and truthful stale/withdrawal Health through the existing
 coordinator mechanisms. Existing response monitors consume accepted output and
 invoke/publish nothing. TTI/sidecar/client/playback and integrated acceptance
 remain at P9B-01/P9B-02.
+Completed automatic SQL-guide update component2026-10-31, native Linux x64:
+opt-in policy4 persists separate immutable seeds/runtime snapshots; coalescing,
+leases and exact source/selection/scope confirmation retain manual originals,
+pending intent and accepted pointers. Canonical qualification.json guide_refresh
+owns76 focused successes by composition, latest29 monitor/3 admission controls,
+final current-preview SSR proof and strict affected checks. The flash fixture's
+protected provenance rejection was correct; retained producer controls fix only
+the fixture, with stronger protected-cell assertions and no permission change.
+Actual matched headed Chromium passes2/2 production0.1.1 cases without skips or
+retries: two profiles/themes under cap1 and a real graceful host replacement,
+SQL-title change, genuine one-minute coalescing, independent old→new page201
+text on one ordinary HTTP response, shared updated current raster, immutable
+historical raster/original/manual pointer and explicit Off revocation metadata.
+All three8MiB prefixes retain authored PMT after first activation and pass57
+existing TSDuck checks; AV decoding and ordinary Legacy/Hybrid/HLS smoke pass.
+The original51-withdrawal capture and later single promotion gap remain retained.
+Actual-release bounded admission and fully prepared/current-confirmed warm
+replacement close those demonstrated defects without renewed old authority.
+All46 observed exact native process identities drain; no cleanup is inferred
+from HTTP cancellation alone. The final current-view submit label reuses the
+existing nine-culture Show-preview text; rendering grants no edit/publication.
+This closes ordinary successful SQL update/startup discovery within this scope,
+not all P9B-01/02. Next finite package: actual failed-source/refresh last-good,
+visible stale Health and recovery while the separate output channel keeps AV.
+Remaining source-clock/config/failure/expiry boundaries, base-context editorial
+compatibility, production interchange, localized current-status and platform/
+client integration retain P9B-01/02 ownership; generic9A proof remains reused.
 '''
 
 [[milestone]]
