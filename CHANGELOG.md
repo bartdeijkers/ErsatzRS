@@ -49,6 +49,10 @@ release section when tagging a release.
 
 ### Added
 
+- Prepare teletext guide concepts from explicitly selected host TV-guide channels
+  through localized native admin forms, with bounded source capture, immutable
+  source-bound storage and exact preview. Static preparation remains independent;
+  live guide publication still requires separate current-role qualification.
 - Save explicit secondary-G0 agreements as receipt-bound teletext concepts
   through localized draft-preview forms, with a populated no-JavaScript path,
   preserving source documents, protected content and exact root undo. Reopening,

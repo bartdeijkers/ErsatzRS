@@ -398,6 +398,18 @@ generation authority. The interchange reference and P9A-04 own API details, proo
 and remaining integration gaps. Stored metadata is historical data, not an
 invocation receipt, editor permission or generation-activation authority.
 
+The production-guide admin connection reuses that source-bound capture under the
+same existing work hold as native preparation/save/preview. Explicit version-2
+authoring policy adds source/expansion/digest limits, and version-2 content names
+selected guide channel IDs. Version-1 static preparation keeps channels:[] and its
+closed schema. Base and effective Lua originals retain the historical source
+fence; neither this capture nor the form grants current-role or live-generation
+authority. The native guide request rechecks the source before and after invocation,
+without a second work-slot admission or renewed deadline. Missing policy/source
+capability refuses guide preparation while retaining static controls and ordinary
+playback. P9B-01 owns implementation/proof; the interchange reference owns numeric
+fields and compatibility. Current-role activation/refresh remains separate.
+
 The native command component now carries one explicit source page on its selected
 logical stream and applies bitmap decoder options to the first matching physical
 input, preserving a shared one-shot AV read. It follows the existing single

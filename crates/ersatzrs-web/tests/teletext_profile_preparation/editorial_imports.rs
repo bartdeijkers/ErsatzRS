@@ -78,7 +78,7 @@ mod drcs_companion;
 #[path = "editorial_imports/forward_header.rs"]
 mod forward_header;
 #[path = "editorial_http.rs"]
-mod http_routes;
+pub(crate) mod http_routes;
 #[path = "editorial_imports/live_client.rs"]
 pub(super) mod live_client;
 #[path = "editorial_imports/live_updates.rs"]

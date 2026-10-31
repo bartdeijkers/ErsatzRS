@@ -64,7 +64,7 @@ pub async fn off(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Res
 /// Validate selected static producers and save a new original draft. Publication
 /// is never part of this action, including when a subsequent preview fails.
 pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
-    use crate::host::teletext_authoring::prepare_static_teletext_design;
+    use crate::host::teletext_authoring::prepare_teletext_design;
     let channel = redirect_channel(&pairs);
     // Establish the original budget before parsing or reading host policy.
     let deadline = std::time::Instant::now()
@@ -77,7 +77,7 @@ pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pai
     let Some(deadline) = deadline else {
         return respond(channel, "draft", Err("expired"));
     };
-    match prepare_static_teletext_design(&state.application, request, deadline).await {
+    match prepare_teletext_design(&state, request, deadline).await {
         Ok(saved) => {
             let identity = saved.identity;
             let mut query = format!(
@@ -255,6 +255,7 @@ fn prepare_command(
 )> {
     use crate::host::teletext_authoring::TeletextAuthoringScope;
     use ersatzrs_domain::{TeletextPageAddress, TeletextPageNumber, TeletextSubcode};
+    let (pairs, guide_channel_ids) = guide_channel_fields(pairs)?;
     let mut fields = fields(pairs)?;
     let channel_id = positive(&take(&mut fields, "channel_id")?)?;
     let selection_digest = take(&mut fields, "selection_digest")?;
@@ -271,7 +272,10 @@ fn prepare_command(
         Some("effective") => TeletextAuthoringScope::Effective,
         _ => return Err("invalid-input"),
     };
-    if scope == TeletextAuthoringScope::Effective && fields.is_empty() {
+    if scope == TeletextAuthoringScope::Effective
+        && fields.is_empty()
+        && guide_channel_ids.is_empty()
+    {
         return Ok((
             crate::host::teletext_authoring::TeletextAuthoringPrepare {
                 scope,
@@ -306,11 +310,15 @@ fn prepare_command(
     if !fields.is_empty() {
         return Err("invalid-input");
     }
-    let mut input_json = serde_json::to_string(&serde_json::json!({
+    let mut input = serde_json::json!({
         "input_version": 1, "channel_id": channel_id, "entry_addon_id": addon,
         "entry": owner, "v1_region": region,
-    }))
-    .map_err(|_| "invalid-input")?;
+    });
+    if !guide_channel_ids.is_empty() {
+        input["input_version"] = serde_json::json!(2);
+        input["guide_channel_ids"] = serde_json::json!(guide_channel_ids);
+    }
+    let mut input_json = serde_json::to_string(&input).map_err(|_| "invalid-input")?;
     // Keep the submitted JSON untouched until the closed typed parser checks it;
     // a Value round-trip would silently discard duplicate lifecycle fields.
     input_json.pop();
@@ -327,6 +335,27 @@ fn prepare_command(
         },
         Some(owner),
     ))
+}
+
+fn guide_channel_fields(pairs: Pairs) -> ControlResult<(Pairs, Vec<i64>)> {
+    let mut other = Vec::with_capacity(pairs.len());
+    let mut channels = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (key, value) in pairs {
+        if key != "guide_channel_id" {
+            other.push((key, value));
+            continue;
+        }
+        if channels.len() >= ersatzrs_addon_contract::MAX_TELETEXT_PAGES_CHANNELS {
+            return Err("limit");
+        }
+        let id = positive(&value).map_err(|_| "invalid-input")?;
+        if !seen.insert(id) {
+            return Err("invalid-input");
+        }
+        channels.push(id);
+    }
+    Ok((other, channels))
 }
 
 fn preview_destination(owner: Option<ersatzrs_domain::TeletextPageAddress>) -> String {
@@ -648,4 +677,97 @@ async fn supported_edit(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod guide_prepare_tests {
+    use super::*;
+
+    fn prepared_fields() -> Pairs {
+        [
+            ("channel_id", "44".to_owned()),
+            ("selection_digest", "a".repeat(64)),
+            ("name", "Synthetic guide draft".to_owned()),
+            ("entry_addon_id", "org.example.guide".to_owned()),
+            ("entry_page", "200".to_owned()),
+            ("entry_subcode", "0000".to_owned()),
+            ("v1_region", "western_latin".to_owned()),
+            ("resource_transmissions", "[]".to_owned()),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.to_owned(), value))
+        .collect()
+    }
+
+    #[test]
+    fn guide_source_form_is_explicit_and_retains_the_static_version_one_shape() {
+        let (request, _) = prepare_command(prepared_fields()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request.input_json).unwrap();
+        assert_eq!(value["input_version"], 1);
+        assert!(value.get("guide_channel_ids").is_none());
+        let mut fields = prepared_fields();
+        fields.extend([
+            ("guide_channel_id".to_owned(), "12".to_owned()),
+            ("guide_channel_id".to_owned(), "2".to_owned()),
+        ]);
+        let lifecycle = r#"[{"page":100,"page":101}]"#;
+        fields
+            .iter_mut()
+            .find(|(key, _)| key == "resource_transmissions")
+            .unwrap()
+            .1 = lifecycle.to_owned();
+        let (request, _) = prepare_command(fields).unwrap();
+        assert!(request
+            .input_json
+            .ends_with(&format!("\"resource_transmissions\":{lifecycle}}}")));
+        let value: serde_json::Value = serde_json::from_str(&request.input_json).unwrap();
+        assert_eq!(value["input_version"], 2);
+        assert_eq!(value["guide_channel_ids"], serde_json::json!([12, 2]));
+        assert_eq!(value["channel_id"], 44);
+    }
+
+    #[test]
+    fn guide_source_form_rejects_bad_repeated_ids_without_relaxing_closed_fields() {
+        for value in ["", "0", "-1", "x", "9223372036854775808"] {
+            assert!(
+                guide_channel_fields(vec![("guide_channel_id".to_owned(), value.to_owned())])
+                    .is_err()
+            );
+        }
+        assert!(guide_channel_fields(vec![
+            ("guide_channel_id".to_owned(), "1".to_owned()),
+            ("guide_channel_id".to_owned(), "01".to_owned()),
+        ])
+        .is_err());
+        let fields: Pairs = (1..=ersatzrs_addon_contract::MAX_TELETEXT_PAGES_CHANNELS)
+            .map(|id| ("guide_channel_id".to_owned(), id.to_string()))
+            .collect();
+        assert!(guide_channel_fields(fields.clone()).is_ok());
+        let mut excessive = fields;
+        excessive.push(("guide_channel_id".to_owned(), "99999".to_owned()));
+        assert!(matches!(guide_channel_fields(excessive), Err("limit")));
+        for (key, value) in [("guide_channel_ids", "[1]"), ("entry_page", "201")] {
+            let mut fields = prepared_fields();
+            fields.push((key.to_owned(), value.to_owned()));
+            assert!(prepare_command(fields).is_err());
+        }
+    }
+
+    #[test]
+    fn effective_off_never_accepts_unexamined_guide_sources() {
+        let mut fields: Pairs = [
+            ("channel_id", "44".to_owned()),
+            ("selection_digest", "a".repeat(64)),
+            ("name", "Synthetic Off draft".to_owned()),
+            ("scope", "effective".to_owned()),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.to_owned(), value))
+        .collect();
+        let (request, owner) = prepare_command(fields.clone()).unwrap();
+        assert!(request.input_json.is_empty());
+        assert!(owner.is_none());
+        fields.push(("guide_channel_id".to_owned(), "12".to_owned()));
+        assert!(prepare_command(fields).is_err());
+    }
 }

@@ -7,6 +7,7 @@ use ersatzrs_app::{
     teletext_design_documents::{
         decode_teletext_effective_design_documents,
         encode_teletext_effective_design_documents_with_requests,
+        encode_teletext_effective_design_documents_with_source,
         EncodedEffectiveTeletextDesignDocuments, TeletextDesignDocumentBudget,
         TeletextEffectiveDesignDocumentInput, TeletextRestoredEffectiveDesignDocumentParts,
         TeletextSavedDocumentSource, TeletextSavedEditPolicy, TeletextSavedGuideInputs,
@@ -320,11 +321,19 @@ pub(super) async fn save_effective_original_teletext_design_candidate_with_hold(
                 }),
                 resource_transmissions: &transmissions,
             };
-            let document = encode_teletext_effective_design_documents_with_requests(
-                input,
-                candidate.requests(),
-                budget,
-            )?;
+            let document = match candidate.guide_source() {
+                Some(source) => encode_teletext_effective_design_documents_with_source(
+                    input,
+                    candidate.requests(),
+                    source,
+                    budget,
+                )?,
+                None => encode_teletext_effective_design_documents_with_requests(
+                    input,
+                    candidate.requests(),
+                    budget,
+                )?,
+            };
             let hash = digest(document.bytes());
             check_deadline(deadline)?;
             Ok::<_, NativeTeletextDesignError>((candidate, document, hash))

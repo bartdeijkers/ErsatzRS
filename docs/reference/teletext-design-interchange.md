@@ -5268,12 +5268,16 @@ without adopting test bounds as production defaults.
 P9A-04 holds current implementation and browser evidence and all remaining
 acceptance criteria.
 
-### Static original drafts and exact browser previews
+### Original drafts and exact browser previews
 
-Channel profile administration now has a separate **Validate and save draft**
-action. This first connection supplies `channels: []` explicitly: it is a static
-synthetic/page-design workflow, without a TV-guide source fence. It does not
-establish fresh guide publication or remove the remaining guide acceptance.
+Channel profile administration has a separate **Validate and save draft** action.
+With no TV-guide channels selected it retains the static `channels: []` workflow.
+An explicit source selection under authoring policy version 2 instead captures
+those channels from the host guide for the current three civil dates. The host
+supplies the locale, named clock and capture instant. No channel is implicitly
+included, and neither path installs packages or publishes output. Source-bound
+guide concepts are historical snapshots: they can be saved and previewed, but
+current-role qualification remains required before live guide publication.
 
 Configure explicit version-1 `teletext.authoring.policy` limits through the existing
 application configuration mechanism. Its required `design`, `input`, `validation`,
@@ -5286,6 +5290,27 @@ authoring action; ordinary playback continues. The Health overlay reports this
 configuration independently of output policy or actual broadcast readiness.
 Test fixtures are explicit verification inputs, not production defaults or a
 worst-case compiler/RSS acceptance.
+
+Authoring policy version 2 retains all those required sections and additionally
+requires a closed `guide_limits` object with `max_records`, `max_source_bytes`,
+`max_model_nodes`, `max_model_bytes`, `max_digest_fields` and `max_digest_bytes`.
+All six are explicit representable nonnegative integers; zero is a restrictive
+budget, not a default. Capture and its before/after checks share cumulative source
+and expansion budgets and the original operation deadline. Policy version 1
+rejects this field, including null. Version 2 rejects absent/null limits. The
+optional guide selector is unavailable when this policy or its channel list is
+unavailable; static preparation and Off remain independent.
+
+Selecting one or more channels submits closed authoring input version 2 with
+required `guide_channel_ids`. IDs must be positive, unique and nonempty, with at
+most the existing 256-channel wire limit. The native form uses repeated
+`guide_channel_id` fields; it does not accept an unvalidated JSON fragment or
+silently include all channels. Empty selection retains input version 1 exactly.
+Version 1 rejects the new field, and guide input version 2 requires guide-enabled
+policy version 2. Older runtimes reject these explicit versions. The existing
+static-only native function cannot ignore a submitted guide selection. Both Base
+and effective Lua concept preparation preserve the source association alongside
+exact request bytes; reloading never substitutes current data for saved originals.
 
 Trusted limits and per-channel content are separate. Native form submission carries
 a draft name, the exact opaque selection observation, an explicit opening-page

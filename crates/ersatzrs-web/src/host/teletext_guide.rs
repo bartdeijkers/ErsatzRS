@@ -163,7 +163,7 @@ impl CapturedTeletextGuide {
         Ok(candidate)
     }
 
-    async fn recheck_context(
+    pub(super) async fn recheck_context(
         &self,
         budget: &mut GuideReadBudget,
     ) -> Result<(), TeletextGuideCaptureError> {
@@ -200,7 +200,7 @@ impl CapturedTeletextGuide {
         }
     }
 
-    fn borrow_channels(&self) -> Vec<TeletextGuideChannel<'_>> {
+    pub(super) fn borrow_channels(&self) -> Vec<TeletextGuideChannel<'_>> {
         self.snapshot
             .channels()
             .iter()
@@ -213,7 +213,7 @@ impl CapturedTeletextGuide {
             .collect()
     }
 
-    fn context<'a>(
+    pub(super) fn context<'a>(
         &'a self,
         generation: &'a str,
         channels: &'a [TeletextGuideChannel<'a>],
@@ -274,10 +274,33 @@ pub async fn capture_source_bound_teletext_guide(
     digest_limits: GuideSnapshotDigestLimits,
 ) -> Result<CapturedTeletextGuide, TeletextGuideCaptureError> {
     let guard = super::teletext_work::begin(application, Some(deadline)).await?;
+    capture_source_bound_teletext_guide_with_hold(
+        pool,
+        channel_ids,
+        captured_at,
+        budget,
+        deadline,
+        digest_limits,
+        guard.hold_work(),
+    )
+    .await
+}
+
+/// Reuse the author's existing admission and original deadline. The actual
+/// fingerprint worker retains this hold if its awaiting caller is cancelled.
+pub(super) async fn capture_source_bound_teletext_guide_with_hold(
+    pool: &DbPool,
+    channel_ids: &[i64],
+    captured_at: DateTime<Utc>,
+    budget: &mut GuideReadBudget,
+    deadline: Instant,
+    digest_limits: GuideSnapshotDigestLimits,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
+) -> Result<CapturedTeletextGuide, TeletextGuideCaptureError> {
     let captured = capture_teletext_guide(pool, channel_ids, captured_at, budget, deadline).await?;
     let captured = tokio::time::timeout_at(
         tokio::time::Instant::from_std(deadline),
-        super::teletext_work::spawn_blocking(guard.hold_work(), move || {
+        super::teletext_work::spawn_blocking(hold, move || {
             check_deadline(deadline)?;
             let context_digest = captured.snapshot.context_digest(digest_limits)?;
             let source = TeletextGuideSourceFence {

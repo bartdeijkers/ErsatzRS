@@ -58,6 +58,7 @@ use super::teletext_runtime_policy::{
 use super::teletext_work::{self, TeletextWorkError};
 
 mod effective;
+mod guide;
 mod metadata;
 mod object_choices;
 mod object_removals;
@@ -742,6 +743,18 @@ pub async fn observe_teletext_authoring_selection(
     .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))?
 }
 
+/// Display eligibility only; submission rereads the complete trusted policy.
+/// Missing/invalid guide configuration never disables static authoring or Off.
+pub(crate) async fn guide_preparation_configured(application: &ApplicationServices) -> bool {
+    application
+        .get_optional_setting(NATIVE_TELETEXT_AUTHORING_POLICY_SETTING)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|raw| parse_native_teletext_authoring_policy(&raw).ok())
+        .is_some_and(|policy| policy.guide_limits.is_some())
+}
+
 /// Invoke explicitly selected installed profiles with channels:[], validate,
 /// save NEW immutable originals and recompile/render that exact stored revision.
 /// One hold covers policy I/O, every native stage and the joined raster worker.
@@ -750,6 +763,35 @@ pub async fn observe_teletext_authoring_selection(
 /// Pre-save failures return no draft; post-save failures retain its identity.
 pub async fn prepare_static_teletext_design(
     application: &ApplicationServices,
+    request: TeletextAuthoringPrepare,
+    deadline: Instant,
+) -> Result<TeletextAuthoringSaved, TeletextAuthoringError> {
+    // Keep the optional guide state machine out of existing static callers'
+    // async frames. This owns no task or additional admission.
+    Box::pin(prepare_design_inner(application, None, request, deadline)).await
+}
+
+/// Prepare a native admin draft, optionally from explicitly selected SQL guide
+/// channels under versioned policy/input. Saving never selects live output.
+/// # Errors
+/// Preserves admission, configuration, source, encoding and storage fences.
+pub async fn prepare_teletext_design(
+    state: &super::state::AppState,
+    request: TeletextAuthoringPrepare,
+    deadline: Instant,
+) -> Result<TeletextAuthoringSaved, TeletextAuthoringError> {
+    Box::pin(prepare_design_inner(
+        &state.application,
+        Some(&state.pool),
+        request,
+        deadline,
+    ))
+    .await
+}
+
+async fn prepare_design_inner(
+    application: &ApplicationServices,
+    pool: Option<&ersatzrs_infra::db::DbPool>,
     request: TeletextAuthoringPrepare,
     deadline: Instant,
 ) -> Result<TeletextAuthoringSaved, TeletextAuthoringError> {
@@ -764,7 +806,7 @@ pub async fn prepare_static_teletext_design(
     }
     let operation = Operation::begin(application, deadline).await?;
     if request.scope == TeletextAuthoringScope::Effective {
-        return effective::prepare_design(application, request, &operation).await;
+        return effective::prepare_design(application, request, &operation, pool).await;
     }
     let input = parse_native_teletext_authoring_input(&request.input_json, &operation.policy)
         .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
@@ -774,47 +816,18 @@ pub async fn prepare_static_teletext_design(
     let owner = input.entry();
     let selection = observed_selection(application, request.channel_id, operation.deadline).await?;
     let selection = checked_selection(selection, &request.selection_digest, &operation).await?;
-    let locale_raw = before(
-        operation.deadline,
-        application.get_optional_setting("pages.language"),
-    )
-    .await?
-    .map_err(|_| failure(TeletextAuthoringStatus::Unavailable))?;
-    let locale = super::teletext_guide::resolve_locale(locale_raw.as_deref())
-        .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
-    let clock =
-        ProgrammeClock::system().map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
-    let timezone = clock
-        .iana_name()
-        .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?;
-    let locales = super::teletext_guide::supported_locales();
-    let generation = uuid::Uuid::new_v4().to_string();
-    let context = SuppliedTeletextGuideContext {
-        generation: &generation,
-        locale,
-        supported_locales: &locales,
-        timezone,
-        captured_at: Utc::now(),
-        channels: &[],
+    let candidate = if input.guide_channel_ids().is_some() {
+        guide::prepare_base(
+            application,
+            pool.ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?,
+            &input,
+            &selection,
+            &operation,
+        )
+        .await?
+    } else {
+        prepare_static_candidate(application, &input, &selection, &operation).await?
     };
-    let policy = operation
-        .policy
-        .encoding_policy(&input)
-        .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
-    let candidate = prepare_channel_teletext_document_candidate_with_hold(
-        application,
-        request.channel_id,
-        Some(input.entry_addon_id()),
-        TeletextChannelDocumentPreparation {
-            context: &context,
-            expected_selection: Some(&selection),
-            deadline: operation.deadline,
-        },
-        policy,
-        operation.guard.hold_work(),
-    )
-    .await
-    .map_err(channel_error)?;
     if candidate.encoded().is_none() {
         return Err(failure(TeletextAuthoringStatus::Off));
     }
@@ -852,6 +865,58 @@ pub async fn prepare_static_teletext_design(
     )
     .await;
     Ok(TeletextAuthoringSaved { identity, preview })
+}
+
+async fn prepare_static_candidate(
+    application: &ApplicationServices,
+    input: &super::teletext_runtime_policy::NativeTeletextAuthoringInput,
+    selection: &TeletextChannelSelectionSnapshot,
+    operation: &Operation,
+) -> Result<
+    super::teletext_channel_documents::EncodedChannelTeletextDocumentCandidate,
+    TeletextAuthoringError,
+> {
+    let locale_raw = before(
+        operation.deadline,
+        application.get_optional_setting("pages.language"),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::Unavailable))?;
+    let locale = super::teletext_guide::resolve_locale(locale_raw.as_deref())
+        .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
+    let clock =
+        ProgrammeClock::system().map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
+    let timezone = clock
+        .iana_name()
+        .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?;
+    let locales = super::teletext_guide::supported_locales();
+    let generation = uuid::Uuid::new_v4().to_string();
+    let context = SuppliedTeletextGuideContext {
+        generation: &generation,
+        locale,
+        supported_locales: &locales,
+        timezone,
+        captured_at: Utc::now(),
+        channels: &[],
+    };
+    let policy = operation
+        .policy
+        .encoding_policy(input)
+        .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
+    prepare_channel_teletext_document_candidate_with_hold(
+        application,
+        input.channel_id(),
+        Some(input.entry_addon_id()),
+        TeletextChannelDocumentPreparation {
+            context: &context,
+            expected_selection: Some(selection),
+            deadline: operation.deadline,
+        },
+        policy,
+        operation.guard.hold_work(),
+    )
+    .await
+    .map_err(channel_error)
 }
 
 /// Recompile a historical immutable revision without invoking any package.

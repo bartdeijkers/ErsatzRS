@@ -603,6 +603,7 @@ mod tests {
             authoring_error: None,
             effective_authoring: None,
             effective_authoring_error: None,
+            guide_channels: Some(Vec::new()),
             addons: Vec::new(),
         };
         let html = owner.with(|| {

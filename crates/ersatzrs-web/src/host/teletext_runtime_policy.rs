@@ -11,6 +11,7 @@ use ersatzrs_app::{
     teletext_design_documents::TeletextDesignDocumentBudget,
     teletext_profile_documents::TeletextProfileDocumentBudget,
 };
+use ersatzrs_core::repositories::TeletextGuideSourceCheckLimits;
 use ersatzrs_domain::{
     TeletextDeclaredServiceBudget, TeletextEnhancementCollectionBudget,
     TeletextObjectCatalogBudget, TeletextProducerCompositionBudget, TeletextServiceBudget,
@@ -120,6 +121,8 @@ pub(crate) struct NativeTeletextAuthoringPolicy {
     pub(crate) design: TeletextDesignDocumentBudget,
     pub(crate) preview: super::teletext_preview::TeletextPreviewBudget,
     pub(crate) operation_timeout: Duration,
+    /// Explicit SQL/model/fingerprint bounds for version-2 guide preparation.
+    pub(crate) guide_limits: Option<TeletextGuideSourceCheckLimits>,
     input: TeletextChannelDocumentInputBudget,
     validation: TeletextProfileDocumentBudget,
     composition: TeletextProducerCompositionBudget,
@@ -133,6 +136,7 @@ pub(crate) struct NativeTeletextAuthoringInput {
     entry: ersatzrs_domain::TeletextPageAddress,
     v1_region: ersatzrs_app::teletext_design_documents::TeletextSavedV1Region,
     transmissions: Vec<LifecycleInput>,
+    guide_channel_ids: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -160,9 +164,12 @@ pub(crate) fn parse_native_teletext_authoring_policy(
     check_authoring_bytes(raw)?;
     let dto: AuthoringPolicy =
         serde_json::from_str(raw).map_err(|_| TeletextAuthoringPolicyError::InvalidJson)?;
-    if dto.version != 1 {
-        return Err(TeletextAuthoringPolicyError::UnsupportedVersion);
-    }
+    let guide_limits = match (dto.version, dto.guide_limits.0) {
+        (1, None) => None,
+        (1, Some(_)) | (2, None) => return Err(TeletextAuthoringPolicyError::InvalidJson),
+        (2, Some(limits)) => Some(limits.into()),
+        _ => return Err(TeletextAuthoringPolicyError::UnsupportedVersion),
+    };
     let operation_timeout = Duration::from_millis(dto.operation_timeout_ms);
     if operation_timeout.is_zero() || Instant::now().checked_add(operation_timeout).is_none() {
         return Err(TeletextAuthoringPolicyError::InvalidTimeout);
@@ -172,6 +179,7 @@ pub(crate) fn parse_native_teletext_authoring_policy(
         design: dto.design.with_validation(validation),
         preview: dto.preview.into(),
         operation_timeout,
+        guide_limits,
         input: dto.input.into(),
         validation,
         composition: dto.composition.into(),
@@ -189,9 +197,15 @@ pub(crate) fn parse_native_teletext_authoring_input(
     check_authoring_bytes(raw)?;
     let dto: AuthoringInput =
         serde_json::from_str(raw).map_err(|_| TeletextAuthoringPolicyError::InvalidJson)?;
-    if dto.input_version != 1 {
-        return Err(TeletextAuthoringPolicyError::UnsupportedVersion);
-    }
+    let guide_channel_ids = match (dto.input_version, dto.guide_channel_ids.0) {
+        (1, None) => None,
+        (1, Some(_)) | (2, None) => return Err(TeletextAuthoringPolicyError::InvalidJson),
+        (2, Some(channels)) => {
+            check_guide_channels(&channels, policy)?;
+            Some(channels)
+        }
+        _ => return Err(TeletextAuthoringPolicyError::UnsupportedVersion),
+    };
     if dto.channel_id <= 0
         || ersatzrs_addon_contract::validate_addon_id(&dto.entry_addon_id).is_err()
     {
@@ -207,6 +221,7 @@ pub(crate) fn parse_native_teletext_authoring_input(
         entry: dto.entry,
         v1_region: dto.v1_region,
         transmissions: dto.resource_transmissions,
+        guide_channel_ids,
     })
 }
 
@@ -219,6 +234,9 @@ impl NativeTeletextAuthoringInput {
     }
     pub(crate) const fn entry(&self) -> ersatzrs_domain::TeletextPageAddress {
         self.entry
+    }
+    pub(crate) fn guide_channel_ids(&self) -> Option<&[i64]> {
+        self.guide_channel_ids.as_deref()
     }
 }
 
@@ -257,6 +275,9 @@ impl NativeTeletextAuthoringPolicy {
             TeletextResourceFullUpdate, TeletextServiceResourceTransmission,
         };
         check_lifecycle(&input.transmissions, self.design.max_resource_transmissions)?;
+        if let Some(channels) = input.guide_channel_ids() {
+            check_guide_channels(channels, self)?;
+        }
         Ok(TeletextChannelDocumentEncodingPolicy {
             input: self.input,
             validation: self.validation,
@@ -309,6 +330,24 @@ fn check_lifecycle(
     Ok(())
 }
 
+fn check_guide_channels(
+    channels: &[i64],
+    policy: &NativeTeletextAuthoringPolicy,
+) -> Result<(), TeletextAuthoringPolicyError> {
+    if policy.guide_limits.is_none() {
+        return Err(TeletextAuthoringPolicyError::InvalidJson);
+    }
+    if channels.is_empty() || channels.len() > ersatzrs_addon_contract::MAX_TELETEXT_PAGES_CHANNELS
+    {
+        return Err(TeletextAuthoringPolicyError::InvalidOwner);
+    }
+    let mut identities = std::collections::BTreeSet::new();
+    if channels.iter().any(|&id| id <= 0 || !identities.insert(id)) {
+        return Err(TeletextAuthoringPolicyError::InvalidOwner);
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AuthoringPolicy {
@@ -320,6 +359,64 @@ struct AuthoringPolicy {
     composition: ProducerCompositionLimits,
     encoding: EncodingLimits,
     preview: PreviewLimits,
+    #[serde(default)]
+    guide_limits: OptionalGuideLimits,
+}
+
+/// Missing is version-1 absence; an explicit null/sequence is never a policy.
+#[derive(Default)]
+struct OptionalGuideLimits(Option<GuideLimits>);
+
+impl<'de> Deserialize<'de> for OptionalGuideLimits {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Object;
+        impl<'de> serde::de::Visitor<'de> for Object {
+            type Value = OptionalGuideLimits;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an explicit guide preparation limits object")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                map: A,
+            ) -> Result<Self::Value, A::Error> {
+                GuideLimits::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+                    .map(|limits| OptionalGuideLimits(Some(limits)))
+            }
+        }
+        deserializer.deserialize_map(Object)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuideLimits {
+    #[serde(rename = "max_records")]
+    records: usize,
+    #[serde(rename = "max_source_bytes")]
+    source_bytes: usize,
+    #[serde(rename = "max_model_nodes")]
+    model_nodes: usize,
+    #[serde(rename = "max_model_bytes")]
+    model_bytes: usize,
+    #[serde(rename = "max_digest_fields")]
+    digest_fields: usize,
+    #[serde(rename = "max_digest_bytes")]
+    digest_bytes: usize,
+}
+
+impl From<GuideLimits> for TeletextGuideSourceCheckLimits {
+    fn from(value: GuideLimits) -> Self {
+        Self {
+            max_records: value.records,
+            max_source_bytes: value.source_bytes,
+            max_model_nodes: value.model_nodes,
+            max_model_bytes: value.model_bytes,
+            max_digest_fields: value.digest_fields,
+            max_digest_bytes: value.digest_bytes,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -358,6 +455,17 @@ struct AuthoringInput {
     entry: ersatzrs_domain::TeletextPageAddress,
     v1_region: ersatzrs_app::teletext_design_documents::TeletextSavedV1Region,
     resource_transmissions: Vec<LifecycleInput>,
+    #[serde(default)]
+    guide_channel_ids: OptionalGuideChannels,
+}
+
+#[derive(Default)]
+struct OptionalGuideChannels(Option<Vec<i64>>);
+
+impl<'de> Deserialize<'de> for OptionalGuideChannels {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Vec::<i64>::deserialize(deserializer).map(|channels| Self(Some(channels)))
+    }
 }
 
 // Mirror the existing saved lifecycle field types and spelling. Saved resource
@@ -1533,6 +1641,24 @@ mod tests {
         parse_native_teletext_authoring_policy(&value.to_string()).unwrap()
     }
 
+    fn guide_authoring_fixture() -> Value {
+        let mut value = authoring_fixture();
+        value["version"] = json!(2);
+        value["guide_limits"] = json!({
+            "max_records":1000,"max_source_bytes":1_048_576,
+            "max_model_nodes":10_000,"max_model_bytes":16_777_216,
+            "max_digest_fields":100_000,"max_digest_bytes":16_777_216
+        });
+        value
+    }
+
+    fn guide_authoring_input() -> Value {
+        let mut value = authoring_input(1, "org.ersatzrs.addon.tvguide-teletext", 200);
+        value["input_version"] = json!(2);
+        value["guide_channel_ids"] = json!([2, 1, i64::MAX]);
+        value
+    }
+
     fn lifecycle() -> Value {
         json!({"resource":{"kind":"pop","page":{"magazine":2,"page":160},
             "logical_subpage":0},"counter":3,"update":"changed","last_subpage":true})
@@ -1553,6 +1679,252 @@ mod tests {
         match parse_native_teletext_authoring_input(&value.to_string(), policy) {
             Err(actual) => assert_eq!(actual, expected),
             Ok(_) => panic!("invalid authoring input was accepted"),
+        }
+    }
+
+    #[test]
+    fn authoring_guide_versions_preserve_static_inputs_and_exact_source_selection() {
+        let static_policy = authoring_policy(&authoring_fixture());
+        assert!(static_policy.guide_limits.is_none());
+        let policy = authoring_policy(&guide_authoring_fixture());
+        assert_eq!(
+            policy.guide_limits,
+            Some(TeletextGuideSourceCheckLimits {
+                max_records: 1000,
+                max_source_bytes: 1_048_576,
+                max_model_nodes: 10_000,
+                max_model_bytes: 16_777_216,
+                max_digest_fields: 100_000,
+                max_digest_bytes: 16_777_216
+            })
+        );
+        let mut exhausted = guide_authoring_fixture();
+        for value in exhausted["guide_limits"]
+            .as_object_mut()
+            .unwrap()
+            .values_mut()
+        {
+            *value = json!(0);
+        }
+        assert_eq!(
+            authoring_policy(&exhausted).guide_limits,
+            Some(TeletextGuideSourceCheckLimits {
+                max_records: 0,
+                max_source_bytes: 0,
+                max_model_nodes: 0,
+                max_model_bytes: 0,
+                max_digest_fields: 0,
+                max_digest_bytes: 0,
+            })
+        );
+        let input = guide_authoring_input();
+        let checked = parse_native_teletext_authoring_input(&input.to_string(), &policy).unwrap();
+        assert_eq!(
+            checked.guide_channel_ids(),
+            Some([2, 1, i64::MAX].as_slice())
+        );
+        assert_eq!(
+            checked.entry(),
+            ersatzrs_domain::TeletextPageAddress {
+                page: ersatzrs_domain::TeletextPageNumber::new(200).unwrap(),
+                subcode: ersatzrs_domain::TeletextSubcode::new(16).unwrap()
+            }
+        );
+        for selected_policy in [&static_policy, &policy] {
+            let checked = parse_native_teletext_authoring_input(
+                &authoring_input(1, "org.test.pages", 200).to_string(),
+                selected_policy,
+            )
+            .unwrap();
+            assert!(checked.guide_channel_ids().is_none());
+        }
+        assert_authoring_input_error(
+            &input,
+            &static_policy,
+            TeletextAuthoringPolicyError::InvalidJson,
+        );
+        assert!(matches!(
+            static_policy.encoding_policy(&checked),
+            Err(TeletextAuthoringPolicyError::InvalidJson)
+        ));
+        assert!(policy.encoding_policy(&checked).is_ok());
+        let mut boundary = input;
+        boundary["guide_channel_ids"] =
+            json!((1..=ersatzrs_addon_contract::MAX_TELETEXT_PAGES_CHANNELS).collect::<Vec<_>>());
+        assert_eq!(
+            parse_native_teletext_authoring_input(&boundary.to_string(), &policy)
+                .unwrap()
+                .guide_channel_ids()
+                .unwrap()
+                .len(),
+            ersatzrs_addon_contract::MAX_TELETEXT_PAGES_CHANNELS
+        );
+    }
+
+    #[test]
+    fn authoring_guide_policy_requires_an_explicit_closed_limits_object() {
+        let baseline = guide_authoring_fixture();
+        let mut missing = baseline.clone();
+        missing.as_object_mut().unwrap().remove("guide_limits");
+        assert_authoring_error(&missing, TeletextAuthoringPolicyError::InvalidJson);
+        for value in [
+            Value::Null,
+            json!([]),
+            json!([1, 2, 3, 4, 5, 6]),
+            json!("limits"),
+            json!(false),
+        ] {
+            let mut malformed = baseline.clone();
+            malformed["guide_limits"] = value;
+            assert_authoring_error(&malformed, TeletextAuthoringPolicyError::InvalidJson);
+        }
+        for value in [Value::Null, baseline["guide_limits"].clone(), json!([])] {
+            let mut old = authoring_fixture();
+            old["guide_limits"] = value;
+            assert_authoring_error(&old, TeletextAuthoringPolicyError::InvalidJson);
+        }
+        let keys: Vec<_> = baseline["guide_limits"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        for key in keys {
+            let mut missing = baseline.clone();
+            missing["guide_limits"]
+                .as_object_mut()
+                .unwrap()
+                .remove(&key);
+            assert_authoring_error(&missing, TeletextAuthoringPolicyError::InvalidJson);
+            for invalid in [
+                Value::Null,
+                json!(-1),
+                json!(1.5),
+                json!("32"),
+                json!(false),
+            ] {
+                let mut malformed = baseline.clone();
+                malformed["guide_limits"][&key] = invalid;
+                assert_authoring_error(&malformed, TeletextAuthoringPolicyError::InvalidJson);
+            }
+            // Zero is an explicit exhausted budget, never an inferred default.
+            let mut zero = baseline.clone();
+            zero["guide_limits"][&key] = json!(0);
+            assert!(authoring_policy(&zero).guide_limits.is_some());
+            let original = baseline["guide_limits"][&key].to_string();
+            let raw = baseline.to_string().replacen(
+                &format!("\"{key}\":{original}"),
+                &format!("\"{key}\":{}", usize::MAX as u128 + 1),
+                1,
+            );
+            assert!(matches!(
+                parse_native_teletext_authoring_policy(&raw),
+                Err(TeletextAuthoringPolicyError::InvalidJson)
+            ));
+        }
+        let mut unknown = baseline;
+        unknown["guide_limits"]["private-budget"] = json!(1);
+        assert_authoring_error(&unknown, TeletextAuthoringPolicyError::InvalidJson);
+    }
+
+    #[test]
+    fn authoring_guide_input_rejects_missing_or_invalid_source_identities() {
+        let policy = authoring_policy(&guide_authoring_fixture());
+        let baseline = guide_authoring_input();
+        let mut missing = baseline.clone();
+        missing.as_object_mut().unwrap().remove("guide_channel_ids");
+        assert_authoring_input_error(&missing, &policy, TeletextAuthoringPolicyError::InvalidJson);
+        for value in [
+            Value::Null,
+            json!({}),
+            json!("2"),
+            json!(["2"]),
+            json!([1.5]),
+            json!([true]),
+        ] {
+            let mut invalid = baseline.clone();
+            invalid["guide_channel_ids"] = value;
+            assert_authoring_input_error(
+                &invalid,
+                &policy,
+                TeletextAuthoringPolicyError::InvalidJson,
+            );
+        }
+        for value in [
+            json!([]),
+            json!([0]),
+            json!([-1]),
+            json!([2, 2]),
+            json!(
+                (1..=ersatzrs_addon_contract::MAX_TELETEXT_PAGES_CHANNELS + 1).collect::<Vec<_>>()
+            ),
+        ] {
+            let mut invalid = baseline.clone();
+            invalid["guide_channel_ids"] = value;
+            assert_authoring_input_error(
+                &invalid,
+                &policy,
+                TeletextAuthoringPolicyError::InvalidOwner,
+            );
+        }
+        for value in [Value::Null, json!([]), json!([2])] {
+            let mut old = authoring_input(1, "org.test.pages", 200);
+            old["guide_channel_ids"] = value;
+            assert_authoring_input_error(&old, &policy, TeletextAuthoringPolicyError::InvalidJson);
+        }
+        let mut unknown = baseline.clone();
+        unknown["private-channel-list"] = json!([2]);
+        assert_authoring_input_error(&unknown, &policy, TeletextAuthoringPolicyError::InvalidJson);
+        let overflow = baseline.to_string().replacen(
+            &i64::MAX.to_string(),
+            &(i128::from(i64::MAX) + 1).to_string(),
+            1,
+        );
+        assert!(matches!(
+            parse_native_teletext_authoring_input(&overflow, &policy),
+            Err(TeletextAuthoringPolicyError::InvalidJson)
+        ));
+    }
+
+    #[test]
+    fn authoring_guide_fields_reject_duplicates_without_echoing_contents() {
+        let policy_value = guide_authoring_fixture();
+        let policy = authoring_policy(&policy_value);
+        let raw = policy_value.to_string();
+        for duplicate in [
+            raw.replacen(
+                "\"guide_limits\":",
+                &format!(
+                    "\"guide_limits\":{},\"guide_limits\":",
+                    policy_value["guide_limits"]
+                ),
+                1,
+            ),
+            raw.replacen("\"max_records\":", "\"max_records\":1,\"max_records\":", 1),
+        ] {
+            assert!(matches!(
+                parse_native_teletext_authoring_policy(&duplicate),
+                Err(TeletextAuthoringPolicyError::InvalidJson)
+            ));
+        }
+        let raw = guide_authoring_input().to_string();
+        let duplicate = raw.replacen(
+            "\"guide_channel_ids\":",
+            "\"guide_channel_ids\":[1],\"guide_channel_ids\":",
+            1,
+        );
+        assert!(matches!(
+            parse_native_teletext_authoring_input(&duplicate, &policy),
+            Err(TeletextAuthoringPolicyError::InvalidJson)
+        ));
+        let mut private = policy_value;
+        private["guide_limits"]["private-key"] = json!("private-value");
+        let Err(error) = parse_native_teletext_authoring_policy(&private.to_string()) else {
+            panic!("unknown guide limit accepted")
+        };
+        for rendered in [error.to_string(), format!("{error:?}")] {
+            assert!(!rendered.contains("private-key"));
+            assert!(!rendered.contains("private-value"));
         }
     }
 
@@ -1920,10 +2292,10 @@ mod tests {
             Err(TeletextAuthoringPolicyError::TooLarge)
         ));
         let mut version = value.clone();
-        version["version"] = json!(2);
+        version["version"] = json!(3);
         assert_authoring_error(&version, TeletextAuthoringPolicyError::UnsupportedVersion);
         let mut input_version = input.clone();
-        input_version["input_version"] = json!(2);
+        input_version["input_version"] = json!(3);
         assert_authoring_input_error(
             &input_version,
             &policy,

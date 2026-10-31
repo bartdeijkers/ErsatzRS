@@ -35,9 +35,10 @@ pub(super) async fn prepare_design(
     application: &ApplicationServices,
     request: TeletextAuthoringPrepare,
     operation: &Operation,
+    pool: Option<&ersatzrs_infra::db::DbPool>,
 ) -> Result<TeletextAuthoringSaved, TeletextAuthoringError> {
     let selection = scope::observed(application, request.channel_id, operation.deadline).await?;
-    let selection = scope::checked(selection, request.selection_digest, operation).await?;
+    let selection = scope::checked(selection, request.selection_digest.clone(), operation).await?;
     let absent = !selection
         .bindings
         .iter()
@@ -62,6 +63,45 @@ pub(super) async fn prepare_design(
             |input| operation.policy.encoding_policy(input),
         )
         .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
+    let candidate = if input
+        .as_ref()
+        .is_some_and(|input| input.guide_channel_ids().is_some())
+    {
+        super::guide::prepare_effective(
+            application,
+            pool.ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?,
+            input
+                .as_ref()
+                .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?,
+            &selection,
+            operation,
+        )
+        .await?
+    } else {
+        prepare_static_candidate(
+            application,
+            input.as_ref(),
+            policy,
+            &selection,
+            operation,
+            absent,
+        )
+        .await?
+    };
+    if candidate.selection() != &selection || candidate.encoded().is_none() != absent {
+        return Err(failure(TeletextAuthoringStatus::SelectionChanged));
+    }
+    save_and_preview(application, request, input.as_ref(), candidate, operation).await
+}
+
+async fn prepare_static_candidate(
+    application: &ApplicationServices,
+    input: Option<&NativeTeletextAuthoringInput>,
+    policy: crate::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+    selection: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+    operation: &Operation,
+    absent: bool,
+) -> Result<crate::host::teletext_effective_channel_documents::EncodedEffectiveChannelTeletextDocumentCandidate, TeletextAuthoringError>{
     let (locale, timezone, locales) = context_configuration(application, operation, absent).await?;
     let generation = uuid::Uuid::new_v4().to_string();
     let context = SuppliedTeletextGuideContext {
@@ -72,22 +112,27 @@ pub(super) async fn prepare_design(
         captured_at: Utc::now(),
         channels: &[],
     };
-    let candidate = prepare_effective_channel_teletext_document_candidate_checked_with_hold(
+    prepare_effective_channel_teletext_document_candidate_checked_with_hold(
         application,
-        request.channel_id,
-        input
-            .as_ref()
-            .map(NativeTeletextAuthoringInput::entry_addon_id),
+        selection.channel_id,
+        input.map(NativeTeletextAuthoringInput::entry_addon_id),
         &context,
         policy,
-        &selection,
+        selection,
         (operation.deadline, operation.guard.hold_work()),
     )
     .await
-    .map_err(channel_error)?;
-    if candidate.selection() != &selection || candidate.encoded().is_none() != absent {
-        return Err(failure(TeletextAuthoringStatus::SelectionChanged));
-    }
+    .map_err(channel_error)
+}
+
+async fn save_and_preview(
+    application: &ApplicationServices,
+    request: TeletextAuthoringPrepare,
+    input: Option<&NativeTeletextAuthoringInput>,
+    candidate: crate::host::teletext_effective_channel_documents::EncodedEffectiveChannelTeletextDocumentCandidate,
+    operation: &Operation,
+) -> Result<TeletextAuthoringSaved, TeletextAuthoringError> {
+    let selection = candidate.selection().clone();
     let saved = save_effective_original_teletext_design_candidate_with_hold(
         application,
         request.name,
@@ -120,7 +165,7 @@ pub(super) async fn prepare_design(
                     channel_id: identity.channel_id,
                     design_id: identity.design_id,
                     revision: identity.revision,
-                    owner: input.as_ref().map(NativeTeletextAuthoringInput::entry),
+                    owner: input.map(NativeTeletextAuthoringInput::entry),
                 },
                 operation,
             )

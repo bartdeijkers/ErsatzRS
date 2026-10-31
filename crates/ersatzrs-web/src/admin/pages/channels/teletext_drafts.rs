@@ -96,6 +96,7 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
                         {options}
                     </select>
                     {entry_fields("teletext")}
+                    {guide_channel_fields(data, "teletext")}
                     <label for="teletext-v1-region">{tr(TextKey::TeletextV1Region)}</label>
                     <select id="teletext-v1-region" name="v1_region" required>
                         <option value="" selected disabled>{tr(TextKey::TeletextV1Region)}</option>
@@ -146,6 +147,7 @@ pub(super) fn effective_authoring_controls(data: &ChannelTeletextData) -> AnyVie
             <option value="" selected disabled>{tr(TextKey::TeletextEntryProducer)}</option>{options}
         </select>
         {entry_fields("teletext-effective")}
+        {guide_channel_fields(data, "teletext-effective")}
         <label for="teletext-effective-v1-region">{tr(TextKey::TeletextV1Region)}</label>
         <select id="teletext-effective-v1-region" name="v1_region" required>
             <option value="" selected disabled>{tr(TextKey::TeletextV1Region)}</option>
@@ -214,6 +216,35 @@ fn entry_fields(prefix: &str) -> AnyView {
                 <input id=subcode_id name="entry_subcode" pattern="[0-9a-fA-F]{4}"
                     minlength="4" maxlength="4" required/></div>
         </div>
+    }
+    .into_any()
+}
+
+fn guide_channel_fields(data: &ChannelTeletextData, prefix: &str) -> AnyView {
+    let id = format!("{prefix}-guide-channels");
+    let help = format!("{id}-help");
+    let available = data.guide_channels.is_some();
+    let options = data
+        .guide_channels
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|channel| {
+            view! {
+                <option value=channel.id.to_string()>
+                    {format!("{} — {}", channel.number, channel.name)}
+                </option>
+            }
+        })
+        .collect_view();
+    view! {
+        <label for=id.clone()>{tr(TextKey::TeletextGuideChannels)}</label>
+        <p id=help.clone()>{tr(TextKey::TeletextGuideChannelsHelp)}</p>
+        <select id=id name="guide_channel_id" multiple size="6"
+            disabled=!available aria-describedby=help>
+            {options}
+        </select>
+        <p role="status" hidden=available>{tr(TextKey::TeletextGuideChannelsUnavailable)}</p>
     }
     .into_any()
 }
@@ -829,6 +860,13 @@ mod tests {
             authoring_error: None,
             effective_authoring: None,
             effective_authoring_error: None,
+            guide_channels: Some(vec![
+                crate::admin::server_fns::teletext::TeletextGuideChannelData {
+                    id: 12,
+                    number: "2".to_owned(),
+                    name: "Synthetic guide source".to_owned(),
+                },
+            ]),
             addons: vec![
                 addon("org.example.on", true),
                 addon("org.example.off", false),
@@ -934,6 +972,71 @@ mod tests {
                 let html = output_status::view(&data).to_html();
                 assert!(html.contains(tr(TextKey::TeletextDeliveryAbsent)));
                 assert!(html.contains(tr(TextKey::TeletextDeliveryApplied)));
+            });
+        }
+    }
+
+    #[test]
+    fn guide_source_choices_are_optional_localized_and_fail_without_disabling_static_forms() {
+        use crate::admin::server_fns::teletext::TeletextEffectiveAuthoringData;
+        for language in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let owner = Owner::new();
+            owner.with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let mut data = channel();
+                data.guide_channels.as_mut().unwrap()[0].name = "<Guide & source>".to_owned();
+                data.effective_authoring = Some(TeletextEffectiveAuthoringData {
+                    selection_digest: "effective-observation".to_owned(),
+                    producer_addon_ids: vec!["org.example.on".to_owned()],
+                    valid_until: None,
+                    is_absent: false,
+                });
+                for html in [
+                    authoring_controls(&data).to_html(),
+                    effective_authoring_controls(&data).to_html(),
+                ] {
+                    assert!(
+                        html.contains(tr(TextKey::TeletextGuideChannels)),
+                        "{language}"
+                    );
+                    assert!(
+                        html.contains(tr(TextKey::TeletextGuideChannelsHelp)),
+                        "{language}"
+                    );
+                    assert!(html.contains("&lt;Guide &amp; source&gt;"));
+                    let source = html.find("name=\"guide_channel_id\"").unwrap();
+                    let start = html[..source].rfind("<select").unwrap();
+                    let select = html[start..].split('>').next().unwrap();
+                    assert!(select.contains(" multiple"));
+                    assert!(!select.contains("required"));
+                    assert!(!select.contains("disabled"));
+                    assert!(select.contains("aria-describedby="));
+                    let option = html.find("value=\"12\"").unwrap();
+                    assert!(!html[option..]
+                        .split('>')
+                        .next()
+                        .unwrap()
+                        .contains("selected"));
+                }
+                data.guide_channels = None;
+                let html = authoring_controls(&data).to_html();
+                assert!(
+                    html.contains(tr(TextKey::TeletextGuideChannelsUnavailable)),
+                    "{language}"
+                );
+                let source = html.find("name=\"guide_channel_id\"").unwrap();
+                assert!(html[source..]
+                    .split('>')
+                    .next()
+                    .unwrap()
+                    .contains("disabled"));
+                assert!(!html.contains("<fieldset disabled"));
+                data.effective_authoring.as_mut().unwrap().is_absent = true;
+                let html = effective_authoring_controls(&data).to_html();
+                assert!(!html.contains("name=\"guide_channel_id\""));
+                assert!(html.contains("name=\"scope\" value=\"effective\""));
             });
         }
     }

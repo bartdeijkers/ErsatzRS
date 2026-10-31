@@ -41,6 +41,9 @@ pub struct EncodedEffectiveChannelTeletextDocumentCandidate {
     entry_addon_id: Option<String>,
     sources: Vec<TeletextValidatedDocumentSource>,
     requests: TeletextChannelRequestTemplates,
+    // Keep the optional historical source out of every ordinary/static async
+    // frame; the bounded owned association moves only on the guide path.
+    guide_source: Option<Box<ersatzrs_core::repositories::TeletextGuideSourceFence>>,
     originals: EncodedChannelTeletextOriginals,
 }
 
@@ -72,6 +75,18 @@ impl EncodedEffectiveChannelTeletextDocumentCandidate {
     #[must_use]
     pub const fn requests(&self) -> &TeletextChannelRequestTemplates {
         &self.requests
+    }
+    /// Historical semantic source association, not current-role authority.
+    #[must_use]
+    pub fn guide_source(&self) -> Option<&ersatzrs_core::repositories::TeletextGuideSourceFence> {
+        self.guide_source.as_deref()
+    }
+    pub(super) fn with_guide_source(
+        mut self,
+        source: ersatzrs_core::repositories::TeletextGuideSourceFence,
+    ) -> Self {
+        self.guide_source = Some(Box::new(source));
+        self
     }
     #[must_use]
     pub const fn v1_region(&self) -> Option<TeletextEncodingRegion> {
@@ -295,6 +310,7 @@ fn encode_effective_channel(
         entry_addon_id,
         sources,
         requests,
+        guide_source: None,
         originals,
     })
 }

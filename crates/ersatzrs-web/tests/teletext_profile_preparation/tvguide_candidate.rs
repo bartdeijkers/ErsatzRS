@@ -23,6 +23,9 @@ const TVGUIDE: &str = "org.ersatzrs.addon.tvguide-teletext";
 #[path = "tvguide_candidate/source_binding.rs"]
 mod source_binding;
 
+#[path = "tvguide_candidate/admin_preparation.rs"]
+mod admin_preparation;
+
 async fn profile(fixture: &Fixture, name: &str, entries: &[(&str, &str)]) -> TeletextProfile {
     let installation = fixture
         .state

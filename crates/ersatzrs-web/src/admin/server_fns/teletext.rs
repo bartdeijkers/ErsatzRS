@@ -15,7 +15,16 @@ pub struct ChannelTeletextData {
     pub authoring_error: Option<String>,
     pub effective_authoring: Option<TeletextEffectiveAuthoringData>,
     pub effective_authoring_error: Option<String>,
+    /// Explicit source choices only; absence means the source list is unavailable.
+    pub guide_channels: Option<Vec<TeletextGuideChannelData>>,
     pub addons: Vec<TeletextAddonData>,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextGuideChannelData {
+    pub id: i64,
+    pub number: String,
+    pub name: String,
 }
 
 /// Redacted current Scripted scope, observed without invoking producers.
@@ -182,6 +191,26 @@ pub async fn load_channel_teletext_for_application(
             Ok(selection) => (Some(selection), None),
             Err(code) => (None, Some(code.to_owned())),
         };
+    // Missing guide policy or source reads cannot disable static authoring/Off.
+    let guide_channels =
+        if crate::host::teletext_authoring::guide_preparation_configured(application).await {
+            match application.list_channel_numbers().await {
+                Ok(rows) => Some(
+                    rows.into_iter()
+                        .map(|row| TeletextGuideChannelData {
+                            id: row.id,
+                            number: row.number,
+                            name: row.name,
+                        })
+                        .collect(),
+                ),
+                // None renders an unavailable section, not a successful empty
+                // list or permission to substitute static guide content.
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
     Ok(Some(ChannelTeletextData {
         channel_id,
         channel_number: channel.form.number,
@@ -191,6 +220,7 @@ pub async fn load_channel_teletext_for_application(
         authoring_error,
         effective_authoring,
         effective_authoring_error,
+        guide_channels,
         addons,
     }))
 }
