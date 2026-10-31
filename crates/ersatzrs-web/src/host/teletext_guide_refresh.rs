@@ -703,17 +703,17 @@ async fn claim_and_refresh(
     };
     let Some(Ok(TeletextGenerationMutation::Accepted(Some(claim)))) = claimed else {
         drop(context);
-        let _ = settle(&guard, deadline, cadence).await;
+        let _ = settle(&guard, finalization_deadline(), cadence).await;
         return;
     };
     if needs_review {
         drop(context);
-        let _ = settle(&guard, deadline, cadence).await;
-        record_failure(
+        finalize_claim(
             application,
             &claim,
-            TeletextGuideRefreshFailure::NeedsReview,
-            deadline,
+            &guard,
+            JobStop::Failed(TeletextGuideRefreshFailure::NeedsReview),
+            cadence,
         )
         .await;
         return;
@@ -721,19 +721,37 @@ async fn claim_and_refresh(
     let Some(outcome) = execute_claim(operation, &claim, context, authoring_raw).await else {
         return;
     };
-    let settled = settle(&guard, deadline, cadence).await;
+    finalize_claim(application, &claim, &guard, outcome, cadence).await;
+}
+
+async fn finalize_claim(
+    application: &ApplicationServices,
+    claim: &TeletextGuideRefreshClaim,
+    guard: &TeletextWorkGuard,
+    outcome: JobStop,
+    cadence: Duration,
+) {
+    // Preparation and heartbeat futures have stopped. This bounded allowance
+    // permits only actual-worker settlement and the existing same-owner failure
+    // CAS; it cannot extend preparation, publication, source or lease authority.
+    let deadline = finalization_deadline();
+    let bookkeeping = async {
+        if matches!(outcome, JobStop::Failed(_) | JobStop::Cancelled) {
+            let failure = match outcome {
+                JobStop::Failed(failure) => failure,
+                _ => TeletextGuideRefreshFailure::PreparationFailed,
+            };
+            record_failure(application, claim, failure, deadline).await;
+        }
+    };
+    // Persistence shares the drain deadline instead of waiting for cleanup to
+    // exhaust it. The guard remains owned until both terminal paths complete.
+    let (settled, ()) = tokio::join!(settle(guard, deadline, cadence), bookkeeping);
     if !settled {
         tracing::warn!(
-            seed_id = seed.id,
+            seed_id = claim.seed.id,
             "guide refresh producer cleanup is unconfirmed; capacity is quarantined"
         );
-    }
-    if matches!(outcome, JobStop::Failed(_) | JobStop::Cancelled) {
-        let failure = match outcome {
-            JobStop::Failed(failure) => failure,
-            _ => TeletextGuideRefreshFailure::PreparationFailed,
-        };
-        record_failure(application, &claim, failure, deadline).await;
     }
 }
 
@@ -807,14 +825,21 @@ async fn record_failure(
     let Some(next) = now.checked_add_signed(chrono::Duration::seconds(60)) else {
         return;
     };
-    // Same-owner failure CAS may record an expired lease, but can never replace
-    // a reclaimed owner. An expired operation cannot gain another write budget.
+    // This terminal-only budget does not renew the lease. The same-owner CAS
+    // may record an expired lease, but can never replace a reclaimed owner.
     let _ = tokio::time::timeout_at(
         tokio::time::Instant::from_std(deadline),
         application.fail_guide_refresh(claim, now, next, failure),
     )
     .await;
 }
+
+fn finalization_deadline() -> Instant {
+    let now = Instant::now();
+    now.checked_add(super::bootstrap::SHUTDOWN_DRAIN_TIMEOUT)
+        .unwrap_or(now)
+}
+
 async fn settle(guard: &TeletextWorkGuard, deadline: Instant, cadence: Duration) -> bool {
     let bound = deadline.min(
         Instant::now()

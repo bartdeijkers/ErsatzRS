@@ -1165,6 +1165,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Settle timed-out automatic teletext guide work and record its failure within a
+  bounded cleanup allowance, preserving usable capacity after the actual worker
+  exits. Keep the producer deadline and original last-good limits unchanged.
+
 - Keep Current TV-guide previews within their original deadline while teletext
   work capacity is occupied. Share rendering admission with final source
   validation and retain actual worker ownership after request cancellation.

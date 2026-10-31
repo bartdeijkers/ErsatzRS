@@ -62,34 +62,36 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-01 production-package failure/availability acceptance.
-Close the existing missing/disabled/incompatible/failing/timed-out refresh
-clauses as one bounded package using the exact0.1.1 addon, existing route/worker
-controls and retained accepted pages. First identify existing reusable proofs
-and the smallest missing actual-host trial; preserve original stale/scope caps,
-ordinary AV, source/selection/lease and joined-worker cleanup. Stop when these
-named failure clauses are proven; no adjacent variants or general audit.
+Current package: P9B-02 required CI failure on exact3cf12e52.
+Full run41217162921 is terminalred: only Firefox1.5/job124593763968 failed;
+12 applicable jobs pass, push commitlint skipped, optional2.5 unselected.
+Read its retained exact failure and correct the concrete cause before the next
+scoped sourcepush/newSHA fullCI. SameSHA rerun only if an explained unchanged
+failure merits it; neverpresent a targeted rerun as full green. No general audit,
+extra builds or CI measurement program. Existing critical-path timings justify
+no further speed change. Preserve original failed-run logs/artifacts.
 
-Closed Windows host component: exact663 fourbinary release/private ZIP,
-independent extraction and matching release server/WASM structural gate; actual
-packaged launcher and native Deno2.9.5/Node24.21/headed Chromium151 complete the
-production TTI/footer concept, protected rejection, explicit Base5 publication,
-real60sSQL refresh and one publicLegacy response.1/1, fullAV/libzvbi and19TSDuck
-checks pass. Source/package/profile/history stay immutable. Compiler helper
-forced-drain and explicit owned-host taskkill are recorded; no native graceful/
-liveguide restart or whole9B claim. Canonical qualification.json windows_host.
-Reuse closed Linux663 footer/restart/31capacity-fence proofs and earlier source,
-clock, two-profile/theme/culture and9A runtime/platform evidence within scope.
+Closed package: actual0.1.1 producer timeout on native Linux x64 candidate.
+One qualified pidfd Deno stop at the unchanged30s expiry reproduced false
+quarantine/missing failure bookkeeping. One existing10s terminal allowance now
+joins actual settlement and same-owner failure CAS without renewing production,
+source/lease/role/stale authority.4unit, strict all-target Clippy/fmt, matched
+Leptos,1headed native case, fullAV/libzvbi/19TSDuck and ordinary Legacy/Hybrid/
+bothHLS smoke pass.43observed native identities drain; failed lease clears,
+original60sretry/caps/history and cap1 admission hold. Canonical qualification.json
+ guide_command_timeout retains tool-negative/product-red/green and screenshot
+scope. New repair is not Windows/ARM adoption or a whole package-fault matrix.
+Reuse closed Windows663 package/guide component5bf, Linux663 footer/restart and
+31monitor/admission proofs within scopes. Other P9B-01/02 clauses keep owners;
+resume the existing production configuration/package/base-context/Lua/range/
+platform/client list only after the delivery blocker is resolved.
 
-Delivery: exact3cf12e52fcfdeeeb30295845ffff75f0ab9f1273 remains remote/main.
-Full CI41217162921 has12 applicable jobs green; Firefox1.5 remains active.
-e882 full CI41199534104 passed all13. Optional2.5 is unselected. Hold the next
-scoped sourcepush until the active full run is terminal. Root/main retains
-unpublished UCU710/6256,12foreign dirtypaths and stashes; neverpush it wholesale.
-FFmpeg source-onlyfe972060 is remoteverified; stable2.0.8tag457 is unchanged.
-Addons18496b1/Next95206a8 remain equal remote. No new release/tag/publication,
-macOS, physicalKodi, DVBViewer or client hunt. Native ARM remains deferred under
-its existing assumption; required cross/package/QEMU obligations stay owned.
+Delivery:3cf remains remote/main. Verified663 and5bf local checkpoints plus the
+current repair await authorized scoped source delivery; neverpush Root/main
+wholesale. Root preserves unpublished UCU710/6256,12foreign dirtypaths/stashes.
+FFmpegfe972060 source-only is remote; stable2.0.8tag457 unchanged. Addons18496b1/
+Next95206a8 stay equal remote. No new release/tag/publication, macOS, physicalKodi,
+DVBViewer or client hunt. Existing native ARM deferral/assumption remains.
 
 '''
 

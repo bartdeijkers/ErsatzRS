@@ -2,7 +2,7 @@ import { Browser, BrowserContext, expect, Locator, Page } from '@playwright/test
 import { test } from './isolated-web-host';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitForHydration } from './hydration';
@@ -10,6 +10,7 @@ import { addonContentHash } from './fixtures/addon-metadata';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
 import { captureTeletextChannelTs } from './helpers/teletext-stream-capture';
 import { archiveFiles, type Upload } from './helpers/teletext-native-editor';
+import { startupOwner } from './helpers/isolated-host-startup';
 
 // Manual exact-package gate. CI still classifies this base/shared spec as 1.5;
 // absent package evidence is an explicit skip, never a synthetic replacement.
@@ -1703,6 +1704,243 @@ test('native Windows packaged TV-guide TTI footer survives publication and autom
     expect(fixture.calls()).toEqual([]); expect(fixture.setting('teletext.work.max_concurrent')).toBe('1'); expect(errors).toEqual([]);
     receipts.runtime_document_sha256 = snapshot.DocumentDigest; receipts.refreshed_raster_sha256 = sha256(refreshedRaster);
     receipts.scope = 'Opt-in native Windows packaged-host production page201 TTI and unchanged versioned sidecar, protected Generated rejection, footer Zone concept without activation, explicit Base5 publication and preserved footer across genuine guide refresh on one public ts-legacy response. Native Windows Node owns SQLite; controller owns launcher and teardown. No native graceful/restart, QTM/client or whole P9B acceptance.';
+    persist();
+  } finally {
+    try { await context?.close(); } finally { fixture.close(); }
+  }
+});
+
+test('production TV-guide actual command timeout retains last-good output and releases capacity', async ({ browser, isolatedWebHost }, info) => {
+  test.skip(process.platform !== 'linux' || process.env.ERSATZRS_TVGUIDE_COMMAND_TIMEOUT_OBSERVER !== '1',
+    'Requires an explicitly armed Linux pidfd observer for the owned production Deno command.');
+  test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+  test.setTimeout(300_000);
+  info.annotations.push({ type: 'browser-version', description: browser.version() },
+    { type: 'production-package', description: `${addonId}0.1.1; repositoryZIP SHA256 ${candidateDigest}` });
+  const baseURL = isolatedWebHost.baseURL;
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, {
+    authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
+  });
+  let context: BrowserContext | undefined;
+  try {
+    const selectedInstallation = await installProduction(browser, baseURL, isolatedWebHost.databasePath);
+    fixture.configureScripted();
+    const policy = JSON.parse(readFileSync(fileURLToPath(new URL(
+      '../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl,
+    )), 'utf8'));
+    const guideLimits = { max_records: 1000, max_source_bytes: 1_048_576,
+      max_model_nodes: 10_000, max_model_bytes: 16_777_216,
+      max_digest_fields: 100_000, max_digest_bytes: 16_777_216 };
+    const authoring = { ...policy, version: 2, operation_timeout_ms: 30_000, guide_limits: guideLimits,
+      preview: { max_pages: 16, max_model_records: 32_768, max_pixels: 168_000, max_diagnostics: 1400, max_work: 50_000_000 } };
+    delete authoring.source; delete authoring.recovery_timeout_ms;
+    fixture.setAuthoringPolicy(JSON.stringify(authoring));
+    fixture.setOutputPolicy(JSON.stringify({ ...policy, version: 4, guide_limits: guideLimits,
+      live_updates: { poll_interval_ms: 25, recovery_timeout_ms: 2000 } }));
+    fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run('teletext.work.max_concurrent', '1');
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    let page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const text = translation('en_us');
+    await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    const channel = fixture.channels[0];
+    const source = fixture.channels[1];
+    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    const profile = await createProfile(page, fixture, 'classic', true);
+    for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
+    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+    await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
+    await submit(page, binding, text('TeletextBindingSave'), true);
+    const form = page.getByTestId('teletext-authoring-form');
+    for (const [name, value] of [['name', 'Production command timeout original'], ['entry_page', '200'],
+      ['entry_subcode', '0000'], ['resource_transmissions', '[]']] as const) {
+      await form.locator(`[name="${name}"]`).fill(value);
+    }
+    await form.locator('[name="entry_addon_id"]').selectOption(addonId);
+    await form.locator('[name="v1_region"]').selectOption('western_latin');
+    await form.locator('[name="guide_channel_id"]').selectOption(String(source));
+    await submit(page, form, text('TeletextValidateSaveDraft'), true);
+    await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
+    const historical = new URL(page.url());
+    historical.searchParams.set('page', '201'); historical.searchParams.set('subcode', '0000');
+    await submit(page, page.getByTestId('teletext-publication-request-form'), text('TeletextPublicationRequest'), true);
+    await submit(page, page.getByTestId('teletext-publication-publish-form'), text('TeletextPublicationPublish'), true);
+    const accepted = acceptedGuide(fixture, channel);
+    const original = originalBytes(fixture, channel);
+    const initialHost = isolatedWebHost.processIdentity();
+    await context.close();
+    const restarted = await isolatedWebHost.restart();
+    expect(restarted.before).toEqual(initialHost);
+    expect(restarted.stop.closed).toBe(true);
+    expect(restarted.stop.forced).toBe(false);
+    expect(restarted.stop.exitCode).toBe(0);
+    expect(restarted.stop.signalCode).toBeNull();
+    expect(restarted.after.pid).toBeGreaterThan(0);
+    expect(restarted.after.pid).not.toBe(initialHost.pid);
+    expect(restarted.after.generation).toBeGreaterThan(initialHost.generation);
+    expect(isolatedWebHost.processIdentity()).toEqual(restarted.after);
+    expect(originalBytes(fixture, channel)).toEqual(original);
+    expect(acceptedGuide(fixture, channel)).toEqual(accepted);
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    page = await context.newPage();
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(historical.toString()); await ready(page, true);
+    const originalRaster = await rasterBytes(page);
+    const currentUrl = `/channels/${channel}/teletext?guide_preview=1&guide_page=201&guide_subcode=0000`;
+    await page.goto(currentUrl); await ready(page, true);
+    const currentModel = page.getByTestId('teletext-current-guide-model');
+    await expect(currentModel).toBeVisible();
+    expect(Buffer.from((await currentModel.locator('img').getAttribute('src'))!.split(',')[1], 'base64')).toEqual(originalRaster);
+    type TimeoutCurrent = {
+      SeedId: number; RuntimeId: number | null; Revision: number; NextDueAt: string; LastSuccessAt: string;
+      ChangedAt: string | null; FirstFailureAt: string | null; Failure: number | null; Revoked: number;
+      LeaseOwner: string | null; LeaseUntil: string | null;
+    };
+    type StoppedReceipt = {
+      schema: number; qualified: boolean; host: { pid: number; start_tick: string };
+      seed_id: number; channel_id: number; role: number; signal: string; pidfd: boolean;
+      stopped_at_utc: string; operation_deadline_utc: string; state: string;
+      livelease: { owner: string; until: string };
+      producer: { pid: number; start_tick: string; exe_sha256: string; entry_sha256: string };
+    };
+    const current = () => fixture.database.prepare('SELECT * FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
+      .get(channel) as TimeoutCurrent;
+    const history = () => ({ designs: fixture.designs(channel),
+      revisions: fixture.database.prepare('SELECT DesignId,Revision,Digest FROM TeletextDesignRevision WHERE DesignId=? ORDER BY Revision')
+        .all(fixture.designs(channel)[0].Id),
+      requests: fixture.database.prepare('SELECT * FROM TeletextPublicationRequest WHERE ChannelId=? ORDER BY Id').all(channel),
+      generations: fixture.database.prepare('SELECT * FROM TeletextAcceptedGeneration WHERE ChannelId=? ORDER BY Id').all(channel) });
+    const retainedHistory = history();
+    const before = current(); expect(before.RuntimeId).toBeNull(); expect(before.Failure).toBeNull();
+    expect(savedOriginal(fixture, channel).guide_source.channel_ids).toEqual([source]);
+    const seed = fixture.database.prepare('SELECT ValidUntil FROM TeletextGuideRefreshSeed WHERE Id=?')
+      .get(before.SeedId) as { ValidUntil: string };
+    const hostIdentity = isolatedWebHost.processIdentity();
+    const host = startupOwner(hostIdentity.pid);
+    expect(host, 'The exact isolated host needs a live /proc start identity before arming.').toBeDefined();
+    const denoPath = realpathSync(execFileSync('which', ['deno'], { encoding: 'utf8', timeout: 3000, maxBuffer: 4096 }).trim());
+    const denoSha = sha256(readFileSync(denoPath));
+    const entryRelative = 'libexec/pages.mts';
+    const entryPath = realpathSync(`${selectedInstallation.InstallPath}/${entryRelative}`);
+    const entrySha = sha256(readFileSync(entryPath));
+    const receipts: Record<string, unknown> = { repository_zip_sha256: candidateDigest, installation: selectedInstallation,
+      restart: restarted, channel, source, profile, before, host: { pid: host!.pid, start_tick: host!.startTick },
+      producer_executable_sha256: denoSha, producer_entry_sha256: entrySha,
+      accepted_generation: accepted, original_sha256: sha256(original), original_raster_sha256: sha256(originalRaster) };
+    const persist = () => writeFileSync(info.outputPath('production-guide-command-timeout-identity.json'), JSON.stringify(receipts, null, 2));
+    persist();
+    const programme = fixture.database.prepare(`SELECT MediaItemId,Finish FROM PlayoutItem WHERE PlayoutId=?
+      AND julianday(Start)<=julianday(?) AND julianday(Finish)>julianday(?) ORDER BY Start LIMIT 1`)
+      .get(source, new Date().toISOString(), new Date().toISOString()) as { MediaItemId: number; Finish: string };
+    const updatedTitle = 'Timeout guide title';
+    expect(fixture.database.prepare('UPDATE MovieMetadata SET Title=? WHERE MovieId=?').run(updatedTitle, programme.MediaItemId).changes).toBe(1);
+    await expect.poll(() => current().FirstFailureAt !== null, { timeout: 10_000 }).toBe(true);
+    const lost = current();
+    expect(lost.Failure).toBe(1); expect(lost.RuntimeId).toBeNull(); expect(lost.ChangedAt).not.toBeNull();
+    expect(lost.LastSuccessAt).toBe(before.LastSuccessAt);
+    expect(utc(lost.NextDueAt) - utc(lost.ChangedAt!)).toBeGreaterThanOrEqual(59_999);
+    const originalCap = Math.min(utc(seed.ValidUntil), utc(lost.FirstFailureAt!) + 15 * 60_000);
+    expect(utc(lost.NextDueAt) + authoring.operation_timeout_ms + 30_000).toBeLessThan(originalCap);
+    receipts.lost = lost; receipts.original_stale_cap_utc_ms = originalCap; persist();
+    const arm = { schema: 1, host: { pid: host!.pid, start_tick: host!.startTick },
+      installation: { addon_id: addonId, install_path: selectedInstallation.InstallPath,
+        content_sha256: selectedInstallation.ContentSha256, entry_relative: entryRelative, entry_sha256: entrySha },
+      producer_executable: { path: denoPath, sha256: denoSha }, database_path: isolatedWebHost.databasePath,
+      channel_id: channel, seed_id: before.SeedId, role: 1, due_at: lost.NextDueAt,
+      lease_condition: 'nonempty-same-seed', expected_manual_generation_id: accepted.Id,
+      operation_timeout_ms: authoring.operation_timeout_ms };
+    writeFileSync(info.outputPath('production-guide-command-timeout-arm.json'), JSON.stringify(arm, null, 2), { flag: 'wx' });
+    const stoppedPath = info.outputPath('production-guide-command-timeout-stopped.json');
+    // Only the separate owned pidfd observer may signal a process. An absent or
+    // unqualified receipt is a tool failure, never evidence of a product timeout.
+    await expect.poll(() => existsSync(stoppedPath), { timeout: 65_000, intervals: [25] }).toBe(true);
+    const stopped = JSON.parse(readFileSync(stoppedPath, 'utf8')) as StoppedReceipt;
+    receipts.stopped = stopped; persist();
+    expect(stopped.schema).toBe(1); expect(stopped.qualified).toBe(true);
+    expect(stopped.host).toEqual(arm.host); expect(stopped.seed_id).toBe(before.SeedId);
+    expect(stopped.channel_id).toBe(channel); expect(stopped.role).toBe(1);
+    expect(stopped.signal).toBe('SIGSTOP'); expect(stopped.pidfd).toBe(true);
+    expect(['T', 't']).toContain(stopped.state);
+    expect(stopped.producer.pid).toBeGreaterThan(0);
+    expect(stopped.producer.exe_sha256).toBe(denoSha); expect(stopped.producer.entry_sha256).toBe(entrySha);
+    expect(startupOwner(host!.pid)?.startTick).toBe(host!.startTick);
+    expect(startupOwner(stopped.producer.pid)?.startTick).toBe(stopped.producer.start_tick);
+    const claimed = current(); receipts.claimed = claimed; persist();
+    expect(claimed.SeedId).toBe(before.SeedId); expect(claimed.RuntimeId).toBeNull();
+    expect(claimed.LeaseOwner).toBe(stopped.livelease.owner); expect(claimed.LeaseOwner).toBeTruthy();
+    // Heartbeats may update wall-clock lease metadata while retaining the
+    // original operation allowance; source/stale caps remain separately exact.
+    expect(claimed.LeaseUntil).not.toBeNull();
+    expect(utc(claimed.LeaseUntil!)).toBeGreaterThan(utc(stopped.stopped_at_utc));
+    expect(utc(claimed.LeaseUntil!) - utc(stopped.stopped_at_utc)).toBeLessThanOrEqual(authoring.operation_timeout_ms);
+    expect(stopped.operation_deadline_utc).toBe(stopped.livelease.until);
+    expect(utc(stopped.operation_deadline_utc)).toBeGreaterThan(utc(stopped.stopped_at_utc));
+    expect(utc(stopped.operation_deadline_utc) - utc(stopped.stopped_at_utc)).toBeLessThanOrEqual(authoring.operation_timeout_ms);
+    expect(claimed.FirstFailureAt).toBe(lost.FirstFailureAt); expect(claimed.LastSuccessAt).toBe(before.LastSuccessAt);
+    expect(history()).toEqual(retainedHistory);
+    await expect.poll(() => utc(stopped.operation_deadline_utc) - Date.now() <= 5000,
+      { timeout: 30_000, intervals: [100] }).toBe(true);
+    const path = info.outputPath('production-guide-command-timeout.ts');
+    receipts.capture_opened_at = new Date().toISOString(); persist();
+    const number = (fixture.database.prepare('SELECT Number FROM Channel WHERE Id=?').get(channel) as { Number: string }).Number;
+    const capture = await captureTeletextChannelTs(`${baseURL}/iptv/channel/${encodeURIComponent(number)}.ts?mode=ts-legacy`, path,
+      { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+    receipts.capture_closed_at = new Date().toISOString();
+    receipts.capture = { bytes: capture.bytes.length, ended: capture.ended, sha256: sha256(capture.bytes) }; persist();
+    expect(capture.ended).toBe('byte-limit');
+    expect(utc(receipts.capture_opened_at as string)).toBeLessThan(utc(stopped.operation_deadline_utc));
+    expect(utc(receipts.capture_closed_at as string)).toBeGreaterThan(utc(stopped.operation_deadline_utc));
+    assertContinuousAuthoredPmt(path, info.outputPath('production-guide-command-timeout.pmt.json'), info.outputPath('production-guide-command-timeout.pmt.txt'));
+    execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', path,
+      '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'], { timeout: 30_000, maxBuffer: 65_536 });
+    const decoded = execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+      '-txt_format', 'text', '-txt_page', '201', '-txt_duration', '1000', '-i', path,
+      '-map', '0:s:0', '-c:s', 'srt', '-f', 'srt', '-'], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }).toString();
+    writeFileSync(info.outputPath('production-guide-command-timeout.srt'), decoded);
+    expect(decoded).toContain('Now: Synthetic red video and tone'); expect(decoded).not.toContain(updatedTitle);
+    await expect.poll(() => current().Failure === 2 && current().LeaseOwner === null && current().LeaseUntil === null,
+      { timeout: 10_000 }).toBe(true);
+    const failed = current(); receipts.failed = failed; persist();
+    expect(failed.FirstFailureAt).toBe(lost.FirstFailureAt); expect(failed.LastSuccessAt).toBe(before.LastSuccessAt);
+    expect(failed.ChangedAt).toBe(lost.ChangedAt); expect(failed.RuntimeId).toBeNull(); expect(failed.Revoked).toBe(0);
+    expect(utc(failed.NextDueAt) - utc(stopped.operation_deadline_utc)).toBeGreaterThanOrEqual(59_999);
+    expect(Math.min(utc(seed.ValidUntil), utc(failed.FirstFailureAt!) + 15 * 60_000)).toBe(originalCap);
+    await expect.poll(() => startupOwner(stopped.producer.pid)?.startTick !== stopped.producer.start_tick,
+      { timeout: 5000 }).toBe(true);
+    receipts.producer_reaped = true; persist();
+    await page.goto(currentUrl); await ready(page, true);
+    const model = page.getByTestId('teletext-current-guide-model');
+    await expect(model).toContainText(text('TeletextGuideStale'));
+    expect(Buffer.from((await model.locator('img').getAttribute('src'))!.split(',')[1], 'base64')).toEqual(originalRaster);
+    await page.screenshot({ path: info.outputPath('production-guide-command-timeout-stale-current.png') });
+    await page.goto('/system/health'); await ready(page, true);
+    const refreshed = page.waitForResponse(value => value.request().method() === 'POST'
+      && new URL(value.url()).pathname.startsWith('/admin-api/refresh_health_snapshot'));
+    await page.getByRole('button', { name: text('Refresh'), exact: true }).click(); expect((await refreshed).status()).toBe(200);
+    await expect(page.getByRole('button', { name: text('Refresh'), exact: true })).toBeEnabled();
+    const row = page.getByRole('row').filter({ has: page.getByText(text('TeletextGuideMaintenanceTitle'), { exact: true }) });
+    await expect(row.locator('span[aria-label]').first()).toHaveAttribute('aria-label', text('Warning'));
+    const health = (JSON.parse(fixture.setting('health.results')!) as { title: string; status: string; message: string }[])
+      .find(value => value.title === 'Teletext guide maintenance');
+    expect(health?.status).toBe('Warning'); expect(health?.message).toContain('fresh=0, stale=1, unavailable=0, revoked=0');
+    receipts.health = health; await page.screenshot({ path: info.outputPath('production-guide-command-timeout-health.png') }); persist();
+    // This historical original preview takes the ordinary fresh work admission.
+    // With cap1, a successful native reconstruction proves no stuck/quarantined
+    // producer hold was silently treated as released merely by future Drop.
+    expect((await page.goto(historical.toString()))?.status()).toBe(200); await ready(page, true);
+    expect(await rasterBytes(page)).toEqual(originalRaster);
+    receipts.capacity_one_native_preview = true;
+    expect(originalBytes(fixture, channel)).toEqual(original); expect(history()).toEqual(retainedHistory);
+    expect(acceptedGuide(fixture, channel)).toEqual(accepted);
+    expect(fixture.database.prepare('SELECT COUNT(*) AS count FROM TeletextGuideRuntimeSnapshot WHERE SeedId=?').get(before.SeedId))
+      .toEqual({ count: 0 });
+    expect(current().RuntimeId).toBeNull(); expect(current().FirstFailureAt).toBe(lost.FirstFailureAt);
+    expect(fixture.setting('teletext.work.max_concurrent')).toBe('1'); expect(fixture.calls()).toEqual([]);
+    expect(installation(isolatedWebHost.databasePath)).toEqual(selectedInstallation); compareInstalledFiles(selectedInstallation);
+    expect(startupOwner(host!.pid)?.startTick).toBe(host!.startTick); expect(errors).toEqual([]);
+    receipts.scope = 'One explicitly armed real production Deno command stopped by independently identity-qualified pidfd after live ownership, original command timeout, last-good page201/AV/continuousPMT, persisted PreparationFailed retry and fixed stale cap, actual process reap and cap1 native preview. No synthetic pre-spawn timeout, producer recovery, platform/client or whole P9B acceptance.';
     persist();
   } finally {
     try { await context?.close(); } finally { fixture.close(); }

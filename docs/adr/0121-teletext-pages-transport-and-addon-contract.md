@@ -462,6 +462,17 @@ source failure within that bound; it never asserts fresh-current source equality
 renews expired Current/Next roles or survives incompatible selection/package state.
 Fresh/Stale/Unavailable and NeedsReview states feed shared Health/admin evidence.
 
+After a due refresh stops, its producer and heartbeat futures have no remaining
+production authority. Actual worker settlement and same-owner failure bookkeeping
+share one fixed terminal allowance from the existing ten-second shutdown-drain
+bound, independent of an already-expired execution deadline. Keep the admission
+owner alive while both finish; failure persistence and drain may run concurrently
+within that same allowance. Failure CAS may release its expired lease, but cannot
+replace a reclaimed owner, promote a result, renew a source/role/stale deadline or
+start another producer. Confirmed settlement releases capacity normally; genuine
+unconfirmed cleanup retains the existing quarantine. The original execution and
+publication deadlines, source validation and global work limit remain unchanged.
+
 An already-serving source-aware monitor must distinguish occupied work capacity
 from failed source/selection validation. Its cached confirmation may wait in place
 for admission within the existing original recovery deadline, additionally capped

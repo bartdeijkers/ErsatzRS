@@ -5,16 +5,16 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
 summary    = '''
 P9A-04/p9a-final-gate Complete2026-10-31: exact218 full CI41153570313
-passes all13 required general/1.5 jobs with recorded client/platform scopes.
+13required general/1.5 jobs pass; client/platform scopes retained.
 P9B-01 activation, SQL updates, SourceUnavailable recovery, natural clock rollover,
 production TTI/sidecar footer editing/publication/refresh and occupied-capacity
-Current preview are closed within native Linux x64 scopes. Normal Legacy output
-and validated Current preserve immutable manual history. Canonical qualification.json
-owns exact headed/transport/cleanup proof and negatives. P9B-02 now closes the
-exact Windows663 package/bundle and native production TTI/footer/publication/
-SQLrefresh/Legacy component:1headed Chromium, AV/libzvbi and19transport checks;
-bounded forced test-host teardown is not graceful/live-guide restart proof.
-Remaining configuration/package/timeout/base-context/Lua/range/platform/client
+Current preview are closed on native Linux x64. P9B-01 production timeout/drain/
+failure-CAS is closed:1actual pidfd case,4unit/19transport, AV/Health/reap/cap1.
+Original caps/manual history remain exact. P9B-02 Windows663 package/bundle and
+native TTI/footer/publication/SQLrefresh/Legacy:1headed Chromium,AV/libzvbi and19
+transport; forced test teardown is not graceful/liveguide restart. Canonical
+qualification.json owns proofs/negatives and exact platform/source boundaries.
+Remaining configuration/package/base-context/Lua/range/platform/client
 clauses retain P9B-01/02 ownership.
 ADR0123 keeps2.5 experimental/enhanced acceptance Deferred, QTM optional/upstream-
 wait, macOS Deferred and native ARM assumed from required cross/QEMU proof.
@@ -24,7 +24,7 @@ SO1..5/PS1..2/ADR0127 and Windows-package receipts. Preserve their exact
 runtime/platform boundaries (P9A-03), historical negatives and explicit deferrals;
 cross/QEMU proof does not establish native ARM execution.
 
-Typed service/resource,X26/X27/X28/M29 execution/raster remain partial.
+Enhanced-only service/resources remain experimental.
 Standalone Level1/1.5 is accepted at p9a-level15; enhanced-only
 A7/A8/C3/object/DRCS/panel proof is retained at Deferred owners.
 F1/F3 own limits. base_g0_context_followup retains ESC/reset/secondary/Header/POP,
@@ -44,9 +44,8 @@ and mandatory base receiver controls are closed under their typed owners. F6 def
 tmp/phase9-f6-native-carriage/work.json owns87/87 TSDuck.
 
 P9A-03 owns acquisition/leases: descriptors/PTS/NotAcquired are not readiness.
-Local888/889 and Linux/nativeWindows EOF cuts retain F5 scope. Historical
-candidate.4 language/four-package/prepared/manager/startup/Health proof and
-managed.1 negatives remain. FFmpeg2.0.8/Next023rs.7: p9a-managed-adoption.
+Local888/889 and Linux/nativeWindows EOF cuts retain F5 scope. F5 retains candidate.4 language/package/prepared/manager/startup/Health proof
+and managed.1 negatives. FFmpeg2.0.8/Next023rs.7: p9a-managed-adoption.
 Closed candidate components: Linux/Windows installer/Health/TS and cached HLS (124 TSDuck/six AV proofs, managed-current-candidates/hls-live-qualification).
 Runtime/ARM builds, managed adoption and final-gate/CI are Complete.
 EE5/client control and M29 author/admin closed: author-action/,admin/qualification.json.

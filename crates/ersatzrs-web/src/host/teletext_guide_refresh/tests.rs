@@ -31,19 +31,44 @@ async fn cancelled_guide_work_drains_its_specific_hold_and_quarantines_unconfirm
     assert_eq!(locker.active_teletext_work(), 0);
     let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
     let hold = guard.hold_work();
-    assert!(
-        !settle(
-            &guard,
-            Instant::now() + Duration::from_secs(30),
-            Duration::from_millis(25)
-        )
-        .await
-    );
+    assert!(!settle(&guard, finalization_deadline(), Duration::from_millis(25)).await);
     assert!(!guard.is_settled());
     drop(hold);
     drop(guard);
     assert_eq!(locker.active_teletext_work(), 1);
     assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+}
+
+#[tokio::test(start_paused = true)]
+async fn expired_production_work_can_settle_without_releasing_capacity_before_actual_cleanup() {
+    let locker = EntityLocker::default();
+    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let hold = guard.hold_work();
+    let expired = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
+    assert!(wall_deadline(Utc::now(), expired).is_none());
+    let deadline = finalization_deadline();
+    assert!(deadline > Instant::now());
+    let worker_locker = locker.clone();
+    let worker = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Expiring the production operation does not release its actual worker.
+        assert!(TeletextWorkGuard::try_acquire(&worker_locker, 1).is_none());
+        drop(hold);
+    });
+    assert!(!guard.is_settled());
+    assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+    assert!(settle(&guard, deadline, Duration::from_millis(25)).await);
+    worker.await.unwrap();
+    assert!(guard.is_settled());
+    // Final bookkeeping still owns the admitted guard even after worker exit.
+    assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+    drop(guard);
+    assert_eq!(locker.active_teletext_work(), 0);
+    let next = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    drop(next);
+    assert_eq!(locker.active_teletext_work(), 0);
+    // The terminal allowance never renews the expired production/source clock.
+    assert!(wall_deadline(Utc::now(), expired).is_none());
 }
 
 #[test]
