@@ -235,7 +235,8 @@ for (const javaScriptEnabled of [true, false]) {
         const disabledForm = pages[0].getByTestId('teletext-authoring-form');
         await expect(disabledForm.locator('fieldset')).toHaveAttribute('disabled', '');
         const disabledControls = disabledForm.locator('fieldset input, fieldset select, fieldset textarea, fieldset button');
-        await expect(disabledControls).toHaveCount(7);
+        await expect(disabledControls).toHaveCount(8);
+        await expect(disabledForm.locator('[name="guide_channel_id"]')).toBeDisabled();
         for (const control of await disabledControls.all()) await expect(control).toBeDisabled();
         await expect(pages[0].getByTestId('teletext-preview-error')).toBeVisible();
         fixture.setAuthoringPolicy();

@@ -713,6 +713,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Keep the teletext authoring browser check aligned with the optional source-channel
+  selector, including its disabled state when authoring is unavailable.
+
 - Make the Next subtitle-cache restart/lease regression deterministic during
   filesystem contention while retaining exact in-flight deadline checks.
 
