@@ -18679,6 +18679,33 @@ cannot establish Level 2.5 display. Headed localized browser proof covers these
 flows while every existing engine-first, playback, lifecycle and platform gate stays.
 '''
 evidence = '''
+Completed current ARM64 host component2026-11-01: canonical qualification.json
+arm_host owns both exact b9712b29 crossbuilds/private packages and actual QEMU
+production flows. ARM64 package43922c09 contains the three hash-verified AArch64
+binaries from the frozen3989-input source. Pinned Ubuntu24.04/glibc2.39 runs
+actual production0.1.1 through Deno2.9.8 without Node; all six installed payloads
+and framed package hash match. Headed Chromium151 passes install/explicit enable,
+profile/source, real Reset, validated page201 preview and explicit Base5 selection.
+The immediate historical-preview read legitimately returns Busy after publication;
+one ordinary read of the identical immutable URL retains the accepted generation
+and exact original raster digest, then shows selected controls. No POST repetition,
+queue/product change, capacity increase or timeout relaxation. The original Busy
+trial remains retained separately; this is the existing ADR0121 admission contract.
+One ordinary publicLegacy response supplies8MiB; capture identity and all hashes
+are recorded in arm_host/runtime-linux-arm64/capture-qualification.json. Full AV,
+independent FFmpeg/libzvbi page201 guide text, continuous authored PMT and19
+TSDuck3.44-4676 checks pass. All44 observed browser/CLI identities drain; owned
+app/worker exit normally0/Idle with no leases, SQLite integrity and removed namespace.
+The unchanged prepared180s source is generated natively and hash-copied, not an
+ARM encoding claim. Closed ARMv7 flow/capture/decoder/cleanup are reused without
+repetition; all13 frozen trial-script hashes and both package/capture identities
+are checked. Both ARM packaged software components are Complete within this scope;
+native hardware remains assumed/deferred. Earlier Windows/Linux, editor/visual,
+caption/audio and physical-client proofs retain their own source/runtime limits.
+No release, new physical-client or whole9B acceptance is inferred. Next finite
+P9B-02 package: actual production-addon Lua/profile transitions; existing generic
+9A lifecycle proofs are reusable, but do not substitute for the production join.
+
 Completed current ARMv7 host component2026-10-31: canonical qualification.json
 arm_host owns exact b9712b29 source,3989 inputs, three ELF/hard-float binaries,
 pinned cross/userland/dependency records and extracted private package9e4b147f.
@@ -18708,9 +18735,10 @@ TSP exit separately and count diagnostics with unchanged regex/thresholds.
 Original strict red1/newgreen0, clean/diagnostic/silent-exit7 shell regressions
 and bounded no-findings review pass; only the retained capture's affected transport
 checks are repeated. Original18pass false-negative is retained separately.
-Closed scope is current ARMv7 packaged software/production flow, not native ARM,
-new physical-client, every output/platform or whole9B acceptance. ARM64 remains
-at its existing P9B-02 owner; Windows663, Linux663/d959 and accepted9A receipts are
+That checkpoint closed ARMv7 packaged software/production flow only; the later
+ARM64 component above closes its corresponding software scope. No native ARM,
+new physical-client, every output/platform or whole9B claim; Windows663,
+Linux663/d959 and accepted9A receipts are
 reused within unchanged boundaries. No new release or artifact publication.
 
 Completed Windows host package/runtime component2026-10-31, exact application

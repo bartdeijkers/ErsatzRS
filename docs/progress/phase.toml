@@ -62,42 +62,32 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 updated-host ARM64 software/platform flow.
-Wait the existing frozen b9712b29 ARM64 crossbuild, then use its exact private
-package, pinned Ubuntu24.04/QEMU/Deno environment and existing portable synthetic
-source fixture for profile/real Reset/validation/preview/explicit publication/
-one ordinary public Legacy response and actual cleanup. Do not repeat closed
-ARMv7 UI/stream/decoder work or Linux/Windows/editor components. NativeARM remains
-assumed/deferred, not native verified; macOS deferred. No physicalKodi/client hunt.
-Canonical tmp/phase9-tvguide-addon/qualification.json arm_host owns current
-build/runtime receipts, source/input/package identities, negatives and live handles.
+Current package: P9B-02 production Lua/profile transition acceptance.
+Prove actual addon0.1.1 selection/on/off and interval behavior through the existing
+application/Lua functions and ordinary output, reusing closed generic9A lifecycle,
+production two-profile/range and editor/refresh proofs. Finish the concrete
+production join before adjacent variants; retain all other P9B-01/02 owners.
+Canonical tmp/phase9-tvguide-addon/qualification.json owns proofs and negatives.
 
-Completed ARMv7 component: current3989-input b971 source, three ELF binaries and
-extracted package9e4b147f; actual0.1.1 Node22.23.4/noDeno entrypoint and six exact
-payloads. One headed Chromium151 flow validates profile/source and Base5 explicit
-publication; real public8MiB stream passes fullAV/libzvbi/PMT/19transport checks.
-All45 observed native identities and the owned app/worker namespace drain; normal
-exit0/Idle/no leases/integrity hold. Unchanged180s/4500-frame fixture generated
-natively within original30s and hash-copied into target; no ARM encoding claim.
-Original QEMU-generation and Enable-navigation tool failures remain separate.
-Corrected existing continuity checker's zero-match errexit defect: unchanged
-thresholds, actualprocessor failure preserved; strictred/green and three controls
-pass, no-findings review. Reused successful UI/capture/decoder; repeated only19
-transport checks on the retained capture. PreviewDOM/digest proof is separate
-from the viewport admin-selection photo; prior localized/visual scopes retained.
+Completed ARM software component: exact b9712b29/3989-input crossbuilds, three
+binaries per RID and private packages9e4b147f/43922c09. Actual QEMU ARMv7 Node-only
+and ARM64 Deno-only production install/profile/source/preview/Base5/publicLegacy
+flows pass. Each8MiB response passes AV/libzvbi/PMT/19TSDuck;45/44 native identities
+and owned app/worker namespaces drain with normal exit0/Idle/no leases/integrity.
+The actual ARM64 post-publication historical read returns expected Busy; one
+same-URL read preserves selection and original raster. No mutation retry, queue,
+capacity/timeout change. NativeARM remains assumed/deferred, not hardware verified.
+Unchanged180s source is generated natively then hash-copied; no ARM encoding claim.
+All earlier scoped Windows/Linux/editor/caption/audio/client results stay closed.
 
-Delivery: b971 source chain is already on origin/main. Full requiredgeneral+1.5
-CI41237114061 is still active; optional2.5 unselected. Check its exact SHA and all
-applicable jobs to terminal before a new sourcepush. Original3cf failure/trace and
-local8Firefox/2Chromium results remain. No further CI speed change is justified.
-Continuity/ARMv7 checkpoint is locally verified; never push Root wholesale.
-Retain unpublished UCU710/6256, foreign paths/stashes. Stable runtime publications
-are already completed; no new tag/release/artifact publication is commissioned.
-
-Other configuration/package/base-context/Lua/range/client clauses retain their
-existing P9B-01/02 owners. Windows663 component and Linux663/d959 components stay
-closed within recorded source/runtime scopes; new Windows-package trials retain
-120min reservation. Do not reopen closed work without a concrete regression.
+Delivery: b971 is on origin/main; full requiredgeneral+1.5 CI41237114061 remains
+active at last observation, Firefox1.5 only. Read exactSHA/all applicable job results
+to terminal before another scoped sourcepush. Original3cf failure remains; no new
+CI speed change is justified. Continuity-checker checkpointd3f307be is local and
+verified. Never push Root wholesale: retain unpublished UCU710/6256/208 and all
+foreign paths/stashes. Stable runtime publications already completed; no further
+release/tag/artifact publication is commissioned. macOS stays deferred, no client
+hunt/physicalKodi trial. A new Windows-package trial reserves120min.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
