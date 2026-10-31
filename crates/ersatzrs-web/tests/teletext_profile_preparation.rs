@@ -98,6 +98,8 @@ mod publications;
 mod repeated_editorial_imports;
 #[path = "teletext_profile_preparation/scripted_controls.rs"]
 mod scripted_controls;
+#[path = "teletext_profile_preparation/tvguide_candidate.rs"]
+mod tvguide_candidate;
 #[path = "teletext_profile_preparation/work_admission.rs"]
 mod work_admission;
 const SCRIPT: &str = r#"case "$1" in

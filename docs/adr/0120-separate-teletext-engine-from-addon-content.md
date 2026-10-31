@@ -15,8 +15,13 @@ This preserves the engine/content split; no experimental2.5 acceptance is claime
 
 ## Implementation
 
-Not implemented. Phase 9 milestones and the `teletext-support` parity record
-own the remaining standards decision, engine, add-on and integrated acceptance.
+Partial. The revised generic9A boundary is independently accepted at checkpoint
+802c8a10 (2026-10-31), with full required general/Level1.5 CI on exact218d4500
+and the canonical source/runtime/client proof join in P9A-04. Implemented2.5
+remains experimental under ADR0123. P9B-01 now owns the sole production TV-guide
+addon candidate; P9B-02 owns its actual guide/publication/stream/client integration.
+Neither the candidate nor generic fixture evidence accepts production9B.
+See the current milestones and `teletext-support` parity record.
 
 ## Context
 

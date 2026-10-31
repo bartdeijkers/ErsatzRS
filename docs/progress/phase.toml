@@ -62,24 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-01 — production TV-guide teletext addon after accepted9A.
-P9A-04 and p9a-final-gate are Complete under the revised ADR0123 boundary:
-full exact218 CI41153570313 passes all13 mandatory jobs, with expected push
-commitlint skip; unchanged primary receipts/required owners are joined in
-canonical final-gate/ci-runtime-pin-20261030/qualification.json. No repeated
-engine trials or reopening completed components without a concrete regression.
-Next finite action: integrate accepted remote218 and this registration into the
-Root branch while preserving the separate local9B/UCU commits, foreign working
-bytes and all evidence. Then inspect the existing addon contract and addon
-repository, and implement the smallest complete P9B-01 guide package: per-profile
-page range/index, guide-driven map/navigation, named themes/defined zones,
-explicit installation and validated failure behavior. Use only NOS TV-guide
-pages200–299 as reference. P9B-02 owns actual production-package client/admin/
-stream/runtime proof; generic fixture proof never substitutes for that gate.
-Keep Level2.5 experimental, enhanced acceptance/macOS/native ARM Deferred and
-QTM optional/upstream-wait. No client hunt, DVBViewer or decoder maintenance.
-No active owned local host/test or CI monitor; all current CI is terminal.
-No release, tag or new runtime publication is authorized by this checkpoint.
+Current package: p9b-01 — close delivery/CI for the completed production guide component.
+Accepted9A remains closed at802c8a10 with full exact218 CI41153570313 green.
+Canonical tmp/phase9-tvguide-addon/qualification.json owns final source/bundle
+74b30ae2,12 green producer tests, real disabled-install/explicit-enable/two-profile
+native validation/encoding/raster, strict affected test lint and preserved negatives.
+Next finite action: commit/push only the coherent addon and host-test/registration
+files; inspect exact-SHA applicable CI before claiming green. Retain foreign
+Root changes, separate local commits and all proof. No release/tag/publication.
+After delivery, qualify the existing JS runtime on the required Linux/Windows
+RIDs; do not assume new addon runtime/platform compatibility from9A fixtures.
+P9B-01 stays open; P9B-02 owns real guide refresh/restart, headed localized admin,
+TTI/sidecar, explicit publication and simultaneous ordinary stream/client/
+transport/playback integration. No further variants inside the closed producer
+component without a concrete regression. Experimental2.5/editor/platform
+maintainer decisions remain unchanged. Current local checks are terminal.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

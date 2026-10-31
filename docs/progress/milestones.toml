@@ -18328,7 +18328,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9b-01'
 phase      = 'Phase 9B — TV-guide add-on and integrated acceptance'
 title      = 'Deliver TV-guide pages through one teletext add-on'
-status     = 'Not started'
+status = 'In progress'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-04']
@@ -18377,7 +18377,37 @@ permitted overrides and exact navigation through that workflow. Imported changes
 cannot mutate installed templates or protected generated regions; template
 changes follow explicit addon versions. NOS inspiration remains guide-only 200–299.
 '''
-evidence = ''
+evidence = '''
+Completed production guide producer/profile/native-preparation component2026-10-31:
+canonical tmp/phase9-tvguide-addon/qualification.json binds the exact new
+TV-guide teletext0.1.0 source at addon commit0be31ca5706aa0914873b96b17727e6a85f0e63e
+and immutable qualified ZIP74b30ae27bfcfcb5c67e387e7bc1251b3f7ec31a44d64e1e3fd857da4d004ea6.
+Twelve real producer-entrypoint tests pass with Deno2.9.5, including configured
+range/index and complete navigation, three themes/overrides/zones/V3 ownership
+metadata, complete long Unicode and three-day lists, subcode-mask rollover,
+chronological supplied-order independence, DST offsets and lossless i64 identities.
+Manifest validation, Deno type/lint/format and the existing repository/ZIP
+controls pass within their scope; final source files match the actual bundle.
+Actual local offline repository import/install starts disabled; explicit enable,
+two per-channel profiles and native preparation/encoding/raster pass1/1 (498
+unselected) on Linux x64, nextest35666f6f. Both ranges/themes are retained with
+zero raster diagnostics, unchanged global settings and no design/publication.
+Preparation respects the unchanged single-worker policy, not concurrent calls.
+Strict affected web-test Clippy and clean workspace formatting pass. Original
+wrong-fixture/lint/chronology/i64, empty-run and missing-MOT negatives remain
+preserved. Sparse blank rows and explicit mot=null fix actual host rejections;
+no validator, workload limit, page-bound or encoding oracle is weakened.
+Closed component: an actual production package can turn supplied guide data and
+scoped settings into host-validated native pages/preview. P9B-01 remains In
+progress: actual guide refresh/restart, failure handling and required runtime/
+platform compatibility retain their acceptance clauses. P9B-02 owns localized
+headed admin, TTI/sidecar, explicit publication, ordinary simultaneous streams,
+client/navigation/transport and playback/lifecycle integration with this package.
+No new native Windows/ARM/macOS or GitHub-CI claim, release or publication.
+Next finite package: qualify the chosen existing JS runtime against the required
+Linux/Windows targets before broader production-route acceptance. Do not reopen
+accepted9A or begin adjacent character/editor/client variants.
+'''
 
 [[milestone]]
 id         = 'p9b-02'

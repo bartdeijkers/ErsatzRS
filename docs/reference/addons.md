@@ -26,11 +26,17 @@ retroactively.
 | `media-list.list.v6` | Adds typed provider-neutral authentication, restriction, and unavailable reasons for item-scoped publication decisions. |
 | `media-list.import.v1` | Pages overview discovery into durable host checkpoints and enriches exactly one committed item per bounded invocation. A package also declares the `media-list.list.vN` record schema it emits. |
 | `media-list.options.v1` | Declares bounded, localized Boolean and enum list/item options for host validation, inheritance, persistence, and publication snapshots. It is declarative and cannot be invoked. |
+| `teletext.pages.v1` | Produces unpublished base page drafts from the host's bounded read-only programme guide. |
+| `teletext.pages.v2` | Adds authored declarations while retaining the base page model; enhanced-only support is experimental. |
+| `teletext.pages.v3` | Retains the v2 service and adds versioned template/theme, editable-zone and dynamic-field metadata. |
 | `declarative-panel.v1` | Renders host-owned text, status, key/value, and link blocks. |
 
 Unknown capability versions are never executed. The v1 platform does not
-provide a public add-on HTTP API, event stream, teletext capability, or
-video-jukebox request API.
+provide a public add-on HTTP API, event stream, or video-jukebox request API.
+Teletext production uses a separately bounded host invocation, selected channel
+profiles and complete page validation. A successful response grants neither
+publication authority nor a new package activation. Stream and preview use the
+same accepted model; import remains a concept until explicit publication.
 
 ## Reference set
 
