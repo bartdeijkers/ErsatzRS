@@ -977,3 +977,238 @@ test('production TV-guide retains last good on source failure and recovers befor
     }
   }
 });
+
+test('production TV-guide follows a natural programme-clock rollover on one ordinary response', async ({ browser, isolatedWebHost }, info) => {
+  test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+  test.setTimeout(300_000);
+  const baseURL = isolatedWebHost.baseURL;
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, {
+    authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
+  });
+  let context: BrowserContext | undefined;
+  try {
+    const selectedInstallation = await installProduction(browser, baseURL, isolatedWebHost.databasePath);
+    fixture.configureScripted();
+    const policy = JSON.parse(readFileSync(fileURLToPath(new URL(
+      '../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl,
+    )), 'utf8'));
+    const guideLimits = { max_records: 1000, max_source_bytes: 1_048_576,
+      max_model_nodes: 10_000, max_model_bytes: 16_777_216,
+      max_digest_fields: 100_000, max_digest_bytes: 16_777_216 };
+    const authoring = { ...policy, version: 2, operation_timeout_ms: 30_000, guide_limits: guideLimits,
+      preview: { max_pages: 16, max_model_records: 32_768, max_pixels: 168_000, max_diagnostics: 1400, max_work: 50_000_000 } };
+    delete authoring.source; delete authoring.recovery_timeout_ms;
+    fixture.setAuthoringPolicy(JSON.stringify(authoring));
+    fixture.setOutputPolicy(JSON.stringify({ ...policy, version: 4, guide_limits: guideLimits,
+      live_updates: { poll_interval_ms: 25, recovery_timeout_ms: 2000 } }));
+    fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run('teletext.work.max_concurrent', '1');
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    let page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const text = translation('en_us');
+    await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    const channel = fixture.channels[0];
+    const source = fixture.channels[1];
+    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    const profile = await createProfile(page, fixture, 'classic', true);
+    for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
+    const sourceRowsBefore = fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
+      .all(source) as ({ Id: number; Start: string; Finish: string; MediaItemId: number } & Record<string, unknown>)[];
+    expect(sourceRowsBefore).toHaveLength(3);
+    expect(utc(sourceRowsBefore[0].Start)).toBeLessThanOrEqual(Date.now());
+    expect(utc(sourceRowsBefore[0].Finish)).toBeGreaterThan(Date.now());
+    const sourcePath = fixture.database.prepare('SELECT LibraryPathId FROM MediaItem WHERE Id=?')
+      .get(sourceRowsBefore[0].MediaItemId) as { LibraryPathId: number };
+    const sourceTitles = ['Clock Alpha', 'Clock Bravo', 'Clock Charlie'];
+    const sourceMedia: number[] = [];
+    const outputRows = fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel);
+    const metadataAt = new Date().toISOString().replace('T', ' ').replace('Z', '');
+    fixture.database.exec('BEGIN IMMEDIATE;');
+    try {
+      for (const [index, row] of sourceRowsBefore.entries()) {
+        const id = (fixture.database.prepare(`SELECT MAX(Id)+1 AS Id FROM (
+          SELECT Id FROM MediaItem UNION ALL SELECT Id FROM Movie UNION ALL SELECT Id FROM MovieMetadata)`).get() as { Id: number }).Id;
+        fixture.database.prepare('INSERT INTO MediaItem(Id,LibraryPathId) VALUES (?,?)').run(id, sourcePath.LibraryPathId);
+        fixture.database.prepare('INSERT INTO Movie(Id) VALUES (?)').run(id);
+        fixture.database.prepare('INSERT INTO MovieMetadata(Id,MovieId,DateAdded,DateUpdated,MetadataKind,Title) VALUES (?,?,?,?,0,?)')
+          .run(id, id, metadataAt, metadataAt, sourceTitles[index]);
+        expect(fixture.database.prepare('UPDATE PlayoutItem SET MediaItemId=? WHERE Id=? AND PlayoutId=?')
+          .run(id, row.Id, source).changes).toBe(1);
+        sourceMedia.push(id);
+      }
+      fixture.database.exec('COMMIT;');
+    } catch (error) { fixture.database.exec('ROLLBACK;'); throw error; }
+    const sourceRows = fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
+      .all(source) as typeof sourceRowsBefore;
+    expect(sourceRows.map(({ MediaItemId, ...unchanged }) => unchanged))
+      .toEqual(sourceRowsBefore.map(({ MediaItemId, ...unchanged }) => unchanged));
+    expect(sourceRows.map(row => row.MediaItemId)).toEqual(sourceMedia);
+    expect(fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel)).toEqual(outputRows);
+    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+    await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
+    await submit(page, binding, text('TeletextBindingSave'), true);
+    const form = page.getByTestId('teletext-authoring-form');
+    for (const [name, value] of [['name', 'Production programme clock original'], ['entry_page', '200'],
+      ['entry_subcode', '0000'], ['resource_transmissions', '[]']] as const) {
+      await form.locator(`[name="${name}"]`).fill(value);
+    }
+    await form.locator('[name="entry_addon_id"]').selectOption(addonId);
+    await form.locator('[name="v1_region"]').selectOption('western_latin');
+    await form.locator('[name="guide_channel_id"]').selectOption(String(source));
+    await submit(page, form, text('TeletextValidateSaveDraft'), true);
+    await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
+    const historical = new URL(page.url());
+    historical.searchParams.set('page', '201'); historical.searchParams.set('subcode', '0000');
+    await submit(page, page.getByTestId('teletext-publication-request-form'), text('TeletextPublicationRequest'), true);
+    await submit(page, page.getByTestId('teletext-publication-publish-form'), text('TeletextPublicationPublish'), true);
+    const accepted = acceptedGuide(fixture, channel);
+    const original = originalBytes(fixture, channel);
+    const initialHost = isolatedWebHost.processIdentity();
+    await context.close();
+    const restarted = await isolatedWebHost.restart();
+    expect(restarted.before).toEqual(initialHost);
+    expect(restarted.stop.closed).toBe(true);
+    expect(restarted.stop.forced).toBe(false);
+    expect(restarted.stop.exitCode).toBe(0);
+    expect(restarted.stop.signalCode).toBeNull();
+    expect(restarted.after.pid).toBeGreaterThan(0);
+    expect(restarted.after.pid).not.toBe(initialHost.pid);
+    expect(restarted.after.generation).toBeGreaterThan(initialHost.generation);
+    expect(isolatedWebHost.processIdentity()).toEqual(restarted.after);
+    expect(originalBytes(fixture, channel)).toEqual(original);
+    expect(acceptedGuide(fixture, channel)).toEqual(accepted);
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    page = await context.newPage();
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(historical.toString()); await ready(page, true);
+    const originalRaster = await rasterBytes(page);
+    const currentUrl = `/channels/${channel}/teletext?guide_preview=1&guide_page=201&guide_subcode=0000`;
+    await page.goto(currentUrl); await ready(page, true);
+    const currentModel = page.getByTestId('teletext-current-guide-model');
+    await expect(currentModel).toBeVisible();
+    expect(Buffer.from((await currentModel.locator('img').getAttribute('src'))!.split(',')[1], 'base64')).toEqual(originalRaster);
+    const nanos = (value: string): bigint => {
+      const match = value.match(/^(\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(?:Z|\+00:00)?$/);
+      expect(match, 'Source and qualification clocks must retain exact UTC nanoseconds.').not.toBeNull();
+      return BigInt(utc(match![1])) * 1_000_000n + BigInt((match![2] ?? '').padEnd(9, '0'));
+    };
+    type ClockCurrent = { SeedId: number; RuntimeId: number | null; Revision: number; NextDueAt: string;
+      LastSuccessAt: string; Failure: number | null; FirstFailureAt: string | null; LeaseOwner: string | null; Revoked: number };
+    const current = () => fixture.database.prepare('SELECT * FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
+      .get(channel) as ClockCurrent;
+    const history = () => ({ designs: fixture.designs(channel),
+      revisions: fixture.database.prepare('SELECT DesignId,Revision,Digest FROM TeletextDesignRevision WHERE DesignId=? ORDER BY Revision')
+        .all(fixture.designs(channel)[0].Id),
+      requests: fixture.database.prepare('SELECT * FROM TeletextPublicationRequest WHERE ChannelId=? ORDER BY Id').all(channel),
+      generations: fixture.database.prepare('SELECT * FROM TeletextAcceptedGeneration WHERE ChannelId=? ORDER BY Id').all(channel) });
+    const retainedHistory = history();
+    const profiles = fixture.database.prepare('SELECT * FROM TeletextProfile WHERE Id=?').all(profile);
+    const profileSettings = fixture.database.prepare('SELECT * FROM TeletextProfileSetting WHERE ProfileId=? ORDER BY Key').all(profile);
+    const before = current();
+    const seed = fixture.database.prepare('SELECT Source,ValidUntil FROM TeletextGuideRefreshSeed WHERE Id=?')
+      .get(before.SeedId) as { Source: Uint8Array; ValidUntil: string };
+    const seedSource = JSON.parse(Buffer.from(seed.Source).toString()) as { channel_ids: number[]; captured_at: string };
+    expect(seedSource.channel_ids).toEqual([source]);
+    expect(before.RuntimeId).toBeNull(); expect(before.Failure).toBeNull();
+    expect(nanos(seed.ValidUntil)).toBe(nanos(sourceRows[1].Start));
+    expect(nanos(before.NextDueAt)).toBe(nanos(sourceRows[1].Start));
+    expect(nanos(sourceRows[0].Finish)).toBe(nanos(sourceRows[1].Start));
+    expect(nanos(sourceRows[1].Finish)).toBe(nanos(sourceRows[2].Start));
+    expect(nanos(seedSource.captured_at)).toBeLessThan(nanos(sourceRows[1].Start));
+    const receipts: Record<string, unknown> = { repository_zip_sha256: candidateDigest,
+      installation: selectedInstallation, restart: restarted, channel, source, profile, source_titles: sourceTitles,
+      source_media: sourceMedia, source_rows: sourceRows, before, seed_source: seedSource, old_role_until: seed.ValidUntil,
+      accepted_generation: accepted, original_sha256: sha256(original), original_raster_sha256: sha256(originalRaster) };
+    const persist = () => writeFileSync(info.outputPath('production-guide-clock-rollover-identity.json'), JSON.stringify(receipts, null, 2));
+    persist();
+    const outputNumber = (fixture.database.prepare('SELECT Number FROM Channel WHERE Id=?')
+      .get(channel) as { Number: string }).Number;
+    expect(outputNumber).toBeTruthy();
+    const streamUrl = `${baseURL}/iptv/channel/${encodeURIComponent(outputNumber)}.ts?mode=ts-legacy`;
+    receipts.stream_route = streamUrl;
+    // The public continuous wrapper owns the single response across AV items;
+    // hls-direct is finite per item. Allow wrapper startup before the boundary
+    // while retaining the original30s/8MiB observation and real source clocks.
+    await expect.poll(() => utc(sourceRows[1].Start) - Date.now() <= 10_000,
+      { timeout: 180_000, intervals: [100] }).toBe(true);
+    const openedAt = new Date().toISOString();
+    expect(nanos(openedAt)).toBeLessThan(nanos(sourceRows[1].Start));
+    receipts.capture_opened_at = openedAt; persist();
+    const path = info.outputPath('production-guide-clock-rollover.ts');
+    const capture = await captureTeletextChannelTs(streamUrl, path,
+      { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+    const closedAt = new Date().toISOString();
+    receipts.capture_closed_at = closedAt;
+    receipts.capture = { bytes: capture.bytes.length, ended: capture.ended, sha256: sha256(capture.bytes) }; persist();
+    expect(capture.ended).toBe('byte-limit');
+    expect(nanos(closedAt)).toBeGreaterThan(nanos(sourceRows[1].Start));
+    const after = current();
+    receipts.after = after; persist();
+    expect(after.SeedId).toBe(before.SeedId); expect(after.RuntimeId).not.toBeNull();
+    expect(after.Failure).toBeNull(); expect(after.FirstFailureAt).toBeNull(); expect(after.LeaseOwner).toBeNull();
+    expect(after.Revoked).toBe(0);
+    const snapshot = fixture.database.prepare('SELECT Document,DocumentDigest,Source,ValidUntil FROM TeletextGuideRuntimeSnapshot WHERE Id=? AND SeedId=?')
+      .get(after.RuntimeId!, after.SeedId) as { Document: Uint8Array; DocumentDigest: string; Source: Uint8Array; ValidUntil: string };
+    const runtimeBytes = Buffer.from(snapshot.Document);
+    const runtimeSource = JSON.parse(Buffer.from(snapshot.Source).toString()) as { channel_ids: number[]; captured_at: string };
+    receipts.runtime_source = runtimeSource; receipts.runtime_valid_until = snapshot.ValidUntil;
+    receipts.runtime_document_sha256 = snapshot.DocumentDigest; persist();
+    expect(sha256(runtimeBytes)).toBe(snapshot.DocumentDigest);
+    expect(runtimeSource.channel_ids).toEqual([source]);
+    expect(nanos(runtimeSource.captured_at)).toBeGreaterThanOrEqual(nanos(sourceRows[1].Start));
+    expect(nanos(snapshot.ValidUntil)).toBe(nanos(sourceRows[1].Finish));
+    expect(nanos(after.NextDueAt)).toBe(nanos(sourceRows[1].Finish));
+    const tablesPath = info.outputPath('production-guide-clock-rollover.pmt.json');
+    execFileSync('tstables', ['--tid', '2', '--json-output', tablesPath,
+      '--text-output', info.outputPath('production-guide-clock-rollover.pmt.txt'), path],
+    { timeout: 30_000, maxBuffer: 65_536 });
+    const tables = JSON.parse(readFileSync(tablesPath, 'utf8')) as {
+      '#name': string; version: number; '#nodes': { '#name': string; elementary_pid?: number }[];
+    }[];
+    const presence = tables.filter(table => table['#name'] === 'PMT').map(table => ({
+      version: table.version, present: table['#nodes'].some(node => node['#name'] === 'component' && node.elementary_pid === 512),
+    }));
+    receipts.pmt_presence = presence; persist();
+    const initialPresence = presence.findIndex(value => value.present);
+    expect(initialPresence).toBeGreaterThanOrEqual(0);
+    const withdrawal = presence.findIndex((value, index) => index > initialPresence && !value.present);
+    expect(withdrawal, 'Expired old-role output must withdraw while the new role is being qualified.').toBeGreaterThan(initialPresence);
+    expect(presence.findIndex((value, index) => index > withdrawal && value.present),
+      'A newly qualified role must be reannounced on the same response.').toBeGreaterThan(withdrawal);
+    const decoded = execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+      '-txt_format', 'text', '-txt_page', '201', '-txt_duration', '1000', '-i', path,
+      '-map', '0:s:0', '-c:s', 'srt', '-f', 'srt', '-'], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }).toString();
+    writeFileSync(info.outputPath('production-guide-clock-rollover.srt'), decoded);
+    expect(decoded).toContain('Now: Clock Alpha'); expect(decoded).toContain('Next: Clock Bravo');
+    expect(decoded).toContain('Now: Clock Bravo'); expect(decoded).toContain('Next: Clock Charlie');
+    expect(decoded.indexOf('Now: Clock Alpha')).toBeLessThan(decoded.indexOf('Now: Clock Bravo'));
+    execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', path,
+      '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'], { timeout: 30_000, maxBuffer: 65_536 });
+    await page.goto(currentUrl); await ready(page, true);
+    const refreshedModel = page.getByTestId('teletext-current-guide-model');
+    await expect(refreshedModel).toHaveAttribute('data-snapshot', String(after.RuntimeId));
+    await expect(refreshedModel).toContainText(text('TeletextGuideFresh'));
+    const refreshedRaster = Buffer.from((await refreshedModel.locator('img').getAttribute('src'))!.split(',')[1], 'base64');
+    expect(refreshedRaster).not.toEqual(originalRaster);
+    await refreshedModel.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath('production-guide-natural-clock-current.png') });
+    await page.goto(historical.toString()); await ready(page, true);
+    expect(await rasterBytes(page)).toEqual(originalRaster);
+    expect(originalBytes(fixture, channel)).toEqual(original); expect(history()).toEqual(retainedHistory);
+    expect(acceptedGuide(fixture, channel)).toEqual(accepted);
+    expect(fixture.database.prepare('SELECT * FROM TeletextProfile WHERE Id=?').all(profile)).toEqual(profiles);
+    expect(fixture.database.prepare('SELECT * FROM TeletextProfileSetting WHERE ProfileId=? ORDER BY Key').all(profile)).toEqual(profileSettings);
+    expect(fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(source)).toEqual(sourceRows);
+    expect(fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel)).toEqual(outputRows);
+    expect(installation(isolatedWebHost.databasePath)).toEqual(selectedInstallation); compareInstalledFiles(selectedInstallation);
+    expect(fixture.calls()).toEqual([]); expect(fixture.setting('teletext.work.max_concurrent')).toBe('1');
+    expect(errors).toEqual([]);
+    receipts.current_raster_sha256 = sha256(refreshedRaster);
+    receipts.scope = 'One natural180s programme-role rollover, same-response independent page201 decoding and full captured AV decode, PMT withdrawal/reannouncement, exact UTC source qualification, immutable originals/history/profiles. Capture UTC and PMT states do not establish byte-level expiry timing; reuse native precise-expiry proof. Not platform/client or full P9B acceptance.';
+    persist();
+  } finally {
+    try { await context?.close(); } finally { fixture.close(); }
+  }
+});

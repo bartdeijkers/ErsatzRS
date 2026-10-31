@@ -62,39 +62,38 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-01 — actual programme-clock rollover.
-Closed: source-aware concepts93f0b2df, explicit activation f15a6b4d and automatic
-SQL update64efadf8 (2headedcases/57transportchecks/46joinednativeidentities).
-The evidence-only SourceUnavailable package now closes actual last-good/stale
-Health/real failed due attempt/retry/fresh recovery on unchanged64 productcode:
-1headedcase,38transportchecks,43joinednativeidentities. Old page201/AV survives
-missing accepted guide source; exact restoration and changedSQLtitle reach a
-Fresh runtime on one response before the unchanged original cap. Manual history,
-pointers and original raster remain unchanged. EN/NLStaleCurrent/Health and
-ENFresh recovery are proven; no DutchFresh/producer-timeout inference.
-Canonical tmp/phase9-tvguide-addon/qualification.json guide_refresh and
- guide_failure_recovery own exact source/bundle/negative/artifact scopes.
-Reuse valid64 focused/lint/smoke/editor/isolation/platform evidence.
+Current package: p9b-01/02 — production guide TTI/sidecar custom-zone workflow.
+Closed: source-aware concepts93f0b2df, explicit activation f15a6b4d, successful
+SQL updates64efadf8, SourceUnavailable last-good/recovery85466f29, and the natural
+programme-clock component in this evidence checkpoint. Clock: actual unchanged
+180s source timeline, one continuous public ts-legacy response across AV/source
+boundaries, independent Alpha/Bravo→Bravo/Charlie pages and full captured AV.
+New qualification starts after B.Start and ends exactly B.Finish. Old expiry
+withdrawal/new-role reannouncement is observed, without old authority renewal.
+All19 transport checks and46 exact native cleanup identities pass. Initial wrong
+test selector and finite hls-direct EOF are preserved as setup/route negatives,
+not product or F6 defects. No Hybrid/physical-client/byte-level UTC-expiry claim.
+Canonical tmp/phase9-tvguide-addon/qualification.json guide_clock_rollover,
+ guide_failure_recovery and guide_refresh own exact receipts and proof scopes.
 
-Next finite action after the evidence checkpoint: qualify a natural programme-
-clock boundary with the production addon using existing source/host/stream
-helpers. Observe old and new current/next guide on the ordinary route, exact
-old role expiry and recovery under new source qualification, with unchanged AV,
-manual history, admission/cancellation and actual cleanup. First inspect the
-existing source-clock fixture/trace contract, then choose its smallest concrete
-trial; do not guess clock values or extend expired old authority. Other P9B-01/02
-configuration/package/timeout, editorial/interchange, localized/client/platform
-clauses retain their existing owners. No general audit or adjacent variants.
+Next finite action after the clock evidence checkpoint: use the existing generic
+TTI/project exporter/importer and real production addon to edit a permitted zone,
+import as a concept, preview and explicitly publish. Prove generated cells remain
+protected, profile/theme/navigation/metadata/package bytes retain their bindings,
+and accepted output contains the edit. Reuse valid generic editor/client and
+source/clock/failure proof; QTM stays optional and upstream-wait unchanged. First
+inspect the exact existing export/import contract before choosing the smallest
+trial; no general editor or new framework. Configuration/package/producer-timeout,
+base-context, localized/platform/client requirements retain P9B-01/02 owners.
 
-Delivery:64efadf8 is a verified local scoped checkpoint, joined locally at
-Rootdf9156e9 while preserving unpublished UCU710 and12foreign dirtypaths/stash.
-ErsatzRS remote remains e8821bbfc220b4712a2775dfe24d2607f9f3d93f; full CI
-41199534104 passed Next and both general browsers,1.5browser jobs pending.
-Wait for that exact fullrun to finish before the next authorized scoped push;
-neverpush Root/main wholesale or cancel retained CI evidence. FFmpeg source-only
-fe972060 is pushed/remoteverified, stable2.0.8tag457 unchanged; run41210214314
-and all3Dockerpublicationjobs are intentionally skipped. Addons18496b1/Next95206a8
-are clean/equal to live remote. No new release/tag/artifact publication.
+Delivery: scoped64efadf8/85466f29 are local and Rootjoined5c2e1d8 with unpublished
+UCU710 and12foreign dirtypaths/stashes preserved; neverpush Root/main wholesale.
+Remote is exacte8821bbfc220b4712a2775dfe24d2607f9f3d93f. Full CI41199534104 is complete: all13 applicable general/1.5 jobs pass,
+with the expected push commitlint skip and optional2.5 unselected. The authorized
+scoped sourcepush can proceed with CI; retain original failures and exclude UCU710.
+FFmpeg source-onlyfe972060 is remoteverified with stable2.0.8tag457 unchanged;
+run41210214314/all3Dockerpublicationjobs intentionally skipped. Addons18496b1 and
+Next95206a8 are clean/equal to live remote. No new release/tag/artifact publication.
 
 '''
 
