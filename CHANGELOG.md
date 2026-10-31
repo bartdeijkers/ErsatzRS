@@ -713,6 +713,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Make the Next subtitle-cache restart/lease regression deterministic during
+  filesystem contention while retaining exact in-flight deadline checks.
+
 - Preserve bounded, redacted owned-process evidence when an isolated browser
   test host fails startup, retaining the original readiness and cleanup bounds.
 - Accept the independently verified generic Level 1/1.5 teletext engine and its

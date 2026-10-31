@@ -75,9 +75,14 @@ regeneration at the accepted cadence, retaining immutable concepts and preview,
 last-good/stale/withdrawal policy and visible Health. Stop when actual source/
 clock change reaches refreshed accepted output and failure/off/restart cleanup
 is proven within this owner. Reuse closed activation and generic9A evidence.
-Delivery: exact53daf0dc full required CI41185760621 is still running, not green;
-source/bounded startup diagnostics are pushed. Do not cancel remaining evidence
-with another push. New activation checkpoint may be committed locally first.
+Delivery: exact53daf0dc full required CI41185760621 still runs with one Next
+failure (452/453pass; positive Burn-cache fixture hit its artificial I/O budget).
+Initial activation is committed f15a6b4d. The isolated fixture-only correction
+passes all13 cache cases by composition,24 clock/deadline repetitions and strict
+infra Clippy; canonical ci.current_required_failure retains the original error.
+Commit the correction, wait remaining exact53 jobs, then push verified source
+checkpoints with fullCI on their newSHA. Do not cancel existing browser evidence
+or claim an old-SHA rerun validates changed code. No release/tag.
 Old b177 full run41172081790 is terminalred in both1.5 browser jobs; preserve its
 pre-listener negatives. No blind retry, changed timeout or root-cause claim.
 Root preserves unpublished UCU710, parallel edits and retained overlap stashes;

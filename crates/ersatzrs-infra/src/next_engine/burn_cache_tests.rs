@@ -180,8 +180,17 @@ async fn unsanitized_cache_is_rebuilt_and_atomic_replacement_is_reusable() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn completed_artifact_survives_restart_and_lease_only_extends() {
+    // This verifies cache identity and lease persistence, not filesystem speed.
+    // Keep paused Tokio time runnable while external filesystem workers finish;
+    // otherwise auto-advance can expire the unchanged preparation deadline.
+    let clock_guard = tokio::spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
+    let started = Instant::now();
     let root = tempfile::tempdir().unwrap();
     let identity = key(1);
     let original_expiry = Utc::now() + Duration::minutes(2);
@@ -212,6 +221,31 @@ async fn completed_artifact_survives_restart_and_lease_only_extends() {
     let manifest = std::fs::read_to_string(root.path().join(format!("{identity}.json"))).unwrap();
     assert!(!manifest.contains("synthetic/source"));
     assert!(!manifest.contains("headers"));
+    assert_eq!(
+        Instant::now(),
+        started,
+        "filesystem I/O must not advance test time"
+    );
+    clock_guard.abort();
+    assert!(clock_guard.await.unwrap_err().is_cancelled());
+}
+
+#[tokio::test(start_paused = true)]
+async fn waiting_cache_admission_expires_at_the_original_deadline() {
+    let root = tempfile::tempdir().unwrap();
+    let cache = Arc::new(BurnCache::new(root.path().to_owned()));
+    let _held = cache.gate.lock().await;
+    let waiting = Arc::clone(&cache);
+    let started = Instant::now();
+    let preparation = tokio::spawn(async move { prepare(&waiting, &key(1), Utc::now()).await });
+    tokio::task::yield_now().await;
+    assert!(!preparation.is_finished());
+    tokio::time::advance(std::time::Duration::from_secs(4)).await;
+    assert!(!preparation.is_finished(), "deadline must not expire early");
+    tokio::time::advance(std::time::Duration::from_secs(1)).await;
+    assert_eq!(preparation.await.unwrap(), Err(CacheError::Deadline));
+    assert_eq!(Instant::now() - started, std::time::Duration::from_secs(5));
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
 }
 
 #[tokio::test]

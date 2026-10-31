@@ -18466,7 +18466,18 @@ that original log/trace/stops remain canonical. The old full round is terminalre
 in both1.5 browser jobs;11 other applicable jobs succeeded, commitlint skipped.
 Closed53daf0dc retains bounded failure-only startup observations without changing
 readiness/shutdown limits or claiming a root-cause repair. Exact full required
-CI41185760621 on53daf0dc is running; canonical CI receipt owns live status.
+CI41185760621 on53daf0dc still runs; canonical CI receipt owns exact job status.
+Its Next job passes452/453 and fails the positive Burn-cache restart/lease
+fixture at its artificial5s filesystem budget. This is not a demonstrated cache
+corruption defect. A bounded fixture-only correction keeps paused Tokio time
+runnable during external I/O; production deadlines and all original identity/
+lease assertions stay unchanged. A separate in-flight admission test proves
+not-before4s/exact5s Deadline without extraction or file creation. Thirteen local
+cache cases pass by12+1 composition (the HTTP mock needs loopback permission);
+12 repetitions of both clock/deadline cases and strict infra library/tests
+Clippy pass. Original exact53 failure and environment-only mock negative remain
+in canonical qualification.json ci.current_required_failure. No retries or
+changed timeouts; new code requires newSHA CI, not an old-job rerun.
 Completed explicit source-aware guide activation component2026-10-31 on native
 Linux x64. Separate Base5/effective6 roles qualify the exact historical source,
 complete saved inputs and finite programme/segment/civil-midnight validity.
