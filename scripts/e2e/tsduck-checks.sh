@@ -165,8 +165,16 @@ check_pcr_jitter() {
 
 # check_continuity_plugin TSFILE LABEL  (independent cross-check of CC errors)
 check_continuity_plugin() {
-  local ts="$1" label="$2" errs
-  errs=$(tsp -I file "$ts" -P continuity -O drop 2>&1 | grep -ciE 'discontinuity|broken|missing|error')
+  local ts="$1" label="$2" errs report
+  if ! report=$(tsp -I file "$ts" -P continuity -O drop 2>&1); then
+    fail "$label · continuity processor" "$report"
+    return 1
+  fi
+  # Zero matching lines is a successful clean stream, including with errexit.
+  # Keep the processor exit independent of the diagnostic count.
+  errs=$(printf '%s\n' "$report" | awk '
+    tolower($0) ~ /discontinuity|broken|missing|error/ { count++ }
+    END { print count + 0 }')
   assert_le "$errs" "$MAX_CC_ERRORS" "$label · continuity processor errors"
 }
 

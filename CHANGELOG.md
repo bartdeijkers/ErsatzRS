@@ -1165,6 +1165,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Correct TSDuck continuity checks under strict shell execution: clean streams
+  pass, while processor failures remain visible independently of diagnostics.
+
 - Settle timed-out automatic teletext guide work and record its failure within a
   bounded cleanup allowance, preserving usable capacity after the actual worker
   exits. Keep the producer deadline and original last-good limits unchanged.

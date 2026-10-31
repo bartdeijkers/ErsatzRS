@@ -62,43 +62,42 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 updated-host Linux ARM runtime/platform qualification.
-Use existing four-RID/source/package/software receipts and tools, beginning with
-ARMv7's production0.1.1 Node fallback. First identify the exact current-host
-cross/package/emulation gap and smallest existing-container trial; do not repeat
-closed nativeLinux/Windows/editor components or start a general audit. Stop this
-component at exact-source package/dependency identity, actual owned host/producer
-profile/validation/preview/publication/ordinary-route and cleanup within the
-proved software boundary. NativeARM remains assumed/deferred, not native accepted;
-macOS remains deferred. Retained Windows663 component is separate from adoption
-of the new timeout repair; reserve120min for any later Windows-package trial.
-Other configuration/package/base-context/Lua/range/client clauses retain owners.
+Current package: P9B-02 updated-host ARM64 software/platform flow.
+Wait the existing frozen b9712b29 ARM64 crossbuild, then use its exact private
+package, pinned Ubuntu24.04/QEMU/Deno environment and existing portable synthetic
+source fixture for profile/real Reset/validation/preview/explicit publication/
+one ordinary public Legacy response and actual cleanup. Do not repeat closed
+ARMv7 UI/stream/decoder work or Linux/Windows/editor components. NativeARM remains
+assumed/deferred, not native verified; macOS deferred. No physicalKodi/client hunt.
+Canonical tmp/phase9-tvguide-addon/qualification.json arm_host owns current
+build/runtime receipts, source/input/package identities, negatives and live handles.
 
-Delivery gate: finish local CI-lifecycle checkpoint and push only the scoped
-663/5bf/d959/test-fix chain from this checkout, without skipCI or releases, then
-monitor exactnewSHA/allrequiredgeneral+1.5 jobs. Full original3cf run41217162921
-is terminalred only in Firefox1.5;12 applicable jobs pass. Trace proves premature
-feedback checking before native document completion, not a hydration fault or
-known server-latency cause. One existing DOMContentLoaded barrier preserves
-feedback/hydration/navigation limits. Whole8case Firefox plus2 ChromiumJS/noJS
-cases pass;13/11 observed native identities drain. OriginalCI and zero-selection
-Chromium tool-negative remain. Canonical qualification.json ci.current_profile_redirect.
-These local checks are not a new fullgreenCI. Original local artifact transfer
-worked; existing timings justify no additional CI speed changes/measurements.
+Completed ARMv7 component: current3989-input b971 source, three ELF binaries and
+extracted package9e4b147f; actual0.1.1 Node22.23.4/noDeno entrypoint and six exact
+payloads. One headed Chromium151 flow validates profile/source and Base5 explicit
+publication; real public8MiB stream passes fullAV/libzvbi/PMT/19transport checks.
+All45 observed native identities and the owned app/worker namespace drain; normal
+exit0/Idle/no leases/integrity hold. Unchanged180s/4500-frame fixture generated
+natively within original30s and hash-copied into target; no ARM encoding claim.
+Original QEMU-generation and Enable-navigation tool failures remain separate.
+Corrected existing continuity checker's zero-match errexit defect: unchanged
+thresholds, actualprocessor failure preserved; strictred/green and three controls
+pass, no-findings review. Reused successful UI/capture/decoder; repeated only19
+transport checks on the retained capture. PreviewDOM/digest proof is separate
+from the viewport admin-selection photo; prior localized/visual scopes retained.
 
-Closed producer-timeout component d959: actual pidfd production red→green,
-one existing10s terminal drain/failure-CAS allowance; unchanged original30s/
-source/lease/role/stale authority.4unit, strictClippy/fmt, matched Leptos,
-1headed/AV/libzvbi/19TSDuck and ordinarysmoke pass;43observed processes drain,
-original60sretry/caps/history and cap1 admission hold. Windows component5bf
-and Linux663 footer/restart/31monitor proofs retain recorded boundaries.
+Delivery: b971 source chain is already on origin/main. Full requiredgeneral+1.5
+CI41237114061 is still active; optional2.5 unselected. Check its exact SHA and all
+applicable jobs to terminal before a new sourcepush. Original3cf failure/trace and
+local8Firefox/2Chromium results remain. No further CI speed change is justified.
+Continuity/ARMv7 checkpoint is locally verified; never push Root wholesale.
+Retain unpublished UCU710/6256, foreign paths/stashes. Stable runtime publications
+are already completed; no new tag/release/artifact publication is commissioned.
 
-Origin/main freshlyverified3cf. Neverpush Root/main wholesale: retain unpublished
-UCU710/6256,12foreign dirtypaths/stashes. FFmpegfe972060/Addons18496b1/Next95206a8
-have no local changes or ahead commits; no sibling sourcepush needed. Stable
-runtime tags remain unchanged. No new release/tag/publication, physicalKodi,
-DVBViewer, client hunt, macOS or nativeARM hardware claim.
-
+Other configuration/package/base-context/Lua/range/client clauses retain their
+existing P9B-01/02 owners. Windows663 component and Linux663/d959 components stay
+closed within recorded source/runtime scopes; new Windows-package trials retain
+120min reservation. Do not reopen closed work without a concrete regression.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

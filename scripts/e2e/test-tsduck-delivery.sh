@@ -87,3 +87,34 @@ removed=("$capture_root/remove"/tsduck-gate-url.*)
 [ ! -e "${removed[0]}" ] \
   || { printf 'default failed capture was not cleaned\n' >&2; exit 1; }
 printf 'tsduck failed-capture retention regressions passed\n'
+
+# Match the real gate's strict shell: no diagnostic matches must not abort it.
+# A separate shell retains errexit even though its result is checked here.
+bash -euo pipefail -c '
+  source "$1"
+  tsp() { return 0; }
+  check_continuity_plugin unused clean >/dev/null
+  [ "$CHECKS_RUN" -eq 1 ] && [ "$CHECKS_FAILED" -eq 0 ]
+  checks_summary >/dev/null
+' bash "$SCRIPT_DIR/tsduck-checks.sh" \
+  || { printf 'zero-error continuity check aborted under errexit\n' >&2; exit 1; }
+
+CHECKS_RUN=0 CHECKS_FAILED=0
+tsp() { printf 'synthetic missing packet\n' >&2; return 0; }
+check_continuity_plugin unused discontinuity >/dev/null
+[ "$CHECKS_RUN" -eq 1 ] && [ "$CHECKS_FAILED" -eq 1 ] \
+  || { printf 'continuity diagnostics were not counted\n' >&2; exit 1; }
+if checks_summary >/dev/null; then
+  printf 'continuity diagnostic failure was hidden\n' >&2; exit 1
+fi
+
+# Even a silent processor failure must fail, independently of the line count.
+CHECKS_RUN=0 CHECKS_FAILED=0
+tsp() { return 7; }
+if check_continuity_plugin unused silent_processor_failure >/dev/null; then
+  printf 'silent continuity processor failure was hidden\n' >&2; exit 1
+fi
+[ "$CHECKS_RUN" -eq 1 ] && [ "$CHECKS_FAILED" -eq 1 ] \
+  || { printf 'processor failure was not recorded\n' >&2; exit 1; }
+unset -f tsp
+printf 'tsduck strict-shell continuity regressions passed\n'

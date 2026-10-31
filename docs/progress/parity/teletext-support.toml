@@ -14,6 +14,7 @@ Original caps/manual history remain exact. P9B-02 Windows663 package/bundle and
 native TTI/footer/publication/SQLrefresh/Legacy:1headed Chromium,AV/libzvbi and19
 transport; forced test teardown is not graceful/liveguide restart. Canonical
 qualification.json owns proofs/negatives and exact platform/source boundaries.
+ARMv7 host flow Complete under QEMU; ARM64 remains.
 Remaining configuration/package/base-context/Lua/range/platform/client
 clauses retain P9B-01/02 ownership.
 ADR0123 keeps2.5 experimental/enhanced acceptance Deferred, QTM optional/upstream-
@@ -59,8 +60,7 @@ ordinary gates. macOS stays deferred under ADR0121.
 Kodi21.2 base controls are Complete: p9a-client-base owns the actual G3
 photo/settings. No DVBViewer, client hunt or decoder repair. Four-RID P9A-02
 Health/licensing/playback/HLS/caption/audio/admin checks are Complete.
-Production guide follows accepted revised9A; Phase10 followsP9B-02. Native-form
-readiness:8Firefox/2Chromium; newSHA fullCI required.
+Production guide follows revised9A; Phase10 followsP9B-02. Forms:8Firefox/2Chromium; b971 CI pending.
 '''
 
 [[debt]]
