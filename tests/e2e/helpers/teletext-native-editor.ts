@@ -103,7 +103,7 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     assert all(re.fullmatch(r'[A-Za-z0-9_.-]{1,128}',e.filename) and e.filename not in ('.','..') for e in entries)
     print(json.dumps([{'name':e.filename,'base64':base64.b64encode(archive.read(e)).decode()} for e in entries]))
 `;
-  const values = JSON.parse(execFileSync('python3', ['-c', script, path], {
+  const values = JSON.parse(execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['-c', script, path], {
     encoding: 'utf8', timeout: 10_000, maxBuffer: 12 * 1024 * 1024,
   })) as { name: string; base64: string }[];
   return values.map(value => ({ name: value.name, mimeType: 'application/octet-stream', buffer: Buffer.from(value.base64, 'base64') }));

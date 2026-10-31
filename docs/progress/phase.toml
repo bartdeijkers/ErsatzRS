@@ -62,34 +62,34 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-02 — exact Windows host package/runtime acceptance.
-Reserve120minutes as requested; use existing packaged-launcher/admin acceptance
-helpers and isolated data. First qualify available candidate/source/platform
-receipts and Windows tooling, then choose the smallest required build/package
-and actual runtime probe. Preserve any running installation. No publication,
-DVBViewer, macOS work or physical Kodi trial. Native ARM remains deferred under
+Current package: p9b-01 production-package failure/availability acceptance.
+Close the existing missing/disabled/incompatible/failing/timed-out refresh
+clauses as one bounded package using the exact0.1.1 addon, existing route/worker
+controls and retained accepted pages. First identify existing reusable proofs
+and the smallest missing actual-host trial; preserve original stale/scope caps,
+ordinary AV, source/selection/lease and joined-worker cleanup. Stop when these
+named failure clauses are proven; no adjacent variants or general audit.
+
+Closed Windows host component: exact663 fourbinary release/private ZIP,
+independent extraction and matching release server/WASM structural gate; actual
+packaged launcher and native Deno2.9.5/Node24.21/headed Chromium151 complete the
+production TTI/footer concept, protected rejection, explicit Base5 publication,
+real60sSQL refresh and one publicLegacy response.1/1, fullAV/libzvbi and19TSDuck
+checks pass. Source/package/profile/history stay immutable. Compiler helper
+forced-drain and explicit owned-host taskkill are recorded; no native graceful/
+liveguide restart or whole9B claim. Canonical qualification.json windows_host.
+Reuse closed Linux663 footer/restart/31capacity-fence proofs and earlier source,
+clock, two-profile/theme/culture and9A runtime/platform evidence within scope.
+
+Delivery: exact3cf12e52fcfdeeeb30295845ffff75f0ab9f1273 remains remote/main.
+Full CI41217162921 has12 applicable jobs green; Firefox1.5 remains active.
+e882 full CI41199534104 passed all13. Optional2.5 is unselected. Hold the next
+scoped sourcepush until the active full run is terminal. Root/main retains
+unpublished UCU710/6256,12foreign dirtypaths and stashes; neverpush it wholesale.
+FFmpeg source-onlyfe972060 is remoteverified; stable2.0.8tag457 is unchanged.
+Addons18496b1/Next95206a8 remain equal remote. No new release/tag/publication,
+macOS, physicalKodi, DVBViewer or client hunt. Native ARM remains deferred under
 its existing assumption; required cross/package/QEMU obligations stay owned.
-
-Closed package: production0.1.1 page201 TTI/sidecar footer-Zone concept, protected
-Generated rejection, explicit Base5 publication, real restart and automatic guide
-refresh with matching Current preview/publicLegacy output. Final1headedcase,
-full AV/libzvbi,19transportchecks and44joinednativeidentities pass. The reproduced
-cap1 preview rejection is red/green after bounded admission and retained render/
-final-confirmation ownership;31monitor/admission controls andstrictchecks pass.
-Original24ms failure/harness/lint negatives remain; its exactstage is not inferred.
-Canonical tmp/phase9-tvguide-addon/qualification.json guide_tti_zone owns proof.
-Do not reopen closed activation, source-update/failure/clock or footer components
-without a concrete regression. Remaining P9B-01/02 clauses keep their owners.
-
-Delivery: exact3cf12e52fcfdeeeb30295845ffff75f0ab9f1273 is remote/main. Full CI
-41217162921 is active; build, general Rust tests and early checks pass, remaining
-teletext/Next/browser jobs pending. e882 full CI41199534104 passed all13 applicable
-jobs. Optional2.5 is unselected. Hold the next scoped sourcepush until the active
-full run is terminal; neverpush Root/main wholesale or cancel retained CI evidence.
-Root45088ff9 retains unpublished UCU710/6256 and12foreign dirtypaths/stashes.
-FFmpeg source-onlyfe972060 is remoteverified, stable2.0.8tag457 unchanged and all
-publication jobs skipped. Addons18496b1/Next95206a8 remain equal remote. No new
-release/tag/artifact publication.
 
 '''
 

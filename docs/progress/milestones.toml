@@ -18647,7 +18647,41 @@ client versions/features/limitations; Kodi is optional, and transport-only proof
 cannot establish Level 2.5 display. Headed localized browser proof covers these
 flows while every existing engine-first, playback, lifecycle and platform gate stays.
 '''
-evidence = ''
+evidence = '''
+Completed Windows host package/runtime component2026-10-31, exact application
+source66363369bc5991d3bddf8f469bdd5a74ed8add22 and production addon0.1.1/18496b1.
+Canonical tmp/phase9-tvguide-addon/qualification.json windows_host owns source,
+package, runtime, browser, transport, immutable-input and cleanup receipts.
+The isolated native release build produces all four PE/x64 executables from the
+frozen3989-file source archive, with no target override. Matching release WASM
+comes from that same source; the20-file site and independently extracted private
+ZIP35f454368f67bbafc3064f8b8b03c4e6f0dd9dba331cf191c0adda6ce38a7c78 pass the
+existing structural bundle gate. No release or artifact publication occurred.
+The actual packaged launcher starts its hash-verified server child against the
+explicit disposable database. Native Deno2.9.5 and Node24.21.0 run one headed
+Chromium151.0.7922.34 case:1pass,0skip/retry/failure. Actual production install/
+enable, profile/source selection, page201 TTI/versioned-sidecar export, protected
+Generated-title rejection, isolated footer-Zone concept/preview and explicit
+Base5 publication pass. A real SQL-title change and original60s coalescing retain
+Custom notice through automatic refresh on one continuous publicLegacy response.
+The8MiB prefix00754fa4a4ab972d1e9092d1d233a78f97de92aeffc10720a1e6bf55eca37cec
+passes full AV decode, independent FFmpeg/libzvbi old/new-title/footer checks,
+authored-PMT continuity and19 existing TSDuck3.44-4676 transport checks.
+Fresh Current raster is visually reviewed; historical rasters/revisions,
+manual pointers, profiles/settings and installed package remain exact. Zero
+browser errors, unchanged proof inputs and package/source hashes are confirmed.
+The120-minute reservation is honored. The build finishes in4462s; a remaining
+compiler helper needs bounded force, so natural compiler drain is not claimed.
+Runtime test teardown explicitly ends only its owned launcher tree; the outer
+existing WindowsJob exits0 with natural/final-empty and no supervisor force or
+timeout. This proves bounded test cleanup, not graceful application shutdown.
+Closed component: this exact Windows package supports the production editor/
+publication/refresh/Legacy flow. Reuse closed Linux663 graceful restart/footer,
+31 capacity/fence regressions, earlier Linux multi-profile/culture/transport and
+accepted9A managed2.0.8/rs7 caption/alternate-audio/platform evidence within their
+unchanged boundaries. No new Windows live-guide restart/graceful, Hybrid/HLS,
+physical client or whole9B acceptance is inferred; those clauses keep owners.
+'''
 
 [[milestone]]
 id         = 'p10a-01'
