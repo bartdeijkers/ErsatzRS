@@ -38,6 +38,7 @@ use crate::host::{
 
 #[path = "teletext_cached_guide_admission.rs"]
 mod cached_admission;
+pub(crate) use cached_admission::begin_cached_confirmation as begin_current_guide_preview_work;
 
 #[path = "teletext_guide_output_identity.rs"]
 mod guide_identity;
@@ -208,6 +209,23 @@ impl SelectedTeletextOutputCandidate {
         deadline: Instant,
     ) -> bool {
         self.confirm_with_wait(application, maximum, deadline, None)
+            .await
+    }
+
+    /// Finish a read-only preview under its actual joined render admission.
+    /// The held slot does not replace exact current/source confirmation.
+    pub(crate) async fn confirm_guide_preview_with_hold(
+        &self,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+        hold: ersatzrs_core::locking::TeletextWorkHold,
+    ) -> bool {
+        let Self::Guide(candidate, _) = self else {
+            return false;
+        };
+        candidate
+            .confirm(application, maximum, deadline, Some(hold), None)
             .await
     }
 
@@ -454,7 +472,10 @@ impl GuideTeletextOutputCandidate {
         {
             match admit_confirmation(application, deadline, wait_cadence).await {
                 Ok(guard) => Some(guard),
-                Err(_) => return false,
+                Err(error) => {
+                    tracing::debug!(%error, "guide output confirmation admission failed");
+                    return false;
+                }
             }
         } else {
             None
@@ -794,9 +815,17 @@ async fn load_guide_refresh_output(
     ) {
         return Ok(None);
     }
+    let deadline = if wait_cadence.is_some() {
+        guide_read_admission_deadline(metadata, scope, deadline)
+    } else {
+        deadline
+    };
     let guard = admit_confirmation(application, deadline, wait_cadence)
         .await
-        .map_err(|_| SelectedTeletextReadFailure)?;
+        .map_err(|error| {
+            tracing::debug!(%error, "guide output recovery admission failed");
+            SelectedTeletextReadFailure
+        })?;
     // The initial seed needs no runtime BLOB. A separately published runtime
     // document is fetched only for a genuinely new content identity.
     let snapshot = load_snapshot_for_metadata(
@@ -832,7 +861,10 @@ async fn load_guide_refresh_output(
                 .await
         }
     }
-    .map_err(|_| SelectedTeletextReadFailure)?;
+    .map_err(|error| {
+        tracing::debug!(%error, "guide output native recovery failed");
+        SelectedTeletextReadFailure
+    })?;
     if native.seed() != &metadata.seed
         || native.snapshot().map(snapshot_metadata) != metadata.runtime
         || native.status() != status
@@ -840,28 +872,7 @@ async fn load_guide_refresh_output(
     {
         return Err(SelectedTeletextReadFailure);
     }
-    let qualification = metadata.runtime.as_ref().map_or_else(
-        || metadata.seed.qualification.clone(),
-        |snapshot| snapshot.qualification.clone(),
-    );
-    let confirmation = TeletextGuideRefreshOutputConfirmation {
-        seed: metadata.seed.clone(),
-        current_revision: metadata.revision,
-        runtime: metadata.runtime.clone(),
-        selection: native.selection().clone(),
-        qualification,
-        status,
-        available_until: metadata.available_until(),
-    };
-    let candidate = GuideTeletextOutputCandidate {
-        deadline: scope.map_or(native.output_deadline(), |scope| {
-            native.output_deadline().min(scope.into_std())
-        }),
-        identity: GuideOutputIdentity::from_confirmation(&confirmation),
-        native: Arc::new(native),
-        confirmation,
-        limits: runtime.limits,
-    };
+    let candidate = guide_output_candidate(metadata, native, scope, runtime.limits);
     // Reuse the original admission, including the final source transaction.
     if confirm
         && !candidate
@@ -880,6 +891,48 @@ async fn load_guide_refresh_output(
         Box::new(candidate),
         scope,
     ))))
+}
+
+fn guide_output_candidate(
+    metadata: &TeletextGuideRefreshCurrentMetadata,
+    native: NativeGuideRuntimeOutput,
+    scope: Option<tokio::time::Instant>,
+    limits: TeletextGuideSourceCheckLimits,
+) -> GuideTeletextOutputCandidate {
+    let qualification = metadata.runtime.as_ref().map_or_else(
+        || metadata.seed.qualification.clone(),
+        |snapshot| snapshot.qualification.clone(),
+    );
+    let confirmation = TeletextGuideRefreshOutputConfirmation {
+        seed: metadata.seed.clone(),
+        current_revision: metadata.revision,
+        runtime: metadata.runtime.clone(),
+        selection: native.selection().clone(),
+        qualification,
+        status: native.status(),
+        available_until: metadata.available_until(),
+    };
+    GuideTeletextOutputCandidate {
+        deadline: scope.map_or(native.output_deadline(), |scope| {
+            native.output_deadline().min(scope.into_std())
+        }),
+        identity: GuideOutputIdentity::from_confirmation(&confirmation),
+        native: Arc::new(native),
+        confirmation,
+        limits,
+    }
+}
+
+fn guide_read_admission_deadline(
+    metadata: &TeletextGuideRefreshCurrentMetadata,
+    scope: Option<tokio::time::Instant>,
+    deadline: Instant,
+) -> Instant {
+    let monotonic = tokio::time::Instant::now();
+    let observed = Utc::now();
+    let deadline = transition_deadline(monotonic, observed, Some(metadata.available_until()))
+        .map_or(deadline, |cap| deadline.min(cap.into_std()));
+    scope.map_or(deadline, |cap| deadline.min(cap.into_std()))
 }
 
 async fn load_snapshot_for_metadata(
@@ -946,9 +999,9 @@ pub(super) async fn prepare_guide_refresh_base_output(
     .await
 }
 
-/// Prepare the actual current runtime inside one existing monitor recovery.
-/// Cold recovery remains immediate; only this bounded warm attempt may wait.
-pub(super) async fn prepare_current_guide_successor(
+/// Prepare the actual current runtime for bounded monitor or preview recovery.
+/// Initial stream recovery remains immediate; these explicit reads may wait.
+pub(crate) async fn prepare_current_guide_successor(
     application: &ApplicationServices,
     channel_id: i64,
     budget: TeletextDesignDocumentBudget,

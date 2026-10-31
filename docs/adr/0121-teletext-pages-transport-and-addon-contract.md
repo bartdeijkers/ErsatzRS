@@ -467,9 +467,20 @@ from failed source/selection validation. Its cached confirmation may wait in pla
 for admission within the existing original recovery deadline, additionally capped
 by the sealed candidate's role and scope expiry. After admission it performs the
 same source hash and final current-selection checks; waiting grants no fresh
-source proof and cannot publish a replacement. Initial recovery and the global
-immediate-admission API retain their existing behavior. Failure or expiry still
-withdraws optional teletext while ordinary audio/video continues.
+source proof and cannot publish a replacement. Initial stream recovery and the
+global immediate-admission API retain their existing behavior. Failure or expiry
+still withdraws optional teletext while ordinary audio/video continues.
+
+The read-only Current guide preview may use the same bounded capacity-release
+notification for recovery and raster work. Its deadline starts with the original
+request, is never renewed, and is additionally capped by the selected role/scope.
+Only saturation waits; invalid configuration, source, native content or selection
+still fails without presentation. Rendering and final exact-current source
+confirmation share the render admission, retained until both finish. Cancellation
+does not release a still-running worker's own hold. This grants no producer,
+concept, publication or expired-source authority, and adds no stream-start queue.
+Failure-only debug stages distinguish recovery, admission, projection and final
+confirmation using static categories without authored or source content.
 
 A changed runtime snapshot under the same immutable manual origin uses the
 existing warm-replacement path: load and fully confirm the actual successor

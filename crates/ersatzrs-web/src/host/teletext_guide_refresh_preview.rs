@@ -65,72 +65,111 @@ async fn preview_current_guide<T: Send + 'static>(
             refresh: true,
         };
         let maximum = runtime.design.max_serialized_bytes;
-        let candidate = crate::transport::iptv::load_selected_teletext_output_candidate_with_guide(
+        let cadence = runtime
+            .live_updates
+            .ok_or_else(unavailable)?
+            .poll_interval();
+        let recovery = crate::transport::iptv::recover_current_guide_for_preview(
             application,
             channel_id,
             runtime.design,
             runtime.encoding,
             deadline,
-            Some(&guide),
-        )
-        .await
-        .map_err(|_| unavailable())?
-        .ok_or_else(unavailable)?;
+            &guide,
+            cadence,
+        );
+        let candidate = tokio::time::timeout_at(deadline.into(), recovery)
+            .await
+            .map_err(|_| failed_at("recovery"))?
+            .map_err(|_| failed_at("recovery"))?
+            .ok_or_else(unavailable)?;
+        let deadline = candidate
+            .next_transition()
+            .map_or(deadline, |cap| deadline.min(cap.into_std()));
         let generation = candidate.output_observation().ok_or_else(unavailable)?;
         if generation.guide_refresh.is_none() {
             return Err(unavailable());
         }
         let service = candidate.service().cloned().ok_or_else(unavailable)?;
-        let guard = teletext_work::begin(application, Some(deadline))
-            .await
-            .map_err(|_| unavailable())?;
+        let guard = crate::transport::iptv::begin_current_guide_preview_work(
+            application,
+            deadline,
+            cadence,
+        )
+        .await
+        .map_err(|error| {
+            tracing::debug!(%error, "current teletext guide preview admission failed");
+            failed_at("render_admission")
+        })?;
         let worker = teletext_work::spawn_blocking(guard.hold_work(), move || {
-            if Instant::now() >= deadline {
-                return Err(unavailable());
-            }
-            let preview = project_teletext_preview(
+            render_current_guide(
                 &service,
                 owner,
-                TeletextColourPixelOptions {
-                    reveal_concealed: false,
-                    flash_phase: TeletextFlashPhase::Original,
-                },
-                authoring.preview,
-            )
-            .map_err(|_| unavailable())?;
-            let pages = service
-                .declared()
-                .semantic()
-                .base()
-                .pages
-                .iter()
-                .map(|p| p.address)
-                .collect();
-            let (raster, navigation) = preview.into_parts();
-            let result = projection(&CurrentGuidePreview {
                 generation,
-                raster,
-                pages,
-                navigation: navigation.to_vec(),
-            })?;
-            if Instant::now() >= deadline {
-                return Err(unavailable());
-            }
-            Ok(result)
+                authoring.preview,
+                projection,
+                deadline,
+            )
         });
         let rendered = tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), worker)
             .await
-            .map_err(|_| unavailable())?
-            .map_err(|_| unavailable())??;
-        drop(guard);
-        if !candidate.confirm(application, maximum, deadline).await {
-            return Err(unavailable());
+            .map_err(|_| failed_at("render_timeout"))?
+            .map_err(|_| failed_at("render_worker"))??;
+        if !candidate
+            .confirm_guide_preview_with_hold(application, maximum, deadline, guard.hold_work())
+            .await
+        {
+            return Err(failed_at("final_confirmation"));
         }
+        drop(guard);
         Ok(rendered)
     };
     tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), Box::pin(work))
         .await
         .map_err(|_| unavailable())?
+}
+
+fn render_current_guide<T>(
+    service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    generation: TeletextOutputGenerationObservation,
+    budget: super::teletext_preview::TeletextPreviewBudget,
+    projection: impl FnOnce(&CurrentGuidePreview) -> Result<T, TeletextAuthoringError>,
+    deadline: Instant,
+) -> Result<T, TeletextAuthoringError> {
+    if Instant::now() >= deadline {
+        return Err(unavailable());
+    }
+    let preview = project_teletext_preview(
+        service,
+        owner,
+        TeletextColourPixelOptions {
+            reveal_concealed: false,
+            flash_phase: TeletextFlashPhase::Original,
+        },
+        budget,
+    )
+    .map_err(|_| failed_at("raster_projection"))?;
+    let pages = service
+        .declared()
+        .semantic()
+        .base()
+        .pages
+        .iter()
+        .map(|p| p.address)
+        .collect();
+    let (raster, navigation) = preview.into_parts();
+    let result = projection(&CurrentGuidePreview {
+        generation,
+        raster,
+        pages,
+        navigation: navigation.to_vec(),
+    })
+    .map_err(|_| failed_at("projection"))?;
+    if Instant::now() >= deadline {
+        return Err(unavailable());
+    }
+    Ok(result)
 }
 
 async fn configuration(
@@ -173,4 +212,9 @@ fn unavailable() -> TeletextAuthoringError {
         status: TeletextAuthoringStatus::PreviewFailed,
         location: None,
     }
+}
+
+fn failed_at(stage: &'static str) -> TeletextAuthoringError {
+    tracing::debug!(stage, "current teletext guide preview failed");
+    unavailable()
 }

@@ -10,7 +10,7 @@ use tokio::sync::futures::Notified;
 
 use crate::host::teletext_work::TeletextWorkError;
 
-pub(super) async fn begin_cached_confirmation(
+pub(crate) async fn begin_cached_confirmation(
     application: &ersatzrs_app::ApplicationServices,
     deadline: Instant,
     cadence: Duration,

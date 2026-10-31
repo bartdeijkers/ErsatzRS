@@ -5,15 +5,14 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
 summary    = '''
 P9A-04/p9a-final-gate Complete2026-10-31: exact218 full CI41153570313
-passes all13 required general/1.5 jobs; unchanged canonical receipt/source joins
-retain actual client/platform scopes. P9B-01 explicit activation, automatic SQL
-update, SourceUnavailable last-good/recovery and natural programme-clock rollover
-are closed within native Linux x64 scopes. The public continuous Legacy route
-updates Now/Next on one response across AV/source boundaries; validated Current
-preview and immutable manual history remain distinct. Canonical qualification.json
-owns all exact headed/transport/cleanup receipts and negatives. Remaining
-configuration/package/timeout/editorial/interchange/platform/client clauses retain
-P9B-01/02 ownership.
+passes all13 required general/1.5 jobs with recorded client/platform scopes.
+P9B-01 activation, SQL updates, SourceUnavailable recovery, natural clock rollover,
+production TTI/sidecar footer editing/publication/refresh and occupied-capacity
+Current preview are closed within native Linux x64 scopes. Normal Legacy output
+and validated Current preserve immutable manual history. Canonical qualification.json
+owns exact headed/transport/cleanup proof and negatives, including guide_tti_zone.
+Remaining configuration/package/timeout/base-context/Lua/range/platform/client
+clauses retain P9B-01/02 ownership.
 ADR0123 keeps2.5 experimental/enhanced acceptance Deferred, QTM optional/upstream-
 wait, macOS Deferred and native ARM assumed from required cross/QEMU proof.
 P9A-04 owns L15/F/V/X and retained history; closed owners stay closed.

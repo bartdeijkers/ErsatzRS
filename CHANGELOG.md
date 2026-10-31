@@ -1165,6 +1165,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep Current TV-guide previews within their original deadline while teletext
+  work capacity is occupied. Share rendering admission with final source
+  validation and retain actual worker ownership after request cancellation.
+
 - Synchronize browser checks with automatic mobile navigation and
   post-installation page reloads, avoiding reopened drawers and clicks
   before fresh-document hydration.

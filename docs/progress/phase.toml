@@ -62,38 +62,34 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9b-01/02 — production guide TTI/sidecar custom-zone workflow.
-Closed: source-aware concepts93f0b2df, explicit activation f15a6b4d, successful
-SQL updates64efadf8, SourceUnavailable last-good/recovery85466f29, and the natural
-programme-clock component in this evidence checkpoint. Clock: actual unchanged
-180s source timeline, one continuous public ts-legacy response across AV/source
-boundaries, independent Alpha/Bravo→Bravo/Charlie pages and full captured AV.
-New qualification starts after B.Start and ends exactly B.Finish. Old expiry
-withdrawal/new-role reannouncement is observed, without old authority renewal.
-All19 transport checks and46 exact native cleanup identities pass. Initial wrong
-test selector and finite hls-direct EOF are preserved as setup/route negatives,
-not product or F6 defects. No Hybrid/physical-client/byte-level UTC-expiry claim.
-Canonical tmp/phase9-tvguide-addon/qualification.json guide_clock_rollover,
- guide_failure_recovery and guide_refresh own exact receipts and proof scopes.
+Current package: p9b-02 — exact Windows host package/runtime acceptance.
+Reserve120minutes as requested; use existing packaged-launcher/admin acceptance
+helpers and isolated data. First qualify available candidate/source/platform
+receipts and Windows tooling, then choose the smallest required build/package
+and actual runtime probe. Preserve any running installation. No publication,
+DVBViewer, macOS work or physical Kodi trial. Native ARM remains deferred under
+its existing assumption; required cross/package/QEMU obligations stay owned.
 
-Next finite action after the clock evidence checkpoint: use the existing generic
-TTI/project exporter/importer and real production addon to edit a permitted zone,
-import as a concept, preview and explicitly publish. Prove generated cells remain
-protected, profile/theme/navigation/metadata/package bytes retain their bindings,
-and accepted output contains the edit. Reuse valid generic editor/client and
-source/clock/failure proof; QTM stays optional and upstream-wait unchanged. First
-inspect the exact existing export/import contract before choosing the smallest
-trial; no general editor or new framework. Configuration/package/producer-timeout,
-base-context, localized/platform/client requirements retain P9B-01/02 owners.
+Closed package: production0.1.1 page201 TTI/sidecar footer-Zone concept, protected
+Generated rejection, explicit Base5 publication, real restart and automatic guide
+refresh with matching Current preview/publicLegacy output. Final1headedcase,
+full AV/libzvbi,19transportchecks and44joinednativeidentities pass. The reproduced
+cap1 preview rejection is red/green after bounded admission and retained render/
+final-confirmation ownership;31monitor/admission controls andstrictchecks pass.
+Original24ms failure/harness/lint negatives remain; its exactstage is not inferred.
+Canonical tmp/phase9-tvguide-addon/qualification.json guide_tti_zone owns proof.
+Do not reopen closed activation, source-update/failure/clock or footer components
+without a concrete regression. Remaining P9B-01/02 clauses keep their owners.
 
-Delivery: scoped64efadf8/85466f29 are local and Rootjoined5c2e1d8 with unpublished
-UCU710 and12foreign dirtypaths/stashes preserved; neverpush Root/main wholesale.
-Remote is exacte8821bbfc220b4712a2775dfe24d2607f9f3d93f. Full CI41199534104 is complete: all13 applicable general/1.5 jobs pass,
-with the expected push commitlint skip and optional2.5 unselected. The authorized
-scoped sourcepush can proceed with CI; retain original failures and exclude UCU710.
-FFmpeg source-onlyfe972060 is remoteverified with stable2.0.8tag457 unchanged;
-run41210214314/all3Dockerpublicationjobs intentionally skipped. Addons18496b1 and
-Next95206a8 are clean/equal to live remote. No new release/tag/artifact publication.
+Delivery: exact3cf12e52fcfdeeeb30295845ffff75f0ab9f1273 is remote/main. Full CI
+41217162921 is active; build, general Rust tests and early checks pass, remaining
+teletext/Next/browser jobs pending. e882 full CI41199534104 passed all13 applicable
+jobs. Optional2.5 is unselected. Hold the next scoped sourcepush until the active
+full run is terminal; neverpush Root/main wholesale or cancel retained CI evidence.
+Root45088ff9 retains unpublished UCU710/6256 and12foreign dirtypaths/stashes.
+FFmpeg source-onlyfe972060 is remoteverified, stable2.0.8tag457 unchanged and all
+publication jobs skipped. Addons18496b1/Next95206a8 remain equal remote. No new
+release/tag/artifact publication.
 
 '''
 

@@ -211,7 +211,7 @@ pub(super) async fn import_response(
     .await
 }
 
-pub(super) async fn rendered(fixture: &Fixture, uri: &str) -> String {
+pub(crate) async fn rendered(fixture: &Fixture, uri: &str) -> String {
     assert!(uri.starts_with("/channels/"));
     let response = build_app(fixture.state.clone())
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())

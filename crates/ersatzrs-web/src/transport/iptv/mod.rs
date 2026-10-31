@@ -23,7 +23,8 @@ mod teletext_output_observation;
 mod teletext_retained_output;
 mod teletext_selected_output;
 pub(crate) use teletext_selected_output::{
-    load_selected_teletext_output_candidate_with_guide, GuideRuntime,
+    begin_current_guide_preview_work,
+    prepare_current_guide_successor as recover_current_guide_for_preview, GuideRuntime,
 };
 pub mod teletext_source_policy;
 mod teletext_source_probe;

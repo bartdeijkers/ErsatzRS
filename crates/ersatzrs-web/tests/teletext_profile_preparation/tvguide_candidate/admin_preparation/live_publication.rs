@@ -253,6 +253,96 @@ async fn base(
     (identity, before, selected)
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the exact production addon bundle and isolated state/data directories"]
+async fn production_current_guide_preview_waits_for_actual_worker_release_without_mutation() {
+    let (mut fixture, _) = fixture().await;
+    let mut runtime: Value = serde_json::from_str(include_str!(
+        "../../../fixtures/teletext-output-policy-v1.json"
+    ))
+    .unwrap();
+    runtime["version"] = json!(4);
+    runtime["guide_limits"] = policy()["guide_limits"].clone();
+    runtime["live_updates"] = json!({"poll_interval_ms":25,"recovery_timeout_ms":2000});
+    authoring::setting(&fixture, "teletext.output.policy", &runtime.to_string()).await;
+    let (identity, before_original, selected) = base(&fixture).await;
+    let before = state(&fixture).await;
+    let refresh = fixture
+        .state
+        .application
+        .observe_current_guide_refresh(
+            1,
+            ersatzrs_core::repositories::TeletextGuideRefreshRole::Base,
+            designs::budget().max_serialized_bytes,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(refresh.seed.generation, selected);
+    assert!(refresh.runtime.is_none());
+    let guard = fixture
+        .state
+        .application
+        .operations()
+        .try_begin_teletext_work(1)
+        .unwrap();
+    let hold = guard.hold_work();
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let worker = tokio::task::spawn_blocking(move || {
+        let _hold = hold;
+        let _ = started_tx.send(());
+        let _ = release_rx.recv();
+    });
+    drop(guard);
+    started_rx.await.unwrap();
+    let mut request = Box::pin(editorial_http::rendered(
+        &fixture,
+        "/channels/1/teletext?guide_preview=1&guide_page=200&guide_subcode=0000",
+    ));
+    let while_occupied = tokio::time::timeout(Duration::from_millis(200), request.as_mut()).await;
+    // Release and join the real worker even when the current behavior fails.
+    release_tx.send(()).unwrap();
+    worker.await.unwrap();
+    assert!(
+        while_occupied.is_err(),
+        "current preview returned before the admitted worker released its only slot"
+    );
+    let html = request.await;
+    assert!(html.contains("data-testid=\"teletext-current-guide-model\""));
+    assert!(html.contains(&format!("data-generation=\"{}\"", selected.id)));
+    assert_eq!(state(&fixture).await, before);
+    assert_eq!(accepted(&fixture, false).await, selected);
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .observe_current_guide_refresh(
+                1,
+                ersatzrs_core::repositories::TeletextGuideRefreshRole::Base,
+                designs::budget().max_serialized_bytes,
+            )
+            .await
+            .unwrap()
+            .unwrap(),
+        refresh
+    );
+    assert_eq!(
+        original(&fixture, identity, TeletextAuthoringScope::Base, 200).await,
+        before_original
+    );
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .operations()
+            .entity_locker()
+            .active_teletext_work(),
+        0
+    );
+    assert!(fixture.playout.try_recv().is_err());
+}
+
 async fn forged_roles(
     fixture: &Fixture,
     identity: TeletextAuthoringIdentity,
