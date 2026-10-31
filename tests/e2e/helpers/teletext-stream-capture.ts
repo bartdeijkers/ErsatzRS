@@ -9,6 +9,7 @@ export async function captureTeletextChannelTs(
   url: string,
   output: string,
   limits: { maximumBytes: number; maximumTimeMs: number },
+  observeChunk?: (bytes: Uint8Array, receivedUtc: string) => void,
 ): Promise<TeletextTsCapture> {
   if (!Number.isSafeInteger(limits.maximumBytes) || limits.maximumBytes < 188
       || limits.maximumBytes > 8 * 1024 * 1024 || limits.maximumBytes % 188 !== 0
@@ -41,6 +42,9 @@ export async function captureTeletextChannelTs(
       const chunk = await reader.read();
       if (chunk.done) { ended = 'eof'; break; }
       const accepted = chunk.value.subarray(0, limits.maximumBytes - count);
+      // Optional observation is confined to bytes retained by this same bounded
+      // response. It does not alter admission, timeout, delivery or cleanup.
+      observeChunk?.(accepted, new Date().toISOString());
       chunks.push(Buffer.from(accepted));
       count += accepted.length;
     }

@@ -1,7 +1,7 @@
 import { Browser, BrowserContext, expect, Locator, Page } from '@playwright/test';
 import { test } from './isolated-web-host';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1945,4 +1945,382 @@ test('production TV-guide actual command timeout retains last-good output and re
   } finally {
     try { await context?.close(); } finally { fixture.close(); }
   }
+});
+
+// One real production-addon Lua lifecycle. The collection/media fixture supplies
+// AV only; Lua resolves existing production profiles through the normal app API.
+test('production TV-guide Lua profile On Off Continue and natural expiry to Base', async ({ browser, isolatedWebHost }, info) => {
+  test.skip(process.env.ERSATZRS_TVGUIDE_LUA_FLOW !== '1', 'Explicit production Lua lifecycle qualification.');
+  test.skip(process.platform === 'win32', 'This disposable host proof is POSIX; native Windows has separate evidence.');
+  test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9 and its independent libzvbi decoder.');
+  test.setTimeout(300_000);
+  const baseURL = isolatedWebHost.baseURL;
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, {
+    authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
+  });
+  let context: BrowserContext | undefined;
+  const receipts: Record<string, unknown> = { repository_zip_sha256: candidateDigest,
+    scope: 'Real production profile On/effective6, Off/effective4, command-free Continue and natural60s Off expiry to Base5; paired direct-TS ordinary On/isolation responses and one public Legacy Off-to-Base response. No simultaneous paired Legacy-capacity, restart, physical client or whole P9B claim.' };
+  const persist = (): void => writeFileSync(info.outputPath('production-guide-lua-identity.json'), JSON.stringify(receipts, null, 2));
+  type Interval = { PlayoutId: number; AddonId: string; Start: string; Finish: string; State: number; CandidateSnapshot: string | null; ProfileId: number | null };
+  const channel = fixture.channels[0], source = fixture.channels[1];
+  const intervals = (): Interval[] => fixture.database.prepare(`SELECT *,json_extract(CandidateSnapshot,'$.profile') AS ProfileId
+    FROM PlayoutTeletextInterval WHERE PlayoutId=? AND AddonId=? ORDER BY Start`).all(channel, addonId) as Interval[];
+  const sourceRows = (): unknown[] => fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(source);
+  const generation = (id: number, effective: boolean): Record<string, unknown> | undefined => fixture.database.prepare(`
+    SELECT g.*,r.DesignId,r.Revision FROM ${effective ? 'TeletextEffectiveAcceptedGenerationCurrent' : 'TeletextAcceptedGenerationCurrent'} c
+    JOIN TeletextAcceptedGeneration g ON g.Id=c.GenerationId JOIN TeletextPublicationRequest r ON r.Id=g.RequestId WHERE c.ChannelId=?`).get(id);
+  const document = (url: string): Buffer => {
+    const params = new URL(url).searchParams;
+    const row = fixture.database.prepare('SELECT Document FROM TeletextDesignRevision WHERE DesignId=? AND Revision=?')
+      .get(Number(params.get('design_id')), Number(params.get('revision'))) as { Document: Uint8Array };
+    expect(row).toBeDefined(); return Buffer.from(row.Document);
+  };
+  try {
+    const selectedInstallation = await installProduction(browser, baseURL, isolatedWebHost.databasePath);
+    receipts.installation = selectedInstallation; receipts.channels = fixture.channels; persist();
+    fixture.configureScripted();
+    const policy = JSON.parse(readFileSync(fileURLToPath(new URL(
+      '../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl,
+    )), 'utf8'));
+    const guideLimits = { max_records: 1000, max_source_bytes: 1_048_576,
+      max_model_nodes: 10_000, max_model_bytes: 16_777_216, max_digest_fields: 100_000, max_digest_bytes: 16_777_216 };
+    const authoring = { ...policy, version: 2, operation_timeout_ms: 30_000, guide_limits: guideLimits,
+      preview: { max_pages: 16, max_model_records: 32_768, max_pixels: 168_000, max_diagnostics: 1400, max_work: 50_000_000 } };
+    delete authoring.source; delete authoring.recovery_timeout_ms;
+    fixture.setAuthoringPolicy(JSON.stringify(authoring));
+    fixture.setOutputPolicy(JSON.stringify({ ...policy, version: 4, guide_limits: guideLimits,
+      live_updates: { poll_interval_ms: 25, recovery_timeout_ms: 2000 } }));
+    fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run('teletext.work.max_concurrent', '1');
+    context = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage(), errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    const text = translation('en_us');
+    await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
+    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    const classic = await createProfile(page, fixture, 'classic', true), night = await createProfile(page, fixture, 'night', true);
+    receipts.profiles = { classic, night }; persist();
+    for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
+    const retainedSource = sourceRows();
+    const sourceNow = fixture.database.prepare(`SELECT * FROM PlayoutItem WHERE PlayoutId=?
+      AND julianday(Start)<=julianday(?) AND julianday(Finish)>julianday(?) ORDER BY Start LIMIT 1`)
+      .get(source, new Date().toISOString(), new Date().toISOString()) as { Start: string; Finish: string };
+    expect(sourceNow).toBeDefined(); receipts.source_programme = sourceNow; persist();
+    const baseUrls: string[] = [], baseOriginals: Buffer[] = [], baseAccepted: Record<string, unknown>[] = [];
+    // Successful Publish may race cap1 background observation on the historical
+    // GET. Only an exact Busy document with an already-selected identity gets
+    // one explicit read of that same immutable URL; mutations are never retried.
+    const publication = async (effective: boolean, artifact: number): Promise<Record<string, unknown>> => {
+      await submit(page, page.getByTestId('teletext-publication-request-form'), text('TeletextPublicationRequest'), true);
+      await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'pending');
+      const pendingUrl = page.url(), before = document(pendingUrl);
+      await submit(page, page.getByTestId('teletext-publication-publish-form'), text('TeletextPublicationPublish'), true);
+      await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'publication-selected');
+      const target = Number(new URL(page.url()).pathname.split('/')[2]);
+      const accepted = generation(target, effective);
+      expect(accepted?.ArtifactVersion).toBe(artifact);
+      expect(accepted?.DesignId).toBe(Number(new URL(pendingUrl).searchParams.get('design_id')));
+      expect(accepted?.Revision).toBe(Number(new URL(pendingUrl).searchParams.get('revision')));
+      const error = page.getByTestId('teletext-preview-error');
+      if (await error.count()) {
+        await expect(error).toHaveText(text('TeletextWorkBusy'));
+        const selectedUrl = page.url(); await page.goto(selectedUrl); await ready(page, true);
+      }
+      await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+      expect(document(page.url())).toEqual(before); return accepted!;
+    };
+    const historicalReads: { url: string; busy_reread: boolean }[] = [];
+    const historical = async (url: string): Promise<void> => {
+      const before = document(url);
+      const pointers = () => fixture.channels.map(id => ({ channel: id,
+        base: generation(id, false), effective: generation(id, true) }));
+      const acceptedBefore = pointers();
+      await page.goto(url); await ready(page, true);
+      expect(document(url)).toEqual(before); expect(pointers()).toEqual(acceptedBefore);
+      const error = page.getByTestId('teletext-preview-error');
+      const busy = await error.count() !== 0;
+      if (busy) {
+        await expect(error).toHaveText(text('TeletextWorkBusy'));
+        const identity = new URL(url).searchParams;
+        expect(acceptedBefore.some(entry => [entry.base, entry.effective].some(value =>
+          value?.DesignId === Number(identity.get('design_id')) && value?.Revision === Number(identity.get('revision'))))).toBe(true);
+        // One explicit immutable read, only for the established cap1 Busy
+        // response. No other error, publication or mutation is retried.
+        await page.goto(url); await ready(page, true);
+      }
+      expect(page.url()).toBe(url);
+      expect(document(url)).toEqual(before); expect(pointers()).toEqual(acceptedBefore);
+      historicalReads.push({ url, busy_reread: busy }); receipts.historical_reads = historicalReads; persist();
+    };
+    const prepare = async (effective: boolean, name: string, absent = false): Promise<string> => {
+      await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+      const form = page.getByTestId(effective ? 'teletext-effective-authoring-form' : 'teletext-authoring-form');
+      await form.locator('[name="name"]').fill(name);
+      if (absent) {
+        await expect(page.getByTestId('teletext-effective-authoring')).toHaveAttribute('data-state', 'absent');
+        for (const field of ['entry_addon_id', 'entry_page', 'guide_channel_id', 'resource_transmissions']) {
+          await expect(form.locator(`[name="${field}"]`)).toHaveCount(0);
+        }
+      } else {
+        await form.locator('[name="entry_addon_id"]').selectOption(addonId);
+        await form.locator('[name="entry_page"]').fill(effective ? '410' : '200');
+        await form.locator('[name="entry_subcode"]').fill('0000');
+        await form.locator('[name="v1_region"]').selectOption('western_latin');
+        await form.locator('[name="resource_transmissions"]').fill('[]');
+        await form.locator('[name="guide_channel_id"]').selectOption(String(source));
+      }
+      await submit(page, form, text('TeletextValidateSaveDraft'), true);
+      await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
+      return page.url();
+    };
+    for (const id of fixture.channels) {
+      await page.goto(`/channels/${id}/teletext`); await ready(page, true);
+      const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+      await binding.locator('[name="profile_choice"]').selectOption(`${classic}:1`);
+      await submit(page, binding, text('TeletextBindingSave'), true);
+      const form = page.getByTestId('teletext-authoring-form');
+      for (const [name, value] of [['name', `Production Lua Base ${id}`], ['entry_page', '200'],
+        ['entry_subcode', '0000'], ['resource_transmissions', '[]']] as const) await form.locator(`[name="${name}"]`).fill(value);
+      await form.locator('[name="entry_addon_id"]').selectOption(addonId);
+      await form.locator('[name="v1_region"]').selectOption('western_latin');
+      await form.locator('[name="guide_channel_id"]').selectOption(String(source));
+      await submit(page, form, text('TeletextValidateSaveDraft'), true);
+      const url = page.url(); baseUrls.push(url); baseOriginals.push(document(url));
+      baseAccepted.push(await publication(false, 5));
+    }
+    const profilesBefore = fixture.database.prepare('SELECT * FROM TeletextProfile WHERE AddonId=? ORDER BY Id').all(addonId);
+    const bindingsBefore = fixture.database.prepare('SELECT * FROM ChannelTeletextBinding WHERE ChannelId IN (?,?) ORDER BY ChannelId,AddonId')
+      .all(...fixture.channels);
+    receipts.base_generations = baseAccepted; receipts.base_original_sha256 = baseOriginals.map(sha256); persist();
+    const queue = async (mode: 'reset' | 'continue', profile: number | null | undefined): Promise<void> => {
+      const previous = fixture.database.prepare('SELECT LastBuild FROM PlayoutBuildStatus WHERE PlayoutId=?').get(channel) as { LastBuild: string };
+      const oldIntervals = intervals();
+      const count = (fixture.database.prepare('SELECT COUNT(*) AS count FROM PlayoutItem WHERE PlayoutId=?').get(channel) as { count: number }).count;
+      if (typeof profile === 'number') expect(profilesBefore.some(row => row.Id === profile && !row.IsDeleted)).toBe(true);
+      const controls = profile === undefined ? '' : profile === null ? `assert(teletext_enabled('${addonId}',false).ok)`
+        : `assert(teletext_profile('${addonId}',${profile}).ok)\nassert(teletext_enabled('${addonId}',true).ok)`;
+      const script = `add_collection('clip','Synthetic Scripted ${fixture.addonId}')\n${controls}\n`
+        + (mode === 'reset' ? "add_duration('clip','00:01:00',{trim=true,stop_before_end=true})\n" : "add_count('clip',3)\n");
+      writeFileSync(`${fixture.root}/synthetic-controls-${channel}.lua`, script);
+      await page.goto('/playouts'); await ready(page, true);
+      const name = fixture.database.prepare('SELECT Name FROM Channel WHERE Id=?').get(channel) as { Name: string };
+      await page.getByPlaceholder(text('SearchForPlayouts'), { exact: true }).fill(name.Name);
+      const row = page.getByRole('row').filter({ has: page.locator(`a[href="/playouts/scripted/${channel}"]`) });
+      await expect(row).toHaveCount(1);
+      await row.getByRole('button', { name: text('RebuildPlayout'), exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: text('RebuildPlayout'), exact: true });
+      await dialog.getByLabel(text('PlayoutRebuildMode'), { exact: true }).selectOption(mode);
+      const keep = dialog.getByRole('checkbox', { name: text('KeepCurrentProgramme'), exact: true });
+      if (mode === 'continue') { await expect(keep).toBeChecked(); await expect(keep).toBeDisabled(); }
+      else await keep.uncheck();
+      const posted = page.waitForResponse(response => response.request().method() === 'POST'
+        && new URL(response.url()).pathname.startsWith('/admin-api/rebuild_playout'));
+      await dialog.getByRole('button', { name: text('QueuePlayoutBuild'), exact: true }).click();
+      const response = await posted; expect(response.status()).toBe(200);
+      const fields = new URLSearchParams(response.request().postData() ?? '');
+      expect(fields.get('id')).toBe(String(channel)); expect(fields.get('mode')).toBe(mode);
+      expect(fields.get('preserve_current')).toBe(String(mode === 'continue'));
+      expect(await response.json()).toEqual({ accepted: 1, coalesced: 0 }); await expect(dialog).toBeHidden();
+      await expect.poll(() => {
+        const status = fixture.database.prepare('SELECT Success,LastBuild,LastSuccessfulBuild FROM PlayoutBuildStatus WHERE PlayoutId=?')
+          .get(channel) as { Success: number; LastBuild: string; LastSuccessfulBuild: string };
+        const items = (fixture.database.prepare('SELECT COUNT(*) AS count FROM PlayoutItem WHERE PlayoutId=?').get(channel) as { count: number }).count;
+        const actual = intervals();
+        return status?.Success === 1 && status.LastBuild !== previous?.LastBuild && status.LastSuccessfulBuild === status.LastBuild
+          && items === (mode === 'reset' ? 1 : count + 3)
+          && (mode === 'continue' ? JSON.stringify(actual) === JSON.stringify(oldIntervals)
+            : actual.length === 1 && actual[0].State === Number(profile !== null) && actual[0].ProfileId === profile);
+      }, { timeout: 45_000 }).toBe(true);
+      expect(sourceRows()).toEqual(retainedSource);
+      if (mode === 'reset') {
+        const items = fixture.database.prepare('SELECT Start,Finish,InPoint,OutPoint FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
+          .all(channel) as { Start: string; Finish: string; InPoint: string; OutPoint: string }[];
+        expect(items).toHaveLength(1); expect(utc(items[0].Finish) - utc(items[0].Start)).toBe(60_000);
+        expect(intervals()[0].Start).toBe(items[0].Start); expect(intervals()[0].Finish).toBe(items[0].Finish);
+      }
+    };
+    type CaptureTiming = { first_read_utc?: string; last_read_utc?: string; first_authored_utc?: string;
+      first_off_av_utc?: string; last_off_av_utc?: string; packets: number;
+      pmt_transitions: { authored: boolean; received_utc: string; packet: number }[] };
+    const capture = async (id: number, name: string, address: number, theme: string,
+      authoredObserved?: () => void, offFinish?: number, mode: 'direct' | 'legacy' = 'legacy'): Promise<{ path: string; decoded: string; timing: CaptureTiming }> => {
+      const number = (fixture.database.prepare('SELECT Number FROM Channel WHERE Id=?').get(id) as { Number: string }).Number;
+      const path = info.outputPath(`${name}.ts`), opened = new Date().toISOString();
+      const route = mode === 'direct' ? `/iptv/hls-direct/${id}.ts` : `/iptv/channel/${number}.ts?mode=ts-legacy`;
+      const timing: CaptureTiming = { packets: 0, pmt_transitions: [] };
+      let carry = Buffer.alloc(0), carryUtc: string | undefined, pmtPid: number | undefined;
+      // These fixture PAT/PMT sections fit one TS payload. Ignore incomplete
+      // sections rather than inventing a partial state; TSDuck still verifies
+      // the complete retained transport independently below.
+      const section = (packet: Buffer, table: number): Buffer | undefined => {
+        if ((packet[1] & 0x40) === 0 || (packet[3] & 0x10) === 0) return undefined;
+        let offset = 4;
+        if ((packet[3] & 0x20) !== 0) offset += 1 + packet[4];
+        if (offset >= 188) return undefined;
+        offset += 1 + packet[offset];
+        if (offset + 3 > 188 || packet[offset] !== table) return undefined;
+        const length = 3 + ((packet[offset + 1] & 0x0f) << 8 | packet[offset + 2]);
+        if (offset + length > 188) return undefined;
+        return packet.subarray(offset, offset + length);
+      };
+      const result = await captureTeletextChannelTs(`${baseURL}${route}`, path,
+        { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 }, (bytes, receivedUtc) => {
+          timing.first_read_utc ??= receivedUtc; timing.last_read_utc = receivedUtc;
+          const previousCarry = carry.length, previousCarryUtc = carryUtc;
+          const joined = previousCarry ? Buffer.concat([carry, bytes]) : Buffer.from(bytes);
+          let offset = 0;
+          for (; offset + 188 <= joined.length; offset += 188) {
+            const packet = joined.subarray(offset, offset + 188);
+            if (packet[0] !== 0x47) throw new Error('Observed synthetic TS packet lost framing.');
+            const packetUtc = offset < previousCarry ? previousCarryUtc! : receivedUtc;
+            const pid = (packet[1] & 0x1f) << 8 | packet[2];
+            timing.packets++;
+            if (pid === 512 && timing.first_authored_utc === undefined) {
+              timing.first_authored_utc = packetUtc; authoredObserved?.();
+            }
+            const payloadOffset = 4 + ((packet[3] & 0x20) !== 0 ? 1 + packet[4] : 0);
+            const hasPayload = (packet[3] & 0x10) !== 0 && payloadOffset < 188;
+            if ((pid === 256 || pid === 257) && hasPayload && offFinish !== undefined && utc(packetUtc) < offFinish) {
+              timing.first_off_av_utc ??= packetUtc; timing.last_off_av_utc = packetUtc;
+            }
+            if (pid === 0) {
+              const pat = section(packet, 0);
+              if (pat) for (let entry = 8; entry + 4 <= pat.length - 4; entry += 4) {
+                if ((pat[entry] << 8 | pat[entry + 1]) !== 0) pmtPid = (pat[entry + 2] & 0x1f) << 8 | pat[entry + 3];
+              }
+            } else if (pid === pmtPid) {
+              const pmt = section(packet, 2);
+              if (pmt && pmt.length >= 16) {
+                let authored = false;
+                for (let entry = 12 + ((pmt[10] & 0x0f) << 8 | pmt[11]); entry + 5 <= pmt.length - 4;
+                  entry += 5 + ((pmt[entry + 3] & 0x0f) << 8 | pmt[entry + 4])) {
+                  authored ||= ((pmt[entry + 1] & 0x1f) << 8 | pmt[entry + 2]) === 512;
+                }
+                if (timing.pmt_transitions.at(-1)?.authored !== authored) {
+                  expect(timing.pmt_transitions.length, 'Only bounded observed PMT state transitions are retained.').toBeLessThan(4);
+                  timing.pmt_transitions.push({ authored, received_utc: packetUtc, packet: timing.packets });
+                }
+              }
+            }
+          }
+          carry = Buffer.from(joined.subarray(offset));
+          carryUtc = carry.length ? (offset < previousCarry ? previousCarryUtc : receivedUtc) : undefined;
+          expect(carry.length).toBeLessThan(188);
+        });
+      expect(carry.length).toBe(0);
+      receipts[name] = { channel: id, number, route,
+        opened_utc: opened, capture_completed_utc: new Date().toISOString(), timing,
+        bytes: result.bytes.length, ended: result.ended, sha256: sha256(result.bytes) }; persist();
+      expect(result.ended).toBe('byte-limit'); expect(result.bytes.length % 188).toBe(0);
+      const pids = new Set<number>();
+      let malformed = 0;
+      for (let offset = 0; offset < result.bytes.length; offset += 188) {
+        if (result.bytes[offset] !== 0x47 || (result.bytes[offset + 1] & 0x80) !== 0) malformed++;
+        pids.add(((result.bytes[offset + 1] & 0x1f) << 8) | result.bytes[offset + 2]);
+      }
+      expect(malformed).toBe(0);
+      for (const pid of [0, 256, 257, 512]) expect(pids.has(pid)).toBe(true);
+      const av = spawnSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', path,
+        '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'], { encoding: 'utf8', timeout: 30_000, maxBuffer: 65_536 });
+      writeFileSync(info.outputPath(`${name}.av.stderr`), av.stderr ?? '');
+      expect(av.error).toBeUndefined(); expect(av.signal).toBeNull(); expect(av.status).toBe(0); expect(av.stderr).toBe('');
+      const subtitle = spawnSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+        '-txt_format', 'text', '-txt_page', String(address), '-txt_duration', '1000', '-i', path,
+        '-map', '0:s:0', '-c:s', 'srt', '-f', 'srt', '-'], { encoding: 'utf8', timeout: 30_000, maxBuffer: 1_048_576 });
+      writeFileSync(info.outputPath(`${name}.teletext.stderr`), subtitle.stderr ?? '');
+      writeFileSync(info.outputPath(`${name}.srt`), subtitle.stdout ?? '');
+      expect(subtitle.error).toBeUndefined(); expect(subtitle.signal).toBeNull(); expect(subtitle.status).toBe(0); expect(subtitle.stderr).toBe('');
+      const decoded = subtitle.stdout;
+      expect(decoded).toContain(theme); expect(decoded).toContain('Now: Synthetic red video and tone');
+      return { path, decoded, timing };
+    };
+    await queue('reset', night);
+    const on = intervals(); expect(on[0].CandidateSnapshot).not.toBeNull();
+    receipts.on_interval = on; persist();
+    const onUrl = await prepare(true, 'Production Lua Night guide');
+    await expect(page.getByTestId('teletext-preview-theme')).toHaveText('night');
+    const onOriginal = document(onUrl), onRaster = await rasterBytes(page);
+    const effectiveOn = await publication(true, 6);
+    receipts.on_generation = effectiveOn; receipts.on_original_sha256 = sha256(onOriginal); persist();
+    expect(utc(on[0].Finish) - Date.now()).toBeGreaterThan(30_000);
+    expect(utc(sourceNow.Finish) - Date.now()).toBeGreaterThan(30_000);
+    let authoredObserved!: () => void;
+    const onAuthored = new Promise<void>(resolve => { authoredObserved = resolve; });
+    const onPending = capture(channel, 'production-guide-lua-on-night', 400, 'NIGHT GUIDE', authoredObserved, undefined, 'direct');
+    // Keep the same original response/time allowance. Do not cold-start the
+    // second cap1 reconstruction until the first actually delivers teletext.
+    // Failure/completion without authored bytes terminates; it is never retried.
+    await Promise.race([onAuthored, onPending.then(() => { throw new Error('On response completed before authored delivery.'); })]);
+    const paired = await Promise.allSettled([onPending,
+      capture(source, 'production-guide-lua-isolated-classic', 201, 'DAY GUIDE', undefined, undefined, 'direct')]);
+    // Both original bounded responses settle before fixture cleanup, even when
+    // one strict decoder/transport assertion rejects its own observation.
+    for (const result of paired) if (result.status === 'rejected') throw result.reason;
+    const [onCapture, isolatedCapture] = paired.map(result => (result as PromiseFulfilledResult<Awaited<typeof onPending>>).value);
+    expect(utc(isolatedCapture.timing.first_read_utc!)).toBeLessThan(utc(onCapture.timing.last_read_utc!));
+    expect(utc(isolatedCapture.timing.first_authored_utc!)).toBeLessThan(utc(onCapture.timing.last_read_utc!));
+    expect(utc(onCapture.timing.first_authored_utc!)).toBeLessThan(utc(isolatedCapture.timing.last_read_utc!));
+    assertContinuousAuthoredPmt(onCapture.path, info.outputPath('lua-on.pmt.json'), info.outputPath('lua-on.pmt.txt'));
+    assertContinuousAuthoredPmt(isolatedCapture.path, info.outputPath('lua-isolated.pmt.json'), info.outputPath('lua-isolated.pmt.txt'));
+    expect(Date.now()).toBeLessThan(utc(on[0].Finish));
+    expect(Date.now()).toBeLessThan(utc(sourceNow.Finish));
+    expect(document(onUrl)).toEqual(onOriginal);
+    await historical(onUrl); expect(await rasterBytes(page)).toEqual(onRaster);
+    for (const [index, id] of fixture.channels.entries()) expect(generation(id, false)).toEqual(baseAccepted[index]);
+    expect(generation(source, true)).toBeUndefined();
+    await queue('reset', null);
+    const off = intervals(); expect(off[0].CandidateSnapshot).toBeNull();
+    await queue('continue', undefined); expect(intervals()).toEqual(off);
+    const offUrl = await prepare(true, 'Production Lua Off absence', true);
+    expect(new URL(offUrl).searchParams.get('absence')).toBe('1');
+    const offOriginal = document(offUrl), effectiveOff = await publication(true, 4);
+    await expect(page.getByTestId('teletext-preview-model').locator('img')).toHaveCount(0);
+    receipts.off_interval = off; receipts.off_generation = effectiveOff; receipts.off_original_sha256 = sha256(offOriginal); persist();
+    const finish = utc(off[0].Finish);
+    // The source channel is separate: its unchanged role must cover the full
+    // response after the genuine output-only Off interval naturally expires.
+    expect(utc(sourceNow.Finish) - finish).toBeGreaterThan(30_000);
+    expect(Date.now()).toBeLessThan(finish - 5000);
+    await expect.poll(() => Date.now() >= finish - 5000, { timeout: 65_000, intervals: [25] }).toBe(true);
+    expect(Date.now()).toBeLessThan(finish);
+    const returned = await capture(channel, 'production-guide-lua-off-expiry-base', 201, 'DAY GUIDE', undefined, finish);
+    expect(utc(returned.timing.first_off_av_utc!)).toBeLessThan(finish - 1000);
+    expect(utc(returned.timing.last_off_av_utc!) - utc(returned.timing.first_off_av_utc!)).toBeGreaterThanOrEqual(1000);
+    expect(utc(returned.timing.first_authored_utc!)).toBeGreaterThanOrEqual(finish);
+    expect(returned.timing.pmt_transitions.map(value => value.authored)).toEqual([false, true]);
+    expect(utc(returned.timing.pmt_transitions[0].received_utc)).toBeLessThan(finish);
+    expect(utc(returned.timing.pmt_transitions[1].received_utc)).toBeGreaterThanOrEqual(finish);
+    execFileSync('tstables', ['--tid', '2', '--json-output', info.outputPath('lua-expiry.pmt.json'),
+      '--text-output', info.outputPath('lua-expiry.pmt.txt'), returned.path], { timeout: 30_000, maxBuffer: 65_536 });
+    const tables = JSON.parse(readFileSync(info.outputPath('lua-expiry.pmt.json'), 'utf8')) as {
+      '#name': string; '#nodes': { '#name': string; elementary_pid?: number }[];
+    }[];
+    const authoredStates = tables.filter(row => row['#name'] === 'PMT').map(row => row['#nodes']
+      .some(node => node['#name'] === 'component' && node.elementary_pid === 512));
+    expect(authoredStates[0], 'The same response starts with explicit Off and AV.').toBe(false);
+    expect(authoredStates).toContain(true);
+    const firstBase = authoredStates.indexOf(true);
+    expect(authoredStates.slice(firstBase).every(Boolean)).toBe(true);
+    expect(returned.decoded).not.toContain('NIGHT GUIDE');
+    receipts.expiry = { exact_finish: off[0].Finish, pmt_authored_states: authoredStates,
+      observed_after_utc: new Date().toISOString() }; persist();
+    await historical(offUrl);
+    await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'unavailable');
+    await expect(page.getByTestId('teletext-publication-publish-form').getByRole('button')).toBeDisabled();
+    await historical(baseUrls[0]);
+    await expect(page.getByTestId('teletext-preview-theme')).toHaveText('classic');
+    await page.screenshot({ path: info.outputPath('production-guide-lua-returned-base.png') });
+    expect(intervals()).toEqual(off); expect(sourceRows()).toEqual(retainedSource);
+    expect(generation(channel, true)).toEqual(effectiveOff);
+    for (const [index, id] of fixture.channels.entries()) {
+      expect(generation(id, false)).toEqual(baseAccepted[index]); expect(document(baseUrls[index])).toEqual(baseOriginals[index]);
+    }
+    expect(fixture.database.prepare('SELECT * FROM TeletextProfile WHERE AddonId=? ORDER BY Id').all(addonId)).toEqual(profilesBefore);
+    expect(fixture.database.prepare('SELECT * FROM ChannelTeletextBinding WHERE ChannelId IN (?,?) ORDER BY ChannelId,AddonId')
+      .all(...fixture.channels)).toEqual(bindingsBefore);
+    expect(fixture.setting('teletext.work.max_concurrent')).toBe('1'); expect(fixture.calls()).toEqual([]);
+    expect(installation(isolatedWebHost.databasePath)).toEqual(selectedInstallation); compareInstalledFiles(selectedInstallation);
+    expect(errors).toEqual([]); receipts.complete = true; persist();
+  } finally { try { await context?.close(); } finally { persist(); fixture.close(); } }
 });

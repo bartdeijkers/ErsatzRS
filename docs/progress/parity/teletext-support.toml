@@ -4,19 +4,17 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
 summary    = '''
-P9A-04/p9a-final-gate Complete2026-10-31: exact218 full CI41153570313
-13required general/1.5 jobs pass; client/platform scopes retained.
-P9B-01 activation, SQL updates, SourceUnavailable recovery, natural clock rollover,
-production TTI/sidecar footer editing/publication/refresh and occupied-capacity
-Current preview are closed on native Linux x64. P9B-01 production timeout/drain/
-failure-CAS is closed:1actual pidfd case,4unit/19transport, AV/Health/reap/cap1.
-Original caps/manual history remain exact. P9B-02 Windows663 package/bundle and
-native TTI/footer/publication/SQLrefresh/Legacy:1headed Chromium,AV/libzvbi and19
-transport; forced test teardown is not graceful/liveguide restart. Canonical
-qualification.json owns proofs/negatives and exact platform/source boundaries.
-ARM host flows Complete under QEMU; native deferred.
-Remaining configuration/package/base-context/Lua/range/platform/client
-clauses retain P9B-01/02 ownership.
+P9A-04/final-gate Complete2026-10-31: exact218 fullCI13pass; retained scopes.
+P9B-01 Linux activation, SQL refresh/recovery, clock, footer, capacity and actual
+producer-timeout components are Complete; qualification.json owns exact proofs.
+P9B-02 Windows663 package/footer/refresh/Legacy component is Complete within its
+scope; forced test teardown is not graceful restart. ARMb971/QEMU host flows are
+Complete, native execution deferred. Linux production Lua On6/Off4/Continue and
+teletext expiry are Complete: two direct streams retain distinct profiles, while
+one Legacy response restores Base. Its AV programme seam has2PTS/1DTS leaps;
+this P9B-02 playback blocker remains open. No whole integrated acceptance claim.
+Other configuration/package/base-context/Lua/range/platform/client clauses keep
+P9B-01/02 owners. Closed components stay closed without concrete regression.
 ADR0123 keeps2.5 experimental/enhanced acceptance Deferred, QTM optional/upstream-
 wait, macOS Deferred and native ARM assumed from required cross/QEMU proof.
 P9A-04 owns L15/F/V/X and retained history; closed owners stay closed.
@@ -60,7 +58,7 @@ ordinary gates. macOS stays deferred under ADR0121.
 Kodi21.2 base controls are Complete: p9a-client-base owns the actual G3
 photo/settings. No DVBViewer, client hunt or decoder repair. Four-RID P9A-02
 Health/licensing/playback/HLS/caption/audio/admin checks are Complete.
-Production guide follows revised9A; Phase10 followsP9B-02. Forms:8Firefox/2Chromium; b971 CI pending.
+Production guide follows revised9A; Phase10 followsP9B-02. Forms:8Firefox/2Chromium; b971 fullCI13pass, e851 CI pending.
 '''
 
 [[debt]]
@@ -314,3 +312,11 @@ description = 'Qualify the demonstrated unpublished Next candidate Burn shared-c
 discovered  = '2026-10-22'
 evidence    = 'p9a-source-output SO4 candidate component is completed: canonical provider-scan/identity.json burn_shared_clock_correction records the original399.4ms candidate.4 negative and actual candidate.5 public HLS success. Paired rounded shifts preserve every incoming timestamp; whole-public/baseline/taps/debug TS identity, exact889 cue/clear and source-frame coverage prove source end9.1994 <= selected9.2 with next9.2394 outside. Dutch AAC, one provider acquisition, revoked range grant and zero active work/capacity/charged source storage pass; pipeline267/267, argv snapshot, TSDuck19/19 and strict scoped lint pass. This resolves the named unpublished Linux candidate defect only; managed.1 adoption, compatibility and native platform owners retain their independent requirements. The later seek2164 counterexample and original2143 interval are closed by0f8e1289 within Linux x86_64/software unpublishedNext.6: both ordinary public HLS captures preserve176 output/166 complete source frames, exact889 transitions/clear, selected Dutch AAC,19 transport controls each and joined grant/work/capacity/storage cleanup. The original2143 capture stays byte-exact. Managed adoption and other native RIDs remain with their existing owners. Canonical finite_outpoint_followup.route_correction owns exact current receipts and preserved rejected shortest/passthrough/seek hypotheses.'
 resolved    = true
+
+[[debt]]
+id          = 'teletext-guide-trimmed-legacy-av-seam'
+adr         = '0121'
+description = 'Preserve continuous AV PTS/DTS at the real 60-second trimmed programme to following programme transition used by the production Lua Off-expiry flow. Keep the selected copy profile, default AV capacity2, source and outpoint clocks, one public Legacy response and joined cleanup; no timing tolerance or added connection workaround.'
+discovered  = '2026-11-01'
+evidence    = 'P9B-02 and qualification.json production_lua retain two actual captures with2PTS/1DTS leaps on AV, no PCR/CC/TEI/sync or teletext timestamp errors. Base teletext returns after exact Off expiry and strict full AV/libzvbi decoding passes. The later AV seam has4.98/5.45s jumps after finite inner remaining4.961s to next179.997s; producer initialization versus concat normalization is unqualified. Existing ProgrammeServer/forward_wrapper suffice for the next bounded check. Source candidate53f1, accepted FFmpeg2.0.8, default capacity2; no F6 or all-platform regression is inferred.'
+resolved    = false
