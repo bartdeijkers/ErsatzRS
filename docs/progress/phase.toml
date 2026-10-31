@@ -1,8 +1,8 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'p9a-final-gate — Final shared checks for the accepted base engine'
+current_phase = 'Phase 9B — TV-guide add-on and integrated acceptance'
+current_focus = 'p9b-01 — Production TV-guide teletext addon'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,31 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: p9a-final-gate — finish the verified installation reload CI repair.
-Next finite action: commit/push the verified isolated installation-reload test
-repair/current handoff, then inspect all required jobs in full new-SHA CI. That
-push supersedes known-red CI41143145016 at95a2bf21; its two unfinished base-browser
-selections are unchanged by this general-only spec correction. Preserve the red
-and partial results; claim no95 full green or success for unfinished jobs. Canonical final-gate/ci-runtime-pin-20261030/qualification.json
-addon_reload_followup/nav_repair_ci owns source/checkpoint/run/monitor identity.
-The new general Firefox red is a proven test document race: a hydration check
-runs before the pending same-URL install reload finishes. Arm main-frame
-navigation before keyboard install confirmation; wait load/fresh hydration before
-Enable. All keyboard/dialog/DB oracles and120s timeout remain. Existing headed
-Chromium/Firefox x800x513/320x800 cases pass4/4 against strictly verified exact95
-server/site, using the isolated wrapper and natural cleanup. No product/helper/
-translation/runtime change. Root parallel commits and foreign work stay preserved.
-Navigation component stays Complete on95: general Chromium356/5 explicit skips/
-zero flaky, including all four selection cases first attempt; no reopening absent
-regression. Next453 and both ordinary HTTP/Hybrid smokes, general Rust4062,
-base Rust2339+17 and the shared producer/static/lint gates pass. Original Firefox has
-329 pass/one fail/30 explicit skips/one serial not run; retain its trace and report.
-The new full CI must include both base browsers. Local focused proof cannot establish new-
-SHA CI green. No blanket retries or timeout increases; existing push concurrency
-supersedes the old known-red round, never converting it into a successful run.
-Accepted base/runtime/source/platform owners stay closed; no production9B before
-accepted final gate. Preserve negatives and experimental/platform/editor decisions.
-No active owned local host/test. No application or new runtime publication.
+Current package: p9b-01 — production TV-guide teletext addon after accepted9A.
+P9A-04 and p9a-final-gate are Complete under the revised ADR0123 boundary:
+full exact218 CI41153570313 passes all13 mandatory jobs, with expected push
+commitlint skip; unchanged primary receipts/required owners are joined in
+canonical final-gate/ci-runtime-pin-20261030/qualification.json. No repeated
+engine trials or reopening completed components without a concrete regression.
+Next finite action: integrate accepted remote218 and this registration into the
+Root branch while preserving the separate local9B/UCU commits, foreign working
+bytes and all evidence. Then inspect the existing addon contract and addon
+repository, and implement the smallest complete P9B-01 guide package: per-profile
+page range/index, guide-driven map/navigation, named themes/defined zones,
+explicit installation and validated failure behavior. Use only NOS TV-guide
+pages200–299 as reference. P9B-02 owns actual production-package client/admin/
+stream/runtime proof; generic fixture proof never substitutes for that gate.
+Keep Level2.5 experimental, enhanced acceptance/macOS/native ARM Deferred and
+QTM optional/upstream-wait. No client hunt, DVBViewer or decoder maintenance.
+No active owned local host/test or CI monitor; all current CI is terminal.
+No release, tag or new runtime publication is authorized by this checkpoint.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

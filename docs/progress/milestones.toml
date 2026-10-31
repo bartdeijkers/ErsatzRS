@@ -3099,7 +3099,7 @@ acceptance remain open. No milestone status, dependency or acceptance changes.
 id         = 'p9a-04'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Accept the generic teletext engine before content work'
-status     = 'In progress'
+status = 'Complete'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-03', 'p9a-final-gate']
@@ -3189,6 +3189,44 @@ and publication safeguards; unfinished enhanced conformance remains at the Defer
 owners. No full2.5 acceptance claim follows.
 '''
 evidence = '''
+Accepted current generic9A boundary (2026-10-31): canonical provider-scan/
+final-gate/ci-runtime-pin-20261030/qualification.json addon_reload_ci and
+final_gate_reuse join exact pushed218d4500538a597abd189785067d51f6afc5562d to
+full push CI41153570313. All13 mandatory jobs succeed on attempt1; the14th,
+Commit lint, is the expected push-event skip. All applicable executed steps pass,
+including both Next ordinary HTTP/Hybrid smoke rounds. General Rust4062,
+Next453 and base workspace2339 plus17 source/Next controls pass within their
+actual selections. General Chromium356/5skip and Firefox331/30skip, base
+Chromium62/3skip and Firefox57/8skip: zero unexpected/flaky results. Strict
+producer/consumer archive identity and matched SSR/WASM restore retain exact218.
+Original failed rounds, cancelled/superseded scopes, traces and hypotheses remain
+preserved; no rerun or weaker oracle substitutes for the corrections.
+The existing five primary receipts and176 hash-bound reference edges (173
+unique files) verify unchanged. All95 transitive required owners remain Complete.
+Their recorded exact source, input, native/emulated and method scopes apply:
+standalone base/client, source/caption/audio/transport/lifecycle, generic
+interchange/metadata/profile/Lua/admin and public managed four-RID adoption,
+matched builds, standard8273/516 closeout/doctests, strict lint and policy.
+Since clean776f69a7 no production Rust, manifest or lock input changed: only two
+separately qualified Next test modules plus workflow/test/documentation changes.
+This is a verified reuse join with current full CI, not a newly executed single-
+source native four-platform suite. Current production-source claims remain
+bound to their primary artifacts and affected-delta receipts.
+Close p9a-final-gate and P9A-04 under ADR0123's2026-10-28 amendment. Enhanced-only
+Level2.5 acceptance remains Deferred; implemented2.5 stays experimental with
+safeguards and optional tests. Both macOS RIDs and native ARM execution remain
+Deferred: required ARM cross/package/software/QEMU evidence is retained; native
+operation is assumed, not verified. QTM stays optional/upstream-wait. No DVBViewer,
+new client hunt or physical-device rerun. These deferrals are not acceptance.
+CI review from existing logs/timings: all required selections/strict local
+artifact restores execute; zero job reruns and no current failure. Serial
+browser work follows the retained resource policy. No new actionable coverage,
+stability or speed defect: No change needed; no optimization trial commissioned.
+Next existing package: P9B-01 production TV-guide addon, then P9B-02 actual
+package integration. No addon implementation or new runtime/application release
+is inferred by this registration. Dated partial/next-action records below are
+historical; the current typed owners and phase.toml determine execution.
+
 Current standalone base acceptance (2026-10-30): p9a-level15 and P9A-03 are
 Complete at provider-scan/level15-acceptance/qualification.json. The current
 L15-A..E/F/V/X primary owners are all Complete within their explicit source,
@@ -18005,7 +18043,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9a-final-gate'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Run the full generic-engine acceptance gate before production content'
-status     = 'In progress'
+status = 'Complete'
 feature    = 'teletext-support'
 depends_on = ['p9a-03', 'p9a-level15']
 acceptance = '''
@@ -18041,6 +18079,44 @@ does not weaken mandatory Level1/1.5 or playback safety. Then P9A-04 may close a
 start.
 '''
 evidence = '''
+Accepted current generic9A boundary (2026-10-31): canonical provider-scan/
+final-gate/ci-runtime-pin-20261030/qualification.json addon_reload_ci and
+final_gate_reuse join exact pushed218d4500538a597abd189785067d51f6afc5562d to
+full push CI41153570313. All13 mandatory jobs succeed on attempt1; the14th,
+Commit lint, is the expected push-event skip. All applicable executed steps pass,
+including both Next ordinary HTTP/Hybrid smoke rounds. General Rust4062,
+Next453 and base workspace2339 plus17 source/Next controls pass within their
+actual selections. General Chromium356/5skip and Firefox331/30skip, base
+Chromium62/3skip and Firefox57/8skip: zero unexpected/flaky results. Strict
+producer/consumer archive identity and matched SSR/WASM restore retain exact218.
+Original failed rounds, cancelled/superseded scopes, traces and hypotheses remain
+preserved; no rerun or weaker oracle substitutes for the corrections.
+The existing five primary receipts and176 hash-bound reference edges (173
+unique files) verify unchanged. All95 transitive required owners remain Complete.
+Their recorded exact source, input, native/emulated and method scopes apply:
+standalone base/client, source/caption/audio/transport/lifecycle, generic
+interchange/metadata/profile/Lua/admin and public managed four-RID adoption,
+matched builds, standard8273/516 closeout/doctests, strict lint and policy.
+Since clean776f69a7 no production Rust, manifest or lock input changed: only two
+separately qualified Next test modules plus workflow/test/documentation changes.
+This is a verified reuse join with current full CI, not a newly executed single-
+source native four-platform suite. Current production-source claims remain
+bound to their primary artifacts and affected-delta receipts.
+Close p9a-final-gate and P9A-04 under ADR0123's2026-10-28 amendment. Enhanced-only
+Level2.5 acceptance remains Deferred; implemented2.5 stays experimental with
+safeguards and optional tests. Both macOS RIDs and native ARM execution remain
+Deferred: required ARM cross/package/software/QEMU evidence is retained; native
+operation is assumed, not verified. QTM stays optional/upstream-wait. No DVBViewer,
+new client hunt or physical-device rerun. These deferrals are not acceptance.
+CI review from existing logs/timings: all required selections/strict local
+artifact restores execute; zero job reruns and no current failure. Serial
+browser work follows the retained resource policy. No new actionable coverage,
+stability or speed defect: No change needed; no optimization trial commissioned.
+Next existing package: P9B-01 production TV-guide addon, then P9B-02 actual
+package integration. No addon implementation or new runtime/application release
+is inferred by this registration. Dated partial/next-action records below are
+historical; the current typed owners and phase.toml determine execution.
+
 Completed local add-on installation reload synchronization component (2026-10-31):
 canonical ci-runtime-pin-20261030/qualification.json addon_reload_followup owns
 actual general Firefox failure in full CI41143145016 at95a2bf21:329 pass, one
@@ -18234,10 +18310,10 @@ boundary. Final managed selection, exact adopted-byte application/platform gates
 remaining final controls and typed dependencies stay open. A later relevant
 source/input change requires affected revalidation; this is not a green exact-SHA
 GitHub CI, clean-HEAD or all-platform claim.
-Status: In progress. Exact remaining gap: Full engine acceptance is open; registry validation and scoped component passes are not a green full CI, complete authored feature or release/publication claim.
+Status: Complete within the revised current base/shared9A boundary. Exact-SHA CI and the final receipt/source join are proven above; enhanced-only work remains Deferred, and no release/publication is claimed.
 Reuse: Primary package receipts and unchanged full-gate evidence only when exact scope is valid; same-generation preview is never carriage proof. P9B still depends on parent p9a-04.
-Missing mandatory proof: current exact-SHA required general/1.5 CI and final
-acceptance join. Prior failed jobs are accounted above, with the original
+Historical mandatory proof gap, now closed by the current accepted join above:
+exact-SHA required general/1.5 CI and final acceptance join. Prior failed jobs are accounted above, with the original
 Chromium stall explicitly unclassified pending that full run. Standalone base, source
 metadata/output, accepted runtime and required applicable platform owners are
 Complete; local shared Rust/contract/build/manual runtime proofs retain their

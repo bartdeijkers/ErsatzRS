@@ -708,6 +708,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Accept the independently verified generic Level 1/1.5 teletext engine and its
+  required authoring, channel, playback and runtime safeguards. Production
+  TV-guide content follows in Phase 9B; retained Level 2.5 remains experimental.
+
 - Select the stable FFmpeg 2.0.8 runtime distribution for managed startup and
   fallback, retaining FFmpeg 9, qualified original-teletext-clock support and
   existing override, update and offline behavior.
