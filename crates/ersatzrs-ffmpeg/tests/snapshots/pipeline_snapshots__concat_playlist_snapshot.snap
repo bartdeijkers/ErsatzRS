@@ -6,5 +6,7 @@ expression: playlist.render()
 ffconcat version 1.0
 file http://localhost:8409/ffmpeg/stream/101?mode=segmenter
 option multiple_requests 1
+option fpsprobesize 0
 file http://localhost:8409/ffmpeg/stream/101?mode=segmenter
 option multiple_requests 1
+option fpsprobesize 0

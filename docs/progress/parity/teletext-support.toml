@@ -11,13 +11,14 @@ P9B-02 Windows663 package/footer/refresh/Legacy component is Complete within its
 scope; forced test teardown is not graceful restart. ARMb971/QEMU host flows are
 Complete, native execution deferred. Linux production Lua On6/Off4/Continue and
 teletext expiry are Complete: two direct streams retain distinct profiles, while
-one Legacy response restores Base. Its AV programme seam has2PTS/1DTS leaps;
-this P9B-02 playback blocker remains open. No whole integrated acceptance claim.
-Other configuration/package/base-context/Lua/range/platform/client clauses keep
-P9B-01/02 owners. Closed components stay closed without concrete regression.
+one Legacy response restores Base. Its concrete AV seam is repaired on Linux
+private candidate59ac/50ee: native3/3, actual Legacy19/19, smoke/four-route93/93.
+Required platform/runtime adoption stays open; no whole integrated claim.
+Other configuration/package/Lua/range/platform/client clauses keep P9B-01/02
+owners. Closed components stay closed without concrete regression.
 ADR0123 keeps2.5 experimental/enhanced acceptance Deferred, QTM optional/upstream-
 wait, macOS Deferred and native ARM assumed from required cross/QEMU proof.
-P9A-04 owns L15/F/V/X and retained history; closed owners stay closed.
+P9A-04 owns L15/F/V/X and retained history.
 P9A-04 owns the closed EE/A/F/V/AB/SI matrix and canonical F5/provider,
 SO1..5/PS1..2/ADR0127 and Windows-package receipts. Preserve their exact
 runtime/platform boundaries (P9A-03), historical negatives and explicit deferrals;
@@ -318,5 +319,5 @@ id          = 'teletext-guide-trimmed-legacy-av-seam'
 adr         = '0121'
 description = 'Preserve continuous AV PTS/DTS at the real 60-second trimmed programme to following programme transition used by the production Lua Off-expiry flow. Keep the selected copy profile, default AV capacity2, source and outpoint clocks, one public Legacy response and joined cleanup; no timing tolerance or added connection workaround.'
 discovered  = '2026-11-01'
-evidence    = 'P9B-02 and qualification.json production_lua retain two actual captures with2PTS/1DTS leaps on AV, no PCR/CC/TEI/sync or teletext timestamp errors. Base teletext returns after exact Off expiry and strict full AV/libzvbi decoding passes. The later AV seam has4.98/5.45s jumps after finite inner remaining4.961s to next179.997s; producer initialization versus concat normalization is unqualified. Existing ProgrammeServer/forward_wrapper suffice for the next bounded check. Source candidate53f1, accepted FFmpeg2.0.8, default capacity2; no F6 or all-platform regression is inferred.'
-resolved    = false
+evidence    = 'P9B-02 and canonical qualification.json production_lua.transport_blocker.candidate_repair.final close the native Linux x64 private-candidate defect: exact app59ac9551/runtime50ee90f7, FFmpeg source897e5fb. Three native cases and three snapshots pass; the actual one-response Legacy Lua/expiry flow passes19/19 transport with zero PTS/DTS/PCR/CC errors, full AV/libzvbi stderr empty and37 observed exact children drained. Exact matched smoke and four-route TSDuck93/93 pass; static concat958 packets remain byte-exact. Original2PTS/1DTS captures, duration-only44/56 frame failure and candidate delivery negatives remain canonical. Required Windows/ARM packages and managed runtime adoption remain separate P9B-02 obligations; published2.0.8 is not claimed repaired. F6 stays closed.'
+resolved    = true

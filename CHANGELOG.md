@@ -1165,6 +1165,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve Legacy programme-transition timing and initial frames with the
+  qualified concat runtime correction. Skip only optional FPS sampling when
+  opening private programme inputs; retain complete codec/track initialization,
+  captions and alternate audio. Required runtime packages and managed adoption
+  remain separate from the verified Linux candidate.
+
 - Correct TSDuck continuity checks under strict shell execution: clean streams
   pass, while processor failures remain visible independently of diagnostics.
 

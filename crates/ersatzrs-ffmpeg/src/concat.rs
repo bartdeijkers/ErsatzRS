@@ -54,8 +54,11 @@ impl ConcatPlaylist {
         // then reports EIO on its next read. Persistent request handling keeps
         // that normal EOF available to the concat demuxer so it opens the next
         // programme instead of aborting the channel.
+        // For these internal MPEG-TS responses, skip only optional FPS sampling
+        // on each input open (ADR 0121). Codec parameters, first DTS and complete
+        // stream discovery remain required; no frame rate is forced.
         format!(
-            "ffconcat version 1.0\nfile {url}\noption multiple_requests 1\nfile {url}\noption multiple_requests 1\n"
+            "ffconcat version 1.0\nfile {url}\noption multiple_requests 1\noption fpsprobesize 0\nfile {url}\noption multiple_requests 1\noption fpsprobesize 0\n"
         )
     }
 
@@ -77,8 +80,8 @@ mod tests {
 
     #[test]
     fn internal_programme_playlist_preserves_chunked_eof_for_each_entry() {
-        assert_eq!(ConcatPlaylist::new("http", "localhost", "1", "hybrid").render(),
-            "ffconcat version 1.0\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\noption multiple_requests 1\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\noption multiple_requests 1\n");
+        let playlist = ConcatPlaylist::new("http", "localhost", "1", "hybrid");
+        insta::assert_snapshot!("legacy_internal_programme_playlist", playlist.render());
     }
 
     #[test]
@@ -92,6 +95,7 @@ mod tests {
             2
         );
         assert_eq!(rendered.matches("option multiple_requests 1").count(), 2);
+        assert_eq!(rendered.matches("option fpsprobesize 0").count(), 2);
         assert!(!playlist.render().contains("wrapper_id"));
     }
 }

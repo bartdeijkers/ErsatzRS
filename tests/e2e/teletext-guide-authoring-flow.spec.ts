@@ -1949,7 +1949,10 @@ test('production TV-guide actual command timeout retains last-good output and re
 
 // One real production-addon Lua lifecycle. The collection/media fixture supplies
 // AV only; Lua resolves existing production profiles through the normal app API.
-test('production TV-guide Lua profile On Off Continue and natural expiry to Base', async ({ browser, isolatedWebHost }, info) => {
+const reusedLuaDirectEvidence = process.env.ERSATZRS_TVGUIDE_LUA_REUSE_DIRECT;
+test(reusedLuaDirectEvidence
+  ? 'production TV-guide Lua Legacy repair with qualified paired direct evidence'
+  : 'production TV-guide Lua profile On Off Continue and natural expiry to Base', async ({ browser, isolatedWebHost }, info) => {
   test.skip(process.env.ERSATZRS_TVGUIDE_LUA_FLOW !== '1', 'Explicit production Lua lifecycle qualification.');
   test.skip(process.platform === 'win32', 'This disposable host proof is POSIX; native Windows has separate evidence.');
   test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9 and its independent libzvbi decoder.');
@@ -1961,6 +1964,7 @@ test('production TV-guide Lua profile On Off Continue and natural expiry to Base
   let context: BrowserContext | undefined;
   const receipts: Record<string, unknown> = { repository_zip_sha256: candidateDigest,
     scope: 'Real production profile On/effective6, Off/effective4, command-free Continue and natural60s Off expiry to Base5; paired direct-TS ordinary On/isolation responses and one public Legacy Off-to-Base response. No simultaneous paired Legacy-capacity, restart, physical client or whole P9B claim.' };
+  if (reusedLuaDirectEvidence) receipts.scope = 'Affected ordinary Legacy Off-to-Base transport repair, with fresh admin/profile/publication/Lua checks. Previously qualified paired direct responses are explicitly reused within the checked source/runtime boundary; no new paired direct receiver claim.';
   const persist = (): void => writeFileSync(info.outputPath('production-guide-lua-identity.json'), JSON.stringify(receipts, null, 2));
   type Interval = { PlayoutId: number; AddonId: string; Start: string; Finish: string; State: number; CandidateSnapshot: string | null; ProfileId: number | null };
   const channel = fixture.channels[0], source = fixture.channels[1];
@@ -2245,19 +2249,56 @@ test('production TV-guide Lua profile On Off Continue and natural expiry to Base
     receipts.on_generation = effectiveOn; receipts.on_original_sha256 = sha256(onOriginal); persist();
     expect(utc(on[0].Finish) - Date.now()).toBeGreaterThan(30_000);
     expect(utc(sourceNow.Finish) - Date.now()).toBeGreaterThan(30_000);
-    let authoredObserved!: () => void;
-    const onAuthored = new Promise<void>(resolve => { authoredObserved = resolve; });
-    const onPending = capture(channel, 'production-guide-lua-on-night', 400, 'NIGHT GUIDE', authoredObserved, undefined, 'direct');
-    // Keep the same original response/time allowance. Do not cold-start the
-    // second cap1 reconstruction until the first actually delivers teletext.
-    // Failure/completion without authored bytes terminates; it is never retried.
-    await Promise.race([onAuthored, onPending.then(() => { throw new Error('On response completed before authored delivery.'); })]);
-    const paired = await Promise.allSettled([onPending,
-      capture(source, 'production-guide-lua-isolated-classic', 201, 'DAY GUIDE', undefined, undefined, 'direct')]);
-    // Both original bounded responses settle before fixture cleanup, even when
-    // one strict decoder/transport assertion rejects its own observation.
-    for (const result of paired) if (result.status === 'rejected') throw result.reason;
-    const [onCapture, isolatedCapture] = paired.map(result => (result as PromiseFulfilledResult<Awaited<typeof onPending>>).value);
+    let onCapture: Awaited<ReturnType<typeof capture>>, isolatedCapture: Awaited<ReturnType<typeof capture>>;
+    if (reusedLuaDirectEvidence) {
+      const origin = pathToFileURL(reusedLuaDirectEvidence);
+      const evidence = JSON.parse(readFileSync(origin, 'utf8'));
+      const relativeFile = (name: string): string => fileURLToPath(new URL(name, origin));
+      expect(evidence.version).toBe(1);
+      expect(evidence.consumer_sha256).toBe(sha256(readFileSync(process.env.E2E_SERVER_BIN!)));
+      expect(evidence.runtime_sha256).toBe(sha256(readFileSync(process.env.PHASE9_REAL_FFMPEG!)));
+      const before = JSON.parse(readFileSync(relativeFile(evidence.source_before), 'utf8')).files;
+      const after = JSON.parse(readFileSync(relativeFile(evidence.source_after), 'utf8')).files;
+      expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+      expect(Object.keys(after).filter(name => before[name] !== after[name]).sort()).toEqual([
+        'crates/ersatzrs-ffmpeg/src/concat.rs',
+        'crates/ersatzrs-ffmpeg/tests/snapshots/pipeline_snapshots__concat_playlist_snapshot.snap',
+        'crates/ersatzrs-web/src/transport/iptv/stream_wrapper_teletext_runtime_tests.rs',
+      ]);
+      const priorFile = relativeFile(evidence.direct_identity);
+      const prior = JSON.parse(readFileSync(priorFile, 'utf8'));
+      expect(prior.repository_zip_sha256).toBe(candidateDigest);
+      const retained = (name: string, theme: string): Awaited<ReturnType<typeof capture>> => {
+        const artifact = (suffix: string): string => fileURLToPath(new URL(`${name}.${suffix}`, pathToFileURL(priorFile)));
+        const bytes = readFileSync(artifact('ts'));
+        expect(bytes.length).toBe(prior[name].bytes); expect(sha256(bytes)).toBe(prior[name].sha256);
+        expect(prior[name].ended).toBe('byte-limit'); expect(prior[name].route).toMatch(/^\/iptv\/hls-direct\/\d+\.ts$/);
+        expect(readFileSync(artifact('av.stderr'), 'utf8')).toBe('');
+        expect(readFileSync(artifact('teletext.stderr'), 'utf8')).toBe('');
+        const decoded = readFileSync(artifact('srt'), 'utf8'); expect(decoded).toContain(theme);
+        expect(decoded).toContain('Now: Synthetic red video and tone');
+        return { path: artifact('ts'), decoded, timing: prior[name].timing };
+      };
+      onCapture = retained('production-guide-lua-on-night', 'NIGHT GUIDE');
+      isolatedCapture = retained('production-guide-lua-isolated-classic', 'DAY GUIDE');
+      receipts.reused_direct_evidence = { receipt_sha256: sha256(readFileSync(origin)),
+        prior_identity_sha256: sha256(readFileSync(priorFile)), source_changes: evidence.source_changes,
+        runtime_sha256: evidence.runtime_sha256, new_paired_responses: false }; persist();
+    } else {
+      let authoredObserved!: () => void;
+      const onAuthored = new Promise<void>(resolve => { authoredObserved = resolve; });
+      const onPending = capture(channel, 'production-guide-lua-on-night', 400, 'NIGHT GUIDE', authoredObserved, undefined, 'direct');
+      // Keep the same original response/time allowance. Do not cold-start the
+      // second cap1 reconstruction until the first actually delivers teletext.
+      // Failure/completion without authored bytes terminates; it is never retried.
+      await Promise.race([onAuthored, onPending.then(() => { throw new Error('On response completed before authored delivery.'); })]);
+      const paired = await Promise.allSettled([onPending,
+        capture(source, 'production-guide-lua-isolated-classic', 201, 'DAY GUIDE', undefined, undefined, 'direct')]);
+      // Both original bounded responses settle before fixture cleanup, even when
+      // one strict decoder/transport assertion rejects its own observation.
+      for (const result of paired) if (result.status === 'rejected') throw result.reason;
+      [onCapture, isolatedCapture] = paired.map(result => (result as PromiseFulfilledResult<Awaited<typeof onPending>>).value);
+    }
     expect(utc(isolatedCapture.timing.first_read_utc!)).toBeLessThan(utc(onCapture.timing.last_read_utc!));
     expect(utc(isolatedCapture.timing.first_authored_utc!)).toBeLessThan(utc(onCapture.timing.last_read_utc!));
     expect(utc(onCapture.timing.first_authored_utc!)).toBeLessThan(utc(isolatedCapture.timing.last_read_utc!));

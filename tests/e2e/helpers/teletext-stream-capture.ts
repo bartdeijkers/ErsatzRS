@@ -54,6 +54,11 @@ export async function captureTeletextChannelTs(
     writeFileSync(output, bytes);
     return { bytes, ended };
   } catch {
+    // Retain the original bounded prefix for a failed-response investigation.
+    // This remains a failed capture; never present the partial file as success.
+    writeFileSync(`${output}.partial`, Buffer.concat(chunks, count));
+    writeFileSync(`${output}.failure.json`, JSON.stringify({ state: 'failed', stage: failure,
+      timed_out: controller.signal.aborted, bytes: count, maximum_bytes: limits.maximumBytes }));
     throw new Error(controller.signal.aborted
       ? 'Synthetic stream capture exceeded its original time limit.'
       : `Synthetic stream capture failed (${failure}).`);

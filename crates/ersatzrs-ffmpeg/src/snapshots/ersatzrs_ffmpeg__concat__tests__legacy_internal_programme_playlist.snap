@@ -1,0 +1,11 @@
+---
+source: crates/ersatzrs-ffmpeg/src/concat.rs
+expression: playlist.render()
+---
+ffconcat version 1.0
+file http://localhost/ffmpeg/stream/1?mode=hybrid
+option multiple_requests 1
+option fpsprobesize 0
+file http://localhost/ffmpeg/stream/1?mode=hybrid
+option multiple_requests 1
+option fpsprobesize 0

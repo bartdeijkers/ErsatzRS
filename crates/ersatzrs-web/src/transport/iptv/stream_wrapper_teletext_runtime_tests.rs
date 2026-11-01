@@ -57,7 +57,7 @@ fn caption_fixture(caption: &str) -> Vec<u8> {
     bytes
 }
 
-async fn programme(ffmpeg: &str, index: usize) -> Vec<u8> {
+async fn programme(ffmpeg: &str, index: usize, seconds: &str) -> Vec<u8> {
     let color = [
         "color=c=red:size=160x90:rate=25",
         "color=c=blue:size=160x90:rate=25",
@@ -92,7 +92,7 @@ async fn programme(ffmpeg: &str, index: usize) -> Vec<u8> {
         "-i",
         "pipe:0",
         "-t",
-        "2",
+        seconds,
         "-map",
         "0:v:0",
         "-map",
@@ -139,7 +139,7 @@ type ProgrammeWrites = Arc<Mutex<Vec<tokio::task::JoinHandle<io::Result<()>>>>>;
 
 #[derive(Clone)]
 struct Programmes {
-    bytes: [Arc<[u8]>; 2],
+    bytes: Vec<Arc<[u8]>>,
     requests: Arc<AtomicUsize>,
     opened: Arc<Mutex<Vec<usize>>>,
     writers: ProgrammeWrites,
@@ -151,7 +151,7 @@ impl Programmes {
         if request >= 16 {
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
-        let index = request % 2;
+        let index = request % self.bytes.len();
         self.opened.lock().unwrap().push(index);
         let bytes = Arc::clone(&self.bytes[index]);
         let cancel = Arc::new(Notify::new());
@@ -188,7 +188,8 @@ struct ProgrammeServer {
 }
 
 impl ProgrammeServer {
-    async fn start(bytes: [Arc<[u8]>; 2]) -> Self {
+    async fn start(bytes: Vec<Arc<[u8]>>) -> Self {
+        assert!(!bytes.is_empty());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let programmes = Programmes {
@@ -386,8 +387,6 @@ async fn forward_wrapper(ffmpeg: &str, server: &ProgrammeServer) -> Vec<u8> {
     }
     assert!(child.try_wait().unwrap().unwrap().success());
     let bytes = bytes.expect("the single final authored wrapper must end cleanly");
-    assert!(server.programmes.requests.load(Ordering::Acquire) >= 3);
-    assert_eq!(&server.programmes.opened.lock().unwrap()[..3], &[0, 1, 0]);
     verify_wrapper_clock(&bytes, output.binding().unwrap().config().clock);
     bytes
 }
@@ -560,11 +559,13 @@ async fn real_legacy_wrapper_keeps_one_authored_epoch_across_two_distinct_progra
         9
     );
     let sources: [Arc<[u8]>; 2] = [
-        Arc::from(programme(&ffmpeg, 0).await),
-        Arc::from(programme(&ffmpeg, 1).await),
+        Arc::from(programme(&ffmpeg, 0, "2").await),
+        Arc::from(programme(&ffmpeg, 1, "2").await),
     ];
-    let server = ProgrammeServer::start(sources.clone()).await;
+    let server = ProgrammeServer::start(sources.to_vec()).await;
     let output = forward_wrapper(&ffmpeg, &server).await;
+    assert!(server.programmes.requests.load(Ordering::Acquire) >= 3);
+    assert_eq!(&server.programmes.opened.lock().unwrap()[..3], &[0, 1, 0]);
     server.stop().await;
     verify_programme_content(&ffmpeg, &sources, &output).await;
     verify_tsduck(&tsanalyze, &output).await;
@@ -579,4 +580,103 @@ async fn real_legacy_wrapper_keeps_one_authored_epoch_across_two_distinct_progra
     }
     let captions = pids.iter().find(|pid| pid["id"] == 258).unwrap();
     assert_eq!(captions["language"], "eng");
+}
+
+#[tokio::test]
+#[ignore = "requires exact FFmpeg 9/libzvbi, TSDuck and loopback HTTP"]
+async fn real_legacy_wrapper_keeps_av_timestamps_when_reopened_programmes_shorten() {
+    let ffmpeg = exact_tool("ERSATZRS_TELETEXT_TEST_FFMPEG");
+    let tsanalyze = exact_tool("ERSATZRS_TELETEXT_TEST_TSANALYZE");
+    // The playlist still has two entries. Across its real stream_loop, the
+    // first entry becomes shorter, then the second entry becomes longer.
+    let sources: [Arc<[u8]>; 4] = [
+        Arc::from(programme(&ffmpeg, 0, "2").await),
+        Arc::from(programme(&ffmpeg, 1, "0.25").await),
+        Arc::from(programme(&ffmpeg, 0, "0.25").await),
+        Arc::from(programme(&ffmpeg, 1, "2").await),
+    ];
+    let references = [Arc::clone(&sources[0]), Arc::clone(&sources[3])];
+    let server = ProgrammeServer::start(sources.to_vec()).await;
+    let bytes = forward_wrapper(&ffmpeg, &server).await;
+    let opened = server.programmes.opened.lock().unwrap().clone();
+    server.stop().await;
+    assert!(
+        opened.len() >= 4,
+        "the wrapper must reopen its actual playlist"
+    );
+    assert_eq!(&opened[..4], &[0, 1, 2, 3]);
+    // Retain both programmes, selected alternative audio, source captions and
+    // authored pages; fixing the timestamp seam cannot discard their tracks.
+    verify_programme_content(&ffmpeg, &references, &bytes).await;
+    verify_tsduck(&tsanalyze, &bytes).await;
+    let analysis = probe(&tsanalyze, &["--json"], &bytes, 256 * 1024)
+        .await
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&analysis).unwrap();
+    for pid in report["pids"].as_array().unwrap() {
+        assert_eq!(pid["packets"]["dts-leap"], 0, "PID {} DTS", pid["id"]);
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires exact FFmpeg 9/libzvbi, TSDuck and loopback HTTP"]
+async fn real_legacy_wrapper_keeps_complete_video_when_one_tail_reopens_a_long_first_entry() {
+    let ffmpeg = exact_tool("ERSATZRS_TELETEXT_TEST_FFMPEG");
+    let tsanalyze = exact_tool("ERSATZRS_TELETEXT_TEST_TSANALYZE");
+    let sources: [Arc<[u8]>; 4] = [
+        Arc::from(programme(&ffmpeg, 0, "1").await),
+        Arc::from(programme(&ffmpeg, 1, "0.25").await),
+        Arc::from(programme(&ffmpeg, 0, "1.25").await),
+        Arc::from(programme(&ffmpeg, 1, "3").await),
+    ];
+    let references = [Arc::clone(&sources[2]), Arc::clone(&sources[3])];
+    let server = ProgrammeServer::start(sources.to_vec()).await;
+    let bytes = forward_wrapper(&ffmpeg, &server).await;
+    let opened = server.programmes.opened.lock().unwrap().clone();
+    server.stop().await;
+    assert!(
+        opened.len() >= 4,
+        "the wrapper must reopen its actual playlist"
+    );
+    assert_eq!(&opened[..4], &[0, 1, 2, 3]);
+    verify_programme_content(&ffmpeg, &references, &bytes).await;
+    let reference = frame_hashes(
+        probe(&ffmpeg, AV_DIGEST_ARGS, &references[0], 512 * 1024)
+            .await
+            .unwrap(),
+    );
+    let first = frame_hashes(
+        probe(&ffmpeg, AV_DIGEST_ARGS, &sources[0], 512 * 1024)
+            .await
+            .unwrap(),
+    );
+    assert!(
+        first[0].len() >= 20,
+        "the first A source must cover its video oracle"
+    );
+    let actual = frame_hashes(
+        probe(&ffmpeg, AV_DIGEST_ARGS, &bytes, 512 * 1024)
+            .await
+            .unwrap(),
+    );
+    let red_hashes: BTreeSet<_> = reference[0].iter().chain(first[0].iter()).collect();
+    let red_frames = actual[0]
+        .iter()
+        .filter(|hash| red_hashes.contains(hash))
+        .count();
+    // Both complete A occurrences finish before six seconds. The complete
+    // four-programme cycle exceeds six seconds, so a third A cannot contribute.
+    assert_eq!(
+        red_frames,
+        first[0].len() + reference[0].len(),
+        "seeking the fresh nonseekable first entry must not discard A frames"
+    );
+    verify_tsduck(&tsanalyze, &bytes).await;
+    let analysis = probe(&tsanalyze, &["--json"], &bytes, 256 * 1024)
+        .await
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&analysis).unwrap();
+    for pid in report["pids"].as_array().unwrap() {
+        assert_eq!(pid["packets"]["dts-leap"], 0, "PID {} DTS", pid["id"]);
+    }
 }

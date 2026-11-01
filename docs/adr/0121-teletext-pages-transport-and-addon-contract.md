@@ -632,6 +632,22 @@ only global metadata copying. This corrects default-selection caption/alternate-
 audio loss and preserves stream language descriptors under FFmpeg 9, while
 retaining independently configured channel service metadata. Actual programme-
 handover verification remains separate from this command correction.
+Each host-owned finite programme in the private concat playlist skips optional
+frame-rate sampling (`option fpsprobesize 0`). Codec parameters, extradata,
+decoder-delay initialization, first DTS and discovery of every declared stream
+remain required. This avoids an additional multi-frame sampling pause at a live
+programme boundary; it does not force a frame rate, shorten codec discovery,
+change readrate, drop tracks or relax output deadlines. Where the bitstream has
+no explicit rate, inferred frame-rate metadata is not an equality guarantee;
+actual timestamps, complete frames and decoded output remain the oracles.
+A repeated private URL can return different finite programme lengths. Its
+duration must come from the current opened input, without a previous input's
+DTS high-water mark. Loop reopening must preserve eligible initial packets.
+Explicit duration, inpoint, outpoint and static concat behaviour retain their
+contracts. Require the changing-length and short-tail branches, ordinary-route
+delivery and full track/cleanup proof; a buffered wrapper replay alone is not
+acceptance. Runtime candidate verification, platform/package verification and
+managed adoption remain separate, with exact artifact identities in P9B-02.
 Fresh final-output admission permits FFmpeg's initial discontinuity indicator
 only on the first physical packet of each relevant PSI/PCR PID. Adaptation-only
 or unflagged first packets consume that allowance. Strict standalone readers
