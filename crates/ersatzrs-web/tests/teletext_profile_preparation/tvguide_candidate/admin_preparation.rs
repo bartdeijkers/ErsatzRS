@@ -25,6 +25,9 @@ use std::{collections::BTreeMap, time::Instant};
 
 const POLICY: &str = "teletext.authoring.policy";
 
+#[path = "admin_preparation/configuration.rs"]
+mod configuration;
+
 #[path = "admin_preparation/live_publication.rs"]
 mod live_publication;
 
@@ -208,6 +211,25 @@ async fn proof(
     title: &str,
     index: u16,
 ) -> Proof {
+    proof_with_publication(
+        fixture,
+        identity,
+        scope,
+        title,
+        index,
+        TeletextAuthoringPublicationState::Unrequested,
+    )
+    .await
+}
+
+async fn proof_with_publication(
+    fixture: &Fixture,
+    identity: TeletextAuthoringIdentity,
+    scope: TeletextAuthoringScope,
+    title: &str,
+    index: u16,
+    expected_state: TeletextAuthoringPublicationState,
+) -> Proof {
     let (source, units) = match scope {
         TeletextAuthoringScope::Base => {
             let restored = reload_original_teletext_design_revision(
@@ -267,13 +289,16 @@ async fn proof(
     .unwrap();
     assert_eq!(preview.scope(), scope);
     let publication = preview.publication().unwrap();
-    assert_eq!(
-        publication.state,
-        TeletextAuthoringPublicationState::Unrequested
-    );
-    // The additive source-aware publication controller now offers an explicit
-    // request; this optimistic flag still grants no active generation.
-    assert!(publication.can_request && !publication.can_publish);
+    assert_eq!(publication.state, expected_state);
+    let expected_request = match expected_state {
+        TeletextAuthoringPublicationState::Unrequested => true,
+        TeletextAuthoringPublicationState::Unavailable => false,
+        _ => panic!("this proof only qualifies unrequested or unavailable originals"),
+    };
+    // Historical bytes remain previewable after a profile revision changes,
+    // but they cannot acquire publication authority under that new selection.
+    assert_eq!(publication.can_request, expected_request);
+    assert!(!publication.can_publish);
     assert!(preview.raster().unwrap().diagnostics().is_empty());
     assert!(!preview.authoring().is_empty());
     Proof {
