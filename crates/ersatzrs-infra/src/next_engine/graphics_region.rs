@@ -37,8 +37,25 @@ pub(super) async fn measure(
                 deadline.saturating_duration_since(Instant::now()),
                 receiver,
             )
-            .await
-            .ok()?;
+            .await;
+        #[cfg(test)]
+        if let Err(error) = &probe {
+            // Keep failure evidence without exposing the input, arguments or
+            // raw process diagnostics from this optional spatial optimization.
+            use crate::ffprobe::FfprobeError;
+            let category = match error {
+                FfprobeError::Process { .. } => "process",
+                FfprobeError::Spawn { .. } => "spawn",
+                FfprobeError::Json { .. } => "json",
+                FfprobeError::Timeout { .. } => "timeout",
+                FfprobeError::Cancelled { .. } => "cancelled",
+                FfprobeError::InvalidOutput { .. } => "invalid_output",
+                FfprobeError::OutputTooLarge { .. } => "output_too_large",
+                FfprobeError::CleanupUnconfirmed { .. } => "cleanup_unconfirmed",
+            };
+            tracing::warn!(category, "Next watermark region probe unavailable");
+        }
+        let probe = probe.ok()?;
         let image = FrameSize::new(
             u32::try_from(probe.version.width).ok()?,
             u32::try_from(probe.version.height).ok()?,

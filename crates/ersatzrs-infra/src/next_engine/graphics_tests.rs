@@ -8,6 +8,8 @@ use ersatzrs_domain::{FFmpegProfile, GraphicsElement, GraphicsElementConfig, Res
     reason = "manual gate receives the exact packaged executable"
 )]
 async fn canvas_region_projection_measures_local_image_and_signs_fixed_placement() {
+    use tracing::instrument::WithSubscriber as _;
+
     let root = tempfile::tempdir().unwrap();
     let image = region_image(root.path()).await;
     let (pool, _, channel, _) = super::super::schedule::tests::fixture().await;
@@ -49,6 +51,13 @@ async fn canvas_region_projection_measures_local_image_and_signs_fixed_placement
         &mut projected,
         &[watermark.clone()],
         &[],
+    )
+    .with_subscriber(
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::WARN)
+            .with_ansi(false)
+            .with_test_writer()
+            .finish(),
     )
     .await
     .unwrap()

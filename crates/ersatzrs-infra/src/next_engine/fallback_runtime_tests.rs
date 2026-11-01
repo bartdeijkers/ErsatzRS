@@ -168,7 +168,24 @@ async fn fixture_child_live_fallback() {
 #[tokio::test]
 #[ignore = "requires official Next and FFmpeg; generated ephemeral fallback credits"]
 async fn real_next_fallback_credits_preserve_burn_convert_and_programme_off() {
+    // Retain the existing session diagnostics even when an observation panics.
+    // Nextest gives this test its own process, so spawned host tasks use this
+    // subscriber for both original Burn and Convert cases.
+    let diagnostics = tempfile::tempdir().unwrap().keep();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_ansi(false)
+        .with_writer(std::sync::Mutex::new(
+            std::fs::File::create(diagnostics.join("session.log")).unwrap(),
+        ))
+        .try_init()
+        .expect("dedicated nextest process diagnostic subscriber");
+    eprintln!(
+        "credits fallback diagnostics retained at {}",
+        diagnostics.display()
+    );
     for convert in [false, true] {
+        tracing::info!(convert, "starting credits fallback observation");
         fallback_case(FallbackSource::Credits, convert).await;
     }
 }
@@ -446,79 +463,103 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
         .unwrap();
     let handle = registry.try_get("1").await.unwrap();
     let mut checked = std::collections::HashSet::new();
-    let proof = timeout(Duration::from_mins(1), async {
-        let mut saw_fallback = false;
-        loop {
-            if let Some(playlist) = handle.trim_playlist().await {
-                let mut duration = None;
-                for name in playlist.lines() {
-                    if let Some(value) = name.strip_prefix("#EXTINF:") {
-                        duration = Some(value.trim_end_matches(',').parse::<f64>().unwrap());
-                        continue;
-                    }
-                    if name.starts_with('#')
-                        || !Path::new(name)
-                            .extension()
-                            .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
-                    {
-                        continue;
-                    }
-                    let duration = duration.take().expect("segment must declare its duration");
-                    assert!(duration.is_finite() && duration > 0.0);
-                    // Joining near a boundary can yield a valid short segment.
-                    // Select a complete one-second observation window; keep all
-                    // decoded audio, caption and subsequent programme assertions.
-                    if duration < 1.0 {
-                        continue;
-                    }
-                    if checked.contains(name) {
-                        continue;
-                    }
-                    let segment = output.join(name);
-                    if !segment.exists() {
-                        continue;
-                    }
-                    let (mut white, hz, peak) = sample(&ffmpeg, &segment).await;
-                    if source == FallbackSource::Credits {
-                        white = credits_runtime_tests::top_white_pixels(&ffmpeg, &segment).await;
-                    }
-                    checked.insert(name.to_owned());
-                    let is_fallback = if source == FallbackSource::PinnedOff {
-                        hz < 1.0 && peak <= 1 && white == 0
-                    } else {
-                        (820.0..940.0).contains(&hz)
-                            && (if convert { white == 0 } else { white > 20 })
-                    };
-                    if is_fallback {
-                        if convert
-                            && source != FallbackSource::PinnedOff
-                            && !assert_fallback_vtt(
-                                &segment.with_extension("vtt"),
-                                source == FallbackSource::Credits,
-                            )
-                            .await
-                        {
-                            continue;
+    // Join observation panics before stopping the owned session/callback. A
+    // failed decode/assertion must not skip cleanup or erase the cause log.
+    let proof = {
+        let handle = handle.clone();
+        let output = output.clone();
+        let ffmpeg = ffmpeg.clone();
+        tokio::spawn(async move {
+            timeout(Duration::from_mins(1), async {
+                let mut saw_fallback = false;
+                loop {
+                    if let Some(playlist) = handle.trim_playlist().await {
+                        let mut duration = None;
+                        for name in playlist.lines() {
+                            if let Some(value) = name.strip_prefix("#EXTINF:") {
+                                duration =
+                                    Some(value.trim_end_matches(',').parse::<f64>().unwrap());
+                                continue;
+                            }
+                            if name.starts_with('#')
+                                || !Path::new(name)
+                                    .extension()
+                                    .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
+                            {
+                                continue;
+                            }
+                            let duration =
+                                duration.take().expect("segment must declare its duration");
+                            assert!(duration.is_finite() && duration > 0.0);
+                            // Joining near a boundary can yield a valid short segment.
+                            // Select a complete one-second observation window; keep all
+                            // decoded audio, caption and subsequent programme assertions.
+                            if duration < 1.0 {
+                                continue;
+                            }
+                            if checked.contains(name) {
+                                continue;
+                            }
+                            let segment = output.join(name);
+                            if !segment.exists() {
+                                continue;
+                            }
+                            let (mut white, hz, peak) = sample(&ffmpeg, &segment).await;
+                            if source == FallbackSource::Credits {
+                                white = credits_runtime_tests::top_white_pixels(&ffmpeg, &segment)
+                                    .await;
+                            }
+                            checked.insert(name.to_owned());
+                            let is_fallback = if source == FallbackSource::PinnedOff {
+                                hz < 1.0 && peak <= 1 && white == 0
+                            } else {
+                                (820.0..940.0).contains(&hz)
+                                    && (if convert { white == 0 } else { white > 20 })
+                            };
+                            if is_fallback {
+                                if convert
+                                    && source != FallbackSource::PinnedOff
+                                    && !assert_fallback_vtt(
+                                        &segment.with_extension("vtt"),
+                                        source == FallbackSource::Credits,
+                                    )
+                                    .await
+                                {
+                                    continue;
+                                }
+                                saw_fallback = true;
+                            }
+                            if saw_fallback && white == 0 && (410.0..470.0).contains(&hz) {
+                                return Ok(());
+                            }
                         }
-                        saw_fallback = true;
                     }
-                    if saw_fallback && white == 0 && (410.0..470.0).contains(&hz) {
-                        return;
+                    if handle.startup_readiness() == HlsStartupReadiness::Failed {
+                        tracing::error!(convert, "fallback session became terminal before handoff");
+                        return Err("session became terminal before the required handoff");
                     }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
-            }
-            assert_ne!(handle.startup_readiness(), HlsStartupReadiness::Failed);
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await;
-    assert!(registry.stop_channel("1").await);
-    task.await.unwrap();
+            })
+            .await
+        })
+        .await
+    };
+    let stopped = registry.stop_channel("1").await;
+    let session = task.await;
     callback.stop().await;
-    assert!(!output.exists());
-    proof.expect(
-        "Dutch fallback captions must be followed by the English programme without captions",
+    assert!(
+        stopped,
+        "fallback stop missing; convert={convert}; observation={proof:?}"
     );
+    session.expect("owned fallback session task must finish");
+    assert!(!output.exists());
+    proof
+        .expect("fallback observation panicked after owned cleanup")
+        .expect("fallback observation must finish within its original deadline")
+        .expect(
+            "Dutch fallback captions must be followed by the English programme without captions",
+        );
     let rows: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
         .fetch_one(&pool)
         .await
@@ -542,7 +583,9 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
                 .unwrap(),
             "play\nplay\nplay\n",
             "each of two programmes and one ephemeral filler must own exactly one producer; last seek: {}",
-            tokio::fs::read_to_string(root.path().join("producer-seek")).await.unwrap()
+            tokio::fs::read_to_string(root.path().join("producer-seek"))
+                .await
+                .unwrap()
         );
     }
     #[cfg(unix)]

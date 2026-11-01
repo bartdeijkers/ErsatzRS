@@ -18906,8 +18906,15 @@ four-RID joins after the remaining package changes. Exacte851 CI is now green;
 its original runner-shutdown failures remain retained. Current exactadce full
 CI41304907840 is terminalred only in Next engine;12 applicable jobs pass and
 Commitlint is expected skipped. Canonical ci-adce final run/jobs and original
-logs/diagnostics own the two failures; no full-green claim. Concrete cause
-logging/cleanup gaps determine the next bounded action, not a new general audit.
+logs/diagnostics own the two failures; no full-green claim. The bounded diagnostic
+component now retains a safe probe error category/session.log and moves normal
+cleanup before observation assertions. Both original cases pass locally with
+unchanged CI runtime hashes and budgets: image-region0.483s and credits Burn/
+Convert27.137s. ci-adce/local-repro owns receipts and preserved compile/sandbox
+negatives. Strict affected infra all-targets Clippy, affected formatting, progress,
+diff and new-allow policy pass. This diagnostic/observation-cleanup component is
+Complete within focused Linuxx64 verification; original CI causes remain unknown,
+no product fix inferred. New exact-source full CI remains outstanding.
 Minimum: reuse unchanged9A fixtures/source-engine-copy/audio/health/routes and
 localized coverage with source/input joins; run only outstanding required gates
 on final source. Current Linux smoke/four-route93/93 and strict affected Clippy/
@@ -18921,10 +18928,11 @@ platform or complete experimental2.5 acceptance is claimed.
 
 One next executable package: 9B-FINAL exact-source CI gate. The completedadce
 round has12 applicable successes and only Next engine red (452/454 assertions).
-Correct the demonstrated missing diagnostics/cleanup on those two existing cases,
-then perform the bounded affected checks to identify the actual cause. Do not
-speculate on a product fix, relax budgets, rerun unrelated chains or present a
-focused result as full green. Publication/adoption remains a separate9B-RUNTIME
+The missing-diagnostics/observation-cleanup component is now Complete with both
+focused runtime passes and strict affected lint. Original failures were not
+reproduced; retain their unexplained status and obtain new-SHA full CI evidence rather
+than infer a product fix. Do not relax budgets, rerun unrelated chains or present
+the two focused passes as full green. Publication/adoption remains a separate9B-RUNTIME
 authorization dependency; closed private-platform components stay closed.
 
 Completed concrete Legacy finite-programme transition repair2026-11-01:

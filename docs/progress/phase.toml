@@ -73,17 +73,25 @@ only one existing case repeats for report/drain. ARMv7 passes3/3 in one round.
 Verified existingadce archive83784b3c supplies Linuxx64 Rust tests, not ARM Rust;
 actual current ARM compiled-host regular proof remains separately closed.
 
-Next finite action: exactadce fullCI41304907840 is complete,12 applicable jobs pass,
-only Next engine red (452/454 assertions; Commitlint expected skipped). Fix only
-the demonstrated diagnostic/cleanup gap in the two existing image-region/credits
-cases, preserving the2s probe/45s observation/normative geometry and AV/caption/
-audio/handoff assertions. Obtain sanitized probe error and retained credits
-session outcome through normal cleanup before assertion. Then only affected
-checks. Stop when actual cause is known and the smallest justified correction
-is verified, or record the exact remaining diagnostic/capability blocker. No
-blind rerun, speculative runtime fix, general audit or unrelated editor variants.
-Existing ci-adce final run/jobs/original logs and canonical ci.current_source_run
-own this failure. Focused checks are not full green; a code change needs newSHA.
+Completed: bounded9B-FINAL diagnostics/observation-cleanup component. Original
+exactadce fullCI41304907840 is terminalred:12 applicable jobs pass, Next engine
+452/454 assertions and expected skipped Commitlint. Both failing cases now pass
+locally against identical CI26a/bd22/552d runtime hashes: exact image-region0.483s,
+credits Burn/Convert27.137s with original AV/caption/audio/handoff and positive
+cleanup assertions. The original CI causes remain unknown; this is improved
+failure evidence/observation cleanup, no product-fix or full-green claim. Preserve
+2s probe,45s startup,60s observation and all original oracles. Dedicated retained
+session.log and safe probe error category now survive failures; the existing CI
+collector already captures that path. Canonical ci-adce/local-repro receipts own
+successful checks, non-Send diagnostic compile correction and sandbox callback
+EPERM (only affected credits case repeated with local network permission).
+Strict affected infra all-targets Clippy exits0 (238s), affected Rust formatting,
+progress, diff and new-allow policy pass. The coherent local checkpoint contains
+three diagnostic Rust files plus canonical progress. Next finite action: full CI
+on the new exact scoped source SHA, retaining actual diagnostics if either
+original failure recurs. Never present focused results as full green or blindly
+rerun the old failure. No active check/process remains from this local package.
+No general audit, unrelated editor variants or speculative runtime correction.
 
 The sole finite completion list remains P9B-02 evidence. Closed runtime artifacts,
 strict target cases, actual regular hosts and accepted9A source/track/cancellation
