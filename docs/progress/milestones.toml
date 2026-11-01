@@ -18787,21 +18787,29 @@ AV and original state, restarts/Refresh/Reset match ADR0122 timing and precedenc
 and no package is installed/enabled by script. Package faults refer9B-PACKAGE.
 Dependencies: current compatible addon; fixed Legacy candidate for affected AV.
 
-9B-TTI — mandatory remaining generic production interchange proof; executable.
+9B-TTI — Complete: supported production interchange metadata/permission/revision.
 Owners: P9B-01 metadata/theme/navigation; P9B-02 production editor-roundtrip clause.
-Action: import a supported guide edit as a concept and explicitly publish it while
-retaining theme/override bindings, navigation, template/dynamic fields and zones.
-Gap: complete receipt join for those metadata fields and stale-revision refusal
-on the actual production addon; footer Zone/protected generated edit rejection,
-concept isolation, publication, SQL refresh and Linux restart are already closed.
-Minimum: inspect retained export/sidecar and accepted original/refreshed documents
-against generic9A metadata/revision guards; use the existing roundtrip only for
-any precisely named missing boundary. No further QTM maintenance or dependency.
-Stop: every named field/permission/revision invariant is proven lossless, invalid
-edits fail atomically and installed package/template bytes stay exact; same
-validated preview/broadcast content survives refresh. Reuse guide_tti_zone and
-windows_host; no repeated unaffected full editor/stream/client chain.
-Dependencies: same0.1.1 production template and accepted shared authoring contract.
+Completed action: import a permitted guide edit as an isolated concept, preserve
+profile/theme/overrides/template/dynamic/zone/navigation bindings, reject stale or
+forged authority atomically, then explicitly publish and retain the edit through
+real guide refresh. Canonical qualification.json guide_tti_zone.completion_join
+owns exact export ZIP/sidecar/original/profile/package/page digest joins and the
+source-equal production headed case from663. Existing exactadce required1.5
+job124853037760 passes actual_v3_editor_concept_preview_explicit_publication_reopen_and_channel_isolation,
+actual_zone_edit_reuses_immutable_original_receipt_with_fresh_head and
+editorial_tampering_and_protected_effects_preserve_original_pointers_and_storage.
+Shared whole-project association, current-head check and final save CAS are byte-
+equal atab01. Nonempty typed colour/layout metadata is joined from actual0.1.1
+producer12 on Deno/Node/both ARM software paths and the shared nonempty-override
+import/reopen guards; the original headed production sidecar itself has classic/
+empty overrides. This is explicit compositional proof, no claimed new override
+roundtrip. Immutable old-root receipt plus fresh expected head stays supported;
+stale expected-head forms fail without moving either design/live pointers.
+Existing protected Generated/footer Zone concept/publication/SQL refresh/graceful
+Linux restart and native Windows receipts retain their scopes. No product code,
+new variants or tests rerun. No remaining gap within this package. Shared actual
+client, runtime/platform/adoption and final gates retain their own rows; QTM is
+optional/upstream wait. Reopen only for a concrete relevant regression.
 
 9B-RUNTIME — missing repaired-runtime platform/package proof; executable before
 publication. Owner: P9B-02 platform/playback closeout and ADR0121.
@@ -18926,14 +18934,16 @@ Native ARM remains assumed/deferred, macOS deferred; Level2.5 stays experimental
 and its enhanced-only gates deferred, QTM optional/upstream wait. No six-native-
 platform or complete experimental2.5 acceptance is claimed.
 
-One next executable package: 9B-FINAL exact-source CI gate. The completedadce
-round has12 applicable successes and only Next engine red (452/454 assertions).
-The missing-diagnostics/observation-cleanup component is now Complete with both
-focused runtime passes and strict affected lint. Original failures were not
-reproduced; retain their unexplained status and obtain new-SHA full CI evidence rather
-than infer a product fix. Do not relax budgets, rerun unrelated chains or present
-the two focused passes as full green. Publication/adoption remains a separate9B-RUNTIME
-authorization dependency; closed private-platform components stay closed.
+One next executable package: 9B-CONFIG production configuration receipt closure.
+Close its named range/index/theme/override/zone/edit/isolation/rejection actions
+with existing exact production receipts and shared source/input joins; exercise
+only a precisely unmatched required boundary. No general audit or new variants.
+Background9B-FINAL: exactab01 fullCI41331331743 is in progress, not green. The
+adce12-success/Next452of454 failure and completed diagnostic component remain
+retained. Original failures are not yet explained; use the new run's diagnostic
+artifacts on recurrence. No relaxed budgets or focused-as-full-green claim.
+Publication/adoption remains a separate9B-RUNTIME authorization dependency;
+closed private-platform and9B-TTI components stay closed.
 
 Completed concrete Legacy finite-programme transition repair2026-11-01:
 canonical qualification.json production_lua.transport_blocker.candidate_repair.final
