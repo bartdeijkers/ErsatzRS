@@ -18765,20 +18765,34 @@ Actual suitable-client navigation and final runtime/platform/adoption/gates keep
 their separate owners. No gap remains within9B-CONFIG; reopen only on a concrete
 relevant regression. Platform acceptance is bundled on the coherent final candidate.
 
-9B-PACKAGE — mandatory package-unavailability proof; independently executable.
-Owners: P9B-01 install/fault/stale policy; P9B-02 real-package fault/playback clause.
-Action: keep watching accepted output safely when the guide package is missing,
-disabled or incompatible, and recover through explicit valid configuration.
-Gap: production receipt mapping for those three package states; failed source
-and genuine command timeout are already closed and must not be repeated.
-Minimum: first join accepted9A availability/health/publication guards to unchanged
-production invocation; run only missing actual-package boundaries with existing
-fault/restore fixtures. Reuse guide_failure_recovery and guide_command_timeout.
-Stop: named package states are visibly reported, last-good authority never
-extends beyond its original cap, no late/partial generation is promoted and
-ordinary AV/subtitles/selected audio and bounded cleanup survive; explicit
-restore recovers according to the same policy. Scripts never install/enable.
-Dependencies: current package source/identity; shared localized checks9B-CONFIG.
+9B-PACKAGE — Complete: package-state denial and explicit production recovery.
+Owners: P9B-01 install/fault/stale policy; P9B-02 real-package fault/playback.
+Completed action: real0.1.1 normal disable/re-enable and uninstall(false)/same-
+source install/enable, sealed Current SSR denial while original role is still
+unexpired, immutable accepted/history/original packets/raster and explicit fresh
+configuration/capture/Request/Publish recovery. One bundled native case passes
+6.203s. Re-enable/reinstall alone leaves stale installation pins; repaired profile/
+rebind alone cannot revive old accepted authority. Invalid old Request/Publish
+cannot move pointers. Complete channel/FFmpeg/playout/source-item/settings state
+is unchanged; cap1 admission recovers; final SQLite/application reopen succeeds.
+ADR0121 immediately withdraws disabled/missing/incompatible package output;
+15min last-good is only transient refresh/source failure, never invalid selection.
+IncompatibleInstallation joins existing exactadce required1.5 classification and
+no-recovery/history-preservation tests to the same rejected-selection/guide path.
+The production package is not falsely described as a tested incompatible build;
+no artificial replacement package or mislabeled filesystem failure is introduced.
+Ordinary startup maps unavailable optional recovery to no authored pages; live
+missing/error/timeout observation withdraws at the existing safe boundary. Exact
+source/input joins reuse accepted ordinary AV/subtitle/alternate-audio/control
+receipts; no new actual production AV/PMT/client/platform trial is claimed.
+Localized exact profile availability and existing guide/Add-ons Health contracts
+remain joined; revoked alone does not imply a package-specific Health warning.
+Canonical qualification.json package_completion owns source/test/log hashes,
+shared guards and the unused-import lint negative. Only3 compiler-proven unused
+imports changed after runtime pass; logic/assertions/inputs are exact, so no
+runtime replay. Strict changed-integration Clippy and registration close this
+evidence-only package. Source-failure/timeout/CONFIG/TTI stay closed. No gap within
+9B-PACKAGE; remaining Lua/runtime/client/final obligations retain their owners.
 
 9B-LUA — mandatory remaining production lifecycle proof; independently executable.
 Owner: P9B-02 Lua error/restart/Refresh-Reset clause, ADR0122.
@@ -18919,19 +18933,16 @@ packages. Owner: P9B-02 final gates and its dependency on P9B-01.
 Action/proof: independently accept the complete production guide on the required
 platform boundary rather than infer acceptance from one successful flow.
 Gap: final exact-source required CI/workspace closeout/parity/progress and required
-four-RID joins after the remaining package changes. Exacte851 CI is now green;
-its original runner-shutdown failures remain retained. Current exactadce full
-CI41304907840 is terminalred only in Next engine;12 applicable jobs pass and
-Commitlint is expected skipped. Canonical ci-adce final run/jobs and original
-logs/diagnostics own the two failures; no full-green claim. The bounded diagnostic
-component now retains a safe probe error category/session.log and moves normal
-cleanup before observation assertions. Both original cases pass locally with
-unchanged CI runtime hashes and budgets: image-region0.483s and credits Burn/
-Convert27.137s. ci-adce/local-repro owns receipts and preserved compile/sandbox
-negatives. Strict affected infra all-targets Clippy, affected formatting, progress,
-diff and new-allow policy pass. This diagnostic/observation-cleanup component is
-Complete within focused Linuxx64 verification; original CI causes remain unknown,
-no product fix inferred. New exact-source full CI remains outstanding.
+four-RID joins after remaining package changes. Current exactc511 full push
+CI41338652755 is active, no full-green claim. Prior exactab01 CI41331331743 retains
+10successes including Next/Test/1.5 and3cancelled browser jobs plus expectedlintskip;
+the ordinary code push invoked existing cancel-in-progress. Its partial result is
+not full acceptance. Serialize future code pushes after the active full round
+terminates, continuing independent local work meanwhile; no CI weakening/change.
+Originaladce CI41304907840 Next452/454 failures and all logs remain retained.
+The safe diagnostics/observation-cleanup component is Complete; original causes
+remain unexplained, no speculative product fix. Canonical ci.current_source_run,
+ci.superseded_ab01 and ci.completed_adce_failure_and_diagnostics own exact history.
 Minimum: reuse unchanged9A fixtures/source-engine-copy/audio/health/routes and
 localized coverage with source/input joins; run only outstanding required gates
 on final source. Current Linux smoke/four-route93/93 and strict affected Clippy/
@@ -18943,16 +18954,17 @@ Native ARM remains assumed/deferred, macOS deferred; Level2.5 stays experimental
 and its enhanced-only gates deferred, QTM optional/upstream wait. No six-native-
 platform or complete experimental2.5 acceptance is claimed.
 
-One next executable package: 9B-PACKAGE production package-unavailability proof.
-Join exact existing availability/health/publication guards to actual0.1.1 and
-prove only unmatched missing/disabled/incompatible-package recovery boundaries.
-Do not repeat closed source-failure/command-timeout/CONFIG/TTI components or add
-unnamed variants. Start with the smallest distinguishing existing regression;
-new proof must close a named remaining package state. One coherent stop/commit.
-Background9B-FINAL: exactab01 fullCI41331331743 is in progress, not green. The
-adce12-success/Next452of454 failure and completed diagnostic component remain
-retained. Original failures are not yet explained; use the new run's diagnostic
-artifacts on recurrence. No relaxed budgets or focused-as-full-green claim.
+One next executable package: 9B-LUA production lifecycle receipt closure.
+Map invalid/deleted/wrong-addon profile handling, script rollback, restart during/
+after override and Refresh/Reset to the actual production snapshots and unchanged
+accepted application/cursor/transaction guards. Run only a precisely unmatched
+required boundary with existing fixtures; no new variants or full unaffected
+chain replay. Package faults refer closed9B-PACKAGE, not duplicate tests.
+Background9B-FINAL: exactc511 fullCI41338652755 is active, not green. The ab01
+partial-cancelled result, originaladce failure and completed diagnostic component
+remain canonical. Retain unexplained original causes; inspect current exact-SHA
+artifacts on recurrence. Serialize later code pushes after this active round;
+no relaxed budgets, discarded failures or focused-as-full-green claim.
 Publication/adoption remains a separate9B-RUNTIME authorization dependency;
 closed private-platform and9B-TTI components stay closed.
 

@@ -16,6 +16,9 @@ use ersatzrs_web::host::teletext_authoring::{
 const REQUEST: &str = "/admin-api/teletext/design/request-publication";
 const PUBLISH: &str = "/admin-api/teletext/design/publish";
 
+#[path = "live_publication/package_availability.rs"]
+mod package_availability;
+
 #[derive(Debug, PartialEq, Eq)]
 struct Original {
     document: Vec<u8>,

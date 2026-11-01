@@ -62,40 +62,43 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-PACKAGE production package-unavailability proof.
-Next finite action: map missing/disabled/incompatible actual0.1.1 states to the
-existing exact availability/health/publication/recovery guards, then run only a
-precisely unmatched required boundary through existing fixtures. Do not repeat
-closed genuine source-failure/command-timeout components. Stop when all three
-named states have valid receipts/source joins, bounded last-good authority,
-atomic refusal and safe ordinary playback/recovery; no package activation by Lua.
+Current package: P9B-02 / 9B-LUA production lifecycle receipt closure.
+Next finite action: map the existing invalid/deleted/wrong-addon, script-error
+rollback, restart during/after override and Refresh/Reset clauses to actual0.1.1
+snapshots and unchanged accepted application/cursor/transaction controls. Choose
+only a precisely unmatched required boundary for an existing fixture; no general
+audit or new unrelated variant. Stop when each named Lua boundary has a valid
+production receipt or exact source/input join. Package faults refer closedPACKAGE.
 
-Completed9B-CONFIG: one real0.1.1 HTTP/native SQL edit/reopen/refusal case passes
-3.466s; strict changed-integration Clippy passes. Exact map/metadata/units/raster,
-peer/package/global/history and real cap1 release are proven. Fresh snapshots are
-Unrequested; obsolete Day snapshots are explicitlyUnavailable/no publication.
-The first expectation failure remains canonical, no product fix inferred. Existing
-headed/stream/profile/mirror/compositor proof is reused through exact source/input
-joins. qualification.json configuration_completion owns every receipt and boundary.
-9B-TTI is also Complete under guide_tti_zone.completion_join; do not reopen either
-for unrelated variants. No new UI/browser/stream/platform round is required here.
+Completed9B-PACKAGE: one actual0.1.1 normal disable/re-enable, uninstall(false)/
+same-source install/enable Current SSR/publication case passes6.203s. Invalid
+states deny while original role remains unexpired; old authority cannot revive
+from package restore or profile repair alone. Fresh capture/Request/Publish
+recovers. Full originals/history/units/raster/playback configuration and cap1 are
+preserved through SQLite/application reopen. Exact incompatible classification,
+ordinary withdrawal, localized availability/Health and AV/track source joins are
+canonical under qualification.json package_completion. No new fault-stream/PMT/
+client/platform claim. Strict changed-integration Clippy passes after removing
+exactly3 unused imports; original runtime proof reused, no logic/assertion/input
+change. Lint negative retained. Only final registration/local checkpoint remains;
+no further PACKAGE variants. CONFIG and TTI stay Complete with their own receipts.
 
-Background9B-FINAL: exactab01 fullCI41331331743 remains active watch34728.
-Build/Clippy/Test/Next and early gates succeed; remaining Rust1.5/browser jobs
-must finish before a full-green claim. canonical ci-ab01/current-run.json and
-watch.log own actual queued/running/completed distinctions. Do not restart on
-observation timeout or claim focused proofs as fullCI. New Rust code needs its
-own exact-source CI after the coherent checkpoint. No current local test/lint
-process remains from CONFIG; final explicit registration/stage/commit is next.
+Background9B-FINAL: exactc51109abd962337a46f94f682035ea7a41d32734 full push
+CI41338652755 is active watch95058. Build/early gates and current states live in
+ci-c511/current-run.json/watch.log; no full-green claim. The package controller
+30683 is terminal0, local lint18511 is terminal0, no current local verification
+process remains. Before another code push, let this active full CI round become
+terminal; keep verified local checkpoints and independent work meanwhile. This
+avoids existing cancel-in-progress discarding coverage; no CI weakening/retries.
 
-The sole finite completion list remains P9B-02 evidence. Reuse valid proof; each
-verification round must name necessary new evidence and start with the smallest
-distinguishing check. Repeat full user chains only at changed boundaries or for
-missing mandatory final proof; bundle platform acceptance on the final candidate.
-Closed private four-RID runtime components retain their scopes. New stable runtime
-publication/pins/managed adoption need separate authorization; no release/tag now.
-Preserve all parallel Root commits/dirty paths; never push Root wholesale. WSL
-Private inbound TCP8409/firewall/forwarding stays intact for the agreed client trial.
+The sole finite completion list remains P9B-02 evidence. Each verification round
+names necessary new evidence and starts with the smallest distinguishing check.
+Reuse valid proof; full user-chain replay needs an affected integration boundary
+or missing mandatory final evidence. Bundle platform acceptance on the coherent
+final candidate. Closed private four-RID runtime proof retains its scopes; new
+stable publication/pins/managed adoption need separate authorization. No release/
+tag now. Preserve all foreign Root commits/dirty paths; never push Root wholesale.
+WSL Private TCP8409 firewall/forwarding remains intact for the agreed client trial.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
