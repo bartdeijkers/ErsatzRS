@@ -18794,21 +18794,36 @@ runtime replay. Strict changed-integration Clippy and registration close this
 evidence-only package. Source-failure/timeout/CONFIG/TTI stay closed. No gap within
 9B-PACKAGE; remaining Lua/runtime/client/final obligations retain their owners.
 
-9B-LUA — mandatory remaining production lifecycle proof; independently executable.
+9B-LUA — Complete: production profile lifecycle and cold selected guide6 recovery.
 Owner: P9B-02 Lua error/restart/Refresh-Reset clause, ADR0122.
-Action: use existing guide profiles in scripts and retain deterministic overrides
-through errors, restart and Refresh/Reset without changing package activation.
-Gap: production join for handled invalid/deleted/wrong-addon profiles, failed-
-script rollback, restart during/after override and Refresh/Reset boundaries.
-On6/Off4/Continue/expiry and simultaneous different profiles/themes are closed.
-Minimum: map unchanged9A application/transaction/cursor guards to the exact
-production profile snapshots; execute only lifecycle boundaries not established
-by that join with existing host/restart helpers. Compare effective generations,
-actual theme/zone/override content and original programme/interval boundaries.
-Stop: all named rows have valid receipts, failed/unavailable selections preserve
-AV and original state, restarts/Refresh/Reset match ADR0122 timing and precedence,
-and no package is installed/enabled by script. Package faults refer9B-PACKAGE.
-Dependencies: current compatible addon; fixed Legacy candidate for affected AV.
+Completed action: use existing guide profiles in scripts with deterministic
+errors/rollback, original half-open scopes, restart and Refresh/Reset, without
+changing base configuration or activating packages. One existing real0.1.1 native
+publication case now recovers actual Current through the sealed ordinary loader
+and final confirmation after SQLite/application reopen. Effective Night map410,
+exact SVG, original document/encoded units/raster, profile/revision/installation,
+published interval/end and Effective seed provenance match; independent Base5,
+publication pointers/history/settings/package and reusable cap1 remain unchanged.
+A numeric generation ID alone is deliberately insufficient: Base and Effective
+IDs can coincide, so actual map410/raster excludes accidental Base200 fallback.
+The distinguishing case passes4.421s; no new stream/client/platform claim.
+Canonical qualification.json lua_completion joins19 byte-equal source paths to
+10 exactadce required1.5 PASS receipts: missing/deleted/wrong-addon/invalid profile
+rejections reach unchanged Lua mapping before selection mutation; handled errors
+retain prior choice, compile/runtime errors reject the candidate atomically;
+actual child OSprocess18 observations cover before/duringOn/duringOff/afterexpiry
+without replay. Continue starts current base; Refresh KeepCurrent, Reset
+KeepCurrent and Reset EngineDefault preserve/replace original programme seams.
+Generic lifecycle artifact4 cold recovery is retained, never mislabeled guide6;
+the new Current proof closes that production-specific boundary. Actual production
+On6/Off4/Continue/natural expiry, independent maps/themes, ordinary AV/source/
+caption/alternate-audio/withdrawal and repaired Legacy receipts keep their scopes.
+Original SSR current-thread harness panic and strict143-line-test lint negative
+are retained. Only the test runtime attribute and mechanical extraction of two
+unchanged blocks were corrected; exact reconstruction verifies runtime proof
+reuse, strict final integration Clippy passes. No product/oracle/timeout change.
+No gap remains within9B-LUA; package faults refer closed9B-PACKAGE. Reopen only
+on a concrete relevant regression; no additional Lua/editor/character variants.
 
 9B-TTI — Complete: supported production interchange metadata/permission/revision.
 Owners: P9B-01 metadata/theme/navigation; P9B-02 production editor-roundtrip clause.
@@ -18954,12 +18969,16 @@ Native ARM remains assumed/deferred, macOS deferred; Level2.5 stays experimental
 and its enhanced-only gates deferred, QTM optional/upstream wait. No six-native-
 platform or complete experimental2.5 acceptance is claimed.
 
-One next executable package: 9B-LUA production lifecycle receipt closure.
-Map invalid/deleted/wrong-addon profile handling, script rollback, restart during/
-after override and Refresh/Reset to the actual production snapshots and unchanged
-accepted application/cursor/transaction guards. Run only a precisely unmatched
-required boundary with existing fixtures; no new variants or full unaffected
-chain replay. Package faults refer closed9B-PACKAGE, not duplicate tests.
+One current package: 9B-FINAL exact-source required CI/gate component.
+Await active fullc511 CI41338652755 before another code push; Next now succeeds,
+generalChromium/1.5Rust active and remaining consumers queued at last receipt.
+Then push only scoped verified PACKAGE/LUA checkpoints and evaluate every required
+job on the exact new SHA, never Root's foreign unpublished history. Reuse valid
+unchanged gate/platform evidence; run only mandatory missing final checks. Stop
+this source-gate component when applicable exact-source jobs/checks are terminal
+and accounted for; it cannot close wholeFINAL before runtime/client dependencies.
+Closed CONFIG/PACKAGE/LUA/TTI and private runtime proofs remain closed. Runtime
+stable publication/pins/managed adoption and joint final Kodi retain their owners.
 Background9B-FINAL: exactc511 fullCI41338652755 is active, not green. The ab01
 partial-cancelled result, originaladce failure and completed diagnostic component
 remain canonical. Retain unexplained original causes; inspect current exact-SHA

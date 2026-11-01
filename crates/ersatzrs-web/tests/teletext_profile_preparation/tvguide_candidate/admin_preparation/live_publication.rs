@@ -454,7 +454,11 @@ async fn refusals(fixture: &Fixture, identity: TeletextAuthoringIdentity) {
     drop(begin(&fixture.state.application, None).await.unwrap());
 }
 
-async fn effective(fixture: &Fixture, night: &TeletextProfile, base: &TeletextAcceptedGeneration) {
+async fn effective(
+    fixture: &Fixture,
+    night: &TeletextProfile,
+    base: &TeletextAcceptedGeneration,
+) -> TeletextAuthoringIdentity {
     let identity = effective_prepare(fixture, night).await;
     let before = original(fixture, identity, TeletextAuthoringScope::Effective, 410).await;
     let observed = observe(fixture, identity, 410).await;
@@ -487,13 +491,107 @@ async fn effective(fixture: &Fixture, night: &TeletextProfile, base: &TeletextAc
         before
     );
     drop(begin(&fixture.state.application, None).await.unwrap());
+    identity
 }
 
-#[tokio::test]
+async fn current_effective_image(
+    fixture: &Fixture,
+    selected: &TeletextAcceptedGeneration,
+) -> String {
+    let html = editorial_http::rendered(
+        fixture,
+        "/channels/1/teletext?guide_preview=1&guide_page=410&guide_subcode=0000",
+    )
+    .await;
+    let model = html
+        .split("data-testid=\"teletext-current-guide-model\"")
+        .nth(1)
+        .expect("cold ordinary selection must recover the actual effective guide");
+    assert!(model.contains(&format!("data-generation=\"{}\"", selected.id)));
+    // Base and Effective IDs can coincide. The actual map/raster is the
+    // distinguishing proof, rather than an ambiguous numeric generation ID.
+    assert!(model.contains("alt=\"410/0000\""));
+    assert!(model.contains("guide_page=410"));
+    assert!(!model.contains("guide_page=200"));
+    let image = model
+        .split("src=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_owned();
+    assert!(image.starts_with("data:image/svg+xml;base64,"));
+    drop(begin(&fixture.state.application, None).await.unwrap());
+    image
+}
+
+async fn live_guide_runtime(fixture: &Fixture) {
+    let mut runtime: Value = serde_json::from_str(include_str!(
+        "../../../fixtures/teletext-output-policy-v1.json"
+    ))
+    .unwrap();
+    runtime["version"] = json!(4);
+    runtime["guide_limits"] = policy()["guide_limits"].clone();
+    runtime["live_updates"] = json!({"poll_interval_ms":25,"recovery_timeout_ms":2000});
+    authoring::setting(fixture, "teletext.output.policy", &runtime.to_string()).await;
+}
+
+async fn effective_origin(
+    fixture: &Fixture,
+    night: &TeletextProfile,
+    scoped: &TeletextAcceptedGeneration,
+) -> (
+    ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+    ersatzrs_core::repositories::TeletextGuideRefreshCurrentMetadata,
+) {
+    let selection = saved(
+        fixture
+            .state
+            .application
+            .observe_effective_channel_teletext_selection(1, Utc::now())
+            .await
+            .unwrap(),
+    );
+    assert!(selection.valid_until.unwrap() > Utc::now());
+    let ersatzrs_domain::TeletextEffectiveBindingSnapshot::Scripted(interval) =
+        &selection.bindings[0]
+    else {
+        panic!("the production guide must retain its published Lua provenance")
+    };
+    let ersatzrs_domain::TeletextOverrideState::Enabled(candidate) = &interval.interval.state
+    else {
+        panic!("the published interval must select the existing Night profile")
+    };
+    assert_eq!(candidate.profile_id, night.id);
+    assert_eq!(candidate.profile_revision, night.revision);
+    assert_eq!(candidate.installation, night.validated_installation);
+    assert_eq!(selection.valid_until, Some(interval.interval.finish));
+    let role = fixture
+        .state
+        .application
+        .observe_current_guide_refresh(
+            1,
+            ersatzrs_core::repositories::TeletextGuideRefreshRole::Effective,
+            designs::budget().max_serialized_bytes,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(role.seed.generation, *scoped);
+    assert_eq!(
+        role.seed.role,
+        ersatzrs_core::repositories::TeletextGuideRefreshRole::Effective
+    );
+    (selection, role)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires the exact production addon bundle and isolated state/data directories"]
 async fn production_guide_explicit_http_base_and_real_lua_effective_publication_preserve_originals()
 {
     let (mut fixture, night) = fixture().await;
+    live_guide_runtime(&fixture).await;
     let configuration = designs::config(&fixture).await;
     let installation = fixture
         .state
@@ -510,7 +608,18 @@ async fn production_guide_explicit_http_base_and_real_lua_effective_publication_
         original(&fixture, identity, TeletextAuthoringScope::Base, 200).await,
         before
     );
-    effective(&fixture, &night, &base).await;
+    let effective_identity = effective(&fixture, &night, &base).await;
+    let scoped = accepted(&fixture, true).await;
+    let effective_before = original(
+        &fixture,
+        effective_identity,
+        TeletextAuthoringScope::Effective,
+        410,
+    )
+    .await;
+    let (selection, role) = effective_origin(&fixture, &night, &scoped).await;
+    let image = current_effective_image(&fixture, &scoped).await;
+    let published = state(&fixture).await;
     assert_eq!(designs::config(&fixture).await, configuration);
     assert_eq!(
         fixture
@@ -525,7 +634,56 @@ async fn production_guide_explicit_http_base_and_real_lua_effective_publication_
     assert!(fixture.playout.try_recv().is_err());
     fixture = fixture.reopen().await;
     assert_eq!(accepted(&fixture, false).await, base);
-    assert_eq!(accepted(&fixture, true).await.artifact_version, 6);
+    assert_eq!(accepted(&fixture, true).await, scoped);
+    assert_eq!(state(&fixture).await, published);
+    assert_eq!(
+        saved(
+            fixture
+                .state
+                .application
+                .observe_effective_channel_teletext_selection(1, Utc::now())
+                .await
+                .unwrap()
+        ),
+        selection
+    );
+    assert_eq!(current_effective_image(&fixture, &scoped).await, image);
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .observe_current_guide_refresh(
+                1,
+                ersatzrs_core::repositories::TeletextGuideRefreshRole::Effective,
+                designs::budget().max_serialized_bytes,
+            )
+            .await
+            .unwrap()
+            .unwrap(),
+        role
+    );
+    assert_eq!(
+        original(
+            &fixture,
+            effective_identity,
+            TeletextAuthoringScope::Effective,
+            410,
+        )
+        .await,
+        effective_before
+    );
+    assert_eq!(designs::config(&fixture).await, configuration);
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .teletext_installation_snapshot(TVGUIDE)
+            .await
+            .unwrap()
+            .snapshot,
+        installation
+    );
+    assert!(fixture.playout.try_recv().is_err());
     assert_eq!(
         original(&fixture, identity, TeletextAuthoringScope::Base, 200).await,
         before
