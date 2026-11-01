@@ -62,30 +62,32 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-RUNTIME private-package verification.
-The concrete Legacy programme-transition defect is closed on Linux candidate
-in applicatione66418fa and FFmpeg897e5fb. Three native wrapper cases/snapshots,
-actual Legacy19/19, smoke and four-route93/93 pass; no runtime adoption claim.
+Current package: P9B-02 / 9B-RUNTIME full ARM target-host transition proof.
+Closed e66418fa/FFmpeg897e5fb Legacy Linux correction and cc060dfe finite list.
+The four private runtime archives/provenance/software component is now closed;
+native Windows target tools pass the same three unchanged wrapper cases and
+leave zero exact Windows processes. Linux candidate retains native3/3, actual
+Legacy19/19, smoke and four-route93/93. These are not managed adoption claims.
 
-Next finite action: use existing builders and wrappers to verify the exact
-repaired FFmpeg source and private programme bootstrap on the three Linux RIDs
-and Windows x64. Record exact package/source/recipe identities and affected
-codec/track/initial-frame/clock/cleanup proof. Windows trials reserve120min;
-ARM is software/QEMU, native execution deferred. No macOS work or publication.
-Stop this package when all four private-package rows have their required proof;
-managed adoption requires a separate publication decision and exact pin/startup
-verification. Do not imply accepted2.0.8 already contains this new correction.
+Next finite action: reuse existing ARM cross/package/start-host helpers for the
+current scoped source and new exact FFmpeg packages. Server and FFmpeg must share
+the target container namespace. The Linux-hosted Docker-exec shortcut is now
+qualified unsuitable: WSL loopback succeeds but Docker host-network refuses the
+same connection; both original3/3 EmptyOutput attempts are retained. Do not retry
+that adapter, change strict clocks/frames/deadlines or invent a proxy framework.
+Stop: affected actual ARM ordinary-route/transition, AV/caption/audio and cleanup
+proof on both required emulated RIDs, with exact source/package identities.
+Keep b971 host proof closed within its old scope. Native ARM and macOS remain
+deferred. Native Windows full app/final platform proof and separately authorized
+runtime publication/managed startup remain with their existing owners.
 
-The sole current finite completion list is P9B-02 evidence: 9B-CONFIG, PACKAGE,
-LUA, TTI, RUNTIME, CLIENT and FINAL; P9B-01 shares those owners. Reuse all completed
-components and canonical tmp/phase9-tvguide-addon/qualification.json receipts.
-Missing proof is not automatically a product defect; no new adjacent variants.
-
-Delivery: exactb971 fullCI41237114061 is green. Exacte851 CI41253269265 finished
-with two runner-shutdown exit130 jobs; only those failed jobs were rerun on the
-same SHA after all others finished. Check their exact terminal results before
-another scoped sourcepush. Never push Root wholesale: preserve unpublished UCU
-commits and foreign dirty paths. No new runtime release/publication is authorized.
+The sole finite list remains P9B-02 evidence; all other rows keep their explicit
+stop conditions. Canonical tmp/phase9-tvguide-addon/qualification.json and its
+runtime_packages receipt retain exact current/historical proof. Windows-package
+trials reserve120min. Do not repeat unaffected editor/client/format chains.
+Delivery: e851 CI41253269265 failed-only rerun is still awaiting terminal exact
+review; no new sourcepush while active. Never push Root wholesale or publish
+runtime artifacts without separate authorization. Preserve all foreign work.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

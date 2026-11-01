@@ -23444,6 +23444,26 @@ SHA/subject comparison against upstream git log, and substantive Codex review.
 AMM-N-03 acceptance remains required before per-commit execution.
 """
 evidence = """
+Completed private concat-runtime artifacts/software component2026-11-01:
+canonical qualification.json runtime_packages and guide-lua-flow/av-seam/
+runtime-packages/qualification.json own all four exact archives and original
+source/recipe hashes. Only concatdec.c changed in each accepted source copy;
+three offline incremental builds take8/16/11s, native Linux build is reused.
+The sole additional build input is committed common patch0021. Strict layout,
+full extraction inventory equality, license/dependency records and wrong-pin
+refusal pass on all four. Native Windows software5-gate chain and ARMv7/ARM64
+QEMU software chains pass; exact new Linux binaries load offline on Bookworm.
+Three existing wrapper cases also pass with native Windows FFmpeg via WSL
+interop, unchanged strict limits and zero exact Windows processes after proof.
+This closes the four-RID artifact/software and Windows target-tool clock/frame
+component. Full target Rust application/route/platform and managed adoption
+remain separate; do not present Linux-hosted tests as native Windows app proof.
+Both ARM wrapper adapters fail3/3 EmptyOutput. Bounded loopback qualification
+proves WSL-local HTTP works but Docker Desktop host-network connection is refused.
+Their containers are removed; an omitted PID column also prevents a natural
+process-drain claim. No ARM product defect is inferred. Next use the existing
+full ARM target-host namespace, not another unchanged adapter round.
+
 Current ownership: the single finite completion list at P9B-02 evidence owns
 remaining P9B-01 configuration/package/interchange and shared final proof. Its
 9B-CONFIG/PACKAGE/TTI rows name the unproven actions, reusable receipts and exact
@@ -23551,9 +23571,19 @@ Dependencies: same0.1.1 production template and accepted shared authoring contra
 9B-RUNTIME — missing repaired-runtime platform/package proof; executable before
 publication. Owner: P9B-02 platform/playback closeout and ADR0121.
 Action: run the repaired programme transition on each required runtime target.
-Gap: the new FFmpeg897e5fb correction and application FPS bootstrap are qualified
-only on native Linux x64 private bytes, not repaired Windows/ARM packages or
-managed startup. No known additional source fix is required to start this work.
+Completed artifact/software component: all four private FFmpeg897e5fb archives
+pass strict layout/extraction/full-inventory equality/wrong-hash refusal. Native
+Linux and Windows plus QEMU ARM software gates pass; no original build is changed.
+Canonical qualification.json runtime_packages owns exact package hashes and
+source/recipe/dependency joins. Native Windows target tools also pass the same
+three Linux-hosted wrapper cases, all56 frames/tracks/strict clocks and zero
+remaining Windows processes. This is not a native Windows Rust-host route claim.
+Remaining gap: complete target ARM ordinary-route/transition proof on the new
+runtime, final target application/platform joins and managed startup/adoption.
+Two unchanged Docker-exec adapters fail because their Docker Desktop namespace
+cannot reach the WSL-local fixture. A bounded independent loopback probe confirms
+connection refused; retain both failures as tool limitations, not product faults.
+No new product correction is justified by those empty-output results.
 Minimum: use existing four-RID builders/package checks and three wrapper cases;
 reuse unchanged accepted dependency/licensing/feature and generic9A safety proofs
 only with source/recipe/hash joins. Native Windows package trial reserves120min;
@@ -23599,8 +23629,9 @@ Native ARM remains assumed/deferred, macOS deferred; Level2.5 stays experimental
 and its enhanced-only gates deferred, QTM optional/upstream wait. No six-native-
 platform or complete experimental2.5 acceptance is claimed.
 
-One next package: 9B-RUNTIME private-package component. Finish its existing
-four-RID candidate verification before adoption; do not start unrelated variants.
+One next package: 9B-RUNTIME full ARM target-host transition proof. Use existing
+cross/package/container helpers; artifacts/software and Linux/Windows target-tool
+components above stay closed. Do not retry the unchanged loopback adapter.
 
 Completed concrete Legacy finite-programme transition repair2026-11-01:
 canonical qualification.json production_lua.transport_blocker.candidate_repair.final
