@@ -18840,13 +18840,28 @@ OS zero listener/PID absence and offline integrity/Idle/no leases prove bounded
 cleanup, not graceful post-playback drain. Empty-DB bootstrap alone exits0 by
 Ctrl+C. The4499.76s build produces verified artifacts but one remaining build
 process needs bounded force; natural compiler drain is not claimed.120min reserved.
-Missing mandatory evidence: the original strict three-case ARM target-tool
-oracles remain unrun successfully. Both ARM regular flows are closed, but do not
-prove tiny-tail/playlist reopening, all56 frames and four-track exact clocks.
-Use the existing frozen Rust test artifact and actual ARM FFmpeg in one namespace;
-qualify that execution boundary first, then the same three unchanged cases. No
-new test variants, crossbuild merely for convenience, WSL-loopback proxy or relaxed
-oracles. Publication/pins/managed startup remain the separate external dependency.
+The original strict ARM target-tool obligation is now Complete within QEMU.
+Canonical runtime_packages/arm-strict-target/qualification.json owns exactadce
+archive83784b3c, source/compiler/flags/inventory validation, matched3case listing,
+read-only x64 library/ELF and real ARM tool identities. The existing Linuxx64 Rust
+HTTP test host and actual target FFmpeg share one VFS/network/PID namespace;
+there is no per-FFmpeg Docker-exec proxy, new case, build or toolchain install.
+All3 original ARM64 assertions pass in48.249s. Its runner then exits110 writing
+JUnit under the read-only source target; retain this tooling failure. Only the
+existing complete-video case is repeated after an owned report-directory mount,
+closing report/drain in17.995s with exit0. ARMv7's same3cases pass in one47.589s
+round, exit0/JUnit3. All frame-equality, four-track English/Dutch audio, source
+captions/authored pages, exact clock and actual playlist-reopening assertions
+remain unchanged. Both targets have zero real-tool survivors before stop and
+removed namespaces. This is target FFmpeg emulation proof with an x64 Rust test
+host, not ARM-compiled Rust tests or native hardware; actual current ARM compiled
+application regular flows retain their separate closed scope. No regular flow,
+editor/publication or native Windows chain is repeated for the reporting fix.
+Closed private-runtime platform component: all required archives/software,
+original target-tool cases and affected actual application route scopes above.
+Remaining runtime gap: separately authorized publication, exact pins and managed
+cold/cached startup/Health/affected-route adoption. Published2.0.8 is not repaired
+by these private candidate results; earlier release permission is not renewed.
 Closed cache support: inactive Linux Cargo53.47GB→1.07GB after both crossbuilds,
 seven binaries/20 matched assets retained/restored; Windows inactive13GiB cache
 moved intact with19383-file inventory equality and unchanged65GiB guard. Original
@@ -18889,8 +18904,10 @@ platform boundary rather than infer acceptance from one successful flow.
 Gap: final exact-source required CI/workspace closeout/parity/progress and required
 four-RID joins after the remaining package changes. Exacte851 CI is now green;
 its original runner-shutdown failures remain retained. Current exactadce full
-CI41304907840 has two Next test failures; other browser jobs are still active.
-Canonical ci-adce original logs/diagnostics own those failures, not a green claim.
+CI41304907840 is terminalred only in Next engine;12 applicable jobs pass and
+Commitlint is expected skipped. Canonical ci-adce final run/jobs and original
+logs/diagnostics own the two failures; no full-green claim. Concrete cause
+logging/cleanup gaps determine the next bounded action, not a new general audit.
 Minimum: reuse unchanged9A fixtures/source-engine-copy/audio/health/routes and
 localized coverage with source/input joins; run only outstanding required gates
 on final source. Current Linux smoke/four-route93/93 and strict affected Clippy/
@@ -18902,12 +18919,13 @@ Native ARM remains assumed/deferred, macOS deferred; Level2.5 stays experimental
 and its enhanced-only gates deferred, QTM optional/upstream wait. No six-native-
 platform or complete experimental2.5 acceptance is claimed.
 
-One next package: 9B-RUNTIME original strict ARM target-tool three-case proof.
-The current Windows package/regular transition and both ARM regular components
-are closed. Qualify a shared namespace for the frozen native Rust HTTP test host
-and real ARM FFmpeg using existing artifacts/environment, then run the original
-frame/track/clock/loop oracles. Do not rerun the failed WSL-loopback adapter or
-repeat closed editor/publication/regular stream flows. No runtime publication.
+One next executable package: 9B-FINAL exact-source CI gate. The completedadce
+round has12 applicable successes and only Next engine red (452/454 assertions).
+Correct the demonstrated missing diagnostics/cleanup on those two existing cases,
+then perform the bounded affected checks to identify the actual cause. Do not
+speculate on a product fix, relax budgets, rerun unrelated chains or present a
+focused result as full green. Publication/adoption remains a separate9B-RUNTIME
+authorization dependency; closed private-platform components stay closed.
 
 Completed concrete Legacy finite-programme transition repair2026-11-01:
 canonical qualification.json production_lua.transport_blocker.candidate_repair.final
