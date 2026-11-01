@@ -23,7 +23,7 @@ use crate::version::{
 /// First-party `FFmpeg` build repository used by ADR 0008 runtime acquisition.
 pub const ERSATZRS_FFMPEG_REPOSITORY: &str = "bartdeijkers/ErsatzRS-ffmpeg";
 /// Known-good `ErsatzRS-ffmpeg` release tag used when no runtime is available.
-pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "2.0.8";
+pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "2.0.9";
 /// Optional operator pin for the managed `FFmpeg` release tag.
 pub const MANAGED_FFMPEG_TAG_ENV_VAR: &str = "ERSATZRS_FFMPEG_RELEASE_TAG";
 /// Set to `0`, `false`, or `no` to forbid startup downloads.
@@ -1379,7 +1379,7 @@ mod tests {
     fn default_manager_uses_ffmpeg_nine_package_line() {
         let config = FfmpegRuntimeManagerConfig::new("/tmp/ersatzrs-ffmpeg-test");
 
-        assert_eq!(config.release_tag, "2.0.8");
+        assert_eq!(config.release_tag, "2.0.9");
         assert!(!config.release_tag_pinned);
     }
 
@@ -1406,6 +1406,7 @@ mod tests {
         for (installed, latest, archive_version) in [
             ("v1.0.1", "v1.0.2", "1.0.2"),
             ("v2.0.7", "2.0.8", "2.0.7-teletext-pts-local"),
+            ("2.0.8", "2.0.9", "concat-clock-local"),
         ] {
             let temp = tempfile::tempdir().expect("temp");
             seed_managed_runtime(temp.path(), installed);
@@ -1607,37 +1608,60 @@ mod tests {
 
     #[test]
     fn package_selection_distinguishes_arm_architectures_in_any_asset_order() {
-        let names = [
-            "ersatzrs-ffmpeg-2.0.5-linux-arm.tar.gz",
-            "ersatzrs-ffmpeg-2.0.5-linux-arm64.tar.gz",
-            "ersatzrs-ffmpeg-2.0.4-linux-x64.tar.gz",
-            "ersatzrs-ffmpeg-2.0.4-win-x64.zip",
-        ];
-        let mut release = FfmpegReleaseMetadata {
-            tag_name: "v2.0.5".to_owned(),
-            assets: names
-                .iter()
-                .map(|name| FfmpegReleaseAsset {
-                    name: (*name).to_owned(),
-                    download_url: format!("https://example.test/{name}"),
-                    digest: None,
-                })
-                .collect(),
-        };
-        for _ in 0..2 {
-            assert_eq!(
-                select_package_asset(&release, "linux-arm").map(|asset| asset.name.as_str()),
-                Some(names[0])
-            );
-            assert_eq!(
-                select_package_asset(&release, "linux-arm64").map(|asset| asset.name.as_str()),
-                Some(names[1])
-            );
-            assert!(select_package_asset(&release, "osx-arm64").is_none());
-            release.assets.reverse();
+        for (tag, names) in [
+            (
+                "v2.0.5",
+                [
+                    "ersatzrs-ffmpeg-2.0.5-linux-arm.tar.gz",
+                    "ersatzrs-ffmpeg-2.0.5-linux-arm64.tar.gz",
+                    "ersatzrs-ffmpeg-2.0.4-linux-x64.tar.gz",
+                    "ersatzrs-ffmpeg-2.0.4-win-x64.zip",
+                ],
+            ),
+            (
+                "2.0.9",
+                [
+                    "ersatzrs-ffmpeg-concat-clock-local-linux-arm.tar.gz",
+                    "ersatzrs-ffmpeg-concat-clock-local-linux-arm64.tar.gz",
+                    "ersatzrs-ffmpeg-concat-clock-local-linux-x64.tar.gz",
+                    "ersatzrs-ffmpeg-concat-clock-local-win-x64.zip",
+                ],
+            ),
+        ] {
+            let mut release = FfmpegReleaseMetadata {
+                tag_name: tag.to_owned(),
+                assets: names
+                    .iter()
+                    .map(|name| FfmpegReleaseAsset {
+                        name: (*name).to_owned(),
+                        download_url: format!("https://example.test/{name}"),
+                        digest: None,
+                    })
+                    .collect(),
+            };
+            for _ in 0..2 {
+                assert_eq!(
+                    select_package_asset(&release, "linux-arm").map(|asset| asset.name.as_str()),
+                    Some(names[0])
+                );
+                assert_eq!(
+                    select_package_asset(&release, "linux-arm64").map(|asset| asset.name.as_str()),
+                    Some(names[1])
+                );
+                assert_eq!(
+                    select_package_asset(&release, "linux-x64").map(|asset| asset.name.as_str()),
+                    Some(names[2])
+                );
+                assert_eq!(
+                    select_package_asset(&release, "win-x64").map(|asset| asset.name.as_str()),
+                    Some(names[3])
+                );
+                assert!(select_package_asset(&release, "osx-arm64").is_none());
+                release.assets.reverse();
+            }
+            release.assets.retain(|asset| asset.name != names[0]);
+            assert!(select_package_asset(&release, "linux-arm").is_none());
         }
-        release.assets.retain(|asset| asset.name != names[0]);
-        assert!(select_package_asset(&release, "linux-arm").is_none());
     }
 
     // Use an independently qualified archive and its pinned digest. Exercise the

@@ -730,9 +730,9 @@ release section when tagging a release.
   required authoring, channel, playback and runtime safeguards. Production
   TV-guide content follows in Phase 9B; retained Level 2.5 remains experimental.
 
-- Select the stable FFmpeg 2.0.8 runtime distribution for managed startup and
-  fallback, retaining FFmpeg 9, qualified original-teletext-clock support and
-  existing override, update and offline behavior.
+- Select stable FFmpeg 2.0.9 for managed startup and fallback, retaining FFmpeg 9,
+  qualified original teletext clocks, explicit overrides and the existing update
+  policy. Cached startup preserves installed bytes when downloads are disabled.
 
 - Extend the isolated Level 1.5 receiver fixture with conceal, flash, double-height
   text and mosaics, with independently checked ordinary-stream delivery and
@@ -1168,8 +1168,8 @@ release section when tagging a release.
 - Preserve Legacy programme-transition timing and initial frames with the
   qualified concat runtime correction. Skip only optional FPS sampling when
   opening private programme inputs; retain complete codec/track initialization,
-  captions and alternate audio. Required runtime packages and managed adoption
-  remain separate from the verified Linux candidate.
+  captions and alternate audio. Published FFmpeg 2.0.9 carries the corresponding
+  clock and packet-retention correction.
 
 - Correct TSDuck continuity checks under strict shell execution: clean streams
   pass, while processor failures remain visible independently of diagnostics.
@@ -1189,7 +1189,7 @@ release section when tagging a release.
 - Preserve Native/Next caption CI fixture data across replaced database
   connections, keeping extraction and legacy NUL-cache repair assertions intact.
 
-- Run Next, teletext and browser CI against the accepted FFmpeg 2.0.8 runtime.
+- Run Next, teletext and browser CI against the qualified FFmpeg 2.0.9 runtime.
   Keep runtime selection aligned with the managed default and verify browser
   Health against its independently qualified clock capability and tool hashes.
 

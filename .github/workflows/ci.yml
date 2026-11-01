@@ -521,7 +521,7 @@ jobs:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
       # Runtime fixtures share channel1's report path in this owned app-data root.
       NEXTEST_TEST_THREADS: "1"
-      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.8
+      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.9
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -646,7 +646,7 @@ jobs:
       CARGO_BUILD_JOBS: "1"
       TELETEXT_LEVEL: ${{ matrix.level }}
       NEXTEST_TEST_THREADS: "4"
-      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.8
+      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.9
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -761,12 +761,12 @@ jobs:
       # Keep each project's result JSON and host log separate; both jobs upload
       # from test-results/.
       ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.suite }}-${{ matrix.project }}
-      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.8
-      # Independently qualified Linux x64 2.0.8 payloads; never infer the
+      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.9
+      # Independently qualified Linux x64 2.0.9 payloads; never infer the
       # expected capability or identity from the Health result under test.
       ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS: "true"
-      ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256: 26a01625635b3ac5832cb3967d877ca9317976ff03739ec8fc1b528e4ae4b094
-      ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256: bd22c12f30641250c72980473a6f97726db980455f3c4355f7781d84782095db
+      ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256: 50ee90f724b22c4706e782fa834670cb14539d798e2693f3466c248b724b3eab
+      ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256: f61fff7f05e615f22ffe1f5b0ae832d37167d83147a2357f06af9fd97872f85e
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local web artifact
