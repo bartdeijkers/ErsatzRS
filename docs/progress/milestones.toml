@@ -23444,6 +23444,164 @@ SHA/subject comparison against upstream git log, and substantive Codex review.
 AMM-N-03 acceptance remains required before per-commit execution.
 """
 evidence = """
+Current ownership: the single finite completion list at P9B-02 evidence owns
+remaining P9B-01 configuration/package/interchange and shared final proof. Its
+9B-CONFIG/PACKAGE/TTI rows name the unproven actions, reusable receipts and exact
+closure conditions. Producer, activation, automatic refresh, source failure/
+recovery, programme rollover, footer/restart and Linux timeout components below
+are completed within their recorded bounds; historical next actions cannot
+reopen them. P9B-01 remains In progress until its remaining clauses are proven.
+
+Preserved component evidence:
+Current finite P9B completion list2026-11-01 (supersedes historical next actions):
+Each ID owns only the named remaining clauses of P9B-01/02. Missing proof is
+not a demonstrated implementation defect. Close a row when its stated evidence
+exists; do not reopen completed components without a concrete regression.
+Canonical detailed receipts remain in tmp/phase9-tvguide-addon/qualification.json.
+
+Completed components, retained within their recorded runtime/platform bounds:
+- Producer and compatibility: exact production0.1.1, named themes/overrides/zones,
+  complete configured map/navigation and template/dynamic-field permissions;
+  current/next/continuing/Later Today, filler/empty/long/multilingual/DST content.
+  Reuse producer_tests, bundle_qualified, runtime_compatibility and12 producer
+  tests. These are producer/native preparation proofs, not all client actions.
+- Activation/current-guide lifecycle: explicit install-disabled/enable, SQL-guide
+  preparation/publication, source update, source-unavailable last-good/recovery,
+  natural programme rollover, footer-Zone TTI import/publication/refresh and
+  Linux graceful restart. Reuse production_activation, admin_guide_preparation,
+  guide_refresh, guide_failure_recovery, guide_clock_rollover, guide_tti_zone and
+  guide_command_timeout. Producer timeout/capacity settlement is closed on Linux.
+- Production Lua On/Off/Continue/natural expiry, paired distinct direct profiles
+  and concrete Legacy transition repair: production_lua and its candidate_repair.
+  Linux private host59ac/runtime50ee passes original strict oracles. Windows663
+  package/footer/refresh and both ARMb971/QEMU production components remain closed
+  within their exact older boundaries; they do not prove the new runtime repair.
+- Generic9A Level1/1.5, applicable X26, profiles/mirrors, Lua authority/timing,
+  authoring/metadata, localized JS/no-JS admin, source/subtitle/alternate-audio,
+  health/cancellation/lease/capacity and accepted platform safety stay closed.
+  Reuse P9A-01..04 and final-gate receipts wherever relevant code/inputs match.
+
+9B-CONFIG — mandatory production configuration proof; independently executable.
+Owners: P9B-01 range/index/themes/zones; P9B-02 two-channel/profile/range clauses.
+Action: edit one actual guide's range/index, theme, permitted override and zone,
+validate/preview then explicitly publish, without changing its peer or globals.
+Gap: exact production admin/stream receipt join for range/index edits and
+persistence, binding/profile/mirror edits, same-number cross-channel isolation,
+invalid ranges/index/unknown or oversized values, same-channel collision and
+insufficient complete-map capacity. Producer/generic rejection tests are valid;
+these production integration claims are not all established by two initial maps.
+Minimum: reuse producer12, activation/two-map rasters, production Lua paired
+streams and generic localized/lifecycle negatives; exercise only unmatched actual
+profile/map actions through existing admin helpers. No new template editor.
+Stop: every named action/rejection has a receipt or explicit valid source/input
+join; full map/subpage/index/previous-next/colour links stay in range, browser and
+stream agree, restart plus guide refresh preserve assignment, rejected output
+keeps prior pages and ordinary AV/subtitles/selected audio, all changed controls/
+errors retain headed JS/no-JS Chromium/Firefox and all-culture proof.
+Dependencies: existing production package and closed generic engine. Actual
+suitable-client navigation is shared with9B-CLIENT, not duplicated here.
+
+9B-PACKAGE — mandatory package-unavailability proof; independently executable.
+Owners: P9B-01 install/fault/stale policy; P9B-02 real-package fault/playback clause.
+Action: keep watching accepted output safely when the guide package is missing,
+disabled or incompatible, and recover through explicit valid configuration.
+Gap: production receipt mapping for those three package states; failed source
+and genuine command timeout are already closed and must not be repeated.
+Minimum: first join accepted9A availability/health/publication guards to unchanged
+production invocation; run only missing actual-package boundaries with existing
+fault/restore fixtures. Reuse guide_failure_recovery and guide_command_timeout.
+Stop: named package states are visibly reported, last-good authority never
+extends beyond its original cap, no late/partial generation is promoted and
+ordinary AV/subtitles/selected audio and bounded cleanup survive; explicit
+restore recovers according to the same policy. Scripts never install/enable.
+Dependencies: current package source/identity; shared localized checks9B-CONFIG.
+
+9B-LUA — mandatory remaining production lifecycle proof; independently executable.
+Owner: P9B-02 Lua error/restart/Refresh-Reset clause, ADR0122.
+Action: use existing guide profiles in scripts and retain deterministic overrides
+through errors, restart and Refresh/Reset without changing package activation.
+Gap: production join for handled invalid/deleted/wrong-addon profiles, failed-
+script rollback, restart during/after override and Refresh/Reset boundaries.
+On6/Off4/Continue/expiry and simultaneous different profiles/themes are closed.
+Minimum: map unchanged9A application/transaction/cursor guards to the exact
+production profile snapshots; execute only lifecycle boundaries not established
+by that join with existing host/restart helpers. Compare effective generations,
+actual theme/zone/override content and original programme/interval boundaries.
+Stop: all named rows have valid receipts, failed/unavailable selections preserve
+AV and original state, restarts/Refresh/Reset match ADR0122 timing and precedence,
+and no package is installed/enabled by script. Package faults refer9B-PACKAGE.
+Dependencies: current compatible addon; fixed Legacy candidate for affected AV.
+
+9B-TTI — mandatory remaining generic production interchange proof; executable.
+Owners: P9B-01 metadata/theme/navigation; P9B-02 production editor-roundtrip clause.
+Action: import a supported guide edit as a concept and explicitly publish it while
+retaining theme/override bindings, navigation, template/dynamic fields and zones.
+Gap: complete receipt join for those metadata fields and stale-revision refusal
+on the actual production addon; footer Zone/protected generated edit rejection,
+concept isolation, publication, SQL refresh and Linux restart are already closed.
+Minimum: inspect retained export/sidecar and accepted original/refreshed documents
+against generic9A metadata/revision guards; use the existing roundtrip only for
+any precisely named missing boundary. No further QTM maintenance or dependency.
+Stop: every named field/permission/revision invariant is proven lossless, invalid
+edits fail atomically and installed package/template bytes stay exact; same
+validated preview/broadcast content survives refresh. Reuse guide_tti_zone and
+windows_host; no repeated unaffected full editor/stream/client chain.
+Dependencies: same0.1.1 production template and accepted shared authoring contract.
+
+9B-RUNTIME — missing repaired-runtime platform/package proof; executable before
+publication. Owner: P9B-02 platform/playback closeout and ADR0121.
+Action: run the repaired programme transition on each required runtime target.
+Gap: the new FFmpeg897e5fb correction and application FPS bootstrap are qualified
+only on native Linux x64 private bytes, not repaired Windows/ARM packages or
+managed startup. No known additional source fix is required to start this work.
+Minimum: use existing four-RID builders/package checks and three wrapper cases;
+reuse unchanged accepted dependency/licensing/feature and generic9A safety proofs
+only with source/recipe/hash joins. Native Windows package trial reserves120min;
+ARM checks use retained software/QEMU environment and disclose native assumption.
+Stop for private-package component: all three Linux RIDs and Windows x64 have
+exact-source packages, complete codec/tracks/start/frame/clock/cancellation checks
+and affected ordinary-route proof or justified unchanged-boundary joins. Keep
+Linux candidate, platform package verification and managed adoption distinct.
+External adoption dependency: a separately authorized stable publication of the
+qualified runtime, exact digests/pins, then managed cold/cached startup/Health and
+affected route checks. Earlier stable2.0.8 permission is not a new release grant.
+Reuse Windows663/ARMb971 only within their old scope, not as new-patch acceptance.
+
+9B-CLIENT — missing actual production-client proof; requires joint maintainer
+observation on the agreed physical Kodi21.2/Google TV Streamer installation.
+Owner: P9B-02 suitable-client production index/navigation/content clause.
+Action: watch/navigate actual guide maps/subpages/colour links and refreshed
+content, return to normal AV with the selected captions/audio intact.
+Gap: accepted generic1.5 Kodi proof is not yet the final production-addon join.
+Minimum: one prepared joint final trial using the final identities and working
+LAN stream; reuse accepted generic character/flash/reveal controls unchanged.
+Stop: actual production index/page/subpage/colour navigation, two configured
+maps/themes, refresh and AV restoration are recorded with client/addon/host and
+transport/decoder versions/limitations. No DVBViewer or premature device trial.
+Dependencies: 9B-CONFIG and qualified final runtime. Maintainer availability/access
+is the external prerequisite; no client hunt or experimental2.5 display gate.
+
+9B-FINAL — remaining integrated release-gate evidence; execute after functional
+packages. Owner: P9B-02 final gates and its dependency on P9B-01.
+Action/proof: independently accept the complete production guide on the required
+platform boundary rather than infer acceptance from one successful flow.
+Gap: final exact-source required CI/workspace closeout/parity/progress and required
+four-RID joins after the remaining package changes; current e851 CI has two
+retained runner-shutdown failures, all other applicable results are green.
+Minimum: reuse unchanged9A fixtures/source-engine-copy/audio/health/routes and
+localized coverage with source/input joins; run only outstanding required gates
+on final source. Current Linux smoke/four-route93/93 and strict affected Clippy/
+matched Leptos proof remain valid until affected inputs change. Do not repeat
+unaffected editor or stream rounds solely for a new evidence variant.
+Stop: P9B-01 clauses and all rows above closed, exact final SHA has every required
+CI/local gate and mandatory platform proof; unique negatives/history retained.
+Native ARM remains assumed/deferred, macOS deferred; Level2.5 stays experimental
+and its enhanced-only gates deferred, QTM optional/upstream wait. No six-native-
+platform or complete experimental2.5 acceptance is claimed.
+
+One next package: 9B-RUNTIME private-package component. Finish its existing
+four-RID candidate verification before adoption; do not start unrelated variants.
+
 Completed concrete Legacy finite-programme transition repair2026-11-01:
 canonical qualification.json production_lua.transport_blocker.candidate_repair.final
 owns exact sources, original failures and current receipts under guide-lua-flow/
@@ -23466,8 +23624,8 @@ No codec/profile, readrate, capacity, source/outpoint, deadline or oracle change
 Closed: this concrete defect on the native Linux private candidate. Other required
 platform packages and managed runtime adoption are separate and still open;
 the published2.0.8 runtime is not silently claimed repaired. F6 stays closed.
-Next finite package: reconcile only the existing P9B clauses and canonical
-receipts into the current completion list, then choose one missing obligation.
+Current next action is the finite list above. This completed checkpoint closes
+only its named native Linux candidate boundary.
 
 Historical semantic proof and original transport failure (superseded only for
 the new native Linux candidate; original captures and platform bounds retained):
