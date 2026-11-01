@@ -62,32 +62,36 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-RUNTIME full ARM target-host transition proof.
-Closed e66418fa/FFmpeg897e5fb Legacy Linux correction and cc060dfe finite list.
-The four private runtime archives/provenance/software component is now closed;
-native Windows target tools pass the same three unchanged wrapper cases and
-leave zero exact Windows processes. Linux candidate retains native3/3, actual
-Legacy19/19, smoke and four-route93/93. These are not managed adoption claims.
+Current package: P9B-02 / 9B-RUNTIME native Windows exact-source package/transition.
+Closed: e66418fa/FFmpeg897e5fb Legacy candidate repair,760f9611 finite completion
+list and adce26f0 four-RID private runtime/software package component. Both current
+ARMv7/ARM64 packaged-host regular60s-trim→180s transitions are Complete within
+QEMU: headed install/profile/preview/publication, one public Legacy response,
+full AV/libzvbi/PMT,19 transport controls each, normal exit0/removed namespace/
+offline integrity/Idle/no leases. Mono English only; targeted tiny-tail loop
+proof stays with the unchanged Linux/Windows three-case owner. No native ARM claim.
 
-Next finite action: reuse existing ARM cross/package/start-host helpers for the
-current scoped source and new exact FFmpeg packages. Server and FFmpeg must share
-the target container namespace. The Linux-hosted Docker-exec shortcut is now
-qualified unsuitable: WSL loopback succeeds but Docker host-network refuses the
-same connection; both original3/3 EmptyOutput attempts are retained. Do not retry
-that adapter, change strict clocks/frames/deadlines or invent a proxy framework.
-Stop: affected actual ARM ordinary-route/transition, AV/caption/audio and cleanup
-proof on both required emulated RIDs, with exact source/package identities.
-Keep b971 host proof closed within its old scope. Native ARM and macOS remain
-deferred. Native Windows full app/final platform proof and separately authorized
-runtime publication/managed startup remain with their existing owners.
+Next finite action: recheck actual Windows disk headroom after verified inactive
+Cargo cache reclamation, then use the prepared exactadce four-binary native build,
+independent extraction/structural bundle gate and ordinary transition observer.
+Reserve120min; retain the existing65GiB post-cache-copy guard. Stop: native Windows
+application/package/regular transition and bounded cleanup receipts, or exact
+concrete environment/product blocker. Managed publication/startup/adoption stays
+separate and requires its own authorization; no release has occurred.
 
-The sole finite list remains P9B-02 evidence; all other rows keep their explicit
-stop conditions. Canonical tmp/phase9-tvguide-addon/qualification.json and its
-runtime_packages receipt retain exact current/historical proof. Windows-package
-trials reserve120min. Do not repeat unaffected editor/client/format chains.
-Delivery: e851 CI41253269265 failed-only rerun is still awaiting terminal exact
-review; no new sourcepush while active. Never push Root wholesale or publish
-runtime artifacts without separate authorization. Preserve all foreign work.
+The sole finite list remains P9B-02 evidence. Reuse closed editor/visual/isolation,
+Lua and accepted9A safety proof within unchanged boundaries; do not add variants.
+Canonical qualification.json runtime_packages/arm_target_host retains all exact
+inputs, failed loopback attempts, ARM64 preparation negative and terminal results.
+Seven required binaries and20 matched assets were retained and restored after
+inactive build-cache cleanup; sources, dependencies and evidence are preserved.
+
+Delivery: exacte851 CI41253269265 is green in13 applicable jobs; original shutdown
+failures remain. New scoped adce26f0 fullCI41304907840 has two Next test failures;
+original logs retained at tmp/phase9-tvguide-addon/ci-adce. Other jobs are still
+running; do not claim full green or start a new push. FFmpeg e267 source-only
+publisher41305339803 is skipped; no Docker/release publication. Preserve foreign
+Root commits/dirty paths and never push Root history wholesale.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
@@ -4316,7 +4320,7 @@ independent9A acceptance.
 '''
 
 [[blocking_decision]]
-note = 'Current9A requires complete Level1/1.5 and shared safety/platform proof; existing Level2.5 is experimental and enhanced-only proof is Deferred until a new task. Remaining primary prerequisites: actual joint Kodi base-client observations, four independent raw-header observations, and approved managed-runtime publication/adoption. P9A-01 contract decisions and all completed scoped components remain closed. QTeletextMaker is optional; no DVBViewer or premature physical-device trial.'
+note = 'Revised9A is Complete under its accepted owner receipts; the former Kodi/raw-header/managed-runtime prerequisites are historical, not current blockers. The finite P9B-02 list owns production guide closure and the separate new concat-runtime platform/adoption obligation. Preserve experimental Level2.5/QTM upstream/native ARM/macOS deferrals; no DVBViewer or premature physical-device trial.'
 
 [[blocking_decision]]
 note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'
