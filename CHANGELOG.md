@@ -1166,6 +1166,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Wait within the existing startup deadline for shared teletext preparation
+  capacity, preserving selected source captions across programme transitions
+  without increasing concurrency or releasing running workers on cancellation.
+
 - Let Legacy concat wrappers discover audio/video timing beyond a leading
   bitmap-subtitle packet, preventing an early stream-loop failure caused by
   the former 32-byte probe shortcut. Preserve selected tracks, encoding and

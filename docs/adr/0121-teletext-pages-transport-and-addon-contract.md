@@ -1030,6 +1030,15 @@ admission ends with actual preparation work; playback retains its existing
 transcode reservation. No extra serving mux, connection or capacity increase
 may substitute for the required handoff.
 
+Source-caption preparation waits for occupied shared work capacity within its
+original absolute startup deadline. Register the existing actual-worker-release
+notification before admission, and use the existing 25 ms policy cadence to
+re-read configuration when a capacity change does not release a worker. Invalid
+configuration and expired deadlines fail without admission. A waiting request
+owns no lease or detached worker; cancellation never releases another worker's
+hold. This changes neither the global immediate-admission primitive nor configured
+capacity, source validation, preparation deadlines or ordinary AV fallback.
+
 Independent prepared captions retain ordinary primary AV pacing. Their explicit
 bitmap producer retains the normal positive MPEG-TS mux lead (0.7 s), so late
 AAC priming packets do not become a wrapped negative start after an early

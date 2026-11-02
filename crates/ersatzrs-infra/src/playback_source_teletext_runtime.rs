@@ -31,6 +31,7 @@ use crate::{
 
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_SETTING: &str = "teletext.work.max_concurrent";
+const ADMISSION_POLICY_POLL: Duration = Duration::from_millis(25);
 
 #[path = "playback_source_teletext_interval.rs"]
 mod interval;
@@ -516,19 +517,40 @@ pub(crate) async fn begin(
     locker: &EntityLocker,
     deadline: Instant,
 ) -> Result<TeletextWorkGuard> {
-    if Instant::now() >= deadline {
-        return Err(unavailable());
-    }
     let configuration = SqliteConfigRepository(pool.clone());
-    let configured = before(deadline, configuration.get(MAX_CONCURRENT_SETTING)).await?;
-    let maximum = match configured {
-        None => NonZeroUsize::MIN,
-        Some(value) => value.parse::<NonZeroUsize>().map_err(|_| unavailable())?,
-    };
-    if Instant::now() >= deadline {
-        return Err(unavailable());
+    loop {
+        if Instant::now() >= deadline {
+            return Err(unavailable());
+        }
+        // Register before admission so an actual worker's release between the
+        // failed attempt and the await cannot be missed. Waiting owns no lease
+        // or detached worker, so cancellation leaves admitted work untouched.
+        let released = locker.teletext_work_released();
+        tokio::pin!(released);
+        released.as_mut().enable();
+        let configured = before(deadline, configuration.get(MAX_CONCURRENT_SETTING)).await?;
+        let maximum = match configured {
+            None => NonZeroUsize::MIN,
+            Some(value) => value.parse::<NonZeroUsize>().map_err(|_| unavailable())?,
+        };
+        if Instant::now() >= deadline {
+            return Err(unavailable());
+        }
+        if let Some(work) = TeletextWorkGuard::try_acquire(locker, maximum.get()) {
+            return if Instant::now() < deadline {
+                Ok(work)
+            } else {
+                Err(unavailable())
+            };
+        }
+        // Releases wake immediately; the bounded fallback observes policy
+        // changes that do not release capacity, under the original deadline.
+        let next_poll = (Instant::now() + ADMISSION_POLICY_POLL).min(deadline);
+        tokio::select! {
+            () = released.as_mut() => {},
+            () = tokio::time::sleep_until(next_poll) => {},
+        }
     }
-    TeletextWorkGuard::try_acquire(locker, maximum.get()).ok_or_else(unavailable)
 }
 
 struct ClosingScope(LocalProbeCleanupScope);
@@ -607,8 +629,7 @@ mod tests {
         assert_eq!(locker.active_teletext_work(), 0);
     }
 
-    #[tokio::test]
-    async fn existing_configuration_and_locker_enforce_immediate_shared_admission() {
+    async fn admission_database() -> DbPool {
         let pool = SqlitePoolOptions::new()
             .connect("sqlite::memory:")
             .await
@@ -619,17 +640,38 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn existing_configuration_and_locker_enforce_shared_limits_and_invalid_policy() {
+        let pool = admission_database().await;
         let config = SqliteConfigRepository(pool.clone());
         let locker = EntityLocker::new();
         let deadline = Instant::now() + MAX_STARTUP;
         let work = begin(&pool, &locker, deadline).await.unwrap();
-        assert!(begin(&pool, &locker.clone(), deadline).await.is_err());
+        assert!(begin(
+            &pool,
+            &locker.clone(),
+            Instant::now() + Duration::from_millis(10)
+        )
+        .await
+        .is_err());
+        assert_eq!(locker.active_teletext_work(), 1);
         config.set(MAX_CONCURRENT_SETTING, "2").await.unwrap();
         let second = begin(&pool, &locker, deadline).await.unwrap();
         assert_eq!(locker.active_teletext_work(), 2);
-        assert!(begin(&pool, &locker, deadline).await.is_err());
+        assert!(
+            begin(&pool, &locker, Instant::now() + Duration::from_millis(10))
+                .await
+                .is_err()
+        );
         config.set(MAX_CONCURRENT_SETTING, "1").await.unwrap();
-        assert!(begin(&pool, &locker, deadline).await.is_err());
+        assert!(
+            begin(&pool, &locker, Instant::now() + Duration::from_millis(10))
+                .await
+                .is_err()
+        );
         drop(second);
         drop(work);
         for value in ["0", "", " 1", "-1", "invalid"] {
@@ -638,7 +680,90 @@ mod tests {
             assert_eq!(locker.active_teletext_work(), 0);
         }
         config.set(MAX_CONCURRENT_SETTING, "1").await.unwrap();
+        pool.close().await;
         assert!(begin(&pool, &locker, Instant::now()).await.is_err());
+        assert_eq!(locker.active_teletext_work(), 0);
+    }
+
+    #[tokio::test]
+    async fn admission_waits_for_actual_worker_release_and_cancellation_owns_no_capacity() {
+        let pool = admission_database().await;
+        let locker = EntityLocker::new();
+        let owner = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let worker = owner.hold_work();
+        drop(owner);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut cancelled = Box::pin(begin(&pool, &locker, deadline));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), cancelled.as_mut())
+                .await
+                .is_err()
+        );
+        drop(cancelled);
+        assert_eq!(locker.active_teletext_work(), 1);
+        let mut waiting = Box::pin(begin(&pool, &locker, deadline));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), waiting.as_mut())
+                .await
+                .is_err()
+        );
+        assert_eq!(locker.active_teletext_work(), 1);
+        drop(worker);
+        let next = waiting.await.unwrap();
+        assert_eq!(locker.active_teletext_work(), 1);
+        drop(next);
+        assert_eq!(locker.active_teletext_work(), 0);
+    }
+
+    #[tokio::test]
+    async fn admission_observes_changed_limits_and_invalid_policy_without_a_release() {
+        let pool = admission_database().await;
+        let config = SqliteConfigRepository(pool.clone());
+        let locker = EntityLocker::new();
+        let owner = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut waiting = Box::pin(begin(&pool, &locker, deadline));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), waiting.as_mut())
+                .await
+                .is_err()
+        );
+        config.set(MAX_CONCURRENT_SETTING, "2").await.unwrap();
+        let next = waiting.await.unwrap();
+        assert_eq!(locker.active_teletext_work(), 2);
+        drop(next);
+        config.set(MAX_CONCURRENT_SETTING, "1").await.unwrap();
+        let mut waiting = Box::pin(begin(&pool, &locker, deadline));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), waiting.as_mut())
+                .await
+                .is_err()
+        );
+        config.set(MAX_CONCURRENT_SETTING, "invalid").await.unwrap();
+        assert!(waiting.await.is_err());
+        assert_eq!(locker.active_teletext_work(), 1);
+        drop(owner);
+        assert_eq!(locker.active_teletext_work(), 0);
+    }
+
+    #[tokio::test]
+    async fn admission_deadline_does_not_release_running_work_or_admit_after_expiry() {
+        let pool = admission_database().await;
+        let locker = EntityLocker::new();
+        let owner = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let worker = owner.hold_work();
+        drop(owner);
+        let deadline = Instant::now() + Duration::from_millis(10);
+        assert!(begin(&pool, &locker, deadline).await.is_err());
+        assert!(Instant::now() >= deadline);
+        assert_eq!(locker.active_teletext_work(), 1);
+        drop(worker);
+        assert!(begin(&pool, &locker, deadline).await.is_err());
+        assert_eq!(locker.active_teletext_work(), 0);
+        let next = begin(&pool, &locker, Instant::now() + Duration::from_secs(1))
+            .await
+            .unwrap();
+        drop(next);
         assert_eq!(locker.active_teletext_work(), 0);
     }
 }

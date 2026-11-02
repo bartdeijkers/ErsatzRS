@@ -19039,15 +19039,29 @@ Independent AV decoding has empty stderr; existing strict transport checks show
 zero AV PTS/DTS leaps, PCR breaks/jitter, CC/TEI/sync errors. Keep the actual
 19/20 result: two PTS flags belong to the sparse DVB-subtitle PID, so the whole
 gate is not accepted. Original and refreshed guide text both decode from this
-same response (the long title wraps across lines). Caption preparation rejection
-on a later occurrence remains unclassified; full selected-caption lifecycle,
-compiled-host integration and physical completion remain mandatory.
-Next: classify that existing caption/cue gap with the retained source, admission
-and cache evidence; add only a bounded failure-stage reason if existing evidence
-cannot distinguish it. Bundle affected runtime acceptance on the final source.
-Stop: the affected ordinary response crosses real programme boundaries with
-its selected tracks and refreshed guide intact; repeat only affected physical
-navigation/refresh/AV-return integration after local continuity is proven.
+same response (the long title wraps across lines). Current35 compiled Linux x64
+plus denial-only logging now independently confirms the caption defect: the
+real60s boundary rejects work immediately at active1/maximum1, and only four DVB
+packets are present before that later occurrence while AV continues. Existing
+headed host1/1 passes; all29 observed owned identities drain. Canonical
+client-flow/caption-diagnostic-native/admission-negative.json owns exact inputs,
+logs and packet evidence. Physical component above is closed; do not reopen it.
+Complete concrete admission correction: register actual-release notification
+before trying admission, retain the original absolute deadline and worker hold,
+and re-read policy on the existing25ms cadence. Focused5/5, strict infra Clippy,
+fmt and actual headed host1/1 pass. Same85s response now has second-occurrence A/B
+DVB packets at44.323200/68.128211 with identical first-occurrence bitmap hashes;
+selected nld audio660Hz, strict AV decode and all34 observed owned identities drain.
+Canonical client-flow/{caption-admission-rust/qualification.json,
+caption-admission-candidate/stream-check/qualification.json} owns exact source,
+binary, commands and scoped results. Three actual compiled concat wrappers start0
+without probe-removal instrumentation, independently joining97a44778's correction.
+This component is Complete for default-profile Linux x64, not a new package gate.
+Next/stop at existing final-source/platform owner: retain full cue-tail/clear proof
+(the second finalclear is beyond this82s packet window) and sparse-DVB transport
+qualification. Existing gate remains19/20 with4PTS flags only on DVB258; no AV/DTS/
+PCR/jitter/CC/TEI/sync failure or relaxed threshold. Bundle the remaining affected
+native/package/platform/CI joins; no further physical guide variant is required.
 Completed preparation removes that concrete fixture blocker: one opt-in headed
 normal host trial passes77.54s with the exact production0.1.1 ZIP308d1d2c and final
 Linux package2b06. Normal Local scan retains four source tracks/page888 binding,
@@ -19077,9 +19091,10 @@ Dependencies: 9B-CONFIG and qualified final runtime. Maintainer availability/acc
 is the external prerequisite; no client hunt or experimental2.5 display gate.
 
 9B-FINAL — Complete: required local, platform and full-CI gate components.
-Owner: P9B-02 final gates and dependency on P9B-01. Overall milestone acceptance
-still depends on the separately owned9B-CLIENT observation; do not mark either
-milestone complete from these components alone.
+Owner: P9B-02 final gates and dependency on P9B-01. The separately owned9B-CLIENT
+physical component above is Complete. Current-source caption-tail/transport and
+affected package/platform/CI joins remain mandatory; do not infer final acceptance
+from earlier closed gate components.
 Current-source CI exception: normal97a44778 pushrun41452100743 finds
 RUSTSEC-2026-0433 in pulldown-cmark0.13.5. Keep that exact red job/log; the
 preliminary optional rustup flag probe is not the audit failure. The isolated
