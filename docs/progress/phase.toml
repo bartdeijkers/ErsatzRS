@@ -63,6 +63,19 @@ backup, rollback, quarantine and expanded administration, not defers them.
 
 next_steps = '''
 Current package: P9B-02 coherent final-source package/platform and full-CI joins.
+Maintainer release amendment2026-11-03: final delivery includes three stable
+publications after applicable acceptance: new app1.2.0, in-place promotion of
+unchanged Next next-0.2.3-54c6cb9-ersatzrs.7, and addon repositoryv0.11.12 with
+TV-guide0.1.2/yt-dlp0.11.12 and deliberate host<1.3 compatibility extensions.
+Verify exact source/tag/CI/publication and actual downloads for each. Reuse
+stable FFmpeg2.0.9; do not replace the existing installation automatically.
+Both0a1.1.0 nativeWindows/Linuxx64 candidate components are Complete below.
+Retain their actual identity; do not launch the prepared but unstarted0a ARM
+builds. Final ARM and other release builds belong to one frozen1.2.0 candidate,
+using the normal draft-first workflow and required Docker contract. No older
+binary relabel, Next recompilation or macOS work. Existing9B-FINAL owns these
+release joins. Candidate proof, final release builds and publication stay distinct.
+
 Complete: physical production-guide viewing/themes/navigation/refreshed content
 on the recorded Kodi21.2/IPTV Simple21.11.0/FFmpeg Direct21.3.8. Its201/02 local
 reselection and human-window negatives remain explicit. Do not reopen without a
@@ -87,14 +100,56 @@ Next finite action: qualify affected final-source platform/package joins on one
 coherent candidate, using existing package/native workflows and reserved120min
 Windows budget. Reuse closed physical/editor/publication/profile/runtime scopes;
 keep exact-source candidate, package and actual native execution claims separate.
-Normal full CI41478714670 targets exact0a4fb2de; check every applicable result
+Normal full CI41481824829 targets exact98566685; check every applicable result
 and use only source/digest-qualified artifacts for the remaining Linux joins.
-Current Windows attempt is not started: C has8.1GiB free, below the unchanged24GiB
-start/20GiB ongoing budget. Existing warm cache has no users; no files or packages
-were deleted. WSL trim discarded129.8GiB logically, but actual Windows free space
-did not recover. Canonical final-candidate/current-source-storage-block.json owns
-this environment prerequisite. Await planned WSL stop/compaction or sufficient
-host storage; never lower the floor or shut down active work automatically.
+CI recovery: Next and Teletext1.5 failed together at17:29:24 with GitHub runner-
+communication-loss annotations, not a demonstrated test/source defect. General
+Rust and artifact build pass; browser jobs continue. Both Linux runners are now
+online. GitHub rejects failed-only rerun while the original round is running;
+wait for its terminal state, then rerun only failures on this same SHA. Canonical
+ci-98566685/infrastructure-loss-classification.json retains original negatives.
+
+Complete native Linux x64 candidate0a1.1.0 package/startup component: actual
+three-ELF release build2668.994s,3993 exact source inputs,71-member independent
+archive88dd5b11 and extraction pass. Existing managed2.0.9/Bundledrs7 startup,
+three persisted Health titles, exact HTML/JS/WASM/changelog and naturalSIGTERM0/
+absent processgroup pass. Canonical current-source-0a4fb2de/linux/
+managed-linux-qualification.json and package-linux-x64.json own full identities.
+Retain this completed candidate scope; it is not a newly compiled1.2.0 release.
+No obsolete0a ARM build follows; final required ARM work belongs to1.2.0.
+
+Complete Windows x64 candidate0a1.1.0 package/startup component: actual four-PE
+build4499.38s/source3993 exact, private ZIPf3539249/independent extraction and
+existing structural gate pass. Actual packaged launcher acquires public2.0.9,
+then restarts with identical cache bytes/mtimes and Bundledrs7. Persisted Health,
+HTML/JS/WASM/changelog/configuration and existing headed next-version case in
+Chromium/Firefox pass2/2 without skips/flakes/console errors. Canonical
+current-source-0a4fb2de/attempt-local-control2/windows-{build,package,managed}-
+result.json and windows-headed-results.json own full identities. Compilerhelper
+needed bounded force; runtime outer Job drains naturally. Internal Taskkill is
+owned test teardown, not a graceful tray-exit claim; no survivors/listener remain.
+Both native candidate components are Complete within source0a/version1.1.0.
+Next: one frozen1.2.0 release source and its required build/publication joins;
+no old-binary relabel or unstarted0a ARM compilation.
+
+Original build handles95818(Windows)/32773(Linux), package14659 and runtime27520/
+2915 are terminal0. CI recovery worker still owns exact985 run41481824829: first
+1.5 browser is green; second runs before failed-only infrastructure rerun.
+
+Complete maintainer-requested WSL cleanup: five inactive worktree Cargo targets
+measured93.419GiB were cleaned with configured target checks. Active main target
+and CI caches stay intact; modified-source hashes, packages and evidence are
+preserved. After actual TRIM, C:free is117.46GiB and E:125.64GiB. Canonical
+cleanup-wsl/cargo-clean-result.json owns the measurements. Storage prerequisite
+is resolved; the former compaction choice is no longer needed for this trial.
+Next finite action: freeze one1.2.0 release source after the completed native
+candidate checkpoint. Correct the demonstrated release-source blockers, prepare
+compatible add-on metadata and satisfy exact-source CI before tag builds.
+Nine immutable postbuild controls/inputs are staged and hash-verified. Reuse the
+qualified20-file release663 frontend: its WASM inputs remain unchanged through0a.
+The separately validated CI985 dev frontend is not mixed with native releaseSSR.
+0a->985 changes only checker/docs. No extra client/editor variants; only the
+three authorized publication joins follow.
 Prior35/c6 runs are superseded, not full-green proof; retain97 audit red and ab56
 historical13pass. No product threshold/capacity/deadline increase is introduced.
 
@@ -104,31 +159,26 @@ skipped, attempt1/no reruns. All14 actual results and brief review are canonical
 under tmp/phase9-tvguide-addon/ci-ab56/status.json and qualification.json
 ci.current_source_run. Unchanged Next-motion passes once3752ms; original2b failure
 remains retained and unexplained, not a demonstrated product-fix claim. Observer
-43441 exits0. Both retired physical trial hosts and observed owned workers drain;
-there is no active physical client host to reconnect until the local correction.
+43441 exits0. The physical trial component and owned-worker cleanup are closed
+above; there is no physical client host to reconnect for this package join.
 
 Complete: four required final app packages/startups (actual compiled source2b06;
 ab56 changes only CI/tests/progress). Linux x64 and Windows x64 are native;
 ARMv7/ARM64 are pinned Ubuntu24 QEMU, not native. Reuse closed FINAL/CONFIG/PACKAGE/
 LUA/TTI/RUNTIME and all unaffected9A evidence. Sole finite list: P9B-02 evidence.
 
-After the local full-track correction and compiled-host qualification, reuse
-the confirmed client/plugin versions and check the
-existing Windows Private TCP8409 forwarding, and launch the prepared bounded
-production external-hold case. Choose classic200/201{0000,0001} and night410/
-400{0000,0001}; prove colour/index/page/subpage navigation, actual guide refresh,
-AV return with Dutch audio and English DVB captions, client stop and owned cleanup.
-Reuse client_preparation's normal Local scan, real60s source/occurrences,40 strict
-transport checks/independent decoding and exact compatible0.1.1 package. Existing
-hold75–600s only; no initial captionA guarantee or sourceclock rewrite. No physical
-TV trial before renewed joint readiness; keep the existing Private TCP8409
-firewall policy and repaired exact portproxy mapping intact.
+The actual joint production-guide trial and local full-track correction are
+closed above. Reuse their canonical identities, versions and recorded limits;
+do not relaunch the older75–600s trial plan or require another physical variant
+without a concrete regression. Keep the existing Windows Private TCP8409
+firewall and repaired exact portproxy mapping intact.
 
-Keep Root's foreign dirty changes/history out of delivery. Scope this evidence
-update to the existing progress fields; retain exactab56 CI only for its source,
-not the new probe correction. P9B-01/02 remain In progress until CLIENT closes. Native ARM
-assumed/deferred, macOS deferred,2.5 experimental/deferred,QTM optional/upstream
-wait. No DVBViewer or additional release. No acceptance requirement is waived.
+Keep Root's foreign dirty changes/history out of delivery. P9B-01/02 remain
+In progress for the existing current-source package/platform/CI joins. Native
+ARM remains assumed/deferred, macOS deferred,2.5 experimental/deferred and QTM
+optional/upstream wait. No DVBViewer; publication stays within the three
+authorized repositories. All remaining
+acceptance obligations retain their existing owner and canonical evidence.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
