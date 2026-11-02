@@ -62,10 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-CLIENT — joint physical production-guide acceptance.
-Only prerequisite: maintainer returns and confirms readiness for Kodi21.2 on the
-Google TV Streamer. No independently executable implementation or mandatory
-check remains. Do not substitute extra variants, decoder/client hunting or builds.
+Current package: P9B-02 / 9B-CLIENT — restore full-track ordinary Legacy
+continuity before resuming physical acceptance. Production pages200/201 are
+confirmed on the unchanged client. Completed command component: remove only the
+outer32-byte probe cap; the actual local positive-start loop fails at51.613s on
+baseline and the candidate delivers one85s response until explicit diagnostic
+stop. Reviewed snapshot/focused Rust/strict crate lint are canonical at
+client-flow/legacy-probe-cap-candidate/rust-qualification.json. Underlying
+public2.0.9 runtime, codecs, maps, source and deadlines are unchanged.
+Next finite action: classify the retained source-caption rejection/cue gap on a
+later real occurrence using existing admission/cache/source evidence. Keep the
+19/20 strict transport negative (two sparse DVB-subtitle PTS flags), despite
+zero AV/PCR/CC errors and independently decoded original/refreshed guide text.
+Do not claim full stream repair from this candidate or repeat the physical
+trial before compiled-host and selected-caption continuity are qualified.
+Canonical P9B-02 evidence and client-flow/legacy-probe-cap-candidate own exact
+positive/zero-start/negative controls, byte/argv identities and drained processes.
+No client hunt, unrelated variants or duplicate platform rounds; qualified
+components remain closed within their named boundaries.
 
 Complete: exact codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 is pushed and
 normal fullCI41375889471 is green:13 required jobs pass, Commit lint expected
@@ -73,14 +87,16 @@ skipped, attempt1/no reruns. All14 actual results and brief review are canonical
 under tmp/phase9-tvguide-addon/ci-ab56/status.json and qualification.json
 ci.current_source_run. Unchanged Next-motion passes once3752ms; original2b failure
 remains retained and unexplained, not a demonstrated product-fix claim. Observer
-43441 exits0. There are no active package build/test/client processes to resume.
+43441 exits0. Both retired physical trial hosts and observed owned workers drain;
+there is no active physical client host to reconnect until the local correction.
 
 Complete: four required final app packages/startups (actual compiled source2b06;
 ab56 changes only CI/tests/progress). Linux x64 and Windows x64 are native;
 ARMv7/ARM64 are pinned Ubuntu24 QEMU, not native. Reuse closed FINAL/CONFIG/PACKAGE/
 LUA/TTI/RUNTIME and all unaffected9A evidence. Sole finite list: P9B-02 evidence.
 
-Next, when the maintainer is ready: confirm client/plugin versions, check the
+After the local full-track correction and compiled-host qualification, reuse
+the confirmed client/plugin versions and check the
 existing Windows Private TCP8409 forwarding, and launch the prepared bounded
 production external-hold case. Choose classic200/201{0000,0001} and night410/
 400{0000,0001}; prove colour/index/page/subpage navigation, actual guide refresh,
@@ -88,11 +104,12 @@ AV return with Dutch audio and English DVB captions, client stop and owned clean
 Reuse client_preparation's normal Local scan, real60s source/occurrences,40 strict
 transport checks/independent decoding and exact compatible0.1.1 package. Existing
 hold75–600s only; no initial captionA guarantee or sourceclock rewrite. No physical
-TV access or8409 binding before joint availability; keep firewall policy intact.
+TV trial before renewed joint readiness; keep the existing Private TCP8409
+firewall policy and repaired exact portproxy mapping intact.
 
 Keep Root's foreign dirty changes/history out of delivery. Scope this evidence
-update to the existing progress fields; production code remains the fully tested
-ab56 checkpoint. P9B-01/02 remain In progress until CLIENT closes. Native ARM
+update to the existing progress fields; retain exactab56 CI only for its source,
+not the new probe correction. P9B-01/02 remain In progress until CLIENT closes. Native ARM
 assumed/deferred, macOS deferred,2.5 experimental/deferred,QTM optional/upstream
 wait. No DVBViewer or additional release. No acceptance requirement is waived.
 '''

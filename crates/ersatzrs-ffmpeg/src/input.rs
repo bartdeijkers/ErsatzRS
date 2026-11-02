@@ -211,6 +211,8 @@ impl InputFile {
     #[must_use]
     pub fn concat(path: impl Into<String>) -> Self {
         let mut input = Self::new(InputKind::Concat, path, 0);
+        // Preserve codec/track and first-DTS discovery (ADR 0121). A tiny probe
+        // can stop at a leading subtitle packet, leaving the loop origin wrong.
         input.input_options.extend([
             "-f".to_owned(),
             "concat".to_owned(),
@@ -218,8 +220,6 @@ impl InputFile {
             "0".to_owned(),
             "-protocol_whitelist".to_owned(),
             "file,http,tcp,https,tcp,tls".to_owned(),
-            "-probesize".to_owned(),
-            "32".to_owned(),
         ]);
         input
     }

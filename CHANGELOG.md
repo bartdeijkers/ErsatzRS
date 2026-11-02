@@ -1165,6 +1165,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Let Legacy concat wrappers discover audio/video timing beyond a leading
+  bitmap-subtitle packet, preventing an early stream-loop failure caused by
+  the former 32-byte probe shortcut. Preserve selected tracks, encoding and
+  existing playback deadlines.
+
 - Preserve Legacy programme-transition timing and initial frames with the
   qualified concat runtime correction. Skip only optional FPS sampling when
   opening private programme inputs; retain complete codec/track initialization,

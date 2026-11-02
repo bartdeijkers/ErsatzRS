@@ -640,6 +640,15 @@ programme boundary; it does not force a frame rate, shorten codec discovery,
 change readrate, drop tracks or relax output deadlines. Where the bitstream has
 no explicit rate, inferred frame-rate metadata is not an equality guarantee;
 actual timestamps, complete frames and decoded output remain the oracles.
+The outer concat input must also initialize every declared AV stream and its
+first DTS. Unlike the 32-byte shortcut in ErsatzTV's
+`ErsatzTV.FFmpeg/Format/ConcatInputFormat.cs`, retain normal probe discovery:
+a leading bitmap-subtitle packet alone can exhaust that shortcut, leave AV
+timing uninitialized and give the non-seekable playlist a false positive
+start time. A subsequent CLI loop then fails with `ESPIPE` before reopening
+the next programme. Removing that outer shortcut preserves the existing
+per-programme optional-FPS policy, codecs, maps, source clocks and deadlines.
+Candidate argv verification and compiled-host/platform acceptance stay separate.
 A repeated private URL can return different finite programme lengths. Its
 duration must come from the current opened input, without a previous input's
 DTS high-water mark. Loop reopening must preserve eligible initial packets.
