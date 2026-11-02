@@ -475,7 +475,9 @@ test('production TV-guide ordinary URLs are held for the joint external receiver
   expect(scannerDigest).toMatch(/^[a-f0-9]{64}$/);
   expect(sha256(readFileSync(scanner!))).toBe(scannerDigest);
   const hold = Number(process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_HOLD_SECONDS ?? 75);
-  expect(Number.isSafeInteger(hold) && hold >= 75 && hold <= 600).toBe(true);
+  // Reserve bounded conversation time for the opt-in physical receiver trial.
+  // This changes no source, worker, delivery or capture deadline.
+  expect(Number.isSafeInteger(hold) && hold >= 75 && hold <= 1200).toBe(true);
   test.setTimeout(Math.max(180_000, (hold + 120) * 1000));
   for (const marker of ['host-ready.json', 'client-complete.json', 'client-update-guide.json', 'host-update-complete.json']) {
     expect(existsSync(`${external}/${marker}`), 'Use a fresh owned receiver directory').toBe(false);
@@ -574,7 +576,9 @@ test('production TV-guide ordinary URLs are held for the joint external receiver
       if (!updated && existsSync(`${external}/client-update-guide.json`)) {
         expect(JSON.parse(readFileSync(`${external}/client-update-guide.json`, 'utf8'))).toEqual(readyMarker.update.requires);
         expect(Date.now(), 'Refresh must fit the original external-hold deadline').toBeLessThan(holdDeadline - 65_000);
-        const title = 'Receiver refreshed guide programme';
+        // Keep this positive refresh inside the same bounded response policy
+        // with the full programme count needed by the manual viewing window.
+        const title = 'Guide update B';
         expect(fixture.database.prepare('UPDATE MovieMetadata SET Title=? WHERE MovieId=?').run(title, scan.item).changes).toBe(1);
         await expect.poll(() => current().every(row => {
           if (!row || row.RuntimeId === null || row.Revoked !== 0) return false;
