@@ -62,34 +62,39 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-FINAL — exact-SHA CI evidence.
-Complete: all four required final app build/package/startup components on source
-2b06f030. Linux x64/Windows x64 are native; ARM64/ARMv7 are pinned Ubuntu24 QEMU,
-not native or new cold-acquisition proof. Full receipts and retained negatives:
-tmp/phase9-tvguide-addon/qualification.json final_candidate and the sole P9B-02
-completion list. No need to rebuild/replay unaffected components for test/docs.
+Current package: P9B-02 / 9B-CLIENT — joint physical production-guide acceptance.
+Only prerequisite: maintainer returns and confirms readiness for Kodi21.2 on the
+Google TV Streamer. No independently executable implementation or mandatory
+check remains. Do not substitute extra variants, decoder/client hunting or builds.
 
-Next: let exact2b06 fullCI41357008280 terminate. Its original Chromium readiness
-failure remains unexplained; fresh1/ordered2 local passes do not fix it. Local
-checkpointcb61f485 preserves bounded Next diagnostics (54Python checks). Then
-push only the isolated verified checkpoints and assess every applicable job on
-the exact new SHA; never push Root's foreign history or cancel the current round.
-Observer73689 remains owned by guide_authoring_policy.
+Complete: exact codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 is pushed and
+normal fullCI41375889471 is green:13 required jobs pass, Commit lint expected
+skipped, attempt1/no reruns. All14 actual results and brief review are canonical
+under tmp/phase9-tvguide-addon/ci-ab56/status.json and qualification.json
+ci.current_source_run. Unchanged Next-motion passes once3752ms; original2b failure
+remains retained and unexplained, not a demonstrated product-fix claim. Observer
+43441 exits0. There are no active package build/test/client processes to resume.
 
-Complete: 9B-CLIENT full-track host preparation, with one headed77.54s pass,
-normal Local scan/real occurrences/two maps and subpages/explicit publication/
-both automatic runtime refreshes. Strict AV,40 strict TSDuck checks, independent
-DAY/NIGHT text, selected660Hz Dutch audio and DVB payload pass;26 observed exact
-process identities drain/natural hostexit0. Canonical client_preparation retains
-all failed fixtures and unchanged-oracle corrections. Default manual skip and12
-CI selection contracts pass. No more preparation variants. Actual physical Kodi
-navigation/themes/refresh/AV-caption-audio return remains the sole client action;
-maintainer availability is required. No TV/8409 binding until that joint trial.
+Complete: four required final app packages/startups (actual compiled source2b06;
+ab56 changes only CI/tests/progress). Linux x64 and Windows x64 are native;
+ARMv7/ARM64 are pinned Ubuntu24 QEMU, not native. Reuse closed FINAL/CONFIG/PACKAGE/
+LUA/TTI/RUNTIME and all unaffected9A evidence. Sole finite list: P9B-02 evidence.
 
-Reuse closed CONFIG/PACKAGE/LUA/TTI/RUNTIME and valid editor/stream/platform proof.
-Preserve parallel Root changes, Windows Private TCP8409 forwarding/firewall and
-all negatives. Native ARM assumed/deferred, macOS deferred,2.5 experimental/
-deferred,QTM optional/upstream wait. No DVBViewer/client hunt or further release.
+Next, when the maintainer is ready: confirm client/plugin versions, check the
+existing Windows Private TCP8409 forwarding, and launch the prepared bounded
+production external-hold case. Choose classic200/201{0000,0001} and night410/
+400{0000,0001}; prove colour/index/page/subpage navigation, actual guide refresh,
+AV return with Dutch audio and English DVB captions, client stop and owned cleanup.
+Reuse client_preparation's normal Local scan, real60s source/occurrences,40 strict
+transport checks/independent decoding and exact compatible0.1.1 package. Existing
+hold75–600s only; no initial captionA guarantee or sourceclock rewrite. No physical
+TV access or8409 binding before joint availability; keep firewall policy intact.
+
+Keep Root's foreign dirty changes/history out of delivery. Scope this evidence
+update to the existing progress fields; production code remains the fully tested
+ab56 checkpoint. P9B-01/02 remain In progress until CLIENT closes. Native ARM
+assumed/deferred, macOS deferred,2.5 experimental/deferred,QTM optional/upstream
+wait. No DVBViewer or additional release. No acceptance requirement is waived.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

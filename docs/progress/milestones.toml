@@ -19014,19 +19014,30 @@ transport/decoder versions/limitations. No DVBViewer or premature device trial.
 Dependencies: 9B-CONFIG and qualified final runtime. Maintainer availability/access
 is the external prerequisite; no client hunt or experimental2.5 display gate.
 
-9B-FINAL — remaining integrated release-gate evidence; execute after functional
-packages. Owner: P9B-02 final gates and its dependency on P9B-01.
-Action/proof: independently accept the complete production guide on the required
-platform boundary rather than infer acceptance from one successful flow.
-Remaining proof: final exact-source CI execution. All four required app build/
-package/startup components below are Complete within their explicit native or
-software/emulation boundaries; native ARM remains an explicit assumption. On exact pushed 2b06f030, CI Clippy and the matched
-Rust/Leptos artifact producer are Complete (build 42m48); no test execution is
-inferred from compilation. CI 41357008280 retains an unexplained general-Chromium readiness failure;
-other completed required components pass and remaining browser jobs continue.
-Canonical ci-2b06/status.json records all fourteen job identities. Native Linux
-x64 package/startup evidence is Complete below. Reuse valid parity and unchanged
-local gates; preserve unique failures and retain each final required check. The mandatory workspace closeout
+9B-FINAL — Complete: required local, platform and full-CI gate components.
+Owner: P9B-02 final gates and dependency on P9B-01. Overall milestone acceptance
+still depends on the separately owned9B-CLIENT observation; do not mark either
+milestone complete from these components alone.
+Exact pushed codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 has normal full
+pushCI41375889471 SUCCESS2026-11-02: all13 required jobs pass, Commit lint is an
+expected push skip, attempt1/no reruns or cancellation. General and1.5 Rust and
+both browser engines are retained; enhanced-only2.5 CI remains optional. Canonical
+ci-ab56/status.json owns all14 actual job/step/timing results; qualification.json
+ci.current_source_run owns the short review and delivery identity. Live remote
+main was independently verified at that exact SHA after completion.
+The unchanged whole troubleshooting spec retains blobfbdaecbec3d46b70dc67eddf545db1a979ea690b.
+Its previously failed Next-motion identity actually passes once3752ms/retry0,
+not skipped; general Chromium totals357pass/5skip/0flaky. Raw primary JSON and
+artifact/source hashes are at ci-ab56/general-chromium-proof. This is a new exact-
+source pass, not proof of the original2b readiness failure's cause or a product
+repair. Keep all original negative evidence. Review: missing CI diagnostics are
+addressed by the bounded existing mechanism; no further CI change is justified.
+All four app build/package/startup components below are Complete within their
+native or software/emulation boundaries. Their actual compiled source is2b06;
+ab56 changes only CI/tests/progress, not production Rust/Cargo/assets/embedded
+changelog. Do not relabel those binaries as newly compiledab56 artifacts. Native
+ARM remains an explicit assumption; existing valid local gates are reused.
+The mandatory workspace closeout
 is Complete by case-exact composition on99f Rust inputs: original8186passes plus
 142sandbox denials(129socket/13appdata), then2discriminating cases+onlyremaining140
 pass with required loopback access and empty isolated app directories. Every
@@ -19040,7 +19051,9 @@ No unchanged workspace/editor/stream replay merely for evidence metadata. Comple
 exactc511 full pushCI41338652755:13 required jobs pass and expectedCommitlintskip.
 Optionaltoolchain setup annotations are explained; requiredrustc/Format/deny pass,
 No change needed. Runtime source2b06f030 is pushed normally after that terminal
-round; exact new fullCI41357008280 is active with2.0.9pins, no newgreenclaim.
+round. That2b06 full round is now terminal with12 required passes, the one
+retained general-Chromium failure and expected Commitlintskip. Its exact source
+never became full-green; the later ab56 result above is distinct.
 Canonical ci.completed_c511_full and ci-2b06/delivery.json retain exact identities.
 Native Linux x64 final-source component is Complete: build76378 exits0 after
 3406.784s;3 binaries/exact3992sourceinputs,71-member archive b42168fb/extraction,
@@ -19077,10 +19090,10 @@ new gracefultray-exit claim. The entire trial finishes within120minutes, below
 90minutecompilerbound and without crossing20GiBfree. Current samples are notpeak
 compiler-growthproof. Canonical final-candidate/windows-{build,package,managed}-
 result.json and windows-managed-owned-job.json own exact hashes and negatives.
-This component is closed; no unchanged UI/AV/Lua replay. Real exact2b06 CI general
-Chromium125009926938 is red; Next/Test/1.5Rust pass and remaining browserscontinue.
-Retainfailure/trace and diagnose onlythat concrete defect; no automaticrerun or
-sourcepush whilethe current full round and ARMsourcechecks remainactive.
+This component is closed; no unchanged UI/AV/Lua replay. Historical exact2b06
+general Chromium125009926938 failed; its other12 required jobs passed. Preserve
+the failure/trace and bounded qualification below. That round and all ARM source
+checks are terminal; the later source push waited for them, preserving evidence.
 Bounded local diagnosis is Complete: exact CI2b product/pinned50ee+552d first
 passes the unchanged failing Next motion case1/1 (5.8s), then adjacent unchanged
 Legacy→Next cases2/2 (6.9s), no retry/skip/flaky or relaxed5s/pixel/expiry/archive
@@ -19099,8 +19112,9 @@ independent review correction. No product/protocol/timeout/oracle change or clai
 that the original readiness failure is fixed. The shared latest archive may omit
 in-flight reports or describe a later preview; identity is explicitly unverified.
 No new compiled-input/changelog change: this is internal verification support,
-not a new product behavior. Push only after the current full round terminates;
-new exact-source full CI is required, without extending artifact-reuse exceptions.
+not a new product behavior. These delivery conditions are fulfilled: old round
+terminal before scoped ab56 push, followed by normal full exact-source green CI;
+artifact-reuse exceptions were not extended.
 InactiveRootdebug cleanup preserves3 defaultbinaries/95protectedfiles; no source,
 release/site/CIrunner/evidence removal or physicalWindowsrecovery/TRIM claim.
 final-candidate/qualification.json owns3992sourcefiles/archive/receipts; native
@@ -19108,12 +19122,13 @@ negative storage guard passes0.0084s/ownedJobempty before one Windows warmbuild.
 Historical65GiBpreflight remains unmet, not waived as accepted: this trial uses
 24GiBstart/20GiBongoing explicitbudget, immediateJobtermination,90minutecompiler/
 120minutereservation. The completed actual Windows component above supersedes
-that historical preparation. All four required app source/package/startup components are closed;
-the mandatory final CI join stays with this FINAL row. Prior exactab01 CI41331331743 retains
+that historical preparation. All four required app source/package/startup and
+current exact-source full-CI components are closed. Actual client proof remains
+owned once by9B-CLIENT. Prior exactab01 CI41331331743 retains
 10successes including Next/Test/1.5 and3cancelled browser jobs plus expectedlintskip;
 the ordinary code push invoked existing cancel-in-progress. Its partial result is
-not full acceptance. Serialize future code pushes after the active full round
-terminates, continuing independent local work meanwhile; no CI weakening/change.
+not full acceptance. Future code pushes must preserve any active full round;
+no CI weakening/change or duplicate unaffected rounds for evidence bookkeeping.
 Originaladce CI41304907840 Next452/454 failures and all logs remain retained.
 The safe diagnostics/observation-cleanup component is Complete; original causes
 remain unexplained, no speculative product fix. Canonical ci.current_source_run,
@@ -19136,26 +19151,28 @@ Native ARM remains assumed/deferred, macOS deferred; Level2.5 stays experimental
 and its enhanced-only gates deferred, QTM optional/upstream wait. No six-native-
 platform or complete experimental2.5 acceptance is claimed.
 
-One next finite package: 9B-FINAL coherent final-source/platform and CI joins.
-All functional CONFIG/PACKAGE/LUA/TTI/RUNTIME rows are Complete within explicit
-scope; actual production-client proof remains9B-CLIENT. Frozen2b06f030 is now
-pushed after completedgreen c511; finish current exact2b06 CI. All four required
-final-source app/package/startup components are Complete above. The isolated
-local diagnostic checkpointcb61f485 preserves the original unexplained failure. Qualify only
-the remaining required final app-source/build/package/platform boundaries as one
-coherent candidate; retain immutable runtime/track/frame/editor/Lua proof. Windows
-package trial reserves120minutes; ARM emulation/native assumption and macOS
-maintainer deferral remain unchanged. Do not relabel olderadce app binaries as
-new final-source builds. Stop each named final component once its existing gate
-is proven; no new general audits or small source/marker variants.
-Background9B-FINAL: exact2b06 fullCI41357008280 is active, not green. The prior
-c511 round is Complete with13requiredsuccesses; ab01partial cancellation and
-originaladce failures/diagnostics remain canonical. Retain unexplained original
-causes; inspect exact-SHA artifacts on recurrence. Serialize later code pushes
-after the active round; no discarded failures or focused-as-full-green claim.
-ApprovedstableFFmpeg2.0.9 publication and boundedmanaged-adoption scope are
-Complete9B-RUNTIME; final compiled app/platform joins remain FINAL. Closed
-private-platform and9B-TTI components stay closed.
+One next finite package:9B-CLIENT actual joint production-guide viewing.
+All independently executable CONFIG/PACKAGE/LUA/TTI/RUNTIME and required FINAL
+local/platform/full-CI components are Complete within their named scopes. No
+other independent implementation or mandatory test remains. P9B-01/02 remain In
+progress until this one shared suitable-client obligation is closed.
+External prerequisite: the maintainer's readiness/access to their physical
+Kodi21.2/Google TV Streamer; their last message requested independent work while
+asleep. Do not start a TV trial or bind8409 without that joint availability.
+On return, confirm installed client/plugin versions, verify existing Windows
+Private TCP8409 forwarding without changing its policy, then reuse the prepared
+opt-in held-host flow and actual maps. Classic uses index200/page201{0000,0001};
+night uses index410/page400{0000,0001}. Observe colour/index/page/subpage navigation,
+real source-title refresh and return to AV with selected Dutch660Hz/EnglishDVB
+captions, then stop the client and verify owned cleanup. Use real60s occurrences
+inside the existing75–600s hold; do not regenerate or relabel source duration.
+Canonical client_preparation owns exact source/scanner/host/addon hashes and the
+40-check/independent-decoder preparation. Initial captionA is not promised at
+handshake; observe an actual subsequent occurrence without rewriting sourceclock.
+Observer43441 is terminal0; there are no active test/build/client processes from
+this package. Do not add internal variants, re-run closed gates or reopen F6
+without a concrete regression. Original2b/adce failures, cancelledab01 partial
+round and all unique evidence remain canonical. No further release is authorized.
 
 Completed concrete Legacy finite-programme transition repair2026-11-01:
 canonical qualification.json production_lua.transport_blocker.candidate_repair.final
