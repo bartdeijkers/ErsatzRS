@@ -61,9 +61,11 @@ _jn() { jq -r "($1) // 0" "$2" 2>/dev/null || echo 0; }
 # TSDuck 3.44 counts any consecutive PES PTS distance >3s, including normal
 # event-driven subtitle gaps. Qualify only complete, monotonic DVB subtitle PTS
 # observations that remain bound to PCR in the caller's strict CBR check.
-# Retain the same 3s clock bound; missing data never qualifies a raw flag.
+# Retain the 3s absolute clock bound and existing strict PCR jitter bound for
+# drift between events; missing data never qualifies a raw flag.
 _sparse_subtitle_pts_clock_matches() {
-  awk -F, -v pid="$2" -v expected="$3" -v flags="$4" -v first="$5" -v final="$6" '
+  awk -F, -v pid="$2" -v expected="$3" -v flags="$4" -v first="$5" -v final="$6" \
+      -v drift="$((MAX_PCR_JITTER_US * 9 / 100))" '
     function abs(n) { return n < 0 ? -n : n }
     $1 == pid {
       for (i=1; i<=NF; i++) gsub(/[[:space:]]/, "", $i)
@@ -73,7 +75,7 @@ _sparse_subtitle_pts_clock_matches() {
       if (abs($8) > 270000) bad=1
       if (count == 0 && $6 != first) bad=1
       if (count > 0) {
-        if ($6 < previous || abs($8 - offset) > 270000) bad=1
+        if ($6 < previous || abs($8 - offset) > drift) bad=1
         if ($6 - previous > 270000) gaps++
       }
       previous=$6; offset=$8; count++

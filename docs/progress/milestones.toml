@@ -19067,14 +19067,22 @@ Original19/20 remains retained: official installed3.44 analyzer counts all PES
 gaps>3s and reports5 raw DVB258 flags. Eight independent PTS/PCR observations
 remain within47ticks, with no AV/DTS/PCR/CC/jitter failure. Existing checker now
 qualifies only complete, monotonic, clock-bound DVB subtitle observations in strict
-CBR mode under the original3s clock bound. Actual21/21 passes; raw flags remain
-visible. Missing/bad clocks, backward PTS, counts/endpoints, injected AV flags and
+CBR mode under the original3s absolute clock bound and existing8ms PCR-jitter
+allowance for consecutive offset drift. Actual21/21 passes; raw flags remain
+visible. A concrete checker regression at0a admitted a1s intermediate offset shift
+with matching counts/endpoints; one-second-drift-negative.json retains that red
+expectation/falsepass and corrected rejection. Same retained capture passes21/21
+with the tighter existing drift bound; no host/client chain is repeated. Missing/bad clocks, backward PTS, counts/endpoints, injected AV flags and
 non-strict captures retain rejection; bundled existing shell/delivery/retention
 regressions pass. This is scoped native Linux x64 c6 proof, not a new package.
 Next/stop: coherent final-source affected package/platform and full-CI joins at
-the existing owner, including reserved120min Windows trial. Reuse closed physical,
-editor/publication/profile and runtime scopes; no further caption variant unless
-an actual regression or separately owned mandatory gap is demonstrated.
+the existing owner, including reserved120min Windows trial. Current Windows
+attempt is not started: actual C free8.1GiB is below24GiB start/20GiB ongoing;
+no-deletion WSL trim did not return physical host space. The exact prerequisite
+and resumption condition are in final-candidate/current-source-storage-block.json:
+sufficient host storage or a planned WSL stop/compaction after active work.
+Reuse closed physical/editor/publication/profile/runtime scopes; no further
+caption variant without an actual regression or separately owned mandatory gap.
 Completed preparation removes that concrete fixture blocker: one opt-in headed
 normal host trial passes77.54s with the exact production0.1.1 ZIP308d1d2c and final
 Linux package2b06. Normal Local scan retains four source tracks/page888 binding,

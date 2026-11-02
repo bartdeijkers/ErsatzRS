@@ -984,8 +984,9 @@ potential leap, including normal event-driven subtitle gaps
 ([versioned analyzer source](https://github.com/tsduck/tsduck/blob/v3.44-4676/src/libtsduck/dtv/analysis/tsTSAnalyzer.cpp#L1531-L1544)).
 Under `STRICT_PCR_JITTER=1`, the checker may qualify those flags for explicitly
 identified DVB subtitles using complete `pcrextract` PTS/PCR observations. It
-requires matching counts/endpoints, forward timestamps and clock offsets within
-the original three-second bound. The strict CBR PCR/jitter checks remain required;
+requires matching counts/endpoints, forward timestamps, absolute clock offsets
+within the original three-second bound and offset drift within the existing
+strict PCR jitter allowance. The strict CBR PCR/jitter checks remain required;
 raw counters stay visible in JSON and logs. Missing clock data, other PID types
 and non-strict captures retain the original failure. This does not prove caption
 content or completeness: exact source-bound cue, transition and clear evidence

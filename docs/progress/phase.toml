@@ -78,17 +78,25 @@ same c6 source/binary and public50ee; only observation length changed85to100s.
 Existing strict CBR transport now passes21/21 after complete subtitle PTS/PCR
 qualification. Retain original19/20 and all5 raw flags: installed TSDuck3.44 counts
 PES gaps>3s; all8 subtitle events follow PCR within47ticks. Missing/bad clocks,
-backward timestamps, AV flags and non-strict captures remain rejected. Existing
-shell/delivery/retention and scoped negative regressions prove that boundary.
+backward timestamps, AV flags and non-strict captures remain rejected. A concrete
+1s intermediate cue-clock falsepass is corrected using the existing8ms PCR-jitter
+drift bound; same retained capture21/21 and bundled regressions pass. Canonical
+one-second-drift-negative.json retains both outcomes; no host/client replay.
 
 Next finite action: qualify affected final-source platform/package joins on one
 coherent candidate, using existing package/native workflows and reserved120min
 Windows budget. Reuse closed physical/editor/publication/profile/runtime scopes;
 keep exact-source candidate, package and actual native execution claims separate.
-Normal full CI41475955391 targets exact c6a31df2; check all applicable results.
-Prior35 run41468443287 is cancelled after the newer push, not full green; retain
-97 audit red and ab56 historical13pass. No threshold/capacity/deadline increase,
-new source observation guard or product limitation is introduced.
+Normal full CI41478714670 targets exact0a4fb2de; check every applicable result
+and use only source/digest-qualified artifacts for the remaining Linux joins.
+Current Windows attempt is not started: C has8.1GiB free, below the unchanged24GiB
+start/20GiB ongoing budget. Existing warm cache has no users; no files or packages
+were deleted. WSL trim discarded129.8GiB logically, but actual Windows free space
+did not recover. Canonical final-candidate/current-source-storage-block.json owns
+this environment prerequisite. Await planned WSL stop/compaction or sufficient
+host storage; never lower the floor or shut down active work automatically.
+Prior35/c6 runs are superseded, not full-green proof; retain97 audit red and ab56
+historical13pass. No product threshold/capacity/deadline increase is introduced.
 
 Complete: exact codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 is pushed and
 normal fullCI41375889471 is green:13 required jobs pass, Commit lint expected

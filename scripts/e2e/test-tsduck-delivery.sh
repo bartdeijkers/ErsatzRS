@@ -64,6 +64,16 @@ for bad in '258,30040,29,PTS,3,820832,787231,' \
 done
 printf 'tsduck sparse subtitle clock regressions passed\n'
 
+# A one-second cue-clock shift preserves counts/endpoints and the number of
+# raw >3s gaps. It still exceeds the existing strict PCR jitter allowance.
+printf '%s\n' '258,1230,0,PTS,1,33601,0,-11' \
+  '258,30039,28,PTS,2,820831,787230,-3' \
+  '258,30040,29,PTS,3,910832,877231,90000' \
+  '258,79444,57,PTS,4,2170831,2137230,-24' >"$monitor_log"
+if _sparse_subtitle_pts_clock_matches "$monitor_log" 258 4 2 33601 2170831; then
+  printf 'unexpected one-second subtitle clock drift qualification\n' >&2; exit 1
+fi
+
 printf '%s\n' \
   'bitrate_monitor: ERSATZRS_DELIVERY{ "bitrate": 10368000, "status": "normal" }' \
   'bitrate_monitor: ERSATZRS_DELIVERY{ "bitrate": 10000000, "status": "normal" }' \
