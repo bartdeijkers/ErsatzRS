@@ -19055,6 +19055,15 @@ is the external prerequisite; no client hunt or experimental2.5 display gate.
 Owner: P9B-02 final gates and dependency on P9B-01. Overall milestone acceptance
 still depends on the separately owned9B-CLIENT observation; do not mark either
 milestone complete from these components alone.
+Current-source CI exception: normal97a44778 pushrun41452100743 finds
+RUSTSEC-2026-0433 in pulldown-cmark0.13.5. Keep that exact red job/log; the
+preliminary optional rustup flag probe is not the audit failure. The isolated
+repair raises manifest/lock to0.13.6 with no transitive churn, retains Markdown
+options/sanitization and adds the upstream-distinguishing nested-image forms.
+Local5 release-note tests, cargo deny, strict web Clippy and fmt pass;
+canonical ci-97a44778/security-repair/COMPLETE.json owns commands, hashes and
+actual results. This closes the local security repair only. Require normal full
+CI on its new pushed source; do not rerun old97 jobs as proof of the correction.
 Exact pushed codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 has normal full
 pushCI41375889471 SUCCESS2026-11-02: all13 required jobs pass, Commit lint is an
 expected push skip, attempt1/no reruns or cancellation. General and1.5 Rust and

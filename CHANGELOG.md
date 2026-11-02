@@ -15,8 +15,9 @@ release section when tagging a release.
 
 ### Security
 
-- Update release-notes Markdown rendering to pulldown-cmark 0.13.5, fixing
+- Update release-notes Markdown rendering to pulldown-cmark 0.13.6, fixing
   [RUSTSEC-2026-0414](https://rustsec.org/advisories/RUSTSEC-2026-0414.html)
+  and [RUSTSEC-2026-0433](https://rustsec.org/advisories/RUSTSEC-2026-0433.html)
   without disabling existing Markdown options or changing sanitization.
 
 - Use JWT 11's supported AWS-LC backend to remove the vulnerable RustCrypto

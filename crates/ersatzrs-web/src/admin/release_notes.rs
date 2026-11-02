@@ -121,6 +121,22 @@ mod tests {
     }
 
     #[test]
+    fn release_markdown_nested_image_wikilinks_preserve_the_deepest_image() {
+        // RUSTSEC-2026-0433: enclosing image openers must not rescan a resolved
+        // wikilink. These forms distinguish the fix without a timing threshold.
+        for (markdown, prefix) in [
+            ("![[![[dog.png]]]]", "![["),
+            ("![[cat.png|![[dog.png]]]]", "![[cat.png|"),
+        ] {
+            let html = render_markdown(markdown);
+            assert_eq!(
+                html,
+                format!("<p>{prefix}<img src=\"dog.png\" alt=\"dog.png\">]]</p>\n")
+            );
+        }
+    }
+
+    #[test]
     fn release_markdown_adversarial_wikilinks_have_bounded_events() {
         let markdown = "[[[[^(\n|]]]]=]]]]]]]]\n".repeat(10);
         let limit = markdown.len() * 8;
