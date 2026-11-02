@@ -62,48 +62,30 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-FINAL coherent final-source/platform and CI joins.
-Next finite action: finish the verified runtime checkpoint and freeze that source.
-Await current fullc511 CI41338652755 terminal before scoped source push, then
-inspect every required job on exact newSHA with2.0.9runtimepins. Bundle remaining
-required final app-source/build/package/platform boundaries on this candidate;
-reserve120minutes Windows, retain ARM software/native assumption/macOS deferral.
-Do not relabel oldadce app packages as newly compiled source. Reuse closed binary/
-frame/track/editor/Lua/managed guards; no new general audit/marker/codec variant.
+Current package: P9B-02 / 9B-FINAL — final platform and exact-SHA CI evidence.
+Next: finish existing ARM64 build43998, then the prepared package/managed-startup
+checks. Source2b06f030 stays frozen until all source checks finish. Linux x64,
+Windows x64 and ARMv7 final-source package/startup components are Complete within
+their documented native/emulated boundaries; see the sole P9B-02 completion list
+and tmp/phase9-tvguide-addon/qualification.json final_candidate. Windows used the
+120-minute reservation and bounded test teardown, without a graceful-tray claim.
 
-Completed9B-RUNTIME: explicitly approvedstableLatest2.0.9/release430834146 has6
-exact verified assets at e267 source/tree-equivalent897 build, unchanged main.
-Actual managed Linux host59ac cold14.029s downloads correct50ee/f61f/source record;
-download-disabled cache7.007s preserves bytes/mtimes. Persisted Health/diagnosis/
-20assets/natural0/no owned process proof passes. Applicable ordinary Legacy route
-passes22existingURLtransport controls, full strictAV and actualmanagedchild/cleanup.
-Additional HLS-only150mspip probe remains negative, also in prepublicationLegacy
-baseline; not an accepted Legacy gate. Existing live-position contract/positive
-regression remains unchanged; actual clock→pip correlation unproven. Preserve both
-negatives and invalid-p5 fixture; do not claim ideal intro/cadence or weaken selected-
-input frame/track clocks. Known-good and3CIpins become2.0.9 with exactindependent
-50ee/f61f hashes;14manager tests/strictFFalltargetClippy/12+38CIcontracts pass.
-Only production-code delta is fallbackstring; allguard bodies/platformcfg retained.
-Final compiled four-RID source/package joins remain thisFINAL owner, physical
-production guide/navigation remains9B-CLIENT. All functional list rows nowclosed.
+Local CI evidence-retention correction is verified:54 focused Python tests,
+Bash/YAML/diff checks; independent review corrected archive bounds. It changes
+only CI diagnostics, not product code, timeouts or acceptance oracles. Exact2b06
+CI41357008280 remains active and not green: original Chromium readiness failure
+is unexplained despite fresh/ordered targeted passes. Observer73689 is owned by
+guide_authoring_policy. Preserve original failure; wait for the full round to
+terminate before scoped normal push and full exact-new-SHA CI. Worktree
+p9b-next-preview-ci isolates these changes from Root's unpublished foreign history.
 
-Completed local workspace closeout by explicit composition:8186originalpasses,
-129socket+13readonlyappdata sandboxdenials retained;2distinguishing cases then
-only140remaining cases pass with actual loopback permission and empty isolated
-app dirs. All8328originalrunnable identities accounted for;526ignored/manual
-owners retained. Doctest11libraries/zeroexamples exits0. No one-full-green-run or
-newCI claim. Later fallbackdata/CIpin delta hasfocused14runtime/Clippy+50Python
-verification; no full unchanged gate replay. Canonical qualification.json fields
-workspace_closeout_composition/runtime_packages own all source/log/hash/negative
-joins. Localhandles17623/48988/36097/19108/35554/58177/79092/97312 are terminal;
-only existingCIwatch95058 remains live, sourcec511. No duplicate controls.
-
-Lastc511 CI snapshot:11successes;1.5Chromium active/1.5Firefox queued, nofullgreen.
-Preserve originaladce failure and ab01cancelled partial results. Wait terminal
-before nextcodepush to avoid cancel-in-progress, never Root wholesale. Foreign
-Root commits/dirty paths preserved. No new release beyond approved/published2.0.9.
-WSL PrivateTCP8409 firewall/forwarding staysintact; recheck LAN only for prepared
-joint final Kodi21.2/GoogleTVStreamer production trial. Sole finite list P9B-02.
+Reuse closed CONFIG/PACKAGE/LUA/TTI/RUNTIME and unaffected workspace/editor/stream/
+frontend proof; no duplicate chains. After FINAL, prepare only the existing
+9B-CLIENT joint production-guide trial on Kodi21.2/Google TV Streamer. Maintainer
+is asleep: no physical TV trial or port8409 binding now. Preserve WSL Private
+TCP8409 forwarding/firewall, parallel Root changes and all negative evidence.
+Native ARM remains assumed/deferred, macOS deferred,2.5 experimental/deferred,
+QTM optional/upstream wait. No DVBViewer/client hunt or further release.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

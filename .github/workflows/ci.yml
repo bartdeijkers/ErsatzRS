@@ -816,6 +816,8 @@ jobs:
           BROWSER_PROJECT: ${{ matrix.project }}
           BROWSER_SUITE: ${{ matrix.suite }}
           BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
+          # RUST_LOG also reaches the pinned Next child; preserve its DEBUG diagnostics.
+          RUST_LOG: warn,ersatzrs_web=info,ersatzrs_infra::next_engine::diagnostics=debug,ersatztv_channel=debug,ersatztv_core=debug,ersatztv_playout=debug,ffpipeline=debug,ffmpeg=debug
         run: |
           export ErsatzRS_FFMPEG__PATH="$FFMPEG_PATH"
           export ErsatzRS_FFPROBE__PATH="$FFPROBE_PATH"
@@ -924,6 +926,7 @@ jobs:
         run: |
           python3 scripts/ci-teletext-selection_test.py
           python3 scripts/ci-build-artifacts_test.py
+          python3 scripts/e2e/playwright-e2e_test.py
       - name: Check CI trigger contract
         run: |
           if grep -Eq '^[[:space:]]*types:.*[[:space:],]labeled([][[:space:],]|$)' .github/workflows/ci.yml; then

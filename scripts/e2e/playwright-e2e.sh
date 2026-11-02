@@ -20,6 +20,75 @@ SERVER_LOG="$RESULT_DIR/ersatzrs-web.log"
 log() { printf '\033[1;34m[playwright-e2e]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[playwright-e2e]\033[0m %s\n' "$*" >&2; }
 
+# Capture only the existing diagnostic archive while our host is still alive.
+# This is the latest shared preview, not necessarily the test that failed.
+capture_troubleshooting_failure() (
+  set +e
+  [[ "$1" -ne 0 ]] || return 0
+  local partial archive metadata http_status curl_status
+  partial="$(mktemp "$RESULT_DIR/playback-troubleshooting-latest.XXXXXX.zip.partial")" || {
+    err "warning: could not allocate optional troubleshooting diagnostics"
+    return 0
+  }
+  archive="${partial%.partial}"
+  metadata="${archive%.zip}.json"
+  http_status="$(curl --silent --show-error --max-time 5 --max-filesize 33554432 \
+    --output "$partial" --write-out '%{http_code}' \
+    "$BASE_URL/api/troubleshoot/playback/archive")"
+  curl_status=$?
+  if ! python3 - "$partial" "$archive" "$metadata" "$http_status" "$curl_status" "$1" <<'PY_CAPTURE'
+import datetime
+import hashlib
+import json
+from pathlib import Path
+import sys
+import zipfile
+
+partial, archive, metadata = map(Path, sys.argv[1:4])
+http_status, curl_status, test_status = sys.argv[4:7]
+receipt = {
+    "captured_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "scope": "Latest shared troubleshooting diagnostics; not an exact failed-preview snapshot",
+    "exact_failed_preview_identity_verified": False,
+    "original_test_exit_code": int(test_status),
+    "http_status": http_status,
+    "curl_exit_code": int(curl_status),
+    "request_limit_seconds": 5,
+    "max_compressed_bytes": 33554432,
+    "max_uncompressed_bytes": 134217728,
+    "archive_retained": False,
+    "limitations": "May be unavailable before a report exists, omit active in-flight reports, or describe a later preview",
+}
+try:
+    if curl_status != "0" or http_status != "200":
+        raise ValueError("Diagnostic archive request did not succeed")
+    if partial.stat().st_size > receipt["max_compressed_bytes"]:
+        raise ValueError("Diagnostic archive exceeds compressed-byte cap")
+    with zipfile.ZipFile(partial) as content:
+        if sum(member.file_size for member in content.infolist()) > receipt["max_uncompressed_bytes"]:
+            raise ValueError("Diagnostic archive exceeds uncompressed-byte cap")
+        if content.testzip() is not None:
+            raise ValueError("Diagnostic archive CRC validation failed")
+    with partial.open("rb") as stream:
+        archive_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+    receipt.update(archive_sha256=archive_sha256, archive_bytes=partial.stat().st_size)
+    partial.replace(archive)
+    receipt.update(archive_retained=True, archive=archive.name)
+except Exception as error:
+    receipt["capture_error"] = str(error)
+    print("warning: optional troubleshooting archive was not retained", file=sys.stderr)
+finally:
+    partial.unlink(missing_ok=True)
+metadata.write_text(json.dumps(receipt, indent=2) + "\n")
+PY_CAPTURE
+  then
+    rm -f -- "$partial" "$archive"
+    err "warning: optional troubleshooting archive validation or metadata failed"
+  fi
+  # Diagnostic failure must never replace the original Playwright status.
+  return 0
+)
+
 WINDOWS_POSIX=0
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) WINDOWS_POSIX=1 ;;
@@ -268,6 +337,8 @@ PLAYWRIGHT_JSON_OUTPUT_NAME="$RESULT_JSON" \
   npx --yes playwright test "${PLAYWRIGHT_ARGS[@]}" --reporter=line,json
 STATUS=$?
 set -e
+
+capture_troubleshooting_failure "$STATUS" || err "warning: optional troubleshooting capture failed"
 
 if [[ "$STATUS" -eq 0 ]]; then
   log "PASS - Playwright suite completed"

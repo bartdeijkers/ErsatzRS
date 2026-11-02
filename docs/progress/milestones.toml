@@ -18998,8 +18998,15 @@ is the external prerequisite; no client hunt or experimental2.5 display gate.
 packages. Owner: P9B-02 final gates and its dependency on P9B-01.
 Action/proof: independently accept the complete production guide on the required
 platform boundary rather than infer acceptance from one successful flow.
-Gap: final exact-source required CI/Clippy/Leptos/parity/progress and coherent
-four-RID final app build/package/source joins. The mandatory workspace closeout
+Remaining proof: final exact-source CI execution and the active ARM64 app
+build/package/startup join. Linux x64, Windows x64 and ARMv7 components below
+are Complete within their explicit boundaries. On exact pushed 2b06f030, CI Clippy and the matched
+Rust/Leptos artifact producer are Complete (build 42m48); no test execution is
+inferred from compilation. CI 41357008280 retains an unexplained general-Chromium readiness failure;
+other completed required components pass and remaining browser jobs continue.
+Canonical ci-2b06/status.json records all fourteen job identities. Native Linux
+x64 package/startup evidence is Complete below. Reuse valid parity and unchanged
+local gates; preserve unique failures and retain each final required check. The mandatory workspace closeout
 is Complete by case-exact composition on99f Rust inputs: original8186passes plus
 142sandbox denials(129socket/13appdata), then2discriminating cases+onlyremaining140
 pass with required loopback access and empty isolated app directories. Every
@@ -19009,8 +19016,72 @@ for11libraries/zeroexamples. Original failed run100 is retained, not called one
 fullgreenrun. The later production delta is only runtimefallback2.0.9 plus tests/
 CIpins/changelog; focused14manager+strictClippy/50CIcontracts cover that delta.
 Canonical workspace_closeout_composition owns exact binary/test/log/hash joins.
-No unchanged workspace/editor/stream replay merely for evidence metadata. Current exactc511 full push
-CI41338652755 is active, no full-green claim. Prior exactab01 CI41331331743 retains
+No unchanged workspace/editor/stream replay merely for evidence metadata. Completed
+exactc511 full pushCI41338652755:13 required jobs pass and expectedCommitlintskip.
+Optionaltoolchain setup annotations are explained; requiredrustc/Format/deny pass,
+No change needed. Runtime source2b06f030 is pushed normally after that terminal
+round; exact new fullCI41357008280 is active with2.0.9pins, no newgreenclaim.
+Canonical ci.completed_c511_full and ci-2b06/delivery.json retain exact identities.
+Native Linux x64 final-source component is Complete: build76378 exits0 after
+3406.784s;3 binaries/exact3992sourceinputs,71-member archive b42168fb/extraction,
+release20files/actualHTMLJSWASM/changelog and one managed startup7.01s pass.
+FFmpeg2.0.9 exact50ee/f61f/NextBundled552d, three persistedHealth titles Pass,
+errors0/expectedsoftware-profilewarning1; naturalSIGTERM0/no force/groupabsent.
+Original source/cache/fixture/package stay unchanged. Canonical final-candidate/
+managed-linux-qualification.json and package-linux-x64.json own full hashes.
+Closed component; no stream/editor/Lua replay or broader platform claim. Remaining
+ARMv7 final-source component is Complete: actual three-ELF build4307.768s,
+source3992/exactaftercheck, independent71-member archive a0dc4b25. Actual pinned
+Ubuntu24/glibc2.39 QEMU preplaced managed2.0.9/BundledNext startup6.59s passes
+threeHealthtitles/errors0/20assets/actualHTML/changelog/config, source/cache/seed/
+packageunchanged. NaturalSIGTERM0/no force/groupabsent, containerexit0/namespace
+removed. Canonical final-candidate/managed-arm/linux-arm/qualification.json owns
+full hashes. This is software/emulation, not native ARM or cold acquisition.
+ARM64 continues in existing sequentialbuild43998 on2b06. Native Windows x64 final-source
+component is Complete: actual four-PE build4601.41s/exactsourcearchive; package
+9aa5a5cf (106781950 bytes), independent extraction and existing structural gate.
+Real packaged launcher downloads public2.0.9, then restarts from identical cached
+bdaa/c2f tools/mtimes with BundledNext rs7. Three Health titles Pass/errors0,
+expectedwarning1, actual HTML JS/WASM/changelog/config/source/package preserved.
+ControlledTaskkilltestteardown leaveszeroCIMsurvivors/noHTTP listener; outer Job
+exits0 naturally with no outer force. Compilerhelper needed boundedforce; no
+new gracefultray-exit claim. The entire trial finishes within120minutes, below
+90minutecompilerbound and without crossing20GiBfree. Current samples are notpeak
+compiler-growthproof. Canonical final-candidate/windows-{build,package,managed}-
+result.json and windows-managed-owned-job.json own exact hashes and negatives.
+This component is closed; no unchanged UI/AV/Lua replay. Real exact2b06 CI general
+Chromium125009926938 is red; Next/Test/1.5Rust pass and remaining browserscontinue.
+Retainfailure/trace and diagnose onlythat concrete defect; no automaticrerun or
+sourcepush whilethe current full round and ARMsourcechecks remainactive.
+Bounded local diagnosis is Complete: exact CI2b product/pinned50ee+552d first
+passes the unchanged failing Next motion case1/1 (5.8s), then adjacent unchanged
+Legacy→Next cases2/2 (6.9s), no retry/skip/flaky or relaxed5s/pixel/expiry/archive
+oracles. Fresh report proves3s/75frames/EOF,2.22s actual FFmpeg duration and
+successful short-output EOF readiness, no four-segment marker. Order-only and
+fresh reproduction are unproven; stop furtherpermutations. OriginalCIcause is
+unknown, not fixed by these passes. Default valid warn/info RUST_LOG suppresses
+pinnedNext's DEBUG lifecycle; failed temporary reports are deleted before CI
+upload. Completed local CI-only evidence-capture correction addresses this concrete
+proof gap: inherited Next DEBUG namespaces and optional existing archive before
+cleanup, one five-second request, 32MiB compressed/128MiB expanded caps, streaming
+hash and original test exit preserved. Four focused regressions/seven outcomes
+plus12 selection/38 artifact contracts pass; Bash syntax/YAML/diff checks pass.
+Canonical ci-2b06/diagnostic-correction.json records exact files/results and the
+independent review correction. No product/protocol/timeout/oracle change or claim
+that the original readiness failure is fixed. The shared latest archive may omit
+in-flight reports or describe a later preview; identity is explicitly unverified.
+No new compiled-input/changelog change: this is internal verification support,
+not a new product behavior. Push only after the current full round terminates;
+new exact-source full CI is required, without extending artifact-reuse exceptions.
+InactiveRootdebug cleanup preserves3 defaultbinaries/95protectedfiles; no source,
+release/site/CIrunner/evidence removal or physicalWindowsrecovery/TRIM claim.
+final-candidate/qualification.json owns3992sourcefiles/archive/receipts; native
+negative storage guard passes0.0084s/ownedJobempty before one Windows warmbuild.
+Historical65GiBpreflight remains unmet, not waived as accepted: this trial uses
+24GiBstart/20GiBongoing explicitbudget, immediateJobtermination,90minutecompiler/
+120minutereservation. The completed actual Windows component above supersedes
+that historical preparation. Only ARM64 app source/package/startup remains
+active; the mandatory final CI join stays with this FINAL row. Prior exactab01 CI41331331743 retains
 10successes including Next/Test/1.5 and3cancelled browser jobs plus expectedlintskip;
 the ordinary code push invoked existing cancel-in-progress. Its partial result is
 not full acceptance. Serialize future code pushes after the active full round
@@ -19039,22 +19110,23 @@ platform or complete experimental2.5 acceptance is claimed.
 
 One next finite package: 9B-FINAL coherent final-source/platform and CI joins.
 All functional CONFIG/PACKAGE/LUA/TTI/RUNTIME rows are Complete within explicit
-scope; actual production-client proof remains9B-CLIENT. Freeze the verified
-runtime source checkpoint, finish activec511 fullCI before scoped code push,
-then inspect every required job on the exact new SHA with2.0.9pins. Qualify only
+scope; actual production-client proof remains9B-CLIENT. Frozen2b06f030 is now
+pushed after completedgreen c511; finish current exact2b06 CI and the active
+ARM64 final-source join. Linux x64, Windows x64 and ARMv7 are Complete above. Qualify only
 the remaining required final app-source/build/package/platform boundaries as one
 coherent candidate; retain immutable runtime/track/frame/editor/Lua proof. Windows
 package trial reserves120minutes; ARM emulation/native assumption and macOS
 maintainer deferral remain unchanged. Do not relabel olderadce app binaries as
 new final-source builds. Stop each named final component once its existing gate
 is proven; no new general audits or small source/marker variants.
-Background9B-FINAL: exactc511 fullCI41338652755 is active, not green. The ab01
-partial-cancelled result, originaladce failure and completed diagnostic component
-remain canonical. Retain unexplained original causes; inspect current exact-SHA
-artifacts on recurrence. Serialize later code pushes after this active round;
-no relaxed budgets, discarded failures or focused-as-full-green claim.
-Publication/adoption remains a separate9B-RUNTIME authorization dependency;
-closed private-platform and9B-TTI components stay closed.
+Background9B-FINAL: exact2b06 fullCI41357008280 is active, not green. The prior
+c511 round is Complete with13requiredsuccesses; ab01partial cancellation and
+originaladce failures/diagnostics remain canonical. Retain unexplained original
+causes; inspect exact-SHA artifacts on recurrence. Serialize later code pushes
+after the active round; no discarded failures or focused-as-full-green claim.
+ApprovedstableFFmpeg2.0.9 publication and boundedmanaged-adoption scope are
+Complete9B-RUNTIME; final compiled app/platform joins remain FINAL. Closed
+private-platform and9B-TTI components stay closed.
 
 Completed concrete Legacy finite-programme transition repair2026-11-01:
 canonical qualification.json production_lua.transport_blocker.candidate_repair.final
