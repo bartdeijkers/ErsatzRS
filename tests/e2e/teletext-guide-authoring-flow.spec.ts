@@ -104,6 +104,9 @@ test.describe.configure({ mode: 'serial' });
 test.skip(!databasePath || !candidateZip, 'Requires disposable E2E_DB_PATH and an explicit production0.1.1 ERSATZRS_TVGUIDE_CANDIDATE_ZIP.');
 
 test.beforeAll(async ({ browser, baseURL }) => {
+  // The manual external case owns its isolated install; its existing controller
+  // has no shared wrapper host. Ordinary production suites keep their setup.
+  if (process.env.ERSATZRS_TELETEXT_PRODUCTION_EXTERNAL_HOLD === '1') return;
   test.setTimeout(120_000);
   const db = database();
   const setting = (key: string) => (db.prepare('SELECT Value FROM ConfigElement WHERE Key=?').get(key) as { Value: string } | undefined)?.Value;
@@ -359,11 +362,12 @@ for (const js of [true, false]) {
 
 // A real Reset owns programme publication. No synthetic SQL guide rows, source
 // clock rewrites, teletext Lua overrides or producer replay are used here.
-async function resetGuidePlayout(page: Page, fixture: TeletextChannelFixture, channel: number): Promise<void> {
+async function resetGuidePlayout(page: Page, fixture: TeletextChannelFixture, channel: number,
+  expected: { count: number; durationMilliseconds: number; sourceDuration?: string } = { count: 3, durationMilliseconds: 180_000 }): Promise<void> {
   const text = translation('en_us');
   const previous = fixture.database.prepare('SELECT LastBuild FROM PlayoutBuildStatus WHERE PlayoutId=?')
     .get(channel) as { LastBuild: string } | undefined;
-  fixture.writeScriptedControls(channel, undefined, 3);
+  fixture.writeScriptedControls(channel, undefined, expected.count);
   await page.goto('/playouts'); await ready(page, true);
   const name = fixture.database.prepare('SELECT Name FROM Channel WHERE Id=?').get(channel) as { Name: string };
   await page.getByPlaceholder(text('SearchForPlayouts'), { exact: true }).fill(name.Name);
@@ -389,12 +393,18 @@ async function resetGuidePlayout(page: Page, fixture: TeletextChannelFixture, ch
       .get(channel) as { Success: number; LastBuild: string; LastSuccessfulBuild: string } | undefined;
     const items = fixture.database.prepare('SELECT COUNT(*) AS count FROM PlayoutItem WHERE PlayoutId=?').get(channel) as { count: number };
     return status?.Success === 1 && status.LastBuild !== previous?.LastBuild
-      && status.LastSuccessfulBuild === status.LastBuild && items.count === 3
+      && status.LastSuccessfulBuild === status.LastBuild && items.count === expected.count
       && fixture.scriptedIntervals(channel).length === 0;
   }, { timeout: 45_000 }).toBe(true);
-  const spans = fixture.database.prepare('SELECT Start,Finish FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
-    .all(channel) as { Start: string; Finish: string }[];
-  for (const span of spans) expect(utc(span.Finish) - utc(span.Start)).toBe(180_000);
+  const spans = fixture.database.prepare('SELECT Start,Finish,InPoint,OutPoint FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
+    .all(channel) as { Start: string; Finish: string; InPoint: string; OutPoint: string }[];
+  for (const span of spans) {
+    if (expected.sourceDuration !== undefined) {
+      expect(span.InPoint).toMatch(/^00:00:00(?:\.0+)?$/);
+      expect(span.OutPoint).toBe(expected.sourceDuration);
+      expect(utc(span.Finish)).toBeGreaterThan(utc(span.Start));
+    } else expect(utc(span.Finish) - utc(span.Start)).toBe(expected.durationMilliseconds);
+  }
 }
 
 function utc(value: string): number {
@@ -419,6 +429,175 @@ function acceptedGuide(fixture: TeletextChannelFixture, channel: number): Record
   expect(row!.ArtifactVersion).toBe(5);
   return row!;
 }
+
+type ReceiverGuideMap = { theme: string; entry: number; pages: { address: { page: number; subcode: number }; navigation: unknown[] }[] };
+
+async function prepareReceiverGuide(page: Page, fixture: TeletextChannelFixture, channel: number,
+  profile: number, night: boolean): Promise<ReceiverGuideMap> {
+  const text = translation('en_us');
+  await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+  const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+  await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
+  await submit(page, binding, text('TeletextBindingSave'), true);
+  const form = page.getByTestId('teletext-authoring-form');
+  for (const [key, value] of Object.entries({ name: `Production receiver ${channel}`, entry_page: night ? '410' : '200',
+    entry_subcode: '0000', resource_transmissions: '[]' })) await form.locator(`[name="${key}"]`).fill(value);
+  await form.locator('[name="entry_addon_id"]').selectOption(addonId);
+  await form.locator('[name="v1_region"]').selectOption('western_latin');
+  await form.locator('[name="guide_channel_id"]').selectOption(String(fixture.channels[1]));
+  await submit(page, form, text('TeletextValidateSaveDraft'), true);
+  const response = JSON.parse(savedOriginal(fixture, channel).documents[0].response);
+  const map: ReceiverGuideMap = { theme: response.authoring.theme.id, entry: response.service.initial_page,
+    pages: response.service.pages.map((value: ReceiverGuideMap['pages'][number]) => ({ address: value.address, navigation: value.navigation })) };
+  expect(map.theme).toBe(night ? 'night' : 'classic');
+  expect(map.pages.some(value => value.address.subcode !== 0), 'Normal finite guide must genuinely paginate').toBe(true);
+  await submit(page, page.getByTestId('teletext-publication-request-form'), text('TeletextPublicationRequest'), true);
+  await submit(page, page.getByTestId('teletext-publication-publish-form'), text('TeletextPublicationPublish'), true);
+  await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+  return map;
+}
+
+// Opt-in human handoff, never an automated renderer acceptance claim. Existing
+// base controls remain closed; this joins the real production guide and tracks.
+test.describe('production external receiver', () => {
+test.skip(process.env.ERSATZRS_TELETEXT_PRODUCTION_EXTERNAL_HOLD !== '1', 'Explicit manual production receiver opt-in required.');
+test('production TV-guide ordinary URLs are held for the joint external receiver', async ({ browser, isolatedWebHost }, info) => {
+  const external = process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_DIR;
+  const source = process.env.ERSATZRS_TELETEXT_EXTERNAL_CAPTION_SOURCE;
+  const sourceDigest = process.env.ERSATZRS_TELETEXT_EXTERNAL_CAPTION_SHA256;
+  const scanner = process.env.ERSATZRS_TELETEXT_EXTERNAL_SCANNER;
+  const scannerDigest = process.env.ERSATZRS_TELETEXT_EXTERNAL_SCANNER_SHA256;
+  test.skip(process.env.ERSATZRS_TELETEXT_PRODUCTION_EXTERNAL_HOLD !== '1' || !external || !source || !scanner,
+    'Requires explicit production external hold, owned controller, qualified source and exact final packaged Local scanner.');
+  test.skip(process.platform === 'win32' || !process.env.FFMPEG_PATH || !process.env.FFPROBE_PATH,
+    'Existing external-hold fixture requires POSIX and explicit qualified FFmpeg/ffprobe.');
+  expect(sourceDigest).toBe('b6ffa783e1cc96926a846b73fa8182755a11555296294ef9a740c09d9245c560');
+  expect(scannerDigest).toMatch(/^[a-f0-9]{64}$/);
+  expect(sha256(readFileSync(scanner!))).toBe(scannerDigest);
+  const hold = Number(process.env.ERSATZRS_TELETEXT_EXTERNAL_CLIENT_HOLD_SECONDS ?? 75);
+  expect(Number.isSafeInteger(hold) && hold >= 75 && hold <= 600).toBe(true);
+  test.setTimeout(Math.max(180_000, (hold + 120) * 1000));
+  for (const marker of ['host-ready.json', 'client-complete.json', 'client-update-guide.json', 'host-update-complete.json']) {
+    expect(existsSync(`${external}/${marker}`), 'Use a fresh owned receiver directory').toBe(false);
+  }
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true,
+    playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 60, captionSource: { path: source!, sha256: sourceDigest! } } });
+  const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage(); const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    const selected = await installProduction(browser, isolatedWebHost.baseURL, isolatedWebHost.databasePath);
+    const scan = fixture.configureScannedScripted(scanner!, process.env.FFPROBE_PATH!, info.outputPath('receiver-local-scan.log'));
+    const policy = JSON.parse(readFileSync(fileURLToPath(new URL('../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl)), 'utf8'));
+    const guideLimits = { max_records: 1000, max_source_bytes: 1_048_576,
+      max_model_nodes: 10_000, max_model_bytes: 16_777_216, max_digest_fields: 100_000, max_digest_bytes: 16_777_216 };
+    const authoring = { ...policy, version: 2, operation_timeout_ms: 30_000, guide_limits: guideLimits,
+      preview: { max_pages: 16, max_model_records: 32_768, max_pixels: 168_000, max_diagnostics: 1400, max_work: 50_000_000 } };
+    delete authoring.source; delete authoring.recovery_timeout_ms;
+    fixture.setAuthoringPolicy(JSON.stringify(authoring));
+    fixture.setOutputPolicy(JSON.stringify({ ...policy, version: 4, guide_limits: guideLimits,
+      live_updates: { poll_interval_ms: 25, recovery_timeout_ms: 2000 } }));
+    fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run('teletext.work.max_concurrent', '1');
+    const count = Math.max(8, Math.ceil((hold + 120) / 60) + 1);
+    for (const channel of fixture.channels) {
+      await page.goto(`/channels/${channel}`); await ready(page, true);
+      for (const [name, value] of Object.entries({ preferred_audio_language_code: 'dut', preferred_subtitle_language_code: 'eng',
+        subtitle_mode: '3', source_teletext_delivery: '1' })) {
+        const select = page.locator(`select[name="${name}"]`);
+        await expect(select.locator(`option[value="${value}"]`)).toHaveCount(1);
+        await select.selectOption(value, { timeout: 5000 });
+      }
+      await page.getByRole('button', { name: translation('en_us')('SaveChannel'), exact: true }).click();
+      await expect(page).toHaveURL(/\/channels$/); await ready(page, true);
+    }
+    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
+    // Establish the real guide-source timeline first; Reset the primary output
+    // immediately before publication, without editing any programme timestamps.
+    for (const channel of [...fixture.channels].reverse()) {
+      await resetGuidePlayout(page, fixture, channel, { count, durationMilliseconds: 60_000, sourceDuration: scan.duration });
+    }
+    const firstProgramme = fixture.database.prepare('SELECT Start,Finish FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start LIMIT 1')
+      .get(fixture.channels[0]) as { Start: string; Finish: string };
+    expect(Date.now() - utc(firstProgramme.Start), 'Normal publication must begin in source caption A window').toBeLessThan(25_000);
+    const maps: ReceiverGuideMap[] = [];
+    for (const [index, channel] of fixture.channels.entries()) maps.push(await prepareReceiverGuide(page, fixture, channel, profiles[index], index === 1));
+    const originals = fixture.channels.map(channel => sha256(originalBytes(fixture, channel)));
+    const accepted = fixture.channels.map(channel => acceptedGuide(fixture, channel));
+    const current = () => fixture.channels.map(channel => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1').get(channel));
+    const before = current();
+    const playlist = await page.request.get('/iptv/channels.m3u', { headers: { 'User-Agent': 'Kodi/21.2' } });
+    expect(playlist.ok()).toBe(true); const body = await playlist.text();
+    expect(body).toContain('#KODIPROP:inputstream=inputstream.ffmpegdirect');
+    expect(body).toContain('#KODIPROP:mimetype=video/mp2t');
+    const urls = fixture.channels.map(channel => `${isolatedWebHost.baseURL}/iptv/channel/${channel}.ts?mode=ts-legacy`);
+    for (const url of urls) expect(body.split(/\r?\n/)).toContain(url);
+    writeFileSync(`${external}/playlist.m3u`, body);
+    for (const [index, url] of urls.entries()) {
+      const path = info.outputPath(`receiver-${index}-prefix.ts`);
+      const capture = await captureTeletextChannelTs(url, path, { maximumBytes: Math.floor(1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+      expect(capture.ended).toBe('byte-limit');
+      const streams = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-show_streams', '-of', 'json', path],
+        { timeout: 30_000, maxBuffer: 1024 * 1024 }).toString()).streams;
+      expect(streams.map((stream: { codec_name: string }) => stream.codec_name).sort()).toEqual(['aac', 'dvb_subtitle', 'dvb_teletext', 'mpeg2video']);
+      expect(streams.find((stream: { codec_type: string }) => stream.codec_type === 'audio').tags.language).toBe('nld');
+      expect(streams.find((stream: { codec_name: string }) => stream.codec_name === 'dvb_subtitle').tags.language).toBe('eng');
+      expect(streams.find((stream: { codec_name: string }) => stream.codec_name === 'dvb_teletext').id).toBe('0x200');
+      const decoded = spawnSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-i', path, '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
+        { timeout: 30_000, maxBuffer: 65_536 });
+      writeFileSync(info.outputPath(`receiver-${index}-streams.json`), JSON.stringify(streams, null, 2));
+      writeFileSync(info.outputPath(`receiver-${index}-decode.stderr`), decoded.stderr ?? '');
+      writeFileSync(info.outputPath(`receiver-${index}-decode.json`), JSON.stringify({ status: decoded.status, signal: decoded.signal,
+        error: decoded.error?.message }, null, 2));
+      expect(decoded.error).toBeUndefined(); expect(decoded.signal).toBeNull();
+      expect(decoded.status).toBe(0); expect(decoded.stderr.length).toBe(0);
+    }
+    const holdDeadline = Date.now() + hold * 1000;
+    const readyMarker = { probe_version: 1, url: urls[0], urls, channels: fixture.channels,
+      listen_address: isolatedWebHost.listenAddress, host: isolatedWebHost.processIdentity(), profiles, maps,
+      host_sha256: sha256(readFileSync(process.env.E2E_SERVER_BIN!)),
+      tools: Object.fromEntries([['ffmpeg', process.env.FFMPEG_PATH!], ['ffprobe', process.env.FFPROBE_PATH!], ['scanner', scanner!]]
+        .map(([name, path]) => [name, { sha256: sha256(readFileSync(path)),
+          version: name === 'scanner' ? 'Identity joined to the final package receipt; no scanner version CLI'
+            : execFileSync(path, ['-version'], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 }).split('\n')[0] }])),
+      addon: selected, repository_zip_sha256: candidateDigest, browser: browser.version(), scanner_sha256: scannerDigest,
+      source_sha256: sourceDigest, scan, source_duration: scan.duration, real_occurrences_per_channel: count,
+      first_programme: firstProgramme, capture_limits: { maximum_bytes: Math.floor(1024 * 1024 / 188) * 188, maximum_time_ms: 30_000 },
+      selected_audio: 'nld660Hz', selected_captions: 'eng/page888 converted to DVB; source200 is not forwarded',
+      update: { request: 'client-update-guide.json', result: 'host-update-complete.json',
+        request_before_utc: new Date(holdDeadline - 65_000).toISOString(),
+        requires: { probe_version: 1, url: urls[0], seed_ids: before.map(value => value!.SeedId), refresh: true } },
+      scope: 'Production profile/publication/ordinary four-track host preflight only; no external renderer observation or client acceptance' };
+    writeFileSync(`${external}/host-ready.json`, JSON.stringify(readyMarker, null, 2));
+    let updated = false;
+    await expect.poll(async () => {
+      if (!updated && existsSync(`${external}/client-update-guide.json`)) {
+        expect(JSON.parse(readFileSync(`${external}/client-update-guide.json`, 'utf8'))).toEqual(readyMarker.update.requires);
+        expect(Date.now(), 'Refresh must fit the original external-hold deadline').toBeLessThan(holdDeadline - 65_000);
+        const title = 'Receiver refreshed guide programme';
+        expect(fixture.database.prepare('UPDATE MovieMetadata SET Title=? WHERE MovieId=?').run(title, scan.item).changes).toBe(1);
+        await expect.poll(() => current().every(row => {
+          if (!row || row.RuntimeId === null || row.Revoked !== 0) return false;
+          const snapshot = fixture.database.prepare('SELECT Document FROM TeletextGuideRuntimeSnapshot WHERE Id=? AND SeedId=?').get(row.RuntimeId, row.SeedId) as { Document: Uint8Array } | undefined;
+          return snapshot !== undefined && Buffer.from(snapshot.Document).toString().includes(title);
+        }), { timeout: Math.min(65_000, holdDeadline - Date.now()) }).toBe(true);
+        writeFileSync(`${external}/host-update-complete.json`, JSON.stringify({ probe_version: 1, url: urls[0], current: current(), title,
+          scope: 'Actual automatic refreshed snapshots; receiver display remains a separate observation' }, null, 2));
+        updated = true;
+      }
+      return existsSync(`${external}/client-complete.json`);
+    }, { timeout: hold * 1000 }).toBe(true);
+    expect(JSON.parse(readFileSync(`${external}/client-complete.json`, 'utf8'))).toMatchObject({ probe_version: 1, url: urls[0], owned_client_closed: true });
+    expect(updated, 'One controlled real guide refresh is required before completion').toBe(true);
+    expect(fixture.channels.map(channel => sha256(originalBytes(fixture, channel)))).toEqual(originals);
+    expect(fixture.channels.map(channel => acceptedGuide(fixture, channel))).toEqual(accepted);
+    expect(installation(isolatedWebHost.databasePath)).toEqual(selected); compareInstalledFiles(selected);
+    expect(sha256(readFileSync(source!))).toBe(sourceDigest); expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
+    writeFileSync(`${external}/host-success.json`, JSON.stringify({ ...readyMarker, updated, current: current(), errors,
+      external_renderer_accepted: false, scope: 'Bounded host/controller completion; marker is not physical Kodi acceptance' }, null, 2));
+  } finally { try { await context.close(); } finally { fixture.close(); } }
+});
+});
 
 async function rasterBytes(page: Page): Promise<Buffer> {
   const image = page.getByTestId('teletext-preview-model').locator('img');

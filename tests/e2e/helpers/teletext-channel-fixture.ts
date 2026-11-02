@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -155,7 +155,7 @@ export class TeletextChannelFixture {
   private readonly playbackDurationSeconds: number;
   private scripted = false;
 
-  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; clientControls?: boolean; playback?: { ffmpeg: string; durationSeconds?: number } } = {}) {
+  constructor(private readonly databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; clientControls?: boolean; playback?: { ffmpeg: string; durationSeconds?: number; captionSource?: { path: string; sha256: string } } } = {}) {
     this.authoredPages = options.authoredPages === true;
     this.clientControls = options.clientControls === true;
     if (this.clientControls && (!options.standaloneLevel15 || !options.playback)) throw new Error('Client controls require standalone base pages and the owned playback fixture.');
@@ -169,7 +169,16 @@ export class TeletextChannelFixture {
     // directory; it is disposed only after the host has stopped.
     this.root = mkdtempSync(join(this.playback ? dirname(databasePath) : tmpdir(), 'ersatzrs-e2e-teletext-'));
     if (options.playback) {
-      try { this.generatePlaybackSource(options.playback.ffmpeg, this.playbackDurationSeconds); }
+      try {
+        if (options.playback.captionSource) {
+          const source = options.playback.captionSource;
+          const digest = createHash('sha256').update(readFileSync(source.path)).digest('hex');
+          if (this.playbackDurationSeconds !== 60 || this.clientControls
+            || source.sha256 !== 'b6ffa783e1cc96926a846b73fa8182755a11555296294ef9a740c09d9245c560'
+            || digest !== source.sha256) throw new Error('Only the qualified finite sixty-second caption source is supported.');
+          copyFileSync(source.path, join(this.root, 'synthetic-client-source.ts'));
+        } else this.generatePlaybackSource(options.playback.ffmpeg, this.playbackDurationSeconds);
+      }
       catch (error) { rmSync(this.root, { recursive: true, force: true }); throw error; }
     }
     this.packagePath = this.authoredPages ? join(this.root, 'package') : this.root;
@@ -349,6 +358,68 @@ export class TeletextChannelFixture {
       this.database.exec('COMMIT;');
       this.scripted = true;
     } catch (error) { this.database.exec('ROLLBACK;'); throw error; }
+  }
+
+  // Opt-in receiver setup: metadata must come from the ordinary Local scanner,
+  // including the source caption binding. Never synthesize its stream rows.
+  configureScannedScripted(scanner: string, ffprobe: string, evidence: string): { item: number; version: number; duration: string; streams: unknown[]; caption: unknown; operations: unknown[] } {
+    if (!this.playback || this.scripted || this.playbackDurationSeconds !== 60) {
+      throw new Error('Scanned setup requires the unused finite caption fixture.');
+    }
+    const original = join(this.root, 'synthetic-client-source.ts');
+    if (createHash('sha256').update(readFileSync(original)).digest('hex')
+      !== 'b6ffa783e1cc96926a846b73fa8182755a11555296294ef9a740c09d9245c560') {
+      throw new Error('Scanned setup requires the exact qualified caption source.');
+    }
+    const id = this.channels[0] + 10;
+    const library = join(this.root, 'scanned-library'); mkdirSync(library);
+    copyFileSync(original, join(library, 'Synthetic Caption.ts'));
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      this.database.prepare('INSERT INTO MediaSource(Id) VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO LocalMediaSource(Id) VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO Library(Id,MediaSourceId,MediaKind,Name) VALUES (?,?,1,?)').run(id, id, 'Synthetic caption receiver');
+      this.database.prepare('INSERT INTO LocalLibrary(Id) VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO LibraryPath(Id,LibraryId,Path) VALUES (?,?,?)').run(id, id, library);
+      for (const channel of this.channels) {
+        const path = join(this.root, `synthetic-controls-${channel}.lua`);
+        writeFileSync(path, 'error("Scanned receiver setup is not complete")');
+        this.database.prepare('UPDATE Playout SET ScheduleKind=4,ScheduleFile=? WHERE Id=? AND ChannelId=?').run(path, channel, channel);
+      }
+      this.database.exec('COMMIT;');
+    } catch (error) { this.database.exec('ROLLBACK;'); throw error; }
+    // Retain owned files until the isolated host stops, including on scan failure.
+    this.scripted = true;
+    for (const name of ['scanner-state', 'scanner-data', 'scanner-tmp']) mkdirSync(join(this.root, name));
+    const databasePath = this.databasePath;
+    const output = execFileSync(scanner, ['--provider', 'local', '--library-id', String(id), '--deep-scan', '--ffprobe-path', ffprobe], {
+      encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
+      env: { ...process.env, DATABASE_URL: `sqlite:${databasePath}`, ERSATZRS_DATABASE__URL: `sqlite:${databasePath}`,
+        ErsatzRS_DATABASE__URL: `sqlite:${databasePath}`, ERSATZRS_APP_STATE_DIR: join(this.root, 'scanner-state'),
+        ERSATZRS_APP_DATA_DIR: join(this.root, 'scanner-data'), TMPDIR: join(this.root, 'scanner-tmp'), ERSATZRS_FFMPEG_DOWNLOAD: 'false' },
+    });
+    writeFileSync(evidence, output);
+    const rows = this.database.prepare(`SELECT v.MovieId AS item,v.Id AS version,v.Duration AS duration
+      FROM MediaVersion v JOIN MediaItem m ON m.Id=v.MovieId WHERE m.LibraryPathId=?`).all(id) as { item: number; version: number; duration: string }[];
+    if (rows.length !== 1) throw new Error('Actual Local scan must produce exactly one caption movie.');
+    const media = rows[0];
+    const streams = this.database.prepare('SELECT "Index",Codec,MediaStreamKind,Language FROM MediaStream WHERE MediaVersionId=? ORDER BY "Index"').all(media.version);
+    const expected = [[0, 'mpeg2video', 1, null], [1, 'aac', 2, 'eng'], [2, 'dvb_teletext', 3, 'eng,eng'], [3, 'aac', 2, 'nld']];
+    if (JSON.stringify(streams.map(row => [row.Index, row.Codec, row.MediaStreamKind, row.Language])) !== JSON.stringify(expected)) {
+      throw new Error('Actual Local scan lost the qualified four-track inventory.');
+    }
+    const captions = this.database.prepare('SELECT * FROM SourceTeletextMetadata WHERE MediaVersionId=? AND StreamIndex=2 AND Pid=258').all(media.version);
+    const subtitlePage = this.database.prepare(`SELECT 1 FROM SourceTeletextDescriptor d JOIN SourceTeletextMetadata m ON m.Id=d.SourceTeletextMetadataId
+      WHERE m.MediaVersionId=? AND d.Language='eng' AND d.DescriptorType IN (2,5) AND d.WireMagazine=0 AND d.WirePage=136`).get(media.version);
+    const operations = this.database.prepare('SELECT State,LeaseOwner,LeaseExpiresAt FROM ManagedLibraryOperation WHERE LibraryId=?').all(id);
+    const lease = this.database.prepare('SELECT 1 FROM ManagedLibraryLease WHERE LibraryId=?').get(id);
+    if (captions.length !== 1 || !subtitlePage || operations.length !== 1 || operations[0].State !== 3
+      || operations[0].LeaseOwner !== null || operations[0].LeaseExpiresAt !== null || lease) {
+      throw new Error('Local scan must retain source caption binding and settle actual operation ownership.');
+    }
+    this.database.prepare('INSERT INTO Collection(Id,Name,UseCustomPlaybackOrder) VALUES (?,?,0)').run(id, `Synthetic Scripted ${this.addonId}`);
+    this.database.prepare('INSERT INTO CollectionItem(CollectionId,MediaItemId) VALUES (?,?)').run(id, media.item);
+    return { ...media, streams, caption: captions[0], operations };
   }
 
   // Undefined emits no teletext commands: a fresh control-free Lua build.
