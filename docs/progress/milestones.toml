@@ -18986,6 +18986,11 @@ Owner: P9B-02 suitable-client production index/navigation/content clause.
 Action: watch/navigate actual guide maps/subpages/colour links and refreshed
 content, return to normal AV with the selected captions/audio intact.
 Gap: accepted generic1.5 Kodi proof is not yet the final production-addon join.
+Preparation found the existing production fixture has mono English/no captions.
+A bounded opt-in full-track normal-Local-scan join is a test candidate, not yet
+accepted: dut/nld admin-option mismatch is corrected; its512packet startup sample
+has no complete video frame. Preserve both negatives under client-flow; qualify
+the existing packet-aligned prefix from actual observed output, not input bitrate.
 Minimum: one prepared joint final trial using the final identities and working
 LAN stream; reuse accepted generic character/flash/reveal controls unchanged.
 Stop: actual production index/page/subpage/colour navigation, two configured
@@ -18998,9 +19003,9 @@ is the external prerequisite; no client hunt or experimental2.5 display gate.
 packages. Owner: P9B-02 final gates and its dependency on P9B-01.
 Action/proof: independently accept the complete production guide on the required
 platform boundary rather than infer acceptance from one successful flow.
-Remaining proof: final exact-source CI execution and the active ARM64 app
-build/package/startup join. Linux x64, Windows x64 and ARMv7 components below
-are Complete within their explicit boundaries. On exact pushed 2b06f030, CI Clippy and the matched
+Remaining proof: final exact-source CI execution. All four required app build/
+package/startup components below are Complete within their explicit native or
+software/emulation boundaries; native ARM remains an explicit assumption. On exact pushed 2b06f030, CI Clippy and the matched
 Rust/Leptos artifact producer are Complete (build 42m48); no test execution is
 inferred from compilation. CI 41357008280 retains an unexplained general-Chromium readiness failure;
 other completed required components pass and remaining browser jobs continue.
@@ -19037,7 +19042,15 @@ threeHealthtitles/errors0/20assets/actualHTML/changelog/config, source/cache/see
 packageunchanged. NaturalSIGTERM0/no force/groupabsent, containerexit0/namespace
 removed. Canonical final-candidate/managed-arm/linux-arm/qualification.json owns
 full hashes. This is software/emulation, not native ARM or cold acquisition.
-ARM64 continues in existing sequentialbuild43998 on2b06. Native Windows x64 final-source
+ARM64 final-source component is Complete: actual three-ELF build3455.317s/
+source3992exactaftercheck, independent76-member archive73a8c0d7. Actual pinned
+Ubuntu24/glibc2.39 QEMU preplaced managed2.0.9/NextBundled startup18.39s passes
+threeHealthtitles/errors0/warnings0,20assets/HTML/changelog/config. Source, cache,
+package and seed remain unchanged; naturalSIGTERM0/no force/groupabsent, container
+exit0/noOOM/namespace removed. Canonical final-candidate/managed-arm/linux-arm64/
+qualification.json owns exact hashes. Emulation only; no native or cold-acquisition
+claim. All four required final-source package/startup components are now closed.
+Native Windows x64 final-source
 component is Complete: actual four-PE build4601.41s/exactsourcearchive; package
 9aa5a5cf (106781950 bytes), independent extraction and existing structural gate.
 Real packaged launcher downloads public2.0.9, then restarts from identical cached
@@ -19080,8 +19093,8 @@ negative storage guard passes0.0084s/ownedJobempty before one Windows warmbuild.
 Historical65GiBpreflight remains unmet, not waived as accepted: this trial uses
 24GiBstart/20GiBongoing explicitbudget, immediateJobtermination,90minutecompiler/
 120minutereservation. The completed actual Windows component above supersedes
-that historical preparation. Only ARM64 app source/package/startup remains
-active; the mandatory final CI join stays with this FINAL row. Prior exactab01 CI41331331743 retains
+that historical preparation. All four required app source/package/startup components are closed;
+the mandatory final CI join stays with this FINAL row. Prior exactab01 CI41331331743 retains
 10successes including Next/Test/1.5 and3cancelled browser jobs plus expectedlintskip;
 the ordinary code push invoked existing cancel-in-progress. Its partial result is
 not full acceptance. Serialize future code pushes after the active full round
@@ -19095,8 +19108,8 @@ Completed required workspace-doctest component on exact9db49239:
 targets, zero executable doctest examples. This satisfies only that component,
 not unit/integration behavior, full workspace closeout or fullCI. Canonical
 qualification.json final_gate_component owns command/source/log/counts. Reuse
-this valid result; the remaining workspace-nextest component must be accounted
-for separately on the coherent source, without repeating unaffected doctests.
+this valid result. The unit/integration component is already closed by the case-
+exact composition above; do not repeat either component for evidence metadata.
 Minimum: reuse unchanged9A fixtures/source-engine-copy/audio/health/routes and
 localized coverage with source/input joins; run only outstanding required gates
 on final source. Current Linux smoke/four-route93/93 and strict affected Clippy/
@@ -19111,8 +19124,9 @@ platform or complete experimental2.5 acceptance is claimed.
 One next finite package: 9B-FINAL coherent final-source/platform and CI joins.
 All functional CONFIG/PACKAGE/LUA/TTI/RUNTIME rows are Complete within explicit
 scope; actual production-client proof remains9B-CLIENT. Frozen2b06f030 is now
-pushed after completedgreen c511; finish current exact2b06 CI and the active
-ARM64 final-source join. Linux x64, Windows x64 and ARMv7 are Complete above. Qualify only
+pushed after completedgreen c511; finish current exact2b06 CI. All four required
+final-source app/package/startup components are Complete above. The isolated
+local diagnostic checkpointcb61f485 preserves the original unexplained failure. Qualify only
 the remaining required final app-source/build/package/platform boundaries as one
 coherent candidate; retain immutable runtime/track/frame/editor/Lua proof. Windows
 package trial reserves120minutes; ARM emulation/native assumption and macOS

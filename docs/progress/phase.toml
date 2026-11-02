@@ -62,30 +62,33 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-FINAL — final platform and exact-SHA CI evidence.
-Next: finish existing ARM64 build43998, then the prepared package/managed-startup
-checks. Source2b06f030 stays frozen until all source checks finish. Linux x64,
-Windows x64 and ARMv7 final-source package/startup components are Complete within
-their documented native/emulated boundaries; see the sole P9B-02 completion list
-and tmp/phase9-tvguide-addon/qualification.json final_candidate. Windows used the
-120-minute reservation and bounded test teardown, without a graceful-tray claim.
+Current package: P9B-02 / 9B-FINAL — exact-SHA CI evidence.
+Complete: all four required final app build/package/startup components on source
+2b06f030. Linux x64/Windows x64 are native; ARM64/ARMv7 are pinned Ubuntu24 QEMU,
+not native or new cold-acquisition proof. Full receipts and retained negatives:
+tmp/phase9-tvguide-addon/qualification.json final_candidate and the sole P9B-02
+completion list. No need to rebuild/replay unaffected components for test/docs.
 
-Local CI evidence-retention correction is verified:54 focused Python tests,
-Bash/YAML/diff checks; independent review corrected archive bounds. It changes
-only CI diagnostics, not product code, timeouts or acceptance oracles. Exact2b06
-CI41357008280 remains active and not green: original Chromium readiness failure
-is unexplained despite fresh/ordered targeted passes. Observer73689 is owned by
-guide_authoring_policy. Preserve original failure; wait for the full round to
-terminate before scoped normal push and full exact-new-SHA CI. Worktree
-p9b-next-preview-ci isolates these changes from Root's unpublished foreign history.
+Next: let exact2b06 fullCI41357008280 terminate. Its original Chromium readiness
+failure remains unexplained; fresh1/ordered2 local passes do not fix it. Local
+checkpointcb61f485 preserves bounded Next diagnostics (54Python checks). Then
+push only the isolated verified checkpoints and assess every applicable job on
+the exact new SHA; never push Root's foreign history or cancel the current round.
+Observer73689 remains owned by guide_authoring_policy.
 
-Reuse closed CONFIG/PACKAGE/LUA/TTI/RUNTIME and unaffected workspace/editor/stream/
-frontend proof; no duplicate chains. After FINAL, prepare only the existing
-9B-CLIENT joint production-guide trial on Kodi21.2/Google TV Streamer. Maintainer
-is asleep: no physical TV trial or port8409 binding now. Preserve WSL Private
-TCP8409 forwarding/firewall, parallel Root changes and all negative evidence.
-Native ARM remains assumed/deferred, macOS deferred,2.5 experimental/deferred,
-QTM optional/upstream wait. No DVBViewer/client hunt or further release.
+Independent 9B-CLIENT preparation has two uncommitted test files in worktree
+p9b-next-preview-ci. One actual loopback trial found UI canonicaldut versus nld;
+corrected fixture preserves source nld. Second proves real scan, finite Reset,
+subpages/publication and four-track PMT but512packets span only0.155s/no complete
+video frame. Next: use the existing packet-aligned prefix with unchanged30s bound,
+derived from actual4.95Mbps output; retain original failures, no product repair
+or decoder/client acceptance claim. Close this bounded preparation before any
+new variant. Final physical Kodi trial waits for the maintainer; no TV or8409now.
+
+Reuse closed CONFIG/PACKAGE/LUA/TTI/RUNTIME and valid editor/stream/platform proof.
+Preserve parallel Root changes, Windows Private TCP8409 forwarding/firewall and
+all negatives. Native ARM assumed/deferred, macOS deferred,2.5 experimental/
+deferred,QTM optional/upstream wait. No DVBViewer/client hunt or further release.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
