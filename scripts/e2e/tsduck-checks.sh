@@ -58,6 +58,30 @@ assert_eq() { if [ "$1" = "$2" ]; then pass "$3 ($1)"; else fail "$3" "got $1, e
 # _jn 'jq-expr' file  → numeric scalar (null/empty → 0)
 _jn() { jq -r "($1) // 0" "$2" 2>/dev/null || echo 0; }
 
+# TSDuck 3.44 counts any consecutive PES PTS distance >3s, including normal
+# event-driven subtitle gaps. Qualify only complete, monotonic DVB subtitle PTS
+# observations that remain bound to PCR in the caller's strict CBR check.
+# Retain the same 3s clock bound; missing data never qualifies a raw flag.
+_sparse_subtitle_pts_clock_matches() {
+  awk -F, -v pid="$2" -v expected="$3" -v flags="$4" -v first="$5" -v final="$6" '
+    function abs(n) { return n < 0 ? -n : n }
+    $1 == pid {
+      for (i=1; i<=NF; i++) gsub(/[[:space:]]/, "", $i)
+      if (NF != 8 || $4 != "PTS" || $6 !~ /^[0-9]+$/ || $8 !~ /^-?[0-9]+$/) {
+        bad=1; next
+      }
+      if (abs($8) > 270000) bad=1
+      if (count == 0 && $6 != first) bad=1
+      if (count > 0) {
+        if ($6 < previous || abs($8 - offset) > 270000) bad=1
+        if ($6 - previous > 270000) gaps++
+      }
+      previous=$6; offset=$8; count++
+    }
+    END { exit !(count > 1 && count == expected && gaps == flags && previous == final && !bad) }
+  ' "$1"
+}
+
 # analyze_ts TSFILE LABEL [JSON_OUT]
 # Runs the full structural battery against a transport-stream file.
 analyze_ts() {
@@ -126,6 +150,25 @@ analyze_ts() {
   assert_le "$cc" "$MAX_CC_ERRORS" "$label · continuity-counter errors (packet loss)"
   if [ "$cc" -gt "$MAX_CC_ERRORS" ]; then
     jq -r '.pids[]|select(.packets.discontinuities>0)|"           ↳ PID \(.id) (\(.description)): \(.packets.discontinuities) discontinuities"' "$json" 2>/dev/null
+  fi
+  # Only strict CBR qualification may use pcrextract's estimated PCR offsets.
+  # AV, other data, invalid/missing clocks and unmatched raw flags stay gated.
+  if [ "$ptsleap" -gt 0 ] && [ "$STRICT_PCR_JITTER" = 1 ]; then
+    local subtitle_csv="${json}.subtitle-pts.csv" pid count flags first final qualified=0
+    if tsp --bitrate "$bitrate" -I file "$ts" \
+        -P pcrextract --pts --evaluate-pcr-offset --csv --noheader -o "$subtitle_csv" \
+        -O drop >/dev/null 2>&1; then
+      while read -r pid count flags first final; do
+        if _sparse_subtitle_pts_clock_matches "$subtitle_csv" "$pid" "$count" "$flags" "$first" "$final"; then
+          pass "$label · DVB subtitle PID $pid PTS bound to PCR (raw cadence flags: $flags)"
+          qualified=$((qualified + flags))
+        else
+          fail "$label · DVB subtitle PID $pid PTS/PCR qualification" "raw cadence flags retained"
+        fi
+      done < <(jq -r '.pids[] | select(.packets["pts-leap"] > 0 and .audio == false and .video == false and (.description | test("^Subtitles \\(.*DVB subtitles"))) | [.id, .packets.pts, .packets["pts-leap"], .["first-pts"], .["last-pts"]] | @tsv' "$json")
+      info "$label · raw PTS cadence flags=$ptsleap; clock-qualified DVB subtitle flags=$qualified"
+      ptsleap=$((ptsleap - qualified))
+    fi
   fi
   assert_le "$ptsleap" "$MAX_PTS_LEAPS" "$label · PTS leaps (visible skips/jumps)"
   assert_le "$dtsleap" "$MAX_DTS_LEAPS" "$label · DTS leaps"

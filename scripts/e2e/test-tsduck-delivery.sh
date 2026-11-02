@@ -33,6 +33,37 @@ expect_fail excessive_startup_latency 130 161
 
 monitor_log=$(mktemp)
 trap 'rm -f "$monitor_log"' EXIT
+
+# Event-driven DVB cues may be more than3s apart while their PTS track PCR.
+# Missing, stale, reordered or shifted observations must never clear raw flags.
+printf '%s\n' \
+  '258,1230,0,PTS,1,33601,0,-11' \
+  '258,30039,28,PTS,2,820831,787230,-3' \
+  '258,30040,29,PTS,3,820832,787231,-30' \
+  '258,79444,57,PTS,4,2170831,2137230,-24' \
+  >"$monitor_log"
+_sparse_subtitle_pts_clock_matches "$monitor_log" 258 4 2 33601 2170831 \
+  || { printf 'expected clock-bound sparse cues to qualify\n' >&2; exit 1; }
+for metadata in '258 5 2 33601 2170831' '258 4 1 33601 2170831' \
+    '258 4 2 33602 2170831' '258 4 2 33601 2170832' '259 4 2 33601 2170831'; do
+  read -r pid count flags first final <<<"$metadata"
+  if _sparse_subtitle_pts_clock_matches "$monitor_log" "$pid" "$count" "$flags" "$first" "$final"; then
+    printf 'unexpected sparse cue qualification: %s\n' "$metadata" >&2; exit 1
+  fi
+done
+for bad in '258,30040,29,PTS,3,820832,787231,' \
+    '258,30040,29,PTS,3,820832,787231,900000' \
+    '258,30040,29,PTS,3,12345,787231,-30' \
+    '258,30040,29,PTS,3,invalid,787231,-30'; do
+  printf '%s\n' '258,1230,0,PTS,1,33601,0,-11' \
+    '258,30039,28,PTS,2,820831,787230,-3' "$bad" \
+    '258,79444,57,PTS,4,2170831,2137230,-24' >"$monitor_log"
+  if _sparse_subtitle_pts_clock_matches "$monitor_log" 258 4 2 33601 2170831; then
+    printf 'unexpected invalid sparse cue qualification: %s\n' "$bad" >&2; exit 1
+  fi
+done
+printf 'tsduck sparse subtitle clock regressions passed\n'
+
 printf '%s\n' \
   'bitrate_monitor: ERSATZRS_DELIVERY{ "bitrate": 10368000, "status": "normal" }' \
   'bitrate_monitor: ERSATZRS_DELIVERY{ "bitrate": 10000000, "status": "normal" }' \

@@ -979,6 +979,19 @@ e.g. one started by another agent). In that case stop it, or use `url` mode.
 core: a dropped or duplicated packet, or an unexpected timestamp jump, is exactly
 what shows up as a stutter, skip, or A/V‑sync break in a player.
 
+TSDuck 3.44 also counts any PES PTS distance greater than three seconds as a
+potential leap, including normal event-driven subtitle gaps
+([versioned analyzer source](https://github.com/tsduck/tsduck/blob/v3.44-4676/src/libtsduck/dtv/analysis/tsTSAnalyzer.cpp#L1531-L1544)).
+Under `STRICT_PCR_JITTER=1`, the checker may qualify those flags for explicitly
+identified DVB subtitles using complete `pcrextract` PTS/PCR observations. It
+requires matching counts/endpoints, forward timestamps and clock offsets within
+the original three-second bound. The strict CBR PCR/jitter checks remain required;
+raw counters stay visible in JSON and logs. Missing clock data, other PID types
+and non-strict captures retain the original failure. This does not prove caption
+content or completeness: exact source-bound cue, transition and clear evidence
+is still required separately. Run `bash scripts/e2e/test-tsduck-delivery.sh` for
+the bundled positive, rejection, delivery and retention regressions.
+
 ### A note on PCR jitter
 
 `pcrverify` measures each PCR against the average‑bitrate byte‑position model, so

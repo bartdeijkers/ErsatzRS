@@ -62,38 +62,33 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 final-source selected-caption/platform integration.
-Complete: physical production-guide theme/map/subpage/colour navigation and
-refreshed content receipt on Kodi21.2/IPTV Simple21.11.0/FFmpeg Direct21.3.8.
-client-flow/joint-kodi-guide-confirmed-20261102-140844/component-qualification.json
-owns identities and actual human observations, including201/02 local reselection,
-AV return and explicit stop. Do not invent an untouched-page instant-redraw gate
-or repeat physical variants without a concrete regression. Human-window timeout
-negatives remain red; they do not erase the bounded physical component.
+Current package: P9B-02 coherent final-source package/platform and full-CI joins.
+Complete: physical production-guide viewing/themes/navigation/refreshed content
+on the recorded Kodi21.2/IPTV Simple21.11.0/FFmpeg Direct21.3.8. Its201/02 local
+reselection and human-window negatives remain explicit. Do not reopen without a
+concrete regression; no new physical guide variant or client hunt is required.
 
-Complete: actual current35 Linux x64 host joins the concat initialization fix
-without an argv-removal shim: three wrappers start0, same response85s, no Illegal
-seek, strict AV decode and owned cleanup. The next native trial isolates the
-caption loss to immediate shared admission at active1/maximum1. The bounded
-release-wait correction then passes5 focused ownership/cancel/deadline/policy
-regressions, strict infra Clippy/fmt, headed host1/1 and the same real programme
-boundary. Both second-occurrence A/B bitmap payloads exactly match the first;
-Dutch audio660Hz and34 exact owned identities drain. Canonical client-flow/
-{caption-diagnostic-native/admission-negative.json,caption-admission-candidate/
-stream-check/qualification.json} retain the baseline/candidate distinction.
-This closes concrete immediate-admission caption loss on the Linux default-profile
-candidate, not final package/platform acceptance.
+Complete: concrete native Linux concat initialization and immediate-admission
+caption loss (c6a31df2). Existing real60s boundary trial now also proves complete
+A/clear/B/clear across two occurrences, identical bitmap/clear payloads, exact
+15s B-to-clear relationship with retained one-tick display separation, selected
+Dutch660Hz, strict AV decode and35 observed owned identities drained. Canonical
+client-flow/caption-admission-final-tail/stream-check/qualification.json owns
+same c6 source/binary and public50ee; only observation length changed85to100s.
+Existing strict CBR transport now passes21/21 after complete subtitle PTS/PCR
+qualification. Retain original19/20 and all5 raw flags: installed TSDuck3.44 counts
+PES gaps>3s; all8 subtitle events follow PCR within47ticks. Missing/bad clocks,
+backward timestamps, AV flags and non-strict captures remain rejected. Existing
+shell/delivery/retention and scoped negative regressions prove that boundary.
 
-Next finite action: use the existing final-source/platform package owner to
-prove the complete second-occurrence caption tail/clear and resolve the retained
-sparse-subtitle transport classification, without relaxing any source/cue/AV
-oracle. The retained85s response ends before that second finalclear. Existing
-TSDuck result stays19/20:4PTS flags exclusively DVB258, AV/PCR/CC/jitter intact.
-No new client hunt or small editor variants. Reuse closed physical/editor/profile
-and qualified runtime/package components; bundle required affected platform gates
-on the coherent final source. Exact35 normal CI41468443287 remains in progress;
-no full-green claim for a new correction SHA. Keep97 audit red and ab56 historical
-13pass separate. The cold release-build timeout is retained, not repeated.
+Next finite action: qualify affected final-source platform/package joins on one
+coherent candidate, using existing package/native workflows and reserved120min
+Windows budget. Reuse closed physical/editor/publication/profile/runtime scopes;
+keep exact-source candidate, package and actual native execution claims separate.
+Normal full CI41475955391 targets exact c6a31df2; check all applicable results.
+Prior35 run41468443287 is cancelled after the newer push, not full green; retain
+97 audit red and ab56 historical13pass. No threshold/capacity/deadline increase,
+new source observation guard or product limitation is introduced.
 
 Complete: exact codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 is pushed and
 normal fullCI41375889471 is green:13 required jobs pass, Commit lint expected

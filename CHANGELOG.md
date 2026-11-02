@@ -1166,6 +1166,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Validate sparse DVB subtitle timestamps against the actual PCR clock in strict
+  CBR transport checks, retaining raw cadence diagnostics and rejecting missing
+  clock evidence, backward timestamps and AV discontinuities.
+
 - Wait within the existing startup deadline for shared teletext preparation
   capacity, preserving selected source captions across programme transitions
   without increasing concurrency or releasing running workers on cancellation.
