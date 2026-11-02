@@ -18624,7 +18624,7 @@ timings justify no additional CI speed change or measurement program.
 id         = 'p9b-02'
 phase      = 'Phase 9B — TV-guide add-on and integrated acceptance'
 title      = 'Accept integrated teletext engine and TV-guide add-on'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9b-01']
