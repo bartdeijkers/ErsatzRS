@@ -601,6 +601,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         for row in existing {
             let path_id: i64 = row.try_get("Id").repository()?;
             if !retained.contains(&path_id) {
+                release_library_path_restrictions(&mut tx, path_id).await?;
                 sqlx::query(r#"DELETE FROM "LibraryPath" WHERE "Id" = ? AND "LibraryId" = ?"#)
                     .bind(path_id)
                     .bind(id)
@@ -614,11 +615,12 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 
     async fn delete_local_library_admin(&self, id: EntityId) -> Result<()> {
+        let mut tx = self.0.begin().await.repository()?;
         let managed: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*) FROM "AddonMediaListLibrary" WHERE "LibraryId" = ?"#,
         )
         .bind(id)
-        .fetch_one(&self.0)
+        .fetch_one(&mut *tx)
         .await
         .repository()?;
         if managed > 0 {
@@ -626,15 +628,24 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                 "managed add-on libraries must be deleted through Add-on Lists".to_owned(),
             ));
         }
+        let path_ids: Vec<i64> =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "LibraryPath" WHERE "LibraryId" = ?"#)
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await
+                .repository()?;
+        for path_id in path_ids {
+            release_library_path_restrictions(&mut tx, path_id).await?;
+        }
         sqlx::query(
             r#"DELETE FROM "MediaSource"
                WHERE "Id" = (SELECT "MediaSourceId" FROM "Library" WHERE "Id" = ?)"#,
         )
         .bind(id)
-        .execute(&self.0)
+        .execute(&mut *tx)
         .await
         .repository()?;
-        Ok(())
+        tx.commit().await.repository()
     }
 
     async fn list_remote_sources_admin(
@@ -1288,6 +1299,34 @@ impl ProviderUpsert for EmbyMediaSource {
     }
 }
 
+/// Clears the two `ON DELETE RESTRICT` edges below a `LibraryPath` so its
+/// cascade delete can succeed.
+///
+/// `LibraryFolder.ParentId` and `MediaFile.LibraryFolderId` are `RESTRICT`
+/// (`ErsatzTV` schema parity), and `SQLite` checks `RESTRICT` per row in the
+/// middle of a cascade: a parent folder removed before its child, or a folder
+/// removed before the media files inside it, aborts the whole delete with
+/// `FOREIGN KEY constraint failed`. `ErsatzTV` avoids this by deleting the media
+/// items first and then each folder children-first; detaching the folder tree
+/// achieves the same in two set-based statements, after which the normal
+/// `LibraryPath` cascade removes the folders.
+async fn release_library_path_restrictions(
+    conn: &mut <crate::db::Db as sqlx::Database>::Connection,
+    library_path_id: EntityId,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "MediaItem" WHERE "LibraryPathId" = ?"#)
+        .bind(library_path_id)
+        .execute(&mut *conn)
+        .await
+        .repository()?;
+    sqlx::query(r#"UPDATE "LibraryFolder" SET "ParentId" = NULL WHERE "LibraryPathId" = ?"#)
+        .bind(library_path_id)
+        .execute(&mut *conn)
+        .await
+        .repository()?;
+    Ok(())
+}
+
 async fn fetch_base_source(
     pool: &Pool<crate::db::Db>,
     id: EntityId,
@@ -1370,5 +1409,92 @@ mod tests {
                 token: "beta-token".to_owned(),
             })
         );
+    }
+
+    /// Seeds a local library whose single path holds a nested folder tree and
+    /// a media file inside the child folder: the shape a real scan produces
+    /// and the one that tripped the `RESTRICT` keys during cascade deletes.
+    async fn seed_scanned_local_library(pool: &Pool<crate::db::Db>) {
+        for sql in [
+            r#"INSERT INTO "MediaSource" ("Id") VALUES (7)"#,
+            r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (7)"#,
+            r#"INSERT INTO "Library" ("Id", "MediaSourceId", "MediaKind", "Name")
+               VALUES (19, 7, 1, 'Scanned')"#,
+            r#"INSERT INTO "LocalLibrary" ("Id") VALUES (19)"#,
+            r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (30, 19, '/media/scanned')"#,
+            r#"INSERT INTO "LibraryFolder" ("Id", "LibraryPathId", "ParentId", "Path")
+               VALUES (40, 30, NULL, '/media/scanned'),
+                      (41, 30, 40, '/media/scanned/season'),
+                      (42, 30, 41, '/media/scanned/season/extras')"#,
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId") VALUES (50, 30)"#,
+            r#"INSERT INTO "Movie" ("Id") VALUES (50)"#,
+            r#"INSERT INTO "MediaVersion" ("Id", "MovieId", "Name", "Duration", "VideoScanKind",
+                 "DateAdded", "DateUpdated", "Width", "Height")
+               VALUES (60, 50, 'Main', '00:20:00', 0, '2026-01-01 00:00:00',
+                 '2026-01-01 00:00:00', 1920, 1080)"#,
+            r#"INSERT INTO "MediaFile" ("Id", "LibraryFolderId", "MediaVersionId", "Path", "PathHash")
+               VALUES (70, 41, 60, '/media/scanned/season/episode.mkv', 'episode-hash')"#,
+        ] {
+            sqlx::query(sql)
+                .execute(pool)
+                .await
+                .expect("seed scanned library");
+        }
+    }
+
+    async fn count(pool: &Pool<crate::db::Db>, table: &str) -> i64 {
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            r#"SELECT COUNT(*) FROM "{table}""#
+        )))
+        .fetch_one(pool)
+        .await
+        .expect("count rows")
+    }
+
+    #[tokio::test]
+    async fn deleting_a_scanned_local_library_removes_its_folder_tree_and_media() {
+        let pool = crate::db::init("sqlite::memory:")
+            .await
+            .expect("initialize database");
+        seed_scanned_local_library(&pool).await;
+
+        SqliteMediaSourceRepository(pool.clone())
+            .delete_local_library_admin(19)
+            .await
+            .expect("delete scanned local library");
+
+        for table in [
+            "MediaSource",
+            "Library",
+            "LibraryPath",
+            "LibraryFolder",
+            "MediaItem",
+            "MediaFile",
+        ] {
+            assert_eq!(count(&pool, table).await, 0, "{table} rows remain");
+        }
+    }
+
+    #[tokio::test]
+    async fn removing_a_scanned_path_from_a_local_library_removes_its_folder_tree() {
+        let pool = crate::db::init("sqlite::memory:")
+            .await
+            .expect("initialize database");
+        seed_scanned_local_library(&pool).await;
+
+        SqliteMediaSourceRepository(pool.clone())
+            .save_local_library_admin(&LocalLibraryAdmin {
+                id: 19,
+                name: "Scanned".to_owned(),
+                media_kind: 1,
+                paths: Vec::new(),
+            })
+            .await
+            .expect("remove scanned path");
+
+        assert_eq!(count(&pool, "Library").await, 1);
+        for table in ["LibraryPath", "LibraryFolder", "MediaItem", "MediaFile"] {
+            assert_eq!(count(&pool, table).await, 0, "{table} rows remain");
+        }
     }
 }

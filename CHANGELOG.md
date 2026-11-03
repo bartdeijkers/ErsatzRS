@@ -21,6 +21,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Deleting a scanned local library, or removing a scanned path from one, no
+  longer fails with a `FOREIGN KEY constraint failed` error when the path
+  contains nested folders or media files.
 - Cross-compile release Docker application binaries on the build host using
   the existing Bookworm toolchains, avoiding ARM compiler emulation that
   exceeded the release job's six-hour limit. Preserve the runtime base,
