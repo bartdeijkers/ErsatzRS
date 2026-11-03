@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Defer Docker image delivery for application release 1.2.0 by maintainer
+  decision. Preserve container code and evidence; the three Linux archives,
+  Windows x64 and their required verification remain in scope.
+
 ### Fixed
 
 - Cross-compile release Docker application binaries on the build host using

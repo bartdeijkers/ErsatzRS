@@ -839,6 +839,12 @@ actual three-platform output and startup before publishing the application
 draft. Do not copy ordinary archive binaries into Bookworm without qualifying
 their strong GLIBC imports: a newer build host can produce incompatible ELFs.
 
+For application release 1.2.0 only, the maintainer deferred Docker image
+building, publication and image acceptance on 2026-11-03. The three Linux
+archives and Windows x64 retain their required package/runtime/CI gates. Keep
+the corrected recipe and original image-timeout evidence; this exception does
+not accept an untested image or require registry credentials for that release.
+
 ## Compile-cost notes
 
 The two crates that dominate cold build time:

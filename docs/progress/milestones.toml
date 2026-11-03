@@ -18688,6 +18688,14 @@ repository. Reuse stable FFmpeg2.0.9. Do not replace the existing installation.
 Preserve experimental2.5 and all current platform exceptions. Freeze one final
 versioned release candidate before further release builds; retain previous
 candidate identities and reuse only applicable unchanged proof/artifacts.
+
+Maintainer delivery amendment2026-11-03: explicit "skip docker" defers Docker
+image building, publication and image acceptance for this1.2.0 release. Retain
+container code, qualified recipe and all timeout/ABI/auth/preparation evidence;
+do not mark image support accepted or claim the original Docker job green.
+The three Linux application archives, Windows x64 and every applicable required
+CI/runtime/package gate remain mandatory. The application release may complete
+without this deferred container deliverable; no new scope reduction elsewhere.
 '''
 evidence = '''
 Completed private concat-runtime artifacts/software component2026-11-01:
@@ -19172,11 +19180,25 @@ that cold QEMU compilation or claim a compiler diagnostic/manual cancellation.
 
 Windows checkout correction is complete: runner-local core.longpaths=true proves
 exact clean CAC checkout, and recorded Python3.13.12 satisfies the prerequisite.
-Only Windows was rerun at15:00Z (attempt2, actual job125997987210); checkout passes,
-native compilation is in progress. Space preflight passes C64.16/E123.02GiB;
-retain the120-minute actual package trial and24/20GiB guards. Native preparation
-now uses the genuine18-file frontend. No package/runtime acceptance follows yet.
-Wait for this attempt to finish before requesting only ARMv7 recovery. Confirm no
+Only Windows was rerun at15:00Z: actual job125997987210 succeeds16:29:27Z on
+unchangedCAC. Real asset706278176/archive06e70512 passes native72-file admission,
+source-static45/site18/full layout and14.04s bundle gate with natural empty Job.
+Native Windows component is Complete: public209 acquisition and unchanged cache,
+3Health/Version1.2/assets/changelog and Bundledrs7 pass. Actual headed proof is
+explicit case composition: retained ChromiumPASS plus focusedFirefoxPASS7.24s,
+original JS/noJS/responsive drawer oracles,0skips/flakes/retries in successfulcases.
+Original Nodehash mismatch and30sFirefoxviewport stall remain negative evidence;
+new official Node24.22.1 matches published checksum, blankresize41ms and the
+unchanged focused Firefoxcase passes. Original stallcause stays unexplained;
+this is no productrepair or one fullgreen two-case-run claim. Canonical final-
+candidate/release-v1.2.0/candidate-cac93f3d/windows-native-preparation/actual-win-
+v1.2.0/qualification.json SHA35006da0 joins the exact ZIP/producer/package receipt
+458dad7c, source3993 inputs and screenshots. All owned Jobs/handles finish with
+no processes/listeners; private evidence/cache/DB remain. InnerTaskkill is test
+teardown, not gracefultrayexit. Finished16:53:17Z within16:31–18:31 reservation;
+C57.33/E121.37GiB remain. No compile/install/8409/firewall change.
+
+Windows attempt2 is terminal; wait for control fullCI before ARMv7 recovery. Confirm no
 other Linux job can prune shared Cargo sources: the preserved ARM64-postcleanup/
 ARMv7-depinfo ordering strongly supports that cause, but the exact missing syscall
 was not captured. Target-clean/cache-miss evidence rejects stale restored target.
@@ -19184,23 +19206,26 @@ A quiescent retry supports recovery, not conclusive original causation; no blind
 repeat or cache/source/toolchain mutation if it fails. GitHub clones inherited
 job IDs on new attempts; execution timestamps distinguish reuse from a new test.
 
-The corrected Docker candidate reuses existing Bookworm host cross-toolchains,
-three explicit Rust targets and target-specific caches. Keep the same source,
-lockfile, frontend, SSR features, single worker/codegen16/LTO-off settings,
-runtime base and pinned Next/FFmpeg. Ordinary x64/ARM64 web archive reuse is
-rejected by actual strong GLIBC2.38 imports; weak2.39 pidfd references alone are
-not that proof. Existing release-docker-recovery separates immutable app tagCAC
-from the corrected recipe revision; its current CI guard requires all13 general/
-Level1.5 jobs and keeps enhanced-only2.5 optional. Local candidate checks pass: Docker three-platform check has no warnings,
-recovery guard10 tests plus existing CI selection/artifact50 tests pass, and
-actionlint accepts both changed workflows with only the known registered runner
-labels exempted. Progress/whitespace validation passes. These checks are separate
-from successful builds/adoption. Next: commit/push this bounded recipe and guard,
-verify its applicable CI; use the existing recovery workflow on tagv1.2.0 and run
-41598409267 only after it is terminal. Stop after three actual compatible images,
-remaining Windows/ARMv7 packages and their required startup/bundle checks pass,
-then publish and download-check the unchanged app release. Reuse completed Linux
-x64/ARM64, physical/editor/publication/isolation and full source-CAC CI evidence.
+Deferred Docker delivery, explicit maintainer2026-11-03 "skip docker": no
+recovery build, image publication or image runtime proof for currentv1.2.0.
+Preserve the original six-hour timeout/cleanup and rejected archive-reuse ABI
+hypothesis (strong GLIBC2.38, distinct from weak2.39 imports). Preserve committed
+cross-builder/recovery guard50cf9a28 and its Docker/actionlint/60 Python/progress
+checks; they are not image build/ABI/runtime acceptance. Exact fullCI41662384714
+continues for that pushed checkpoint. The prepared strict recovery/image observer
+remains unexecuted; anonymous private GHCR403 is retained, but local authentication
+is no longer a release prerequisite. No runner-secret copying, visibility change,
+new Docker tag, repeated build or deferred-work acceptance. Future Docker delivery
+requires an authorized follow-up; native archives remain within this release.
+
+Current finite stop: finish exact control full CI, then quiescent ARMv7 archive/
+QEMU startup; publish/download-check unchanged draft432399807 and all four required
+native assets. Windows1.2 acceptance is closed within its explicit source/platform
+and case-composition boundary. Reuse completed Linux x64/ARM64, physical/editor/
+publication/isolation and source-CAC full CI. Docker's original inherited
+cancellation remains visible and Deferred; the individual required archive
+producers and actual successful recovery executions establish release coverage,
+not an invented full green original release run.
 
 This9B-FINAL owner also owns the three authorized stable publication joins.
 ExistingLatestapp1.1.0/source97aa and addonv0.11.11/sourcea416 do not satisfy the
@@ -19271,7 +19296,7 @@ all28members/identities/modes/CRLF match. It contains TV-guide0.1.2 and
 yt-dlp0.11.12 with compatible<1.3 bounds; priorv0.11.11 and installations are
 preserved. Canonical runtime-compatibility/addons-v012-ci/published-v0.11.12/
 qualification.json. Exact app source-CAC full CI is Complete; only the explicitly
-remaining package/image acceptance and app publication above remain.
+remaining native package acceptance and app publication above remain.
 Canonical final-candidate/release-v1.2.0/candidate-cac93f3d/source-freeze.json
 binds3993rawGitfiles/tree3642b6be/inventory89caba9a and WindowsZIPdcdf3c59 with
 24materializedlinks. All originalcfa snapshots remain historical. Prepared

@@ -62,45 +62,48 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-FINAL, stable application1.2.0 delivery. The sole
-finite completion list is the P9B-02 evidence; closed components stay closed.
-Delivery checkout: `tmp/worktrees/p9b-next-preview-ci`; preserve Root foreign work.
+Current package: P9B-02 / 9B-FINAL stable application1.2.0 delivery. The only
+finite completion list is P9B-02 evidence; closed components remain closed.
+Delivery checkout `tmp/worktrees/p9b-next-preview-ci` carries codecheckpoint
+50cf9a28 plus documentation-only checkpoints. Preserve Root foreign work and
+immutablev1.2.0 application sourceCAC/tag a3706406.
 
-Completed: exact application sourcecac93f3dca190992ede69688907a1f248563f589 full
-CI41578029160 (all13 required jobs, expected push Commitlint skip), owned Stop
-retirement, host1.2/TV-guide0.1.2 compatibility join and physical production-client
-component. Genuine official Linux x64/ARM64 archives and native/QEMU startup are
-Complete within their recorded scopes. Reuse canonical source/editor/publication/
-isolation/Lua/F6/transport/client evidence; no unchanged full-chain replay.
+Completed: sourceCAC full CI41578029160 (13required jobs, expectedpushlintskip),
+owned Stop repair, production-host/addon compatibility and physical-client proof.
+Actual Linux x64/ARM64 archives and native/QEMU startup components are Complete.
 Stable Next rs7 and Addonsv0.11.12 publications/download checks are Complete.
+Reuse closed editor/publication/isolation/Lua/F6/transport/client evidence.
 
-One current direction: the bounded Docker cross-compilation recipe/guard passes
-local Docker/actionlint/60 Python/progress checks. Commit/push the checkpoint,
-then verify its applicable CI and execute existing Docker recovery
-against immutable annotatedv1.2.0/sourceCAC. Original Release41598409267 attempt1
-hit the fixed six-hour Docker limit; its builder/cache are gone. Keep original
-negative logs/annotations and do not repeat the same cold QEMU compiler build.
-The new recipe retains Bookworm, dependencies, flags and real accepted frontend/
-Next payloads while compiling all three Linux targets on the x64 build host.
-No new app tag, older-binary relabel, runtime-base change or timeout increase.
+One current direction: finish full control CI41662384714 on50cf9a28, then only
+the isolated ARMv7 producer/archive/QEMU startup. Wait until other host Cargo work
+is terminal; do not let ARMv7 post-cache pruning race CI. Rerun only its job,
+never all failed jobs including deferred Docker. After required native gates,
+publish/download-check the unchanged app draft432399807 and four actual archives.
 
-Windows-only attempt2/job125997987210 is compiling after successful corrected
-checkout. Finish that actual producer, then admit its genuine ZIP and run the
-existing isolated native bundle/managed/headed checks (120 minutes reserved,
-24GiB start/20GiB ongoing guards). Actual18-file frontend preparation is complete.
-After the attempt is terminal and Linux Cargo registry pruners are absent, rerun
-only the known ARMv7 failure and qualify its genuine package/QEMU startup. No
-blind retry if the supported shared-registry-pruning hypothesis is disproven.
-Complete real three-platform image identity/startup and all remaining package
-gates before publishing unchanged draft432399807 and checking final downloads.
+Native Windows1.2 gate is Complete: official sourceCAC producer125997987210,
+ZIP06e70512/asset706278176, native72files/static45/site18, bundle14.04s, public209/
+unchangedcache,3Health/Version1.2/assets/NextBundled. Headed case composition is
+retained ChromiumPASS plus focusedFirefoxPASS7.24s with original JS/noJS/drawer
+oracles. Preserve original Nodehash/30sFirefoxstall negatives and41msblankcontrol;
+originalstallcause remainsunknown, not a productfix or singlefullgreen2case run.
+Canonical windows-native-preparation/actual-win-v1.2.0/qualification.json SHA35006da0
+joins source/ZIP/package458dad7c and screenshots. All owned Jobs/handles terminal,
+no process/listener; private evidence/cache/DB retained. Finished16:53:17Z within
+120min reservation. No installation/firewall/8409 change or gracefultrayexit claim.
 
-Canonical evidence: qualification.json.release_delivery and final-candidate/
-release-v1.2.0/candidate-cac93f3d; original release failures are at final-candidate/
-candidate-cac93f3d/release-observation. Preserve all prior candidates/negatives.
-Use stable FFmpeg2.0.9; do not rebuild Next or replace the existing installation.
-Keep Private TCP8409/firewall/portproxy intact, macOS deferred, native ARM assumed
-from required package/emulation evidence, enhanced-only2.5 experimental/optional
-and QTM optional/upstream wait. No DVBViewer or new client search.
+Maintainer "skip docker" defers current-release image build/publication/proof.
+Preserve50cf recipe and original timeout/ABI/auth/prepared evidence, not accepted
+images. Do not dispatch Docker recovery, ask for credentials or change visibility.
+This removes local GHCR authentication from the current release prerequisites.
+All three Linux native packages, Windows and applicable CI remain required.
+Publish unchanged app draft432399807 only after those remaining gates and verify
+its four actual downloadable archives. No installation replacement or8409 change.
+
+Canonical qualification.json.release_delivery owns exact sources/producer scopes;
+final-candidate/release-v1.2.0/candidate-cac93f3d and original sibling release-
+observation retain receipts/negatives. Use stable FFmpeg2.0.9; do not rebuild Next.
+Keep macOS deferred, ARM native assumption explicit and2.5 experimental/optional;
+QTM remains optional/upstream wait. No DVBViewer or new client search.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
