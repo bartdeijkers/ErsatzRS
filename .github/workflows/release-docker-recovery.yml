@@ -118,8 +118,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          next_repository=$(python3 -c 'import runpy; print(runpy.run_path("scripts/release/stage-next.py")["DISTRIBUTION_REPOSITORY"])')
           next_tag=$(python3 -c 'import runpy; print(runpy.run_path("scripts/release/stage-next.py")["DISTRIBUTION_TAG"])')
-          gh release download "$next_tag" --repo "$GITHUB_REPOSITORY" --dir .next-snapshot
+          gh release download "$next_tag" --repo "$next_repository" --dir .next-snapshot
       - name: Build and push corrected image
         uses: docker/bake-action@v7
         with:

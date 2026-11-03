@@ -600,7 +600,7 @@ async fn production_guide_explicit_http_base_and_real_lua_effective_publication_
         .await
         .unwrap()
         .snapshot;
-    assert_eq!(installation.as_ref().unwrap().version, "0.1.1");
+    assert_eq!(installation.as_ref().unwrap().version, "0.1.2");
     let (identity, before, base) = base(&fixture).await;
     refusals(&fixture, identity).await;
     assert_eq!(accepted(&fixture, false).await, base);

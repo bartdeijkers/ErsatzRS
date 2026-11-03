@@ -1111,7 +1111,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-app"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1130,7 +1130,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1155,7 +1155,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-domain"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1167,7 +1167,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-ffmpeg"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-trait",
  "ersatzrs-domain",
@@ -1190,15 +1190,15 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-healthcheck"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "ersatzrs-hwprobe"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "ersatzrs-infra"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -1252,7 +1252,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-launcher"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "directories",
  "embed-resource",
@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-platform"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "thiserror 2.0.21",
  "winreg 0.56.0",
@@ -1274,7 +1274,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-scanner"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-scheduler"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1321,7 +1321,7 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-web"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "ammonia",
  "async-trait",
@@ -6145,7 +6145,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "chrono",

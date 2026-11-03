@@ -18,6 +18,7 @@ const databasePath = process.env.E2E_DB_PATH;
 const candidateZip = process.env.ERSATZRS_TVGUIDE_CANDIDATE_ZIP;
 const candidateDigest = candidateZip ? sha256(readFileSync(candidateZip)) : undefined;
 const addonId = 'org.ersatzrs.addon.tvguide-teletext';
+const productionVersion = '0.1.2';
 const cultures = [
   ['en-us', 'en_us'], ['nl', 'nl'], ['pl', 'pl'], ['pt-br', 'pt_br'],
   ['fr-fr', 'fr_fr'], ['de-de', 'de_de'], ['es-es', 'es_es'],
@@ -101,7 +102,7 @@ function compareInstalledFiles(selected = installed): void {
 }
 
 test.describe.configure({ mode: 'serial' });
-test.skip(!databasePath || !candidateZip, 'Requires disposable E2E_DB_PATH and an explicit production0.1.1 ERSATZRS_TVGUIDE_CANDIDATE_ZIP.');
+test.skip(!databasePath || !candidateZip, 'Requires disposable E2E_DB_PATH and an explicit production0.1.2 ERSATZRS_TVGUIDE_CANDIDATE_ZIP.');
 
 test.beforeAll(async ({ browser, baseURL }) => {
   // The manual external case owns its isolated install; its existing controller
@@ -165,7 +166,7 @@ async function installProduction(browser: Browser, baseURL: string | undefined, 
     await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect.poll(() => installation(selectedPath)?.Enabled).toBe(1);
     const selected = installation(selectedPath)!;
-    expect(selected.Version).toBe('0.1.1');
+    expect(selected.Version).toBe(productionVersion);
     expect(selected.SourceId).toBeTruthy();
     expect(selected.StateRevision).toBeTruthy();
     expect(selected.PackageSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -251,7 +252,7 @@ for (const js of [true, false]) {
   test(`production TV-guide SQL draft preparation (JavaScript ${js})`, async ({ browser, baseURL }, info) => {
     test.setTimeout(300_000);
     info.annotations.push({ type: 'browser-version', description: browser.version() },
-      { type: 'production-package', description: `${addonId}0.1.1; repositoryZIP SHA256 ${candidateDigest}; contentSHA256 ${installed.ContentSha256}` });
+      { type: 'production-package', description: `${addonId}${productionVersion}; repositoryZIP SHA256 ${candidateDigest}; contentSHA256 ${installed.ContentSha256}` });
     // Reuse channel allocation/settings cleanup only. Its configuration-only
     // sentinel remains unbound and must never execute or supply page content.
     const fixture = new TeletextChannelFixture(databasePath!);
@@ -631,7 +632,7 @@ test('production TV-guide explicit publication and paired ordinary stream output
   test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
   test.setTimeout(300_000);
   info.annotations.push({ type: 'browser-version', description: browser.version() },
-    { type: 'production-package', description: `${addonId}0.1.1; repositoryZIP SHA256 ${candidateDigest}; contentSHA256 ${installed.ContentSha256}` });
+    { type: 'production-package', description: `${addonId}${productionVersion}; repositoryZIP SHA256 ${candidateDigest}; contentSHA256 ${installed.ContentSha256}` });
   const fixture = new TeletextChannelFixture(databasePath!, {
     authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
   });
@@ -1654,7 +1655,7 @@ test('native Windows packaged TV-guide TTI footer survives publication and autom
   test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
   test.setTimeout(300_000);
   info.annotations.push({ type: 'browser-version', description: browser.version() },
-    { type: 'production-package', description: `${addonId}0.1.1; repositoryZIP SHA256 ${candidateDigest}` });
+    { type: 'production-package', description: `${addonId}${productionVersion}; repositoryZIP SHA256 ${candidateDigest}` });
   const fixture = new TeletextChannelFixture(databasePath!, {
     authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
   });
@@ -1899,7 +1900,7 @@ test('production TV-guide actual command timeout retains last-good output and re
   test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
   test.setTimeout(300_000);
   info.annotations.push({ type: 'browser-version', description: browser.version() },
-    { type: 'production-package', description: `${addonId}0.1.1; repositoryZIP SHA256 ${candidateDigest}` });
+    { type: 'production-package', description: `${addonId}${productionVersion}; repositoryZIP SHA256 ${candidateDigest}` });
   const baseURL = isolatedWebHost.baseURL;
   const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, {
     authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },

@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-03
+
 ### Security
 
 - Update release-notes Markdown rendering to pulldown-cmark 0.13.6, fixing
@@ -49,6 +51,11 @@ release section when tagging a release.
   RUSTSEC-2026-0373 without weakening sanitizer policy.
 
 ### Added
+
+- Deliver Level 1/1.5 teletext authoring, preview and explicit publication with
+  per-channel profiles, themes, custom zones and Lua control. The production
+  TV-guide add-on supplies guide-only pages and navigation; Level 2.5 remains
+  experimental and its enhanced-only acceptance is deferred.
 
 - Prepare teletext guide concepts from explicitly selected host TV-guide channels
   through localized native admin forms, with bounded source capture, immutable
@@ -719,6 +726,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Upgrade the official add-on repository to v0.11.12 before upgrading the host
+  to 1.2.0. It includes TV-guide 0.1.2 and yt-dlp 0.11.12 with compatible host
+  ranges; existing add-on versions bounded below 1.2 are rejected explicitly.
+  Package installation and activation remain separate operator actions.
+
 - Keep the teletext authoring browser check aligned with the optional source-channel
   selector, including its disabled state when authoring is unavailable.
 
@@ -1165,6 +1177,11 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Resolve Docker's pinned Next download from its distribution repository and
+  include every validated runtime companion, including ARM64's private MPP
+  library and notices. Keep hydration output names consistent across release
+  archives, recovery builds and Docker images.
 
 - Validate sparse DVB subtitle timestamps against the actual PCR clock in strict
   CBR transport checks, retaining raw cadence diagnostics and rejecting missing
@@ -5932,7 +5949,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...v1.1.0
 [1.0.37-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...v1.0.37-beta
 [1.0.35-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...v1.0.35-beta

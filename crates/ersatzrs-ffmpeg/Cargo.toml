@@ -7,8 +7,8 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1"
-ersatzrs-domain = { path = "../ersatzrs-domain", version = "1.1.0" }
-ersatzrs-hwprobe = { path = "../ersatzrs-hwprobe", version = "1.1.0" }
+ersatzrs-domain = { path = "../ersatzrs-domain", version = "1.2.0" }
+ersatzrs-hwprobe = { path = "../ersatzrs-hwprobe", version = "1.2.0" }
 flate2 = "1"
 mlua = { version = "0.12", features = ["lua54", "vendored"] }
 mpeg2ts-reader = "0.18.2"

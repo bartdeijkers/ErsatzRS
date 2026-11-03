@@ -19156,6 +19156,19 @@ ExistingLatestapp1.1.0/source97aa and addonv0.11.11/sourcea416 do not satisfy th
 new releases. Freeze proposed1.2.0/v0.11.12 compatibility before final builds.
 Complete the running0a1.1.0 components as candidate proof, not relabeled assets.
 Canonical qualification.json release_delivery owns the cross-repository joins.
+Prepared release boundary: new workspace1.2.0/24 internal requirements/13 local
+lock identities, unchanged SDK0.4 and585 external dependencies; true production
+fixture expectations0.1.2, no synthetic/negative scope rewrite. Existing actionlint
+passes3 release workflows with the two known self-hosted labels; fmt and browser
+case declaration pass. Actual Docker ARM64 Next staging passes8 pinned files,
+including MPP/notice placement. PublishedFFmpeg2.0.9 requires at most GLIBC2.36,
+so no demonstrated reason to change Bookworm. New1.2.0 binaries remain required;
+do not relabel oldcandidate or compile unused0a ARM. Source47f2ab4 addons full
+CI41549946960 passes nativeWindows/Linux/Node with.9fixtures; actual downloaded
+ZIPa7390fb9/28members matches source/modes/CRLF and includes both compatible
+packages. New host1.2 actual install/publication/ordinary-output join, exact app
+candidate CI, final4RID/image builds/acceptance and3 publications remain open.
+
 Current-source CI exception: normal97a44778 pushrun41452100743 finds
 RUSTSEC-2026-0433 in pulldown-cmark0.13.5. Keep that exact red job/log; the
 preliminary optional rustup flag probe is not the audit failure. The isolated

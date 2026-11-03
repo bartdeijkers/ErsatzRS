@@ -35,6 +35,9 @@ jobs:
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
       CARGO_PROFILE_RELEASE_LTO: "false"
       LEPTOS_HASH_FILES: "false"
+      # Same compile-time output name as the primary binaries job, so a
+      # recovered archive is byte-comparable with the one it replaces.
+      LEPTOS_OUTPUT_NAME: "ersatzrs-web"
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag }}

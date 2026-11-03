@@ -25,6 +25,11 @@ COPY scripts/release/next-patches/manifest.json /next-patches/manifest.json
 COPY .next-snapshot/ /next-snapshot/
 RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
     --docker-variant "$TARGETVARIANT" --snapshot-dir /next-snapshot --output /next
+# Keep provenance separate while staging every validated runtime companion
+# beside the worker, including ARM64's private MPP library and its notices.
+RUN mkdir -p /next-runtime/next \
+    && mv /next/LICENSE /next/origin.json /next-runtime/next/ \
+    && cp -a /next/. /next-runtime/
 
 FROM rust:1.97.1-slim-bookworm AS builder
 
@@ -38,7 +43,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV CARGO_BUILD_JOBS=1 \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
-    CARGO_PROFILE_RELEASE_LTO=false
+    CARGO_PROFILE_RELEASE_LTO=false \
+    LEPTOS_HASH_FILES=false \
+    LEPTOS_OUTPUT_NAME=ersatzrs-web
 
 WORKDIR /workspace
 
@@ -150,8 +157,7 @@ FROM runtime-base AS runtime
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
-COPY --from=next-artifacts /next/ersatztv-channel /usr/local/bin/ersatztv-channel
-COPY --from=next-artifacts /next/LICENSE /next/origin.json /usr/local/bin/next/
+COPY --from=next-artifacts /next-runtime/ /usr/local/bin/
 # release-web-assets/site is already the single merged admin-UI directory
 # (pkg/ plus the assets-dir/public contents cargo-leptos copies alongside
 # it); ship only that, not a separate public/ copy.

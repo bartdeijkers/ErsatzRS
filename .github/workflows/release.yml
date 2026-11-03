@@ -19,6 +19,7 @@ jobs:
       # The Windows runner shares a machine with WSL; bound compiler memory.
       CARGO_BUILD_JOBS: "2"
       LEPTOS_HASH_FILES: "false"
+      LEPTOS_OUTPUT_NAME: "ersatzrs-web"
     steps:
       - uses: actions/checkout@v7
       - name: Test beta draft guard (offline)
@@ -170,6 +171,7 @@ jobs:
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       LEPTOS_HASH_FILES: "false"
+      LEPTOS_OUTPUT_NAME: "ersatzrs-web"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -250,6 +252,7 @@ jobs:
       # ([package.metadata.leptos] hash-files = false) and enforced by the
       # "Verify web bundle" gate step below.
       LEPTOS_HASH_FILES: "false"
+      LEPTOS_OUTPUT_NAME: "ersatzrs-web"
       # Empty unless the signing secrets are configured. Hoisted to job env
       # because the `secrets` context is not available in step `if:` conditions;
       # the optional signing steps gate on `env.AZURE_CLIENT_ID != ''`.
@@ -500,8 +503,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          next_repository=$(python3 -c 'import runpy; print(runpy.run_path("scripts/release/stage-next.py")["DISTRIBUTION_REPOSITORY"])')
           next_tag=$(python3 -c 'import runpy; print(runpy.run_path("scripts/release/stage-next.py")["DISTRIBUTION_TAG"])')
-          gh release download "$next_tag" --repo "$GITHUB_REPOSITORY" --dir .next-snapshot
+          gh release download "$next_tag" --repo "$next_repository" --dir .next-snapshot
 
       - name: Build and push multi-arch image
         uses: docker/bake-action@v7

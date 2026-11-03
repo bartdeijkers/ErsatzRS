@@ -62,123 +62,56 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 coherent final-source package/platform and full-CI joins.
-Maintainer release amendment2026-11-03: final delivery includes three stable
-publications after applicable acceptance: new app1.2.0, in-place promotion of
-unchanged Next next-0.2.3-54c6cb9-ersatzrs.7, and addon repositoryv0.11.12 with
-TV-guide0.1.2/yt-dlp0.11.12 and deliberate host<1.3 compatibility extensions.
-Verify exact source/tag/CI/publication and actual downloads for each. Reuse
-stable FFmpeg2.0.9; do not replace the existing installation automatically.
-Both0a1.1.0 nativeWindows/Linuxx64 candidate components are Complete below.
-Retain their actual identity; do not launch the prepared but unstarted0a ARM
-builds. Final ARM and other release builds belong to one frozen1.2.0 candidate,
-using the normal draft-first workflow and required Docker contract. No older
-binary relabel, Next recompilation or macOS work. Existing9B-FINAL owns these
-release joins. Candidate proof, final release builds and publication stay distinct.
+Current package: P9B-02 / 9B-FINAL versioned1.2.0 candidate and three stable publications.
+The sole finite completion list remains P9B-02 evidence. Reuse closed9A,9B-CONFIG,
+PACKAGE,LUA,TTI,RUNTIME and actual Kodi production-guide scopes; reopen only for
+concrete regressions. Previous live handoff is retained in checkpoint92270084.
 
-Complete: physical production-guide viewing/themes/navigation/refreshed content
-on the recorded Kodi21.2/IPTV Simple21.11.0/FFmpeg Direct21.3.8. Its201/02 local
-reselection and human-window negatives remain explicit. Do not reopen without a
-concrete regression; no new physical guide variant or client hunt is required.
+Complete: source0a/version1.1.0 native Linux and Windows candidate packages.
+Canonical final-candidate/current-source-0a4fb2de owns exact archives88dd5b11/
+f3539249, source3993, actual managedFFmpeg2.0.9/BundledNextrs7, package/Health/
+web-bundle and natural Linux cleanup; Windows headed Next navigation passes2/2.
+Windows inner Taskkill is test teardown; compilerhelper needed bounded force,
+while runtime outer Job drains naturally. These are not relabeled1.2.0 binaries.
+All native build/package/runtime handles are terminal. Unstarted0a ARM recipes
+stay preserved and unexecuted; final platform builds belong to one1.2.0 source.
 
-Complete: concrete native Linux concat initialization and immediate-admission
-caption loss (c6a31df2). Existing real60s boundary trial now also proves complete
-A/clear/B/clear across two occurrences, identical bitmap/clear payloads, exact
-15s B-to-clear relationship with retained one-tick display separation, selected
-Dutch660Hz, strict AV decode and35 observed owned identities drained. Canonical
-client-flow/caption-admission-final-tail/stream-check/qualification.json owns
-same c6 source/binary and public50ee; only observation length changed85to100s.
-Existing strict CBR transport now passes21/21 after complete subtitle PTS/PCR
-qualification. Retain original19/20 and all5 raw flags: installed TSDuck3.44 counts
-PES gaps>3s; all8 subtitle events follow PCR within47ticks. Missing/bad clocks,
-backward timestamps, AV flags and non-strict captures remain rejected. A concrete
-1s intermediate cue-clock falsepass is corrected using the existing8ms PCR-jitter
-drift bound; same retained capture21/21 and bundled regressions pass. Canonical
-one-second-drift-negative.json retains both outcomes; no host/client replay.
+App release preparation: workspace1.2.0,24 internal requirements and13 local lock
+identities updated; SDK0.4 and all585 external lock records unchanged. Genuine
+TV-guide expectations now use0.1.2; synthetic/old-negative cases remain intact.
+Release workflows now resolve Next's actual distribution repository; Docker
+stages every validated companion. Existing ARM64 Next-stage proof passes8 files,
+including MPP, without Rust/Next compilation. FFmpeg2.0.9 ABI check finds maxima
+2.28(x64/ARM64)/2.36(ARMv7), so no Bookworm base change is needed. Ubuntu24 app
+binaries cannot substitute for the distinct Bookworm builds. Normal release
+workflow builds one matched frontend,4 RID archives and its required Docker image.
 
-Next finite action: qualify affected final-source platform/package joins on one
-coherent candidate, using existing package/native workflows and reserved120min
-Windows budget. Reuse closed physical/editor/publication/profile/runtime scopes;
-keep exact-source candidate, package and actual native execution claims separate.
-Normal full CI41481824829 targets exact98566685; check every applicable result
-and use only source/digest-qualified artifacts for the remaining Linux joins.
-CI recovery: Next and Teletext1.5 failed together at17:29:24 with GitHub runner-
-communication-loss annotations, not a demonstrated test/source defect. General
-Rust and artifact build pass; browser jobs continue. Both Linux runners are now
-online. GitHub rejects failed-only rerun while the original round is running;
-wait for its terminal state, then rerun only failures on this same SHA. Canonical
-ci-98566685/infrastructure-loss-classification.json retains original negatives.
+Next finite action: finish exact985 CI41481824829 failed-only infrastructure
+recovery before pushing the prepared app candidate, preserving its original11
+required passes and the two runner-communication-loss negatives. Attempt2
+Teletext1.5 passes; the parent now follows the same Next job125640102013. The
+bounded observer stopped; no new rerun or full-green claim before completion.
+Then push one frozen1.2.0 candidate, require its exact-SHA full CI and execute
+existing explicit-publication/paired-ordinary-output proof with its matched CI
+host and genuine0.1.2 ZIP. Only then create immutablev1.2.0 and use the normal
+draft-first build, accept actual required packages/image, and publish same bytes.
 
-Complete native Linux x64 candidate0a1.1.0 package/startup component: actual
-three-ELF release build2668.994s,3993 exact source inputs,71-member independent
-archive88dd5b11 and extraction pass. Existing managed2.0.9/Bundledrs7 startup,
-three persisted Health titles, exact HTML/JS/WASM/changelog and naturalSIGTERM0/
-absent processgroup pass. Canonical current-source-0a4fb2de/linux/
-managed-linux-qualification.json and package-linux-x64.json own full identities.
-Retain this completed candidate scope; it is not a newly compiled1.2.0 release.
-No obsolete0a ARM build follows; final required ARM work belongs to1.2.0.
+Addons source47f2ab4eb233895ec6807fe488d688d8271c5f54 is pushed. Full manual CI
+41549946960 passes Windows160/81skips, Linux160/38skips, Node12/0skips; attachment
+is the expected manual skip. Actual CI ZIPa7390fb9 has28 source/mode/CRLF-exact
+members: TV-guide0.1.2 plus yt-dlp0.11.12, lower bounds preserved and upper<1.3.
+Canonical runtime-compatibility/addons-v012-ci/qualification.json. Repository
+v0.11.12 publication/download checks await the host1.2 join; no scripts changed.
+Next next-0.2.3-54c6cb9-ersatzrs.7/source95206a81 can be promoted stable/Latest
+with unchanged tag/artifacts after applicable acceptance; no new Next compile.
+Use existing stableFFmpeg2.0.9; no further FFmpeg release.
 
-Complete Windows x64 candidate0a1.1.0 package/startup component: actual four-PE
-build4499.38s/source3993 exact, private ZIPf3539249/independent extraction and
-existing structural gate pass. Actual packaged launcher acquires public2.0.9,
-then restarts with identical cache bytes/mtimes and Bundledrs7. Persisted Health,
-HTML/JS/WASM/changelog/configuration and existing headed next-version case in
-Chromium/Firefox pass2/2 without skips/flakes/console errors. Canonical
-current-source-0a4fb2de/attempt-local-control2/windows-{build,package,managed}-
-result.json and windows-headed-results.json own full identities. Compilerhelper
-needed bounded force; runtime outer Job drains naturally. Internal Taskkill is
-owned test teardown, not a graceful tray-exit claim; no survivors/listener remain.
-Both native candidate components are Complete within source0a/version1.1.0.
-Next: one frozen1.2.0 release source and its required build/publication joins;
-no old-binary relabel or unstarted0a ARM compilation.
-
-Original build handles95818(Windows)/32773(Linux), package14659 and runtime27520/
-2915 are terminal0. CI recovery worker still owns exact985 run41481824829: first
-1.5 browser is green; second runs before failed-only infrastructure rerun.
-
-Complete maintainer-requested WSL cleanup: five inactive worktree Cargo targets
-measured93.419GiB were cleaned with configured target checks. Active main target
-and CI caches stay intact; modified-source hashes, packages and evidence are
-preserved. After actual TRIM, C:free is117.46GiB and E:125.64GiB. Canonical
-cleanup-wsl/cargo-clean-result.json owns the measurements. Storage prerequisite
-is resolved; the former compaction choice is no longer needed for this trial.
-Next finite action: freeze one1.2.0 release source after the completed native
-candidate checkpoint. Correct the demonstrated release-source blockers, prepare
-compatible add-on metadata and satisfy exact-source CI before tag builds.
-Nine immutable postbuild controls/inputs are staged and hash-verified. Reuse the
-qualified20-file release663 frontend: its WASM inputs remain unchanged through0a.
-The separately validated CI985 dev frontend is not mixed with native releaseSSR.
-0a->985 changes only checker/docs. No extra client/editor variants; only the
-three authorized publication joins follow.
-Prior35/c6 runs are superseded, not full-green proof; retain97 audit red and ab56
-historical13pass. No product threshold/capacity/deadline increase is introduced.
-
-Complete: exact codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 is pushed and
-normal fullCI41375889471 is green:13 required jobs pass, Commit lint expected
-skipped, attempt1/no reruns. All14 actual results and brief review are canonical
-under tmp/phase9-tvguide-addon/ci-ab56/status.json and qualification.json
-ci.current_source_run. Unchanged Next-motion passes once3752ms; original2b failure
-remains retained and unexplained, not a demonstrated product-fix claim. Observer
-43441 exits0. The physical trial component and owned-worker cleanup are closed
-above; there is no physical client host to reconnect for this package join.
-
-Complete: four required final app packages/startups (actual compiled source2b06;
-ab56 changes only CI/tests/progress). Linux x64 and Windows x64 are native;
-ARMv7/ARM64 are pinned Ubuntu24 QEMU, not native. Reuse closed FINAL/CONFIG/PACKAGE/
-LUA/TTI/RUNTIME and all unaffected9A evidence. Sole finite list: P9B-02 evidence.
-
-The actual joint production-guide trial and local full-track correction are
-closed above. Reuse their canonical identities, versions and recorded limits;
-do not relaunch the older75–600s trial plan or require another physical variant
-without a concrete regression. Keep the existing Windows Private TCP8409
-firewall and repaired exact portproxy mapping intact.
-
-Keep Root's foreign dirty changes/history out of delivery. P9B-01/02 remain
-In progress for the existing current-source package/platform/CI joins. Native
-ARM remains assumed/deferred, macOS deferred,2.5 experimental/deferred and QTM
-optional/upstream wait. No DVBViewer; publication stays within the three
-authorized repositories. All remaining
-acceptance obligations retain their existing owner and canonical evidence.
+Maintainer2026-11-03 authorizes these three tags/publications after gates, not
+installation replacement. Upgrade compatible add-ons before the app. Preserve
+all old/negative proofs and Root's foreign history/dirty changes outside delivery.
+Keep Windows Private TCP8409/firewall/portproxy intact. Native ARM remains assumed
+from required build/package/emulation proof, macOS deferred/no paid work,2.5
+experimental/optional CI, QTM optional/upstream wait. No DVBViewer/client search.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

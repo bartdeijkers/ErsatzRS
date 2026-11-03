@@ -380,13 +380,17 @@ gh run view <run-id> --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
 Create the release tag only when the evidence run reports the same full
 `headSha`, `status: completed`, and `conclusion: success`, **and** its job
 list shows `success` for `Format`, `Clippy`, `Build CI artifacts`, the `Test` job(s) for its runner
-configuration, both `Teletext` levels, all six `Playwright E2E` suite/project
-combinations, `Next engine`, `Cargo deny`, and
+configuration, `Teletext 1.5`, all four required `Playwright E2E` combinations
+(general and Level 1.5 in Chromium and Firefox), `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
 because skipped jobs do not fail a run. A failed, cancelled, queued, or
 in-progress run is not release evidence. Any commit or amend after the
 successful run creates a new candidate SHA and requires new CI evidence before
 tagging.
+
+Level 2.5 Rust and browser suites remain optional explicit dispatches for the
+experimental enhanced features. They do not replace any required general or
+Level 1.5 result and do not block the current release gate.
 
 ### Preflight-skipped runs are a pointer, not evidence
 

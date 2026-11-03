@@ -300,7 +300,7 @@ async fn restore_package(
         .snapshot
         .unwrap();
     assert_ne!(current.state_revision, previous.state_revision);
-    assert_eq!(current.version, "0.1.1");
+    assert_eq!(current.version, "0.1.2");
     assert_eq!(current.package_sha256, previous.package_sha256);
     assert_eq!(current.content_sha256, previous.content_sha256);
 }
