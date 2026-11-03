@@ -43,10 +43,15 @@ unverified. Building or publishing an archive does not establish that acceptance
 
 ## Linux runtime baseline
 
-The v1.1.0 Linux x64, ARM64 and ARMv7 application archives require glibc 2.39
-or newer, such as Ubuntu 24.04 or Debian 13. Debian 12 (Bookworm), with glibc
-2.36, cannot run these application archives. The managed FFmpeg runtime has
-its own compatibility requirements; its minimum does not lower this baseline.
+The supported native-archive baseline for application v1.1.0 and v1.2.0 is
+glibc 2.39 or newer, such as Ubuntu 24.04 or Debian 13. Version 1.2.0 package
+startup is qualified on Ubuntu 24.04 for Linux x64 and in pinned Ubuntu 24.04
+ARM64/ARMv7 emulation; this does not establish native ARM operation. Debian 12
+(Bookworm), with glibc 2.36, is not a supported baseline for these archives.
+The managed FFmpeg runtime has its own compatibility requirements; its minimum
+does not lower the application baseline. Docker image building, publication and
+image qualification for v1.2.0 are explicitly deferred by maintainer decision;
+no v1.2.0 container-image acceptance is claimed.
 
 ## Network requirements
 

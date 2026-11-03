@@ -2,9 +2,17 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9B — TV-guide add-on and integrated acceptance'
-current_focus = 'p9b-02 — Corrected application candidate and stable release'
+current_focus = "Complete — revised Phase 9 acceptance and three stable releases"
 
 summary = '''
+The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
+engine, production TV-guide add-on, four required package/runtime scopes and
+three stable releases with exact-source CI and actual published downloads.
+Level2.5 remains experimental; retained enhanced-only, optionalQTM, macOS,
+nativeARM and current-release Docker scopes are Deferred, not accepted. No
+current independently executable required work remains.
+
+Earlier completed programme context is retained below:
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
 Lists preserve unknown/finite/live Remote Stream behavior and use resumable
 overview-first imports with deferred fair-use details. CRF has repaired Classic
@@ -62,48 +70,34 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-FINAL stable application1.2.0 delivery. The only
-finite completion list is P9B-02 evidence; closed components remain closed.
-Delivery checkout `tmp/worktrees/p9b-next-preview-ci` carries codecheckpoint
-50cf9a28 plus documentation-only checkpoints. Preserve Root foreign work and
-immutablev1.2.0 application sourceCAC/tag a3706406.
+Current package: none. Revised9A and production9B are accepted; the three
+stable releases are delivered. P9B-01/P9B-02 and qualification.json.release_delivery
+own the finite closure and canonical source/CI/artifact/runtime/failure evidence.
 
-Completed: sourceCAC full CI41578029160 (13required jobs, expectedpushlintskip),
-owned Stop repair, production-host/addon compatibility and physical-client proof.
-Actual Linux x64/ARM64 archives and native/QEMU startup components are Complete.
-Stable Next rs7 and Addonsv0.11.12 publications/download checks are Complete.
-Reuse closed editor/publication/isolation/Lua/F6/transport/client evidence.
+Appv1.2.0 sourceCAC/taga3706406/release432399807 is stable/Latest with four actual
+published GETs matching qualified nativeLinux/Windows and ARM QEMU archives.
+App-source CI41578029160 and code50cf9a28 CI41662384714 each pass13requiredjobs.
+Documentation-only checkpoints do not relabel source/binaries or prove new fullCI.
+Original Docker cancellation remains Deferred, notgreen; all four required archive
+producers have successful executions. No failed-Docker rerun/image acceptance.
 
-One current direction: finish full control CI41662384714 on50cf9a28, then only
-the isolated ARMv7 producer/archive/QEMU startup. Wait until other host Cargo work
-is terminal; do not let ARMv7 post-cache pruning race CI. Rerun only its job,
-never all failed jobs including deferred Docker. After required native gates,
-publish/download-check the unchanged app draft432399807 and four actual archives.
+Nextnext-0.2.3-54c6cb9-ersatzrs.7/source95206a81 is stable/Latest in place: same tag,
+21assets and four qualified public archive/payload GETs. Addonsv0.11.12/source47f2ab4
+is stable/Latest; ZIPa7390fb9 contains TV-guide0.1.2 and yt-dlp0.11.12. Use existing
+stableFFmpeg2.0.9. No Next/FFmpeg rebuild, older-binary relabel, installation
+replacement or8409/firewall change occurred.
 
-Native Windows1.2 gate is Complete: official sourceCAC producer125997987210,
-ZIP06e70512/asset706278176, native72files/static45/site18, bundle14.04s, public209/
-unchangedcache,3Health/Version1.2/assets/NextBundled. Headed case composition is
-retained ChromiumPASS plus focusedFirefoxPASS7.24s with original JS/noJS/drawer
-oracles. Preserve original Nodehash/30sFirefoxstall negatives and41msblankcontrol;
-originalstallcause remainsunknown, not a productfix or singlefullgreen2case run.
-Canonical windows-native-preparation/actual-win-v1.2.0/qualification.json SHA35006da0
-joins source/ZIP/package458dad7c and screenshots. All owned Jobs/handles terminal,
-no process/listener; private evidence/cache/DB retained. Finished16:53:17Z within
-120min reservation. No installation/firewall/8409 change or gracefultrayexit claim.
+All owned handles/observers are terminal; hosts/listeners/Jobs/emulation namespaces
+are cleaned. Preserve evidence, original negatives, private caches/DB and Root
+foreign history/modified/untracked work. Delivery checkout:
+tmp/worktrees/p9b-next-preview-ci. Current required work is closed.
 
-Maintainer "skip docker" defers current-release image build/publication/proof.
-Preserve50cf recipe and original timeout/ABI/auth/prepared evidence, not accepted
-images. Do not dispatch Docker recovery, ask for credentials or change visibility.
-This removes local GHCR authentication from the current release prerequisites.
-All three Linux native packages, Windows and applicable CI remain required.
-Publish unchanged app draft432399807 only after those remaining gates and verify
-its four actual downloadable archives. No installation replacement or8409 change.
-
-Canonical qualification.json.release_delivery owns exact sources/producer scopes;
-final-candidate/release-v1.2.0/candidate-cac93f3d and original sibling release-
-observation retain receipts/negatives. Use stable FFmpeg2.0.9; do not rebuild Next.
-Keep macOS deferred, ARM native assumption explicit and2.5 experimental/optional;
-QTM remains optional/upstream wait. No DVBViewer or new client search.
+Next executable action: none in this completed goal. Deferred enhanced/client/
+editor/decoder, macOS, unavailable nativeARM hardware and Docker follow-ups need
+their recorded capability/new applicable maintainer task. Do not start Phase10 or
+invent substitute work. NativeARM is assumed from build/package/QEMU, not verified
+hardware operation. Keep2.5 experimental/optionalCI and QTM optional/upstream wait.
+No DVBViewer/new client hunt. Reopen only for a concrete evidenced regression.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

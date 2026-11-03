@@ -150,19 +150,19 @@ is the launcher's documented counterpart to the Unix-only-test carve-out above.
 
 ## Current status
 
-**Phase 9 — Teletext support** (Phases 0–8 complete). The Cargo workspace,
-baseline FFmpeg pipeline, playout scheduling engines, media-source scanning,
-IPTV/HDHomeRun endpoints, application boundary, main admin UI, and the FFmpeg 9
-HDR/Dolby Vision, Vulkan/libplacebo, performance, and media-input hardening
-program are in place. Phase 9 adds teletext support, starting with the blocking
-`p9a-01` product/standards ADR; the "The Box" video-jukebox extension follows as
-Phase 10. Keep the health-check engine current whenever this work changes FFmpeg
-capabilities, hardware acceleration support, schema readiness, media-item state,
-metadata persistence, schedules, or provider availability; it is an explicit
-indicator for ErsatzTV port completeness. For the live focus and remaining
-gaps, run `cargo xtask progress next` (the authoritative source) rather than
-relying on a fixed priority here; structured detail lives in
-[`docs/progress/`](docs/progress/README.md).
+**Phase 9 — required teletext delivery complete.** Phases 0–8 and the revised
+Phase 9A engine / Phase 9B production TV-guide delivery are accepted within the
+current maintainer-approved boundary. Level 1/1.5 is independently accepted;
+implemented Level 2.5 remains experimental with enhanced-only acceptance deferred.
+The three stable release deliveries are recorded in `docs/progress/`; unavailable
+native ARM hardware, macOS, optional QTeletextMaker and the explicitly deferred
+1.2.0 Docker image retain their recorded limitations. Do not infer six-platform,
+full enhanced or Docker acceptance. "The Box" video-jukebox work remains Phase 10
+and requires an applicable new maintainer task. Keep the health-check engine
+current whenever later work changes FFmpeg capabilities, hardware acceleration,
+schema readiness, media-item state, metadata, schedules or provider availability.
+Run `cargo xtask progress next` for the authoritative current focus and remaining
+explicit deferrals rather than reviving historical next-action paragraphs.
 
 When adding code, follow the workspace layout in
 [ARCHITECTURE.md](ARCHITECTURE.md).

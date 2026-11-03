@@ -18328,7 +18328,7 @@ in the P9A-04 ownership map; this package does not duplicate those trials.
 id         = 'p9b-01'
 phase      = 'Phase 9B — TV-guide add-on and integrated acceptance'
 title      = 'Deliver TV-guide pages through one teletext add-on'
-status = 'In progress'
+status = 'Complete'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-04']
@@ -18378,6 +18378,42 @@ cannot mutate installed templates or protected generated regions; template
 changes follow explicit addon versions. NOS inspiration remains guide-only 200–299.
 '''
 evidence = '''
+Current required Phase9 acceptance Complete2026-11-03. P9A-04 revised independent
+Level1/1.5 acceptance precedes production9B; all9B-CONFIG/PACKAGE/LUA/TTI/RUNTIME/
+CLIENT/FINAL owners are closed within their recorded source/platform boundaries.
+Stable/Latest appv1.2.0/sourcecac93f3dca190992ede69688907a1f248563f589, annotated
+taga3706406/release432399807, has four actual published downloads matching qualified
+archives a8870e37(x64),95c46d41(ARM64),54df9fb8(ARMv7),06e70512(Windows). Canonical
+final-candidate/release-v1.2.0/candidate-cac93f3d/publication/qualification.json
+binds full digests and retained nativeLinux/Windows/QEMU runtime/bundle proofs.
+NativeARM remains assumed, not hardware-verified. Windows headed evidence is exact
+case composition; original Node/Firefox failures and unknown stallcause remain.
+All owned test processes/listeners/Jobs/emulation namespaces are cleaned; private
+proof/cache/DB retained. No installation replacement or8409/firewall change.
+
+App-source fullCI41578029160 and code50cf9a28 fullCI41662384714 each pass13required
+jobs with expectedpushCommitlintskip. Latest control attempt1 has no failures/
+reruns; newguard10 tests execute and seven consumers use verified localartifacts.
+Its round-review distinguishes64m12 Build into tools24m22/Rust33m14/web5m22/
+local4s/cloud31s; unequal runner/warm state does not establish a transferdefect.
+No additional CI change needed. Documentation-only checkpoints are paths-ignored;
+no new fullCI claim or compiled-source relabel follows from their SHA.
+
+All three authorized stable publications are Complete. Next rs7/source95206a81
+is promoted in place with unchanged21assetIDs/digests/tag and four public archive/
+payload GETs. Addonsv0.11.12/source47f2ab4 has real ZIPa7390fb9/28source-equal members,
+TV-guide0.1.2 and yt-dlp0.11.12; accepted host1.2/sourceCAC joins and source/template/
+ABI equivalence retain earlier scoped integration proofs. Existing stable
+FFmpeg2.0.9 is reused, with no Next/FFmpeg rebuild or older-binary relabel.
+Original normal-release workflow cancellation remains visible: Docker hit6h and
+was explicitly Deferred by maintainer "skip docker". Required four archive
+producers have actual successful executions across original/Windows/ARM attempts;
+this is not one invented fullgreen original run or accepted image. No current
+required work remains. Enhanced-only2.5 stays experimental/Deferred, QTM optional/
+upstream wait, macOS/nativeARM and Docker future scopes retain their recorded
+resumption conditions. Earlier historical next-actions cannot reopen this closure
+without a concrete regression/new task. Historical evidence follows unchanged.
+
 Completed production guide producer/profile/native-preparation component2026-10-31:
 canonical tmp/phase9-tvguide-addon/qualification.json binds the exact new
 TV-guide teletext0.1.0 source at addon commit0be31ca5706aa0914873b96b17727e6a85f0e63e
@@ -18624,7 +18660,7 @@ timings justify no additional CI speed change or measurement program.
 id         = 'p9b-02'
 phase      = 'Phase 9B — TV-guide add-on and integrated acceptance'
 title      = 'Accept integrated teletext engine and TV-guide add-on'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9b-01']
@@ -18698,6 +18734,42 @@ CI/runtime/package gate remain mandatory. The application release may complete
 without this deferred container deliverable; no new scope reduction elsewhere.
 '''
 evidence = '''
+Current required Phase9 acceptance Complete2026-11-03. P9A-04 revised independent
+Level1/1.5 acceptance precedes production9B; all9B-CONFIG/PACKAGE/LUA/TTI/RUNTIME/
+CLIENT/FINAL owners are closed within their recorded source/platform boundaries.
+Stable/Latest appv1.2.0/sourcecac93f3dca190992ede69688907a1f248563f589, annotated
+taga3706406/release432399807, has four actual published downloads matching qualified
+archives a8870e37(x64),95c46d41(ARM64),54df9fb8(ARMv7),06e70512(Windows). Canonical
+final-candidate/release-v1.2.0/candidate-cac93f3d/publication/qualification.json
+binds full digests and retained nativeLinux/Windows/QEMU runtime/bundle proofs.
+NativeARM remains assumed, not hardware-verified. Windows headed evidence is exact
+case composition; original Node/Firefox failures and unknown stallcause remain.
+All owned test processes/listeners/Jobs/emulation namespaces are cleaned; private
+proof/cache/DB retained. No installation replacement or8409/firewall change.
+
+App-source fullCI41578029160 and code50cf9a28 fullCI41662384714 each pass13required
+jobs with expectedpushCommitlintskip. Latest control attempt1 has no failures/
+reruns; newguard10 tests execute and seven consumers use verified localartifacts.
+Its round-review distinguishes64m12 Build into tools24m22/Rust33m14/web5m22/
+local4s/cloud31s; unequal runner/warm state does not establish a transferdefect.
+No additional CI change needed. Documentation-only checkpoints are paths-ignored;
+no new fullCI claim or compiled-source relabel follows from their SHA.
+
+All three authorized stable publications are Complete. Next rs7/source95206a81
+is promoted in place with unchanged21assetIDs/digests/tag and four public archive/
+payload GETs. Addonsv0.11.12/source47f2ab4 has real ZIPa7390fb9/28source-equal members,
+TV-guide0.1.2 and yt-dlp0.11.12; accepted host1.2/sourceCAC joins and source/template/
+ABI equivalence retain earlier scoped integration proofs. Existing stable
+FFmpeg2.0.9 is reused, with no Next/FFmpeg rebuild or older-binary relabel.
+Original normal-release workflow cancellation remains visible: Docker hit6h and
+was explicitly Deferred by maintainer "skip docker". Required four archive
+producers have actual successful executions across original/Windows/ARM attempts;
+this is not one invented fullgreen original run or accepted image. No current
+required work remains. Enhanced-only2.5 stays experimental/Deferred, QTM optional/
+upstream wait, macOS/nativeARM and Docker future scopes retain their recorded
+resumption conditions. Earlier historical next-actions cannot reopen this closure
+without a concrete regression/new task. Historical evidence follows unchanged.
+
 Completed private concat-runtime artifacts/software component2026-11-01:
 canonical qualification.json runtime_packages and guide-lua-flow/av-seam/
 runtime-packages/qualification.json own all four exact archives and original
@@ -19198,7 +19270,12 @@ no processes/listeners; private evidence/cache/DB remain. InnerTaskkill is test
 teardown, not gracefultrayexit. Finished16:53:17Z within16:31–18:31 reservation;
 C57.33/E121.37GiB remain. No compile/install/8409/firewall change.
 
-Windows attempt2 is terminal; wait for control fullCI before ARMv7 recovery. Confirm no
+Windows attempt2 is terminal. All controlCI Rust jobs are Complete; onlytwo1.5
+browsersremain andexistingworkflow/wrapper usesverifiedprebuilt/noCargo. Hostps
+17:29:53 confirmsnoCargo actor and onlythatbrowserCIpending. ARM-only recovery
+was requested (latestinheritedID125998082664, exit0) withoutsource/cache/toolchain
+changes; followactualattempt3/job, neverrerunDocker. This proves the necessary
+registry-source quiescence; wholebrowsercompletion was not a prerequisite. Confirm no
 other Linux job can prune shared Cargo sources: the preserved ARM64-postcleanup/
 ARMv7-depinfo ordering strongly supports that cause, but the exact missing syscall
 was not captured. Target-clean/cache-miss evidence rejects stale restored target.
@@ -19212,15 +19289,27 @@ Preserve the original six-hour timeout/cleanup and rejected archive-reuse ABI
 hypothesis (strong GLIBC2.38, distinct from weak2.39 imports). Preserve committed
 cross-builder/recovery guard50cf9a28 and its Docker/actionlint/60 Python/progress
 checks; they are not image build/ABI/runtime acceptance. Exact fullCI41662384714
-continues for that pushed checkpoint. The prepared strict recovery/image observer
+is Complete with13requiredsuccesses for that checkpoint. The prepared strict recovery/image observer
 remains unexecuted; anonymous private GHCR403 is retained, but local authentication
 is no longer a release prerequisite. No runner-secret copying, visibility change,
 new Docker tag, repeated build or deferred-work acceptance. Future Docker delivery
 requires an authorized follow-up; native archives remain within this release.
 
-Current finite stop: finish exact control full CI, then quiescent ARMv7 archive/
-QEMU startup; publish/download-check unchanged draft432399807 and all four required
-native assets. Windows1.2 acceptance is closed within its explicit source/platform
+Complete genuineARMv7 source-CAC component: actual producer126088648660 succeeds
+18:41:12Z; asset706676025/archive54df9fb8 passes69-file/static45/site18 fullidentity
+and exact pinned Next payloads. PinnedUbuntu24 QEMU actual1.2startup6.332s,
+preplacedqualified209/Bundledrs7,3HealthPass/errors0,version/changelog/assets/config,
+natural0/noOOM/emptygroup and removednamespace pass. Source/package/runtime/seed
+stay exact. Canonical recipes/{package-linux-arm-content.json,managed-arm/linux-
+arm/qualification.json}; package receipt829bd1e7. Build, bytes and emulation are
+separate successful claims; no nativehardware/newcold/streamclaim. Allfourrequired
+source-CAC package components are nowComplete. The original shared-pruning
+negative remains; quiescentrecovery supports resolution, not conclusive syscall
+causation. No repeatedsource/cache/toolchain change or failed-Docker rerun occurred.
+
+Current finite stop is satisfied: finalFirefox/fullCI pass, app432399807 is
+stable/Latest and all four published downloads are byte-qualified. Current delivery
+is closed; no substitute work or deferred-image run. Windows1.2 acceptance is closed within its explicit source/platform
 and case-composition boundary. Reuse completed Linux x64/ARM64, physical/editor/
 publication/isolation and source-CAC full CI. Docker's original inherited
 cancellation remains visible and Deferred; the individual required archive
