@@ -37,6 +37,13 @@ channel identity. Cancellation never invokes a live channel's stop controller.
 Unconfirmed cleanup retains the lock's quarantine and capacity reservation;
 only a server restart clears that condition.
 
+An owned Stop also retires completed output when the finite producer finishes
+before the request arrives. If cleanup is already confirmed, transition directly
+to cancelled, revoke output readiness and retain the completed diagnostics. This
+retires playback; it does not claim to have interrupted the completed producer.
+Active cancellation still waits for actual cleanup, and failed or unconfirmed
+cleanup remains fenced. A repeated or stale Stop cannot affect a replacement.
+
 Serve owned HLS members behind a generation fence, with bounded file reads,
 validated member names and no-store responses. An earlier ID cannot read a
 replacement's output or cancel a later operation. Keep the legacy diagnostic

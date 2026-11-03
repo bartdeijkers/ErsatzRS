@@ -19166,18 +19166,61 @@ so no demonstrated reason to change Bookworm. New1.2.0 binaries remain required;
 do not relabel oldcandidate or compile unused0a ARM. Source47f2ab4 addons full
 CI41549946960 passes nativeWindows/Linux/Node with.9fixtures; actual downloaded
 ZIPa7390fb9/28members matches source/modes/CRLF and includes both compatible
-packages. New host1.2 actual install/publication/ordinary-output join, exact app
-candidate CI, final4RID/image builds/acceptance and3 publications remain open.
+packages. Next publication is Complete: same tag/release427278528/source95206,
+stable/Latest,21unchanged asset identities and four unauthenticated public archive
+redownloads/payloads verified. Canonical original publication execution/
+next-stable-promotion-20261103/qualification.json. No Next build/tag move/upload.
+Previous985 fullCI41481824829 is Complete with13required passes after failed-only
+same-SHA infrastructure recovery; original runner-loss negatives remain retained.
+Frozen app1.2 sourcecfa4705a913072a10f547e33bcf430205407b111 is pushed and exact
+fullCI41554604951 retains successful Rust/Next/1.5 and generalChromium components;
+generalFirefox125665045740 exposes a concrete owned-Stop retirement defect. A
+finite producer completes153ms before Stop, which returns Completed/readytrue;
+the browser subsequently fetches the old playlist/segments and resumes playback.
+Canonical ci-cfa4705a/preview-stop-defect.json and original artifact13198643914/
+SHA3dc23794 preserve trace/status/log/source. This is not an unreaped-worker claim.
+Completed local retirement correction: only cleanup-confirmed Completed output
+now retires through existing cancelled/readiness/token fencing, preserving
+log/speed/cleanup/identity and active/Failed/quarantine/permit ownership. Source
+is cfa plus the explicit host/ADR/changelog patch, not a relabeled old binary.
+New deterministic both-engine completed case and affected lifecycle10/10 pass.
+Strict Weballtargets Clippy passes after a helper-only test-length refactor;
+its original113/100 lint negative is retained and the case rechecked1/1 with
+all assertions intact. Architecture validation passes. Existing real Legacy/
+Next Stop and SSR/noJS each pass in headed Chromium151.0.7922.34/Firefox153.0:
+6/6, zero skips/flakes/retries, unchanged strict cancelled/readiness/old404 and
+replacement assertions. Input/new server hashes stay exact; owned process/
+port cleanup is confirmed. Canonical ci-cfa4705a/preview-stop-retirement-
+qualification.json. Unchanged20-file frontend is reused only under explicit
+wasm32 input equivalence; native host/changelog are excluded from that target.
+This closes the concrete local Stop component; no Windows/ARM/final-package or
+managed-adoption claim follows. Actual source/editor/publication/isolation/AV/
+caption/F6/transport/physical-client scopes remain reused without reopening.
+Current unaffected1.5browserjobs continue; preserve their results and the single
+originalcfa Firefox failure. This checkpoint contains the verified correction;
+require a new exact-SHA fullCI before app tag. Freeze the corrected source before the normal
+release build; all cfa source/preparation snapshots remain historical inputs.
+The actual host1.2/genuine0.1.2 compatibility join
+is Complete: existing headedChromium151 case passes1/1 with no skips/retries;
+two classic/night profiles and200/410 maps, preview/explicit publication, both
+8MiB ordinary direct responses/AV/continuous PMT and immutable original/raster/
+installed payload checks pass. Canonical ci-cfa4705a/host-addon-join-selected/
+qualification.json retains the initial zero-test CLI selection negative separately;
+no product assertions, source or timeout changed. Owned runtime processes and
+port are absent after wrapper terminal0. Earlier unaffected culture/editor/client
+proof is reused. This is not final release archive or fullCI acceptance.
+Add-on stable publication is Complete: repositoryv0.11.12/source47f2ab4,
+annotatedtag774376d7, stable/Latest release432164827 and all3jobs of publication
+run41560300737 pass. Actual public959027-byte ZIPa7390fb9 matches accepted CI;
+all28members/identities/modes/CRLF match. It contains TV-guide0.1.2 and
+yt-dlp0.11.12 with compatible<1.3 bounds; priorv0.11.11 and installations are
+preserved. Canonical runtime-compatibility/addons-v012-ci/published-v0.11.12/
+qualification.json. Only app candidate fullCI, final4RID/image build/acceptance
+and app stable publication remain in this delivery owner.
+Canonical final-candidate/release-v1.2.0/candidate-source.json binds3993 source
+files/tree/inventory and planned build identities; previous0a binaries are not
+relabeled. Source changes and final GitHub archive acceptance remain distinct.
 
-Current-source CI exception: normal97a44778 pushrun41452100743 finds
-RUSTSEC-2026-0433 in pulldown-cmark0.13.5. Keep that exact red job/log; the
-preliminary optional rustup flag probe is not the audit failure. The isolated
-repair raises manifest/lock to0.13.6 with no transitive churn, retains Markdown
-options/sanitization and adds the upstream-distinguishing nested-image forms.
-Local5 release-note tests, cargo deny, strict web Clippy and fmt pass;
-canonical ci-97a44778/security-repair/COMPLETE.json owns commands, hashes and
-actual results. This closes the local security repair only. Require normal full
-CI on its new pushed source; do not rerun old97 jobs as proof of the correction.
 Exact pushed codecheckpointab56da0ef20d05e2b9a87e5849e1f89abfd99039 has normal full
 pushCI41375889471 SUCCESS2026-11-02: all13 required jobs pass, Commit lint is an
 expected push skip, attempt1/no reruns or cancellation. General and1.5 Rust and

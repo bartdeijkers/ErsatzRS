@@ -1178,6 +1178,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Retire an owned troubleshooting preview when Stop arrives just after its
+  producer finishes, preventing completed output from starting again. Preserve
+  diagnostics, confirmed cleanup and isolation from a replacement preview.
+
 - Resolve Docker's pinned Next download from its distribution repository and
   include every validated runtime companion, including ARM64's private MPP
   library and notices. Keep hydration output names consistent across release

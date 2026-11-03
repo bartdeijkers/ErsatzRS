@@ -135,8 +135,15 @@ impl Job {
 
     pub(super) fn cancel(&self) {
         self.status.send_modify(|status| {
-            if !status.state.is_terminal() {
-                status.state = Phase::Cancelling;
+            // Stop also retires finite output that completed before the request.
+            // Confirmed cleanup means no supervisor remains to finish Cancelling.
+            let completed = status.state == Phase::Completed && status.cleanup_confirmed;
+            if completed || !status.state.is_terminal() {
+                status.state = if completed {
+                    Phase::Cancelled
+                } else {
+                    Phase::Cancelling
+                };
                 status.ready = false;
                 status.updated_at = Utc::now().to_rfc3339();
                 self.cancel.cancel();
@@ -634,6 +641,132 @@ mod tests {
         }
     }
 
+    fn completed_job(engine: ersatzrs_domain::StreamingEngine) -> Arc<Job> {
+        let job = Arc::new(Job::new(&PlaybackPreviewRequest {
+            streaming_engine: engine,
+            ..Default::default()
+        }));
+        job.selected_at(Utc::now());
+        job.running();
+        job.ready();
+        job.finish(
+            true,
+            true,
+            Some(PlaybackPreviewLog {
+                text: "exit status: exit status: 0\nspeed=1.25x\n".into(),
+                speed: Some(1.25),
+            }),
+        );
+        job
+    }
+
+    #[tokio::test]
+    async fn completed_stop_retires_output_and_preserves_diagnostics_and_replacement() {
+        use ersatzrs_app::AdminTroubleshootingRuntime as _;
+
+        for engine in [
+            ersatzrs_domain::StreamingEngine::Legacy,
+            ersatzrs_domain::StreamingEngine::Next,
+        ] {
+            let runtime = runtime();
+            let root = tempfile::tempdir().unwrap();
+            let old = completed_job(engine);
+            runtime
+                .previews
+                .write()
+                .await
+                .jobs
+                .push_back(Arc::clone(&old));
+            let playlist = b"#EXTM3U\n#EXTINF:1,\nold.ts\n#EXT-X-ENDLIST\n";
+            tokio::fs::write(root.path().join("live.m3u8"), playlist)
+                .await
+                .unwrap();
+            let completed = old.read();
+            assert_eq!(completed.state, Phase::Completed);
+            assert!(completed.ready && completed.cleanup_confirmed);
+            assert_eq!(
+                runtime
+                    .read_owned_file_from(&completed.id, "live.m3u8", root.path())
+                    .await
+                    .unwrap(),
+                Some(playlist.to_vec())
+            );
+
+            let stopped = runtime
+                .stop_playback_preview(completed.id.clone())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(stopped.state, Phase::Cancelled);
+            assert!(!stopped.ready);
+            assert!(stopped.cleanup_confirmed);
+            assert!(old.cancel.is_cancelled());
+            assert_eq!(stopped.id, completed.id);
+            assert_eq!(stopped.playlist_url, completed.playlist_url);
+            assert_eq!(stopped.created_at, completed.created_at);
+            assert_eq!(stopped.selected_at, completed.selected_at);
+            assert_eq!(stopped.log, completed.log);
+            assert_eq!(stopped.error_code, completed.error_code);
+            assert!(runtime
+                .read_owned_file_from(&completed.id, "live.m3u8", root.path())
+                .await
+                .unwrap()
+                .is_none());
+
+            old.running();
+            old.ready();
+            let retired = old.read();
+            assert_eq!(retired.state, Phase::Cancelled);
+            assert!(!retired.ready);
+            assert_eq!(retired.log, completed.log);
+            assert_eq!(
+                runtime
+                    .stop_playback_preview(completed.id.clone())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                retired
+            );
+
+            let replacement = Arc::new(Job::new(&PlaybackPreviewRequest {
+                streaming_engine: engine,
+                ..Default::default()
+            }));
+            replacement.running();
+            replacement.ready();
+            runtime
+                .previews
+                .write()
+                .await
+                .jobs
+                .push_back(Arc::clone(&replacement));
+            let replacement_status = replacement.read();
+            assert_ne!(replacement_status.id, completed.id);
+            let playlist = b"#EXTM3U\n#EXTINF:1,\nreplacement.ts\n";
+            tokio::fs::write(root.path().join("live.m3u8"), playlist)
+                .await
+                .unwrap();
+            runtime
+                .stop_playback_preview(completed.id.clone())
+                .await
+                .unwrap();
+            assert_eq!(replacement.read(), replacement_status);
+            assert!(!replacement.cancel.is_cancelled());
+            assert!(runtime
+                .read_owned_file_from(&completed.id, "live.m3u8", root.path())
+                .await
+                .unwrap()
+                .is_none());
+            assert_eq!(
+                runtime
+                    .read_owned_file_from(&replacement_status.id, "live.m3u8", root.path())
+                    .await
+                    .unwrap(),
+                Some(playlist.to_vec())
+            );
+        }
+    }
+
     #[tokio::test]
     async fn unspawned_preview_failure_does_not_inherit_previous_completed_log() {
         let runtime = runtime();
@@ -714,6 +847,12 @@ mod tests {
                 &*runtime.preview_lock.lock().await,
                 PreviewAvailability::Available
             ));
+            if !success {
+                let failed = job.read();
+                job.cancel();
+                assert_eq!(job.read(), failed);
+                assert!(!job.cancel.is_cancelled());
+            }
         }
     }
 
@@ -739,6 +878,10 @@ mod tests {
         assert_eq!(job.read().state, Phase::Failed);
         assert_eq!(job.read().error_code.as_deref(), Some("cleanup"));
         assert!(!job.read().cleanup_confirmed);
+        let failed = job.read();
+        job.cancel();
+        assert_eq!(job.read(), failed);
+        assert!(!job.cancel.is_cancelled());
         assert!(matches!(
             &*runtime.preview_lock.lock().await,
             PreviewAvailability::CleanupUnconfirmed {

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9B — TV-guide add-on and integrated acceptance'
-current_focus = 'p9b-01 — Production TV-guide teletext addon'
+current_focus = 'p9b-02 — Corrected application candidate and stable release'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,56 +62,55 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-FINAL versioned1.2.0 candidate and three stable publications.
-The sole finite completion list remains P9B-02 evidence. Reuse closed9A,9B-CONFIG,
-PACKAGE,LUA,TTI,RUNTIME and actual Kodi production-guide scopes; reopen only for
-concrete regressions. Previous live handoff is retained in checkpoint92270084.
+Current package: P9B-02 / 9B-FINAL corrected app1.2 candidate and stable delivery.
+The sole finite completion list remains P9B-02 evidence. Closed components stay
+closed; reopen only for a concrete regression. Delivery checkout is
+`tmp/worktrees/p9b-next-preview-ci`; Root foreign history/changes are preserved.
 
-Complete: source0a/version1.1.0 native Linux and Windows candidate packages.
-Canonical final-candidate/current-source-0a4fb2de owns exact archives88dd5b11/
-f3539249, source3993, actual managedFFmpeg2.0.9/BundledNextrs7, package/Health/
-web-bundle and natural Linux cleanup; Windows headed Next navigation passes2/2.
-Windows inner Taskkill is test teardown; compilerhelper needed bounded force,
-while runtime outer Job drains naturally. These are not relabeled1.2.0 binaries.
-All native build/package/runtime handles are terminal. Unstarted0a ARM recipes
-stay preserved and unexecuted; final platform builds belong to one1.2.0 source.
+Complete local Stop-retirement correction: a finite producer can finish before
+owned Stop. Retire cleanup-confirmed Completed output as Cancelled/readyfalse,
+retaining diagnostics and failed/active cleanup/ownership fences. Canonical
+ci-cfa4705a/preview-stop-retirement-qualification.json records the exact three-file
+patch/source hashes and genuinely rebuilt Linux dev server. Lifecycle10/10,
+refactored newcase1/1, strict Weballtargets Clippy/architecture/fmt pass; existing
+Legacy/Next Stop and SSR/noJS each pass in headed Chromium151.0.7922.34 and
+Firefox153.0:6/6, zero skips/flakes/retries, unchanged cancelled/readiness/old404/
+replacement oracles, exact inputs and full owned-process/port cleanup. Reuse the
+20-file frontend only under recorded unchanged wasm32 inputs. Original cfa
+Firefox trace/API failure and the corrected test-length lint negative remain.
+This is local candidate proof, separate from final platform/runtime adoption.
 
-App release preparation: workspace1.2.0,24 internal requirements and13 local lock
-identities updated; SDK0.4 and all585 external lock records unchanged. Genuine
-TV-guide expectations now use0.1.2; synthetic/old-negative cases remain intact.
-Release workflows now resolve Next's actual distribution repository; Docker
-stages every validated companion. Existing ARM64 Next-stage proof passes8 files,
-including MPP, without Rust/Next compilation. FFmpeg2.0.9 ABI check finds maxima
-2.28(x64/ARM64)/2.36(ARMv7), so no Bookworm base change is needed. Ubuntu24 app
-binaries cannot substitute for the distinct Bookworm builds. Normal release
-workflow builds one matched frontend,4 RID archives and its required Docker image.
+Next finite action: wait for the last original cfa1.5Firefox job in run41554604951;
+retain its outcome without rerunning successful jobs. Original generalFirefox
+failed; every other completed required job passes. Push this corrected1.2
+checkpoint with normal CI, then require every applicable job on its exact new SHA
+before tag. Only then create immutablev1.2.0 and use the normal draft-first
+release workflow once: matched release frontend,4 RID archives and3-platform
+GHCR image. Accept actual downloaded package/image/runtime bytes, then publish
+those unchanged application artifacts. No installation replacement is authorized.
 
-Next finite action: finish exact985 CI41481824829 failed-only infrastructure
-recovery before pushing the prepared app candidate, preserving its original11
-required passes and the two runner-communication-loss negatives. Attempt2
-Teletext1.5 passes; the parent now follows the same Next job125640102013. The
-bounded observer stopped; no new rerun or full-green claim before completion.
-Then push one frozen1.2.0 candidate, require its exact-SHA full CI and execute
-existing explicit-publication/paired-ordinary-output proof with its matched CI
-host and genuine0.1.2 ZIP. Only then create immutablev1.2.0 and use the normal
-draft-first build, accept actual required packages/image, and publish same bytes.
+Complete compatibility join: actual host1.2/genuine TV-guide0.1.2 passes the
+existing explicit-publication/paired-ordinary-output case,1headedChrome pass,
+no skip/retry, both profiles/themes/maps,8MiB AV/PMT and immutable originals.
+Canonical ci-cfa4705a/host-addon-join-selected/qualification.json. Reuse all other
+unchanged editor/publication/isolation/Lua/F6/transport/actual-Kodi scopes.
 
-Addons source47f2ab4eb233895ec6807fe488d688d8271c5f54 is pushed. Full manual CI
-41549946960 passes Windows160/81skips, Linux160/38skips, Node12/0skips; attachment
-is the expected manual skip. Actual CI ZIPa7390fb9 has28 source/mode/CRLF-exact
-members: TV-guide0.1.2 plus yt-dlp0.11.12, lower bounds preserved and upper<1.3.
-Canonical runtime-compatibility/addons-v012-ci/qualification.json. Repository
-v0.11.12 publication/download checks await the host1.2 join; no scripts changed.
-Next next-0.2.3-54c6cb9-ersatzrs.7/source95206a81 can be promoted stable/Latest
-with unchanged tag/artifacts after applicable acceptance; no new Next compile.
-Use existing stableFFmpeg2.0.9; no further FFmpeg release.
+Complete stable Next rs7: same tag/release427278528/source95206a81 and21assets,
+four public unauthenticated archive/payload downloads agree. Canonical original
+publication execution/next-stable-promotion-20261103/qualification.json; no build.
+Complete stable Addons v0.11.12/source47f2ab4/tag774376d7: publication41560300737
+passes all3jobs and public ZIPa7390fb9/28members equals accepted CI. Both TV-guide
+0.1.2 and yt-dlp0.11.12 have compatible<1.3 bounds. Canonical runtime-compatibility/
+addons-v012-ci/published-v0.11.12/qualification.json. Old v0.11.11 is preserved.
 
-Maintainer2026-11-03 authorizes these three tags/publications after gates, not
-installation replacement. Upgrade compatible add-ons before the app. Preserve
-all old/negative proofs and Root's foreign history/dirty changes outside delivery.
-Keep Windows Private TCP8409/firewall/portproxy intact. Native ARM remains assumed
-from required build/package/emulation proof, macOS deferred/no paid work,2.5
-experimental/optional CI, QTM optional/upstream wait. No DVBViewer/client search.
+Version1.2 changes13 local lock identities/24internal requirements only; SDK0.4
+and585external records stay fixed. Use existing stableFFmpeg2.0.9 and unchanged
+Nextrs7. Native0a/version1.1 packages and original cfa source/reference snapshots
+remain preserved; do not relabel them or start obsolete0a ARM builds. Freeze the
+corrected release source before final builds. Windows reservation120min and
+Private TCP8409/firewall/portproxy stay intact. Native ARM remains assumed from
+required build/package/emulation, macOS deferred/no paid work,2.5 experimental/
+optional CI, QTM optional/upstream wait. No DVBViewer or new client search.
 '''
 
 # Preserved historical handoffs; excluded from progress next.
