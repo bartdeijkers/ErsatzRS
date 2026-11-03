@@ -67,6 +67,7 @@ jobs:
               raise SystemExit('Web-assets run does not match the completed tagged release')
           asset_jobs = gh('api', endpoint + '/jobs?per_page=100')['jobs']
           if not any(job['name'] == 'Build web assets' and job['conclusion'] == 'success'
+                     and job['status'] == 'completed'
                      for job in asset_jobs):
               raise SystemExit('Matching web-assets job did not succeed')
           required = {'Format', 'Clippy', 'Test', 'Playwright E2E (chromium)',
@@ -75,22 +76,33 @@ jobs:
           # The checked-out immutable source determines the CI job contract;
           # historical releases retain their original two-browser requirement.
           from pathlib import Path
-          if 'teletext_only:' in Path('.github/workflows/ci.yml').read_text():
+          ci_workflow = Path('.github/workflows/ci.yml').read_text()
+          optional_enhanced = 'experimental2.5 requires teletext_only=2.5/all.' in ci_workflow
+          if 'name: Preflight' in ci_workflow:
+              required.add('Preflight')
+          if 'teletext_only:' in ci_workflow:
               required -= {'Playwright E2E (chromium)', 'Playwright E2E (firefox)'}
-              required |= {'Teletext 1.5', 'Teletext 2.5'}
-              if 'name: Build CI artifacts' in Path('.github/workflows/ci.yml').read_text():
+              levels = ('1.5',) if optional_enhanced else ('1.5', '2.5')
+              required |= {f'Teletext {level}' for level in levels}
+              if 'Build CI artifacts' in ci_workflow:
                   required.add('Build CI artifacts')
               required |= {f'Playwright E2E ({suite}, {browser})'
-                           for suite in ('general', '1.5', '2.5')
+                           for suite in ('general', *levels)
                            for browser in ('chromium', 'firefox')}
+          if optional_enhanced:
+              # This contract skips Commit lint on push; PR/manual runs still
+              # have to pass it. Optional 2.5 dispatches cannot replace full CI.
+              required.remove('Commit lint')
           runs = gh('run', 'list', '--workflow', 'ci.yml', '--commit', os.environ['SOURCE_SHA'],
-                    '--limit', '100', '--json', 'databaseId,headSha,status,conclusion')
+                    '--limit', '100', '--json', 'databaseId,headSha,event,status,conclusion')
           for run in runs:
-              if run['status'] != 'completed' or run['conclusion'] != 'success':
+              if (run['headSha'] != os.environ['SOURCE_SHA'] or run['status'] != 'completed'
+                      or run['conclusion'] != 'success'):
                   continue
               jobs = gh('run', 'view', str(run['databaseId']), '--json', 'jobs')['jobs']
               passed = {j['name'] for j in jobs if j['status'] == 'completed' and j['conclusion'] == 'success'}
-              if required <= passed:
+              run_required = required | ({'Commit lint'} if optional_enhanced and run['event'] != 'push' else set())
+              if run_required <= passed:
                   print('Accepted source CI:', run['databaseId'])
                   break
           else:

@@ -62,55 +62,45 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current package: P9B-02 / 9B-FINAL corrected app1.2 candidate and stable delivery.
-The sole finite completion list remains P9B-02 evidence. Closed components stay
-closed; reopen only for a concrete regression. Delivery checkout is
-`tmp/worktrees/p9b-next-preview-ci`; Root foreign history/changes are preserved.
+Current package: P9B-02 / 9B-FINAL, stable application1.2.0 delivery. The sole
+finite completion list is the P9B-02 evidence; closed components stay closed.
+Delivery checkout: `tmp/worktrees/p9b-next-preview-ci`; preserve Root foreign work.
 
-Complete local Stop-retirement correction: a finite producer can finish before
-owned Stop. Retire cleanup-confirmed Completed output as Cancelled/readyfalse,
-retaining diagnostics and failed/active cleanup/ownership fences. Canonical
-ci-cfa4705a/preview-stop-retirement-qualification.json records the exact three-file
-patch/source hashes and genuinely rebuilt Linux dev server. Lifecycle10/10,
-refactored newcase1/1, strict Weballtargets Clippy/architecture/fmt pass; existing
-Legacy/Next Stop and SSR/noJS each pass in headed Chromium151.0.7922.34 and
-Firefox153.0:6/6, zero skips/flakes/retries, unchanged cancelled/readiness/old404/
-replacement oracles, exact inputs and full owned-process/port cleanup. Reuse the
-20-file frontend only under recorded unchanged wasm32 inputs. Original cfa
-Firefox trace/API failure and the corrected test-length lint negative remain.
-This is local candidate proof, separate from final platform/runtime adoption.
+Completed: exact application sourcecac93f3dca190992ede69688907a1f248563f589 full
+CI41578029160 (all13 required jobs, expected push Commitlint skip), owned Stop
+retirement, host1.2/TV-guide0.1.2 compatibility join and physical production-client
+component. Genuine official Linux x64/ARM64 archives and native/QEMU startup are
+Complete within their recorded scopes. Reuse canonical source/editor/publication/
+isolation/Lua/F6/transport/client evidence; no unchanged full-chain replay.
+Stable Next rs7 and Addonsv0.11.12 publications/download checks are Complete.
 
-Next finite action: wait for the last original cfa1.5Firefox job in run41554604951;
-retain its outcome without rerunning successful jobs. Original generalFirefox
-failed; every other completed required job passes. Push this corrected1.2
-checkpoint with normal CI, then require every applicable job on its exact new SHA
-before tag. Only then create immutablev1.2.0 and use the normal draft-first
-release workflow once: matched release frontend,4 RID archives and3-platform
-GHCR image. Accept actual downloaded package/image/runtime bytes, then publish
-those unchanged application artifacts. No installation replacement is authorized.
+One current direction: the bounded Docker cross-compilation recipe/guard passes
+local Docker/actionlint/60 Python/progress checks. Commit/push the checkpoint,
+then verify its applicable CI and execute existing Docker recovery
+against immutable annotatedv1.2.0/sourceCAC. Original Release41598409267 attempt1
+hit the fixed six-hour Docker limit; its builder/cache are gone. Keep original
+negative logs/annotations and do not repeat the same cold QEMU compiler build.
+The new recipe retains Bookworm, dependencies, flags and real accepted frontend/
+Next payloads while compiling all three Linux targets on the x64 build host.
+No new app tag, older-binary relabel, runtime-base change or timeout increase.
 
-Complete compatibility join: actual host1.2/genuine TV-guide0.1.2 passes the
-existing explicit-publication/paired-ordinary-output case,1headedChrome pass,
-no skip/retry, both profiles/themes/maps,8MiB AV/PMT and immutable originals.
-Canonical ci-cfa4705a/host-addon-join-selected/qualification.json. Reuse all other
-unchanged editor/publication/isolation/Lua/F6/transport/actual-Kodi scopes.
+Windows-only attempt2/job125997987210 is compiling after successful corrected
+checkout. Finish that actual producer, then admit its genuine ZIP and run the
+existing isolated native bundle/managed/headed checks (120 minutes reserved,
+24GiB start/20GiB ongoing guards). Actual18-file frontend preparation is complete.
+After the attempt is terminal and Linux Cargo registry pruners are absent, rerun
+only the known ARMv7 failure and qualify its genuine package/QEMU startup. No
+blind retry if the supported shared-registry-pruning hypothesis is disproven.
+Complete real three-platform image identity/startup and all remaining package
+gates before publishing unchanged draft432399807 and checking final downloads.
 
-Complete stable Next rs7: same tag/release427278528/source95206a81 and21assets,
-four public unauthenticated archive/payload downloads agree. Canonical original
-publication execution/next-stable-promotion-20261103/qualification.json; no build.
-Complete stable Addons v0.11.12/source47f2ab4/tag774376d7: publication41560300737
-passes all3jobs and public ZIPa7390fb9/28members equals accepted CI. Both TV-guide
-0.1.2 and yt-dlp0.11.12 have compatible<1.3 bounds. Canonical runtime-compatibility/
-addons-v012-ci/published-v0.11.12/qualification.json. Old v0.11.11 is preserved.
-
-Version1.2 changes13 local lock identities/24internal requirements only; SDK0.4
-and585external records stay fixed. Use existing stableFFmpeg2.0.9 and unchanged
-Nextrs7. Native0a/version1.1 packages and original cfa source/reference snapshots
-remain preserved; do not relabel them or start obsolete0a ARM builds. Freeze the
-corrected release source before final builds. Windows reservation120min and
-Private TCP8409/firewall/portproxy stay intact. Native ARM remains assumed from
-required build/package/emulation, macOS deferred/no paid work,2.5 experimental/
-optional CI, QTM optional/upstream wait. No DVBViewer or new client search.
+Canonical evidence: qualification.json.release_delivery and final-candidate/
+release-v1.2.0/candidate-cac93f3d; original release failures are at final-candidate/
+candidate-cac93f3d/release-observation. Preserve all prior candidates/negatives.
+Use stable FFmpeg2.0.9; do not rebuild Next or replace the existing installation.
+Keep Private TCP8409/firewall/portproxy intact, macOS deferred, native ARM assumed
+from required package/emulation evidence, enhanced-only2.5 experimental/optional
+and QTM optional/upstream wait. No DVBViewer or new client search.
 '''
 
 # Preserved historical handoffs; excluded from progress next.

@@ -927,6 +927,7 @@ jobs:
           python3 scripts/ci-teletext-selection_test.py
           python3 scripts/ci-build-artifacts_test.py
           python3 scripts/e2e/playwright-e2e_test.py
+          python3 scripts/release/test-docker-recovery.py
       - name: Check CI trigger contract
         run: |
           if grep -Eq '^[[:space:]]*types:.*[[:space:],]labeled([][[:space:],]|$)' .github/workflows/ci.yml; then

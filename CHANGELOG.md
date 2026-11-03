@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Cross-compile release Docker application binaries on the build host using
+  the existing Bookworm toolchains, avoiding ARM compiler emulation that
+  exceeded the release job's six-hour limit. Preserve the runtime base,
+  accepted application source, frontend and pinned runtime payloads; keep
+  recovery CI requirements aligned with mandatory Level 1/1.5 coverage.
+
 ## [1.2.0] - 2026-11-03
 
 ### Security

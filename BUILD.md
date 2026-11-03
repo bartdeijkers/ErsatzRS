@@ -818,6 +818,27 @@ hydration scripts. Managed FFmpeg is not bundled in the image; startup uses the
 same state-directory download/update path documented in
 [Configuration Reference](docs/reference/configuration.md).
 
+The normal release bake target uses `Dockerfile.release` and consumes the
+accepted release web-assets artifact rather than compiling frontend tools under
+emulation. Its pinned Rust 1.97.1 Bookworm builder runs on the build host and
+cross-compiles the three Linux targets with the same Bookworm GCC/sysroot
+toolchains used by `docker/next-source.Dockerfile`. Keep the default SSR features,
+SQLX offline mode, single Cargo worker, codegen units 16, LTO disabled and
+unhashed Leptos output. Each target has a separate BuildKit target cache; both
+dependency priming and the real build use the selected Rust target explicitly.
+QEMU remains available for ARM runtime-image assembly and acceptance, which is
+emulation rather than native ARM execution.
+
+If a tagged image build fails, the existing `release-docker-recovery.yml` may
+apply a corrected Docker recipe to the immutable accepted application tag. It
+retains the original source, lockfile, matching web assets and pinned Next
+distribution, and records both the application and recipe revisions in image
+labels. Require the tagged source's complete applicable CI contract; optional
+experimental Level 2.5 jobs do not become recovery prerequisites. Verify the
+actual three-platform output and startup before publishing the application
+draft. Do not copy ordinary archive binaries into Bookworm without qualifying
+their strong GLIBC imports: a newer build host can produce incompatible ELFs.
+
 ## Compile-cost notes
 
 The two crates that dominate cold build time:
