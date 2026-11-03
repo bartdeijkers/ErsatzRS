@@ -1,8 +1,8 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 9B — TV-guide add-on and integrated acceptance'
-current_focus = "Complete — revised Phase 9 acceptance and three stable releases"
+current_phase = 'Phase 9 — Teletext support (Complete)'
+current_focus = "Phase 9 complete — Phase 10 awaits a new maintainer task (p10a-01 ADR)"
 
 summary = '''
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
@@ -4326,7 +4326,7 @@ independent9A acceptance.
 '''
 
 [[blocking_decision]]
-note = 'Revised9A is Complete under its accepted owner receipts; the former Kodi/raw-header/managed-runtime prerequisites are historical, not current blockers. The finite P9B-02 list owns production guide closure and the separate new concat-runtime platform/adoption obligation. Preserve experimental Level2.5/QTM upstream/native ARM/macOS deferrals; no DVBViewer or premature physical-device trial.'
+note = 'Phase 9 is Complete: revised 9A and production 9B are accepted and the three stable releases are delivered. Preserve the recorded Deferred scopes (experimental Level2.5, enhanced client/editor, optional QTM upstream wait, native ARM, macOS, current-release Docker image); they do not reopen Phase 9 without a concrete evidenced regression or a new maintainer task.'
 
 [[blocking_decision]]
 note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'
