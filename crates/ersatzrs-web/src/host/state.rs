@@ -131,8 +131,7 @@ impl AppState {
     }
 
     #[allow(clippy::too_many_arguments)]
-    // Composition root: every port and shared host registry is wired here once.
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)] // reason: composition root wires every port and shared registry once
     #[must_use]
     pub fn new_with_scan_queue(
         pool: DbPool,

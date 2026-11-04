@@ -47,8 +47,7 @@ fn pid(raw: &[u8; 188]) -> u16 {
 
 #[test]
 #[ignore = "needs a real FFmpeg capture; see module documentation"]
-// Opt-in evidence input, like the packaged-FFmpeg capability tests.
-#[allow(clippy::disallowed_methods)]
+#[allow(clippy::disallowed_methods)] // reason: opt-in evidence input, like the packaged-FFmpeg capability tests
 fn real_ffmpeg_cbr_bursts_carry_teletext_without_av_changes() {
     let path = std::env::var("ERSATZRS_TELETEXT_BURST_TS").expect("capture path");
     let muxrate: u64 = std::env::var("ERSATZRS_TELETEXT_BURST_MUXRATE")
