@@ -6,7 +6,10 @@ actually merged since the last run and reports the three gap goal-prompts in its
 Edit this file to change the routine's behavior; the schedule points at this
 contract.
 
-- **Delivery:** commits doc-only changes **directly to `main`**.
+- **Delivery:** commits doc-only changes on a short-lived branch and lands
+  them through a pull request. `main` is protected and requires the `CI ok`
+  check; Preflight skips the gate for docs-only pull requests, so `CI ok`
+  reports within minutes and auto-merge lands the change.
 - **Selection:** the three most important **chores the specs still require** —
   auto-prioritized across parity gaps, open parity debt, unimplemented ADRs,
   active plans, and open phase TODOs (see
@@ -159,17 +162,24 @@ file:
 1. `cargo xtask progress check` — must pass. Fix any validation error you
    introduced before committing.
 2. If reconciliation produced no documentation changes, report the selected
-   prompts without creating a commit. Otherwise stage only `docs/` changes
-   and commit directly to `main`:
+   prompts without creating a commit. Otherwise create the branch
+   `routine/daily-reconcile-<YYYY-MM-DD>` from the evaluated `HEAD`, stage
+   only `docs/` changes and commit:
    `docs(status): daily reconcile (<baseline>..<head>)`.
    The scope must come from the `scope-enum` in `commitlint.config.cjs`
    (`progress` and `automation` are **not** valid scopes).
    End the commit message with the standard `Co-Authored-By` trailer.
 3. Validate the commit message: `npx commitlint --from HEAD~1` — must pass.
    Amend the message if it does not.
-4. Push to `main`.
+4. Push the branch (never `main`) and open a pull request to `main` titled
+   with the commit subject. Enable auto-merge with the **rebase** method, so
+   the `docs(status): daily reconcile` subject that step 1 searches for lands
+   on `main` unchanged. If auto-merge is unavailable, wait for the `CI ok`
+   check to pass and then rebase-merge. Never merge while `CI ok` is queued,
+   running or red; report the open pull request instead.
 5. Report: the change window, which parity files changed and how, the three
-   goal-prompts selected (with the ranking reason), and the evaluated commit.
+   goal-prompts selected (with the ranking reason), the evaluated commit, and
+   the pull request with its merge state.
 
 If `cargo xtask progress check` cannot be made to pass from docs-only edits,
-do **not** push — report the failure instead.
+do **not** push or open a pull request — report the failure instead.
