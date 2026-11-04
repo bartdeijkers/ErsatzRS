@@ -459,6 +459,11 @@ exactly the jobs the selection left out. When a mapping proves too narrow, add
 the missing path or spec to `scripts/ci-domains.py`; `scripts/ci-domains_test.py`
 checks that every mapping names existing specs and crates.
 
+Browser suites never run at the same time on the runner machine, also across
+workflow runs: each Playwright job holds a host-wide lock
+([`scripts/e2e/host-lock.py`](scripts/e2e/host-lock.py), a bind on
+`127.0.0.1:18399`) and a second job waits for it.
+
 Open work-in-progress pull requests as drafts: follow-up pushes then cost the
 fast lane only, and **Ready for review** starts the `pr` lane.
 

@@ -26,7 +26,9 @@ release section when tagging a release.
   request already tested is not rerun; a nightly full run on `main` covers
   everything else, including Firefox. Browser suites wait for a passing `Test`
   job, and the build uses six parallel compile jobs instead of one and
-  compiles only the test binaries a pull request selects.
+  compiles only the test binaries a pull request selects. Browser suites of
+  different workflow runs no longer run at the same time on the shared runner
+  machine, which also stops their fixed ports from colliding.
 - The daily progress and nightly clippy-cleanup routines now land their
   commits through an auto-merged pull request instead of pushing to `main`.
 - Defer Docker image delivery for application release 1.2.0 by maintainer

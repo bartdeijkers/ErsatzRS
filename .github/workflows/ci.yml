@@ -1047,7 +1047,10 @@ jobs:
           else
             playwright_args+=("$(python3 scripts/ci-teletext-selection.py browser "$BROWSER_SUITE")")
           fi
-          scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
+          # Both self-hosted runners share one machine: never run two browser
+          # suites at once (it made results unreliable and their fixed ports
+          # collide), also across workflow runs.
+          python3 scripts/e2e/host-lock.py -- scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
       - name: Upload Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@v7
@@ -1142,6 +1145,7 @@ jobs:
         run: |
           python3 scripts/ci-teletext-selection_test.py
           python3 scripts/ci-domains_test.py
+          python3 scripts/e2e/host-lock_test.py
           python3 scripts/ci-build-artifacts_test.py
           python3 scripts/e2e/playwright-e2e_test.py
           python3 scripts/release/test-docker-recovery.py
