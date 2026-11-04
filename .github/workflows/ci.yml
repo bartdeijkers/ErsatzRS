@@ -1,11 +1,13 @@
 name: CI
-run-name: ${{ inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && inputs.next_case_set == 'subtitle-nul' && 'CI (Next subtitle-NUL recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
+run-name: ${{ github.event.pull_request.draft && 'CI (Draft)' || inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && inputs.next_case_set == 'subtitle-nul' && 'CI (Next subtitle-NUL recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
 
 on:
   pull_request:
     # Do not add `labeled`: dependency automation applies several routine
     # labels, and each label event would start another full CI run.
-    types: [opened, synchronize, reopened]
+    # `ready_for_review` starts the full PR lane once a draft is marked ready;
+    # draft pull requests run only the fast lane (see Preflight).
+    types: [opened, synchronize, reopened, ready_for_review]
     # No `paths-ignore` here: `main` requires the `CI ok` check, and a
     # workflow that never starts never reports it, which would leave
     # docs-only PRs unmergeable. Preflight instead detects a PR that touches
@@ -150,15 +152,32 @@ jobs:
   # Pinned to a hosted runner on purpose: the self-hosted pool is one machine
   # with two runners, and adding a gate job there would charge every run
   # queue time to save a duplicate that is comparatively rare.
+  #
+  # Preflight also chooses the lane (`outputs.lane`) that the gate jobs and
+  # `CI ok` follow:
+  #   skip    - already proven SHA, or a docs-only pull request.
+  #   light   - draft pull request: Format, Clippy, Build, Test, deny,
+  #             commit lint and docs only. `CI ok` fails on purpose so a draft
+  #             never carries a passing required check into its ready run.
+  #   pr      - ready pull request: everything, browsers in Chromium only.
+  #             A green run records the tested merge tree as a `ci-tree-<tree>`
+  #             artifact.
+  #   firefox - push whose tree a green `pr` lane run already tested: only the
+  #             Firefox browser jobs (plus the cheap checks), which the PR lane
+  #             did not run.
+  #   full    - every other push and every manual dispatch: everything.
   preflight:
     name: Preflight
     if: ${{ inputs.audit_only || (!inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none')) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
+      contents: read
       pull-requests: read
     outputs:
       skip: ${{ steps.duplicate.outputs.skip }}
+      lane: ${{ steps.duplicate.outputs.lane }}
+      tree: ${{ steps.duplicate.outputs.tree }}
     steps:
       - name: Reject mixed audit mode
         if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts || (inputs.next_case_set && inputs.next_case_set != 'all')) }}
@@ -174,6 +193,15 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
+            const lane = (name) => {
+              core.setOutput('lane', name);
+              core.setOutput('skip', name === 'skip' ? 'true' : 'false');
+            };
+            const treeOf = async (sha) => (await github.rest.git.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: sha,
+            })).data.tree.sha;
             if (context.eventName === 'pull_request') {
               // Mirrors the `push` paths-ignore list. Any file outside it,
               // including a rename from outside it, runs the full gate.
@@ -192,16 +220,22 @@ jobs:
                 (file) => nonCode(file.filename)
                   && (!file.previous_filename || nonCode(file.previous_filename)),
               );
-              core.setOutput('skip', docsOnly ? 'true' : 'false');
               if (docsOnly) {
+                lane('skip');
                 core.notice('This pull request changes only non-code paths; skipping the gate.');
+              } else if (context.payload.pull_request.draft) {
+                lane('light');
+                core.notice('Draft pull request: fast lane only. Mark it ready for review to run the full PR lane.');
               } else {
-                core.info('pull_request runs the selected gate.');
+                lane('pr');
+                // context.sha is the merge commit this run tests.
+                core.setOutput('tree', await treeOf(context.sha));
+                core.info('pull_request runs the PR lane (browsers in Chromium only).');
               }
               return;
             }
             if (context.eventName !== 'push') {
-              core.setOutput('skip', 'false');
+              lane('full');
               core.info(`${context.eventName} runs the selected gate.`);
               return;
             }
@@ -215,21 +249,56 @@ jobs:
                 per_page: 100,
               },
             );
+            // Pull request runs test a merge commit, not their head SHA, and
+            // do not run every job; only push or dispatch runs prove a SHA.
             const proven = runs.filter(
               (run) => run.id !== context.runId && run.conclusion === 'success'
+                && run.event !== 'pull_request'
                 && run.display_title !== 'CI (Test only)'
                 && run.display_title !== 'CI (Next engine only)'
                 && run.display_title !== 'CI (Teletext only)'
                 && run.display_title !== 'CI (Browser recovery)'
                 && run.display_title !== 'CI (Audit only)',
             );
-            core.setOutput('skip', proven.length > 0 ? 'true' : 'false');
             if (proven.length > 0) {
+              lane('skip');
               const links = proven.map((run) => run.html_url).join(', ');
               core.notice(
                 `${context.sha} already passed CI (${links}); skipping this duplicate run.`,
               );
+              return;
             }
+            // A merged pull request lands as a new SHA, but often with the
+            // exact tree its PR lane already tested. `CI ok` uploads the
+            // `ci-tree-<tree>` marker only after every PR lane job passed.
+            const tree = await treeOf(context.sha);
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: `ci-tree-${tree}`,
+                per_page: 100,
+              },
+            );
+            for (const artifact of artifacts) {
+              if (artifact.expired || !artifact.workflow_run) continue;
+              const run = (await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: artifact.workflow_run.id,
+              })).data;
+              if (run.path !== '.github/workflows/ci.yml' || run.event !== 'pull_request'
+                || run.head_repository?.full_name !== repository
+                || (run.conclusion && run.conclusion !== 'success')) continue;
+              lane('firefox');
+              core.notice(
+                `Tree ${tree} already passed the PR lane (${run.html_url}); running only the Firefox browser jobs.`,
+              );
+              return;
+            }
+            lane('full');
 
   fmt:
     name: Format
@@ -260,8 +329,8 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
-    needs: fmt
-    if: ${{ !inputs.audit_only }}
+    needs: [preflight, fmt]
+    if: ${{ !inputs.audit_only && needs.preflight.outputs.lane != 'firefox' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -309,7 +378,7 @@ jobs:
       RUSTFLAGS: ${{ inputs.runner == 'github-hosted' && '-C link-arg=-fuse-ld=lld' || '' }}
       LEPTOS_OUTPUT_NAME: ersatzrs-web
       LEPTOS_HASH_FILES: "false"
-      BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') }}
+      BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') && needs.preflight.outputs.lane != 'firefox' }}
       BUILD_WEB: ${{ !inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     steps:
       - name: Validate dispatch mode
@@ -476,8 +545,8 @@ jobs:
 
   test:
     name: Test
-    needs: build
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    needs: [preflight, build]
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'firefox' && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     env:
       NEXTEST_TEST_THREADS: "4"
@@ -533,8 +602,8 @@ jobs:
       run:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
-    needs: build
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    needs: [preflight, build]
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.lane != 'firefox' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
@@ -653,8 +722,8 @@ jobs:
       run:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
-    needs: build
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    needs: [preflight, build]
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.lane != 'firefox' && !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -750,9 +819,11 @@ jobs:
   hydration:
     name: Playwright E2E (${{ matrix.suite }}, ${{ matrix.project }})
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
-    # Every selected job executes the same verified SSR/WASM build.
-    needs: build
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
+    # Every selected job executes the same verified SSR/WASM build. Browser
+    # suites start only after Test passed (or was not selected), so a red
+    # Rust run stops before hours of browser time.
+    needs: [preflight, build, test]
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') && needs.preflight.outputs.lane != 'light' && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     # Default: general and1.5; experimental2.5 requires teletext_only=2.5/all.
     # One job per selected suite/project. Each suite uses a single worker because
     # it mutates shared application state in its test database (TEST.md): each
@@ -761,6 +832,9 @@ jobs:
     # two projects cannot see each other's state. Splitting by project rather
     # than by `--shard` also keeps every `mode: 'serial'` group whole inside
     # one job.
+    #
+    # Pull requests (lane `pr`) run Chromium only; the Firefox jobs run on the
+    # push to main (lane `firefox` or `full`) and on manual dispatch.
     #
     # Selected suite/project combinations run serially within this workflow. Both self-hosted
     # runners share one machine, so simultaneous browser suites compete for
@@ -773,7 +847,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}') }}
+      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || needs.preflight.outputs.lane == 'pr' && '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"1.5","project":"chromium","port":"18411"}]}' || needs.preflight.outputs.lane == 'firefox' && '{"include":[{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}') }}
     env:
       # Keep CI independent from the maintainer's live admin server on 8409.
       ERSATZRS_E2E_PORT: ${{ matrix.port }}
@@ -990,11 +1064,35 @@ jobs:
           if needs["preflight"]["outputs"].get("skip") == "true":
               print("Preflight skipped the gate (already proven SHA or docs-only change).")
               sys.exit(0)
+          lane = needs["preflight"]["outputs"].get("lane") or "full"
           # Commit lint runs only for pull requests and manual dispatches.
           optional = {"commitlint"} if os.environ["EVENT_NAME"] == "push" else set()
+          # Jobs a lane leaves out on purpose (see Preflight).
+          optional |= {
+              "light": {"next_engine", "teletext", "hydration"},
+              "firefox": {"clippy", "test", "next_engine", "teletext"},
+          }.get(lane, set())
           missing = [job for job, result in results.items()
                      if result != "success" and job not in optional]
           if missing:
               sys.exit(f"::error::Gate jobs were skipped: {', '.join(sorted(missing))}")
-          print("All gate jobs passed.")
+          if lane == "light":
+              # A passing check here would let the head SHA merge while the
+              # full run after `ready_for_review` is still in progress.
+              sys.exit("::error::Draft pull request: the fast lane passed. Mark it ready for review to run the full PR lane.")
+          print(f"All gate jobs passed ({lane} lane).")
           PY
+      - name: Record the tested tree
+        if: ${{ needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.tree != '' }}
+        env:
+          TREE: ${{ needs.preflight.outputs.tree }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: printf '%s\n%s\n' "$TREE" "$RUN_URL" > ci-tree.txt
+      # Read by Preflight on the push to main: the merged tree passed the PR
+      # lane, so only the Firefox browser jobs remain.
+      - uses: actions/upload-artifact@v7
+        if: ${{ needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.tree != '' }}
+        with:
+          name: ci-tree-${{ needs.preflight.outputs.tree }}
+          path: ci-tree.txt
+          retention-days: 14
