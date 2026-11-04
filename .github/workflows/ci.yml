@@ -192,6 +192,7 @@ jobs:
       run_browser: ${{ steps.select.outputs.run_browser }}
       pr_matrix: ${{ steps.select.outputs.pr_matrix }}
       nextest_filter: ${{ steps.select.outputs.nextest_filter }}
+      archive_packages: ${{ steps.select.outputs.archive_packages }}
       general_filter: ${{ steps.select.outputs.general_filter }}
       deselected: ${{ steps.select.outputs.deselected }}
     steps:
@@ -380,6 +381,7 @@ jobs:
           print(f"run_browser={str(bool(rows)).lower()}")
           print("pr_matrix=" + json.dumps({"include": rows}, separators=(",", ":")))
           print(f"nextest_filter={s['nextest_filter']}")
+          print("archive_packages=" + " ".join(s["archive_packages"]))
           print(f"general_filter={s['general_filter']}")
           print("deselected=" + json.dumps(deselected, separators=(",", ":")))
           PY
@@ -470,6 +472,7 @@ jobs:
       RUSTFLAGS: ${{ inputs.runner == 'github-hosted' && '-C link-arg=-fuse-ld=lld' || '' }}
       LEPTOS_OUTPUT_NAME: ersatzrs-web
       LEPTOS_HASH_FILES: "false"
+      ARCHIVE_PACKAGES: ${{ needs.preflight.outputs.archive_packages }}
       BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') }}
       BUILD_WEB: ${{ !inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     steps:
@@ -569,7 +572,18 @@ jobs:
           cargo build --locked --bin ersatzrs-web
           cp "$CARGO_TARGET_DIR/debug/ersatzrs-web" ci-artifacts/build-rust/bin/ersatzrs-web-smoke
           cp "$(command -v cargo-nextest)" ci-artifacts/build-rust/bin/cargo-nextest
-          cargo nextest archive --locked --workspace --lib --bins --tests --archive-file ci-artifacts/build-rust/nextest.tar.zst
+          # A `pr` lane run archives only the selected crates and every crate
+          # depending on them; every other run archives the whole workspace.
+          scope=(--workspace)
+          if [[ -n "$ARCHIVE_PACKAGES" ]]; then
+            cargo metadata --locked --no-deps --format-version 1 > "$RUNNER_TEMP/metadata.json"
+            scope=()
+            for package in $(python3 scripts/ci-domains.py closure "$RUNNER_TEMP/metadata.json" $ARCHIVE_PACKAGES); do
+              scope+=(--package "$package")
+            done
+          fi
+          echo "nextest archive scope: ${scope[*]}"
+          cargo nextest archive --locked "${scope[@]}" --lib --bins --tests --archive-file ci-artifacts/build-rust/nextest.tar.zst
           python3 scripts/ci-build-artifacts.py pack --kind rust --directory ci-artifacts/build-rust \
             --archive ci-artifacts/rust.tar.gz --sha "$GITHUB_SHA"
       - name: Build matched server and complete Leptos site

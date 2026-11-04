@@ -439,7 +439,9 @@ including Firefox.
 pull request's changed paths to work:
 
 - Rust tests: the touched crates and every crate that depends on them
-  (nextest `rdeps(...)`).
+  (nextest `rdeps(...)`). The build archives only those crates' test
+  binaries (plus `ersatzrs-infra`/`ersatzrs-web` when the Teletext or Next job
+  runs), so a change without Rust code skips most of the Rust build.
 - `Teletext 1.5` (Rust) and the Teletext browser suite: paths naming teletext;
   the Rust job also runs for the service crates whose tests contain Teletext
   regressions.
