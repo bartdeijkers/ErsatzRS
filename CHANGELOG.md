@@ -28,6 +28,10 @@ release section when tagging a release.
   not. A global MPEG-TS script owns the final Hybrid mux. The checklist names a
   fix for only this channel (MPEG-TS streaming mode) separately from the global
   alternative (built-in wrapper).
+- A `Clean up old workflow runs` workflow deletes completed GitHub Actions
+  runs older than 30 days, and failed or cancelled runs older than 7 days,
+  every week. Manual runs start as a dry run. Active runs, runs for open pull
+  requests and successful Release runs are kept.
 
 ### Changed
 
