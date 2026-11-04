@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, watermark_error_message, TextKey};
+use crate::admin::i18n::{delete_failed, tr, watermark_error_message, TextKey};
 use crate::admin::server_fns::watermarks::{
     copy_watermark, count_watermarks, delete_watermark, list_watermark_rows, WatermarkListRow,
 };
@@ -50,12 +50,22 @@ fn WatermarksListIsland() -> impl IntoView {
     let delete_target: RwSignal<Option<WatermarkListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
 
-    Effect::new(move |_| {
-        if matches!(delete_action.value().get(), Some(Ok(()))) {
+    Effect::new(move |_| match delete_action.value().get() {
+        Some(Ok(())) => {
             rows_resource.refetch();
             count_resource.refetch();
             delete_open.set(false);
         }
+        // A failed delete must stay visible: the dialog closes and the
+        // localized reason is reported instead of being dropped.
+        Some(Err(error)) => {
+            toast.push(
+                delete_failed(watermark_error_message(error)),
+                ToastSeverity::Error,
+            );
+            delete_open.set(false);
+        }
+        None => {}
     });
 
     // Copy watermark state

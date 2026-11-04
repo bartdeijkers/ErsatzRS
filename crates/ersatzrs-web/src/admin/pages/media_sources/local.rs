@@ -2,7 +2,9 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{media_kind_label, tr, TextKey};
+use crate::admin::i18n::{
+    delete_failed, media_kind_label, media_source_error_message, tr, TextKey,
+};
 use crate::admin::server_fns::media_sources::{
     delete_local_library, get_local_library_form, list_local_libraries,
     list_managed_addon_media_sources, LocalLibraryForm, LocalLibraryRow,
@@ -12,7 +14,7 @@ use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     resource_state::{admin_loading_resource_view, admin_result_view},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
-    toast::{load_or_notify, use_toast},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
@@ -90,11 +92,21 @@ fn LocalLibrariesIsland() -> impl IntoView {
     let delete_target: RwSignal<Option<LocalLibraryRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
 
-    Effect::new(move |_| {
-        if matches!(delete_action.value().get(), Some(Ok(()))) {
+    Effect::new(move |_| match delete_action.value().get() {
+        Some(Ok(())) => {
             libraries.refetch();
             delete_open.set(false);
         }
+        // A failed delete must stay visible: the dialog closes and the
+        // localized reason is reported instead of being dropped.
+        Some(Err(error)) => {
+            load_toast.push(
+                delete_failed(media_source_error_message(error)),
+                ToastSeverity::Error,
+            );
+            delete_open.set(false);
+        }
+        None => {}
     });
 
     let columns: Vec<Column<LocalSourceRow>> = vec![
