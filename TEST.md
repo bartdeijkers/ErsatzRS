@@ -563,6 +563,13 @@ route-set mismatches in either direction.
 
 - **External services (Plex/Jellyfin/Emby/Trakt)** — `httpmock` helper used in
   `ersatzrs-infra` and `ersatzrs-scanner` integration tests.
+- **Scanned local libraries (Playwright)** — `tests/e2e/helpers/scanned-library.ts`
+  generates a tiny TV-show tree with the pinned FFmpeg, adds it through the
+  local library form and runs the application's own scanner from the Libraries
+  page. Prefer it over hand-inserted rows when a browser spec needs scan-shaped
+  data. Only the television scanner writes `LibraryFolder` rows, so the helper
+  builds shows rather than movies. `local-library-scan-lifecycle.spec.ts` is
+  the reference user.
 
 ## Snapshot-test policy
 
