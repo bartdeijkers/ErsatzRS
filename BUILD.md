@@ -303,8 +303,8 @@ A Linux job is not acceptance for the other supported platforms.
 
 Default required CI runs the **Teletext 1.5** Rust job and four serial browser
 jobs: **general** and **1.5**, each in Chromium and Firefox. Pull requests run
-the Chromium half and the push to `main` the Firefox half (see
-[CI lanes](#ci-lanes)). **Teletext 2.5**
+only the Chromium jobs of the domains they touch; the nightly run covers both
+browsers (see [CI lanes](#ci-lanes)). **Teletext 2.5**
 Rust and both **2.5** browser jobs are optional experimental checks, selected
 only by explicit `teletext_only=2.5` or `teletext_only=all` dispatch. Push/PR and
 normal dispatch do not schedule them. Tests/selectors remain intact, with
@@ -385,9 +385,9 @@ list shows `success` for `Format`, `Clippy`, `Build CI artifacts`, the `Test` jo
 configuration, `Teletext 1.5`, all four required `Playwright E2E` combinations
 (general and Level 1.5 in Chromium and Firefox), `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
-because skipped jobs do not fail a run. A `pr` or `firefox`
-[lane](#ci-lanes) run holds only part of this list; dispatch a full run on the
-candidate SHA for release evidence. A failed, cancelled, queued, or
+because skipped jobs do not fail a run. A `pr` or `skip`
+[lane](#ci-lanes) run holds only part of this list; use a nightly or manually
+dispatched full run on the candidate SHA as release evidence. A failed, cancelled, queued, or
 in-progress run is not release evidence. Any commit or amend after the
 successful run creates a new candidate SHA and requires new CI evidence before
 tagging.
@@ -417,24 +417,48 @@ enforces this.
 
 ### CI lanes
 
-`Preflight` picks one lane per run so a change is not tested twice in full:
+`Preflight` picks one lane per run so a change is tested once, and only as far
+as it can break something:
 
 | Lane | When | Runs |
 |---|---|---|
-| `skip` | push of an already proven SHA, or a docs-only pull request | nothing (`CI ok` passes) |
+| `skip` | push of an already proven SHA or tree, a docs-only pull request, a ready pull request whose domains select nothing, or a nightly run on an already fully tested tree | nothing (`CI ok` passes) |
 | `light` | draft pull request | Format, Clippy, Build, Test, Cargo deny, Commit lint, docs (`CI ok` fails on purpose) |
-| `pr` | ready pull request | everything, Playwright in Chromium only |
-| `firefox` | push to `main` whose tree a green `pr` run already tested | Format, Build (web only), Cargo deny, docs and the Firefox Playwright jobs |
-| `full` | any other push, every manual dispatch | everything |
+| `pr` | ready pull request | the touched domains (below), Playwright in Chromium only |
+| `full` | any other push, the nightly run (01:00 UTC), every manual dispatch | everything, both browsers |
 
 Playwright jobs in every lane start only after `Test` passed, so a red Rust run
 stops before the browser suites. A green `pr` run uploads a small
-`ci-tree-<tree>` artifact naming the tree of the merge commit it tested; the
-push to `main` looks it up by the pushed commit's tree. When `main` moved
-between the PR run and the merge, the trees differ and the push runs `full`.
+`ci-tree-<tree>` artifact naming the tree of the merge commit it tested, and the
+push to `main` with that tree is skipped. A green `full` run uploads
+`ci-full-<tree>`, and the nightly run is skipped while `main`'s tree has one.
+The nightly run is the safety net for everything a `pr` run left out,
+including Firefox.
+
+**Domain selection.** [`scripts/ci-domains.py`](scripts/ci-domains.py) maps the
+pull request's changed paths to work:
+
+- Rust tests: the touched crates and every crate that depends on them
+  (nextest `rdeps(...)`).
+- `Teletext 1.5` (Rust) and the Teletext browser suite: paths naming teletext;
+  the Rust job also runs for the service crates whose tests contain Teletext
+  regressions.
+- `Next engine`: paths naming Next, and `ersatzrs-ffmpeg`.
+- General Playwright specs: the specs of the touched admin page areas, crates or
+  service files (by keyword), changed specs themselves, specs importing a
+  changed helper, plus a hydration smoke set. Shared admin UI code selects every
+  general spec.
+- Build, toolchain and CI inputs, `ersatzrs-core`, `ersatzrs-domain`,
+  migrations, shared Playwright infrastructure and any unmapped path select
+  everything.
+
+The job summary of `Preflight` shows the selection and why. `CI ok` accepts
+exactly the jobs the selection left out. When a mapping proves too narrow, add
+the missing path or spec to `scripts/ci-domains.py`; `scripts/ci-domains_test.py`
+checks that every mapping names existing specs and crates.
 
 Open work-in-progress pull requests as drafts: follow-up pushes then cost the
-fast lane only, and **Ready for review** starts the full `pr` lane.
+fast lane only, and **Ready for review** starts the `pr` lane.
 
 ### Preflight-skipped runs are a pointer, not evidence
 

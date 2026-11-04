@@ -31,6 +31,12 @@ on:
       - '**/*.md'
       - '*.png'
       - '**/*.png'
+  # Nightly full suite on main (both browsers, every domain). Pull requests run
+  # only the domains they touch and a merge whose tree its PR already tested is
+  # skipped, so this run is the safety net. Preflight skips it when main's tree
+  # already passed a full run.
+  schedule:
+    - cron: '0 1 * * *'
   workflow_dispatch:
     inputs:
       runner:
@@ -114,7 +120,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && format('-next-engine-only{0}', inputs.next_case_set == 'subtitle-nul' && '-subtitle-nul' || '') || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ github.event_name == 'schedule' && '-nightly' || '' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && format('-next-engine-only{0}', inputs.next_case_set == 'subtitle-nul' && '-subtitle-nul' || '') || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -159,13 +165,14 @@ jobs:
   #   light   - draft pull request: Format, Clippy, Build, Test, deny,
   #             commit lint and docs only. `CI ok` fails on purpose so a draft
   #             never carries a passing required check into its ready run.
-  #   pr      - ready pull request: everything, browsers in Chromium only.
-  #             A green run records the tested merge tree as a `ci-tree-<tree>`
-  #             artifact.
-  #   firefox - push whose tree a green `pr` lane run already tested: only the
-  #             Firefox browser jobs (plus the cheap checks), which the PR lane
-  #             did not run.
-  #   full    - every other push and every manual dispatch: everything.
+  #   pr      - ready pull request: the domains it touches
+  #             (scripts/ci-domains.py), browsers in Chromium only. A green run
+  #             records the tested merge tree as a `ci-tree-<tree>` artifact,
+  #             and a push to main with that tree is skipped.
+  #   full    - every other push, the nightly run and every manual dispatch:
+  #             everything. A green run records `ci-full-<tree>`, and the
+  #             nightly run is skipped when main's tree already has one.
+  #   A ready pull request whose domains select nothing runs as `skip`.
   preflight:
     name: Preflight
     if: ${{ inputs.audit_only || (!inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none')) }}
@@ -175,9 +182,18 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      skip: ${{ steps.duplicate.outputs.skip }}
-      lane: ${{ steps.duplicate.outputs.lane }}
+      skip: ${{ steps.select.outputs.skip || steps.duplicate.outputs.skip }}
+      lane: ${{ steps.select.outputs.lane || steps.duplicate.outputs.lane }}
       tree: ${{ steps.duplicate.outputs.tree }}
+      # Domain selection of a `pr` lane run. Empty for every other lane, which
+      # the jobs read as "run".
+      run_next: ${{ steps.select.outputs.run_next }}
+      run_teletext: ${{ steps.select.outputs.run_teletext }}
+      run_browser: ${{ steps.select.outputs.run_browser }}
+      pr_matrix: ${{ steps.select.outputs.pr_matrix }}
+      nextest_filter: ${{ steps.select.outputs.nextest_filter }}
+      general_filter: ${{ steps.select.outputs.general_filter }}
+      deselected: ${{ steps.select.outputs.deselected }}
     steps:
       - name: Reject mixed audit mode
         if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts || (inputs.next_case_set && inputs.next_case_set != 'all')) }}
@@ -196,6 +212,11 @@ jobs:
             const lane = (name) => {
               core.setOutput('lane', name);
               core.setOutput('skip', name === 'skip' ? 'true' : 'false');
+            };
+            // The full lane records its tree so the nightly run can skip it.
+            const full = async () => {
+              lane('full');
+              core.setOutput('tree', await treeOf(context.sha));
             };
             const treeOf = async (sha) => (await github.rest.git.getCommit({
               owner: context.repo.owner,
@@ -230,12 +251,58 @@ jobs:
                 lane('pr');
                 // context.sha is the merge commit this run tests.
                 core.setOutput('tree', await treeOf(context.sha));
-                core.info('pull_request runs the PR lane (browsers in Chromium only).');
+                const changed = new Set();
+                for (const file of files) {
+                  changed.add(file.filename);
+                  if (file.previous_filename) changed.add(file.previous_filename);
+                }
+                require('fs').writeFileSync(
+                  `${process.env.RUNNER_TEMP}/changed-files.txt`, [...changed].join('\n') + '\n',
+                );
+                core.info('pull_request runs the PR lane (touched domains, browsers in Chromium only).');
+              }
+              return;
+            }
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            // A `ci-tree-<tree>` / `ci-full-<tree>` marker is uploaded by
+            // `CI ok` only after every selected job passed.
+            const provenBy = async (prefix, tree, events) => {
+              const artifacts = await github.paginate(
+                github.rest.actions.listArtifactsForRepo,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: `${prefix}-${tree}`,
+                  per_page: 100,
+                },
+              );
+              for (const artifact of artifacts) {
+                if (artifact.expired || !artifact.workflow_run) continue;
+                const run = (await github.rest.actions.getWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: artifact.workflow_run.id,
+                })).data;
+                if (run.path !== '.github/workflows/ci.yml' || !events.includes(run.event)
+                  || run.head_repository?.full_name !== repository
+                  || (run.conclusion && run.conclusion !== 'success')) continue;
+                return run;
+              }
+              return null;
+            };
+            if (context.eventName === 'schedule') {
+              const tree = await treeOf(context.sha);
+              const run = await provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch']);
+              if (run) {
+                lane('skip');
+                core.notice(`Tree ${tree} already passed a full run (${run.html_url}); skipping the nightly run.`);
+              } else {
+                await full();
               }
               return;
             }
             if (context.eventName !== 'push') {
-              lane('full');
+              await full();
               core.info(`${context.eventName} runs the selected gate.`);
               return;
             }
@@ -269,36 +336,59 @@ jobs:
               return;
             }
             // A merged pull request lands as a new SHA, but often with the
-            // exact tree its PR lane already tested. `CI ok` uploads the
-            // `ci-tree-<tree>` marker only after every PR lane job passed.
+            // exact tree its PR lane already tested. The nightly full run
+            // covers the domains and Firefox jobs that lane left out.
             const tree = await treeOf(context.sha);
-            const repository = `${context.repo.owner}/${context.repo.repo}`;
-            const artifacts = await github.paginate(
-              github.rest.actions.listArtifactsForRepo,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                name: `ci-tree-${tree}`,
-                per_page: 100,
-              },
-            );
-            for (const artifact of artifacts) {
-              if (artifact.expired || !artifact.workflow_run) continue;
-              const run = (await github.rest.actions.getWorkflowRun({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: artifact.workflow_run.id,
-              })).data;
-              if (run.path !== '.github/workflows/ci.yml' || run.event !== 'pull_request'
-                || run.head_repository?.full_name !== repository
-                || (run.conclusion && run.conclusion !== 'success')) continue;
-              lane('firefox');
+            const run = await provenBy('ci-tree', tree, ['pull_request']);
+            if (run) {
+              lane('skip');
               core.notice(
-                `Tree ${tree} already passed the PR lane (${run.html_url}); running only the Firefox browser jobs.`,
+                `Tree ${tree} already passed the PR lane (${run.html_url}); skipping this run. The nightly run covers the rest.`,
               );
               return;
             }
-            lane('full');
+            await full();
+      - uses: actions/checkout@v7
+        if: ${{ steps.duplicate.outputs.lane == 'pr' }}
+        with:
+          # Cone mode always includes root files such as Cargo.toml.
+          sparse-checkout: |
+            scripts
+            tests/e2e
+      - id: select
+        name: Select touched domains
+        if: ${{ steps.duplicate.outputs.lane == 'pr' }}
+        run: |
+          python3 scripts/ci-domains.py select "$RUNNER_TEMP/changed-files.txt" > "$RUNNER_TEMP/selection.json"
+          python3 - "$RUNNER_TEMP/selection.json" >> "$GITHUB_OUTPUT" <<'PY'
+          import json, sys
+          s = json.load(open(sys.argv[1]))
+          print(json.dumps(s, indent=1), file=sys.stderr)
+          general = s["general_specs"] == "all" or bool(s["general_specs"])
+          rows = []
+          if general:
+              rows.append({"suite": "general", "project": "chromium", "port": "18409"})
+          if s["teletext_browser"]:
+              rows.append({"suite": "1.5", "project": "chromium", "port": "18411"})
+          deselected = [job for job, on in (("next_engine", s["next"]), ("teletext", s["teletext_rust"]),
+                                            ("hydration", bool(rows))) if not on]
+          nothing = not (s["rust_packages"] or rows)
+          print(f"lane={'skip' if nothing else 'pr'}")
+          print(f"skip={'true' if nothing else 'false'}")
+          print(f"run_next={str(s['next']).lower()}")
+          print(f"run_teletext={str(s['teletext_rust']).lower()}")
+          print(f"run_browser={str(bool(rows)).lower()}")
+          print("pr_matrix=" + json.dumps({"include": rows}, separators=(",", ":")))
+          print(f"nextest_filter={s['nextest_filter']}")
+          print(f"general_filter={s['general_filter']}")
+          print("deselected=" + json.dumps(deselected, separators=(",", ":")))
+          PY
+          {
+            echo "### Selected CI domains"
+            echo '```json'
+            cat "$RUNNER_TEMP/selection.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   fmt:
     name: Format
@@ -330,7 +420,7 @@ jobs:
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
     needs: [preflight, fmt]
-    if: ${{ !inputs.audit_only && needs.preflight.outputs.lane != 'firefox' }}
+    if: ${{ !inputs.audit_only }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -373,12 +463,14 @@ jobs:
       rust_source_sha: ${{ steps.reuse.outputs.rust_source_sha || github.sha }}
       web_source_sha: ${{ steps.reuse.outputs.web_source_sha || github.sha }}
     env:
-      CARGO_BUILD_JOBS: "1"
+      # Kether V (Ryzen 9 5900X, 24 threads, 64 GB) hosts both self-hosted
+      # runners: 6 jobs each leaves half the threads free when both build.
+      CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '4' || '6' }}
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: ${{ inputs.runner == 'github-hosted' && '-C link-arg=-fuse-ld=lld' || '' }}
       LEPTOS_OUTPUT_NAME: ersatzrs-web
       LEPTOS_HASH_FILES: "false"
-      BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') && needs.preflight.outputs.lane != 'firefox' }}
+      BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') }}
       BUILD_WEB: ${{ !inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     steps:
       - name: Validate dispatch mode
@@ -460,6 +552,9 @@ jobs:
         if: ${{ !inputs.reuse_artifacts }}
         run: |
           git diff --exit-code
+          echo "Runner hardware: $(nproc) threads, CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS"
+          free -g || true
+          df -h "$GITHUB_WORKSPACE/.." || true
           cargo build --locked -p xtask --bin xtask
           "$CARGO_TARGET_DIR/debug/xtask" target-size
           cargo build --locked -p ersatzrs-ffmpeg --example provision_runtime
@@ -538,18 +633,23 @@ jobs:
           cache_kib=$(du -sk -- "$CARGO_TARGET_DIR" | awk '{print $1}')
           cache_limit_gib="${ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB:-60}"
           [[ "$cache_limit_gib" =~ ^[0-9]+$ ]]
-          if (( cache_kib >= cache_limit_gib * 1024 * 1024 )); then
-            echo "Completed build cache exceeds ${cache_limit_gib} GiB; freeing it before consumers restore artifacts."
+          # The second runner lives on a 100 GB disk: also clean when less than
+          # 20 GiB stays free, whatever the cache size.
+          free_kib=$(df -Pk -- "$CARGO_TARGET_DIR" | awk 'NR==2 {print $4}')
+          if (( cache_kib >= cache_limit_gib * 1024 * 1024 || free_kib < 20 * 1024 * 1024 )); then
+            echo "Completed build cache is ${cache_kib} KiB with ${free_kib} KiB free; freeing it before consumers restore artifacts."
             cargo clean
           fi
 
   test:
     name: Test
     needs: [preflight, build]
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'firefox' && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     env:
       NEXTEST_TEST_THREADS: "4"
+      # Set only by a `pr` lane run: the touched crates and their dependents.
+      NEXTEST_FILTER: ${{ needs.preflight.outputs.nextest_filter }}
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -574,8 +674,11 @@ jobs:
             --sha "$GITHUB_SHA" --env-file "$GITHUB_ENV"
       - name: General Rust regressions
         run: |
+          # A `pr` lane run narrows the selection to the touched crates and
+          # every crate that depends on them; other lanes run it whole.
           "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" \
-            --profile ci -E "$(python3 scripts/ci-teletext-selection.py rust general)"
+            --profile ci --no-tests pass \
+            -E "($(python3 scripts/ci-teletext-selection.py rust general)) & (${NEXTEST_FILTER:-all()})"
       - name: Collect test timings
         if: always()
         run: |
@@ -603,7 +706,7 @@ jobs:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     needs: [preflight, build]
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.lane != 'firefox' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.run_next != 'false' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
@@ -723,7 +826,7 @@ jobs:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     needs: [preflight, build]
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.lane != 'firefox' && !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.run_teletext != 'false' && !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -823,7 +926,7 @@ jobs:
     # suites start only after Test passed (or was not selected), so a red
     # Rust run stops before hours of browser time.
     needs: [preflight, build, test]
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') && needs.preflight.outputs.lane != 'light' && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.run_browser != 'false' && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     # Default: general and1.5; experimental2.5 requires teletext_only=2.5/all.
     # One job per selected suite/project. Each suite uses a single worker because
     # it mutates shared application state in its test database (TEST.md): each
@@ -833,8 +936,9 @@ jobs:
     # than by `--shard` also keeps every `mode: 'serial'` group whole inside
     # one job.
     #
-    # Pull requests (lane `pr`) run Chromium only; the Firefox jobs run on the
-    # push to main (lane `firefox` or `full`) and on manual dispatch.
+    # Pull requests (lane `pr`) run Chromium only, and only the suites and
+    # specs of the domains they touch; Firefox and the rest run nightly on main
+    # (lane `full`) and on manual dispatch.
     #
     # Selected suite/project combinations run serially within this workflow. Both self-hosted
     # runners share one machine, so simultaneous browser suites compete for
@@ -847,7 +951,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || needs.preflight.outputs.lane == 'pr' && '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"1.5","project":"chromium","port":"18411"}]}' || needs.preflight.outputs.lane == 'firefox' && '{"include":[{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}') }}
+      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.pr_matrix || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}') }}
     env:
       # Keep CI independent from the maintainer's live admin server on 8409.
       ERSATZRS_E2E_PORT: ${{ matrix.port }}
@@ -909,6 +1013,7 @@ jobs:
           BROWSER_PROJECT: ${{ matrix.project }}
           BROWSER_SUITE: ${{ matrix.suite }}
           BROWSER_CASE_SET: ${{ inputs.browser_case_set || 'fixtures' }}
+          PR_GENERAL_FILTER: ${{ needs.preflight.outputs.general_filter }}
           # RUST_LOG also reaches the pinned Next child; preserve its DEBUG diagnostics.
           RUST_LOG: warn,ersatzrs_web=info,ersatzrs_infra::next_engine::diagnostics=debug,ersatztv_channel=debug,ersatztv_core=debug,ersatztv_playout=debug,ffpipeline=debug,ffmpeg=debug
         run: |
@@ -921,6 +1026,10 @@ jobs:
             recovery_args="$(python3 scripts/ci-teletext-selection.py browser-recovery "$BROWSER_CASE_SET")"
             mapfile -t selected_cases <<< "$recovery_args"
             playwright_args+=("${selected_cases[@]}")
+          elif [[ "$BROWSER_SUITE" == 'general' && -n "$PR_GENERAL_FILTER" ]]; then
+            # A `pr` lane run: only the specs of the touched admin areas plus
+            # the hydration smoke set (scripts/ci-domains.py).
+            playwright_args+=("$PR_GENERAL_FILTER")
           else
             playwright_args+=("$(python3 scripts/ci-teletext-selection.py browser "$BROWSER_SUITE")")
           fi
@@ -1018,6 +1127,7 @@ jobs:
       - name: Check CI suite ownership and artifact integrity
         run: |
           python3 scripts/ci-teletext-selection_test.py
+          python3 scripts/ci-domains_test.py
           python3 scripts/ci-build-artifacts_test.py
           python3 scripts/e2e/playwright-e2e_test.py
           python3 scripts/release/test-docker-recovery.py
@@ -1070,8 +1180,10 @@ jobs:
           # Jobs a lane leaves out on purpose (see Preflight).
           optional |= {
               "light": {"next_engine", "teletext", "hydration"},
-              "firefox": {"clippy", "test", "next_engine", "teletext"},
           }.get(lane, set())
+          if lane == "pr":
+              # Domains the pull request does not touch (scripts/ci-domains.py).
+              optional |= set(json.loads(needs["preflight"]["outputs"].get("deselected") or "[]"))
           missing = [job for job, result in results.items()
                      if result != "success" and job not in optional]
           if missing:
@@ -1083,16 +1195,30 @@ jobs:
           print(f"All gate jobs passed ({lane} lane).")
           PY
       - name: Record the tested tree
-        if: ${{ needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.tree != '' }}
+        if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.tree != '' }}
         env:
           TREE: ${{ needs.preflight.outputs.tree }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: printf '%s\n%s\n' "$TREE" "$RUN_URL" > ci-tree.txt
       # Read by Preflight on the push to main: the merged tree passed the PR
-      # lane, so only the Firefox browser jobs remain.
+      # lane, so that push is skipped and the nightly run covers the rest.
       - uses: actions/upload-artifact@v7
-        if: ${{ needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.tree != '' }}
+        if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.tree != '' }}
         with:
           name: ci-tree-${{ needs.preflight.outputs.tree }}
           path: ci-tree.txt
+          retention-days: 14
+      - name: Record the fully tested tree
+        if: ${{ needs.preflight.outputs.lane == 'full' && needs.preflight.outputs.tree != '' }}
+        env:
+          TREE: ${{ needs.preflight.outputs.tree }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: printf '%s\n%s\n' "$TREE" "$RUN_URL" > ci-full.txt
+      # Read by Preflight on the nightly run: skip it when main's tree already
+      # passed a full run.
+      - uses: actions/upload-artifact@v7
+        if: ${{ needs.preflight.outputs.lane == 'full' && needs.preflight.outputs.tree != '' }}
+        with:
+          name: ci-full-${{ needs.preflight.outputs.tree }}
+          path: ci-full.txt
           retention-days: 14
