@@ -6385,7 +6385,27 @@ pub fn provide_i18n_context() {
 }
 
 pub fn use_i18n() -> UiLanguage {
-    use_context::<UiLanguage>().unwrap_or(UiLanguage::English)
+    use_context::<UiLanguage>().unwrap_or_else(context_free_language)
+}
+
+/// The language used when no `UiLanguage` context is in scope.
+///
+/// Islands hydrate independently of the server shell, so an island that does
+/// not call [`provide_i18n_context`] itself has no language context on the
+/// client. Falling back to English there rendered every client-side label
+/// (table rows, row actions, pagination, toasts) in English on a localized
+/// page. The server-rendered `<html lang>` is the authoritative choice, so the
+/// client reads it instead; the server always provides the context.
+fn context_free_language() -> UiLanguage {
+    #[cfg(all(not(feature = "ssr"), target_arch = "wasm32"))]
+    {
+        load_language_initial()
+    }
+
+    #[cfg(not(all(not(feature = "ssr"), target_arch = "wasm32")))]
+    {
+        UiLanguage::English
+    }
 }
 
 pub fn tr(key: TextKey) -> &'static str {
