@@ -52,8 +52,9 @@ library and create a playable channel.
 See [system requirements](docs/reference/system-requirements.md) for the package
 matrix, runtime requirements, and unverified platform/hardware combinations.
 macOS code compatibility is retained, but build, package, runtime and acceptance
-work is deferred by maintainer decision during the private-repository period.
-Explicit permission is required to resume; no verified macOS support is claimed.
+work is deferred by maintainer decision. Making the repository public did not
+lift that deferral; explicit permission is required to resume, and no verified
+macOS support is claimed.
 
 ## Operate your server
 
@@ -117,6 +118,12 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before making changes. The
 [architecture](ARCHITECTURE.md), [porting workflow](PORTING.md),
 [coding style](STYLE.md), [test contract](TEST.md), and
 [architectural decisions](docs/adr/) describe the project conventions.
+
+Changes reach `main` only through pull requests. `main` requires the single
+`CI ok` check, which passes only when every CI job passed; pull requests that
+touch only documentation get it within a minute. CI runs on the maintainer's
+self-hosted runners, so workflows for pull requests from forks start only
+after the maintainer approves them, and a full run can take several hours.
 
 ## Credits
 
