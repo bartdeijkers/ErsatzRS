@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Changed
 
+- CI now ends with a single `CI ok` job that passes only when every gate job
+  passed, so `main` can require one status check. Docs-only pull requests
+  start CI and report `CI ok` quickly instead of never reporting a status.
+- The daily progress and nightly clippy-cleanup routines now land their
+  commits through an auto-merged pull request instead of pushing to `main`.
 - Defer Docker image delivery for application release 1.2.0 by maintainer
   decision. Preserve container code and evidence; the three Linux archives,
   Windows x64 and their required verification remain in scope.

@@ -8,8 +8,12 @@ artifact and, when there are safe targets, fixes a **batch** of
 each one individually verification-gated — behind a single push. Edit this
 file to change the routine's behavior; the schedule points at this contract.
 
-- **Delivery:** commits code changes **directly to `main`**. Each verified
-  fix within a run gets its own commit (readable history, meaningful
+- **Delivery:** commits code changes on a short-lived branch and lands them
+  through **one pull request** per run. `main` is protected and requires the
+  `CI ok` check, so a run never pushes to `main`; the pull request merges
+  with auto-merge (rebase method, which keeps every commit and the
+  `Clippy-cleanup-run:` trailer on `main`) once full CI is green. Each
+  verified fix within a run gets its own commit (readable history, meaningful
   `commitlint --from HEAD~1` checks), but the whole run does **at most one
   `git push`**. An all-skipped run or a run that reaches the time-box before
   its first success uses one empty state commit so the tuner can observe that
@@ -65,11 +69,11 @@ file to change the routine's behavior; the schedule points at this contract.
   stop the loop after `TIME_BOX_SECONDS` (2400s / 40 minutes, from
   `xtask/src/clippy_ledger.rs`) of active work regardless of the batch cap —
   that's the actual backstop protecting the usage window. `.github/workflows/
-  ci.yml` runs the full CI gate on every push to `main` that touches anything
-  outside `docs/**`; since these fixes touch `.rs` files, **exactly one push
-  per night** keeps this to one CI run per night instead of a flood. GitHub's
-  `push` trigger fires once per `git push` regardless of how many commits it
-  carries, so batching several verified commits behind one push doesn't cost
+  ci.yml` runs the full CI gate on every pull request push that touches
+  anything outside the non-code paths; since these fixes touch `.rs` files,
+  **exactly one push per night** keeps this to one pull request run per night
+  instead of a flood. GitHub runs CI once per `git push` regardless of how
+  many commits it carries, so batching several verified commits behind one push doesn't cost
   any extra CI runs — that's what makes batching free from a CI-flood
   perspective, and is why the batch cap can safely be more than one.
 - **Schedule owner:** this routine is intended for the maintainer-owned
@@ -99,7 +103,11 @@ file.
    --limit 1 --json status,conclusion,headSha`). If it did not succeed, do
    **not** add a new commit on top of a red `main` tonight — report which run
    failed and why (if determinable), and stop. No-op.
-3. Set `start_epoch=$(date -u +%s)` and `TIME_BOX_SECONDS=2400` — you'll need
+3. If a previous run's pull request (branch `routine/clippy-cleanup-*`) is
+   still open, do **not** start another batch: the tuner reads only merged
+   trailers on `main`, and stacked batches would conflict. Report the open
+   pull request and its `CI ok` state, and stop. No-op.
+4. Set `start_epoch=$(date -u +%s)` and `TIME_BOX_SECONDS=2400` — you'll need
    both at the end of the loop to compute `duration_s` for the run trailer and
    before every potentially long verification command to enforce the
    time-box.
@@ -133,7 +141,7 @@ failed target isn't retried in an infinite loop) and a `succeeded` list (one
 entry per committed fix, for the final report and the run trailer). Also keep
 a `stop_reason`, including whether the time-box ended the loop. Repeat the
 following until **any** of: `succeeded.len() == batch_cap`, elapsed time since
-step 0.3 reaches `TIME_BOX_SECONDS` (2400s), or a `--next` call returns
+step 0.4 reaches `TIME_BOX_SECONDS` (2400s), or a `--next` call returns
 `tier=none`. Check elapsed time before selecting or editing another target; if
 the deadline is already reached, set `stop_reason=time-box` and break:
 
@@ -260,8 +268,14 @@ pass.
 
 ### 5. Push
 
-If step 4 amended a fix commit or created an empty state commit, `git push`
-once, carrying every commit made this run. If the first `--next` call returned
+Make every commit of this run on the branch
+`routine/clippy-cleanup-<YYYY-MM-DD>` (create it from the evaluated `main`
+before the first commit in step 3). If step 4 amended a fix commit or created
+an empty state commit, `git push` that branch once, carrying every commit made
+this run; never push to `main`. Open a pull request to `main` and enable
+auto-merge with the **rebase** method. If auto-merge is unavailable, leave the
+pull request open for the maintainer; never merge while `CI ok` is queued,
+running or red. If the first `--next` call returned
 `tier=none` without skips or a time-box stop: no-op, no push, working tree
 clean.
 
@@ -276,7 +290,7 @@ fixes immediately rather than lagging until tomorrow's step 1. Skip this if
 State: the pre-flight CI check result, whether the artifact was published
 (both times), tonight's batch cap and the tuner's reason, each target
 attempted this run with its outcome (committed / skipped-with-reason), the
-final fix or state commit and push (or the true no-op reason), whether the
+final fix or state commit, push and pull request (or the true no-op reason), whether the
 time-box stopped a verification command, and the fresh ledger totals (sites
 remaining, Tier-1 files remaining, Tier-2 candidates remaining) so the
 maintainer can see the trend without opening the artifact.
