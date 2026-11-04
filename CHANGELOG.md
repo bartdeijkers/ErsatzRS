@@ -24,6 +24,12 @@ release section when tagging a release.
 - Deleting a scanned local library, or removing a scanned path from one, no
   longer fails with a `FOREIGN KEY constraint failed` error when the path
   contains nested folders or media files.
+- A failed delete on the local, Jellyfin, Emby, watermark, channel and playout
+  lists now closes the confirmation dialog and shows a localized error toast,
+  instead of silently leaving the dialog open.
+- Interactive admin lists (for example local sources, watermarks, channels,
+  collections and logs) no longer switch their rows, row actions, pagination
+  and toasts to English on a localized UI after the page becomes interactive.
 - Cross-compile release Docker application binaries on the build host using
   the existing Bookworm toolchains, avoiding ARM compiler emulation that
   exceeded the release job's six-hour limit. Preserve the runtime base,

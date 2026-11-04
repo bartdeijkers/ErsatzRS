@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{
-    media_kind_label, media_source_error_message, no_media_source_configured,
+    delete_failed, media_kind_label, media_source_error_message, no_media_source_configured,
     provider_connection_title, provider_libraries_title, provider_path_label,
     provider_path_replacements_title, save_failed, tr, TextKey,
 };
@@ -15,7 +15,9 @@ use crate::admin::ui::primitives::dialog::DeleteDialog;
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
-use crate::admin::ui::primitives::toast::{load_failed_message, load_or_notify, use_toast};
+use crate::admin::ui::primitives::toast::{
+    load_failed_message, load_or_notify, use_toast, ToastSeverity,
+};
 
 // `shared.module.css` is shared across the media-source pages (emby, jellyfin,
 // local, plex); not every class is used by this particular page.
@@ -70,11 +72,21 @@ fn JellyfinSourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
     let delete_target: RwSignal<Option<RemoteSourceRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
 
-    Effect::new(move |_| {
-        if matches!(delete_action.value().get(), Some(Ok(()))) {
+    Effect::new(move |_| match delete_action.value().get() {
+        Some(Ok(())) => {
             rows.refetch();
             delete_open.set(false);
         }
+        // A failed delete must stay visible: the dialog closes and the
+        // localized reason is reported instead of being dropped.
+        Some(Err(error)) => {
+            load_toast.push(
+                delete_failed(media_source_error_message(error)),
+                ToastSeverity::Error,
+            );
+            delete_open.set(false);
+        }
+        None => {}
     });
 
     view! {

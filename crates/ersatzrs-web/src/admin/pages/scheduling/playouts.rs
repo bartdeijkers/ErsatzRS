@@ -9,7 +9,8 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{
-    external_json_help, playout_reset_prompt, playout_schedule_kind_label, tr, TextKey,
+    delete_failed, external_json_help, playout_reset_prompt, playout_schedule_kind_label,
+    schedule_error_message, tr, TextKey,
 };
 use crate::admin::server_fns::playouts::{
     count_playout_detail_items, count_playouts, delete_playout, get_show_filler_pref,
@@ -290,12 +291,22 @@ fn PlayoutsIsland(
             .map(playout_entity_name)
             .unwrap_or_default()
     });
-    Effect::new(move |_| {
-        if matches!(delete_action.value().get(), Some(Ok(()))) {
+    Effect::new(move |_| match delete_action.value().get() {
+        Some(Ok(())) => {
             list_rows.refetch();
             list_count.refetch();
             delete_open.set(false);
         }
+        // A failed delete must stay visible: the dialog closes and the
+        // localized reason is reported instead of being dropped.
+        Some(Err(error)) => {
+            load_toast.push(
+                delete_failed(schedule_error_message(error)),
+                ToastSeverity::Error,
+            );
+            delete_open.set(false);
+        }
+        None => {}
     });
 
     // -- schedule reset dialog --

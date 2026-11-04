@@ -2,7 +2,9 @@
 use leptos::prelude::*;
 
 use super::preview::ChannelPreviewPlayer;
-use crate::admin::i18n::{channel_language_label, channel_streaming_mode_label, tr, TextKey};
+use crate::admin::i18n::{
+    channel_language_label, channel_streaming_mode_label, delete_failed, tr, TextKey,
+};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::channels::list_active_channel_numbers;
 use crate::admin::server_fns::channels::{
@@ -12,7 +14,7 @@ use crate::admin::server_fns::channels::{
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
-    toast::{load_or_notify, use_toast},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/list.module.css");
@@ -97,12 +99,19 @@ fn ChannelsListIsland() -> impl IntoView {
         async move { stop_channel_session(number).await }
     });
 
-    Effect::new(move |_| {
-        if matches!(delete_action.value().get(), Some(Ok(()))) {
+    Effect::new(move |_| match delete_action.value().get() {
+        Some(Ok(())) => {
             rows_resource.refetch();
             count_resource.refetch();
             delete_open.set(false);
         }
+        // A failed delete must stay visible: the dialog closes and the
+        // localized reason is reported instead of being dropped.
+        Some(Err(error)) => {
+            load_toast.push(delete_failed(error), ToastSeverity::Error);
+            delete_open.set(false);
+        }
+        None => {}
     });
 
     let columns: Vec<Column<ChannelListRow>> = vec![
