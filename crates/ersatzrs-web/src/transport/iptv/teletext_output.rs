@@ -243,6 +243,31 @@ async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         intervals: 1,
         control: control.map(PumpControl::new),
     };
+    let result = forward_epoch(
+        source,
+        sink,
+        config,
+        content,
+        first_byte_timeout,
+        seed,
+        &mut progress,
+    )
+    .await;
+    if let (Err(error), Some(control)) = (&result, &progress.control) {
+        control.failed(error);
+    }
+    result
+}
+
+async fn forward_epoch<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    config: TeletextOutputConfig,
+    content: TeletextOutputContent,
+    first_byte_timeout: Duration,
+    seed: Option<TeletextStartupPrefix>,
+    progress: &mut ForwardProgress,
+) -> Result<u64, TeletextPumpError> {
     let epoch = seed
         .as_ref()
         .map_or_else(Instant::now, TeletextStartupPrefix::epoch);

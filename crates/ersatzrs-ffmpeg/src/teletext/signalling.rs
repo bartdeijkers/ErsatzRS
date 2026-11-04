@@ -64,6 +64,17 @@ pub enum TeletextMultiplexError {
     /// Capacity is insufficient; neither input bytes nor counters were changed.
     #[error("teletext needs {needed} null packets but the window has {available}")]
     Capacity { needed: usize, available: usize },
+    /// Consecutive intervals stayed full for the whole permitted deferral span.
+    #[error(
+        "teletext needs {needed} null packets but the multiplex had only {available} \
+         within {window_ms} ms; the output muxrate leaves too little room beside \
+         the video peaks"
+    )]
+    SustainedCapacity {
+        needed: usize,
+        available: usize,
+        window_ms: u32,
+    },
 }
 
 /// Host-owned EN 300 468 teletext descriptors for an encoded page generation.

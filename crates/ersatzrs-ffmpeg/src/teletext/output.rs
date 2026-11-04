@@ -11,6 +11,23 @@ use super::{
 };
 
 const STEP_TICKS: u64 = 1_800;
+/// EN 300 706 B.9 bounds the time between successive packets of a page; the
+/// gate uses 100 ms. A batch that continues a page and finds no null capacity
+/// may therefore move at most four further 20 ms intervals after the interval
+/// following its predecessor.
+const MAX_DEFERRED_INTERVALS: u32 = 4;
+/// A page header, magazine declaration or cycle terminator starts a new page
+/// transmission, so B.9 does not bound its wait. A header is not placed while
+/// the output already received shows no room for every remaining batch of its
+/// page within the B.9 spacing; it waits instead. This bound keeps a permanently
+/// full multiplex from starving the service silently. Five seconds covers the
+/// longest null-free stretch measured with an ordinary constant-rate profile
+/// (3.9 s at start-up, about 1.1 s in steady state). EN 300 706 B.6 is still
+/// enforced separately by the carousel.
+const MAX_PAGE_START_DEFERRED_INTERVALS: u32 = 250;
+/// Null packets kept free per look-ahead interval for PSI that a later window
+/// may still install into them.
+const LOOKAHEAD_SLACK_PACKETS: usize = 1;
 const PACKET_BITS: u128 = 188 * 8;
 
 #[cfg(test)]
@@ -24,6 +41,10 @@ mod tail_tests;
 #[cfg(test)]
 #[path = "output_retained_tests.rs"]
 mod retained_tests;
+
+#[cfg(test)]
+#[path = "output_real_burst_tests.rs"]
+mod real_burst_tests;
 
 #[cfg(test)]
 #[path = "authored_service_output_tests.rs"]
@@ -257,8 +278,14 @@ struct PendingOutput {
 /// failed generation discards all held/prepared bytes and cannot be retried.
 /// Regular windows cover complete 20 ms intervals; actual EOF can drain a
 /// fractional interval without adding an authored batch. PMT growth is
-/// preflighted before all carousel batches are inserted into their own null
-/// slots; insufficient interval capacity never silently drops or delays pages.
+/// preflighted before all carousel batches are inserted into null slots. A
+/// batch whose own interval lacks nulls (a video burst) waits for a later
+/// interval. Within a page it never waits longer than the B.9 packet spacing;
+/// a new page does not start while the received output shows no room for the
+/// whole page, waiting at most `MAX_PAGE_START_DEFERRED_INTERVALS`; and nothing waits
+/// beyond the B.6 acquisition bound. Its PTS names the interval that actually
+/// carries it. Exhausted deferral fails the epoch explicitly: pages are never
+/// silently dropped.
 ///
 /// A prepared window is immutable and must be acknowledged after real sink
 /// delivery before another can be prepared. The epoch token prevents using a
@@ -298,6 +325,16 @@ pub struct TeletextOutputGate {
     // neutral bank with that exact owner clears previously delivered MOT state.
     acknowledged_nonempty_mots: [u16; 8],
     mot_retirement: Option<mot_retirement::MotRetirement>,
+    // A planned batch still waiting for null capacity after a video burst.
+    deferred: Option<DeferredBatch>,
+}
+
+/// One planned batch whose own interval lacked null capacity.
+/// A batch with its cycle completion and the intervals it already waited.
+struct DeferredBatch {
+    batch: super::TeletextCarouselBatch,
+    completes: bool,
+    intervals: u32,
 }
 
 impl TeletextOutputGate {
@@ -492,6 +529,7 @@ impl TeletextOutputGate {
             acknowledged_m29_magazines: 0,
             acknowledged_nonempty_mots: [0; 8],
             mot_retirement: None,
+            deferred: None,
         })
     }
 
@@ -930,23 +968,21 @@ impl TeletextOutputGate {
                         .ok_or(TeletextOutputError::Boundary)?,
                 )
                 .map_err(|_| TeletextOutputError::Arithmetic)?;
-            let (batch, completes) = self.next_payload_batch()?;
-            completes_cycle |= completes;
+            let pending = self.take_batch()?;
             let next = self
                 .batch_ticks
                 .checked_add(STEP_TICKS)
                 .ok_or(TeletextOutputError::Arithmetic)?;
+            // The PTS names the end of the interval that actually carries the
+            // PES, so a deferred batch still arrives before its presentation and
+            // Bttx holds at most one batch, exactly as for on-time placement.
             let pts = self
                 .anchor
                 .ok_or(TeletextOutputError::Boundary)?
                 .1
                 .wrapping_add(next);
-            if let Some(batch) = batch {
-                self.monitor
-                    .as_ref()
-                    .ok_or(TeletextOutputError::Configuration)?
-                    .plan()
-                    .replace_null_packets(&mut packets[range], &batch, pts, &mut self.packetizer)?;
+            if let Some(pending) = pending {
+                completes_cycle |= self.place_batch(&mut packets, range, pending, pts)?;
             }
             self.batch_ticks = next;
         }
@@ -969,6 +1005,7 @@ impl TeletextOutputGate {
             cycle: PendingCycleEvidence {
                 completes_cycle,
                 cycle_boundary: self.mot_retirement.is_none()
+                    && self.deferred.is_none()
                     && self
                         .carousel
                         .as_ref()
@@ -976,10 +1013,11 @@ impl TeletextOutputGate {
                 signalling_announced: installation.announced,
             },
             completed_authored,
-            completed_mot_retirement: self
-                .mot_retirement
-                .as_ref()
-                .is_some_and(mot_retirement::MotRetirement::complete),
+            completed_mot_retirement: self.deferred.is_none()
+                && self
+                    .mot_retirement
+                    .as_ref()
+                    .is_some_and(mot_retirement::MotRetirement::complete),
         });
         self.source_start = end;
         Ok(true)
@@ -1004,6 +1042,154 @@ impl TeletextOutputGate {
         let batch = carousel.next_batch()?;
         let complete = batch.kind() == super::TeletextCarouselBatchKind::Terminator;
         Ok((Some(batch), complete))
+    }
+
+    /// The deferred batch first, otherwise the next planned payload batch.
+    fn take_batch(&mut self) -> Result<Option<DeferredBatch>, TeletextOutputError> {
+        if let Some(deferred) = self.deferred.take() {
+            return Ok(Some(deferred));
+        }
+        let (batch, completes) = self.next_payload_batch()?;
+        Ok(batch.map(|batch| DeferredBatch {
+            batch,
+            completes,
+            intervals: 0,
+        }))
+    }
+
+    /// Place one batch in its interval, or defer it within its bound.
+    /// Returns whether the placed batch completes a carousel cycle.
+    fn place_batch(
+        &mut self,
+        packets: &mut [[u8; 188]],
+        range: std::ops::Range<usize>,
+        pending: DeferredBatch,
+        pts: TeletextTimestamp,
+    ) -> Result<bool, TeletextOutputError> {
+        let DeferredBatch {
+            batch,
+            completes,
+            intervals,
+        } = pending;
+        let page_start = self.mot_retirement.is_none()
+            && !matches!(batch.kind(), super::TeletextCarouselBatchKind::Page);
+        let limit = if page_start {
+            MAX_PAGE_START_DEFERRED_INTERVALS
+        } else {
+            MAX_DEFERRED_INTERVALS
+        };
+        let continuation = if page_start && batch.kind() == super::TeletextCarouselBatchKind::Header
+        {
+            self.carousel
+                .as_ref()
+                .ok_or(TeletextOutputError::Configuration)?
+                .header_continuation_packets()
+        } else {
+            Vec::new()
+        };
+        let placed = if self.page_fits_ahead(packets, &continuation)? {
+            self.monitor
+                .as_ref()
+                .ok_or(TeletextOutputError::Configuration)?
+                .plan()
+                .replace_null_packets(
+                    &mut packets[range.clone()],
+                    &batch,
+                    pts,
+                    &mut self.packetizer,
+                )
+        } else {
+            Err(TeletextMultiplexError::Capacity {
+                needed: batch.transport_packet_count() + continuation.iter().sum::<usize>(),
+                available: free_packets(&packets[range]),
+            })
+        };
+        match placed {
+            Ok(_) => Ok(completes),
+            Err(TeletextMultiplexError::Capacity { needed, available }) => {
+                if intervals >= limit {
+                    return Err(TeletextMultiplexError::SustainedCapacity {
+                        needed,
+                        available,
+                        window_ms: (limit + 1) * 20,
+                    }
+                    .into());
+                }
+                self.defer_carousel_interval()?;
+                self.deferred = Some(DeferredBatch {
+                    batch,
+                    completes,
+                    intervals: intervals + 1,
+                });
+                Ok(false)
+            }
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// Whether the output already received leaves room for each remaining batch
+    /// of the page whose header is about to be placed in the current interval,
+    /// every batch within the B.9 spacing of its predecessor. Only output that
+    /// has already arrived can prove a page does not fit; a page that does not
+    /// fit in received output keeps its header waiting instead.
+    fn page_fits_ahead(
+        &self,
+        packets: &[[u8; 188]],
+        continuation: &[usize],
+    ) -> Result<bool, TeletextOutputError> {
+        let window = self.buffer_ref()?.window()?;
+        let index = |ticks: u64| -> Result<usize, TeletextOutputError> {
+            usize::try_from(
+                self.frame_position(ticks)?
+                    .checked_sub(self.source_start)
+                    .ok_or(TeletextOutputError::Boundary)?,
+            )
+            .map_err(|_| TeletextOutputError::Arithmetic)
+        };
+        let mut previous = self.batch_ticks;
+        'batches: for &needed in continuation {
+            for step in 1..=u64::from(MAX_DEFERRED_INTERVALS) + 1 {
+                let start_ticks = previous
+                    .checked_add(step * STEP_TICKS)
+                    .ok_or(TeletextOutputError::Arithmetic)?;
+                let start = index(start_ticks)?;
+                let stop = index(
+                    start_ticks
+                        .checked_add(STEP_TICKS)
+                        .ok_or(TeletextOutputError::Arithmetic)?,
+                )?;
+                if stop > window.len() {
+                    // Not received yet: nothing shows the page cannot fit, so the
+                    // header is placed as before and the B.9-bounded deferral
+                    // still covers a burst that arrives later.
+                    return Ok(true);
+                }
+                let free = (start..stop)
+                    .filter(|&position| is_null(packets.get(position).unwrap_or(&window[position])))
+                    .count();
+                if free >= needed + LOOKAHEAD_SLACK_PACKETS {
+                    previous = start_ticks;
+                    continue 'batches;
+                }
+            }
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
+    /// Keep the carousel clock on physical time while a batch waits for nulls.
+    fn defer_carousel_interval(&mut self) -> Result<(), TeletextOutputError> {
+        let carousel = self
+            .carousel
+            .as_mut()
+            .ok_or(TeletextOutputError::Configuration)?;
+        if self.mot_retirement.is_some() {
+            // Retirement batches are planned against an idle cycle boundary.
+            carousel.advance_empty_at_boundary(STEP_TICKS)?;
+        } else {
+            carousel.defer_pending_batch()?;
+        }
+        Ok(())
     }
 
     fn acknowledge_inner(
@@ -1264,4 +1450,12 @@ impl TeletextOutputGate {
         }
         result
     }
+}
+
+fn is_null(raw: &[u8; 188]) -> bool {
+    raw[0] == 0x47 && (u16::from(raw[1] & 0x1f) << 8 | u16::from(raw[2])) == 0x1fff
+}
+
+fn free_packets(packets: &[[u8; 188]]) -> usize {
+    packets.iter().filter(|raw| is_null(raw)).count()
 }

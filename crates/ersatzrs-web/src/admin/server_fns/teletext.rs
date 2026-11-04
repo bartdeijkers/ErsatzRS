@@ -21,6 +21,45 @@ pub struct ChannelTeletextData {
     #[serde(default)]
     pub current_guide_available: Option<bool>,
     pub addons: Vec<TeletextAddonData>,
+    /// Ordered readiness facts; absent when an older server rendered the page.
+    #[serde(default)]
+    pub readiness: Option<TeletextReadinessData>,
+}
+
+/// Separately observed preconditions for teletext on this channel. Each fact
+/// is configuration or durable state; none claims receiver/client display.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextReadinessData {
+    /// `absent`, `profile`, `custom`, `invalid` or `unreadable`.
+    pub authoring_policy: String,
+    pub output_policy: String,
+    /// Named capacity profile when both settings equal it exactly.
+    pub capacity_profile: Option<String>,
+    pub profiles: Vec<TeletextCapacityProfileData>,
+    /// `legacy`, `hybrid-builtin`, `hybrid-script` or `hls`.
+    pub route: String,
+    /// The global MPEG-TS script id that takes over muxing, when one is set.
+    pub script: Option<String>,
+    /// Accepted (published) generation id, if any.
+    pub published_generation: Option<i64>,
+    /// A validated revision awaits explicit publication.
+    pub publication_pending: bool,
+    /// Active outputs confirming authored delivery, from live observations.
+    pub delivering_outputs: usize,
+    pub active_outputs: usize,
+    /// Last terminal transport failure on this channel since teletext was last
+    /// delivered: `transport_capacity`, `deadline`, `source` or `transport`.
+    #[serde(default)]
+    pub last_failure: Option<String>,
+    /// RFC 3339 UTC time of that failure.
+    #[serde(default)]
+    pub last_failure_at: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextCapacityProfileData {
+    pub id: String,
+    pub max_pages: u64,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,6 +268,7 @@ pub async fn load_channel_teletext_for_application(
         }
         Err(_) => None,
     };
+    let readiness = Some(readiness(application, &channel.form, channel_id).await);
     Ok(Some(ChannelTeletextData {
         channel_id,
         channel_number: channel.form.number,
@@ -241,7 +281,130 @@ pub async fn load_channel_teletext_for_application(
         guide_channels,
         current_guide_available,
         addons,
+        readiness,
     }))
+}
+
+/// Classify the channel's MPEG-TS route for authored teletext.
+///
+/// HLS playlists never carry the DVB teletext service; MPEG-TS (legacy concat)
+/// uses the host mux; Hybrid uses the host wrapper unless a global MPEG-TS
+/// script owns the final mux, which the host cannot extend.
+#[cfg(feature = "ssr")]
+pub(crate) fn teletext_output_route(
+    streaming_mode: i32,
+    streaming_engine: i32,
+    script: Option<&str>,
+) -> &'static str {
+    let hybrid = match streaming_mode {
+        2 | 4 => return "hls",
+        // A Next channel's legacy transport request is served as Hybrid.
+        1 => streaming_engine == 1,
+        _ => true,
+    };
+    if !hybrid {
+        "legacy"
+    } else if script.is_some_and(|id| !id.trim().is_empty()) {
+        "hybrid-script"
+    } else {
+        "hybrid-builtin"
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn readiness(
+    application: &ersatzrs_app::ApplicationServices,
+    form: &ersatzrs_core::repositories::ChannelEditorForm,
+    channel_id: i64,
+) -> TeletextReadinessData {
+    use crate::host::teletext_capacity::{policy_status, TeletextPolicyState, PROFILES};
+    let (authoring, output) = policy_status(application).await;
+    let capacity_profile = match (&authoring, &output) {
+        (TeletextPolicyState::Profile(left), TeletextPolicyState::Profile(right))
+            if left == right =>
+        {
+            Some((*left).to_owned())
+        }
+        _ => None,
+    };
+    // Absence is the seeded `default` script, which is an external script.
+    let script = match application
+        .get_optional_setting(ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT)
+        .await
+    {
+        Ok(Some(value)) => Some(value),
+        Ok(None) | Err(_) => Some("default".to_owned()),
+    };
+    let route = teletext_output_route(
+        form.streaming_mode,
+        form.streaming_engine,
+        script.as_deref(),
+    );
+    let published_generation = match application.accepted_teletext_generation(channel_id).await {
+        Ok(Some(generation)) => Some(generation.id),
+        _ => match application
+            .effective_teletext_accepted_generation(channel_id)
+            .await
+        {
+            Ok(Some(generation)) => Some(generation.id),
+            _ => None,
+        },
+    };
+    let publication_pending = matches!(
+        application.teletext_publication_request(channel_id).await,
+        Ok(Some(_))
+    ) || matches!(
+        application
+            .effective_teletext_publication_request(channel_id)
+            .await,
+        Ok(Some(_))
+    );
+    let observations = application.teletext_output_observations(channel_id);
+    let failure = observations
+        .as_ref()
+        .and_then(|observed| observed.last_failure.clone());
+    let (active_outputs, delivering_outputs) = observations.map_or((0, 0), |observed| {
+        let delivering = observed
+            .outputs
+            .iter()
+            .filter(|output| {
+                output.phase == ersatzrs_domain::TeletextOutputObservationPhase::Applied
+                    && output
+                        .applied
+                        .as_ref()
+                        .is_some_and(|applied| applied.authored)
+            })
+            .count();
+        (observed.outputs.len(), delivering)
+    });
+    TeletextReadinessData {
+        authoring_policy: authoring.code().to_owned(),
+        output_policy: output.code().to_owned(),
+        capacity_profile,
+        profiles: PROFILES
+            .iter()
+            .map(|profile| TeletextCapacityProfileData {
+                id: profile.id.to_owned(),
+                max_pages: profile.max_pages().unwrap_or(0),
+            })
+            .collect(),
+        route: route.to_owned(),
+        script: matches!(route, "hybrid-script").then(|| script.unwrap_or_default()),
+        published_generation,
+        publication_pending,
+        delivering_outputs,
+        active_outputs,
+        last_failure: failure.as_ref().and_then(|failure| {
+            serde_json::to_value(failure.kind)
+                .ok()
+                .and_then(|kind| kind.as_str().map(str::to_owned))
+        }),
+        last_failure_at: failure.map(|failure| {
+            failure
+                .at
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        }),
+    }
 }
 
 #[cfg(feature = "ssr")]

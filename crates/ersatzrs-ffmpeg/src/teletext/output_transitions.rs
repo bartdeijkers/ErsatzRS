@@ -25,7 +25,9 @@ impl TeletextOutputGate {
             .as_ref()
             .ok_or(TeletextOutputError::Configuration)?
             .batches_until_boundary(intervals)?
-            .unwrap_or(intervals);
+            // A deferred batch was planned already but still needs an interval.
+            .map_or(intervals, |count| count + usize::from(self.deferred.is_some()))
+            .min(intervals);
         self.window_end(intervals)
     }
 
@@ -151,6 +153,7 @@ impl TeletextOutputGate {
         }
         if !receipt.cycle_boundary
             || self.mot_retirement.is_some()
+            || self.deferred.is_some()
             || !self
                 .carousel
                 .as_ref()

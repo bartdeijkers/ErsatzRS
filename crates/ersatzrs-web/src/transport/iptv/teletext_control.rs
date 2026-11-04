@@ -225,6 +225,29 @@ pub(in crate::transport::iptv) struct PumpControl {
     observation: Option<PumpObservation>,
 }
 impl PumpControl {
+    /// Record why this authored output ended, as a stable diagnostic kind.
+    /// A client that closes its connection is an ordinary end, not a failure.
+    pub(in crate::transport::iptv) fn failed(
+        &self,
+        error: &crate::transport::iptv::teletext_output::TeletextPumpError,
+    ) {
+        use crate::transport::iptv::teletext_output::TeletextPumpError as Pump;
+        use ersatzrs_domain::TeletextOutputFailureKind as Kind;
+        let kind = match error {
+            Pump::Write(_) => return,
+            Pump::Gate(TeletextOutputError::Multiplex(
+                TeletextMultiplexError::SustainedCapacity { .. }
+                | TeletextMultiplexError::Capacity { .. },
+            )) => Kind::TransportCapacity,
+            Pump::Gate(TeletextOutputError::Deadline) | Pump::FirstByteTimeout => Kind::Deadline,
+            Pump::Read(_) | Pump::EmptyOutput => Kind::Source,
+            Pump::Gate(_) | Pump::Configuration => Kind::Transport,
+        };
+        if let Some(observation) = &self.observation {
+            observation.failed(kind);
+        }
+    }
+
     pub(in crate::transport::iptv) fn new(control: TeletextOutputControl) -> Self {
         let trace_epoch = uuid::Uuid::new_v4();
         let observation = control

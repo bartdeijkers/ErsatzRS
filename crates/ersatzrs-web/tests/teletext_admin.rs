@@ -592,3 +592,211 @@ async fn body_limits_reject_oversized_forms_before_mutation() {
     assert!(fixture.profiles(ADDON).await.is_empty());
     assert_eq!(config(&fixture).await, before);
 }
+
+const CAPACITY_PATH: &str = "/admin-api/teletext/capacity/apply";
+const AUTHORING_POLICY: &str = "teletext.authoring.policy";
+const OUTPUT_POLICY: &str = "teletext.output.policy";
+
+async fn setting(fixture: &Fixture, key: &str) -> Option<String> {
+    fixture
+        .state
+        .application
+        .get_optional_setting(key)
+        .await
+        .unwrap()
+}
+
+async fn readiness(
+    fixture: &Fixture,
+    channel: i64,
+) -> ersatzrs_web::admin::server_fns::teletext::TeletextReadinessData {
+    load_channel_teletext_for_application(&fixture.state.application, channel)
+        .await
+        .unwrap()
+        .unwrap()
+        .readiness
+        .unwrap()
+}
+
+fn capacity_form(channel: i64, confirm: bool, replace: bool) -> Pairs {
+    let mut fields = vec![
+        ("channel_id".to_owned(), channel.to_string()),
+        ("profile".to_owned(), "tvguide-16".to_owned()),
+    ];
+    if confirm {
+        fields.push(("confirm_scope".to_owned(), "1".to_owned()));
+    }
+    if replace {
+        fields.push(("replace".to_owned(), "1".to_owned()));
+    }
+    fields
+}
+
+#[tokio::test]
+async fn capacity_profile_sets_missing_policies_through_the_admin_without_sql() {
+    let fixture = Fixture::new().await;
+    let before = readiness(&fixture, 1).await;
+    assert_eq!(
+        (
+            before.authoring_policy.as_str(),
+            before.output_policy.as_str()
+        ),
+        ("absent", "absent")
+    );
+    assert_eq!(before.capacity_profile, None);
+    assert_eq!(before.profiles.len(), 1);
+    assert_eq!(before.profiles[0].max_pages, 16);
+
+    // The global scope must be confirmed explicitly; nothing is written otherwise.
+    let location = fixture
+        .post(CAPACITY_PATH, capacity_form(1, false, false))
+        .await;
+    assert_eq!(location, "/channels/1/teletext?error=scope-unconfirmed");
+    assert_eq!(setting(&fixture, AUTHORING_POLICY).await, None);
+    assert_eq!(setting(&fixture, OUTPUT_POLICY).await, None);
+    let mut unknown = capacity_form(1, true, false);
+    unknown[1].1 = "unbounded".to_owned();
+    assert_eq!(
+        fixture.post(CAPACITY_PATH, unknown).await,
+        "/channels/1/teletext?error=invalid"
+    );
+    assert_eq!(setting(&fixture, OUTPUT_POLICY).await, None);
+
+    let location = fixture
+        .post(CAPACITY_PATH, capacity_form(1, true, false))
+        .await;
+    assert_eq!(location, "/channels/1/teletext?saved=capacity");
+    let after = readiness(&fixture, 1).await;
+    assert_eq!(
+        (
+            after.authoring_policy.as_str(),
+            after.output_policy.as_str()
+        ),
+        ("profile", "profile")
+    );
+    assert_eq!(after.capacity_profile.as_deref(), Some("tvguide-16"));
+    // The runtime-facing settings now carry guide refresh and guide preparation.
+    let channel = load_channel_teletext_for_application(&fixture.state.application, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(channel.current_guide_available, Some(true));
+    // Re-applying the same profile is idempotent.
+    assert_eq!(
+        fixture
+            .post(CAPACITY_PATH, capacity_form(1, true, false))
+            .await,
+        "/channels/1/teletext?saved=capacity"
+    );
+}
+
+#[tokio::test]
+async fn hand_tuned_policies_are_replaced_only_after_a_separate_confirmation() {
+    let fixture = Fixture::new().await;
+    fixture
+        .post(CAPACITY_PATH, capacity_form(1, true, false))
+        .await;
+    let mut tuned: serde_json::Value =
+        serde_json::from_str(&setting(&fixture, OUTPUT_POLICY).await.unwrap()).unwrap();
+    tuned["recovery_timeout_ms"] = json!(4000);
+    put_setting(&fixture, OUTPUT_POLICY, &tuned.to_string()).await;
+    assert_eq!(readiness(&fixture, 1).await.output_policy, "custom");
+
+    let location = fixture
+        .post(CAPACITY_PATH, capacity_form(1, true, false))
+        .await;
+    assert_eq!(location, "/channels/1/teletext?error=policy-exists");
+    let kept: serde_json::Value =
+        serde_json::from_str(&setting(&fixture, OUTPUT_POLICY).await.unwrap()).unwrap();
+    assert_eq!(kept, tuned);
+
+    let location = fixture
+        .post(CAPACITY_PATH, capacity_form(1, true, true))
+        .await;
+    assert_eq!(location, "/channels/1/teletext?saved=capacity");
+    assert_eq!(readiness(&fixture, 1).await.output_policy, "profile");
+
+    // An invalid stored policy is repaired without the replace confirmation.
+    put_setting(&fixture, OUTPUT_POLICY, "{\"version\":4}").await;
+    assert_eq!(readiness(&fixture, 1).await.output_policy, "invalid");
+    assert_eq!(
+        fixture
+            .post(CAPACITY_PATH, capacity_form(1, true, false))
+            .await,
+        "/channels/1/teletext?saved=capacity"
+    );
+    assert_eq!(readiness(&fixture, 1).await.output_policy, "profile");
+}
+
+#[tokio::test]
+async fn readiness_explains_each_output_route_and_the_scope_of_its_fix() {
+    let fixture = Fixture::new().await;
+    for (mode, script, expected) in [
+        (
+            ersatzrs_domain::StreamingMode::TransportStream,
+            "default",
+            "legacy",
+        ),
+        (
+            ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter,
+            "",
+            "hls",
+        ),
+        (
+            ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect,
+            "",
+            "hls",
+        ),
+        (
+            ersatzrs_domain::StreamingMode::TransportStreamHybrid,
+            "default",
+            "hybrid-script",
+        ),
+        (
+            ersatzrs_domain::StreamingMode::TransportStreamHybrid,
+            "",
+            "hybrid-builtin",
+        ),
+    ] {
+        let mut channel = fixture
+            .state
+            .repositories
+            .channel
+            .get_with_profile(2)
+            .await
+            .unwrap();
+        channel.streaming_mode = mode;
+        fixture
+            .state
+            .repositories
+            .channel
+            .upsert(&channel)
+            .await
+            .unwrap();
+        put_setting(&fixture, "ffmpeg.default_mpegts_script", script).await;
+        let readiness = readiness(&fixture, 2).await;
+        assert_eq!(readiness.route, expected, "{mode:?} with script {script:?}");
+        assert_eq!(
+            readiness.script.as_deref(),
+            (expected == "hybrid-script").then_some(script)
+        );
+        // Changing channel 2 never changes channel 1's route.
+        assert_eq!(readiness_route(&fixture, 1).await, "legacy");
+    }
+}
+
+async fn put_setting(fixture: &Fixture, key: &'static str, value: &str) {
+    fixture
+        .state
+        .application
+        .set_admin_setting(ersatzrs_app::commands::SetAdminSetting {
+            key,
+            value: value.to_owned(),
+        })
+        .await
+        .unwrap();
+}
+
+async fn readiness_route(fixture: &Fixture, channel: i64) -> String {
+    readiness(fixture, channel).await.route
+}

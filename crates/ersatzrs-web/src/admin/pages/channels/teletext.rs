@@ -21,6 +21,9 @@ use crate::admin::ui::primitives::resource_state::{
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext.module.css");
 
+#[path = "teletext_readiness.rs"]
+mod readiness;
+
 #[component]
 pub fn ChannelTeletextPage() -> impl IntoView {
     let params = use_params_map();
@@ -144,7 +147,8 @@ fn channel_page(
         } else {
             let code = match error {
                 "conflict" | "invalid" | "unavailable" | "wrong-addon" | "missing-profile"
-                | "deleted-profile" | "limit" | "storage" => error,
+                | "deleted-profile" | "limit" | "storage" | "policy-exists"
+                | "scope-unconfirmed" => error,
                 _ => "invalid",
             };
             (code, teletext_admin_error_text(language, code), "alert")
@@ -158,12 +162,18 @@ fn channel_page(
             super::teletext_drafts::draft_status_text(saved),
             "status",
         )
+    } else if saved == "capacity" {
+        (saved, tr(TextKey::TeletextCapacitySaved), "status")
     } else if matches!(saved, "profile" | "binding" | "off") {
         (saved, tr(TextKey::TeletextAdminSaved), "status")
     } else {
         ("", "", "status")
     };
     let channel_id = data.channel_id;
+    let readiness = data
+        .readiness
+        .as_ref()
+        .map(|readiness| readiness::view(channel_id, readiness, &data.addons));
     let empty = data.addons.is_empty();
     let guide_available = data.current_guide_available == Some(true);
     let guide_unreadable = data.current_guide_available.is_none();
@@ -187,6 +197,7 @@ fn channel_page(
             <p role="alert" hidden=data.catalog_available>{tr(TextKey::TeletextAdminUnavailable)}</p>
             <p class=style::feedback role=role data-testid="teletext-feedback"
                 data-code=code.to_owned() hidden=message.is_empty()>{message}</p>
+            {readiness}
             <p class=style::help hidden=!empty>{tr(TextKey::TeletextChannelEmpty)}</p>
             <a class=style::manage href="/settings/addons">{tr(TextKey::Addons)}</a>
             {data.addons.into_iter().map(|addon| addon_section(channel_id, &addon)).collect_view()}
@@ -629,6 +640,7 @@ mod tests {
             guide_channels: Some(Vec::new()),
             current_guide_available: Some(false),
             addons: Vec::new(),
+            readiness: None,
         };
         let html = owner.with(|| {
             channel_page(
