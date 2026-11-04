@@ -18,6 +18,11 @@ release section when tagging a release.
 - CI now ends with a single `CI ok` job that passes only when every gate job
   passed, so `main` can require one status check. Docs-only pull requests
   start CI and report `CI ok` quickly instead of never reporting a status.
+- CI no longer tests each change twice in full. Draft pull requests run only
+  the fast Rust checks, ready pull requests run the browser suites in
+  Chromium only, and the push to `main` runs only the Firefox browser jobs
+  when the pull request already tested the exact merged code. Browser suites
+  now wait for a passing `Test` job, so a red run stops hours earlier.
 - The daily progress and nightly clippy-cleanup routines now land their
   commits through an auto-merged pull request instead of pushing to `main`.
 - Defer Docker image delivery for application release 1.2.0 by maintainer
