@@ -123,6 +123,21 @@ separate hosted shards. Cargo tools are prepared in the build job; execution
 jobs use its verified nextest/helper executables. The full test selection remains
 intact. Hosted execution remains an explicit fallback rather than the default.
 
+**Automatic hosted fallback.** When the repository secret
+`CI_RUNNER_STATUS_TOKEN` is set, a run that was not dispatched with an explicit
+`runner` checks the runner status in Preflight. If no self-hosted runner with
+the `self-hosted` and `Linux` labels is online, every later job of that
+run uses GitHub-hosted runners instead of waiting in the queue; the run summary
+shows a notice. The decision is taken once, when the run starts: a run already
+waiting for a self-hosted runner does not move, and a runner that goes offline
+mid-run does not move the remaining jobs. Listing runners needs repository
+**Administration: read**, which `GITHUB_TOKEN` cannot be granted, so the secret
+holds a fine-grained personal access token limited to this repository with only
+that permission. Without the secret, or when the status call fails, CI keeps
+using the self-hosted pool. Pull requests from forks never receive the secret
+and therefore always stay on the self-hosted pool. Hosted runs are slower
+(four vCPUs, cold Cargo cache) but are free for this public repository.
+
 For a dependency-audit correction, use the existing workflow's focused mode:
 
 ```bash
