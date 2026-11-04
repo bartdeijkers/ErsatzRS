@@ -507,6 +507,19 @@ time.sleep(20)
         self.assertEqual({path.name: path.read_bytes() for path in (cache / "occupied").iterdir()}, occupied_before)
 
 
+class Outputs(SimpleNamespace):
+    """Job outputs: an output a job did not set reads as '' on GitHub."""
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return ""
+
+
+def preflight(**outputs):
+    return SimpleNamespace(preflight=SimpleNamespace(outputs=Outputs(**outputs)))
+
+
 class FocusedAuditSelection(unittest.TestCase):
     """Evaluate actual job conditions, including implicit successful-needs gates."""
 
@@ -528,7 +541,7 @@ class FocusedAuditSelection(unittest.TestCase):
             "env": env or SimpleNamespace(),
         }))
 
-    def scheduled(self, lane="full", **selected):
+    def scheduled(self, lane="full", selection=None, **selected):
         inputs = dict(audit_only=False, test_only=False, next_engine_only=False,
                       teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="", next_case_set="all")
         inputs.update(selected)
@@ -544,7 +557,8 @@ class FocusedAuditSelection(unittest.TestCase):
             selected_lane = lane if "preflight" in scheduled else ""
             needs = SimpleNamespace(**{
                 key: SimpleNamespace(result="success" if key in scheduled else "skipped",
-                                     outputs=SimpleNamespace(skip="false", lane=selected_lane, tree=""))
+                                     outputs=Outputs(skip="false", lane=selected_lane, tree="",
+                                                     **(selection if selected_lane and selection else {})))
                 for key in self.jobs
             })
             if self.evaluate(condition, inputs, needs):
@@ -611,7 +625,7 @@ class FocusedAuditSelection(unittest.TestCase):
     def test_rust_level15_recovery_excludes_web_build_and_browsers(self):
         self.assertEqual(self.scheduled(teletext_only="1.5-rust"), {"build", "teletext"})
         inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="1.5-rust", reuse_artifacts="")
-        unfocused = SimpleNamespace(preflight=SimpleNamespace(outputs=SimpleNamespace(lane="")))
+        unfocused = preflight(lane="")
         for key, expected in (("BUILD_RUST", True), ("BUILD_WEB", False)):
             expression = re.search(rf"^      {key}: (.+)$", self.jobs["build"], re.M)[1]
             self.assertEqual(self.evaluate(expression, inputs, unfocused), expected)
@@ -647,11 +661,11 @@ class FocusedAuditSelection(unittest.TestCase):
                                      {"chromium", "firefox"})
 
     @staticmethod
-    def browser_matrix(expression, lane="full", **inputs):
+    def browser_matrix(expression, lane="full", pr_matrix="", **inputs):
         inputs = dict(dict(teletext_only="none", browser_only="none"), **inputs)
         return eval(expression, {"__builtins__": {}}, {
             "inputs": SimpleNamespace(**inputs), "fromJSON": json.loads,
-            "needs": SimpleNamespace(preflight=SimpleNamespace(outputs=SimpleNamespace(lane=lane))),
+            "needs": preflight(lane=lane, pr_matrix=pr_matrix),
         })["include"]
 
     def test_lanes_schedule_only_their_jobs(self):
@@ -659,31 +673,29 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertEqual(self.scheduled(lane="pr"), everything)
         self.assertEqual(self.scheduled(lane="light"),
                          everything - {"next_engine", "teletext", "hydration"})
-        self.assertEqual(self.scheduled(lane="firefox"),
-                         everything - {"clippy", "test", "next_engine", "teletext"})
+        # A pull request that touches no Teletext, Next or browser domain.
+        narrow = dict(run_next="false", run_teletext="false", run_browser="false")
+        self.assertEqual(self.scheduled(lane="pr", selection=narrow),
+                         everything - {"next_engine", "teletext", "hydration"})
+        self.assertEqual(self.scheduled(lane="pr", selection=dict(run_next="false")),
+                         everything - {"next_engine"})
+        # Focused manual modes never see a selection.
+        self.assertEqual(self.scheduled(lane="pr", selection=narrow, teletext_only="all"),
+                         {"build", "teletext", "hydration"})
 
-    def test_pull_request_lane_runs_chromium_and_main_completes_firefox(self):
+    def test_pull_request_lane_uses_the_selected_chromium_matrix(self):
         expression = re.search(r"^      matrix: (.+)$", self.jobs["hydration"], re.M)[1]
         expression = expression.removeprefix("${{").removesuffix("}}").strip()
         expression = expression.replace("&&", " and ").replace("||", " or ")
-        rows = {lane: {(row["suite"], row["project"], row["port"])
-                       for row in self.browser_matrix(expression, lane=lane)}
-                for lane in ("pr", "firefox", "full", "")}
-        self.assertEqual({project for _, project, _ in rows["pr"]}, {"chromium"})
-        self.assertEqual({project for _, project, _ in rows["firefox"]}, {"firefox"})
-        # Together the two lanes cover exactly the full default matrix.
-        self.assertEqual(rows["pr"] | rows["firefox"], rows["full"])
-        self.assertEqual(rows[""], rows["full"])
+        selected = json.dumps({"include": [{"suite": "general", "project": "chromium", "port": "18409"}]})
+        self.assertEqual(self.browser_matrix(expression, lane="pr", pr_matrix=selected),
+                         json.loads(selected)["include"])
+        full = {(row["suite"], row["project"]) for row in self.browser_matrix(expression)}
+        self.assertEqual(full, {(suite, project) for suite in ("general", "1.5")
+                                for project in ("chromium", "firefox")})
         # Focused dispatches keep their own matrix whatever the lane.
         self.assertEqual({row["project"] for row in self.browser_matrix(
-            expression, lane="pr", browser_only="firefox")}, {"firefox"})
-
-    def test_firefox_lane_builds_only_the_web_artifact(self):
-        expression = re.search(r"^      BUILD_RUST: (.+)$", self.jobs["build"], re.M)[1]
-        inputs = dict(browser_only="none", reuse_artifacts="")
-        for lane, expected in (("firefox", False), ("pr", True), ("full", True), ("", True)):
-            needs = SimpleNamespace(preflight=SimpleNamespace(outputs=SimpleNamespace(lane=lane)))
-            self.assertEqual(self.evaluate(expression, inputs, needs), expected)
+            expression, lane="pr", pr_matrix=selected, browser_only="firefox")}, {"firefox"})
 
     def test_browser_suites_wait_for_a_passing_test_job(self):
         body = self.jobs["hydration"]
@@ -693,43 +705,55 @@ class FocusedAuditSelection(unittest.TestCase):
         inputs = dict(test_only=False, next_engine_only=False, teletext_only="none")
         for test_result, expected in (("success", True), ("skipped", True),
                                       ("failure", False), ("cancelled", False)):
-            needs = SimpleNamespace(
-                build=SimpleNamespace(result="success"),
-                test=SimpleNamespace(result=test_result),
-                preflight=SimpleNamespace(outputs=SimpleNamespace(lane="pr")),
-            )
+            needs = preflight(lane="pr")
+            needs.build = SimpleNamespace(result="success")
+            needs.test = SimpleNamespace(result=test_result)
             self.assertEqual(self.evaluate(condition, inputs, needs), expected)
 
-    def ci_ok_exit(self, lane, results, event="pull_request", skip="false"):
+    def ci_ok_exit(self, lane, results, event="pull_request", skip="false", deselected="[]"):
         code = re.search(r"python3 - <<'PY'\n(.*?)^          PY$", self.jobs["ci_ok"], re.S | re.M)[1]
         code = "\n".join(line[10:] for line in code.splitlines())
         needs = {job: {"result": results.get(job, "success"), "outputs": {}}
                  for job in self.jobs if job != "ci_ok"}
-        needs["preflight"]["outputs"] = {"skip": skip, "lane": lane, "tree": ""}
+        needs["preflight"]["outputs"] = {"skip": skip, "lane": lane, "tree": "", "deselected": deselected}
         result = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True,
                                 env=dict(os.environ, NEEDS=json.dumps(needs), EVENT_NAME=event))
         return result.returncode
 
     def test_ci_ok_accepts_only_the_jobs_a_lane_leaves_out(self):
         light = {"next_engine": "skipped", "teletext": "skipped", "hydration": "skipped"}
-        firefox = {"clippy": "skipped", "test": "skipped", "next_engine": "skipped",
-                   "teletext": "skipped", "commitlint": "skipped"}
         self.assertEqual(self.ci_ok_exit("pr", {}), 0)
         self.assertNotEqual(self.ci_ok_exit("pr", {"hydration": "skipped"}), 0)
         self.assertNotEqual(self.ci_ok_exit("pr", {"test": "failure"}), 0)
-        self.assertEqual(self.ci_ok_exit("firefox", firefox, event="push"), 0)
-        self.assertNotEqual(self.ci_ok_exit("firefox", dict(firefox, hydration="skipped"), event="push"), 0)
-        self.assertNotEqual(self.ci_ok_exit("full", firefox, event="push"), 0)
+        # Domain selection: exactly the deselected jobs may be skipped.
+        self.assertEqual(self.ci_ok_exit("pr", {"next_engine": "skipped"},
+                                         deselected='["next_engine"]'), 0)
+        self.assertNotEqual(self.ci_ok_exit("pr", {"next_engine": "skipped", "teletext": "skipped"},
+                                            deselected='["next_engine"]'), 0)
+        self.assertNotEqual(self.ci_ok_exit("pr", {"next_engine": "failure"},
+                                            deselected='["next_engine"]'), 0)
+        self.assertNotEqual(self.ci_ok_exit("full", {"next_engine": "skipped"},
+                                            event="push", deselected='["next_engine"]'), 0)
+        self.assertEqual(self.ci_ok_exit("full", {"commitlint": "skipped"}, event="push"), 0)
         # A draft never reports a passing required check, even when green.
         self.assertNotEqual(self.ci_ok_exit("light", light), 0)
         self.assertEqual(self.ci_ok_exit("skip", {job: "skipped" for job in self.jobs
                                                   if job != "preflight"}, skip="true"), 0)
 
-    def test_only_a_green_pr_lane_records_its_tree(self):
+    def test_green_runs_record_the_tree_they_proved(self):
         body = self.jobs["ci_ok"]
         self.assertIn("name: ci-tree-${{ needs.preflight.outputs.tree }}", body)
-        self.assertEqual(body.count("if: ${{ needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.tree != '' }}"), 2)
-        self.assertIn("name: `ci-tree-${tree}`", self.workflow)
+        self.assertIn("name: ci-full-${{ needs.preflight.outputs.tree }}", body)
+        self.assertEqual(body.count("if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.tree != '' }}"), 2)
+        self.assertEqual(body.count("if: ${{ needs.preflight.outputs.lane == 'full' && needs.preflight.outputs.tree != '' }}"), 2)
+        self.assertIn("provenBy('ci-tree', tree, ['pull_request'])", self.workflow)
+        self.assertIn("provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch'])", self.workflow)
+
+    def test_test_job_narrows_to_the_selected_crates(self):
+        body = self.jobs["test"]
+        self.assertIn("NEXTEST_FILTER: ${{ needs.preflight.outputs.nextest_filter }}", body)
+        self.assertIn('& (${NEXTEST_FILTER:-all()})', body)
+        self.assertIn("--no-tests pass", body)
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
