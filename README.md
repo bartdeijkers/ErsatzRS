@@ -99,8 +99,13 @@ required available local gates. Whole-window acceptance remains open: macOS
 FFmpeg builds and dependent software/application proof are deferred until
 maintainer resume. Approved hardware/platform debt stays explicitly unverified.
 
-Teletext (Phase 9) and the "The Box" video-jukebox extension (Phase 10) are
-planned work. They are not advertised as features of this release.
+Teletext (Phase 9) is delivered since release 1.2.0: Level 1/1.5 authoring,
+preview, explicit publication and the teletext TV guide are accepted. Level 2.5
+is available as **experimental**; its enhanced-only acceptance is deferred. See
+the [teletext design interchange reference](docs/reference/teletext-design-interchange.md)
+and the teletext ADRs (0120-0124 and 0126) in [docs/adr/](docs/adr/). The "The Box"
+video-jukebox extension (Phase 10) is planned work and is not advertised as a
+feature.
 
 ## Develop and contribute
 
