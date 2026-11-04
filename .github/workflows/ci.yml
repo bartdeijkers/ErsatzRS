@@ -6,20 +6,11 @@ on:
     # Do not add `labeled`: dependency automation applies several routine
     # labels, and each label event would start another full CI run.
     types: [opened, synchronize, reopened]
-    # Same non-code skip as `push` below. Safe here only because this
-    # repository has no branch protection, so no required status check can be
-    # left unreported by a skipped run. If branch protection is ever enabled,
-    # do NOT drop this list: add a sentinel job that reports success under the
-    # required check names instead, or docs-only PRs become unmergeable.
-    paths-ignore:
-      - 'docs/**'
-      - 'plans/**'
-      - '.claude/**'
-      - '.codex/**'
-      - '*.md'
-      - '**/*.md'
-      - '*.png'
-      - '**/*.png'
+    # No `paths-ignore` here: `main` requires the `CI ok` check, and a
+    # workflow that never starts never reports it, which would leave
+    # docs-only PRs unmergeable. Preflight instead detects a PR that touches
+    # only the non-code paths listed under `push` below and skips the gate,
+    # and `CI ok` then reports success for it.
   push:
     branches: [main]
     # Skip the Rust CI gate when a push touches only non-code paths (docs,
@@ -153,7 +144,8 @@ jobs:
   #
   # Push only. A pull_request must be evaluated on its own merge result, and a
   # manual dispatch is an explicit request to re-run. A PR merge commit is a
-  # new SHA, so this never skips one.
+  # new SHA, so this never skips one. A pull_request is skipped only when it
+  # changes nothing but the non-code paths ignored for `push`.
   #
   # Pinned to a hosted runner on purpose: the self-hosted pool is one machine
   # with two runners, and adding a gate job there would charge every run
@@ -164,6 +156,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       actions: read
+      pull-requests: read
     outputs:
       skip: ${{ steps.duplicate.outputs.skip }}
     steps:
@@ -181,6 +174,32 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
+            if (context.eventName === 'pull_request') {
+              // Mirrors the `push` paths-ignore list. Any file outside it,
+              // including a rename from outside it, runs the full gate.
+              const nonCode = (path) => /^(docs|plans|\.claude|\.codex)\//.test(path)
+                || /\.(md|png)$/.test(path);
+              const files = await github.paginate(
+                github.rest.pulls.listFiles,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  per_page: 100,
+                },
+              );
+              const docsOnly = files.length > 0 && files.every(
+                (file) => nonCode(file.filename)
+                  && (!file.previous_filename || nonCode(file.previous_filename)),
+              );
+              core.setOutput('skip', docsOnly ? 'true' : 'false');
+              if (docsOnly) {
+                core.notice('This pull request changes only non-code paths; skipping the gate.');
+              } else {
+                core.info('pull_request runs the selected gate.');
+              }
+              return;
+            }
             if (context.eventName !== 'push') {
               core.setOutput('skip', 'false');
               core.info(`${context.eventName} runs the selected gate.`);
@@ -938,3 +957,44 @@ jobs:
             echo "Pull-request labels must not select a CI runner."
             exit 1
           fi
+
+  # The single required status check for `main` (branch protection). It
+  # aggregates every gate job so the protection rule never has to track job or
+  # matrix names. It runs even after a failure or cancellation (`always()`):
+  # GitHub treats a skipped required check as passing, so this job must
+  # report a real failure instead of being skipped. Focused manual recovery
+  # modes do not establish full CI and therefore do not run it.
+  ci_ok:
+    name: CI ok
+    needs: [preflight, fmt, clippy, build, test, next_engine, teletext, hydration, deny, commitlint, docs]
+    if: ${{ always() && !inputs.audit_only && !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every gate job to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+
+          needs = json.loads(os.environ["NEEDS"])
+          results = {job: data["result"] for job, data in needs.items()}
+          for job, result in sorted(results.items()):
+              print(f"{job}: {result}")
+          if results.get("preflight") != "success":
+              sys.exit("::error::Preflight did not succeed")
+          bad = [job for job, result in results.items() if result not in ("success", "skipped")]
+          if bad:
+              sys.exit(f"::error::Gate jobs did not pass: {', '.join(sorted(bad))}")
+          if needs["preflight"]["outputs"].get("skip") == "true":
+              print("Preflight skipped the gate (already proven SHA or docs-only change).")
+              sys.exit(0)
+          # Commit lint runs only for pull requests and manual dispatches.
+          optional = {"commitlint"} if os.environ["EVENT_NAME"] == "push" else set()
+          missing = [job for job, result in results.items()
+                     if result != "success" and job not in optional]
+          if missing:
+              sys.exit(f"::error::Gate jobs were skipped: {', '.join(sorted(missing))}")
+          print("All gate jobs passed.")
+          PY

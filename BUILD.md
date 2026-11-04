@@ -392,6 +392,23 @@ Level 2.5 Rust and browser suites remain optional explicit dispatches for the
 experimental enhanced features. They do not replace any required general or
 Level 1.5 result and do not block the current release gate.
 
+### Required `CI ok` check for `main`
+
+`main` is protected by one required status check, `CI ok`. The `ci_ok` job
+depends on every gate job, so the protection rule never has to list job or
+matrix names. It runs even after a failure or cancellation and fails unless
+`Preflight` succeeded and every other gate job either passed or was skipped
+by `Preflight` (an already proven SHA, or a pull request that changes only
+docs, plans, agent config, Markdown or PNG files). Commit lint may be skipped
+only on `push`. Focused manual recovery modes do not run `CI ok` because they
+never establish full CI.
+
+The `pull_request` trigger deliberately has no `paths-ignore`: a workflow that
+never starts never reports `CI ok`, which would leave docs-only pull requests
+unmergeable. Docs-only detection lives in `Preflight` instead. When adding a
+gate job, add it to `ci_ok.needs`; `scripts/ci-build-artifacts_test.py`
+enforces this.
+
 ### Preflight-skipped runs are a pointer, not evidence
 
 The `Preflight` job skips the gate when a pushed SHA already has a successful

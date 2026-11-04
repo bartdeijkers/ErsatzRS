@@ -574,6 +574,20 @@ class FocusedAuditSelection(unittest.TestCase):
             self.assertRegex(environment,
                              rf'(?m)^      ERSATZRS_TELETEXT_E2E_{binary}_SHA256: [a-f0-9]{{64}}$')
 
+    def test_required_ci_ok_check_aggregates_every_gate_job(self):
+        # `CI ok` is the single required check on main. A gate job missing
+        # from its needs could fail without blocking a merge.
+        body = self.jobs["ci_ok"]
+        self.assertIn("    name: CI ok\n", body)
+        needs = re.search(r"^    needs: \[(.+)\]$", body, re.M)[1]
+        self.assertEqual({x.strip() for x in needs.split(",")}, set(self.jobs) - {"ci_ok"})
+        self.assertRegex(body, r"(?m)^    if: \$\{\{ always\(\) && ")
+
+    def test_pull_requests_always_start_the_workflow(self):
+        # A path-filtered pull_request never reports the required check.
+        trigger = self.workflow.split("\n  pull_request:\n", 1)[1].split("\n  push:\n", 1)[0]
+        self.assertNotRegex(trigger, r"(?m)^    paths(-ignore)?:")
+
     def test_audit_recovery_runs_only_preflight_format_and_audit(self):
         self.assertEqual(self.scheduled(audit_only=True), {"preflight", "fmt", "deny"})
 
