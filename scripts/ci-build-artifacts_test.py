@@ -858,6 +858,8 @@ class FocusedAuditSelection(unittest.TestCase):
         step = self.jobs["preflight"].split("name: Choose the runner pool", 1)[1]
         self.assertIn("if: ${{ !inputs.runner }}", step)
         self.assertIn("secrets.CI_RUNNER_STATUS_TOKEN", step)
+        self.assertIn("continue-on-error: true", step.split("script:", 1)[0])
+        self.assertIn("github-authentication-token-expiration", step)
         self.assertIn("pool: ${{ steps.pool.outputs.pool }}", self.jobs["preflight"])
 
     def test_reuse_has_no_download_fallback_and_has_an_honest_job_name(self):

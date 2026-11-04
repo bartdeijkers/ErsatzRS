@@ -133,8 +133,11 @@ waiting for a self-hosted runner does not move, and a runner that goes offline
 mid-run does not move the remaining jobs. Listing runners needs repository
 **Administration: read**, which `GITHUB_TOKEN` cannot be granted, so the secret
 holds a fine-grained personal access token limited to this repository with only
-that permission. Without the secret, or when the status call fails, CI keeps
-using the self-hosted pool. Pull requests from forks never receive the secret
+that permission. Without the secret, or when the status call fails (for
+example an expired or revoked token), CI keeps using the self-hosted pool: the
+step never fails the run, and its job summary says that the fallback is
+unavailable. Preflight warns two weeks before the token expires. Choose the
+longest expiry that the token settings allow, and renew it when warned. Pull requests from forks never receive the secret
 and therefore always stay on the self-hosted pool. Hosted runs are slower
 (four vCPUs, cold Cargo cache) but are free for this public repository.
 

@@ -397,6 +397,9 @@ jobs:
       - id: pool
         name: Choose the runner pool
         if: ${{ !inputs.runner }}
+        # The pool choice is an optimisation: whatever goes wrong here, the run
+        # keeps the self-hosted pool instead of failing.
+        continue-on-error: true
         uses: actions/github-script@v9
         env:
           RUNNER_STATUS_TOKEN: ${{ secrets.CI_RUNNER_STATUS_TOKEN }}
@@ -412,19 +415,32 @@ jobs:
               core.info('No CI_RUNNER_STATUS_TOKEN: using the self-hosted pool.');
               return;
             }
-            let runners;
+            const keepSelfHosted = async (reason) => {
+              core.warning(`${reason} Using the self-hosted pool.`);
+              await core.summary.addRaw(`:warning: Runner fallback unavailable: ${reason} `
+                + 'This run uses the self-hosted pool. Renew the `CI_RUNNER_STATUS_TOKEN` '
+                + 'repository secret to restore the GitHub-hosted fallback.\n').write();
+            };
+            let response;
             try {
-              runners = await getOctokit(token).paginate(
+              response = await getOctokit(token).request(
                 'GET /repos/{owner}/{repo}/actions/runners',
                 { owner: context.repo.owner, repo: context.repo.repo, per_page: 100 },
               );
             } catch (error) {
-              core.warning(`Could not read runner status (${error.message}); using the self-hosted pool.`);
+              const expired = error.status === 401 ? ' (expired or revoked token)' : '';
+              await keepSelfHosted(`Could not read runner status: HTTP ${error.status ?? '?'}${expired}, ${error.message}.`);
               return;
             }
+            // Personal access tokens report their expiry; warn two weeks ahead.
+            const expiry = Date.parse(response.headers['github-authentication-token-expiration'] ?? '');
+            if (!Number.isNaN(expiry) && expiry - Date.now() < 14 * 24 * 3600 * 1000) {
+              core.warning(`CI_RUNNER_STATUS_TOKEN expires on ${new Date(expiry).toISOString().slice(0, 10)}; renew it to keep the hosted fallback.`);
+            }
+            const runners = response.data.runners ?? [];
             const usable = runners.filter((runner) => runner.status === 'online'
               && ['self-hosted', 'Linux'].every(
-                (label) => runner.labels.some((l) => l.name === label)));
+                (label) => (runner.labels ?? []).some((l) => l.name === label)));
             if (usable.length > 0) {
               core.info(`Self-hosted runners online: ${usable.map((r) => r.name).join(', ')}`);
               return;
