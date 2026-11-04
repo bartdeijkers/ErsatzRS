@@ -327,6 +327,9 @@ pub struct TeletextOutputGate {
     mot_retirement: Option<mot_retirement::MotRetirement>,
     // A planned batch still waiting for null capacity after a video burst.
     deferred: Option<DeferredBatch>,
+    // Whether this epoch has received any null packet at all. Deferral only
+    // makes sense for a constant-rate source that has shown spare capacity.
+    null_capacity_seen: bool,
 }
 
 /// One planned batch whose own interval lacked null capacity.
@@ -530,6 +533,7 @@ impl TeletextOutputGate {
             acknowledged_nonempty_mots: [0; 8],
             mot_retirement: None,
             deferred: None,
+            null_capacity_seen: false,
         })
     }
 
@@ -1107,6 +1111,16 @@ impl TeletextOutputGate {
         match placed {
             Ok(_) => Ok(completes),
             Err(TeletextMultiplexError::Capacity { needed, available }) => {
+                if !self.null_capacity_seen {
+                    self.null_capacity_seen = free_packets(packets) > 0
+                        || self.buffer_ref()?.window()?.iter().any(is_null);
+                }
+                // A source that has shown no spare capacity at all is rejected
+                // at once, before any output is committed, so an optional
+                // output can still fall back to ordinary playback.
+                if !self.null_capacity_seen {
+                    return Err(TeletextMultiplexError::Capacity { needed, available }.into());
+                }
                 if intervals >= limit {
                     return Err(TeletextMultiplexError::SustainedCapacity {
                         needed,

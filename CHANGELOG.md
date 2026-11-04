@@ -48,9 +48,11 @@ release section when tagging a release.
   null packets within 100 ms" error. Pages are never silently dropped, and
   audio/video packets, PCR and continuity remain byte-identical. A new page now
   waits (at most 5 s) while the received output has no room for the whole
-  page, because the 100 ms spacing applies within a page. Real FFmpeg output
-  at the ordinary 1.2 × muxrate, with pauses of up to 0.8 s in steady state and
-  3.9 s at start-up, now carries teletext without failures. During a burst a
+  page, because the 100 ms spacing applies within a page. ErsatzRS's own
+  segmenter and MPEG-TS wrapper output at the ordinary 1.2 × muxrate, with
+  pauses of up to 2.7 s, now carries teletext without failures. A source that
+  has shown no null packet at all is still rejected immediately, so optional
+  output keeps falling back to ordinary playback. During a burst a
   page arrives later instead (see `docs/reference/teletext-capacity-profiles.md`).
 - A teletext output that stops on a transport failure is now shown on the
   channel's **Teletext readiness** checklist and as a **Teletext transport**

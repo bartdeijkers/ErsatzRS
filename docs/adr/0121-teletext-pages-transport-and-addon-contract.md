@@ -1041,7 +1041,7 @@ header waits instead, for at most 250 intervals (5 s), then fails with
 that has not arrived yet is not treated as full, so the header is placed and
 the 100 ms continuation deferral applies as before. One packet per look-ahead
 interval stays reserved for PSI that a later window may install. MOT
-retirement batches keep the 100 ms bound. Terminal authored-output failures
+retirement batches keep the 100 ms bound. Deferral applies only after the epoch has received at least one null packet. A source that has shown no spare capacity at all fails immediately with the original `Capacity` error, before any output is committed, so optional startup fallback to ordinary playback is unchanged. Terminal authored-output failures
 are kept per channel in the host-local output registry (a stable kind and a
 time, never raw error text) until a later output on that channel delivers
 authored teletext. They are shown in channel readiness and Health.

@@ -650,6 +650,19 @@ fn burst_within_the_b9_spacing_is_absorbed_but_a_sustained_shortage_fails_explic
     fenced(&mut starved, error);
 }
 
+#[test]
+fn a_source_without_any_null_capacity_is_rejected_before_output_is_committed() {
+    let mut raw = source(6);
+    fill_nulls(&mut raw, 0..6);
+    let mut gate = gate();
+    let error = emit_intervals(&mut gate, &raw, 6).unwrap_err();
+    assert!(matches!(
+        error,
+        TeletextOutputError::Multiplex(TeletextMultiplexError::Capacity { available: 0, .. })
+    ));
+    fenced(&mut gate, error);
+}
+
 fn long_gate() -> TeletextOutputGate {
     let mut config = config();
     config.max_buffer_packets = 20_000;
@@ -681,7 +694,8 @@ fn a_new_page_waits_through_a_long_video_burst_instead_of_starting_into_it() {
 fn a_page_start_that_never_finds_room_fails_explicitly_after_its_bound() {
     let frames = u64::from(MAX_PAGE_START_DEFERRED_INTERVALS) + 2;
     let mut raw = source(frames);
-    fill_nulls(&mut raw, 0..frames);
+    // The first interval shows spare capacity; the multiplex then stays full.
+    fill_nulls(&mut raw, 1..frames);
     let mut gate = long_gate();
     let error = emit_intervals(&mut gate, &raw, frames).unwrap_err();
     assert!(matches!(

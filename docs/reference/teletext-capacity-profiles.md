@@ -110,12 +110,18 @@ The content is synthetic noise, which is harsher than typical library media.
 Measurements on the maintainer's real media and channels remain part of the
 end-to-end proof.
 
-Evidence with the real FFmpeg captures above at **1.2 × content bitrate**
-(`output_real_burst_tests.rs`, opt-in): no transport failure across 12 to 20 s
-with null-free stretches up to 0.82 s and 3.9 s at start-up. Audio, video and
-PCR packets are byte-identical, and there are no continuity errors.
-FFmpeg's libzvbi decoder independently decodes pages 200 and 201 from the
-delivered stream. Cost: during an I-frame burst a page arrives later (the
+**Start-up rule.** Deferral is only used once the epoch has received at
+least one null packet. A source that has shown no spare capacity at all, in
+the current window or in anything received so far, is rejected immediately
+with the original capacity error. This happens before any output is
+committed, so an optional output still falls back to ordinary playback. The
+ErsatzRS wrapper output above has null packets in its first interval. The
+FFmpeg 6.1 direct-encode captures (`-muxrate` on the encoder itself) start
+with 1.5 to 3.9 s without any null packet. They are therefore still rejected
+at start-up, exactly as before this change. After a start with nulls, the
+captures' steady-state stretches of up to 0.8 s are carried.
+
+Cost: during an I-frame burst a page arrives later (the
 longest pause between teletext packets was about 0.86 s). The 100 ms value is
 taken from the existing gate documentation and has not been re-checked
 against the standard text. EN 300 472 clause 5 (40 ms maximum retention in
