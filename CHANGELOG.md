@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- A `Clean up old workflow runs` workflow deletes completed GitHub Actions
+  runs older than 30 days, and failed or cancelled runs older than 7 days,
+  every week. Manual runs start as a dry run. Active runs, runs for open pull
+  requests and successful Release runs are kept.
+
 ### Changed
 
 - CI now ends with a single `CI ok` job that passes only when every gate job
