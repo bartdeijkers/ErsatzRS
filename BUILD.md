@@ -302,7 +302,9 @@ A Linux job is not acceptance for the other supported platforms.
 ### Teletext CI checks
 
 Default required CI runs the **Teletext 1.5** Rust job and four serial browser
-jobs: **general** and **1.5**, each in Chromium and Firefox. **Teletext 2.5**
+jobs: **general** and **1.5**, each in Chromium and Firefox. Pull requests run
+the Chromium half and the push to `main` the Firefox half (see
+[CI lanes](#ci-lanes)). **Teletext 2.5**
 Rust and both **2.5** browser jobs are optional experimental checks, selected
 only by explicit `teletext_only=2.5` or `teletext_only=all` dispatch. Push/PR and
 normal dispatch do not schedule them. Tests/selectors remain intact, with
@@ -383,7 +385,9 @@ list shows `success` for `Format`, `Clippy`, `Build CI artifacts`, the `Test` jo
 configuration, `Teletext 1.5`, all four required `Playwright E2E` combinations
 (general and Level 1.5 in Chromium and Firefox), `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
-because skipped jobs do not fail a run. A failed, cancelled, queued, or
+because skipped jobs do not fail a run. A `pr` or `firefox`
+[lane](#ci-lanes) run holds only part of this list; dispatch a full run on the
+candidate SHA for release evidence. A failed, cancelled, queued, or
 in-progress run is not release evidence. Any commit or amend after the
 successful run creates a new candidate SHA and requires new CI evidence before
 tagging.
@@ -391,6 +395,46 @@ tagging.
 Level 2.5 Rust and browser suites remain optional explicit dispatches for the
 experimental enhanced features. They do not replace any required general or
 Level 1.5 result and do not block the current release gate.
+
+### Required `CI ok` check for `main`
+
+`main` is protected by one required status check, `CI ok`. The `ci_ok` job
+depends on every gate job, so the protection rule never has to list job or
+matrix names. It runs even after a failure or cancellation and fails unless
+`Preflight` succeeded and every other gate job either passed or was skipped
+by `Preflight` (an already proven SHA, or a pull request that changes only
+docs, plans, agent config, Markdown or PNG files) or left out by the run's
+[lane](#ci-lanes). Commit lint may be skipped only on `push`. On a draft pull
+request `CI ok` always fails, so a draft never carries a passing required
+check into the full run that starts when it is marked ready. Focused manual recovery modes do not run `CI ok` because they
+never establish full CI.
+
+The `pull_request` trigger deliberately has no `paths-ignore`: a workflow that
+never starts never reports `CI ok`, which would leave docs-only pull requests
+unmergeable. Docs-only detection lives in `Preflight` instead. When adding a
+gate job, add it to `ci_ok.needs`; `scripts/ci-build-artifacts_test.py`
+enforces this.
+
+### CI lanes
+
+`Preflight` picks one lane per run so a change is not tested twice in full:
+
+| Lane | When | Runs |
+|---|---|---|
+| `skip` | push of an already proven SHA, or a docs-only pull request | nothing (`CI ok` passes) |
+| `light` | draft pull request | Format, Clippy, Build, Test, Cargo deny, Commit lint, docs (`CI ok` fails on purpose) |
+| `pr` | ready pull request | everything, Playwright in Chromium only |
+| `firefox` | push to `main` whose tree a green `pr` run already tested | Format, Build (web only), Cargo deny, docs and the Firefox Playwright jobs |
+| `full` | any other push, every manual dispatch | everything |
+
+Playwright jobs in every lane start only after `Test` passed, so a red Rust run
+stops before the browser suites. A green `pr` run uploads a small
+`ci-tree-<tree>` artifact naming the tree of the merge commit it tested; the
+push to `main` looks it up by the pushed commit's tree. When `main` moved
+between the PR run and the merge, the trees differ and the push runs `full`.
+
+Open work-in-progress pull requests as drafts: follow-up pushes then cost the
+fast lane only, and **Ready for review** starts the full `pr` lane.
 
 ### Preflight-skipped runs are a pointer, not evidence
 

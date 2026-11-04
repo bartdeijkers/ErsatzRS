@@ -528,7 +528,7 @@ class FocusedAuditSelection(unittest.TestCase):
             "env": env or SimpleNamespace(),
         }))
 
-    def scheduled(self, **selected):
+    def scheduled(self, lane="full", **selected):
         inputs = dict(audit_only=False, test_only=False, next_engine_only=False,
                       teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="", next_case_set="all")
         inputs.update(selected)
@@ -540,9 +540,11 @@ class FocusedAuditSelection(unittest.TestCase):
             dependencies = [x.strip() for x in dependencies[1].strip("[]").split(",")] if dependencies else []
             if "always()" not in condition and any(x not in scheduled for x in dependencies):
                 continue
+            # A skipped Preflight (focused modes) has empty outputs on GitHub.
+            selected_lane = lane if "preflight" in scheduled else ""
             needs = SimpleNamespace(**{
                 key: SimpleNamespace(result="success" if key in scheduled else "skipped",
-                                     outputs=SimpleNamespace(skip="false"))
+                                     outputs=SimpleNamespace(skip="false", lane=selected_lane, tree=""))
                 for key in self.jobs
             })
             if self.evaluate(condition, inputs, needs):
@@ -574,6 +576,20 @@ class FocusedAuditSelection(unittest.TestCase):
             self.assertRegex(environment,
                              rf'(?m)^      ERSATZRS_TELETEXT_E2E_{binary}_SHA256: [a-f0-9]{{64}}$')
 
+    def test_required_ci_ok_check_aggregates_every_gate_job(self):
+        # `CI ok` is the single required check on main. A gate job missing
+        # from its needs could fail without blocking a merge.
+        body = self.jobs["ci_ok"]
+        self.assertIn("    name: CI ok\n", body)
+        needs = re.search(r"^    needs: \[(.+)\]$", body, re.M)[1]
+        self.assertEqual({x.strip() for x in needs.split(",")}, set(self.jobs) - {"ci_ok"})
+        self.assertRegex(body, r"(?m)^    if: \$\{\{ always\(\) && ")
+
+    def test_pull_requests_always_start_the_workflow(self):
+        # A path-filtered pull_request never reports the required check.
+        trigger = self.workflow.split("\n  pull_request:\n", 1)[1].split("\n  push:\n", 1)[0]
+        self.assertNotRegex(trigger, r"(?m)^    paths(-ignore)?:")
+
     def test_audit_recovery_runs_only_preflight_format_and_audit(self):
         self.assertEqual(self.scheduled(audit_only=True), {"preflight", "fmt", "deny"})
 
@@ -595,9 +611,10 @@ class FocusedAuditSelection(unittest.TestCase):
     def test_rust_level15_recovery_excludes_web_build_and_browsers(self):
         self.assertEqual(self.scheduled(teletext_only="1.5-rust"), {"build", "teletext"})
         inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="1.5-rust", reuse_artifacts="")
+        unfocused = SimpleNamespace(preflight=SimpleNamespace(outputs=SimpleNamespace(lane="")))
         for key, expected in (("BUILD_RUST", True), ("BUILD_WEB", False)):
             expression = re.search(rf"^      {key}: (.+)$", self.jobs["build"], re.M)[1]
-            self.assertEqual(self.evaluate(expression, inputs, SimpleNamespace()), expected)
+            self.assertEqual(self.evaluate(expression, inputs, unfocused), expected)
         expression = re.search(r"^        level: (.+)$", self.jobs["teletext"], re.M)[1]
         expression = expression.removeprefix("${{").removesuffix("}}").strip()
         expression = expression.replace("&&", " and ").replace("||", " or ")
@@ -621,16 +638,98 @@ class FocusedAuditSelection(unittest.TestCase):
                                ("none", {"general", "1.5"}), ("1.5", {"1.5"}),
                                ("2.5", {"2.5"}), ("all", {"1.5", "2.5"})):
             with self.subTest(teletext_only=mode):
-                matrix = eval(expression, {"__builtins__": {}}, {
-                    "inputs": SimpleNamespace(teletext_only=mode, browser_only="none"),
-                    "fromJSON": json.loads,
-                })["include"]
+                matrix = self.browser_matrix(expression, teletext_only=mode)
                 self.assertEqual({row["suite"] for row in matrix}, expected)
                 self.assertEqual(len(matrix), 2 * len(expected))
                 self.assertEqual(len({row["port"] for row in matrix}), len(matrix))
                 for suite in expected:
                     self.assertEqual({row["project"] for row in matrix if row["suite"] == suite},
                                      {"chromium", "firefox"})
+
+    @staticmethod
+    def browser_matrix(expression, lane="full", **inputs):
+        inputs = dict(dict(teletext_only="none", browser_only="none"), **inputs)
+        return eval(expression, {"__builtins__": {}}, {
+            "inputs": SimpleNamespace(**inputs), "fromJSON": json.loads,
+            "needs": SimpleNamespace(preflight=SimpleNamespace(outputs=SimpleNamespace(lane=lane))),
+        })["include"]
+
+    def test_lanes_schedule_only_their_jobs(self):
+        everything = set(self.jobs)
+        self.assertEqual(self.scheduled(lane="pr"), everything)
+        self.assertEqual(self.scheduled(lane="light"),
+                         everything - {"next_engine", "teletext", "hydration"})
+        self.assertEqual(self.scheduled(lane="firefox"),
+                         everything - {"clippy", "test", "next_engine", "teletext"})
+
+    def test_pull_request_lane_runs_chromium_and_main_completes_firefox(self):
+        expression = re.search(r"^      matrix: (.+)$", self.jobs["hydration"], re.M)[1]
+        expression = expression.removeprefix("${{").removesuffix("}}").strip()
+        expression = expression.replace("&&", " and ").replace("||", " or ")
+        rows = {lane: {(row["suite"], row["project"], row["port"])
+                       for row in self.browser_matrix(expression, lane=lane)}
+                for lane in ("pr", "firefox", "full", "")}
+        self.assertEqual({project for _, project, _ in rows["pr"]}, {"chromium"})
+        self.assertEqual({project for _, project, _ in rows["firefox"]}, {"firefox"})
+        # Together the two lanes cover exactly the full default matrix.
+        self.assertEqual(rows["pr"] | rows["firefox"], rows["full"])
+        self.assertEqual(rows[""], rows["full"])
+        # Focused dispatches keep their own matrix whatever the lane.
+        self.assertEqual({row["project"] for row in self.browser_matrix(
+            expression, lane="pr", browser_only="firefox")}, {"firefox"})
+
+    def test_firefox_lane_builds_only_the_web_artifact(self):
+        expression = re.search(r"^      BUILD_RUST: (.+)$", self.jobs["build"], re.M)[1]
+        inputs = dict(browser_only="none", reuse_artifacts="")
+        for lane, expected in (("firefox", False), ("pr", True), ("full", True), ("", True)):
+            needs = SimpleNamespace(preflight=SimpleNamespace(outputs=SimpleNamespace(lane=lane)))
+            self.assertEqual(self.evaluate(expression, inputs, needs), expected)
+
+    def test_browser_suites_wait_for_a_passing_test_job(self):
+        body = self.jobs["hydration"]
+        needs = re.search(r"^    needs: \[(.+)\]$", body, re.M)[1]
+        self.assertIn("test", {x.strip() for x in needs.split(",")})
+        condition = re.search(r"^    if: (.+)$", body, re.M)[1]
+        inputs = dict(test_only=False, next_engine_only=False, teletext_only="none")
+        for test_result, expected in (("success", True), ("skipped", True),
+                                      ("failure", False), ("cancelled", False)):
+            needs = SimpleNamespace(
+                build=SimpleNamespace(result="success"),
+                test=SimpleNamespace(result=test_result),
+                preflight=SimpleNamespace(outputs=SimpleNamespace(lane="pr")),
+            )
+            self.assertEqual(self.evaluate(condition, inputs, needs), expected)
+
+    def ci_ok_exit(self, lane, results, event="pull_request", skip="false"):
+        code = re.search(r"python3 - <<'PY'\n(.*?)^          PY$", self.jobs["ci_ok"], re.S | re.M)[1]
+        code = "\n".join(line[10:] for line in code.splitlines())
+        needs = {job: {"result": results.get(job, "success"), "outputs": {}}
+                 for job in self.jobs if job != "ci_ok"}
+        needs["preflight"]["outputs"] = {"skip": skip, "lane": lane, "tree": ""}
+        result = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True,
+                                env=dict(os.environ, NEEDS=json.dumps(needs), EVENT_NAME=event))
+        return result.returncode
+
+    def test_ci_ok_accepts_only_the_jobs_a_lane_leaves_out(self):
+        light = {"next_engine": "skipped", "teletext": "skipped", "hydration": "skipped"}
+        firefox = {"clippy": "skipped", "test": "skipped", "next_engine": "skipped",
+                   "teletext": "skipped", "commitlint": "skipped"}
+        self.assertEqual(self.ci_ok_exit("pr", {}), 0)
+        self.assertNotEqual(self.ci_ok_exit("pr", {"hydration": "skipped"}), 0)
+        self.assertNotEqual(self.ci_ok_exit("pr", {"test": "failure"}), 0)
+        self.assertEqual(self.ci_ok_exit("firefox", firefox, event="push"), 0)
+        self.assertNotEqual(self.ci_ok_exit("firefox", dict(firefox, hydration="skipped"), event="push"), 0)
+        self.assertNotEqual(self.ci_ok_exit("full", firefox, event="push"), 0)
+        # A draft never reports a passing required check, even when green.
+        self.assertNotEqual(self.ci_ok_exit("light", light), 0)
+        self.assertEqual(self.ci_ok_exit("skip", {job: "skipped" for job in self.jobs
+                                                  if job != "preflight"}, skip="true"), 0)
+
+    def test_only_a_green_pr_lane_records_its_tree(self):
+        body = self.jobs["ci_ok"]
+        self.assertIn("name: ci-tree-${{ needs.preflight.outputs.tree }}", body)
+        self.assertEqual(body.count("if: ${{ needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.tree != '' }}"), 2)
+        self.assertIn("name: `ci-tree-${tree}`", self.workflow)
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
