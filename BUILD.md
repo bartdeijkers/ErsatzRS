@@ -142,7 +142,13 @@ and therefore always stay on the self-hosted pool. Hosted runs are slower
 (four vCPUs, cold Cargo cache) but are free for this public repository. Their build
 first removes unused preinstalled toolchains, adds swap and disables incremental
 compilation, because a full workspace test build does not fit a standard hosted
-runner otherwise.
+runner otherwise. Hosted Next engine runs install `libvpl2` and
+`fonts-noto-cjk`, which the self-hosted runners carry. Two capacity proofs are
+CPU-bound and do not fit four hosted vCPUs: the Next 4K TrueHD late-PGS
+readiness budget of 30 seconds (about 35 seconds on hosted) and the Playwright
+`channel-watch` case that decodes three full-frame JPEG XL carriers in a native
+1080p graph. A hosted run that selects either needs a self-hosted re-run before
+`CI ok` passes; their budgets are not relaxed for hosted runs.
 
 For a dependency-audit correction, use the existing workflow's focused mode:
 

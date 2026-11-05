@@ -877,9 +877,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes libvpl2 fonts-noto-cjk
-          # Real-engine 4K cases keep their readiness budgets only when a
-          # four-vCPU hosted runner is not also encoding three other streams.
-          echo "NEXTEST_TEST_THREADS=2" >> "$GITHUB_ENV"
       - name: Next components, real-engine decoding and HTTP EOF
         env:
           NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
