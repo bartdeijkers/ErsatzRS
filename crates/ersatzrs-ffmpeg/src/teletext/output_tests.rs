@@ -532,25 +532,215 @@ fn malformed_or_wrong_rate_input_never_yields_pending_packets() {
     }
 }
 
-#[test]
-fn interval_null_capacity_failure_never_exposes_partial_rewriting() {
-    let mut raw = source(3);
-    for slot in &mut raw[3..end(1)] {
+fn fill_nulls(raw: &mut [[u8; 188]], intervals: std::ops::Range<u64>) {
+    for slot in &mut raw[end(intervals.start)..end(intervals.end)] {
         if u16::from(Packet::new(slot).pid()) == 8191 {
             *slot = packet(300, false, 0, &[0x55; 184]);
         }
     }
+}
+
+/// Emit `frames` consecutive one-interval windows, returning each window.
+fn emit_intervals(
+    gate: &mut TeletextOutputGate,
+    raw: &[[u8; 188]],
+    frames: u64,
+) -> Result<Vec<Vec<[u8; 188]>>, TeletextOutputError> {
+    gate.push(&bytes(raw), Duration::ZERO).unwrap();
+    let mut windows = Vec::new();
+    let mut now = Duration::ZERO;
+    let mut start = 0;
+    for frame in 1..=frames {
+        assert!(gate.prepare_window(end(frame) - start, now)?);
+        start = end(frame);
+        now = gate.pending_schedule().unwrap().last_due();
+        windows.push(expose_and_ack(gate));
+    }
+    Ok(windows)
+}
+
+fn first_pes_pts(window: &[[u8; 188]]) -> Option<u64> {
+    window.iter().find_map(|raw| {
+        let packet = Packet::new(raw);
+        (u16::from(packet.pid()) == 512 && packet.payload_unit_start_indicator()).then(|| {
+            let pes = packet.payload().unwrap();
+            let pts = &pes[9..14];
+            (u64::from(pts[0] >> 1) & 7) << 30
+                | u64::from(pts[1]) << 22
+                | u64::from(pts[2] >> 1) << 15
+                | u64::from(pts[3]) << 7
+                | u64::from(pts[4] >> 1)
+        })
+    })
+}
+
+fn carries_teletext(window: &[[u8; 188]]) -> bool {
+    window
+        .iter()
+        .any(|raw| u16::from(Packet::new(raw).pid()) == 512)
+}
+
+#[test]
+fn video_burst_interval_defers_its_batch_with_matching_pts_and_exact_av() {
+    let mut baseline = gate();
+    let on_time = emit_intervals(&mut baseline, &source(3), 3).unwrap();
+    let mut raw = source(3);
+    // A video burst occupies every former null slot of the first interval.
+    fill_nulls(&mut raw, 0..1);
+    let mut gate = gate();
+    let windows = emit_intervals(&mut gate, &raw, 3).unwrap();
+    assert!(carries_teletext(&on_time[0]));
+    assert!(!carries_teletext(&windows[0]));
+    assert!(carries_teletext(&windows[1]));
+    // The deferred PES names the end of the interval that actually carries it.
+    assert_eq!(
+        first_pes_pts(&windows[1]).unwrap(),
+        first_pes_pts(&on_time[0]).unwrap() + 1_800
+    );
+    for (before, after) in raw.iter().zip(windows.iter().flatten()) {
+        if ![8191, 3337].contains(&u16::from(Packet::new(before).pid())) {
+            assert_eq!(before, after);
+        }
+    }
+}
+
+#[test]
+fn burst_within_the_b9_spacing_is_absorbed_but_a_sustained_shortage_fails_explicitly() {
+    let mut raw = source(6);
+    // Four full intervals: the batch moves 80 ms and lands in the fifth.
+    fill_nulls(&mut raw, 0..4);
+    let mut absorbed = gate();
+    let windows = emit_intervals(&mut absorbed, &raw, 6).unwrap();
+    assert!(windows[..4].iter().all(|window| !carries_teletext(window)));
+    assert!(carries_teletext(&windows[4]));
+
+    // The header goes out before the burst has arrived. Five full intervals
+    // then exceed the 100 ms B.9 spacing for the rest of the page.
+    let mut raw = source(7);
+    fill_nulls(&mut raw, 1..6);
+    let mut starved = gate();
+    starved
+        .push(&bytes(&raw[..end(1)]), Duration::ZERO)
+        .unwrap();
+    assert!(starved.prepare_window(end(1), Duration::ZERO).unwrap());
+    let mut now = starved.pending_schedule().unwrap().last_due();
+    assert!(carries_teletext(&expose_and_ack(&mut starved)));
+    starved.push(&bytes(&raw[end(1)..]), now).unwrap();
+    let error = (2..=7)
+        .find_map(
+            |frame| match starved.prepare_window(end(frame) - end(frame - 1), now) {
+                Ok(prepared) => {
+                    assert!(prepared);
+                    now = starved.pending_schedule().unwrap().last_due();
+                    expose_and_ack(&mut starved);
+                    None
+                }
+                Err(error) => Some(error),
+            },
+        )
+        .unwrap();
+    assert!(matches!(
+        error,
+        TeletextOutputError::Multiplex(TeletextMultiplexError::SustainedCapacity {
+            available: 0,
+            window_ms: 100,
+            ..
+        })
+    ));
+    fenced(&mut starved, error);
+}
+
+#[test]
+fn a_source_without_any_null_capacity_is_rejected_before_output_is_committed() {
+    let mut raw = source(6);
+    fill_nulls(&mut raw, 0..6);
+    let mut gate = gate();
+    let error = emit_intervals(&mut gate, &raw, 6).unwrap_err();
+    assert!(matches!(
+        error,
+        TeletextOutputError::Multiplex(TeletextMultiplexError::Capacity { available: 0, .. })
+    ));
+    fenced(&mut gate, error);
+}
+
+fn long_gate() -> TeletextOutputGate {
+    let mut config = config();
+    config.max_buffer_packets = 20_000;
+    config.max_hold = Duration::from_secs(10);
+    TeletextOutputGate::new(config, set()).unwrap()
+}
+
+#[test]
+fn a_new_page_waits_through_a_long_video_burst_instead_of_starting_into_it() {
+    // A one-second burst (50 intervals) right after the first interval: far
+    // beyond the B.9 spacing, as with an I-frame at an ordinary CBR muxrate.
+    let frames = 60;
+    let mut raw = source(frames);
+    fill_nulls(&mut raw, 1..51);
+    let mut gate = long_gate();
+    let windows = emit_intervals(&mut gate, &raw, frames).unwrap();
+    // The received burst shows the page cannot follow its header in time, so
+    // the header waits instead of starting a page that would break B.9.
+    assert!(windows[..51].iter().all(|window| !carries_teletext(window)));
+    assert!(windows[51..].iter().any(|window| carries_teletext(window)));
+    for (before, after) in raw.iter().zip(windows.iter().flatten()) {
+        if ![8191, 3337].contains(&u16::from(Packet::new(before).pid())) {
+            assert_eq!(before, after);
+        }
+    }
+}
+
+#[test]
+fn a_page_start_that_never_finds_room_fails_explicitly_after_its_bound() {
+    let frames = u64::from(MAX_PAGE_START_DEFERRED_INTERVALS) + 2;
+    let mut raw = source(frames);
+    // The first interval shows spare capacity; the multiplex then stays full.
+    fill_nulls(&mut raw, 1..frames);
+    let mut gate = long_gate();
+    let error = emit_intervals(&mut gate, &raw, frames).unwrap_err();
+    assert!(matches!(
+        error,
+        TeletextOutputError::Multiplex(TeletextMultiplexError::SustainedCapacity {
+            available: 0,
+            window_ms: 5_020,
+            ..
+        })
+    ));
+    fenced(&mut gate, error);
+}
+
+#[test]
+fn deferred_terminator_is_not_a_cycle_boundary_until_it_is_sent() {
+    let cycle = gate()
+        .carousel
+        .as_ref()
+        .unwrap()
+        .batches_until_boundary(64)
+        .unwrap()
+        .unwrap();
+    let cycle = u64::try_from(cycle).unwrap();
+    let mut raw = source(cycle + 2);
+    // Starve exactly the interval that should carry the closing FF.
+    fill_nulls(&mut raw, cycle - 1..cycle);
     let mut gate = gate();
     gate.push(&bytes(&raw), Duration::ZERO).unwrap();
-    let error = TeletextOutputError::Multiplex(TeletextMultiplexError::Capacity {
-        needed: 1,
-        available: 0,
-    });
-    assert_eq!(
-        gate.prepare_window(end(1), Duration::ZERO),
-        Err(error.clone())
-    );
-    fenced(&mut gate, error);
+    let (mut start, mut now) = (0, Duration::ZERO);
+    let mut receipts = Vec::new();
+    for frame in 1..=cycle + 1 {
+        assert!(gate.prepare_window(end(frame) - start, now).unwrap());
+        start = end(frame);
+        let schedule = gate.pending_schedule().unwrap();
+        now = schedule.last_due();
+        gate.pending_packets(schedule.first_due()).unwrap();
+        receipts.push(gate.acknowledge_window_with_receipt(schedule, now).unwrap());
+    }
+    let index = usize::try_from(cycle).unwrap();
+    // The interval that planned the FF could not carry it: no boundary yet.
+    assert!(!receipts[index - 1].is_cycle_boundary());
+    assert!(!receipts[index - 1].contains_complete_cycle());
+    // The following interval actually sends it and only then closes the cycle.
+    assert!(receipts[index].is_cycle_boundary());
+    assert!(receipts[index].contains_complete_cycle());
 }
 
 #[test]

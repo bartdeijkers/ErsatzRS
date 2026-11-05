@@ -426,3 +426,43 @@ fn clock_overflow_leaves_prefix_header_body_and_terminator_cursors_unchanged() {
         }
     }
 }
+
+#[test]
+fn deferral_follows_physical_time_and_never_stretches_acquisition_past_b6() {
+    let mut carousel = TeletextCarousel::new_authored(many_displays(3, true)).unwrap();
+    let first = carousel.next_batch().unwrap();
+    assert_eq!(first.kind(), TeletextCarouselBatchKind::Magazine);
+    let before = carousel.ticks;
+    carousel.defer_pending_batch().unwrap();
+    assert_eq!(carousel.ticks, before + STEP_TICKS);
+    // Sustained starvation eventually reaches the 20 s acquisition bound and
+    // is rejected with the cursor unchanged, never silently exceeded.
+    let mut deferrals = 1_usize;
+    let error = loop {
+        let ticks = carousel.ticks;
+        match carousel.defer_pending_batch() {
+            Ok(()) => deferrals += 1,
+            Err(error) => {
+                assert_eq!(carousel.ticks, ticks);
+                break error;
+            }
+        }
+    };
+    assert!(matches!(
+        error,
+        TeletextTransportError::CycleTiming {
+            maximum: MAX_RESOURCE_CYCLE_BATCHES,
+            ..
+        }
+    ));
+    assert!(deferrals < MAX_RESOURCE_CYCLE_BATCHES);
+}
+
+#[test]
+fn display_only_deferral_has_no_acquisition_bound() {
+    let mut carousel = TeletextCarousel::new_authored(many_displays(2, false)).unwrap();
+    carousel.next_batch().unwrap();
+    for _ in 0..2 * MAX_RESOURCE_CYCLE_BATCHES {
+        carousel.defer_pending_batch().unwrap();
+    }
+}

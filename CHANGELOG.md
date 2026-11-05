@@ -15,6 +15,19 @@ release section when tagging a release.
 
 ### Added
 
+- Channel teletext pages show one ordered readiness checklist: add-on enabled,
+  valid profile, teletext capacity, output route, published pages and
+  broadcast confirmed by an active output. Each state is shown separately, and
+  display in a client is never claimed. A missing or invalid
+  `teletext.authoring.policy` / `teletext.output.policy` can now be repaired
+  from the admin by applying the reviewed `tvguide-16` capacity profile. The
+  form needs an explicit confirmation of its global scope, validates on the
+  server before writing, and replaces hand-tuned policies only after a
+  separate confirmation. No manual JSON or SQL is needed.
+- The readiness checklist explains which output routes carry teletext. HLS does
+  not. A global MPEG-TS script owns the final Hybrid mux. The checklist names a
+  fix for only this channel (MPEG-TS streaming mode) separately from the global
+  alternative (built-in wrapper).
 - A `Clean up old workflow runs` workflow deletes completed GitHub Actions
   runs older than 30 days, and failed or cancelled runs older than 7 days,
   every week. Manual runs start as a dry run. Active runs, runs for open pull
@@ -49,6 +62,27 @@ release section when tagging a release.
 
 ### Fixed
 
+- Authored teletext no longer stops the stream with "teletext needs … null
+  packets but the window has 0" when a video burst, such as an I-frame, fills
+  one or more 20 ms intervals of the constant-rate output. A batch that finds
+  no null capacity now waits for a later interval. It waits at most four further
+  intervals (the 100 ms packet spacing the gate attributes to EN 300 706 B.9) and never beyond the B.6 20 s
+  acquisition bound. Its PTS names the interval that actually carries it, and
+  a cycle boundary counts only once the closing packet is sent. A multiplex
+  that stays full for longer fails explicitly with a new "multiplex had only N
+  null packets within 100 ms" error. Pages are never silently dropped, and
+  audio/video packets, PCR and continuity remain byte-identical. A new page now
+  waits (at most 5 s) while the received output has no room for the whole
+  page, because the 100 ms spacing applies within a page. ErsatzRS's own
+  segmenter and MPEG-TS wrapper output at the ordinary 1.2 × muxrate, with
+  pauses of up to 2.7 s, now carries teletext without failures. A source that
+  has shown no null packet at all is still rejected immediately, so optional
+  output keeps falling back to ordinary playback. During a burst a
+  page arrives later instead (see `docs/reference/teletext-capacity-profiles.md`).
+- A teletext output that stops on a transport failure is now shown on the
+  channel's **Teletext readiness** checklist and as a **Teletext transport**
+  warning in Health, with the cause and the next step. The notice remains after
+  the output ended until teletext is delivered on that channel again.
 - Deleting a scanned local library, or removing a scanned path from one, no
   longer fails with a `FOREIGN KEY constraint failed` error when the path
   contains nested folders or media files.

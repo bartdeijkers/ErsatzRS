@@ -47,6 +47,9 @@ impl ChannelRuntimeError {
 pub trait TeletextOutputObserver: Send + Sync {
     /// Replace this owner's bounded snapshot without extending its lifetime.
     fn record(&self, observation: ersatzrs_domain::TeletextOutputObservation);
+
+    /// Keep this output's terminal failure for its channel after it ends.
+    fn failed(&self, _kind: ersatzrs_domain::TeletextOutputFailureKind) {}
 }
 
 /// Runtime-neutral channel session and subtitle side effects.

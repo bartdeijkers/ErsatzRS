@@ -1002,6 +1002,60 @@ than assuming the same adapter applies. Insufficient capacity, malformed PSI
 or PID collision is a visible failure, not silent page loss. Refresh swaps the
 complete validated page generation at a carousel boundary.
 
+**Amendment 2026-11-03: bounded burst deferral.** Constant-rate FFmpeg output
+is not paced within a frame. An I-frame PES occupies consecutive packets, so a
+20 ms interval of an ordinary-bitrate multiplex can contain no null packet at
+all. Strict per-interval placement therefore ended streams unless the muxrate
+was raised far beyond the content bitrate. A carousel batch that finds too few
+nulls in its own interval now waits for a later interval. The bounds are:
+at most four further intervals, which keeps the EN 300 706 B.9 100 ms maximum
+between packets (the B.1 20 ms minimum after erase is preserved because
+spacing only grows); and never a delay that would leave too little time to
+finish the cycle within the B.6 20 s acquisition repetition, with the
+carousel clock following physical time. The PES PTS names the end of the
+interval that actually carries it, so Bttx holds at most one batch exactly as
+for on-time placement. A cycle boundary, and with it a replacement, guide
+refresh or MOT retirement, counts only after the deferred closing batch is
+sent. Exhausting the deferral is the explicit
+`TeletextMultiplexError::SustainedCapacity` failure. Pages are never silently
+dropped, and audio/video bytes, PCR and continuity are unchanged. Setting
+`MAX_DEFERRED_INTERVALS` to zero restores strict placement.
+
+Measurement note (2026-11-04): with real FFmpeg 6.1/libx264 CBR output at
+1.2 x content bitrate and a 16,000 kbit VBV buffer, stretches without null
+packets lasted 0.78 to 1.1 s (1.5 to 3.9 s at start-up). The 100 ms bound
+therefore covers only short bursts and is not yet sufficient for ordinary
+profiles. The numeric value of the B.9 bound is taken from the earlier gate
+documentation and has not been re-checked against the standard text; only the
+clause title "Maximum time between successive packets of a page" was
+confirmed. EN 300 472 clause 5 (40 ms maximum retention in Bttx, no maximum
+gap between PES packets) was confirmed and remains satisfied.
+
+**Amendment 2026-11-04: page-aware start deferral.** B.9 bounds the time
+between successive packets *of a page*. A header, magazine declaration or
+terminator starts a new page transmission and is not bound by it. The gate
+does not place a header while output that has already arrived shows that the
+remaining batches of its page cannot each follow within the B.9 spacing. The
+header waits instead, for at most 250 intervals (5 s), then fails with
+`SustainedCapacity`; the B.6 bound is still enforced by the carousel. Output
+that has not arrived yet is not treated as full, so the header is placed and
+the 100 ms continuation deferral applies as before. One packet per look-ahead
+interval stays reserved for PSI that a later window may install. MOT
+retirement batches keep the 100 ms bound. Deferral applies only after the epoch has received at least one null packet. A source that has shown no spare capacity at all fails immediately with the original `Capacity` error, before any output is committed, so optional startup fallback to ordinary playback is unchanged. Terminal authored-output failures
+are kept per channel in the host-local output registry (a stable kind and a
+time, never raw error text) until a later output on that channel delivers
+authored teletext. They are shown in channel readiness and Health.
+
+**Amendment 2026-11-03: admin capacity profiles.** "No production defaults"
+still holds: nothing is inferred when a policy is absent. The admin can write
+a reviewed, named policy pair (`tvguide-16`) in one explicit action. The
+action confirms its global scope, validates both documents with the runtime
+parsers before writing, and replaces a valid hand-tuned setting only after a
+separate confirmation. The profile equals the policy pair the production
+TV-guide bundle is qualified with in the integrated tests, and a unit test
+keeps the two identical. See
+[teletext capacity profiles](../reference/teletext-capacity-profiles.md).
+
 Native command construction refuses a selected source-teletext bitmap Burn
 when video output is Copy. The same unsupported-source result reaches both
 validated command builders before a playback consumer can start; no implicit encoder

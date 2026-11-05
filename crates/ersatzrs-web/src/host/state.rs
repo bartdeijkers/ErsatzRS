@@ -131,6 +131,7 @@ impl AppState {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_lines)] // reason: composition root wires every port and shared registry once
     #[must_use]
     pub fn new_with_scan_queue(
         pool: DbPool,
@@ -155,14 +156,18 @@ impl AppState {
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
         let next_engine = next_engine_host(pool.clone(), playout_locker.clone());
         let operations = operation_coordinator(playout_locker);
+        let teletext_outputs = super::teletext_output_observations::OutputObservations::default();
         let application = application_with_teletext_storage(
             ApplicationPorts::new(
                 Arc::new(repositories.channel.clone()),
-                Arc::new(NativeChannelRuntime::new(
-                    pool.clone(),
-                    Arc::clone(&hls_sessions),
-                    preview_hls_sessions.clone(),
-                )),
+                Arc::new(
+                    NativeChannelRuntime::new(
+                        pool.clone(),
+                        Arc::clone(&hls_sessions),
+                        preview_hls_sessions.clone(),
+                    )
+                    .with_teletext_outputs(teletext_outputs.clone()),
+                ),
                 Arc::new(repositories.addon_media_lists.clone()),
                 Arc::new(repositories.addon_media_lists.clone()),
                 Arc::new(ersatzrs_infra::addon_media_list_source_probe::AddonMediaListSourceProbeCoordinator::new(pool.clone())),
@@ -189,14 +194,17 @@ impl AppState {
                 Arc::new(repositories.media_item.clone()),
                 Arc::new(repositories.admin_media.clone()),
                 Arc::new(repositories.television.clone()),
-                Arc::new(NativeAdminHealthRuntime::new(
-                    pool.clone(),
-                    Arc::clone(&ffmpeg_runtime),
-                    health.clone(),
-                    startup_errors,
-                    startup_warnings,
-                    operations.scan_activity(),
-                )),
+                Arc::new(
+                    NativeAdminHealthRuntime::new(
+                        pool.clone(),
+                        Arc::clone(&ffmpeg_runtime),
+                        health.clone(),
+                        startup_errors,
+                        startup_warnings,
+                        operations.scan_activity(),
+                    )
+                    .with_teletext_outputs(teletext_outputs.clone()),
+                ),
                 Arc::new(repositories.troubleshooting.clone()),
                 Arc::new(NativeAdminTroubleshootingRuntime::new(
                     pool.clone(),

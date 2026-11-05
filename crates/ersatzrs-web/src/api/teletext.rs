@@ -61,6 +61,41 @@ pub async fn off(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Res
     respond(channel, "off", result)
 }
 
+/// Apply a reviewed capacity profile to the two global teletext policies.
+///
+/// The form must confirm that the change applies to every teletext channel.
+/// A valid hand-tuned policy is replaced only with the separate `replace`
+/// confirmation; validation precedes every write.
+pub async fn apply_capacity(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
+    let channel = redirect_channel(&pairs);
+    let result = match capacity_command(pairs) {
+        Ok((_, profile, replace)) => {
+            crate::host::teletext_capacity::apply_profile(&state.application, &profile, replace)
+                .await
+        }
+        Err(code) => Err(code),
+    };
+    respond(channel, "capacity", result)
+}
+
+fn capacity_command(pairs: Pairs) -> ControlResult<(i64, String, bool)> {
+    let mut fields = fields(pairs)?;
+    let channel = positive(&take(&mut fields, "channel_id")?)?;
+    let profile = take(&mut fields, "profile")?;
+    if fields.remove("confirm_scope").as_deref() != Some("1") {
+        return Err("scope-unconfirmed");
+    }
+    let replace = match fields.remove("replace").as_deref() {
+        None => false,
+        Some("1") => true,
+        Some(_) => return Err("invalid"),
+    };
+    if !fields.is_empty() {
+        return Err("invalid");
+    }
+    Ok((channel, profile, replace))
+}
+
 /// Validate selected static producers and save a new original draft. Publication
 /// is never part of this action, including when a subsequent preview fails.
 pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {

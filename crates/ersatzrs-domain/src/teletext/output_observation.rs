@@ -62,4 +62,29 @@ pub struct TeletextChannelOutputObservations {
     pub outputs: Vec<TeletextOutputObservation>,
     /// The host cannot account for every active output in this snapshot.
     pub incomplete: bool,
+    /// Last terminal transport failure of an authored output on this channel,
+    /// kept after that output ended until a later output delivers teletext.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failure: Option<TeletextOutputFailure>,
+}
+
+/// Why an authored output stopped; a stable code, never raw error text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TeletextOutputFailureKind {
+    /// The constant-rate output had too few null packets for teletext.
+    TransportCapacity,
+    /// The output missed its holding or delivery deadline.
+    Deadline,
+    /// The encoder output ended or failed before teletext could be carried.
+    Source,
+    /// Any other transport, framing or timing rejection.
+    Transport,
+}
+
+/// A host-local diagnostic of one terminal authored-output failure.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextOutputFailure {
+    pub kind: TeletextOutputFailureKind,
+    pub at: chrono::DateTime<chrono::Utc>,
 }

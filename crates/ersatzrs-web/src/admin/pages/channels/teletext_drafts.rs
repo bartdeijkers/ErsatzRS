@@ -857,6 +857,7 @@ mod tests {
             channel_name: "Synthetic".to_owned(),
             catalog_available: true,
             authoring_selection: Some("observed-membership".to_owned()),
+            readiness: None,
             authoring_error: None,
             effective_authoring: None,
             effective_authoring_error: None,
@@ -971,6 +972,7 @@ mod tests {
                 data.outputs = Some(TeletextChannelOutputObservations {
                     outputs: vec![],
                     incomplete: false,
+                    last_failure: None,
                 });
                 assert!(output_status::view(&data)
                     .to_html()
@@ -995,6 +997,7 @@ mod tests {
                         phase: Phase::Waiting,
                     }],
                     incomplete: true,
+                    last_failure: None,
                 });
                 let html = output_status::view(&data).to_html();
                 for text in [

@@ -596,6 +596,83 @@ impl TeletextCarousel {
         Ok(None)
     }
 
+    /// Account one 20 ms output interval in which the most recently planned
+    /// batch found no null capacity and remains pending for a later interval.
+    ///
+    /// The carousel clock follows physical time, so the existing acquisition
+    /// restart decision keeps measuring the real EN 300 706 B.6 repetition
+    /// interval. A delay that would leave no room to finish the pending batch,
+    /// the rest of the current sweep or display, the closing FF and the existing
+    /// placement margin before the 20 s bound is rejected instead of emitting a
+    /// late acquisition cycle.
+    /// # Errors
+    /// Rejects clock overflow or a delay that would break the B.6 bound; both
+    /// leave the cursor unchanged.
+    pub(super) fn defer_pending_batch(&mut self) -> Result<(), TeletextTransportError> {
+        let next = self
+            .ticks
+            .checked_add(STEP_TICKS)
+            .ok_or(TeletextTransportError::ClockOverflow)?;
+        if self.content.has_acquisition() {
+            let elapsed = usize::try_from((next - self.resource_start_ticks) / STEP_TICKS)
+                .map_err(|_| TeletextTransportError::ClockOverflow)?;
+            let batches = elapsed
+                .checked_add(self.committed_cycle_batches())
+                .ok_or(TeletextTransportError::ClockOverflow)?;
+            if batches > MAX_RESOURCE_CYCLE_BATCHES {
+                return Err(TeletextTransportError::CycleTiming {
+                    batches,
+                    maximum: MAX_RESOURCE_CYCLE_BATCHES,
+                });
+            }
+        }
+        self.ticks = next;
+        Ok(())
+    }
+
+    /// Transport packet counts of the batches that follow a page header that
+    /// was just planned, in transmission order. Empty when the most recently
+    /// planned batch was not a header or the page has no further packets.
+    pub(super) fn header_continuation_packets(&self) -> Vec<usize> {
+        if self.unit != 1 || self.page >= self.content.page_count() {
+            return Vec::new();
+        }
+        self.content.page(self.page).0[1..]
+            .chunks(MAX_BATCH_UNITS)
+            .map(|units| (units.len() + 1).div_ceil(4))
+            .collect()
+    }
+
+    /// Batches this acquisition cycle has already committed to before the next
+    /// restart decision: the pending batch, the rest of a started page, any
+    /// remaining resource sweep plus the largest display it may resume, the
+    /// closing FF and the existing placement margin.
+    fn committed_cycle_batches(&self) -> usize {
+        let resources = self.content.resource_count();
+        let pages = self.content.page_count();
+        let mut total = 1 + 1 + RESOURCE_WINDOW_MARGIN;
+        let mut next_page = self.page;
+        if self.unit > 0 && self.page < pages {
+            let units = self.content.page(self.page).0;
+            total += units
+                .len()
+                .saturating_sub(self.unit)
+                .div_ceil(MAX_BATCH_UNITS);
+            next_page += 1;
+        }
+        if self.magazine_pending || self.page < resources {
+            total += usize::from(self.magazine_pending);
+            total += (next_page.min(resources)..resources)
+                .map(|page| page_batches(self.content.page(page).0))
+                .sum::<usize>();
+            total += (resources..pages)
+                .map(|page| page_batches(self.content.page(page).0))
+                .max()
+                .unwrap_or(0);
+        }
+        total
+    }
+
     /// Plan the next bounded batch, leaving a 20 ms presentation interval.
     /// # Errors
     /// Clock overflow leaves the cursor and encoded set unchanged.

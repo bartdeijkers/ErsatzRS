@@ -25,6 +25,9 @@ const TELETEXT_OUTPUT_INVALID_BRIEF: &str = "Teletext output settings are invali
 const TELETEXT_OUTPUT_INVALID_MESSAGE: &str = "The teletext output settings are invalid. Ordinary playback continues without adding teletext. Correct the settings to enable teletext output.";
 const TELETEXT_OUTPUT_UNREADABLE_BRIEF: &str = "Teletext output settings could not be read";
 const TELETEXT_OUTPUT_UNREADABLE_MESSAGE: &str = "The teletext output settings could not be read. Ordinary playback continues without adding teletext. Check database availability and access.";
+const TELETEXT_TRANSPORT_TITLE: &str = "Teletext transport";
+const TELETEXT_TRANSPORT_BRIEF: &str = "A teletext output stopped on a transport failure";
+const TELETEXT_TRANSPORT_MESSAGE: &str = "The last authored teletext output stopped on a transport failure for channel(s) {channels} since teletext was last delivered there. Open the channel's teletext page: Teletext readiness shows the cause and the next step. Ordinary playback without teletext is unaffected.";
 const TELETEXT_AUTHORING_TITLE: &str = "Teletext authoring configuration";
 const TELETEXT_AUTHORING_ABSENT_BRIEF: &str = "Teletext authoring is not configured";
 const TELETEXT_AUTHORING_ABSENT_MESSAGE: &str = "No authoring policy is configured. Draft preparation and preview are unavailable; ordinary playback is unaffected.";
@@ -43,9 +46,20 @@ pub struct NativeAdminHealthRuntime {
     startup_errors: u32,
     startup_warnings: u32,
     scan_activity: ScanOperationRegistry,
+    teletext_outputs: Option<super::teletext_output_observations::OutputObservations>,
 }
 
 impl NativeAdminHealthRuntime {
+    /// Report host-local teletext transport failures from the output registry.
+    #[must_use]
+    pub(super) fn with_teletext_outputs(
+        mut self,
+        outputs: super::teletext_output_observations::OutputObservations,
+    ) -> Self {
+        self.teletext_outputs = Some(outputs);
+        self
+    }
+
     #[must_use]
     pub fn new(
         pool: DbPool,
@@ -62,6 +76,7 @@ impl NativeAdminHealthRuntime {
             startup_errors,
             startup_warnings,
             scan_activity,
+            teletext_outputs: None,
         }
     }
 
@@ -71,7 +86,10 @@ impl NativeAdminHealthRuntime {
         results.retain(|result| {
             !matches!(
                 result.title.as_str(),
-                SCAN_WORKER_TITLE | TELETEXT_OUTPUT_TITLE | TELETEXT_AUTHORING_TITLE
+                SCAN_WORKER_TITLE
+                    | TELETEXT_OUTPUT_TITLE
+                    | TELETEXT_AUTHORING_TITLE
+                    | TELETEXT_TRANSPORT_TITLE
             )
         });
         if !self.scan_activity.is_worker_available() {
@@ -87,6 +105,13 @@ impl NativeAdminHealthRuntime {
         }
         results.push(teletext_output_configuration(&self.pool).await);
         results.push(teletext_authoring_configuration(&self.pool).await);
+        if let Some(result) = self
+            .teletext_outputs
+            .as_ref()
+            .and_then(teletext_transport_failures)
+        {
+            results.push(result);
+        }
         results
     }
 
@@ -105,6 +130,27 @@ impl NativeAdminHealthRuntime {
             update_check_error: runtime.acquisition.update_check_error.clone(),
         }
     }
+}
+
+fn teletext_transport_failures(
+    outputs: &super::teletext_output_observations::OutputObservations,
+) -> Option<HealthCheckResult> {
+    let failures = outputs.failures();
+    let first = failures.first()?.0;
+    let channels = failures
+        .iter()
+        .map(|(channel, _)| channel.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(
+        HealthCheckResult::new(
+            TELETEXT_TRANSPORT_TITLE,
+            HealthCheckStatus::Warning,
+            TELETEXT_TRANSPORT_MESSAGE.replace("{channels}", &channels),
+            TELETEXT_TRANSPORT_BRIEF,
+        )
+        .with_link(format!("/channels/{first}/teletext")),
+    )
 }
 
 async fn teletext_output_configuration(pool: &DbPool) -> HealthCheckResult {
@@ -259,6 +305,49 @@ mod tests {
             "fresh configuration replaces rather than duplicates cached rows"
         );
         rows[0]
+    }
+
+    #[tokio::test]
+    async fn teletext_transport_failure_is_a_linked_warning_for_its_channel_only() {
+        use super::super::teletext_output_observations::OutputObservations;
+        use ersatzrs_domain::{
+            TeletextOutputFailureKind, TeletextOutputObservation, TeletextOutputObservationPhase,
+            TeletextOutputSelectionObservation,
+        };
+        let outputs = OutputObservations::default();
+        let runtime = health_fixture()
+            .await
+            .with_teletext_outputs(outputs.clone());
+        let quiet = runtime.run_health_checks(false).await.expect("health");
+        assert!(!quiet
+            .results
+            .iter()
+            .any(|row| row.title == TELETEXT_TRANSPORT_TITLE));
+        let owner = outputs
+            .register(
+                7,
+                TeletextOutputObservation {
+                    epoch: uuid::Uuid::new_v4(),
+                    requested: TeletextOutputSelectionObservation {
+                        sequence: 0,
+                        generation: None,
+                        authored: true,
+                    },
+                    applied: None,
+                    phase: TeletextOutputObservationPhase::Waiting,
+                },
+            )
+            .unwrap();
+        owner.failed(TeletextOutputFailureKind::TransportCapacity);
+        drop(owner);
+        let failed = runtime.run_health_checks(false).await.expect("health");
+        let row = configuration_row(&failed.results, TELETEXT_TRANSPORT_TITLE);
+        assert_eq!(row.status, HealthCheckStatus::Warning);
+        assert!(row.message.contains("channel(s) 7 "));
+        assert_eq!(
+            row.link.as_ref().map(|link| link.link.as_str()),
+            Some("/channels/7/teletext")
+        );
     }
 
     #[tokio::test]

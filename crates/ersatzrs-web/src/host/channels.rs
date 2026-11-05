@@ -30,6 +30,13 @@ impl NativeChannelRuntime {
             teletext_outputs: OutputObservations::default(),
         }
     }
+
+    /// Share one diagnostics registry with the admin Health runtime.
+    #[must_use]
+    pub(super) fn with_teletext_outputs(mut self, outputs: OutputObservations) -> Self {
+        self.teletext_outputs = outputs;
+        self
+    }
 }
 
 #[async_trait]
