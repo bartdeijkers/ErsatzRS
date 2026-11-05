@@ -568,6 +568,22 @@ jobs:
                   raise SystemExit('Artifact reuse references must be a JSON object')
           PYCODE
       - uses: actions/checkout@v7
+      - name: Free hosted runner disk and memory
+        # A standard hosted runner has 4 vCPUs, 16 GB RAM and about 14 GB of
+        # free disk; a full workspace test build exceeds that, and the runner
+        # then dies with "lost communication". Drop preinstalled toolchains CI
+        # does not use and add swap so linking large test binaries survives.
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && !inputs.reuse_artifacts }}
+        run: |
+          df -h / ; free -g
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/powershell /usr/local/julia* || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo fallocate -l 12G /mnt/ci-swap && sudo chmod 600 /mnt/ci-swap \
+            && sudo mkswap /mnt/ci-swap >/dev/null && sudo swapon /mnt/ci-swap || true
+          df -h / ; free -g
+          # Incremental state roughly doubles target/; a cold hosted build gains nothing from it.
+          echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
       - name: Reuse verified CI artifacts
         id: reuse
         if: ${{ inputs.reuse_artifacts != '' }}

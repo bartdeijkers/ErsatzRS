@@ -139,7 +139,10 @@ step never fails the run, and its job summary says that the fallback is
 unavailable. Preflight warns two weeks before the token expires. Choose the
 longest expiry that the token settings allow, and renew it when warned. Pull requests from forks never receive the secret
 and therefore always stay on the self-hosted pool. Hosted runs are slower
-(four vCPUs, cold Cargo cache) but are free for this public repository.
+(four vCPUs, cold Cargo cache) but are free for this public repository. Their build
+first removes unused preinstalled toolchains, adds swap and disables incremental
+compilation, because a full workspace test build does not fit a standard hosted
+runner otherwise.
 
 For a dependency-audit correction, use the existing workflow's focused mode:
 
