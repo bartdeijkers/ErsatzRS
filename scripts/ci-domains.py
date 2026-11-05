@@ -156,7 +156,9 @@ def select(paths, members=None, specs=None, importers=importers):
             everything(f"{path} is shared build/CI input")
             continue
         if TELETEXT_PATH.search(path):
-            out["teletext_rust"] = True
+            # A Teletext spec or helper needs only the Teletext browser suite.
+            if not path.startswith("tests/e2e/"):
+                out["teletext_rust"] = True
             out["teletext_browser"] = True
         if NEXT_PATH.search(path):
             out["next"] = True
@@ -229,6 +231,34 @@ def select(paths, members=None, specs=None, importers=importers):
     return out
 
 
+def archive_packages(selection):
+    """Workspace packages whose test binaries the nextest archive must hold:
+    the touched crates (the build adds their dependents) plus the crates the
+    Teletext and Next jobs run tests from. Empty means the whole workspace."""
+    if selection["everything"]:
+        return []
+    packages = set(selection["rust_packages"])
+    if selection["teletext_rust"] or selection["next"]:
+        packages |= {"ersatzrs-infra", "ersatzrs-web"}
+    # xtask is always built; an archive of it alone keeps the Test job's
+    # filter valid when no Rust test is selected.
+    return sorted(packages or {"xtask"})
+
+
+def reverse_closure(packages, metadata):
+    """`packages` plus every workspace member depending on them (any kind)."""
+    members = {p["name"]: p for p in metadata["packages"] if p["id"] in metadata["workspace_members"]}
+    selected = set(packages)
+    changed = True
+    while changed:
+        changed = False
+        for name, package in members.items():
+            if name not in selected and any(d["name"] in selected for d in package["dependencies"]):
+                selected.add(name)
+                changed = True
+    return sorted(selected)
+
+
 def nextest_filter(packages, members):
     """Filterset narrowing the general Rust selection to the touched crates."""
     if not packages or set(packages) >= set(members):
@@ -245,13 +275,18 @@ def spec_filter(specs):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=("select",))
-    parser.add_argument("files", type=Path)
+    parser.add_argument("command", choices=("select", "closure"))
+    parser.add_argument("files", type=Path, help="changed paths (select) or cargo metadata JSON (closure)")
+    parser.add_argument("packages", nargs="*", help="closure: the packages to close over")
     args = parser.parse_args()
+    if args.command == "closure":
+        print(" ".join(reverse_closure(args.packages, json.loads(args.files.read_text()))))
+        return
     paths = [line.strip() for line in args.files.read_text().splitlines() if line.strip()]
     members = workspace_members()
     result = select(paths, members)
     result["nextest_filter"] = nextest_filter(result["rust_packages"], members)
+    result["archive_packages"] = archive_packages(result)
     general = result["general_specs"]
     result["general_filter"] = "" if general == "all" else (spec_filter(general) if general else "")
     json.dump(result, sys.stdout, sort_keys=True)

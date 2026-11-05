@@ -32,7 +32,15 @@ release section when tagging a release.
   touched admin areas plus a hydration smoke set. A merge whose code its pull
   request already tested is not rerun; a nightly full run on `main` covers
   everything else, including Firefox. Browser suites wait for a passing `Test`
-  job, and the build uses six parallel compile jobs instead of one.
+  job, and the build uses six parallel compile jobs instead of one and
+  compiles only the test binaries a pull request selects. Browser suites of
+  different workflow runs no longer run at the same time on the shared runner
+  machine, which also stops their fixed ports from colliding.
+- CI moves a run to GitHub-hosted runners when no self-hosted runner is online
+  at its start, once the optional `CI_RUNNER_STATUS_TOKEN` secret is set.
+  On such a four-CPU runner the CPU-bound capacity proofs (a 4K Next stream and
+  a JPEG XL broadcast graph) are reported as skipped, not run with weaker
+  budgets.
 - The daily progress and nightly clippy-cleanup routines now land their
   commits through an auto-merged pull request instead of pushing to `main`.
 - Defer Docker image delivery for application release 1.2.0 by maintainer

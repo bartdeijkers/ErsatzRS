@@ -829,17 +829,38 @@ class FocusedAuditSelection(unittest.TestCase):
             build_env = {}
             for key in ("BUILD_RUST", "BUILD_WEB"):
                 expression = re.search(rf"^      {key}: (.+)$", self.jobs["build"], re.M)[1]
-                build_env[key] = str(self.evaluate(expression, inputs, SimpleNamespace())).lower()
+                build_env[key] = str(self.evaluate(expression, inputs, preflight())).lower()
             self.assertEqual(build_env, {"BUILD_RUST": "false", "BUILD_WEB": "false"})
             steps = re.split(r"^      - ", self.jobs["build"], flags=re.M)[1:]
             active = []
             for step in steps:
                 condition = re.search(r"^        if: (.+)$", step, re.M)
-                if not condition or self.evaluate(condition[1], inputs, SimpleNamespace(), SimpleNamespace(**build_env)):
+                if not condition or self.evaluate(condition[1], inputs, preflight(), SimpleNamespace(**build_env)):
                     active.append(step.splitlines()[0])
             self.assertEqual(active, ["name: Validate dispatch mode", "uses: actions/checkout@v7", "name: Reuse verified CI artifacts"])
         self.assertIn("CI_REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}", self.workflow)
         self.assertIn("REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}", self.jobs["build"])
+
+    def test_runner_pool_falls_back_to_github_hosted(self):
+        runs_on = {name: re.search(r"^    runs-on: (.+)$", body, re.M)[1]
+                   for name, body in self.jobs.items() if name != "preflight"
+                   and re.search(r"^    runs-on: .*self-hosted", body, re.M)}
+        self.assertGreater(len(runs_on), 5)
+        for name, expression in runs_on.items():
+            with self.subTest(job=name):
+                self.assertIn("needs.preflight.outputs.pool == 'github-hosted'", expression)
+                needs = re.search(r"^    needs: (.+)$", self.jobs[name], re.M)
+                self.assertTrue(needs and "preflight" in needs[1], f"{name} must need preflight")
+                pick = re.search(r"fromJSON\((.+?) && '\"", expression)[1]
+                for runner, pool, hosted in (("", "", False), ("", "github-hosted", True),
+                                             ("self-hosted", "", False), ("github-hosted", "", True)):
+                    self.assertEqual(self.evaluate(pick, dict(runner=runner), preflight(pool=pool)), hosted)
+        step = self.jobs["preflight"].split("name: Choose the runner pool", 1)[1]
+        self.assertIn("if: ${{ !inputs.runner }}", step)
+        self.assertIn("secrets.CI_RUNNER_STATUS_TOKEN", step)
+        self.assertIn("continue-on-error: true", step.split("script:", 1)[0])
+        self.assertIn("github-authentication-token-expiration", step)
+        self.assertIn("pool: ${{ steps.pool.outputs.pool }}", self.jobs["preflight"])
 
     def test_reuse_has_no_download_fallback_and_has_an_honest_job_name(self):
         self.assertIn("name: ${{ inputs.reuse_artifacts && 'Verify reused CI artifacts' || 'Build CI artifacts' }}",

@@ -80,6 +80,7 @@ class DomainSelection(unittest.TestCase):
         self.assertIn("watermark-preview", result["general_specs"])
         teletext = select("tests/e2e/teletext-editor-flow.spec.ts")
         self.assertTrue(teletext["teletext_browser"])
+        self.assertFalse(teletext["teletext_rust"])
         self.assertNotIn("teletext-editor-flow", teletext["general_specs"])
 
     def test_shared_playwright_module_selects_its_importers(self):
@@ -110,6 +111,28 @@ class DomainSelection(unittest.TestCase):
             self.assertIn(crate, MEMBERS)
         for smoke in domains.SMOKE_SPECS:
             self.assertIn(smoke, SPECS)
+
+    def test_archive_holds_what_the_selected_jobs_run(self):
+        self.assertEqual(domains.archive_packages(select("Cargo.toml")), [])
+        self.assertEqual(domains.archive_packages(select("tests/e2e/watermark-preview.spec.ts")), ["xtask"])
+        scanner = select("crates/ersatzrs-scanner/src/lib.rs")
+        self.assertEqual(domains.archive_packages(scanner), ["ersatzrs-scanner"])
+        nxt = select("crates/ersatzrs-infra/src/next_engine/coordinator.rs")
+        self.assertEqual(domains.archive_packages(nxt), ["ersatzrs-infra", "ersatzrs-web"])
+
+    def test_reverse_closure_follows_workspace_dependents(self):
+        metadata = {
+            "workspace_members": ["a", "b", "c", "d"],
+            "packages": [
+                {"id": "a", "name": "core", "dependencies": []},
+                {"id": "b", "name": "infra", "dependencies": [{"name": "core"}]},
+                {"id": "c", "name": "web", "dependencies": [{"name": "infra"}, {"name": "serde"}]},
+                {"id": "d", "name": "scanner", "dependencies": [{"name": "core"}]},
+            ],
+        }
+        self.assertEqual(domains.reverse_closure(["infra"], metadata), ["infra", "web"])
+        self.assertEqual(domains.reverse_closure(["core"], metadata), ["core", "infra", "scanner", "web"])
+        self.assertEqual(domains.reverse_closure(["web"], metadata), ["web"])
 
     def test_filters(self):
         self.assertEqual(domains.nextest_filter([], MEMBERS), "none()")
