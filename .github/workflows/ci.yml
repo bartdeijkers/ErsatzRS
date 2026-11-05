@@ -139,6 +139,12 @@ permissions:
 # selection" for the recovery step if this directory ever looks stale.
 env:
   CARGO_TARGET_DIR: ${{ github.workspace }}/../ci-target
+  # insta otherwise runs `cargo metadata` to find the workspace root. Execution
+  # jobs consume prebuilt binaries without installing a toolchain, so on a
+  # fresh GitHub-hosted runner every snapshot test makes rustup install it at
+  # once; those racing installs fail and the snapshots resolve to the wrong
+  # directory.
+  INSTA_WORKSPACE_ROOT: ${{ github.workspace }}
   # Same-host runners share the user's cache by default. Other machines safely
   # miss this cache and download the unchanged GitHub artifact instead.
   CI_LOCAL_ARTIFACT_CACHE: ${{ vars.CI_LOCAL_ARTIFACT_CACHE }}
