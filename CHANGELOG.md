@@ -31,6 +31,9 @@ release section when tagging a release.
   machine, which also stops their fixed ports from colliding.
 - CI moves a run to GitHub-hosted runners when no self-hosted runner is online
   at its start, once the optional `CI_RUNNER_STATUS_TOKEN` secret is set.
+  On such a four-CPU runner the CPU-bound capacity proofs (a 4K Next stream and
+  a JPEG XL broadcast graph) are reported as skipped, not run with weaker
+  budgets.
 - The daily progress and nightly clippy-cleanup routines now land their
   commits through an auto-merged pull request instead of pushing to `main`.
 - Defer Docker image delivery for application release 1.2.0 by maintainer

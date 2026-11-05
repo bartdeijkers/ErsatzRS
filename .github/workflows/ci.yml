@@ -881,7 +881,15 @@ jobs:
         env:
           NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
         run: |
-          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py next-recovery "$NEXT_CASE_SET") & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/next-engine/tests.log
+          filter="$(python3 scripts/ci-teletext-selection.py next-recovery "$NEXT_CASE_SET") & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)"
+          # CPU-bound real-time budgets run only on runners with more than four
+          # CPUs; elsewhere they are reported as skipped, never relaxed.
+          if ! python3 scripts/ci-capacity-proofs.py capable; then
+            filter="($filter) & $(python3 scripts/ci-capacity-proofs.py nextest-exclude)"
+            python3 scripts/ci-capacity-proofs.py report next | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Capacity proofs skipped::This runner has $(nproc) CPUs; the Next capacity proofs need more than four."
+          fi
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$filter" 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
@@ -1134,6 +1142,13 @@ jobs:
           else
             playwright_args+=("$(python3 scripts/ci-teletext-selection.py browser "$BROWSER_SUITE")")
           fi
+          # CPU-bound real-time budgets run only on runners with more than four
+          # CPUs; elsewhere they are reported as skipped, never relaxed.
+          if [[ -z "$BROWSER_ONLY" || "$BROWSER_ONLY" == 'none' ]] && ! python3 scripts/ci-capacity-proofs.py capable; then
+            playwright_args+=(--grep-invert "$(python3 scripts/ci-capacity-proofs.py browser-grep)")
+            python3 scripts/ci-capacity-proofs.py report browser | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Capacity proofs skipped::This runner has $(nproc) CPUs; the browser capacity proofs need more than four."
+          fi
           # Both self-hosted runners share one machine: never run two browser
           # suites at once (it made results unreliable and their fixed ports
           # collide), also across workflow runs.
@@ -1233,6 +1248,7 @@ jobs:
           python3 scripts/ci-teletext-selection_test.py
           python3 scripts/ci-domains_test.py
           python3 scripts/e2e/host-lock_test.py
+          python3 scripts/ci-capacity-proofs_test.py
           python3 scripts/ci-build-artifacts_test.py
           python3 scripts/e2e/playwright-e2e_test.py
           python3 scripts/release/test-docker-recovery.py

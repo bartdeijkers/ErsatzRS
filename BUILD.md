@@ -143,12 +143,18 @@ and therefore always stay on the self-hosted pool. Hosted runs are slower
 first removes unused preinstalled toolchains, adds swap and disables incremental
 compilation, because a full workspace test build does not fit a standard hosted
 runner otherwise. Hosted Next engine runs install `libvpl2` and
-`fonts-noto-cjk`, which the self-hosted runners carry. Two capacity proofs are
-CPU-bound and do not fit four hosted vCPUs: the Next 4K TrueHD late-PGS
-readiness budget of 30 seconds (about 35 seconds on hosted) and the Playwright
-`channel-watch` case that decodes three full-frame JPEG XL carriers in a native
-1080p graph. A hosted run that selects either needs a self-hosted re-run before
-`CI ok` passes; their budgets are not relaxed for hosted runs.
+`fonts-noto-cjk`, which the self-hosted runners carry.
+
+**Capacity proofs.** A few cases prove a fixed real-time budget rather than
+behavior and are CPU-bound: the Next 4K TrueHD late-PGS readiness budget of 30
+seconds (about 35 seconds on four vCPUs) and the Playwright `channel-watch` case
+that decodes three full-frame JPEG XL carriers in a native 1080p graph.
+[`scripts/ci-capacity-proofs.py`](scripts/ci-capacity-proofs.py) lists them.
+The Next and Playwright jobs run them only on a runner with more than four CPUs.
+On a smaller runner they leave them out, add a notice, and list them in the job
+summary as skipped. Their budgets are never relaxed. The self-hosted runners
+and the nightly full run on `main` keep proving them; a change merged from a
+hosted run is covered by the next nightly run on the self-hosted runners.
 
 For a dependency-audit correction, use the existing workflow's focused mode:
 
