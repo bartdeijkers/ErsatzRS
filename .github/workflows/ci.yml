@@ -869,6 +869,17 @@ jobs:
           "$CI_PROVISION_RUNTIME" "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/next-engine/ffmpeg-runtime.log
           python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/next-engine/rtsp-test-server.log
           echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
+      - name: Install hosted runtime libraries
+        # The self-hosted runners carry these system packages. Real-engine
+        # tests need the oneVPL dispatcher (QSV fallback with no Intel device)
+        # and CJK fonts (song title rendering); a stock hosted image has neither.
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libvpl2 fonts-noto-cjk
+          # Real-engine 4K cases keep their readiness budgets only when a
+          # four-vCPU hosted runner is not also encoding three other streams.
+          echo "NEXTEST_TEST_THREADS=2" >> "$GITHUB_ENV"
       - name: Next components, real-engine decoding and HTTP EOF
         env:
           NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
