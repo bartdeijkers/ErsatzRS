@@ -1579,8 +1579,8 @@ mod tests {
         // `std::path::Path::parent` only splits on `/` on Unix, which is
         // what produced the empty folders in the /system/health message.
         assert_eq!(
-            parent_folder(r"D:\Downloads\TV\3 Body Problem (2024)\Season 1\ep.mkv").as_deref(),
-            Some(r"D:\Downloads\TV\3 Body Problem (2024)\Season 1")
+            parent_folder(r"D:\Media\TV\Example Show (2024)\Season 1\ep.mkv").as_deref(),
+            Some(r"D:\Media\TV\Example Show (2024)\Season 1")
         );
         // Trailing separators must not produce an empty parent.
         assert_eq!(

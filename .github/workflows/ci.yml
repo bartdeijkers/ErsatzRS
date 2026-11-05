@@ -139,6 +139,12 @@ permissions:
 # selection" for the recovery step if this directory ever looks stale.
 env:
   CARGO_TARGET_DIR: ${{ github.workspace }}/../ci-target
+  # insta otherwise runs `cargo metadata` to find the workspace root. Execution
+  # jobs consume prebuilt binaries without installing a toolchain, so on a
+  # fresh GitHub-hosted runner every snapshot test makes rustup install it at
+  # once; those racing installs fail and the snapshots resolve to the wrong
+  # directory.
+  INSTA_WORKSPACE_ROOT: ${{ github.workspace }}
   # Same-host runners share the user's cache by default. Other machines safely
   # miss this cache and download the unchanged GitHub artifact instead.
   CI_LOCAL_ARTIFACT_CACHE: ${{ vars.CI_LOCAL_ARTIFACT_CACHE }}
@@ -182,6 +188,9 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      # `github-hosted` when no self-hosted runner is online (see the
+      # "Choose the runner pool" step); empty means the self-hosted pool.
+      pool: ${{ steps.pool.outputs.pool }}
       skip: ${{ steps.select.outputs.skip || steps.duplicate.outputs.skip }}
       lane: ${{ steps.select.outputs.lane || steps.duplicate.outputs.lane }}
       tree: ${{ steps.duplicate.outputs.tree }}
@@ -192,6 +201,7 @@ jobs:
       run_browser: ${{ steps.select.outputs.run_browser }}
       pr_matrix: ${{ steps.select.outputs.pr_matrix }}
       nextest_filter: ${{ steps.select.outputs.nextest_filter }}
+      archive_packages: ${{ steps.select.outputs.archive_packages }}
       general_filter: ${{ steps.select.outputs.general_filter }}
       deselected: ${{ steps.select.outputs.deselected }}
     steps:
@@ -380,6 +390,7 @@ jobs:
           print(f"run_browser={str(bool(rows)).lower()}")
           print("pr_matrix=" + json.dumps({"include": rows}, separators=(",", ":")))
           print(f"nextest_filter={s['nextest_filter']}")
+          print("archive_packages=" + " ".join(s["archive_packages"]))
           print(f"general_filter={s['general_filter']}")
           print("deselected=" + json.dumps(deselected, separators=(",", ":")))
           PY
@@ -389,12 +400,66 @@ jobs:
             cat "$RUNNER_TEMP/selection.json"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - id: pool
+        name: Choose the runner pool
+        if: ${{ !inputs.runner }}
+        # The pool choice is an optimisation: whatever goes wrong here, the run
+        # keeps the self-hosted pool instead of failing.
+        continue-on-error: true
+        uses: actions/github-script@v9
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.CI_RUNNER_STATUS_TOKEN }}
+        with:
+          script: |
+            // Listing self-hosted runners needs repository Administration
+            // (read), which GITHUB_TOKEN cannot have. Without the optional
+            // CI_RUNNER_STATUS_TOKEN secret (and on fork pull requests, which
+            // get no secrets) the run keeps the self-hosted pool and queues
+            // until a runner comes online, as before.
+            const token = process.env.RUNNER_STATUS_TOKEN;
+            if (!token) {
+              core.info('No CI_RUNNER_STATUS_TOKEN: using the self-hosted pool.');
+              return;
+            }
+            const keepSelfHosted = async (reason) => {
+              core.warning(`${reason} Using the self-hosted pool.`);
+              await core.summary.addRaw(`:warning: Runner fallback unavailable: ${reason} `
+                + 'This run uses the self-hosted pool. Renew the `CI_RUNNER_STATUS_TOKEN` '
+                + 'repository secret to restore the GitHub-hosted fallback.\n').write();
+            };
+            let response;
+            try {
+              response = await getOctokit(token).request(
+                'GET /repos/{owner}/{repo}/actions/runners',
+                { owner: context.repo.owner, repo: context.repo.repo, per_page: 100 },
+              );
+            } catch (error) {
+              const expired = error.status === 401 ? ' (expired or revoked token)' : '';
+              await keepSelfHosted(`Could not read runner status: HTTP ${error.status ?? '?'}${expired}, ${error.message}.`);
+              return;
+            }
+            // Personal access tokens report their expiry; warn two weeks ahead.
+            const expiry = Date.parse(response.headers['github-authentication-token-expiration'] ?? '');
+            if (!Number.isNaN(expiry) && expiry - Date.now() < 14 * 24 * 3600 * 1000) {
+              core.warning(`CI_RUNNER_STATUS_TOKEN expires on ${new Date(expiry).toISOString().slice(0, 10)}; renew it to keep the hosted fallback.`);
+            }
+            const runners = response.data.runners ?? [];
+            const usable = runners.filter((runner) => runner.status === 'online'
+              && ['self-hosted', 'Linux'].every(
+                (label) => (runner.labels ?? []).some((l) => l.name === label)));
+            if (usable.length > 0) {
+              core.info(`Self-hosted runners online: ${usable.map((r) => r.name).join(', ')}`);
+              return;
+            }
+            core.setOutput('pool', 'github-hosted');
+            core.notice('No self-hosted runner is online: this run uses GitHub-hosted runners.');
+
 
   fmt:
     name: Format
     needs: preflight
     if: needs.preflight.outputs.skip != 'true'
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -416,7 +481,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
     needs: [preflight, fmt]
@@ -433,7 +498,7 @@ jobs:
       # of it there would risk overwriting fresher local objects with a
       # staler blob for no benefit.
       - uses: Swatinem/rust-cache@v2
-        if: ${{ inputs.runner == 'github-hosted' }}
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
         with:
           # Self-hosted runner shares $CARGO_HOME/bin with the developer
           # shell, so don't let rust-cache prune cargo-leptos /
@@ -451,7 +516,7 @@ jobs:
     name: ${{ inputs.reuse_artifacts && 'Verify reused CI artifacts' || 'Build CI artifacts' }}
     needs: [preflight, fmt]
     if: ${{ always() && !cancelled() && !inputs.audit_only && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     timeout-minutes: 120
     outputs:
       rust_artifact: ${{ steps.identity.outputs.rust_artifact }}
@@ -465,11 +530,12 @@ jobs:
     env:
       # Kether V (Ryzen 9 5900X, 24 threads, 64 GB) hosts both self-hosted
       # runners: 6 jobs each leaves half the threads free when both build.
-      CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '4' || '6' }}
+      CARGO_BUILD_JOBS: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '4' || '6' }}
       CARGO_PROFILE_TEST_DEBUG: "0"
-      RUSTFLAGS: ${{ inputs.runner == 'github-hosted' && '-C link-arg=-fuse-ld=lld' || '' }}
+      RUSTFLAGS: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '-C link-arg=-fuse-ld=lld' || '' }}
       LEPTOS_OUTPUT_NAME: ersatzrs-web
       LEPTOS_HASH_FILES: "false"
+      ARCHIVE_PACKAGES: ${{ needs.preflight.outputs.archive_packages }}
       BUILD_RUST: ${{ !inputs.reuse_artifacts && (!inputs.browser_only || inputs.browser_only == 'none') }}
       BUILD_WEB: ${{ !inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && inputs.teletext_only != '1.5-rust' }}
     steps:
@@ -508,6 +574,22 @@ jobs:
                   raise SystemExit('Artifact reuse references must be a JSON object')
           PYCODE
       - uses: actions/checkout@v7
+      - name: Free hosted runner disk and memory
+        # A standard hosted runner has 4 vCPUs, 16 GB RAM and about 14 GB of
+        # free disk; a full workspace test build exceeds that, and the runner
+        # then dies with "lost communication". Drop preinstalled toolchains CI
+        # does not use and add swap so linking large test binaries survives.
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && !inputs.reuse_artifacts }}
+        run: |
+          df -h / ; free -g
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/powershell /usr/local/julia* || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo fallocate -l 12G /mnt/ci-swap && sudo chmod 600 /mnt/ci-swap \
+            && sudo mkswap /mnt/ci-swap >/dev/null && sudo swapon /mnt/ci-swap || true
+          df -h / ; free -g
+          # Incremental state roughly doubles target/; a cold hosted build gains nothing from it.
+          echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
       - name: Reuse verified CI artifacts
         id: reuse
         if: ${{ inputs.reuse_artifacts != '' }}
@@ -527,12 +609,12 @@ jobs:
         if: ${{ inputs.reset_target_dir == true && !inputs.reuse_artifacts }}
         run: rm -rf "$CARGO_TARGET_DIR"
       - uses: Swatinem/rust-cache@v2
-        if: ${{ inputs.runner == 'github-hosted' && !inputs.reuse_artifacts }}
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && !inputs.reuse_artifacts }}
         with:
           key: ci-build
           cache-bin: "true"
       - name: Install LLVM linker
-        if: ${{ inputs.runner == 'github-hosted' && !inputs.reuse_artifacts }}
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && !inputs.reuse_artifacts }}
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes lld
@@ -569,7 +651,18 @@ jobs:
           cargo build --locked --bin ersatzrs-web
           cp "$CARGO_TARGET_DIR/debug/ersatzrs-web" ci-artifacts/build-rust/bin/ersatzrs-web-smoke
           cp "$(command -v cargo-nextest)" ci-artifacts/build-rust/bin/cargo-nextest
-          cargo nextest archive --locked --workspace --lib --bins --tests --archive-file ci-artifacts/build-rust/nextest.tar.zst
+          # A `pr` lane run archives only the selected crates and every crate
+          # depending on them; every other run archives the whole workspace.
+          scope=(--workspace)
+          if [[ -n "$ARCHIVE_PACKAGES" ]]; then
+            cargo metadata --locked --no-deps --format-version 1 > "$RUNNER_TEMP/metadata.json"
+            scope=()
+            for package in $(python3 scripts/ci-domains.py closure "$RUNNER_TEMP/metadata.json" $ARCHIVE_PACKAGES); do
+              scope+=(--package "$package")
+            done
+          fi
+          echo "nextest archive scope: ${scope[*]}"
+          cargo nextest archive --locked "${scope[@]}" --lib --bins --tests --archive-file ci-artifacts/build-rust/nextest.tar.zst
           python3 scripts/ci-build-artifacts.py pack --kind rust --directory ci-artifacts/build-rust \
             --archive ci-artifacts/rust.tar.gz --sha "$GITHUB_SHA"
       - name: Build matched server and complete Leptos site
@@ -599,14 +692,14 @@ jobs:
             fi
           done
       - name: Publish local Rust artifact
-        if: ${{ inputs.runner != 'github-hosted' && env.BUILD_RUST == 'true' }}
+        if: ${{ (inputs.runner != 'github-hosted' && needs.preflight.outputs.pool != 'github-hosted') && env.BUILD_RUST == 'true' }}
         env:
           CI_ARTIFACT_KEY: ${{ steps.identity.outputs.rust_cache_key }}
         run: |
           python3 scripts/ci-build-artifacts.py publish-local --kind rust --archive ci-artifacts/rust.tar.gz \
             --sha "$GITHUB_SHA" --cache-key "$CI_ARTIFACT_KEY"
       - name: Publish local web artifact
-        if: ${{ inputs.runner != 'github-hosted' && env.BUILD_WEB == 'true' }}
+        if: ${{ (inputs.runner != 'github-hosted' && needs.preflight.outputs.pool != 'github-hosted') && env.BUILD_WEB == 'true' }}
         env:
           CI_ARTIFACT_KEY: ${{ steps.identity.outputs.web_cache_key }}
         run: |
@@ -627,7 +720,7 @@ jobs:
           compression-level: 0
           retention-days: 7
       - name: Bound completed self-hosted build cache
-        if: ${{ inputs.runner != 'github-hosted' && !inputs.reuse_artifacts }}
+        if: ${{ (inputs.runner != 'github-hosted' && needs.preflight.outputs.pool != 'github-hosted') && !inputs.reuse_artifacts }}
         run: |
           # All consumers use uploaded/local immutable copies, never this target.
           cache_kib=$(du -sk -- "$CARGO_TARGET_DIR" | awk '{print $1}')
@@ -645,7 +738,7 @@ jobs:
     name: Test
     needs: [preflight, build]
     if: ${{ always() && !cancelled() && needs.build.result == 'success' && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     env:
       NEXTEST_TEST_THREADS: "4"
       # Set only by a `pr` lane run: the touched crates and their dependents.
@@ -654,7 +747,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
         id: local_artifact
-        if: ${{ inputs.runner != 'github-hosted' }}
+        if: ${{ (inputs.runner != 'github-hosted' && needs.preflight.outputs.pool != 'github-hosted') }}
         env:
           CI_ARTIFACT_KEY: ${{ needs.build.outputs.rust_cache_key }}
           CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.rust_digest }}
@@ -704,12 +797,12 @@ jobs:
     defaults:
       run:
         shell: bash
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     needs: [preflight, build]
     if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.run_next != 'false' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 45
     env:
-      CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
+      CARGO_BUILD_JOBS: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '8' || '2' }}
       # Runtime fixtures share channel1's report path in this owned app-data root.
       NEXTEST_TEST_THREADS: "1"
       ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.9
@@ -717,7 +810,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
         id: local_artifact
-        if: ${{ inputs.runner != 'github-hosted' }}
+        if: ${{ (inputs.runner != 'github-hosted' && needs.preflight.outputs.pool != 'github-hosted') }}
         env:
           CI_ARTIFACT_KEY: ${{ needs.build.outputs.rust_cache_key }}
           CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.rust_digest }}
@@ -776,11 +869,27 @@ jobs:
           "$CI_PROVISION_RUNTIME" "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/next-engine/ffmpeg-runtime.log
           python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/next-engine/rtsp-test-server.log
           echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
+      - name: Install hosted runtime libraries
+        # The self-hosted runners carry these system packages. Real-engine
+        # tests need the oneVPL dispatcher (QSV fallback with no Intel device)
+        # and CJK fonts (song title rendering); a stock hosted image has neither.
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libvpl2 fonts-noto-cjk
       - name: Next components, real-engine decoding and HTTP EOF
         env:
           NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
         run: |
-          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$(python3 scripts/ci-teletext-selection.py next-recovery "$NEXT_CASE_SET") & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/next-engine/tests.log
+          filter="$(python3 scripts/ci-teletext-selection.py next-recovery "$NEXT_CASE_SET") & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)"
+          # CPU-bound real-time budgets run only on runners with more than four
+          # CPUs; elsewhere they are reported as skipped, never relaxed.
+          if ! python3 scripts/ci-capacity-proofs.py capable; then
+            filter="($filter) & $(python3 scripts/ci-capacity-proofs.py nextest-exclude)"
+            python3 scripts/ci-capacity-proofs.py report next | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Capacity proofs skipped::This runner has $(nproc) CPUs; the Next capacity proofs need more than four."
+          fi
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$filter" 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
@@ -824,7 +933,7 @@ jobs:
     defaults:
       run:
         shell: bash
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     needs: [preflight, build]
     if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.run_teletext != 'false' && !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 90
@@ -842,7 +951,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
         id: local_artifact
-        if: ${{ inputs.runner != 'github-hosted' }}
+        if: ${{ (inputs.runner != 'github-hosted' && needs.preflight.outputs.pool != 'github-hosted') }}
         env:
           CI_ARTIFACT_KEY: ${{ needs.build.outputs.rust_cache_key }}
           CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.rust_digest }}
@@ -921,7 +1030,7 @@ jobs:
 
   hydration:
     name: Playwright E2E (${{ matrix.suite }}, ${{ matrix.project }})
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     # Every selected job executes the same verified SSR/WASM build. Browser
     # suites start only after Test passed (or was not selected), so a red
     # Rust run stops before hours of browser time.
@@ -968,7 +1077,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Fetch local web artifact
         id: local_artifact
-        if: ${{ inputs.runner != 'github-hosted' }}
+        if: ${{ (inputs.runner != 'github-hosted' && needs.preflight.outputs.pool != 'github-hosted') }}
         env:
           CI_ARTIFACT_KEY: ${{ needs.build.outputs.web_cache_key }}
           CI_ARTIFACT_DIGEST: ${{ needs.build.outputs.web_digest }}
@@ -989,7 +1098,7 @@ jobs:
       - name: Hydration lint
         run: '"$CI_XTASK" hydration-lint -p ersatzrs-web'
       - uses: actions/cache@v6
-        if: ${{ inputs.runner == 'github-hosted' }}
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
         with:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -1033,7 +1142,17 @@ jobs:
           else
             playwright_args+=("$(python3 scripts/ci-teletext-selection.py browser "$BROWSER_SUITE")")
           fi
-          scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
+          # CPU-bound real-time budgets run only on runners with more than four
+          # CPUs; elsewhere they are reported as skipped, never relaxed.
+          if [[ -z "$BROWSER_ONLY" || "$BROWSER_ONLY" == 'none' ]] && ! python3 scripts/ci-capacity-proofs.py capable; then
+            playwright_args+=(--grep-invert "$(python3 scripts/ci-capacity-proofs.py browser-grep)")
+            python3 scripts/ci-capacity-proofs.py report browser | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Capacity proofs skipped::This runner has $(nproc) CPUs; the browser capacity proofs need more than four."
+          fi
+          # Both self-hosted runners share one machine: never run two browser
+          # suites at once (it made results unreliable and their fixed ports
+          # collide), also across workflow runs.
+          python3 scripts/e2e/host-lock.py -- scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
       - name: Upload Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@v7
@@ -1046,9 +1165,9 @@ jobs:
 
   deny:
     name: Cargo deny
-    needs: fmt
+    needs: [preflight, fmt]
     if: needs.fmt.result == 'success'
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -1062,8 +1181,8 @@ jobs:
 
   commitlint:
     name: Commit lint
-    needs: fmt
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    needs: [preflight, fmt]
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     if: ${{ !inputs.audit_only && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') }}
     permissions:
       contents: read
@@ -1095,7 +1214,7 @@ jobs:
       # Only needed on the GitHub-hosted fallback path: self-hosted runs
       # already have a warm ~/.npm cache from the shared, persistent $HOME.
       - uses: actions/cache@v6
-        if: ${{ inputs.runner == 'github-hosted' }}
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
         with:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -1113,7 +1232,7 @@ jobs:
     name: Documentation links
     needs: preflight
     if: ${{ !inputs.audit_only && needs.preflight.outputs.skip != 'true' }}
-    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Check Markdown files exist
@@ -1128,6 +1247,8 @@ jobs:
         run: |
           python3 scripts/ci-teletext-selection_test.py
           python3 scripts/ci-domains_test.py
+          python3 scripts/e2e/host-lock_test.py
+          python3 scripts/ci-capacity-proofs_test.py
           python3 scripts/ci-build-artifacts_test.py
           python3 scripts/e2e/playwright-e2e_test.py
           python3 scripts/release/test-docker-recovery.py

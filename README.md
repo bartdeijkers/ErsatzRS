@@ -52,8 +52,9 @@ library and create a playable channel.
 See [system requirements](docs/reference/system-requirements.md) for the package
 matrix, runtime requirements, and unverified platform/hardware combinations.
 macOS code compatibility is retained, but build, package, runtime and acceptance
-work is deferred by maintainer decision during the private-repository period.
-Explicit permission is required to resume; no verified macOS support is claimed.
+work is deferred by maintainer decision. Making the repository public did not
+lift that deferral; explicit permission is required to resume, and no verified
+macOS support is claimed.
 
 ## Operate your server
 
@@ -98,8 +99,13 @@ required available local gates. Whole-window acceptance remains open: macOS
 FFmpeg builds and dependent software/application proof are deferred until
 maintainer resume. Approved hardware/platform debt stays explicitly unverified.
 
-Teletext (Phase 9) and the "The Box" video-jukebox extension (Phase 10) are
-planned work. They are not advertised as features of this release.
+Teletext (Phase 9) is delivered since release 1.2.0: Level 1/1.5 authoring,
+preview, explicit publication and the teletext TV guide are accepted. Level 2.5
+is available as **experimental**; its enhanced-only acceptance is deferred. See
+the [teletext design interchange reference](docs/reference/teletext-design-interchange.md)
+and the teletext ADRs (0120-0124 and 0126) in [docs/adr/](docs/adr/). The "The Box"
+video-jukebox extension (Phase 10) is planned work and is not advertised as a
+feature.
 
 ## Develop and contribute
 
@@ -117,6 +123,12 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before making changes. The
 [architecture](ARCHITECTURE.md), [porting workflow](PORTING.md),
 [coding style](STYLE.md), [test contract](TEST.md), and
 [architectural decisions](docs/adr/) describe the project conventions.
+
+Changes reach `main` only through pull requests. `main` requires the single
+`CI ok` check, which passes only when every CI job passed; pull requests that
+touch only documentation get it within a minute. CI runs on the maintainer's
+self-hosted runners, so workflows for pull requests from forks start only
+after the maintainer approves them, and a full run can take several hours.
 
 ## Credits
 

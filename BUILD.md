@@ -123,6 +123,39 @@ separate hosted shards. Cargo tools are prepared in the build job; execution
 jobs use its verified nextest/helper executables. The full test selection remains
 intact. Hosted execution remains an explicit fallback rather than the default.
 
+**Automatic hosted fallback.** When the repository secret
+`CI_RUNNER_STATUS_TOKEN` is set, a run that was not dispatched with an explicit
+`runner` checks the runner status in Preflight. If no self-hosted runner with
+the `self-hosted` and `Linux` labels is online, every later job of that
+run uses GitHub-hosted runners instead of waiting in the queue; the run summary
+shows a notice. The decision is taken once, when the run starts: a run already
+waiting for a self-hosted runner does not move, and a runner that goes offline
+mid-run does not move the remaining jobs. Listing runners needs repository
+**Administration: read**, which `GITHUB_TOKEN` cannot be granted, so the secret
+holds a fine-grained personal access token limited to this repository with only
+that permission. Without the secret, or when the status call fails (for
+example an expired or revoked token), CI keeps using the self-hosted pool: the
+step never fails the run, and its job summary says that the fallback is
+unavailable. Preflight warns two weeks before the token expires. Choose the
+longest expiry that the token settings allow, and renew it when warned. Pull requests from forks never receive the secret
+and therefore always stay on the self-hosted pool. Hosted runs are slower
+(four vCPUs, cold Cargo cache) but are free for this public repository. Their build
+first removes unused preinstalled toolchains, adds swap and disables incremental
+compilation, because a full workspace test build does not fit a standard hosted
+runner otherwise. Hosted Next engine runs install `libvpl2` and
+`fonts-noto-cjk`, which the self-hosted runners carry.
+
+**Capacity proofs.** A few cases prove a fixed real-time budget rather than
+behavior and are CPU-bound: the Next 4K TrueHD late-PGS readiness budget of 30
+seconds (about 35 seconds on four vCPUs) and the Playwright `channel-watch` case
+that decodes three full-frame JPEG XL carriers in a native 1080p graph.
+[`scripts/ci-capacity-proofs.py`](scripts/ci-capacity-proofs.py) lists them.
+The Next and Playwright jobs run them only on a runner with more than four CPUs.
+On a smaller runner they leave them out, add a notice, and list them in the job
+summary as skipped. Their budgets are never relaxed. The self-hosted runners
+and the nightly full run on `main` keep proving them; a change merged from a
+hosted run is covered by the next nightly run on the self-hosted runners.
+
 For a dependency-audit correction, use the existing workflow's focused mode:
 
 ```bash
@@ -439,7 +472,9 @@ including Firefox.
 pull request's changed paths to work:
 
 - Rust tests: the touched crates and every crate that depends on them
-  (nextest `rdeps(...)`).
+  (nextest `rdeps(...)`). The build archives only those crates' test
+  binaries (plus `ersatzrs-infra`/`ersatzrs-web` when the Teletext or Next job
+  runs), so a change without Rust code skips most of the Rust build.
 - `Teletext 1.5` (Rust) and the Teletext browser suite: paths naming teletext;
   the Rust job also runs for the service crates whose tests contain Teletext
   regressions.
@@ -456,6 +491,11 @@ The job summary of `Preflight` shows the selection and why. `CI ok` accepts
 exactly the jobs the selection left out. When a mapping proves too narrow, add
 the missing path or spec to `scripts/ci-domains.py`; `scripts/ci-domains_test.py`
 checks that every mapping names existing specs and crates.
+
+Browser suites never run at the same time on the runner machine, also across
+workflow runs: each Playwright job holds a host-wide lock
+([`scripts/e2e/host-lock.py`](scripts/e2e/host-lock.py), a bind on
+`127.0.0.1:18399`) and a second job waits for it.
 
 Open work-in-progress pull requests as drafts: follow-up pushes then cost the
 fast lane only, and **Ready for review** starts the `pr` lane.

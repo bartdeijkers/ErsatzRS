@@ -19,17 +19,17 @@ comma/semicolon cases.
 A 2026-08-29 production channel died at an episode boundary with:
 
 ```
-[AVFilterGraph] No option name near '/Users/Bart/AppData/Local/ErsatzRS/cache/streams/fonts[v];[1:0]scale=154:-1,format=yuva420p|...'
+[AVFilterGraph] No option name near '/Users/User/AppData/Local/ErsatzRS/cache/streams/fonts[v];[1:0]scale=154:-1,format=yuva420p|...'
 Error : Invalid argument
 ```
 
 The emitted filterchain was:
 
 ```
-...,subtitles=D\\:/Downloads/TV/South Park (1997)/Season 13/South Park (1997) - S13E09 - Butters' Bottom Bitch (1080p BluRay x265 RCVR).dut.srt:fontsdir=C\\:/Users/Bart/AppData/Local/ErsatzRS/cache/streams/fonts[v];...
+...,subtitles=D\\:/Media/TV/Example Show (2020)/Season 1/Example Show (2020) - S01E01 - Pilot's Night (1080p).dut.srt:fontsdir=C\\:/Users/User/AppData/Local/ErsatzRS/cache/streams/fonts[v];...
 ```
 
-The apostrophe in `Butters'` opened an ffmpeg quoted region. Because the quote
+The apostrophe in `Pilot's` opened an ffmpeg quoted region. Because the quote
 never closes, every subsequent filter separator (`,`), chain separator (`;`) and
 pad label (`[`, `]`) is consumed as literal text, collapsing the remainder of the
 graph into a single option blob. That also stripped the `\\:` drive-colon escape

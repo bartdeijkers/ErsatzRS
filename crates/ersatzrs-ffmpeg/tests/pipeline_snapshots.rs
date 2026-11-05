@@ -1361,9 +1361,9 @@ fn software_pipeline_escapes_filtergraph_metacharacters_in_subtitle_paths() {
     // so ffmpeg reported `No option name near '/Users/...'` and the channel
     // died at the episode boundary. See ADR 0082.
     let mut request = h264_request(DesiredVideoState::h264_1080p())
-        .with_subtitle_fonts_dir(r"C:\Users\Bart\AppData\Local\ErsatzRS\cache\streams\fonts");
+        .with_subtitle_fonts_dir(r"C:\Users\User\AppData\Local\ErsatzRS\cache\streams\fonts");
     request.inputs.push(InputFile::text_subtitle(
-        r"D:\Downloads\TV\South Park (1997)\Season 13\South Park (1997) - S13E09 - Butters' Bottom Bitch (1080p BluRay x265 RCVR).dut.srt",
+        r"D:\Media\TV\Example Show (2020)\Season 1\Example Show (2020) - S01E01 - Pilot's Night (1080p).dut.srt",
         ersatzrs_ffmpeg::SubtitleMethod::Burn,
     ));
 
@@ -1372,12 +1372,12 @@ fn software_pipeline_escapes_filtergraph_metacharacters_in_subtitle_paths() {
 
     // `'` must survive both ffmpeg parse levels: filtergraph then filter option.
     assert!(
-        args.contains(r"Butters\\\' Bottom Bitch"),
+        args.contains(r"Pilot\\\'s Night"),
         "expected the apostrophe to be triple-escaped for both ffmpeg parse levels, got: {args}"
     );
     // The fontsdir drive colon must still be intact after the subtitle path.
     assert!(
-        args.contains(r":fontsdir=C\\:/Users/Bart/AppData/Local/ErsatzRS/cache/streams/fonts"),
+        args.contains(r":fontsdir=C\\:/Users/User/AppData/Local/ErsatzRS/cache/streams/fonts"),
         "expected the fontsdir drive colon to stay escaped, got: {args}"
     );
 }
