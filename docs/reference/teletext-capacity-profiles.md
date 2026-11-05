@@ -128,6 +128,13 @@ against the standard text. EN 300 472 clause 5 (40 ms maximum retention in
 Bttx, no maximum gap between PES packets) is satisfied, because the PTS names
 the interval that actually carries the batch.
 
+**After a failure.** Once output has started, a teletext failure (for example
+`SustainedCapacity`) no longer ends the stream. Audio and video continue
+unchanged without teletext, and the teletext entry is withdrawn from the PMT
+with a new version. The failure stays visible in the channel's teletext
+readiness and in Health until teletext is delivered again (ADR 0121,
+amendment 2026-11-05).
+
 **Not covered.** Larger guides (more than 16 pages), Level 2.5 resource-heavy
 services and measured peak memory per platform. These need a new reviewed
 profile.
