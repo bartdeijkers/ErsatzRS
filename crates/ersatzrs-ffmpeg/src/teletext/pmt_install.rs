@@ -59,6 +59,7 @@ pub struct TeletextPmtInstallReport {
 /// fencing, buffer/rate/deadline admission, publication and session cancellation.
 /// This synchronous adapter neither reads a source nor paces a stream. Failed
 /// or incomplete preflight preserves both the window and all installer state.
+#[derive(Clone)]
 pub struct TeletextPmtInstaller {
     plan: TeletextPmtPlan,
     input: SectionAssembler,

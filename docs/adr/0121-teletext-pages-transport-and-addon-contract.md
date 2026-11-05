@@ -1046,6 +1046,25 @@ are kept per channel in the host-local output registry (a stable kind and a
 time, never raw error text) until a later output on that channel delivers
 authored teletext. They are shown in channel readiness and Health.
 
+**Amendment 2026-11-05: ordinary playback continues after a teletext failure.**
+Maintainer decision (2026-11-05): audio and video must keep flowing when
+authored teletext fails after output is committed. A terminal gate failure no
+longer ends the response when every source byte the sink has not received is
+still retained and the delivered PMT continuity is known (no exposed window,
+no failed retention buffer). The gate then hands over a plain continuation:
+the retained source is forwarded byte-for-byte at its original positions,
+the authored PES stops, and the authored stream is withdrawn from the PMT with
+the next version and continuing output CC. The withdrawal uses the next source
+PMT repetition, or a null packet when one comes first. Later source PMT
+repetitions stay withdrawn. The rest of the source is forwarded without pacing,
+as in ordinary playback. This applies to the direct MPEG-TS pump and to the
+retained reserve pump. The failure is still recorded per channel for readiness
+and Health. Not continued, as before: client write failures, source read
+failures, a failure inside an exposed window, a failed retention buffer
+(holding deadline or capacity), a changed source PMT and an incomplete source
+table at EOF. Failures before commitment keep the optional fallback that
+replays the journal.
+
 **Amendment 2026-11-03: admin capacity profiles.** "No production defaults"
 still holds: nothing is inferred when a policy is absent. The admin can write
 a reviewed, named policy pair (`tvguide-16`) in one explicit action. The

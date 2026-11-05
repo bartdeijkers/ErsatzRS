@@ -142,7 +142,7 @@ pub use object_pages::{
 };
 pub use output::{
     TeletextOutputAcknowledgement, TeletextOutputConfig, TeletextOutputError, TeletextOutputGate,
-    TeletextOutputSchedule,
+    TeletextOutputSchedule, TeletextPlainContinuation,
 };
 pub use packets::{
     encode_teletext_page, encode_teletext_page_set, EncodedTeletextPage, EncodedTeletextPageSet,

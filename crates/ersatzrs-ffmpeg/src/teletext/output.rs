@@ -60,6 +60,15 @@ mod transitions;
 #[path = "output_mot_retirement.rs"]
 mod mot_retirement;
 
+#[path = "output_plain.rs"]
+mod plain;
+
+pub use plain::TeletextPlainContinuation;
+
+#[cfg(test)]
+#[path = "output_plain_tests.rs"]
+mod plain_tests;
+
 #[cfg(test)]
 #[path = "output_transition_tests.rs"]
 pub(in crate::teletext) mod transition_tests;
@@ -330,6 +339,8 @@ pub struct TeletextOutputGate {
     // Whether this epoch has received any null packet at all. Deferral only
     // makes sense for a constant-rate source that has shown spare capacity.
     null_capacity_seen: bool,
+    // Unexposed source bytes and delivered PMT continuity after a failure.
+    plain: Option<TeletextPlainContinuation>,
 }
 
 /// One planned batch whose own interval lacked null capacity.
@@ -534,6 +545,7 @@ impl TeletextOutputGate {
             mot_retirement: None,
             deferred: None,
             null_capacity_seen: false,
+            plain: None,
         })
     }
 
@@ -667,7 +679,12 @@ impl TeletextOutputGate {
         packet_count: usize,
         now: Duration,
     ) -> Result<bool, TeletextOutputError> {
+        let installer = self.installer.clone();
         let result = self.prepare_inner(packet_count, now);
+        if result.is_err() {
+            // Nothing of this window was exposed; keep delivered PMT continuity.
+            self.installer = installer;
+        }
         self.fence(result)
     }
 
@@ -682,7 +699,11 @@ impl TeletextOutputGate {
     /// Incomplete TS/PSI, unavailable clock/capacity, pending output or an initial
     /// incomplete carousel are terminal: EOF cannot wait for additional input.
     pub fn prepare_final_window(&mut self, now: Duration) -> Result<bool, TeletextOutputError> {
+        let installer = self.installer.clone();
         let result = self.prepare_final_inner(now);
+        if result.is_err() {
+            self.installer = installer;
+        }
         self.fence(result)
     }
 
@@ -1455,6 +1476,7 @@ impl TeletextOutputGate {
         if let Err(error) = &result {
             if self.failure.is_none() {
                 self.failure = Some(error.clone());
+                self.plain = self.plain_continuation();
                 self.buffer = None;
                 self.pending = None;
                 self.discovery = None;
@@ -1463,6 +1485,23 @@ impl TeletextOutputGate {
             }
         }
         result
+    }
+}
+
+impl TeletextOutputGate {
+    // Only unexposed source with consistent delivered PMT continuity continues.
+    fn plain_continuation(&mut self) -> Option<TeletextPlainContinuation> {
+        if self.pending.is_some() || self.source_state == SourceState::Closed {
+            return None;
+        }
+        let installer = self.installer.as_ref()?;
+        let buffer = self.buffer.as_mut()?;
+        if self.source_state != SourceState::Open && buffer.held_bytes() == 0 {
+            // Every source byte was already delivered; nothing is left to keep.
+            return None;
+        }
+        let (packets, partial) = buffer.take_retained()?;
+        TeletextPlainContinuation::new(installer, packets, partial).ok()
     }
 }
 

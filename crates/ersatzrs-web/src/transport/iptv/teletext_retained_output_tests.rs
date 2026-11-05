@@ -9,7 +9,9 @@ use tokio::io::{AsyncWriteExt as _, ReadBuf};
 
 use super::super::{
     retained_stream_buffer::{TERMINAL_FAILURE, TERMINAL_SUCCESS},
-    teletext_output::tests::{authored_set, fixture, flatten, policy as ordinary_policy},
+    teletext_output::tests::{
+        authored_set, fixture, flatten, policy as ordinary_policy, starve_after_first_interval,
+    },
 };
 use super::*;
 
@@ -605,4 +607,41 @@ async fn malformed_clock_partial_transport_and_partial_psi_fail_before_short_out
         .is_err());
         assert!(sink.writes.lock().unwrap().bytes.is_empty());
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_retained_teletext_failure_after_commitment_keeps_audio_and_video_flowing() {
+    let policy = ReservePolicy::new(5_000_000, None).unwrap();
+    let binding = binding(policy);
+    let mut original = fixture(700);
+    starve_after_first_interval(&mut original);
+    let mut source = Source::new(flatten(&original), usize::MAX, true);
+    let mut sink = Sink::new(&source, SinkMode::Ready, 0);
+    let started = Instant::now();
+    let result = forward_retained_ts_with_teletext(
+        &mut source,
+        &mut sink,
+        policy,
+        &AtomicU8::new(0),
+        started + Duration::from_secs(1),
+        &Notify::new(),
+        &binding,
+    )
+    .await;
+    assert!(result.is_ok(), "{result:?}");
+    let writes = sink.writes.lock().unwrap();
+    assert_eq!(writes.bytes.len(), original.len() * PACKET_BYTES);
+    let pid = |packet: &[u8]| u16::from(packet[1] & 0x1f) << 8 | u16::from(packet[2]);
+    let output: Vec<&[u8]> = writes.bytes.chunks_exact(PACKET_BYTES).collect();
+    for (before, after) in original.iter().zip(&output) {
+        if ![0x1fff, 3337].contains(&pid(before)) {
+            assert_eq!(before.as_slice(), *after);
+        }
+    }
+    // The full reserve already shows the multiplex is full, so the first page
+    // never starts. The announced stream is withdrawn and AV keeps flowing.
+    let version = |packet: &[u8]| (packet[10] >> 1) & 0x1f;
+    let last_pmt = output.iter().rfind(|packet| pid(packet) == 3337).unwrap();
+    let first_pmt = output.iter().find(|packet| pid(packet) == 3337).unwrap();
+    assert_eq!(version(last_pmt), version(first_pmt) + 1);
 }
