@@ -20,7 +20,7 @@ acceptance from implementation notes or from the presence of a release.
 
 These plans include proposals and deferred work, not blanket implementation approval.
 
-- [Domain-scoped PR CI](domain-scoped-pr-ci.md) — bounded frontend/backend/teletext selection, demand-driven build products and a measured 15–30 minute merge-readiness target; preserves full release-candidate coverage.
+- [Domain-scoped PR CI](domain-scoped-pr-ci.md) — rolled out through PR #121 and verified with full CI; milestone `dci` tracks the remaining ten-PR measurement of the 15–30 minute target. Full release-candidate coverage is preserved.
 - [Local replacement workflow](addon-list-replacement-ux.md) — discovery, suggestions and reverse assignment; bulk matching remains a product choice.
 - [Teletext](teletext-support.md) — Phase 9: independently accept the complete Level 1/1.5 engine and shared gates, retaining implemented Level 2.5 as experimental with remaining enhanced acceptance Deferred until a new maintainer task; then one NOS TV-guide 200–299-inspired addon in ErsatzRS-Addons. Generic TTI/metadata, profiles/themes/zones and shared admin/Lua remain required; QTeletextMaker is optional (ADRs 0120/0122/0123).
 - [Video jukebox](application-layer-and-video-jukebox.md) — Phase 10, after teletext.

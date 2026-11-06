@@ -65,7 +65,8 @@ fail. Runtime xtask commands retain broad coverage; dev pages retain smoke.
 27 selector,57 artifact/workflow,12 teletext,5 capacity,4 wrapper and3 host-lock
 regressions pass. The host-lock tests required loopback access outside the
 sandbox. Actionlint with ShellCheck, shell syntax and progress check pass.
-Functionality: DCI-01/02/03/04 complete; CI execution/rollout not yet claimed.
+At the local checkpoint, DCI-01/02/03/04 were complete; CI execution/rollout was
+not yet claimed.
 DCI-05 partial evidence on2026-11-06:
 - BUILD/TEST describe actual product and gate behavior. Python selection/artifact
   checks now pass28/57 cases; the other required local checks above remain valid.
@@ -119,13 +120,47 @@ the product code, assertions and required gate are unchanged.
 Delivery was isolated in a task-owned worktree after concurrent changelog work
 entered the original shared checkout during commit. The isolated candidate keeps
 only the reviewed CI changelog entry; the other checkout and its unique work
-are preserved. No full candidate CI, remote PR, rollout or performance result
-is yet claimed.
-Merge and publication remain separate.
-External prerequisites: DCI-06 awaits rollout and ten naturally occurring code
-PR terminal outcomes.
-Current package: DCI-05; commit/push the reviewed candidate and verify full CI
-(general/base Chromium plus Firefox).
+are preserved.
+DCI-05 Complete on 2026-11-06 within implementation acceptance:
+PR #121 delivered commit d59c25b78f85de0c58ca105ed2ad6a1b2ee5818e. PR CI 42198516239
+passed all 13 jobs on merge-test source dec959a7fd88ab9879b9295a7a7260267d814549:
+4,067 general Rust tests, 2,402 teletext workspace tests, 17 teletext Next cases,
+454 Next cases and both playback smoke commands passed. General Chromium
+passed 363 cases with 5 explicit skips; base Chromium passed 62 with 14 skips.
+Both browser jobs waited 0s for the host lock. The two earlier nightly failures
+did not recur; this does not claim their underlying cause was repaired.
+The broad CI-change PR took 144.9 minutes from workflow creation to successful
+CI ok. Job execution: build 28.7 minutes, Clippy 3.2, teletext Rust 8.5, Next 24.0,
+general Rust 5.4, general Chromium 28.5 and base Chromium 48.5. General Rust
+started 32.3 minutes after its build dependency completed while the earlier
+nightly occupied the other runner. These overlapping durations must not be
+summed. This shared-CI validation is not proof of narrow-PR speed or the average.
+The maintainer enabled auto-merge; PR #121 merged at 2026-11-06T12:19:29Z as
+88033b9ebe80a48fe1c6aee4ae173feb838a71f6. Post-merge run 42216792048 passed and
+correctly suppressed duplicate checks for the already tested PR tree.
+Full workflow_dispatch run 42216929774 passed all 15 jobs on that exact merged
+revision, using the permitted self-hosted pool with no focused mode or artifact
+reuse. Every build/restore verified that source identity. General/base browser
+results were Chromium 363/62 passed with 5/14 skips, and Firefox 338/57 passed
+with 30/19 skips. Firefox counts match the earlier full nightly's unchanged
+suites (jobs 127780236546 and 127780236553); no test assertions were weakened.
+The general Rust, teletext and Next counts above also passed in this full run,
+as did both playback smoke commands. The required 4K TrueHD/late-PGS capacity
+case passed, and both general browsers executed the native JPEG XL graph proof.
+Implementation acceptance closes DCI-01 through DCI-05. No release was published
+and this documentation checkpoint does not relabel the validated source.
+PR evidence: https://github.com/bartdeijkers/ErsatzRS/actions/runs/42198516239
+Full evidence: https://github.com/bartdeijkers/ErsatzRS/actions/runs/42216929774
+The local implementation branch was removed after verifying its ancestry in
+origin/main. The original mixed branch retains unrelated unique documentation
+commits and must be preserved until that work is safely retained separately.
+External prerequisite: DCI-06 awaits the fixed next ten consecutive code PRs
+reaching terminal outcomes after rollout at 2026-11-06T12:19:29Z. PR #121 is the
+rollout itself, not a sample entry. Keep documentation-only PRs separate and
+retain failures, cancellations, retries and queueing as defined in plan section 8.
+Current package: DCI-06; record that cohort and evaluate the overall mean.
+The 15-30 minute performance outcome remains unproven. No additional optimization
+package is opened while waiting for naturally occurring PRs.
 '''
 
 [[milestone]]
