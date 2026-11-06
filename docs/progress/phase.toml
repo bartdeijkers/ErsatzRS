@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "Engineering DCI-05 — verify domain-scoped CI integration; Phase 9 remains complete"
+current_focus = "Engineering DCI-06 — measure domain-scoped PR CI after rollout; Phase 9 remains complete"
 
 summary = '''
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
@@ -71,9 +71,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 
 next_steps = '''
 Active maintainer goal: plans/domain-scoped-pr-ci.md. Milestone dci owns the
-finite six-package completion list. DCI-01 through DCI-04 are locally verified
-components. DCI-05 owns independent selection review and exact-candidate full
-CI before implementation acceptance; DCI-06 measures the next ten real code PRs.
+finite six-package completion list. DCI-01 through DCI-05 are complete within
+implementation acceptance at source 88033b9e (PR #121). Independent selection
+review, broad PR CI 42198516239 and full CI 42216929774 pass; the full run includes
+all required general/base Chromium and Firefox jobs. DCI-06 awaits the fixed
+next ten consecutive code PRs reaching terminal outcomes after rollout. The
+15-30 minute overall mean remains unproven; no additional optimization package
+is opened while waiting for the sample.
 The historical Phase9 handoff below remains delivery history, not this goal's
 next action. Phase10 and recorded platform/enhanced deferrals are unchanged.
 
