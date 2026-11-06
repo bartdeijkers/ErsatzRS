@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "Phase 9 complete — Phase 10 awaits a new maintainer task (p10a-01 ADR)"
+current_focus = "Engineering DCI-05 — verify domain-scoped CI integration; Phase 9 remains complete"
 
 summary = '''
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
@@ -70,6 +70,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Active maintainer goal: plans/domain-scoped-pr-ci.md. Milestone dci owns the
+finite six-package completion list. DCI-01 through DCI-04 are locally verified
+components. DCI-05 owns independent selection review and exact-candidate full
+CI before implementation acceptance; DCI-06 measures the next ten real code PRs.
+The historical Phase9 handoff below remains delivery history, not this goal's
+next action. Phase10 and recorded platform/enhanced deferrals are unchanged.
+
 Current package: none. Revised9A and production9B are accepted; the three
 stable releases are delivered. P9B-01/P9B-02 and qualification.json.release_delivery
 own the finite closure and canonical source/CI/artifact/runtime/failure evidence.

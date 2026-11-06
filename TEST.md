@@ -425,8 +425,12 @@ temporary runtime. The running suite and any restart fixtures use that copy, so
 another local Leptos build cannot replace the candidate's hydration assets.
 
 Because that single worker is a correctness requirement rather than a tuning
-choice, CI runs the wrapper once per Playwright project (`chromium`,
-`firefox`) as two jobs, one after the other. Each job invokes the wrapper
+choice, CI runs the wrapper separately per selected suite and browser. Ready
+PRs run relevant whole specs in Chromium. Nightly/full release-candidate CI
+retains general and Level 1.5 suites in Chromium and Firefox; Level 2.5 remains
+an explicit optional dispatch. See [CI domain selection](BUILD.md#ci-lanes)
+for ownership, conservative fallback and product requirements.
+Each job invokes the wrapper
 separately, and the wrapper creates its own temporary database and web host
 per invocation, so the two projects cannot observe each other's state. The
 jobs do not overlap: both CI runners share one machine, and two suites

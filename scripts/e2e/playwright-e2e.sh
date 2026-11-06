@@ -149,7 +149,7 @@ mkdir -p "$RESULT_DIR"
 if [[ -n "${ERSATZRS_E2E_PREBUILT_DIR:-}" ]]; then
   log "verifying the shared CI build; rebuilding is disabled"
   python3 scripts/ci-build-artifacts.py verify --kind web \
-    --directory "$ERSATZRS_E2E_PREBUILT_DIR" --sha "$(git rev-parse HEAD)"
+    --directory "$ERSATZRS_E2E_PREBUILT_DIR" --sha "$(git rev-parse HEAD)" --require-capability matched-web
   SERVER_BIN="$ERSATZRS_E2E_PREBUILT_DIR/bin/ersatzrs-web"
   SITE_ROOT="$ERSATZRS_E2E_PREBUILT_DIR/site"
 else

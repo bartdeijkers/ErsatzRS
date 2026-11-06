@@ -25,6 +25,14 @@ REQUIRED = {
             "site/bundle.css", "site/channel-preview.js", "site/vendor/hls/hls.mjs",
             "site/vendor/hls/LICENSE"),
 }
+# Schema 1 required the complete Rust product, including its smoke server.
+# Schema 2 makes that optional but keeps every consumer's requirement explicit.
+CAPABILITIES = {
+    "rust": {"rust-tests": REQUIRED["rust"][:-1],
+             "smoke-server": ("bin/ersatzrs-web-smoke",)},
+    "web": {"matched-web": REQUIRED["web"]},
+}
+BASE_CAPABILITY = {"rust": "rust-tests", "web": "matched-web"}
 LOCAL_GROUP_MARKER = ".ersatzrs-ci-artifacts"
 LOCAL_GROUP_OWNER = b"ersatzrs-ci-artifacts-group-v1\n"
 BUILD_FLAG_KEYS = ("RUSTFLAGS", "CARGO_PROFILE_TEST_DEBUG", "LEPTOS_OUTPUT_NAME", "LEPTOS_HASH_FILES")
@@ -48,18 +56,32 @@ def host():
             "libc": list(platform.libc_ver())}
 
 
-def check_required(root, kind):
-    for name in REQUIRED[kind]:
+def capability_names(kind, names):
+    if (not isinstance(names, list) or not names
+            or any(not isinstance(name, str) for name in names)
+            or len(set(names)) != len(names) or set(names) - CAPABILITIES[kind].keys()
+            or BASE_CAPABILITY[kind] not in names):
+        raise ValueError("invalid CI artifact capabilities")
+    return sorted(names)
+
+
+def check_required(root, kind, capabilities):
+    required = {name for capability in capabilities for name in CAPABILITIES[kind][capability]}
+    for name in required:
         path = root / name
         if not path.is_file() or not path.stat().st_size:
             raise ValueError(f"missing or empty CI build product: {name}")
-    for name in REQUIRED[kind]:
+    for name in required:
         if name.startswith("bin/") and not os.access(root / name, os.X_OK):
             raise ValueError(f"CI executable lost its executable permission: {name}")
+    for name in set(REQUIRED[kind]) - required:
+        if (root / name).exists():
+            raise ValueError(f"undeclared CI build capability product: {name}")
 
 
-def pack(root, archive, sha, kind):
-    check_required(root, kind)
+def pack(root, archive, sha, kind, capabilities=None):
+    capabilities = capability_names(kind, list(CAPABILITIES[kind]) if capabilities is None else capabilities)
+    check_required(root, kind, capabilities)
     actual_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if sha != actual_sha:
         raise ValueError("build source SHA differs from the requested revision")
@@ -73,7 +95,8 @@ def pack(root, archive, sha, kind):
                 raise ValueError("refusing to reuse an existing build manifest")
             files[name] = {"sha256": digest(path), "size": path.stat().st_size,
                            "executable": bool(path.stat().st_mode & 0o111)}
-    manifest = {"schema_version": 1, "source_sha": sha, "kind": kind, "host": host(), "files": files,
+    manifest = {"schema_version": 2, "capabilities": capabilities,
+                "source_sha": sha, "kind": kind, "host": host(), "files": files,
                 "toolchain": subprocess.check_output(["rustc", "--version"], text=True).strip(),
                 "build_flags": {key: os.environ.get(key, "") for key in (
                     "RUSTFLAGS", "CARGO_PROFILE_TEST_DEBUG", "LEPTOS_OUTPUT_NAME", "LEPTOS_HASH_FILES")}}
@@ -82,11 +105,19 @@ def pack(root, archive, sha, kind):
         handle.add(root, arcname=".", recursive=True)
 
 
-def verify(root, sha, kind, reference=None):
+def verify(root, sha, kind, reference=None, required_capabilities=()):
     manifest = json.loads((root / "build.json").read_text())
     producer = reference["source_sha"] if reference else sha
-    if manifest.get("schema_version") != 1 or manifest.get("source_sha") != producer or manifest.get("kind") != kind:
+    if manifest.get("schema_version") not in (1, 2) or manifest.get("source_sha") != producer or manifest.get("kind") != kind:
         raise ValueError("CI build manifest has the wrong schema or source SHA")
+    if manifest["schema_version"] == 1:
+        if "capabilities" in manifest:
+            raise ValueError("legacy CI manifest cannot declare partial capabilities")
+        capabilities = list(CAPABILITIES[kind])
+    else:
+        capabilities = capability_names(kind, manifest.get("capabilities"))
+    if set(required_capabilities) - set(capabilities):
+        raise ValueError("CI artifact lacks required consumer capabilities")
     if manifest.get("host") != host():
         raise ValueError("CI build and execution platform/libc differ")
     if any(p.is_symlink() for p in root.rglob("*")):
@@ -100,12 +131,13 @@ def verify(root, sha, kind, reference=None):
             raise ValueError(f"CI build product hash/size mismatch: {name}")
         if bool(path.stat().st_mode & 0o111) != expected["executable"]:
             raise ValueError(f"CI build product permission mismatch: {name}")
-    check_required(root, kind)
+    check_required(root, kind, capabilities)
     if reference:
         verify_reuse_options(manifest, reference, kind)
+    return capabilities
 
 
-def restore(archive, root, sha, env_file, kind, reference=None):
+def restore(archive, root, sha, env_file, kind, reference=None, required_capabilities=()):
     if reference and digest(archive) != reference["sha256"]:
         raise ValueError("reused CI artifact archive SHA256 differs")
     if root.exists():
@@ -122,7 +154,7 @@ def restore(archive, root, sha, env_file, kind, reference=None):
                     raise ValueError("duplicate CI build archive member")
                 seen.add(path.as_posix())
             handle.extractall(root, filter="data")
-        verify(root, sha, kind, reference)
+        capabilities = verify(root, sha, kind, reference, required_capabilities)
         if env_file:
             values = {
                 "CI_BUILD_DIR": root,
@@ -131,8 +163,9 @@ def restore(archive, root, sha, env_file, kind, reference=None):
             }
             if kind == "rust":
                 values.update({"CI_NEXTEST_ARCHIVE": root / "nextest.tar.zst",
-                               "CI_NEXTEST": root / "bin/cargo-nextest",
-                               "CI_SMOKE_SERVER": root / "bin/ersatzrs-web-smoke"})
+                               "CI_NEXTEST": root / "bin/cargo-nextest"})
+                if "smoke-server" in capabilities:
+                    values["CI_SMOKE_SERVER"] = root / "bin/ersatzrs-web-smoke"
             else:
                 values["ERSATZRS_E2E_PREBUILT_DIR"] = root
             if any(c in str(value) for value in values.values() for c in "\r\n"):
@@ -386,7 +419,14 @@ def main():
     parser.add_argument("--cache-key")
     parser.add_argument("--expected-digest")
     parser.add_argument("--output-file", type=Path)
+    parser.add_argument("--capability", action="append", help="pack: declare each provided capability")
+    parser.add_argument("--require-capability", action="append", default=[],
+                        help="restore/verify: refuse before exporting paths unless provided")
     args = parser.parse_args()
+    if args.capability is not None and args.mode != "pack":
+        parser.error("--capability is only valid when packing")
+    if args.require_capability and args.mode not in ("restore", "verify"):
+        parser.error("--require-capability is only valid when restoring or verifying")
     if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
         parser.error("a full source SHA is required")
     local = args.mode in ("publish-local", "fetch-local")
@@ -438,11 +478,11 @@ def main():
         return
     root = args.directory.resolve()
     if args.mode == "pack":
-        pack(root, args.archive, args.sha, args.kind)
+        pack(root, args.archive, args.sha, args.kind, args.capability)
     elif args.mode == "restore":
-        restore(args.archive, root, args.sha, args.env_file, args.kind, reference)
+        restore(args.archive, root, args.sha, args.env_file, args.kind, reference, args.require_capability)
     else:
-        verify(root, args.sha, args.kind, reference)
+        verify(root, args.sha, args.kind, reference, args.require_capability)
     if reference:
         print(f"CI build {args.mode}: verified producer {reference['source_sha']} for equivalent execution {args.sha}")
     else:
