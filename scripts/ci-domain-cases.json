@@ -1,0 +1,102 @@
+[
+  {
+    "name": "library CSS is presentation only",
+    "paths": ["crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css"],
+    "rust": false, "teletext": false, "next": false,
+    "include": ["local-library-deletion", "local-library-scan-lifecycle"],
+    "exclude": ["teletext-restart-flow", "scheduling-route-family"]
+  },
+  {
+    "name": "library page has native behavior and tests",
+    "paths": ["crates/ersatzrs-web/src/admin/pages/libraries/mod.rs"],
+    "rust": true, "teletext": false, "next": false,
+    "include": ["local-library-deletion"], "exclude": ["teletext-editor-flow"]
+  },
+  {
+    "name": "media component wrapper is presentation only",
+    "paths": ["crates/ersatzrs-web/src/admin/pages/media/images.rs"],
+    "rust": false, "teletext": false, "next": false,
+    "include": ["media-browser-actions"], "exclude": ["teletext-editor-flow"]
+  },
+  {
+    "name": "library server function is backend",
+    "paths": ["crates/ersatzrs-web/src/admin/server_fns/libraries.rs"],
+    "rust": true, "teletext": false, "next": false,
+    "include": ["local-library-deletion"], "exclude": ["teletext-editor-flow"]
+  },
+  {
+    "name": "library repository retains Rust and consumers",
+    "paths": ["crates/ersatzrs-infra/src/repositories/library.rs"],
+    "rust": true, "teletext": false, "next": false,
+    "include": ["local-library-deletion"], "exclude": ["teletext-editor-flow"]
+  },
+  {
+    "name": "scanner browser fixture retains importing specs",
+    "paths": ["tests/e2e/helpers/scanned-library.ts", "tests/e2e/local-library-scan-lifecycle.spec.ts"],
+    "rust": false, "teletext": false, "next": false,
+    "include": ["local-library-scan-lifecycle"], "exclude": ["teletext-editor-flow"]
+  },
+  {
+    "name": "teletext draft CSS selects authoring and editor",
+    "paths": ["crates/ersatzrs-web/src/admin/pages/channels/teletext_drafts.module.css"],
+    "rust": false, "teletext": true, "next": false,
+    "include": ["teletext-authoring-flow", "teletext-editor-flow"],
+    "exclude": ["local-library-deletion"]
+  },
+  {
+    "name": "teletext mixed draft page retains Rust",
+    "paths": ["crates/ersatzrs-web/src/admin/pages/channels/teletext_drafts.rs"],
+    "rust": true, "teletext": true, "next": false,
+    "include": ["teletext-authoring-flow", "teletext-editor-flow"],
+    "exclude": ["local-library-deletion"]
+  },
+  {
+    "name": "teletext transport selects delivery not every admin page",
+    "paths": ["crates/ersatzrs-web/src/transport/iptv/teletext_output.rs"],
+    "rust": true, "teletext": true, "next": true,
+    "include": ["teletext-restart-flow", "channels-source-teletext-delivery", "channel-watch"],
+    "exclude": ["local-library-deletion", "teletext-editor-flow"]
+  },
+  {
+    "name": "shared teletext domain model keeps all base families",
+    "paths": ["crates/ersatzrs-domain/src/teletext/mod.rs"],
+    "rust": true, "teletext": true, "next": true,
+    "include": ["teletext-editor-flow", "teletext-restart-flow"], "exclude": []
+  },
+  {
+    "name": "shared hydration reaches teletext",
+    "paths": ["crates/ersatzrs-web/src/admin/app.rs"],
+    "rust": true, "teletext": true, "next": false,
+    "include": ["teletext-editor-flow", "local-library-deletion"], "exclude": []
+  },
+  {
+    "name": "known native FFmpeg filter does not imply Next",
+    "paths": ["crates/ersatzrs-ffmpeg/src/filter/audio.rs"],
+    "rust": true, "teletext": true, "next": false,
+    "include": ["channel-watch", "channels-source-teletext-delivery"], "exclude": ["teletext-editor-flow"]
+  },
+  {
+    "name": "shared pipeline configuration includes Next",
+    "paths": ["crates/ersatzrs-ffmpeg/src/options.rs"],
+    "rust": true, "teletext": true, "next": true,
+    "include": ["channel-watch", "teletext-restart-flow"], "exclude": []
+  },
+  {
+    "name": "served image is browser input not documentation",
+    "paths": ["crates/ersatzrs-web/public/images/ersatzrs.png"],
+    "rust": false, "teletext": true, "next": false,
+    "include": ["local-library-deletion", "teletext-editor-flow"], "exclude": []
+  },
+  {
+    "name": "build manifest keeps full required gate",
+    "paths": ["Cargo.toml"],
+    "rust": true, "teletext": true, "next": true,
+    "include": ["local-library-deletion", "teletext-editor-flow"], "exclude": []
+  },
+  {
+    "name": "documentation remains lightweight",
+    "paths": ["AGENTS.md", "docs/progress/phase.toml"],
+    "rust": false, "teletext": false, "next": false,
+    "include": [], "exclude": ["teletext-editor-flow", "local-library-deletion"]
+  }
+]

@@ -35,6 +35,17 @@ release section when tagging a release.
 
 ### Changed
 
+- The CI domain selector now separates presentation, server and playback inputs,
+  identifies the affected Level 1.5 browser families, and traces shared browser
+  helpers to their consumers. Shared and unknown inputs retain conservative
+  coverage; embedded release notes and served images are treated as application
+  inputs. PR builds now follow their selected consumers: presentation-only
+  changes omit Rust test archives, backend-only changes omit unused web bundles,
+  and only runtime smoke consumers request the ordinary smoke server. Artifact
+  capabilities and an explicit required-job set reject missing products or
+  unintended skips. PR browsers remain Chromium; full release-candidate CI
+  retains Chromium and Firefox. The 15–30 minute target still requires
+  measurement after rollout.
 - Audio and video now keep playing when authored teletext fails during a
   stream, for example when the multiplex stays full for too long. The stream
   continues without teletext: the teletext entry is withdrawn from the PMT

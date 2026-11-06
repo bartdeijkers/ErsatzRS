@@ -3,6 +3,132 @@
 # order. Query runnable work with `cargo xtask progress milestones --runnable`.
 
 [[milestone]]
+id         = 'dci'
+phase      = 'Engineering — domain-scoped PR CI'
+title      = 'Make PR checks cover affected domains within a measured 15–30 minute average'
+status     = 'In progress'
+feature    = 'developer-surface-hardening'
+plan       = 'plans/domain-scoped-pr-ci.md'
+depends_on = []
+acceptance = '''
+Execute the six finite packages in plans/domain-scoped-pr-ci.md. Frontend-only
+PRs execute relevant Chromium E2E without unrelated Rust suites; mixed/server
+code retains affected Rust coverage. Teletext and Next selection follows real
+domain dependencies rather than crate membership. Build products follow their
+consumers; preserve exact-source artifacts, matched SSR/WASM, scanner helpers,
+fail-closed CI ok, browser serialization and all full/release required gates.
+Unknown reach selects a safe superset. Do not weaken tests, platform deferrals
+or required Level1/1.5; enhanced2.5 remains optional. No product/crate refactor,
+paid infrastructure or publication is in scope.
+DCI-01: audited ownership map and finite selection fixtures.
+DCI-02: explainable safe domain/spec selector with regression evidence.
+DCI-03: demand-driven build products and strict artifact capabilities.
+DCI-04: workflow/gate integration; PR Chromium and full Chromium/Firefox.
+DCI-05: bounded behavioral/independent selection proof and exact-candidate full CI.
+DCI-06: the fixed next-ten-code-PR cohort demonstrates overall average <=30min;
+retain failures, queues, retries and separate runner/domain statistics.
+Implementation component completion is not performance acceptance.
+'''
+evidence = '''
+2026-11-06: the maintainer activated plans/domain-scoped-pr-ci.md as the goal.
+The earlier plan-only authorization is superseded for implementation. Baseline
+ce01d498 has the reviewed plan/index/session changes; target is 13GiB. No
+runtime source or CI behavior changed at registration.
+DCI-01 Complete: plan section10 audits actual mixed/presentation/server/transport
+boundaries and all12 base teletext specs, with intentional cross-family edges.
+The16 scripts/ci-domain-cases.json cases name real paths/specs and positive/
+negative selections. 15 selector/inventory tests and progress check pass.
+The inventory check caught and corrected a nonexistent media spec name; source
+inspection identifies media-browser-actions as the actual images/songs proof.
+No workflow selection behavior changed in this component.
+DCI-02 Complete: 25 selector regressions pass, including the16 audited cases,
+union/rename/deletion/new-file fallback, presentation-source invalidation,
+transitive helper consumers and complete base teletext ownership. Embedded
+CHANGELOG and provider-source Health dependencies retain their real consumers.
+The12 unchanged teletext selector and47 artifact/workflow regressions also pass.
+DCI-03 Complete within local component scope: producer flags follow selected
+consumers; schema2 declares required Rust-tests/matched-web and optional
+smoke-server capabilities. Consumers reject missing capabilities before env
+export; schema1 retains its original full payload requirement. 26 selector,
+53 artifact/workflow and4 browser-wrapper regressions pass. Browser-only flags
+omit the archive, backend-only flags omit the site, and only Next requests the
+ordinary smoke server. Real built-product execution remains DCI-05 evidence.
+Regular library browser fixtures use host/scanning.rs in-process; the external
+teletext hold retains its separately supplied exact scanner and skip boundary.
+DCI-04 Complete within local component scope: actual Preflight JS/Python tests
+cover complete/revision-stable diff metadata, additions/renames, runtime assets,
+required-job/product consistency and Chromium spec output. CI ok rejects missing
+selection, arbitrary skips, failures and cancellations; browser-only PRs can
+omit Test, mixed PRs require its success. Full dispatch still selects both
+browsers and all required general/base suites. General Rust zero-test matches
+fail. Runtime xtask commands retain broad coverage; dev pages retain smoke.
+27 selector,57 artifact/workflow,12 teletext,5 capacity,4 wrapper and3 host-lock
+regressions pass. The host-lock tests required loopback access outside the
+sandbox. Actionlint with ShellCheck, shell syntax and progress check pass.
+Functionality: DCI-01/02/03/04 complete; CI execution/rollout not yet claimed.
+DCI-05 partial evidence on2026-11-06:
+- BUILD/TEST describe actual product and gate behavior. Python selection/artifact
+  checks now pass28/57 cases; the other required local checks above remain valid.
+- Real nextest archiving exposed Cargo's rejection of --lib for binary-only
+  xtask. The producer now derives lib/bin/integration flags from Cargo metadata;
+  full workspace flags stay --lib --bins --tests. Actual xtask archive creation
+  and CI-profile execution pass61/61, run0d2198af-c521-4740-b727-651da5d6111b.
+  Earlier focused affected_checks proof passes5/5, run3efdba7c-ccec-430c-9ffe-c6fbfbe254ea.
+- Playwright --list discovers454 Chromium cases in86 files:444 required cases
+  in66 general plus12 base files, with8 enhanced files kept optional. Library
+  CSS selects9 files/81 cases, no Rust/Next/teletext; affected_checks.rs selects
+  xtask Rust only; existing teletext transport selects12 general+9 base files/
+  199 cases plus Rust/Next. Whole-file filters retain fixture/serial ownership.
+- Paginated GitHub file inventories were compared with local base...revision
+  name-status diffs, including additions. Replay uses current selector/ownership,
+  not historical timing predictions. #109 selects6 browser files/67 cases and
+  no Rust archive; #110/#117/#118 retain all78 required browser files/444 cases
+  and Rust/Next. #118 adds output_plain.rs and output_plain_tests.rs, so its real
+  full diff correctly takes new-production fallback despite narrow existing
+  transport edits. #119 selects no products. Revisions: #109 6cda5a9b, #110
+  be1cff83, #117 c0de856e, #118 landed6a940e81, #119 36da975b; API file counts
+  are3/43/10/14/4. The original #118 branch head is unavailable locally; its
+  squash diff has the same complete14-path inventory and addition metadata.
+- Reused scoped behavioral evidence: run42116633851 at source77b76d8f8d1cba77005b684190098c9b629daeed,
+  fetched and compared to the working tree: crates/tests/xtask/assets/migrations,
+  Cargo/Node manifests+locks, toolchain and Cargo/nextest/Playwright config match.
+  General Chromium job127571721093 passes363 with5 explicit skips, including
+  local-library-deletion's forced SQLite failure/visible localized alert/intact
+  rows and the real scanned-library lifecycle. Teletext Rust job127568616151
+  passes1793+17, including both direct and retained pumps' injected starvation,
+  byte-identical audio/video continuation and PMT withdrawal. The new narrow
+  selections retain these exact unchanged negative fixtures. This is existing
+  behavioral evidence, not new browser execution or new workflow acceptance;
+  changed embedded CHANGELOG text still needs the new candidate's full gate.
+2026-11-06 delivery authorization: the maintainer approved a second Codex review,
+fixes, commit/push to a PR and full candidate CI. Branch ci/domain-scoped-pr-ci
+is based on e109fddf (the intervening PR120 changes README only).
+Independent Codex review01a1b039-03c8-7df2-83a2-d07190db898d found three concrete
+consumer omissions: remote-stream/profile-deletion/library scan browser edges,
+the troubleshooting consumer of channel-preview.js, and prepared-media playback
+through IPTV transport. All five path/spec edges were restored;29 selector and
+57 artifact/workflow regressions pass. Bounded independent re-review confirms
+all three findings closed with no remaining actionable defect. Full workspace
+target flags, Actionlint/ShellCheck, progress and diff checks pass. The library
+and transport inventory counts above describe the initial selection; the review
+adds windows-release-regressions and addon-prepared-playback respectively.
+Before dispatch, existing nightly42181423169 on earlier source6a940e81 showed
+two failed source-teletext Next assertions (missing actual889 EARLY) in
+job127777851440. This is pre-existing evidence to compare with the new candidate;
+the product code, assertions and required gate are unchanged.
+Delivery was isolated in a task-owned worktree after concurrent changelog work
+entered the original shared checkout during commit. The isolated candidate keeps
+only the reviewed CI changelog entry; the other checkout and its unique work
+are preserved. No full candidate CI, remote PR, rollout or performance result
+is yet claimed.
+Merge and publication remain separate.
+External prerequisites: DCI-06 awaits rollout and ten naturally occurring code
+PR terminal outcomes.
+Current package: DCI-05; commit/push the reviewed candidate and verify full CI
+(general/base Chromium plus Firefox).
+'''
+
+[[milestone]]
 id         = 'amm-o-01'
 phase      = 'AMM-O — portable file-backed add-on lists'
 title      = 'Withdrawn: rebuild add-on lists from authoritative saved folders'

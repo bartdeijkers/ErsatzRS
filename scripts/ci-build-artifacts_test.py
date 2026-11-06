@@ -37,18 +37,82 @@ class BuildArtifacts(unittest.TestCase):
         self.commands.start()
         self.addCleanup(self.commands.stop)
 
-    def fixture(self, kind="rust"):
+    def fixture(self, kind="rust", capabilities=None):
         root = self.base / f"input-{kind}"
         root.mkdir()
-        for name in artifacts.REQUIRED[kind]:
+        names = {name for cap in (capabilities or artifacts.CAPABILITIES[kind])
+                 for name in artifacts.CAPABILITIES[kind][cap]}
+        for name in names:
             path = root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"synthetic CI handoff fixture; never executed")
             if name.startswith("bin/"):
                 path.chmod(0o755)
         archive = self.base / f"{kind}.tar.gz"
-        artifacts.pack(root, archive, SHA, kind)
+        artifacts.pack(root, archive, SHA, kind, capabilities)
         return root, archive
+
+    def test_test_only_artifact_omits_smoke_and_refuses_runtime_consumer(self):
+        root, archive = self.fixture(capabilities=["rust-tests"])
+        self.assertFalse((root / "bin/ersatzrs-web-smoke").exists())
+        output, env = self.base / "tests", self.base / "tests.env"
+        artifacts.restore(archive, output, SHA, env, "rust", required_capabilities=["rust-tests"])
+        values = dict(line.split("=", 1) for line in env.read_text().splitlines())
+        self.assertIn("CI_NEXTEST", values)
+        self.assertNotIn("CI_SMOKE_SERVER", values)
+        before = env.read_bytes()
+        refused = self.base / "runtime"
+        with self.assertRaisesRegex(ValueError, "consumer capabilities"):
+            artifacts.restore(archive, refused, SHA, env, "rust", required_capabilities=["smoke-server"])
+        self.assertFalse(refused.exists())
+        self.assertEqual(env.read_bytes(), before)
+
+    def test_capabilities_require_payloads_and_cannot_hide_or_invent_products(self):
+        root, _ = self.fixture()
+        manifest_path = root / "build.json"
+        original = json.loads(manifest_path.read_text())
+        for capabilities in ([], None, "rust-tests", ["unknown"], ["smoke-server"],
+                             ["matched-web"], ["rust-tests", "rust-tests"], [True]):
+            manifest_path.write_text(json.dumps(dict(original, capabilities=capabilities)))
+            with self.subTest(capabilities=capabilities), self.assertRaisesRegex(ValueError, "capabilities"):
+                artifacts.verify(root, SHA, "rust")
+        manifest_path.write_text(json.dumps(dict(original, capabilities=["rust-tests"])))
+        with self.assertRaisesRegex(ValueError, "undeclared"):
+            artifacts.verify(root, SHA, "rust")
+        # Even a manifest with internally consistent hashes cannot claim a
+        # capability whose payload is missing.
+        (root / "bin/ersatzrs-web-smoke").unlink()
+        del original["files"]["bin/ersatzrs-web-smoke"]
+        manifest_path.write_text(json.dumps(original))
+        with self.assertRaisesRegex(ValueError, "missing or empty"):
+            artifacts.verify(root, SHA, "rust", required_capabilities=["smoke-server"])
+
+    def test_legacy_manifest_keeps_the_entire_original_contract(self):
+        root, _ = self.fixture()
+        path = root / "build.json"
+        manifest = json.loads(path.read_text())
+        manifest["schema_version"] = 1
+        path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "legacy"):
+            artifacts.verify(root, SHA, "rust")
+        del manifest["capabilities"]
+        path.write_text(json.dumps(manifest))
+        self.assertIn("smoke-server", artifacts.verify(root, SHA, "rust", required_capabilities=["smoke-server"]))
+        (root / "bin/ersatzrs-web-smoke").unlink()
+        del manifest["files"]["bin/ersatzrs-web-smoke"]
+        path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "missing or empty"):
+            artifacts.verify(root, SHA, "rust")
+
+    def test_full_artifact_exports_smoke_only_after_validating_capability(self):
+        _, archive = self.fixture()
+        env = self.base / "full.env"
+        artifacts.restore(archive, self.base / "full", SHA, env, "rust",
+                          required_capabilities=["rust-tests", "smoke-server"])
+        self.assertIn("CI_SMOKE_SERVER=", env.read_text())
+        with self.assertRaisesRegex(ValueError, "consumer capabilities"):
+            artifacts.restore(archive, self.base / "wrong-kind", SHA, None, "rust",
+                              required_capabilities=["matched-web"])
 
     def test_both_products_roundtrip_with_independent_environment_and_modes(self):
         for kind in ("rust", "web"):
@@ -604,6 +668,105 @@ class FocusedAuditSelection(unittest.TestCase):
         trigger = self.workflow.split("\n  pull_request:\n", 1)[1].split("\n  push:\n", 1)[0]
         self.assertNotRegex(trigger, r"(?m)^    paths(-ignore)?:")
 
+    def preflight_diff(self, files, **overrides):
+        """Execute the actual github-script with controlled API responses."""
+        code = re.search(r"      - id: duplicate\n.*?          script: \|\n(.*?)^      - uses:",
+                         self.jobs["preflight"], re.S | re.M)[1]
+        code = "\n".join(line[12:] for line in code.splitlines())
+        harness = r"""
+        const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        const expected = { number: 42, draft: false, head: {sha: 'head'}, base: {sha: 'base'},
+                           changed_files: input.files.length, ...input.expected };
+        const output = {}, written = {};
+        let reads = 0;
+        const github = {rest: {
+          pulls: {listFiles: 'listFiles', get: async () => ({data: {
+            ...expected, ...(input.revisions?.[reads++] || {})
+          }})}, git: {getCommit: async () => ({data: {tree: {sha: 'merge-tree'}}})}
+        }, paginate: async (method, args) => {
+          if (method !== 'listFiles' || args.per_page !== 100) throw new Error('Expected paginated PR files');
+          return input.files;
+        }};
+        const core = {setOutput: (key, value) => output[key] = value, info: () => {}, notice: () => {}};
+        const context = {eventName: 'pull_request', repo: {owner: 'fixture', repo: 'fixture'},
+                         payload: {pull_request: expected}, sha: 'merge-result'};
+        const fakeRequire = name => {
+          if (name !== 'fs') throw new Error('Unexpected module');
+          return {writeFileSync: (path, data) => written[path.split('/').pop()] = data};
+        };
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        new AsyncFunction('github', 'context', 'core', 'require', 'process', input.code)(
+          github, context, core, fakeRequire, {env: {RUNNER_TEMP: '/fixture'}}
+        ).then(() => console.log(JSON.stringify({output, written})))
+         .catch(error => {console.error(error.message); process.exitCode = 1;});
+        """
+        return subprocess.run(["node", "-e", harness], input=json.dumps(dict(code=code, files=files, **overrides)),
+                              text=True, capture_output=True)
+
+    def test_complete_diff_preserves_added_and_old_paths_and_runtime_assets(self):
+        for path in ("CHANGELOG.md", "crates/ersatzrs-web/public/channel-icon.png", "nested/runtime.md"):
+            result = self.preflight_diff([{"filename": path, "status": "modified"}])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["output"]["lane"], "pr")
+        result = self.preflight_diff([
+            {"filename": "docs/moved.md", "previous_filename": "crates/old.rs", "status": "renamed"},
+            {"filename": "crates/new.rs", "status": "added"},
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["output"], {"lane": "pr", "skip": "false", "tree": "merge-tree"})
+        self.assertEqual(set(data["written"]["changed-files.txt"].splitlines()),
+                         {"docs/moved.md", "crates/old.rs", "crates/new.rs"})
+        self.assertEqual(data["written"]["added-files.txt"], "crates/new.rs")
+        result = self.preflight_diff([{"filename": "plans/INDEX.md", "status": "modified"}])
+        self.assertEqual(json.loads(result.stdout)["output"]["lane"], "skip")
+
+    def test_incomplete_malformed_or_changed_diff_cannot_skip_checks(self):
+        normal = [{"filename": "plans/INDEX.md", "status": "modified"}]
+        cases = [(normal, {"expected": {"changed_files": 2}}), ([], {}),
+                 (normal * 2, {}),
+                 ([{"filename": "docs/../production.rs", "status": "modified"}], {}),
+                 ([{"filename": "docs/new.md", "status": "renamed"}], {}),
+                 ([{"filename": "docs/new.md", "status": "invented"}], {}),
+                 ([{"filename": "docs/new\nfile.md", "status": "modified"}], {}),
+                 (normal, {"revisions": [{"head": {"sha": "new-head"}}]}),
+                 (normal, {"revisions": [{}, {"base": {"sha": "new-base"}}]})]
+        for files, options in cases:
+            with self.subTest(files=files, options=options):
+                self.assertNotEqual(self.preflight_diff(files, **options).returncode, 0)
+
+    def test_actual_selection_outputs_match_gate_and_matrix(self):
+        code = re.search(r"          python3 - .*? <<'PY'\n(.*?)^          PY$",
+                         self.jobs["preflight"], re.S | re.M)[1]
+        code = "\n".join(line[10:] for line in code.splitlines())
+        root = Path(__file__).resolve().parents[1]
+        paths = ("crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css",
+                 "xtask/src/affected_checks.rs", "crates/ersatzrs-web/src/admin/pages/channels/teletext_drafts.rs")
+        with tempfile.TemporaryDirectory() as tmp:
+            changed, selection = Path(tmp, "changed"), Path(tmp, "selection.json")
+            for path in paths:
+                changed.write_text(path + "\n")
+                result = subprocess.run([sys.executable, str(root / "scripts/ci-domains.py"), "select", str(changed)],
+                                        text=True, capture_output=True, check=True)
+                selection.write_text(result.stdout)
+                result = subprocess.run([sys.executable, "-c", code, str(selection)], text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                outputs = dict(line.split("=", 1) for line in result.stdout.splitlines())
+                omitted = json.loads(outputs["deselected"])
+                self.assertEqual(self.ci_ok_exit("pr", {job: "skipped" for job in omitted}, outputs=outputs), 0)
+                self.assertEqual(set(json.loads(outputs["required_jobs"])), set(self.jobs) - {"ci_ok", *omitted})
+                for row in json.loads(outputs["pr_matrix"])["include"]:
+                    self.assertEqual(row["project"], "chromium")
+                    self.assertIn(row["suite"], {"general", "1.5"})
+                if "teletext_drafts" in path:
+                    self.assertIn("teletext-editor-flow", outputs["teletext_filter"])
+                    self.assertNotIn("teletext-restart-flow", outputs["teletext_filter"])
+            data = json.loads(selection.read_text())
+            data["products"]["web"] = False
+            selection.write_text(json.dumps(data))
+            result = subprocess.run([sys.executable, "-c", code, str(selection)], capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+
     def test_audit_recovery_runs_only_preflight_format_and_audit(self):
         self.assertEqual(self.scheduled(audit_only=True), {"preflight", "fmt", "deny"})
 
@@ -683,6 +846,30 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertEqual(self.scheduled(lane="pr", selection=narrow, teletext_only="all"),
                          {"build", "teletext", "hydration"})
 
+    def test_build_flags_follow_pr_consumers_and_full_manual_keeps_every_product(self):
+        inputs = dict(test_only=False, next_engine_only=False, browser_only="none",
+                      teletext_only="none", reuse_artifacts="")
+        cases = [("pr", (False, True, False)), ("pr", (True, False, False)),
+                 ("pr", (True, True, False)), ("pr", (True, True, True)),
+                 ("full", (True, True, True))]
+        for lane, flags in cases:
+            outputs = dict(zip(("build_rust", "build_web", "build_smoke"), map(lambda x: str(x).lower(), flags)))
+            for key, expected in zip(("BUILD_RUST", "BUILD_WEB", "BUILD_SMOKE"), flags):
+                with self.subTest(lane=lane, flags=flags, key=key):
+                    expression = re.search(rf"^      {key}: (.+)$", self.jobs["build"], re.M)[1]
+                    self.assertEqual(self.evaluate(expression, inputs, preflight(lane=lane, **outputs)), expected)
+        selected = dict(run_test="false", run_next="false", run_teletext="false", run_browser="true")
+        self.assertEqual(self.scheduled(lane="pr", selection=selected),
+                         set(self.jobs) - {"test", "next_engine", "teletext"})
+
+    def test_artifact_consumers_require_their_executable_capabilities(self):
+        for job, capability in (("test", "rust-tests"), ("next_engine", "smoke-server"),
+                                ("teletext", "rust-tests"), ("hydration", "matched-web")):
+            self.assertIn(f"--require-capability {capability}", self.jobs[job])
+        build = self.jobs["build"]
+        self.assertIn('if [[ "$BUILD_SMOKE" == \'true\' ]]; then\n            cargo build --locked --bin ersatzrs-web', build)
+        self.assertIn('capabilities+=(--capability smoke-server)', build)
+
     def test_pull_request_lane_uses_the_selected_chromium_matrix(self):
         expression = re.search(r"^      matrix: (.+)$", self.jobs["hydration"], re.M)[1]
         expression = expression.removeprefix("${{").removesuffix("}}").strip()
@@ -702,20 +889,33 @@ class FocusedAuditSelection(unittest.TestCase):
         needs = re.search(r"^    needs: \[(.+)\]$", body, re.M)[1]
         self.assertIn("test", {x.strip() for x in needs.split(",")})
         condition = re.search(r"^    if: (.+)$", body, re.M)[1]
-        inputs = dict(test_only=False, next_engine_only=False, teletext_only="none")
-        for test_result, expected in (("success", True), ("skipped", True),
+        inputs = dict(test_only=False, next_engine_only=False, teletext_only="none", browser_only="none")
+        for test_result, expected in (("success", True), ("skipped", False),
                                       ("failure", False), ("cancelled", False)):
             needs = preflight(lane="pr")
             needs.build = SimpleNamespace(result="success")
             needs.test = SimpleNamespace(result=test_result)
             self.assertEqual(self.evaluate(condition, inputs, needs), expected)
+        needs = preflight(lane="pr", run_test="false")
+        needs.build = SimpleNamespace(result="success")
+        needs.test = SimpleNamespace(result="skipped")
+        self.assertTrue(self.evaluate(condition, inputs, needs))
 
-    def ci_ok_exit(self, lane, results, event="pull_request", skip="false", deselected="[]"):
+    def ci_ok_exit(self, lane, results, event="pull_request", skip="false", deselected="[]", outputs=None):
         code = re.search(r"python3 - <<'PY'\n(.*?)^          PY$", self.jobs["ci_ok"], re.S | re.M)[1]
         code = "\n".join(line[10:] for line in code.splitlines())
         needs = {job: {"result": results.get(job, "success"), "outputs": {}}
                  for job in self.jobs if job != "ci_ok"}
         needs["preflight"]["outputs"] = {"skip": skip, "lane": lane, "tree": "", "deselected": deselected}
+        if lane == "pr":
+            omitted = set(json.loads(deselected))
+            flags = {key: job not in omitted for job, key in (("test", "run_test"), ("next_engine", "run_next"),
+                     ("teletext", "run_teletext"), ("hydration", "run_browser"))}
+            flags.update(build_rust=any(flags[key] for key in ("run_test", "run_next", "run_teletext")),
+                         build_web=flags["run_browser"], build_smoke=flags["run_next"])
+            needs["preflight"]["outputs"].update({key: str(value).lower() for key, value in flags.items()})
+            needs["preflight"]["outputs"]["required_jobs"] = json.dumps(sorted(set(needs) - omitted))
+        needs["preflight"]["outputs"].update(outputs or {})
         result = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True,
                                 env=dict(os.environ, NEEDS=json.dumps(needs), EVENT_NAME=event))
         return result.returncode
@@ -735,10 +935,25 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertNotEqual(self.ci_ok_exit("full", {"next_engine": "skipped"},
                                             event="push", deselected='["next_engine"]'), 0)
         self.assertEqual(self.ci_ok_exit("full", {"commitlint": "skipped"}, event="push"), 0)
+        self.assertEqual(self.ci_ok_exit("full", {"commitlint": "skipped"}, event="schedule"), 0)
         # A draft never reports a passing required check, even when green.
         self.assertNotEqual(self.ci_ok_exit("light", light), 0)
         self.assertEqual(self.ci_ok_exit("skip", {job: "skipped" for job in self.jobs
                                                   if job != "preflight"}, skip="true"), 0)
+
+    def test_ci_ok_refuses_absent_contradictory_or_overbroad_selection(self):
+        for lane in ("", "unknown"):
+            self.assertNotEqual(self.ci_ok_exit(lane, {}), 0)
+        for outputs in ({"run_test": None}, {"run_browser": ""}, {"build_smoke": "false"},
+                        {"required_jobs": "[]"}, {"required_jobs": None}, {"deselected": "null"},
+                        {"skip": "true"}):
+            with self.subTest(outputs=outputs):
+                self.assertNotEqual(self.ci_ok_exit("pr", {}, outputs=outputs), 0)
+        self.assertNotEqual(self.ci_ok_exit("pr", {"fmt": "skipped"}, deselected='["fmt"]'), 0)
+        omitted = ["next_engine", "teletext", "test"]
+        for result, expected in (("skipped", 0), ("failure", 1), ("cancelled", 1)):
+            self.assertEqual(bool(self.ci_ok_exit("pr", {job: result for job in omitted},
+                                                 deselected=json.dumps(omitted))), bool(expected))
 
     def test_green_runs_record_the_tree_they_proved(self):
         body = self.jobs["ci_ok"]
@@ -753,11 +968,12 @@ class FocusedAuditSelection(unittest.TestCase):
         body = self.jobs["test"]
         self.assertIn("NEXTEST_FILTER: ${{ needs.preflight.outputs.nextest_filter }}", body)
         self.assertIn('& (${NEXTEST_FILTER:-all()})', body)
-        self.assertIn("--no-tests pass", body)
+        self.assertIn("--no-tests fail", body)
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
         self.assertIn("&& run.display_title !== 'CI (Audit only)'", self.workflow)
+        self.assertIn("&& run.display_title !== 'CI (Next subtitle-NUL recovery)'", self.workflow)
 
     def test_mixed_audit_modes_are_explicitly_rejected(self):
         step = self.workflow.split("- name: Reject mixed audit mode\n", 1)[1]

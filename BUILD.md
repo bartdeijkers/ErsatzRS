@@ -198,10 +198,12 @@ the GitHub Actions job environment and never touches `.cargo/config.toml`.
 **Build CI artifacts** produces the application test/runtime inputs once for
 all selected execution jobs on the selected Linux runner pool:
 
-- A Rust artifact contains the complete workspace nextest archive, the pinned
-  nextest executable, the ordinary smoke server and the CI helper executables.
+- A Rust artifact is produced only for selected Rust/Next/teletext consumers.
+  It contains their nextest archive, the pinned nextest executable and CI
+  helpers. Only Next runtime smoke consumers require the ordinary smoke server.
 - A web artifact contains one matched Leptos SSR server, WASM/JS, the complete
-  site assets and the CI helper executables. All six Playwright jobs use it.
+  site assets and CI helpers. It is produced only when browsers are selected;
+  every selected Playwright job consumes that same matched product.
 
 The producer retains the native/test and Leptos build graphs as distinct build
 products. Hosted native linker flags never reach the WASM build. General Rust,
@@ -216,6 +218,12 @@ toolchain/build flags and per-file hashes, sizes and executable status. Consumer
 verify the checkout, expected product, complete inventory and contents before
 execution. Wrong, missing, corrupt or incompatible artifacts fail; they do not
 trigger a replacement build. The tar envelope preserves executable permissions.
+Schema 2 declares `rust-tests`/`matched-web` and, when present, `smoke-server`
+capabilities. Each consumer requires its capability before executable paths
+are exported. Schema 1 remains readable with its original complete inventory;
+it cannot be used to omit the smoke server. Ordinary browser scan fixtures use
+the in-process scanner in the web host. Explicit external scanner acceptance
+retains its separately supplied exact executable and opt-in prerequisites.
 Artifact names include the producer run/attempt; consumers use its job outputs,
 so a failed-job rerun can retain the original successful build while a newly
 executed producer publishes a distinct artifact.
@@ -436,8 +444,10 @@ depends on every gate job, so the protection rule never has to list job or
 matrix names. It runs even after a failure or cancellation and fails unless
 `Preflight` succeeded and every other gate job either passed or was skipped
 by `Preflight` (an already proven SHA, or a pull request that changes only
-docs, plans, agent config, Markdown or PNG files) or left out by the run's
-[lane](#ci-lanes). Commit lint may be skipped only on `push`. On a draft pull
+known documentation or agent-config paths) or left out by the run's
+[lane](#ci-lanes). Embedded `CHANGELOG.md`, served images and other runtime
+assets are code inputs. Commit lint may be skipped on `push` and `schedule`.
+On a draft pull
 request `CI ok` always fails, so a draft never carries a passing required
 check into the full run that starts when it is marked ready. Focused manual recovery modes do not run `CI ok` because they
 never establish full CI.
@@ -445,7 +455,8 @@ never establish full CI.
 The `pull_request` trigger deliberately has no `paths-ignore`: a workflow that
 never starts never reports `CI ok`, which would leave docs-only pull requests
 unmergeable. Docs-only detection lives in `Preflight` instead. When adding a
-gate job, add it to `ci_ok.needs`; `scripts/ci-build-artifacts_test.py`
+gate job, add it to `ci_ok.needs` and Preflight's required-job output;
+`scripts/ci-build-artifacts_test.py`
 enforces this.
 
 ### CI lanes
@@ -460,8 +471,11 @@ as it can break something:
 | `pr` | ready pull request | the touched domains (below), Playwright in Chromium only |
 | `full` | any other push, the nightly run (01:00 UTC), every manual dispatch | everything, both browsers |
 
-Playwright jobs in every lane start only after `Test` passed, so a red Rust run
-stops before the browser suites. A green `pr` run uploads a small
+Playwright jobs start after the matched build and a successful `Test` job when
+Rust tests are selected. A presentation-only PR deliberately omits `Test`;
+mixed PRs cannot proceed after an unexpected skip or failure. Format, Clippy,
+dependency audit, commit lint and documentation checks retain their existing
+ownership. A green `pr` run uploads a small
 `ci-tree-<tree>` artifact naming the tree of the merge commit it tested, and the
 push to `main` with that tree is skipped. A green `full` run uploads
 `ci-full-<tree>`, and the nightly run is skipped while `main`'s tree has one.
@@ -474,21 +488,35 @@ pull request's changed paths to work:
 - Rust tests: the touched crates and every crate that depends on them
   (nextest `rdeps(...)`). The build archives only those crates' test
   binaries (plus `ersatzrs-infra`/`ersatzrs-web` when the Teletext or Next job
-  runs), so a change without Rust code skips most of the Rust build.
-- `Teletext 1.5` (Rust) and the Teletext browser suite: paths naming teletext;
-  the Rust job also runs for the service crates whose tests contain Teletext
-  regressions.
-- `Next engine`: paths naming Next, and `ersatzrs-ffmpeg`.
+  runs). Pure admin CSS, served scripts/assets, browser specs/helpers and the
+  audited media presentation wrappers omit this archive and the Rust test job.
+  Wrappers lose that exemption when their source shape gains native behavior.
+  Mixed Rust modules and server functions keep native coverage. A selected
+  general Rust filter that matches zero tests fails.
+- Teletext browser tests: whole authoring, editor and runtime specs, including
+  explicit cross-family and shared dependencies. Crate membership alone does
+  not select them. Shared hydration selects every affected browser family;
+  source Health also retains the provider assertions in `teletext-decoder-health`.
+  Native teletext inputs retain the required Level 1.5 Rust job. Experimental
+  Level 2.5 remains an explicit optional dispatch.
+- `Next engine`: runtime/transport and shared pipeline inputs. The audited
+  native audio-filter helpers do not select Next merely through FFmpeg crate
+  membership; unknown reach still selects broad coverage.
 - General Playwright specs: the specs of the touched admin page areas, crates or
-  service files (by keyword), changed specs themselves, specs importing a
-  changed helper, plus a hydration smoke set. Shared admin UI code selects every
-  general spec.
+  explicitly owned service modules, changed specs themselves and direct or
+  transitive consumers of a changed helper, plus a hydration smoke set. Unknown
+  helper reach selects all required browsers. Whole specs preserve serial groups.
 - Build, toolchain and CI inputs, `ersatzrs-core`, `ersatzrs-domain`,
   migrations, shared Playwright infrastructure and any unmapped path select
-  everything.
+  everything. New production inputs, deletions and unknown paths also retain
+  this conservative fallback until ownership is reviewed.
 
-The job summary of `Preflight` shows the selection and why. `CI ok` accepts
-exactly the jobs the selection left out. When a mapping proves too narrow, add
+Preflight checks the complete paginated diff against the PR's event revision
+before selecting jobs, including old paths of renames and added-file metadata.
+Incomplete or stale metadata fails. Its summary shows domain reasons, filters
+and product demand. `CI ok` checks an explicit required-job set against those
+consumers; absent or inconsistent selection and unintended skips fail.
+When a mapping proves too narrow, add
 the missing path or spec to `scripts/ci-domains.py`; `scripts/ci-domains_test.py`
 checks that every mapping names existing specs and crates.
 
