@@ -26,6 +26,11 @@ The stable release line starts at **v1.1.0**. Read the
 - Inspect health checks and playback diagnostics, and extend media discovery
   with separately installed add-ons.
 
+## Why ErsatzRS?
+
+- ErsatzTV was archived (and later unarchived).
+- I want to improve my a.i. assisted coding skills and the rust language. I learned a lot more
+
 ## Install and start
 
 Download an archive from [ErsatzRS releases](https://github.com/bartdeijkers/ErsatzRS/releases),
@@ -74,38 +79,27 @@ reference material, and explanations.
 
 ## Project status
 
-The v1.1.0 catch-up window covers ErsatzTV Legacy through **v26.11.1**.
-Implementation progress, acceptance evidence, deliberate deviations, and
-remaining debt are tracked in [docs/progress/](docs/progress/README.md).
-
-Unreleased development extends the accepted catch-up through **v26.11.2**,
-retains the Native engine, and adopts the reviewed Next v0.2.1 dependency.
-Its packages are publicly available, and the application changes are integrated
-on main; a new application release is not published. Approved hardware/platform
-acceptance debt remains explicitly unverified.
-
-The **v26.11.3** catch-up is locally accepted, including reviewed Next v0.2.2
-caption timing and the six-second MPEG-TS startup burst. Its exact six-platform
-[dependency packages](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-4a0b59a-ersatzrs.1)
-are published and checksum-pinned. Linux and Windows startup, decoded playback
-and the required local gates pass. Application remote delivery and CI follow
-local acceptance; a new application release remains separate. The Native engine
-remains supported, and approved hardware/platform debt stays explicitly unverified.
-
-UCU-12 catch-up through **v26.11.4** is in progress. Its managed runtime pins
-select published Next v0.2.3 rs.4 and ErsatzRS-ffmpeg v2.0.7 packages. Linux and
-Windows public installation, restart and decoded playback pass, along with the
-required available local gates. Whole-window acceptance remains open: macOS
-FFmpeg builds and dependent software/application proof are deferred until
-maintainer resume. Approved hardware/platform debt stays explicitly unverified.
-
-Teletext (Phase 9) is delivered since release 1.2.0: Level 1/1.5 authoring,
+Teletext is delivered since release 1.2.0: Level 1/1.5 authoring,
 preview, explicit publication and the teletext TV guide are accepted. Level 2.5
 is available as **experimental**; its enhanced-only acceptance is deferred. See
 the [teletext design interchange reference](docs/reference/teletext-design-interchange.md)
 and the teletext ADRs (0120-0124 and 0126) in [docs/adr/](docs/adr/). The "The Box"
 video-jukebox extension (Phase 10) is planned work and is not advertised as a
 feature.
+
+Upstream Catch Up (UCU) with ErsatzTV has priority, but expect delays because time
+and resources are always limited.
+
+## Differences compared to ErsatzTV
+
+- No MacOS builds yet
+- No Docker builds yet, but planned for future releases
+- Mysql support was dropped, because of maturity level SQLite
+- Probably not completely backwards compatible with ErsatzTV profiles (untested)
+- Add-ons are supported, but is still very much work in progress
+- Teletext 1/1.5/2.5 engine added, also very much still work in progress
+- Custom ERsatzRS-ffmpeg to enable jpeg-xl, drawvg
+- 
 
 ## Develop and contribute
 
