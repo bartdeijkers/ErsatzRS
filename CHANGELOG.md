@@ -35,6 +35,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Refresh the README with ADR-backed ErsatzTV differences, including interface
+  languages, subtitle preferences, tagging, add-ons and graphics. Clarify the
+  delivered teletext scope and current platform limitations.
 - The CI domain selector now separates presentation, server and playback inputs,
   identifies the affected Level 1.5 browser families, and traces shared browser
   helpers to their consumers. Shared and unknown inputs retain conservative
