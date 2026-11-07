@@ -340,18 +340,12 @@ resolved    = false
 [[debt]]
 id          = 'teletext-custom-pages-broadcast'
 adr         = '0120'
-description = '''Teletext elements (/teletext-elements) store custom Level 1 pages uploaded as TTI, T42, EP1 or HTT, with field links to channel name/number, date, time and now/next guide data, and channels can link them to a page number. Open: (1) include linked custom pages in the authored teletext publication and broadcast, which needs an ADR 0120 amendment for how custom pages coexist with add-on page ranges, refresh field values and fail; (2) replace the editorial Level 1 HTML preview with an engine-rendered preview; (3) import T42/EP1 enhancement packets (X/26, X/28) instead of reporting them as not imported; (4) Playwright no-JS and hydrated flow for upload, field links and channel linking.'''
-discovered  = '2026-11-07'
-evidence    = 'Branch claude/project-thread-9pm6vy: domain/core/infra/app/web slices with focused domain, infra, app, ffmpeg and web unit tests. Library, upload and editor pages are localized in all nine cultures. No broadcast, engine-preview or browser-flow proof yet.'
-resolved    = false
-
-[[debt]]
-id          = 'teletext-channel-custom-pages-broadcast'
-adr         = '0120'
-description = '''Channel teletext admin redesign (branch claude/project-thread-g3jijz). Component state:
+description = '''Teletext custom pages and the redesigned channel teletext page (branch claude/project-thread-9pm6vy, which includes the channel page work from claude/project-thread-g3jijz). Component state:
 (1) DONE (component): the channel teletext page shows a status line, a page set, one section per teletext add-on (no fields for a disabled, missing or unconfigured add-on), a custom pages section and one Check, Preview, Publish block, using shared primitives and the reference docs/reference/teletext-admin-ux.md. One-click enable creates a per-channel profile and binding; TV-guide channel selection is stored per channel in the admin setting teletext.guide_selection.
-(2) OPEN (functionality): custom pages from the teletext element library (/teletext-elements, separate branch) are listed in the page set but are not yet broadcast. Including channel-linked elements in draft preparation and publication needs an ADR 0120 amendment that lets ErsatzRS itself act as the producer of custom pages, with page-number conflict rules against add-on ranges.
-(3) OPEN (evidence): Playwright no-JS and hydrated runs of the updated teletext specs against the redesigned page.'''
+(2) DONE (component): the teletext element library (/teletext-elements) stores custom Level 1 pages uploaded as TTI, T42, EP1 or HTT, with field links to static text, channel name/number, date, time and now/next guide data. Channels link elements with their own page number and on/off state; the page set lists them as linked but not broadcast, or as overlapping an enabled add-on range.
+(3) OPEN (functionality): include linked custom pages in draft preparation, publication and broadcast. Needs an ADR 0120 amendment that lets ErsatzRS itself act as the producer of custom pages, with page-number conflict rules against add-on ranges, field refresh and failure behaviour.
+(4) OPEN (functionality): replace the editorial Level 1 HTML preview with an engine-rendered preview, and import T42/EP1 enhancement packets (X/26, X/28) instead of reporting them as not imported.
+(5) OPEN (evidence): Playwright no-JS and hydrated runs of the updated teletext specs and of upload, field links and channel linking.'''
 discovered  = '2026-11-07'
-evidence    = 'Branch claude/project-thread-g3jijz: focused ersatzrs-web unit tests for source sections, status line, guide selection parsing and authoring form defaults. Real-app screenshots of the redesigned page are on the progress artifact. Broadcasting custom pages and Playwright runs are not proven.'
+evidence    = 'Branch claude/project-thread-9pm6vy: focused domain, infra, app, ffmpeg and web unit tests (web teletext nextest 644/644), clippy and hydration-lint clean; localized in all nine cultures. Real-app screenshots of both pages are in the joint progress artifact. Broadcasting custom pages, engine preview and Playwright runs are not proven.'
 resolved    = false
