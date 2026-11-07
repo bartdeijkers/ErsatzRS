@@ -32,54 +32,42 @@ publication and operator installation remain excluded.
 
 ## Implementation
 
-Partial overall; the local FFmpeg2.0.10 source/build/package/software component
-is complete on the retained FFmpeg9 base. Four packages bind exact dependency
-images, source deltas, applied patches, payloads and notices. Required software,
-ICC/EXIF, SVG, teletext, pacing and unchanged buffering/caption regressions pass
-within their recorded platform scopes. Available native Windows CUDA, source
-format and low-frame-rate generated commands also pass independent decoding.
-`tmp/ucu14/ffmpeg210/acceptance.json` owns the complete scoped proof; its package
-manifest is `f08f3b3eb95fbfe78e9acdf0169fffcb149ff2037a567f9d498d073dd08368d2`.
-Unavailable hardware/native ARM/macOS remain unverified. Publication, managed
-adoption and application/window acceptance remain separate in UCU14/15.
+Partial overall: the accepted runtime and local application implementation
+components are complete; exact-source application CI, ordered window acceptance
+and authorized main integration remain in milestones `ucu-13/14/15`.
 
-The local Next025 bare-worker source/build/package/software component is complete
-within its explicit scope. Twelve exact patches reproduce292 prepared files;
-455 selected worker/reader and13 core/schema cases, strict affected lint and
-660 serial software playback cases pass. All four required archives match exact
-source, payload and companion hashes. Actual clean Bookworm, native Windows
-software/CUDA H264/CUDA HEVC and both ARM emulators each decode200 frames with
-selected Dutch audio and independent subtitle-reference checks. ARM64 proves
-whole-channel software fallback with the pinned companion but no drivers.
+FFmpeg2.0.10 is published from source4be9c7a on the retained FFmpeg9 base.
+Its four qualified packages bind dependency images, source deltas, patches,
+payloads and notices to manifest
+`f08f3b3eb95fbfe78e9acdf0169fffcb149ff2037a567f9d498d073dd08368d2`.
+Required software, ICC/EXIF, SVG, teletext, pacing and unchanged buffering/caption
+regressions pass. Available native Windows CUDA, source-format and low-frame-rate
+commands also pass independent decoding. Evidence:
+`tmp/ucu14/ffmpeg210/acceptance.json`.
 
-Independent stock-source/security, actual copied-caption, no-device MPP,
-finite-cut and single-use contract controls still fail their unchanged
-regressions; all ten corrections remain required. The current finite-cut and
-single-use negatives stop at missing negotiated contracts, without a new stock
-physical timing claim. Both strict2164/2143 source-frame/caption/audio/cleanup
-routes, grouped single-use delivery and ten compatibility playback checks pass
-on the successor. The metadata-only twelfth patch declares the existing MIT
-license and existing025 path versions, with the security lock unchanged; the
-complete four-target dependency policy passes. Exact evidence and limitations:
-`tmp/ucu14/next025/qualification.json`.
+Next025 is published at `next-0.2.5-c5cb065-ersatzrs.1` from the fixed
+c5cb065f9f35dbbcb7c05845f0f92c70f576a480 source with twelve reviewed patches,
+including ADR0131's reader. Exact source replay,455 worker/reader and13 schema
+cases, strict lint,660 serial software cases and four required runtime packages
+pass. Independent retirement controls retain every still-required correction
+and its tests. Evidence: `tmp/ucu14/next025/qualification.json` and
+`indexed-integration/qualification.json` beneath that directory.
 
-The indexed reader's demonstrated overlay-ownership correction now passes
-33 affected reader/config cases, strict lint and four revised package/playback
-checks. Linux and native Windows hosts preserve clock, selected audio and file
-write economy through active edits, with separate normal/browser-preview outputs
-and finite troubleshooting. Windows publication/recovery and row261 background
-proof also pass. Corrected recipe/packages and retained prior negative:
-`tmp/ucu14/next025/indexed-integration/qualification.json`.
+All37 anonymous release assets match their qualified checksums. Managed pins
+select the published pair for the four required targets; retained deferred
+package identities keep their complete original source context. Actual Linux
+and native Windows cold/cache acquisition, matched both-engine decoded playback,
+headed browser checks and transport gates pass. All four independently extracted
+private application packages pass startup, packaged readiness, bundled Next
+identity and exact served asset checks; ARM64/ARMv7 execution is QEMU. Windows
+also proves the packaged launcher starts the exact candidate server.
+The combined application identities, original negatives and composed final-gate
+results are owned by milestone `ucu-15` and `tmp/ucu14/combined-main/`.
 
-Both runtime distributions are now published unchanged after authorized delivery:
-FFmpeg `v2.0.10` and Next `next-0.2.5-c5cb065-ersatzrs.1`. All37 anonymous asset
-downloads match their qualified hashes. Local application pins select these
-packages while preserving deferred platform identities. Current Linux managed
-cold/warm startup, matched assets,20 headed browser cases, Native/Next playback
-and93/86 transport checks pass. Current Windows/ARM application/package and final
-CI/window acceptance remain open. No operator installation, application release
-or baseline acceptance is changed. The owning milestones retain exact evidence,
-the approved unverified advisory follow-up and platform/hardware debt.
+The maintainer explicitly retains row271 Windows advisory applicability as
+unverified later work. Native ARM, macOS, unavailable Rockchip/Intel/AMD hardware
+and native Linux NVIDIA interop remain unverified under existing approvals.
+No application release, Docker publication or operator installation is claimed.
 
 ## Fixed release-tail scope amendment (2026-11-07)
 

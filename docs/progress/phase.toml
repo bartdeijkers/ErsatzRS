@@ -130,8 +130,13 @@ canonical doctests and three real-package installer gates; strict lint and
 static/dependency gates pass. Current matched Linux Native/Next playback,
 93 Native/86 Next transport checks,20 headed browser cases and actual automatic
 managed cold/warm startup pass. The native Windows candidate build, matched bundle, Native/Next playback and
-actual default managed cold/warm startup pass. Complete extracted-package and
-current ARM application package/emulation acceptance next. Application
+actual default managed cold/warm startup pass. All four current private package
+checks now pass: native Linux/Windows and ARM64/ARMv7 QEMU execution, with exact
+served assets, packaged readiness and bundled Next identity. ARMv7 retains its
+original cancelled GNU-link negative plus successful identical-input LLD control
+and corrected full Cargo build. All31 local source dispositions are recorded.
+Finish exact-source CI before ordered acceptance/baseline advancement and
+authorized main delivery. Application
 checkpoint/integration and, after local acceptance, push/CI/green main merge are
 authorized. No application release, Docker publication or operator installation.
 Exact remaining application/platform acceptance and final gates stay in the milestones.

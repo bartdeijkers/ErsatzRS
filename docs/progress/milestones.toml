@@ -38663,6 +38663,42 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-07 all four current application package components now pass local
+acceptance after PR124 integration. Linux x64 and native Windows x64 run their
+independently extracted private development-profile archives; ARM64 and ARMv7
+execute under QEMU, not native hardware. Every archive has verified extraction
+hashes, bundled Next025 provenance, successful startup and packaged readiness,
+and exact served JavaScript/WASM bytes. Windows additionally proves its packaged
+launcher starts the exact server. Package identities and results live in
+ tmp/ucu14/combined-main/application-packages/*-qualification.json with the
+referenced platform receipts. Linux and Windows actual Native/Next playback,
+managed cold/warm acquisition,20 headed Chromium/Firefox cases and Native93/Next86
+transport checks remain valid. All application changes since compiled input
+60664c3b are progress/ADR and source-ledger records only; no Rust, dependency, runtime pin, served
+asset or embedded changelog input changed. No application release is created.
+
+The exceptionally slow ARMv7 GNU final link was diagnosed without interrupting
+it: identical Cargo-generated inputs link successfully with the existing Rust
+LLD in9.45s to a separate valid ARM ELF. Only then was the task-owned GNU build
+stopped; its original exit137 is retained, not credited as success. A temporary,
+traced cross-GCC wrapper selects that same LLD only for the web final link.
+The original complete Cargo command, package/feature graph, target/profile,
+sysroot and configured target directory then pass in14.68s, reusing the compiled
+libraries. No checked-in source/build configuration, dependency or toolchain installation
+changes. An initial Cargo-rustc package-selection setup error is retained.
+Evidence: armv7-{original-link-command,lld-control-exit,corrected-application-build}.json
+and final-link-trace.log under combined-main. The native Linux healthcheck build
+also succeeds after its build-lock wait. Its initial cached-image Python gap is
+retained; the same package gate runs natively with the installed interpreter.
+
+This removes the finite local platform/package and mandatory local final-gate
+items. All31 ordered source dispositions are now recorded. Final exact-source
+application CI/green main delivery remain required before window acceptance or
+pin advancement.
+Row271 remains explicitly approved, unverified later-work debt; native ARM,
+macOS and unavailable hardware remain unverified. No substitute native or
+six-platform claim, application release, Docker publication or operator install.
+
 2026-11-07 extracted Windows candidate package60664c3b passes ZIP integrity
 and independent file hashes. Packaged ErsatzRS.exe starts its own exact server;
 packaged readiness probe succeeds, bundled Next025 passes provenance, and the

@@ -8,49 +8,39 @@ their separate authorization boundaries. Runtime candidate work is now authorize
 
 ## Implementation
 
-Partial — daily planning/index publication, accepted-SQL recovery, callback
-ownership and reader identity admission are implemented. Startup binds playback
-and browser preview to the qualified indexed owner before creating application
-ports. Older readers retain complete-file publication and compatible schema1.2;
-current ordinary hosts use1.3, and the qualified indexed host uses schema1.4 and
-the separately owned indexed directory. Its reader recipe is
-`scripts/release/next-patches/v0.2.5/`. Four required local packages pass exact
-source/checksum and actual decoded bare-worker playback qualification; ARM is
-emulation, and unavailable hardware/macOS remain unverified.
+Partial overall: local daily planning/index publication, accepted-SQL recovery,
+callback ownership and reader identity admission are implemented and verified.
+Startup binds playback and preview to the qualified indexed owner before
+creating application ports. Older readers retain complete-file publication and
+compatible schema1.2; ordinary hosts use1.3, and the indexed host uses schema1.4
+with its separately owned indexed directory. The twelve-patch Next025 recipe
+is `scripts/release/next-patches/v0.2.5/` and is now published, checksum-verified
+and adopted by the four required managed pins.
 
-Actual prior-candidate testing demonstrated that a later overlay could downgrade
-indexed ownership to ordinary folder scanning. The amended reader rejects
-layout/folder replacement while retaining ordinary-folder overlays and indexed
-normalization overlays. The retained negative, exact replay,33 affected
-reader/config tests and strict reader lint pass. Linux host playback proves
-unchanged index/day contents and mtimes, active replacement with clock/picture/
-selected Dutch audio, permitted audio overlay, independent normal/browser-preview
-codecs and shutdown, plus unchanged complete-format and finite troubleshooting
-controls. Native Windows passes13 host/reader/Health/actual-playback checks and
-35 publication/recovery/callback cases, including real reader leases and
-unchanged-day write economy. Independent published-runtime decoding verifies
-all14 retained Linux/Windows post-edit segments. Strict infra/web lint passes.
+A prior-candidate negative showed an overlay could downgrade indexed ownership.
+The qualified reader rejects layout/folder replacement while permitting ordinary
+folder overlays and indexed normalization overlays. Exact replay,33 affected
+reader/config tests and strict lint pass. Linux and native Windows prove real
+reader leases, unchanged index/day contents and mtimes, active replacement,
+selected Dutch audio, normal/preview isolation, callback/SQL compensation,
+finite controls and bounded shutdown. Windows additionally passes13 host checks
+and35 publication/recovery cases. Independent decoding verifies the retained
+post-edit outputs.
 
-Actual Linux full-host startup and decoded playback pass with both the indexed
-successor and the published older reader, including Dutch audio, captions,
-preview, reconnect and cleanup. The matched web bundle and Native smoke pass.
-The original older-reader describe/schema failures and corrected results are
-retained in `tmp/ucu14/final-gates/`. The corrected native Windows full-host run
-also passes decoded Native/Next playback, preview, restart and owned cleanup;
-its actual index and every referenced day hash are verified without a Complete
-fallback. Both current ARM application type-checks and63 selected infra cases
-per emulator pass. Native93/93 and indexed Next Copy86/86 transport checks,
-composed8446 distinct unit/integration cases, strict lint, static parity,
-dependency policy and the canonical doctest gate pass. The later startup-check
-correction is rechecked against current Linux/Windows executables; the retained
-frontend is byte-identical. These close local implementation/verification within
-their explicit scopes. Publication, managed adoption, four-target application
-package/CI delivery and ordered window acceptance remain open.
-Final application/platform/window gates, public publication and managed adoption
-remain open.
-Evidence: `tmp/ucu14/next025/indexed-integration/qualification.json` and the
-previous scoped writer/recovery/admission evidence in milestone `ucu-15`.
-No production runtime pin or baseline acceptance has changed.
+Current Linux/Windows full-host Native/Next playback and managed cold/cache
+startup pass with published FFmpeg2.0.10/Next025. Native93 and Next Copy86
+transport checks,20 headed browser cases,8472 composed workspace cases, strict
+lint, static/dependency gates and canonical doctests pass within their recorded
+source scopes. Four independently extracted application packages pass startup,
+packaged readiness, bundled identity and served asset checks. ARM64/ARMv7 use
+QEMU; native ARM and other approved unavailable hardware/macOS remain unverified.
+
+Exact-source application CI, ordered window acceptance and authorized main
+integration remain required. Earlier failures and their scoped recoveries remain
+retained. Milestone `ucu-15` owns the finite completion list and current proof;
+`tmp/ucu14/next025/indexed-integration/qualification.json` and
+`tmp/ucu14/combined-main/` contain the source/runtime/package evidence. The
+accepted baseline has not advanced yet.
 
 ## Context
 
