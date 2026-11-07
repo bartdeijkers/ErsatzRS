@@ -11,6 +11,7 @@ use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::teletext::{
     ChannelTeletextData, TeletextAddonData, TeletextCustomPageData, TeletextCustomPagesData,
 };
+use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::teletext::{island, status_badge, TeletextIsland, TeletextTone};
 
 use super::teletext::{addon_name, effective_setting, source_on, style};
@@ -201,7 +202,7 @@ fn body(channel_id: i64, custom: &TeletextCustomPagesData) -> AnyView {
                     <input type="text" name="page_number" inputmode="numeric" pattern="[1-8][0-9]{2}"
                         maxlength="3" size="4"/>
                 </label>
-                <button type="submit">{tr(TextKey::TeletextElementChannelAdd)}</button>
+                <button type="submit" class=btn_class(ButtonVariant::Primary)>{tr(TextKey::TeletextElementChannelAdd)}</button>
                 <p class=style::help>{tr(TextKey::TeletextElementChannelPageHelp)}</p>
             </form>
         }
@@ -245,11 +246,11 @@ fn link_row(channel_id: i64, link: &TeletextCustomPageData) -> impl IntoView {
                         <option value="0" selected=!link.enabled>{tr(TextKey::Off)}</option>
                     </select>
                 </label>
-                <button type="submit">{tr(TextKey::Save)}</button>
+                <button type="submit" class=btn_class(ButtonVariant::Secondary)>{tr(TextKey::Save)}</button>
             </form>
             <form method="post" action=remove class=custom_style::remove>
                 <input type="hidden" name="return" value=return_path(channel_id)/>
-                <button type="submit">{tr(TextKey::Remove)}</button>
+                <button type="submit" class=btn_class(ButtonVariant::Text)>{tr(TextKey::Remove)}</button>
             </form>
         </li>
     }

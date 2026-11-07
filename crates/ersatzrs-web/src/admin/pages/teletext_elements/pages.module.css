@@ -39,6 +39,8 @@
 .edit_link { color: var(--color-secondary); text-decoration: none; font-weight: 500; }
 
 .form { display: grid; gap: 0.9rem; }
+.form > label { display: grid; gap: 0.35rem; justify-items: start; }
+.form input[name="name"] { width: 100%; box-sizing: border-box; }
 .form input[type="text"], .form input[type="number"], .fields_table select, .fields_table input, .preview_form select {
     min-height: 2.5rem; padding: 0 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius);
     background: var(--color-bg); color: var(--color-text-primary); font: inherit; max-width: 100%;
@@ -59,8 +61,13 @@
 .preview_form { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
 .field_name { display: block; font-weight: 600; }
 .static_text { margin-top: 0.35rem; width: 100%; }
+.fields_table { table-layout: fixed; }
+.fields_table td { overflow-wrap: anywhere; }
+.fields_table th:nth-child(1) { width: 42%; }
+.fields_table th:nth-child(2) { width: 33%; }
+.fields_table select, .fields_table input { width: 100%; box-sizing: border-box; }
 .fields_table select:not(:has(option[value="static"]:checked)) + .static_text { display: none; }
-.example { font-family: monospace; white-space: pre; color: var(--color-text-secondary); }
+.example { font-family: monospace; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-secondary); }
 .usage_list { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.4rem; }
 
 @media (max-width: 64rem) {
