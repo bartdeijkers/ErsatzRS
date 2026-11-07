@@ -17,6 +17,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
                 <NavLink href="/ffmpeg" label=tr(TextKey::FfmpegProfiles) icon=IconName::Tune/>
                 <NavLink href="/watermarks" label=tr(TextKey::Watermarks) icon=IconName::Visibility/>
                 <NavLink href="/graphics-elements" label=tr(TextKey::GraphicsElements) icon=IconName::Visibility/>
+                <NavLink href="/teletext-elements" label=tr(TextKey::TeletextElements) icon=IconName::Visibility/>
 
                 <NavGroup storage_key="media-sources" label=tr(TextKey::MediaSources)>
                     <NavLink href="/media/sources/local" label=tr(TextKey::Local) icon=IconName::Download/>
