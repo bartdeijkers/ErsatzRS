@@ -15,6 +15,16 @@ release section when tagging a release.
 
 ### Added
 
+- A new **Teletext elements** page (`/teletext-elements`) keeps a library of
+  custom teletext pages. Upload a TTI, T42, EP1 or HTT file (for example from
+  QTeletextMaker), see a Level 1 preview with subpages, change name, page
+  number and cycle time, replace or download the file, and link fields marked
+  `%NAME%%%` in the page to the channel name or number, date, time or the
+  current and next programme. Each element shows which channels use it.
+  On a channel's teletext page, the custom pages section links elements to
+  that channel with their own page number and an on/off choice, and the page
+  set lists them. Broadcasting linked pages is not wired up yet; the page says
+  so.
 - Channel teletext pages show one ordered readiness checklist: add-on enabled,
   valid profile, teletext capacity, output route, published pages and
   broadcast confirmed by an active output. Each state is shown separately, and

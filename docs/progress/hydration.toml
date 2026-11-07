@@ -39,6 +39,12 @@ routes = ['/graphics-elements', '/graphics-elements/add', '/graphics-elements/:i
 notes  = '2026-08-25: `tests/e2e/graphics-elements.spec.ts` passed Chromium and Firefox with localized list/add/edit routes, stable hydrated drawvg/drawtext switching, safe persistence that preserves unexposed configuration, non-text protection, and add/edit HTML form fallbacks with JavaScript disabled.'
 
 [[page]]
+name   = 'TeletextElementsPages'
+status = '⏳'
+routes = ['/teletext-elements', '/teletext-elements/add', '/teletext-elements/:id']
+notes  = '2026-11-07: server-rendered pages with plain HTML forms and no islands; SSR unit tests and a local headed Chromium screenshot pass (nl, desktop and phone width). Playwright no-JS and hydrated flows are still open under teletext-custom-pages-broadcast.'
+
+[[page]]
 name   = 'BlockEditorPage'
 status = '✅'
 routes = ['/blocks/:id', '/scheduling/blocks/:id']
