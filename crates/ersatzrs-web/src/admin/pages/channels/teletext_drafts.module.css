@@ -70,3 +70,4 @@
 .technical_title { font-weight: 600; }
 .technical_grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 0.75rem 1rem; align-items: start; }
 .technical_grid > div { display: grid; gap: 0.35rem; min-width: 0; }
+.technical > summary { cursor: pointer; min-height: 2.25rem; display: flex; align-items: center; }
