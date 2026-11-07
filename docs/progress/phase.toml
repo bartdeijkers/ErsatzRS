@@ -124,13 +124,25 @@ and disposable managed acquisition can now proceed under existing authorization;
 final application packages/CI retain their acceptance and authorization boundaries.
 Revalidate latest remote/main including merged PR124 before local application
 integration; preserve the new teletext behavior and unrelated root checkout.
+Current checkpoint60664c3b includes PR124/b108ad5c. Published runtimes pass all37
+anonymous checks. Combined Rust proof is8472 distinct composed passes plus
+canonical doctests and three real-package installer gates; strict lint and
+static/dependency gates pass. Current matched Linux Native/Next playback,
+93 Native/86 Next transport checks,20 headed browser cases and actual automatic
+managed cold/warm startup pass. The native Windows candidate build, matched bundle, Native/Next playback and
+actual default managed cold/warm startup pass. Complete extracted-package and
+current ARM application package/emulation acceptance next. Application
+checkpoint/integration and, after local acceptance, push/CI/green main merge are
+authorized. No application release, Docker publication or operator installation.
 Exact remaining application/platform acceptance and final gates stay in the milestones.
 Do not repeat unchanged components or add adjacent variants. macOS, nativeARM
 and approved unavailable-hardware debt remain unverified. Preserve Native UI,
 stored engine/track choices, completed Phase9/UCU12 and independent DCI work.
 Continue autonomous authorized work through at least2026-11-07 08:00 Amsterdam.
-Commit/push/merge, CI, publication and production installation remain separately
-gated; no application release, Phase10 or Docker publication is authorized.
+The explicit runtime/application delivery approvals above supersede the initial
+registration gate. Application push/CI/green merge still require completed local
+acceptance. Operator installation, application release, Phase10 and Docker
+publication remain unauthorized.
 
 Independent engineering goal: plans/domain-scoped-pr-ci.md. Milestone dci owns the
 finite six-package completion list. DCI-01 through DCI-04 are locally verified

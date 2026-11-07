@@ -38663,6 +38663,34 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-07 extracted Windows candidate package60664c3b passes ZIP integrity
+and independent file hashes. Packaged ErsatzRS.exe starts its own exact server;
+packaged readiness probe succeeds, bundled Next025 passes provenance, and the
+actual served JavaScript/WASM bytes match the matched site. Fresh owned state
+and database remain isolated; only the captured launcher/server tree is stopped.
+The unchanged release layout excludes FFmpeg; this private development-profile
+archive is acceptance evidence, not an application release. Initial extraction
+path and incorrect-route harness negatives are retained. Evidence:
+tmp/ucu14/combined-main/application-packages/win-x64-qualification.json and
+windows-package-launch.json. ARM64 application binaries now build successfully;
+its extracted package/emulation check is running, followed by ARMv7. Local
+platform acceptance and final exact-source CI remain mandatory.
+
+2026-11-07 current merged-source Windows component60664c3b completed:
+native Rust1.97.1 builds the server, scanner, hardware probe, launcher, xtask
+and healthcheck. The matched Windows web-bundle gate and actual full-host
+Native/Next playback pass, including Dutch880Hz audio, captions, conversion,
+preview, indexed ownership, wrapper restart and bounded cleanup. A fresh,
+isolated native startup downloads default FFmpeg2.0.10 and Next025 with exact
+published payload hashes; cached restart returns both Managed with FFmpeg
+downloads disabled and an unreachable remote proxy configured. This is scoped
+proxy evidence, not network isolation. Original PowerShell empty-variable setup
+failure is retained; only its setup was corrected. Evidence:
+tmp/ucu14/combined-main/windows-{runtime-results,server-identity,managed-startup}.json.
+Required extracted-package and current ARM application package/emulation proof,
+ordered dispositions and exact-source CI remain open. No operator installation,
+application release, macOS or native ARM acceptance is claimed.
+
 2026-11-07 authorized runtime source/CI checkpoint complete. FFmpeg2.0.10 source
 4be9c7aac9178c3e7bc762554db6e0f116ba4385 is pushed and integrated into its
 remote/main after run42351713434 passes all four existing-package jobs: Linux
@@ -38698,6 +38726,53 @@ of latest remote/main including PR124/b108ad5c; after required local acceptance,
 push, CI and green final integration are authorized. No application release or
 Docker publication. Preserve unrelated root/DCI changes and PR124's new teletext
 behavior; earlier evidence does not by itself qualify the combined source.
+
+Combined-source local Rust/runtime checkpoint2026-11-07: current main/PR124 at
+b108ad5c is merged locally, preserving both code paths and both documentation
+histories. Strict workspace/all-target lint passes on05c44bb8. Formatting,
+progress, architecture, hydration and dependency policy also pass. The workspace
+selects8472 cases:8335 initially pass;130 localhost-dependent failures pass an
+unchanged host-permission retry. Six installer fixtures had inherited the gate's
+explicit FFmpeg override; clearing only those fixture environment aliases makes
+them pass. The last failure requires explicit test-preservation wording for the
+indexed-reader and package-metadata patches. Add that policy text without
+changing runtime/source/payload/patch hashes, then the seven targeted cases pass
+on60664c3b. Current distinct composed result is8472 passes, not a second full
+run; all original negatives and the zero-test filter mistake are retained.
+The canonical doctest component passes, with zero registered doctest cases.
+Three existing opt-in real-package gates pass: all four RID archives install,
+relocate and validate bundle identity without executing foreign targets; Linux
+Next cold HTTP install/cache/version/Health validation passes; the exact Linux
+FFmpeg archive installs and reuses with verified executable/capability identity.
+These installer trials use disposable state and already-anonymously-verified
+published bytes, not operator installation. Native Windows/current ARM application
+and matched UI/playback/final CI acceptance remain required. Source/package
+Python checks pass29 staging,10 preparation and9 packaging cases. Identities,
+commands, failures and composition: tmp/ucu14/combined-main/{gate-results.json,
+recovery-results.json,final-recovery-results.json} and their logs. The matched
+web build is running; no application push, CI or baseline acceptance yet.
+
+Subsequent current Linux application component completes on60664c3b: the matched
+Leptos build passes and its server plus20 site files are preserved separately.
+Bundle verification and actual Native/Next decoded/lifecycle smokes pass with
+published FFmpeg210/Next025. Required unchanged transport/frame gates pass
+93/93 Native and86/86 Next Copy, reusing existing calibration inputs. The first
+headed20-case UI pass uses the wrapper's development FFmpeg9 injection and
+therefore does not prove the new default FFmpeg acquisition. Disable that
+injection through the existing ERSATZRS_FFMPEG_DIR setting and rerun the affected
+gate:20/20 Chromium/Firefox EN/NL profile-policy/validation and scripted-teletext
+Health cases pass, including JavaScript/no-JS and light/dark controls. Fresh
+ordinary startup automatically downloads both published runtimes; managed tags
+and executable hashes match the accepted manifests. The actual browser host
+binary and all20 site files match the preserved build. A subsequent warm host
+restart uses Managed for both runtimes with FFmpeg downloads disabled and a
+loopback proxy configured for remote HTTP; the disposable database/profile is
+retained and no operator installation is changed. Exact proof:
+tmp/ucu14/combined-main/{matched-build-identity.json,linux-runtime-results.json,
+tsduck-results.json,managed-browser-results/playwright-results.json,
+linux-managed-startup.json}. Windows candidate compilation remains live; current
+native Windows, ARM application/package/emulation and final CI/merge obligations
+remain open. No completed Linux gate should be repeated without changed inputs.
 
 2026-11-07 row278 product startup binding locally verified on Linux. Startup now
 constructs the qualified indexed owner before application ports capture it.
