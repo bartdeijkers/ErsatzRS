@@ -92,7 +92,7 @@
     {
       "file": "0011-atomic-index-reader.patch",
       "sha256": "2e013e87aae6016e815f54d56ee0dfc33953f2b8e7322d02a4419b609192fff3",
-      "retire_when": "Retire only when adopted unpatched upstream provides the accepted ADR0131 indexed snapshot/lease/capability contract and passes unchanged acceptance.",
+      "retire_when": "Retire only when adopted unpatched upstream provides the accepted ADR0131 indexed snapshot/lease/capability contract and passes unchanged acceptance. Preserve the tests.",
       "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
       "unpatched_regression": "Accepted local reader extension; exact292-file replay, existing52 reader/contract cases within455-case composed pass, and strict lint. Not an upstream fix. The retained prior indexed recipe permits an overlay to downgrade indexed ownership to folder scanning; the corrected reader rejects layout/folder replacement while preserving ordinary and normalization overlays (indexed-integration/).",
       "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
@@ -100,7 +100,7 @@
     {
       "file": "0012-qualify-worker-package-metadata.patch",
       "sha256": "925ce512c96fd8dbcc8062d63e94e986d8d11b6833e1103fb9831d8f08869435",
-      "retire_when": "Retire when upstream declares the same existing repository MIT license and pins internal workspace path versions so unmodified worker metadata passes the retained complete dependency policy.",
+      "retire_when": "Retire when upstream declares the same existing repository MIT license and pins internal workspace path versions so unmodified worker metadata passes the retained complete dependency policy. Preserve the tests.",
       "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
       "unpatched_regression": "The initial full policy rejects missing private-package license metadata and unversioned path dependencies. Exact upstream root MIT license is preserved, path versions match existing025 and lock unchanged; final full policy passes.",
       "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
