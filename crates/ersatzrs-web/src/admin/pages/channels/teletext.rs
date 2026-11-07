@@ -105,7 +105,10 @@ async fn load_channel_page(
     Ok(Some((channel, preview, current)))
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one view lists the page sections in their fixed order"
+)]
 fn channel_page(
     data: &ChannelTeletextData,
     error: &str,
@@ -540,7 +543,10 @@ fn publish_island(
     })
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one view keeps the badge and both source states together"
+)]
 fn addon_section(data: &ChannelTeletextData, addon: &TeletextAddonData) -> AnyView {
     let channel_id = data.channel_id;
     let language = use_i18n();
