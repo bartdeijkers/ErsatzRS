@@ -290,22 +290,7 @@ pub async fn load_channel_teletext_for_application(
         } else {
             None
         };
-    let guide_selection = load_guide_selection(application, channel_id).await;
-    let current_guide_available = match application
-        .get_optional_setting(
-            crate::host::teletext_runtime_policy::NATIVE_TELETEXT_RUNTIME_POLICY_SETTING,
-        )
-        .await
-    {
-        Ok(None) => Some(false),
-        Ok(Some(raw)) => {
-            match crate::host::teletext_runtime_policy::parse_native_teletext_runtime_policy(&raw) {
-                Ok(policy) => Some(policy.guide_refresh),
-                Err(_) => None,
-            }
-        }
-        Err(_) => None,
-    };
+    let current_guide_available = current_guide_available(application).await;
     let readiness = Some(readiness(application, &channel.form, channel_id).await);
     Ok(Some(ChannelTeletextData {
         channel_id,
@@ -317,7 +302,7 @@ pub async fn load_channel_teletext_for_application(
         effective_authoring,
         effective_authoring_error,
         guide_channels,
-        guide_selection,
+        guide_selection: load_guide_selection(application, channel_id).await,
         current_guide_available,
         addons,
         readiness,
@@ -389,6 +374,25 @@ pub fn parse_guide_selection(raw: &str) -> std::collections::BTreeMap<i64, Vec<i
                 .collect()
         })
         .unwrap_or_default()
+}
+
+#[cfg(feature = "ssr")]
+async fn current_guide_available(application: &ersatzrs_app::ApplicationServices) -> Option<bool> {
+    match application
+        .get_optional_setting(
+            crate::host::teletext_runtime_policy::NATIVE_TELETEXT_RUNTIME_POLICY_SETTING,
+        )
+        .await
+    {
+        Ok(None) => Some(false),
+        Ok(Some(raw)) => {
+            match crate::host::teletext_runtime_policy::parse_native_teletext_runtime_policy(&raw) {
+                Ok(policy) => Some(policy.guide_refresh),
+                Err(_) => None,
+            }
+        }
+        Err(_) => None,
+    }
 }
 
 #[cfg(feature = "ssr")]
