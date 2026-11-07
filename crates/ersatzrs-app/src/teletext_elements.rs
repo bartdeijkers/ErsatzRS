@@ -464,7 +464,7 @@ impl ApplicationServices {
         Ok(Some(FieldValues {
             channel_name: state.name,
             channel_number: state.number,
-            date: local.format("%a %d %b").to_string(),
+            date: local.format("%d-%m-%Y").to_string(),
             time: local.format("%H:%M").to_string(),
             now_title: title(now_programme),
             now_start: start(now_programme),
