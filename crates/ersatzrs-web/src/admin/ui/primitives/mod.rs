@@ -11,4 +11,5 @@ pub mod resource_state;
 pub mod settings_navigation;
 pub mod system_navigation;
 pub mod table;
+pub mod teletext;
 pub mod toast;
