@@ -283,13 +283,13 @@ fn apply_tti_line(subpage: &mut ElementSubpage, command: &[u8], value: &[u8]) ->
             let payload = &value[separator + 1..];
             match row {
                 0..=25 => {
-                    subpage.set_row(row as usize, &decode_ol_row(payload));
+                    subpage.set_row(usize::try_from(row).unwrap_or(0), &decode_ol_row(payload));
                     true
                 }
                 26..=28 => match decode_ol_packet(payload) {
                     Some((designation, words)) => {
                         subpage.packets.push(ElementPacket {
-                            row: row as u8,
+                            row: u8::try_from(row).unwrap_or(26),
                             designation,
                             words,
                         });
@@ -318,10 +318,10 @@ const HAMMING_8_4: [u8; 16] = [
 #[must_use]
 pub fn hamming_8_4(byte: u8) -> Option<u8> {
     let mut best = None;
-    for (value, &code) in HAMMING_8_4.iter().enumerate() {
+    for (value, &code) in (0_u8..).zip(HAMMING_8_4.iter()) {
         match (code ^ byte).count_ones() {
-            0 => return Some(value as u8),
-            1 => best = Some(value as u8),
+            0 => return Some(value),
+            1 => best = Some(value),
             _ => {}
         }
     }
@@ -357,6 +357,7 @@ fn packet_header(packet: &[u8]) -> Option<PacketHeader> {
     })
 }
 
+#[allow(clippy::too_many_lines)] // one linear pass over the packet stream
 fn import_packets(
     packets: impl IntoIterator<Item = Vec<u8>>,
     warnings: &mut Vec<ElementImportWarning>,

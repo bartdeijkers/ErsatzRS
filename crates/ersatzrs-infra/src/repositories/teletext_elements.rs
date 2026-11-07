@@ -1,4 +1,4 @@
-//! SQLite storage for the teletext element library and channel links.
+//! `SQLite` storage for the teletext element library and channel links.
 
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{RepositoryError, Result, TeletextElementRepository};

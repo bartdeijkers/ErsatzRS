@@ -140,7 +140,11 @@ fn channel_page(
             | "secondary-default-invalid"
             | "object-add-invalid"
     );
-    let (code, message, role) = if !error.is_empty() {
+    let custom_page = super::teletext_custom_pages::feedback(error, saved);
+    let (code, message, role) = if let Some((message, role)) = custom_page {
+        let code = if error.is_empty() { saved } else { error };
+        (code, message, role)
+    } else if !error.is_empty() {
         if draft_code {
             (
                 error,
@@ -243,7 +247,7 @@ fn source_usable(addon: &TeletextAddonData) -> bool {
     addon.installed && addon.availability == "configured" && addon.installation.is_some()
 }
 
-fn source_on(addon: &TeletextAddonData) -> bool {
+pub(super) fn source_on(addon: &TeletextAddonData) -> bool {
     source_usable(addon)
         && addon
             .binding
@@ -251,7 +255,7 @@ fn source_on(addon: &TeletextAddonData) -> bool {
             .is_some_and(|binding| binding.enabled && binding.availability == "configured")
 }
 
-fn addon_name(addon: &TeletextAddonData) -> String {
+pub(super) fn addon_name(addon: &TeletextAddonData) -> String {
     if addon.name_labels.is_empty() {
         addon.name.clone()
     } else {
@@ -1093,6 +1097,7 @@ mod tests {
             current_guide_available: Some(false),
             addons: Vec::new(),
             readiness: None,
+            custom_pages: None,
         };
         let html = owner.with(|| {
             channel_page(
@@ -1136,6 +1141,7 @@ mod tests {
             current_guide_available: Some(false),
             addons,
             readiness: None,
+            custom_pages: None,
         }
     }
 

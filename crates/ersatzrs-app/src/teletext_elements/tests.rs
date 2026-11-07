@@ -112,9 +112,9 @@ fn sample_t42() -> Vec<u8> {
 
 #[test]
 fn hamming_decoding_corrects_single_bit_errors() {
-    for (value, code) in HAMMING.iter().enumerate() {
-        assert_eq!(hamming_8_4(*code), Some(value as u8));
-        assert_eq!(hamming_8_4(code ^ 0x10), Some(value as u8));
+    for (value, code) in (0_u8..).zip(HAMMING.iter()) {
+        assert_eq!(hamming_8_4(*code), Some(value));
+        assert_eq!(hamming_8_4(code ^ 0x10), Some(value));
     }
     assert_eq!(hamming_8_4(0x15 ^ 0x03), None);
 }

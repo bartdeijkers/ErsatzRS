@@ -8,6 +8,7 @@ use leptos::prelude::*;
 stylance::import_crate_style!(style, "src/admin/pages/teletext_elements/screen.module.css");
 
 /// One display cell, already resolved to a glyph.
+#[allow(clippy::struct_excessive_bools)] // independent Level 1 display attributes
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScreenCell {
     pub glyph: char,

@@ -104,7 +104,7 @@ pub fn TeletextElementEditorPage() -> impl IntoView {
         )
     });
     match load(id, subpage, channel) {
-        Ok(Some(data)) => editor(data, saved, error, &warnings).into_any(),
+        Ok(Some(data)) => editor(&data, saved.as_deref(), error.as_deref(), &warnings).into_any(),
         Ok(None) => view! {
             <div class=style::page>
                 <p role="alert" data-teletext-element-not-found>{tr(TextKey::TeletextElementNotFound)}</p>
@@ -120,9 +120,9 @@ pub fn TeletextElementEditorPage() -> impl IntoView {
 }
 
 fn editor(
-    data: EditorData,
-    saved: Option<String>,
-    error: Option<String>,
+    data: &EditorData,
+    saved: Option<&str>,
+    error: Option<&str>,
     warnings: &str,
 ) -> impl IntoView {
     let unset = data
@@ -182,19 +182,19 @@ fn editor(
         data.file_name
     );
     let mut messages = Vec::new();
-    if let Some(text) = saved.as_deref().and_then(saved_text) {
+    if let Some(text) = saved.and_then(saved_text) {
         messages.push(
             view! { <p class=style::feedback role="status" data-teletext-element-saved>{text}</p> }
                 .into_any(),
         );
     }
     if let Some(code) = error {
-        messages.push(view! { <p class=style::alert role="alert" data-teletext-element-error=code.clone()>{error_text(&code)}</p> }.into_any());
+        messages.push(view! { <p class=style::alert role="alert" data-teletext-element-error=code.to_owned()>{error_text(code)}</p> }.into_any());
     }
     for text in warnings.split(',').filter_map(warning_text) {
         messages.push(view! { <p class=style::warning role="status" data-teletext-element-warning>{text}</p> }.into_any());
     }
-    let preview = preview_column(&data);
+    let preview = preview_column(data);
     view! {
         <div class=style::page data-teletext-elements-page="editor" data-teletext-element-id=data.id.to_string()>
             <a href="/teletext-elements" class=style::back>{format!("‹ {}", tr(TextKey::TeletextElements))}</a>
@@ -210,10 +210,10 @@ fn editor(
             <div class=style::editor_grid>
                 <div class=style::preview_column>{preview}</div>
                 <div class=style::settings_column>
-                    {fields_island(&data)}
-                    {details_island(&data)}
-                    {usage_island(&data)}
-                    {file_island(&data)}
+                    {fields_island(data)}
+                    {details_island(data)}
+                    {usage_island(data)}
+                    {file_island(data)}
                 </div>
             </div>
         </div>
@@ -223,7 +223,7 @@ fn editor(
 fn editor_href(data: &EditorData, subpage: u16) -> String {
     let mut href = format!("/teletext-elements/{}?subpage={}", data.id, subpage + 1);
     if let Some(channel) = data.preview_channel {
-        href.push_str(&format!("&channel={channel}"));
+        href = format!("{href}&channel={channel}");
     }
     href
 }

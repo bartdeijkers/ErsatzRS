@@ -6,6 +6,7 @@
 
 /// One decoded display cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)] // independent Level 1 display attributes
 pub struct Level1Cell {
     /// 7-bit character code to show (0x20 for a blank control cell).
     pub code: u8,

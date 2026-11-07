@@ -70,7 +70,7 @@ pub struct EditorData {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use native::*;
+pub(crate) use native::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
@@ -86,7 +86,7 @@ mod native {
     }
 
     /// Library rows with a thumbnail of each element's first subpage.
-    pub fn load_rows() -> Result<Vec<ElementRow>, ()> {
+    pub(crate) fn load_rows() -> Result<Vec<ElementRow>, ()> {
         let state = use_context::<AppState>().ok_or(())?;
         block_on(async {
             let summaries = state
@@ -138,7 +138,7 @@ mod native {
     }
 
     /// Editor data; `None` when the element does not exist.
-    pub fn load_editor(
+    pub(crate) fn load_editor(
         id: i64,
         subpage: u16,
         preview_channel: Option<i64>,
@@ -223,7 +223,10 @@ mod native {
                 subpage,
                 cycle_seconds: element.cycle_seconds,
                 updated_at: element.updated_at,
-                national_option: first.map_or(0, |subpage| subpage.charset_designation()),
+                national_option: first.map_or(
+                    0,
+                    ersatzrs_app::teletext_elements::model::ElementSubpage::charset_designation,
+                ),
                 enhancement_packets: page.subpages.iter().map(|s| s.packets.len()).sum(),
                 fields,
                 channels,
