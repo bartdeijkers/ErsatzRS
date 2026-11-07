@@ -243,7 +243,7 @@ test.describe('ffmpeg profile editor parity', () => {
 
     await profileSelect.selectOption('high');
     await noJsPage.getByRole('button', { name: /save profile/i }).first().click();
-    await expect(noJsPage).toHaveURL(/\/ffmpeg$/);
+    await expect(noJsPage).toHaveURL(new RegExp(`${editHref}$`));
     await context.close();
 
     await page.goto(editHref);

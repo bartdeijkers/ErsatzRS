@@ -37,12 +37,15 @@ LOCAL_GROUP_MARKER = ".ersatzrs-ci-artifacts"
 LOCAL_GROUP_OWNER = b"ersatzrs-ci-artifacts-group-v1\n"
 BUILD_FLAG_KEYS = ("RUSTFLAGS", "CARGO_PROFILE_TEST_DEBUG", "LEPTOS_OUTPUT_NAME", "LEPTOS_HASH_FILES")
 # Explicit recovery-only edits that cannot change compiled/runtime inputs.
-# Everything else, including tests, runtime pins and Cargo configuration, fails closed.
+# The qualified browser spec is executed from the checkout, never compiled
+# into these products. Its changes invalidate its browser suite's results.
+# Rust tests, runtime pins and Cargo configuration still fail closed.
 REUSE_SOURCE_EXCEPTIONS = {
     ".github/workflows/ci.yml", "scripts/ci-build-artifacts.py", "scripts/ci-build-artifacts_test.py",
     "scripts/ci-teletext-selection.py", "scripts/ci-teletext-selection_test.py",
     "BUILD.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
     "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
+    "tests/e2e/ffmpeg-profiles.spec.ts",
 }
 
 
@@ -255,16 +258,23 @@ def resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workf
     """Result reuse is stricter than executable reuse: selectors cannot drift."""
     import ast
 
-    allowed = REUSE_SOURCE_EXCEPTIONS - {
-        "scripts/ci-teletext-selection.py", "scripts/ci-teletext-selection_test.py",
+    allowed = {
+        ".github/workflows/ci.yml", "scripts/ci-build-artifacts.py", "scripts/ci-build-artifacts_test.py",
+        "BUILD.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
+        "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
+        "tests/e2e/ffmpeg-profiles.spec.ts",
     }
     if set(changes) - allowed:
         raise ValueError("completed CI check inputs changed")
     def consumer_code(source):
         tree = ast.parse(source)
+        # Qualification is independently checked above. Archive validation,
+        # restoration and execution must remain byte-for-byte equivalent ASTs.
         tree.body = [node for node in tree.body if not (
             isinstance(node, ast.FunctionDef) and node.name.startswith("resume_")
-            and not node.decorator_list)]
+            and not node.decorator_list) and not (
+            isinstance(node, ast.Assign) and any(isinstance(target, ast.Name)
+                and target.id == 'REUSE_SOURCE_EXCEPTIONS' for target in node.targets))]
         return ast.dump(tree, include_attributes=False)
     if consumer_code(old_helper) != consumer_code(new_helper):
         raise ValueError("CI artifact consumer implementation changed")
@@ -295,8 +305,43 @@ def resume_artifacts_guard(log, references, execution_sha):
             raise ValueError("completed CI check artifact provenance differs")
 
 
+def resume_browser_cases(rows, logs, changes):
+    """Narrow replay only after both original general suites fully reported."""
+    selected = {path for path in changes if path == 'tests/e2e/ffmpeg-profiles.spec.ts'}
+    evidence = []
+    for row in rows:
+        project = 'chromium' if row['name'].endswith('chromium)') else 'firefox'
+        log = logs.get(row['name'], '')
+        plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', log)
+        plain = re.sub(r'^\ufeff?\d{4}-\d\d-\d\dT\S+ ', '', plain, flags=re.M)
+        runs = re.findall(r'^Running (\d+) tests? using ', plain, re.M)
+        projects = set(re.findall(r'^\[\d+/\d+\] \[([^]]+)\]', plain, re.M))
+        def count(word):
+            matches = re.findall(rf'^\s*(\d+) {word}(?:\s|$)', plain, re.M)
+            return int(matches[-1]) if matches else 0
+        passed, failed, skipped = count('passed'), count('failed'), count('skipped')
+        failures = re.findall(r'^\s*\d+\) \[' + re.escape(project)
+                              + r'\] › (tests/e2e/[^\s:]+\.spec\.ts):', plain, re.M)
+        if (len(runs) != 1 or projects != {project} or passed <= 0
+                or int(runs[0]) != passed + failed + skipped
+                or len(failures) != failed
+                or row.get('conclusion') not in ('success', 'failure')
+                or (row['conclusion'] == 'failure') != bool(failed)
+                or any(not re.fullmatch(r'tests/e2e/[^/]+\.spec\.ts', path) for path in failures)):
+            return '', []
+        selected.update(failures)
+        evidence.append({'job_id': row['id'], 'project': project, 'listed': int(runs[0]),
+                         'passed': passed, 'failed': failed, 'skipped': skipped,
+                         'failed_specs': sorted(set(failures)),
+                         'log_sha256': hashlib.sha256(log.encode()).hexdigest()})
+    if not selected or len(evidence) != 2:
+        return '', []
+    pattern = '(?:' + '|'.join(re.escape(path) for path in sorted(selected)) + ')$'
+    return pattern, evidence
+
+
 def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
-                old_helper, new_helper, changes, references, producer_log):
+                old_helper, new_helper, changes, references, producer_log, browser_logs=None):
     """Reuse only actual successful jobs from a completed ordinary full run."""
     if (run.get("status") != "completed" or run.get("conclusion") not in ("success", "failure")
             or run.get("path") != ".github/workflows/ci.yml"
@@ -340,19 +385,26 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
     for job, names in scopes.items():
         if resume_job_signature(old_workflow, job) != resume_job_signature(new_workflow, job):
             continue
-        passed = [by_name[name]["id"] for name in names if by_name[name].get("conclusion") == "success"]
+        invalidated = {name for name in names if job == 'hydration'
+                       and 'tests/e2e/ffmpeg-profiles.spec.ts' in changes
+                       and name.startswith('Playwright E2E (general,')}
+        passed = [by_name[name]["id"] for name in names
+                  if by_name[name].get("conclusion") == "success" and name not in invalidated]
         if len(passed) == len(names):
             reused[job] = passed
         if job == "hydration":
             passed_browsers = passed
             pending_browsers = [row for row, name in zip(browsers, names)
-                                if by_name[name].get("conclusion") != "success"]
+                                if by_name[name].get("conclusion") != "success" or name in invalidated]
+    general = [by_name[name] for name in browser_names[:2]]
+    replay_filter, case_proof = resume_browser_cases(general, browser_logs or {}, changes)
     return {"run_id": run["id"], "source_sha": run["head_sha"], "execution_sha": sha,
             "jobs": reused, "browser_passed": passed_browsers,
-            "browser_pending": pending_browsers}
+            "browser_pending": pending_browsers, "general_filter": replay_filter,
+            "browser_case_proof": case_proof}
 
 
-def resume_checks(run, jobs, repository, sha, references, producer_log):
+def resume_checks(run, jobs, repository, sha, references, producer_log, browser_logs=None):
     """Bind the API proof to clean exact source before exporting any skips."""
     if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != sha:
         raise ValueError("resume checkout differs from the execution SHA")
@@ -370,7 +422,7 @@ def resume_checks(run, jobs, repository, sha, references, producer_log):
                        source(sha, ".github/workflows/ci.yml"),
                        source(producer, "scripts/ci-build-artifacts.py"),
                        source(sha, "scripts/ci-build-artifacts.py"), changes,
-                       references, producer_log)
+                       references, producer_log, browser_logs)
 
 
 def workspace_test_targets(metadata):

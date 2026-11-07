@@ -38663,6 +38663,26 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 profile fallback correction passes its exact headed Chromium
+recheck1/1 in5.1s against the unchanged, hash-verified CI producer437fbcf1
+server/site. The assertion now expects the accepted row282 edit-page redirect;
+the existing subsequent hydrated reload still proves VideoProfile=high was
+persisted. No application code or runtime package changed. All150 CI-contract
+tests pass; actionlint and progress validation pass. The qualified browser-only
+spec is not a compiled artifact input, and its change invalidates general
+browser results while retaining unchanged native/Level1.5 proof. Real complete
+logs validate372 Chromium cases (366pass/1fail/5skip) and372 Firefox cases
+(340pass/2fail/30skip). Recovery's verified file filter includes the changed
+profile spec and the two failures in local-library-scan-lifecycle.spec.ts,
+without re-executing unrelated successful cases. Missing/incomplete logs retain
+full scope. Source and exact log/test hashes:
+combined-main/profile-fixture-recheck/qualification.json, run.log and results/;
+ci-profile-correction-contracts.log and ci-profile-correction-other-contracts.log.
+Next bounded blocker: diagnose the two Firefox lifecycle pageerrors, each
+"The operation was aborted." after the deletion/preservation SQL assertions
+pass. Do not suppress the errors without identifying their origin. Remaining
+Level1.5 browser jobs stay live; final CI/window acceptance is still open.
+
 2026-11-08 CI-recovery component locally verified: all144 existing/new CI
 contract tests pass with actual artifact-reuse references, and installed
 actionlint passes. The bounded resume_run mode checks completed same-repository

@@ -331,8 +331,18 @@ the same `reuse_artifacts` references. Preflight verifies the original run and
 complete job inventory through GitHub, binds both archive hashes and producer
 identities to its successful provider log, and compares clean exact source,
 artifact-consumer code, global flags and each check's execution definition.
-Changed runtime, dependency, application-test, selector or embedded release-note inputs
-cannot reuse results. A changed job definition requires that check to run again.
+Changed native runtime, dependency, Rust-test, selector or embedded release-note
+inputs cannot reuse results. A changed job definition requires that check to run
+again. The explicitly qualified `ffmpeg-profiles.spec.ts` is evaluated from the
+current checkout and is not compiled into Rust/server/WASM artifacts. Changing
+it invalidates both general browser results, while unchanged Level1.5 browser
+and native checks may retain their source-bound proof. Shared browser fixtures
+and other application tests remain outside this exception.
+When both original general-browser logs prove complete execution, recovery may
+rerun only changed and failed spec files, using the existing browser filter.
+Unchanged successful cases retain their original proof. Missing logs, incomplete
+counts, unrelated projects or setup/global failures keep the full browser scope;
+the exact log hashes and counts remain in the composed proof.
 Only failed browser suite/project entries are selected when their execution is
 unchanged. Format, dependency audit, commit lint, contract tests and complete
 artifact verification still run; `CI ok` requires every remaining check and

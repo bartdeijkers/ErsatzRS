@@ -317,6 +317,12 @@ class BuildArtifacts(unittest.TestCase):
                  self.assertRaisesRegex(ValueError, "source inputs changed: CHANGELOG.md"):
                 artifacts.verify_source_equivalence(SHA, "b" * 40)
 
+    def test_qualified_browser_spec_does_not_require_recompiling_native_products(self):
+        path = 'tests/e2e/ffmpeg-profiles.spec.ts'
+        with patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+             patch.object(artifacts.subprocess, 'check_output', side_effect=[(path + '\0').encode(), b'']):
+            self.assertEqual(artifacts.verify_source_equivalence(SHA, 'b' * 40), [path])
+
     def test_browser_wrapper_uses_verified_bundle_without_any_build_tools(self):
         root, _ = self.fixture("web")
         server = root / "bin/ersatzrs-web"
@@ -781,6 +787,54 @@ class CompletedCheckReuse(unittest.TestCase):
         self.assertEqual(proof['browser_pending'],
                          [{'suite': 'general', 'project': 'firefox', 'port': '18410'}])
 
+    def test_profile_spec_changes_invalidate_both_general_browsers_but_not_level15(self):
+        proof = self.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'])
+        self.assertEqual(proof['browser_pending'], [
+            {'suite':'general', 'project':'chromium', 'port':'18409'},
+            {'suite':'general', 'project':'firefox', 'port':'18410'}])
+        self.assertEqual(len(proof['browser_passed']), 2)
+        self.assertNotIn('hydration', proof['jobs'])
+        self.assertIn('test', proof['jobs'])
+        self.assertIn('clippy', proof['jobs'])
+
+    @staticmethod
+    def browser_log(project, failed=0):
+        text = f'Running 3 tests using 1 worker\n[1/3] [{project}] › tests/e2e/ffmpeg-profiles.spec.ts:1:1 › example\n'
+        if failed:
+            text += f'  1) [{project}] › tests/e2e/ffmpeg-profiles.spec.ts:1:1 › example\n  1 failed\n'
+        return text + f'  {3 - failed} passed (1s)\n'
+
+    def test_completed_logs_narrow_replay_to_changed_and_failed_specs(self):
+        for row in self.jobs['jobs']:
+            if row['name'] == 'Playwright E2E (general, chromium)': row['conclusion'] = 'failure'
+        logs = {f'Playwright E2E (general, {project})': self.browser_log(project, project == 'chromium')
+                for project in ('chromium', 'firefox')}
+        proof = self.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'], browser_logs=logs)
+        self.assertEqual(proof['general_filter'], r'(?:tests/e2e/ffmpeg\-profiles\.spec\.ts)$')
+        self.assertEqual({case['project'] for case in proof['browser_case_proof']}, {'chromium', 'firefox'})
+        self.assertEqual(sum(case['failed'] for case in proof['browser_case_proof']), 1)
+        self.assertEqual(len(proof['browser_pending']), 2)
+
+    def test_incomplete_wrong_project_or_global_failure_logs_keep_full_browser_scope(self):
+        logs = {f'Playwright E2E (general, {project})': self.browser_log(project)
+                for project in ('chromium', 'firefox')}
+        key = 'Playwright E2E (general, chromium)'
+        for log in ('', logs[key].replace('3 passed', '2 passed'),
+                    logs[key].replace('[chromium]', '[foreign]'),
+                    logs[key].replace('Running 3 tests using', 'Interrupted 3 tests using')):
+            with self.subTest(log=log):
+                proof = self.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'],
+                                  browser_logs=dict(logs, **{key:log}))
+                self.assertEqual(proof['general_filter'], '')
+        for row in self.jobs['jobs']:
+            if row['name'] == key: row['conclusion'] = 'failure'
+        self.assertEqual(self.plan(browser_logs=logs)['general_filter'], '')
+
+    def test_qualification_allowlist_change_cannot_import_changed_native_inputs(self):
+        with self.assertRaisesRegex(ValueError, 'inputs changed'):
+            self.plan(changes=['Cargo.lock'], new_helper=self.helper +
+                      '\nREUSE_SOURCE_EXCEPTIONS = {"Cargo.lock"}\n')
+
     def test_browser_runtime_pin_change_invalidates_every_browser_result(self):
         before, body = self.workflow.split('  hydration:\n', 1)
         changed = before + '  hydration:\n' + body.replace(
@@ -1213,6 +1267,24 @@ class FocusedAuditSelection(unittest.TestCase):
                 event='workflow_dispatch', outputs=outputs, resume='123'), 0)
         self.assertNotEqual(self.ci_ok_exit('full', results, event='workflow_dispatch',
             outputs=dict(outputs, resume_matrix='{"include":[]}'), resume='123'), 0)
+
+    def test_ci_ok_case_replay_requires_complete_logs_and_the_verified_filter(self):
+        fixture = CompletedCheckReuse()
+        fixture.setUp()
+        logs = {f'Playwright E2E (general, {p})': fixture.browser_log(p) for p in ('chromium', 'firefox')}
+        proof = fixture.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'], browser_logs=logs)
+        results = {job:'skipped' for job in proof['jobs']}
+        def gate(value, filter_override=None):
+            outputs = dict(resumed_checks=json.dumps(value), resume_matrix=json.dumps({
+                'include':value['browser_pending']}), general_filter=value['general_filter'])
+            if filter_override is not None: outputs['general_filter'] = filter_override
+            return self.ci_ok_exit('full', results, event='workflow_dispatch', outputs=outputs, resume='123')
+        self.assertEqual(gate(proof), 0)
+        self.assertNotEqual(gate(proof, 'unproven.spec.ts'), 0)
+        for field, value in [('log_sha256','short'), ('listed',999), ('project','wrong')]:
+            changed = deepcopy(proof)
+            changed['browser_case_proof'][0][field] = value
+            with self.subTest(field=field): self.assertNotEqual(gate(changed), 0)
 
     def test_ci_ok_accepts_only_the_jobs_a_lane_leaves_out(self):
         light = {"next_engine": "skipped", "teletext": "skipped", "hydration": "skipped"}

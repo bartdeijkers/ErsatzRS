@@ -228,7 +228,7 @@ jobs:
       pr_matrix: ${{ steps.select.outputs.pr_matrix }}
       nextest_filter: ${{ steps.select.outputs.nextest_filter }}
       archive_packages: ${{ steps.select.outputs.archive_packages }}
-      general_filter: ${{ steps.select.outputs.general_filter }}
+      general_filter: ${{ steps.resume.outputs.general_filter || steps.select.outputs.general_filter }}
       teletext_filter: ${{ steps.select.outputs.teletext_filter }}
       deselected: ${{ steps.select.outputs.deselected }}
       required_jobs: ${{ steps.select.outputs.required_jobs }}
@@ -446,13 +446,20 @@ jobs:
           if '--allow-escape-sequences' in subprocess.check_output(['gh', 'api', '--help'], text=True):
               log_args.append('--allow-escape-sequences')
           producer_log = subprocess.check_output(log_args, text=True)
+          browser_logs = {}
+          for row in jobs['jobs']:
+              if row['name'] in ('Playwright E2E (general, chromium)', 'Playwright E2E (general, firefox)'):
+                  args = list(log_args)
+                  args[2] = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/jobs/{row['id']}/logs"
+                  browser_logs[row['name']] = subprocess.check_output(args, text=True)
           proof = artifacts.resume_checks(run, jobs, os.environ['GITHUB_REPOSITORY'],
-              os.environ['GITHUB_SHA'], os.environ['RESUME_ARTIFACTS'], producer_log)
+              os.environ['GITHUB_SHA'], os.environ['RESUME_ARTIFACTS'], producer_log, browser_logs)
           print('resumed_checks=' + json.dumps(proof, separators=(',', ':')))
           for output, job in [('run_test', 'test'), ('run_next', 'next_engine'),
                               ('run_teletext', 'teletext'), ('run_browser', 'hydration')]:
               print(output + '=' + str(job not in proof['jobs']).lower())
           print('reuse_clippy=' + str('clippy' in proof['jobs']).lower())
+          print('general_filter=' + proof['general_filter'])
           rows = proof['browser_pending'] or [{'suite':'general','project':'chromium','port':'18409'}]
           print('resume_matrix=' + json.dumps({'include': rows}, separators=(',', ':')))
           PY
@@ -1481,6 +1488,14 @@ jobs:
                       or selected != {"include": expected_matrix}
                       or ("hydration" in reused and set(reused["hydration"]) != set(browser_passed))):
                   sys.exit("::error::Incomplete browser recovery scope")
+              replay_filter = proof.get('general_filter', '')
+              if replay_filter:
+                  cases = proof.get('browser_case_proof', [])
+                  if (outputs.get('general_filter') != replay_filter or len(cases) != 2
+                          or {case['project'] for case in cases} != {'chromium', 'firefox'}
+                          or any(case['listed'] != case['passed'] + case['failed'] + case['skipped']
+                                 or not re.fullmatch(r'[0-9a-f]{64}', case['log_sha256']) for case in cases)):
+                      sys.exit('::error::Incomplete browser case provenance')
               optional |= set(reused)
               print("Verified reused check provenance: " + json.dumps(proof, sort_keys=True))
           # Jobs a lane leaves out on purpose (see Preflight).
