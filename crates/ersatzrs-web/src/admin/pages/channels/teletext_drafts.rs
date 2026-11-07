@@ -913,6 +913,7 @@ mod tests {
             catalog_available: true,
             authoring_selection: Some("observed-membership".to_owned()),
             readiness: None,
+            custom_pages: None,
             authoring_error: None,
             effective_authoring: None,
             effective_authoring_error: None,

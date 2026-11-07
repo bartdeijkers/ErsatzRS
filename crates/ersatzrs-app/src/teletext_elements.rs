@@ -503,7 +503,7 @@ fn unique_name(base: &str, existing: &[String]) -> String {
     if !existing.iter().any(|name| name == base) {
         return base.to_owned();
     }
-    (2..)
+    (2..=existing.len() + 1)
         .map(|index| format!("{base} ({index})"))
         .find(|candidate| !existing.iter().any(|name| name == candidate))
         .unwrap_or_else(|| base.to_owned())

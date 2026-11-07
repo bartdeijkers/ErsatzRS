@@ -27,6 +27,40 @@ pub struct ChannelTeletextData {
     /// Ordered readiness facts; absent when an older server rendered the page.
     #[serde(default)]
     pub readiness: Option<TeletextReadinessData>,
+    /// Custom pages from the teletext element library; `None` when the
+    /// library is unavailable or an older server rendered the page.
+    #[serde(default)]
+    pub custom_pages: Option<TeletextCustomPagesData>,
+}
+
+/// Teletext elements linked to this channel plus the library to add from.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextCustomPagesData {
+    pub links: Vec<TeletextCustomPageData>,
+    pub library: Vec<TeletextElementOptionData>,
+}
+
+/// One teletext element linked to this channel.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextCustomPageData {
+    pub link_id: i64,
+    pub element_id: i64,
+    pub name: String,
+    /// Display page number the channel uses, for example `"150"`.
+    pub page: String,
+    /// Channel override in display form; empty when the element's own page is used.
+    pub page_override: String,
+    /// The element's own page number in display form.
+    pub default_page: String,
+    pub enabled: bool,
+}
+
+/// A library element that can be linked to a channel.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextElementOptionData {
+    pub id: i64,
+    pub name: String,
+    pub page: String,
 }
 
 /// Separately observed preconditions for teletext on this channel. Each fact
@@ -287,7 +321,53 @@ pub async fn load_channel_teletext_for_application(
         current_guide_available,
         addons,
         readiness,
+        custom_pages: load_custom_pages(application, channel_id).await,
     }))
+}
+
+#[cfg(feature = "ssr")]
+async fn load_custom_pages(
+    application: &ersatzrs_app::ApplicationServices,
+    channel_id: i64,
+) -> Option<TeletextCustomPagesData> {
+    use ersatzrs_domain::teletext_element_page_label;
+    let links = application
+        .channel_teletext_elements(channel_id)
+        .await
+        .ok()?;
+    let library = application.list_teletext_elements().await.ok()?;
+    let default_page = |element_id: i64| {
+        library
+            .iter()
+            .find(|element| element.id == element_id)
+            .map(|element| teletext_element_page_label(element.page_number))
+            .unwrap_or_default()
+    };
+    Some(TeletextCustomPagesData {
+        links: links
+            .iter()
+            .map(|link| TeletextCustomPageData {
+                link_id: link.id,
+                element_id: link.element_id,
+                name: link.element_name.clone(),
+                page: teletext_element_page_label(link.effective_page_number),
+                page_override: link
+                    .page_number
+                    .map(teletext_element_page_label)
+                    .unwrap_or_default(),
+                default_page: default_page(link.element_id),
+                enabled: link.enabled,
+            })
+            .collect(),
+        library: library
+            .iter()
+            .map(|element| TeletextElementOptionData {
+                id: element.id,
+                name: element.name.clone(),
+                page: teletext_element_page_label(element.page_number),
+            })
+            .collect(),
+    })
 }
 
 /// Admin setting holding each channel's saved guide source channels as a JSON

@@ -46,9 +46,9 @@ pub fn find_field_markers(page: &ElementPage) -> Vec<FieldMarker> {
                         name: String::from_utf8_lossy(&cells[name_start..name_end])
                             .to_ascii_uppercase(),
                         subpage: u16::try_from(subpage_index).unwrap_or(u16::MAX),
-                        row: row as u8,
-                        column: column as u8,
-                        length: (end - column) as u8,
+                        row: u8::try_from(row).unwrap_or(u8::MAX),
+                        column: u8::try_from(column).unwrap_or(u8::MAX),
+                        length: u8::try_from(end - column).unwrap_or(u8::MAX),
                     });
                     column = end;
                 } else {
@@ -164,7 +164,7 @@ pub fn level1_safe_text(text: &str) -> Vec<u8> {
     let mut output = Vec::with_capacity(text.len());
     for character in text.chars() {
         let folded: &str = match character {
-            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ą' => "a",
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ą' | '@' => "a",
             'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ą' => "A",
             'æ' => "ae",
             'Æ' => "AE",
@@ -189,7 +189,7 @@ pub fn level1_safe_text(text: &str) -> Vec<u8> {
             'ř' => "r",
             'Ř' => "R",
             'ś' | 'š' | 'ş' => "s",
-            'Ś' | 'Š' | 'Ş' => "S",
+            'Ś' | 'Š' | 'Ş' | '$' => "S",
             'ß' => "ss",
             'ť' | 'ţ' => "t",
             'Ť' | 'Ţ' => "T",
@@ -207,8 +207,6 @@ pub fn level1_safe_text(text: &str) -> Vec<u8> {
             ']' | '}' => ")",
             '\\' => "/",
             '|' => "!",
-            '@' => "a",
-            '$' => "S",
             '#' | '^' => " ",
             character if (' '..='~').contains(&character) => {
                 output.push(character as u8);

@@ -331,7 +331,7 @@ pub async fn save_channel_link(
             None => return Redirect::to(&with_query(&target, "error=custom-page-page-number")),
         },
     };
-    let enabled = fields.get("enabled").map_or(true, |value| value != "0");
+    let enabled = fields.get("enabled").is_none_or(|value| value != "0");
     match state
         .application
         .save_channel_teletext_element(channel_id, element_id, page, enabled)
