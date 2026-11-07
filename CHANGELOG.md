@@ -35,6 +35,20 @@ release section when tagging a release.
 
 ### Changed
 
+- The channel teletext page (`/channels/{id}/teletext`) is reorganised into
+  clearly bounded sections: a one-sentence status line with the broadcast
+  checklist folded away, a page set that lists every page number and its
+  source, one section per teletext add-on, a section for custom pages and one
+  Check → Preview → Publish block. Settings of a disabled, missing or
+  unconfigured add-on are no longer shown; the section explains the cause and
+  links to the fix. An add-on is switched on for a channel with one button,
+  its settings are labelled as this channel's settings, and shared profiles
+  move under Advanced. The channels shown in the TV guide are chosen once in
+  the add-on section and stored per channel instead of being picked again at
+  every check. Technical draft fields are prefilled. Shared teletext admin
+  building blocks and a UX reference (`docs/reference/teletext-admin-ux.md`)
+  keep this page and the upcoming teletext element library consistent. All
+  supported interface languages are updated.
 - Refresh the README with ADR-backed ErsatzTV differences, including interface
   languages, subtitle preferences, tagging, add-ons and graphics. Clarify the
   delivered teletext scope and current platform limitations.

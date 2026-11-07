@@ -336,3 +336,14 @@ Finite completion list:
 discovered  = '2026-11-03'
 evidence    = 'Branch claude/project-thread-tdo1gf (uncommitted at time of writing). ersatzrs-ffmpeg teletext nextest: 1074/1074 pass, including the new burst, sustained-shortage, deferred-terminator and B.6 carousel regressions. The original strict behavior is reproduced by the replaced test interval_null_capacity_failure_never_exposes_partial_rewriting (one full 20 ms interval was fatal). ersatzrs-web teletext_admin integration tests cover capacity apply/confirm/replace/invalid repair and route classification. No real FFmpeg/TSDuck/client evidence yet.'
 resolved    = false
+
+[[debt]]
+id          = 'teletext-channel-custom-pages-broadcast'
+adr         = '0120'
+description = '''Channel teletext admin redesign (branch claude/project-thread-g3jijz). Component state:
+(1) DONE (component): the channel teletext page shows a status line, a page set, one section per teletext add-on (no fields for a disabled, missing or unconfigured add-on), a custom pages section and one Check, Preview, Publish block, using shared primitives and the reference docs/reference/teletext-admin-ux.md. One-click enable creates a per-channel profile and binding; TV-guide channel selection is stored per channel in the admin setting teletext.guide_selection.
+(2) OPEN (functionality): custom pages from the teletext element library (/teletext-elements, separate branch) are listed in the page set but are not yet broadcast. Including channel-linked elements in draft preparation and publication needs an ADR 0120 amendment that lets ErsatzRS itself act as the producer of custom pages, with page-number conflict rules against add-on ranges.
+(3) OPEN (evidence): Playwright no-JS and hydrated runs of the updated teletext specs against the redesigned page.'''
+discovered  = '2026-11-07'
+evidence    = 'Branch claude/project-thread-g3jijz: focused ersatzrs-web unit tests for source sections, status line, guide selection parsing and authoring form defaults. Real-app screenshots of the redesigned page are on the progress artifact. Broadcasting custom pages and Playwright runs are not proven.'
+resolved    = false

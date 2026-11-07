@@ -221,6 +221,8 @@ function seedSqlGuide(fixture: TeletextChannelFixture): number {
 
 async function createProfile(page: Page, fixture: TeletextChannelFixture, theme: 'classic' | 'night', js: boolean): Promise<number> {
   const form = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
+  const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+  if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
   const details = form.locator('..');
   if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
   const name = `Production ${theme} ${fixture.channels[0]}`;
@@ -2244,6 +2246,8 @@ test(reusedLuaDirectEvidence
     const prepare = async (effective: boolean, name: string, absent = false): Promise<string> => {
       await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
       const form = page.getByTestId(effective ? 'teletext-effective-authoring-form' : 'teletext-authoring-form');
+      const publishAdvanced = page.getByTestId('teletext-publish-advanced');
+      if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
       await form.locator('[name="name"]').fill(name);
       if (absent) {
         await expect(page.getByTestId('teletext-effective-authoring')).toHaveAttribute('data-state', 'absent');

@@ -48,6 +48,8 @@ async function submit(page: Page, form: Locator, key: string, js: boolean): Prom
 }
 async function profile(page: Page, fixture: TeletextChannelFixture, theme: string, js: boolean): Promise<number> {
   const form = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
+  const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+  if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
   const details = form.locator('..');
   if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
   await form.locator('[name="name"]').fill(`Synthetic effective ${theme}`);
@@ -105,6 +107,8 @@ async function resetScript(page: Page, fixture: TeletextChannelFixture, channel:
 }
 async function prepare(page: Page, fixture: TeletextChannelFixture, theme: string, js: boolean, absent = false): Promise<string> {
   const form = page.getByTestId('teletext-effective-authoring-form');
+  const publishAdvanced = page.getByTestId('teletext-publish-advanced');
+  if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
   await expect(form.locator('[name="selection_digest"]')).toHaveValue(/^[a-f0-9]{64}$/);
   await expect(form.locator('[name="scope"]')).toHaveValue('effective');
   await expect(form.getByRole('button')).toBeEnabled();
@@ -729,6 +733,8 @@ async function localized(page: Page, fixture: TeletextChannelFixture, url: strin
 async function responsive(page: Page, testInfo: { outputPath(name: string): string }): Promise<void> {
   await page.setViewportSize({ width: 320, height: 900 });
   const form = page.getByTestId('teletext-effective-authoring-form');
+  const publishAdvanced = page.getByTestId('teletext-publish-advanced');
+  if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
   const name = form.locator('[name="name"]'); await name.focus(); await page.keyboard.press('Tab');
   const producer = form.locator('[name="entry_addon_id"]'); await expect(producer).toBeFocused();
   await expect.poll(() => producer.evaluate(element => Number.parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
