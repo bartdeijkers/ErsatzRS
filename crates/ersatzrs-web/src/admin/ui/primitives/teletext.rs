@@ -127,7 +127,7 @@ pub struct TeletextSubpageLink {
 /// renderer's own output (a raster image or an HTML cell grid).
 #[must_use]
 pub fn preview_frame(
-    caption: String,
+    caption: &str,
     content: AnyView,
     subpages: Vec<TeletextSubpageLink>,
     footer: AnyView,
@@ -141,12 +141,12 @@ pub fn preview_frame(
                 }
             })
             .collect_view();
-        view! { <nav class=style::subpages aria-label=caption.clone()>{links}</nav> }
+        view! { <nav class=style::subpages aria-label=caption.to_owned()>{links}</nav> }
     });
     view! {
         <figure class=style::preview data-testid="teletext-preview-frame">
             <div class=style::screen>{content}</div>
-            <figcaption class=style::caption>{caption.clone()}</figcaption>
+            <figcaption class=style::caption>{caption.to_owned()}</figcaption>
             {subpages}
             {footer}
         </figure>

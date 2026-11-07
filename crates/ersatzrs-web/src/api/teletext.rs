@@ -113,24 +113,23 @@ async fn enable_with_application(
         .into_iter()
         .find(|read| !read.profile.deleted && read.profile.name == command.name)
         .map(|read| (read.profile.id, read.profile.revision));
-    let (profile_id, profile_revision) = match existing {
-        Some(found) => found,
-        None => {
-            let save = TeletextProfileSave {
-                addon_id: command.addon_id.clone(),
-                name: command.name.clone(),
-                settings: Vec::new(),
-                expected_installation: command.expected_installation.clone(),
-                existing: None,
-            };
-            match application
-                .save_teletext_profile(&save)
-                .await
-                .map_err(|_| "storage")?
-            {
-                TeletextProfileMutation::Saved(saved) => (saved.profile.id, saved.profile.revision),
-                TeletextProfileMutation::Rejected(reason) => return Err(rejection(reason)),
-            }
+    let (profile_id, profile_revision) = if let Some(found) = existing {
+        found
+    } else {
+        let save = TeletextProfileSave {
+            addon_id: command.addon_id.clone(),
+            name: command.name.clone(),
+            settings: Vec::new(),
+            expected_installation: command.expected_installation.clone(),
+            existing: None,
+        };
+        match application
+            .save_teletext_profile(&save)
+            .await
+            .map_err(|_| "storage")?
+        {
+            TeletextProfileMutation::Saved(saved) => (saved.profile.id, saved.profile.revision),
+            TeletextProfileMutation::Rejected(reason) => return Err(rejection(reason)),
         }
     };
     let channel_id = command.channel_id;

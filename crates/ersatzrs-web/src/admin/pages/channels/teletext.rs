@@ -60,7 +60,7 @@ pub fn ChannelTeletextPage() -> impl IntoView {
                     result.map_err(|_| tr(TextKey::TeletextAdminUnavailable).to_owned()),
                     |data| match data {
                         Some((data, preview, current)) => channel_page(
-                            data, &error, &saved, preview, current,
+                            &data, &error, &saved, preview, current,
                             query.with(|values| values.get("design_id").is_some()),
                             query.with(super::teletext_drafts::redirected_error_location),
                         ),
@@ -105,8 +105,9 @@ async fn load_channel_page(
     Ok(Some((channel, preview, current)))
 }
 
+#[allow(clippy::too_many_lines)]
 fn channel_page(
-    data: ChannelTeletextData,
+    data: &ChannelTeletextData,
     error: &str,
     saved: &str,
     preview: Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
@@ -190,16 +191,16 @@ fn channel_page(
             current.or_else(|| guide_unreadable.then(|| Err(ServerFnError::new("unavailable")))),
         )
     });
-    let page_set = page_set_island(&data);
+    let page_set = page_set_island(data);
     let sources = data
         .addons
         .iter()
         .filter(|addon| source_visible(addon))
-        .map(|addon| addon_section(&data, addon))
+        .map(|addon| addon_section(data, addon))
         .collect_view();
     let no_sources = !data.addons.iter().any(source_visible);
-    let custom_pages = super::teletext_custom_pages::custom_pages_island(&data);
-    let publish = publish_island(&data, preview, requested, redirected, current_guide);
+    let custom_pages = super::teletext_custom_pages::custom_pages_island(data);
+    let publish = publish_island(data, preview, requested, redirected, current_guide);
     view! {
         <div class=style::page data-testid="channel-teletext-page" data-channel-id=channel_id>
             <header class=style::header>
@@ -535,6 +536,7 @@ fn publish_island(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn addon_section(data: &ChannelTeletextData, addon: &TeletextAddonData) -> AnyView {
     let channel_id = data.channel_id;
     let language = use_i18n();
@@ -557,7 +559,8 @@ fn addon_section(data: &ChannelTeletextData, addon: &TeletextAddonData) -> AnyVi
                 .iter()
                 .find(|profile| profile.id == binding.profile_id)
         });
-    let badge = if !source_usable(addon) {
+    let usable = source_usable(addon);
+    let badge = if !usable {
         let key = if addon.installed {
             TextKey::TeletextSourceDisabled
         } else {
@@ -570,7 +573,9 @@ fn addon_section(data: &ChannelTeletextData, addon: &TeletextAddonData) -> AnyVi
         status_badge(TeletextTone::Neutral, tr(TextKey::TeletextSourceOff))
     };
     let off = off_form(channel_id, addon);
-    let body = if !source_usable(addon) {
+    let body = if usable {
+        usable_body(data, addon, bound, installation.as_deref(), writable, off)
+    } else {
         view! {
             <p class=style::availability data-availability=addon.availability.clone()>
                 {teletext_profile_availability_text(language, &addon.availability)}
@@ -583,56 +588,6 @@ fn addon_section(data: &ChannelTeletextData, addon: &TeletextAddonData) -> AnyVi
             <details class=style::advanced data-testid="teletext-source-advanced">
                 <summary>{tr(TextKey::TeletextSourceAdvanced)}</summary>
                 {binding_controls(channel_id, addon, installation.as_deref(), writable)}
-            </details>
-        }
-        .into_any()
-    } else {
-        let primary = match bound {
-            Some(profile) => profile_editor(
-                channel_id,
-                addon,
-                Some(profile),
-                installation.as_deref(),
-                writable,
-                true,
-                Some(guide_choices(data)),
-            ),
-            None => enable_form(data, addon, installation.as_deref().unwrap_or_default()),
-        };
-        let others = addon
-            .profiles
-            .iter()
-            .filter(|profile| bound.is_none_or(|bound| bound.id != profile.id))
-            .map(|profile| {
-                profile_editor(
-                    channel_id,
-                    addon,
-                    Some(profile),
-                    installation.as_deref(),
-                    writable,
-                    false,
-                    None,
-                )
-            })
-            .collect_view();
-        let create = profile_editor(
-            channel_id,
-            addon,
-            None,
-            installation.as_deref(),
-            writable,
-            false,
-            None,
-        );
-        view! {
-            {primary}
-            <div class=style::actions>{off}</div>
-            {binding_controls(channel_id, addon, installation.as_deref(), writable)}
-            <details class=style::advanced data-testid="teletext-source-advanced">
-                <summary>{tr(TextKey::TeletextSourceAdvanced)}</summary>
-                <p class=style::help>{tr(TextKey::TeletextProfileSharedHelp)}</p>
-                {others}
-                {create}
             </details>
         }
         .into_any()
@@ -653,13 +608,74 @@ fn addon_section(data: &ChannelTeletextData, addon: &TeletextAddonData) -> AnyVi
     .into_any()
 }
 
+fn usable_body(
+    data: &ChannelTeletextData,
+    addon: &TeletextAddonData,
+    bound: Option<&TeletextProfileData>,
+    installation: Option<&str>,
+    writable: bool,
+    off: Option<AnyView>,
+) -> AnyView {
+    let channel_id = data.channel_id;
+    let primary = match bound {
+        Some(profile) => profile_editor(
+            channel_id,
+            addon,
+            Some(profile),
+            installation,
+            writable,
+            true,
+            Some(guide_choices(data)),
+        ),
+        None => enable_form(data, addon, installation.unwrap_or_default()),
+    };
+    let others = addon
+        .profiles
+        .iter()
+        .filter(|profile| bound.is_none_or(|bound| bound.id != profile.id))
+        .map(|profile| {
+            profile_editor(
+                channel_id,
+                addon,
+                Some(profile),
+                installation,
+                writable,
+                false,
+                None,
+            )
+        })
+        .collect_view();
+    let create = profile_editor(channel_id, addon, None, installation, writable, false, None);
+    // Choosing between saved settings only makes sense once some exist;
+    // a first-time channel sees the single enable action.
+    let choice = binding_controls(channel_id, addon, installation, writable);
+    let (visible_choice, advanced_choice) = if addon.profiles.is_empty() {
+        (None, Some(choice))
+    } else {
+        (Some(choice), None)
+    };
+    view! {
+        {primary}
+        <div class=style::actions>{off}</div>
+        {visible_choice}
+        <details class=style::advanced data-testid="teletext-source-advanced">
+            <summary>{tr(TextKey::TeletextSourceAdvanced)}</summary>
+            <p class=style::help>{tr(TextKey::TeletextProfileSharedHelp)}</p>
+            {advanced_choice}
+            {others}
+            {create}
+        </details>
+    }
+    .into_any()
+}
+
 fn off_form(channel_id: i64, addon: &TeletextAddonData) -> Option<AnyView> {
     addon.binding.as_ref().filter(|binding| binding.enabled).map(|binding| view! {
         <form method="post" action="/admin-api/teletext/binding/off" data-testid="teletext-disable-form">
             {hidden("channel_id", channel_id.to_string())}
             {hidden("addon_id", addon.addon_id.clone())}
             {hidden("expected_binding_revision", binding.revision.to_string())}
-            <button type="submit" class=btn_class(ButtonVariant::Text)>{tr(TextKey::TeletextBindingOff)}</button>
+            <button type="submit" class=btn_class(ButtonVariant::Secondary)>{tr(TextKey::TeletextBindingOff)}</button>
         </form>
     }.into_any())
 }
@@ -1096,7 +1112,7 @@ mod tests {
         };
         let html = owner.with(|| {
             channel_page(
-                data,
+                &data,
                 "secondary-default-invalid",
                 "",
                 None,
