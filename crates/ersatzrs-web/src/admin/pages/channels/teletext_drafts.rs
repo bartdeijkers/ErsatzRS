@@ -85,6 +85,8 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
         })
         .collect_view();
     let default_name = format!("{} · {}", data.channel_number, data.channel_name);
+    // Nothing can be checked before a source is on; keep the details folded.
+    let open_technical = !eligible.is_empty();
     view! {
         <div class=style::authoring data-testid="teletext-authoring">
             <p>{tr(TextKey::TeletextAuthoringHelp)}</p>
@@ -99,8 +101,8 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
                     <button type="submit" class=btn_class(ButtonVariant::Primary)>
                         {tr(TextKey::TeletextValidateSaveDraft)}
                     </button>
-                    <div class=style::technical data-testid="teletext-authoring-technical">
-                        <p class=style::technical_title>{tr(TextKey::TeletextCheckTechnical)}</p>
+                    <details class=style::technical data-testid="teletext-authoring-technical" open=open_technical>
+                        <summary class=style::technical_title>{tr(TextKey::TeletextCheckTechnical)}</summary>
                         <p>{tr(TextKey::TeletextCheckTechnicalHelp)}</p>
                         <div class=style::technical_grid>
                             <div>
@@ -132,7 +134,7 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
                                     inner_html=textarea_content("[]")></textarea>
                             </div>
                         </div>
-                    </div>
+                    </details>
                 </fieldset>
             </form>
         </div>
