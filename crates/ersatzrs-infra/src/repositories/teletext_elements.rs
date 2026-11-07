@@ -194,7 +194,7 @@ impl TeletextElementRepository for SqliteTeletextElementRepository {
     }
 
     async fn delete(&self, id: EntityId) -> Result<bool> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(r#"DELETE FROM "ChannelTeletextElement" WHERE "TeletextElementId" = ?"#)
             .bind(id)
             .execute(&mut *transaction)
