@@ -110,6 +110,8 @@ test('genuine national Base QTM page uses localized native import, preview and e
       const addon = page.locator(`[data-testid="teletext-addon"][data-addon-id="${channel.addon_id}"]`);
       const selected = addon.getByTestId('teletext-binding-form').locator('[name="profile_choice"]');
       await expect(selected).toHaveValue(`${channel.profile_id}:${channel.profile_revision}`);
+      const advanced = selected.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+      if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
       await selected.scrollIntoViewIfNeeded();
       await page.screenshot({ path: testInfo.outputPath(`${channel.theme}-binding.png`) });
       const details = addon.locator(`[data-testid="teletext-profile"][data-profile-id="${channel.profile_id}"]`);

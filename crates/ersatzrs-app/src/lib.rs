@@ -22,6 +22,7 @@ pub mod teletext_design_exports;
 pub mod teletext_designs;
 pub mod teletext_effective_channel_documents;
 pub mod teletext_effective_profiles;
+pub mod teletext_elements;
 pub mod teletext_export_project;
 pub mod teletext_generations;
 pub mod teletext_guide;

@@ -10,4 +10,5 @@ pub mod scheduling;
 pub mod search;
 pub mod settings;
 pub mod system;
+pub mod teletext_elements;
 pub mod watermarks;

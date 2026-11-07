@@ -26,6 +26,7 @@ mod playout;
 mod program_schedule;
 mod saved_search;
 mod teletext_designs;
+mod teletext_elements;
 mod teletext_generations;
 mod teletext_guide_refresh;
 mod teletext_guide_source;
@@ -171,6 +172,7 @@ pub use program_schedule::{
 };
 pub use saved_search::{SavedSearchAdminRow, SavedSearchRepository};
 pub use teletext_designs::*;
+pub use teletext_elements::TeletextElementRepository;
 pub use teletext_profiles::*;
 pub use television::{EpisodeCard, EpisodeMediaItemInfo, SeasonDetail, TelevisionRepository};
 pub use template::{

@@ -27,15 +27,219 @@ type ControlResult<T> = Result<T, &'static str>;
 
 pub async fn save_profile(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
     let channel = redirect_channel(&pairs);
-    let result = profile_command(pairs)
-        .and_then(|command| (command.0 == channel).then_some(command).ok_or("invalid"));
+    let result = guide_selection_fields(pairs).and_then(|(pairs, guide)| {
+        profile_command(pairs)
+            .and_then(|command| (command.0 == channel).then_some(command).ok_or("invalid"))
+            .map(|command| (command, guide))
+    });
     let result = match result {
-        Ok((channel, save)) => {
-            save_profile_with_application(&state.application, channel, save).await
+        Ok(((channel, save), guide)) => {
+            match save_profile_with_application(&state.application, channel, save).await {
+                Ok(()) => match guide {
+                    Some(ids) => save_guide_selection(&state.application, channel, ids).await,
+                    None => Ok(()),
+                },
+                Err(code) => Err(code),
+            }
         }
         Err(code) => Err(code),
     };
     respond(channel, "profile", result)
+}
+
+/// Turn an add-on on for one channel with the add-on's own defaults.
+///
+/// Creates a channel-named settings profile that inherits every value, or
+/// reuses an existing undeleted profile with exactly that name, then selects
+/// it for the channel. Both writes use the existing CAS-checked commands.
+pub async fn enable_source(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
+    let channel = redirect_channel(&pairs);
+    let result = match enable_command(pairs) {
+        Ok(command) if command.channel_id == channel => {
+            enable_with_application(&state.application, command).await
+        }
+        Ok(_) => Err("invalid"),
+        Err(code) => Err(code),
+    };
+    respond(channel, "binding", result)
+}
+
+struct EnableCommand {
+    channel_id: i64,
+    addon_id: String,
+    name: String,
+    expected_installation: TeletextInstallationSnapshot,
+    expected_binding_revision: Option<i64>,
+}
+
+fn enable_command(pairs: Pairs) -> ControlResult<EnableCommand> {
+    let mut fields = fields(pairs)?;
+    let (channel_id, addon_id) = owner(&mut fields)?;
+    let name = take(&mut fields, "name")?;
+    let expected_binding_revision =
+        optional_positive(&take(&mut fields, "expected_binding_revision")?)?;
+    let expected_installation = installation(&mut fields)?;
+    if !fields.is_empty() {
+        return Err("invalid");
+    }
+    ersatzrs_domain::validate_teletext_profile_values(&name, &[]).map_err(|_| "invalid")?;
+    Ok(EnableCommand {
+        channel_id,
+        addon_id,
+        name,
+        expected_installation,
+        expected_binding_revision,
+    })
+}
+
+async fn enable_with_application(
+    application: &ApplicationServices,
+    command: EnableCommand,
+) -> ControlResult<()> {
+    if application
+        .get_channel_editor(ersatzrs_app::queries::GetChannelEditor {
+            channel_id: command.channel_id,
+        })
+        .await
+        .map_err(|_| "storage")?
+        .is_none()
+    {
+        return Err("invalid");
+    }
+    let existing = application
+        .list_teletext_profiles(&command.addon_id)
+        .await
+        .map_err(|_| "storage")?
+        .into_iter()
+        .find(|read| !read.profile.deleted && read.profile.name == command.name)
+        .map(|read| (read.profile.id, read.profile.revision));
+    let (profile_id, profile_revision) = if let Some(found) = existing {
+        found
+    } else {
+        let save = TeletextProfileSave {
+            addon_id: command.addon_id.clone(),
+            name: command.name.clone(),
+            settings: Vec::new(),
+            expected_installation: command.expected_installation.clone(),
+            existing: None,
+        };
+        match application
+            .save_teletext_profile(&save)
+            .await
+            .map_err(|_| "storage")?
+        {
+            TeletextProfileMutation::Saved(saved) => (saved.profile.id, saved.profile.revision),
+            TeletextProfileMutation::Rejected(reason) => return Err(rejection(reason)),
+        }
+    };
+    let channel_id = command.channel_id;
+    mutation(
+        application
+            .save_channel_teletext_binding(&ChannelTeletextBindingSave {
+                channel_id,
+                addon_id: command.addon_id,
+                profile_id,
+                enabled: true,
+                expected_installation: command.expected_installation,
+                expected_profile_revision: profile_revision,
+                expected_binding_revision: command.expected_binding_revision,
+            })
+            .await,
+    )?;
+    // A first enable starts the guide with this channel itself; an existing
+    // saved choice (including an explicit empty one) is kept.
+    if crate::host::teletext_authoring::guide_preparation_configured(application).await {
+        let saved = application
+            .get_optional_setting(
+                crate::admin::server_fns::teletext::TELETEXT_GUIDE_SELECTION_SETTING,
+            )
+            .await
+            .map_err(|_| "storage")?;
+        let known = saved
+            .as_deref()
+            .map(crate::admin::server_fns::teletext::parse_guide_selection)
+            .is_some_and(|map| map.contains_key(&channel_id));
+        if !known {
+            save_guide_selection(application, channel_id, vec![channel_id]).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Split the optional guide-source checkboxes from a settings form.
+///
+/// `guide_selection_present=1` marks that the form carried the checkbox list,
+/// so an empty list is an explicit choice rather than an absent field.
+fn guide_selection_fields(pairs: Pairs) -> ControlResult<(Pairs, Option<Vec<i64>>)> {
+    let mut present = false;
+    let mut other = Vec::with_capacity(pairs.len());
+    let mut channels = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (key, value) in pairs {
+        match key.as_str() {
+            "guide_selection_present" if value == "1" && !present => present = true,
+            "guide_selection_present" => return Err("invalid"),
+            "guide_selection_id" => {
+                if channels.len() >= ersatzrs_addon_contract::MAX_TELETEXT_PAGES_CHANNELS {
+                    return Err("limit");
+                }
+                let id = positive(&value)?;
+                if !seen.insert(id) {
+                    return Err("invalid");
+                }
+                channels.push(id);
+            }
+            _ => other.push((key, value)),
+        }
+    }
+    if !present && !channels.is_empty() {
+        return Err("invalid");
+    }
+    Ok((other, present.then_some(channels)))
+}
+
+async fn save_guide_selection(
+    application: &ApplicationServices,
+    channel: i64,
+    ids: Vec<i64>,
+) -> ControlResult<()> {
+    use crate::admin::server_fns::teletext::{
+        parse_guide_selection, TELETEXT_GUIDE_SELECTION_SETTING,
+    };
+    let known: BTreeSet<i64> = application
+        .list_channel_numbers()
+        .await
+        .map_err(|_| "storage")?
+        .into_iter()
+        .map(|row| row.id)
+        .collect();
+    if ids.iter().any(|id| !known.contains(id)) {
+        return Err("invalid");
+    }
+    let raw = application
+        .get_optional_setting(TELETEXT_GUIDE_SELECTION_SETTING)
+        .await
+        .map_err(|_| "storage")?;
+    let mut map = raw
+        .as_deref()
+        .map(parse_guide_selection)
+        .unwrap_or_default();
+    // Drop entries for channels that no longer exist so the map stays bounded.
+    map.retain(|channel, _| known.contains(channel));
+    map.insert(channel, ids);
+    let value = serde_json::to_string(
+        &map.into_iter()
+            .map(|(channel, ids)| (channel.to_string(), ids))
+            .collect::<BTreeMap<_, _>>(),
+    )
+    .map_err(|_| "storage")?;
+    application
+        .set_admin_setting(ersatzrs_app::commands::SetAdminSetting {
+            key: TELETEXT_GUIDE_SELECTION_SETTING,
+            value,
+        })
+        .await
+        .map_err(|_| "storage")
 }
 
 pub async fn save_binding(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
