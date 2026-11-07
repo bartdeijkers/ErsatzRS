@@ -273,7 +273,7 @@ fn preview_column(data: &EditorData) -> AnyView {
     .into_any();
     let label = format!("{} {}", tr(TextKey::Preview), data.name);
     preview_frame(
-        caption,
+        &caption,
         teletext_screen(&data.screen, label, false),
         subpages,
         footer,
