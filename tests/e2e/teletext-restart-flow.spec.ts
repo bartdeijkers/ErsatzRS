@@ -47,6 +47,8 @@ async function saveWrapperChoice(page: Page, selected: string, module: string, j
 }
 async function createProfile(page: Page, fixture: TeletextChannelFixture, theme: string, js: boolean): Promise<number> {
   const form = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
+  const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+  if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
   const details = form.locator('..');
   if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
   await form.locator('[name="name"]').fill(`Restart ${theme}`);
@@ -63,6 +65,8 @@ async function bind(page: Page, fixture: TeletextChannelFixture, id: number, js:
 }
 async function prepare(page: Page, fixture: TeletextChannelFixture, name: string, js: boolean, effective = false): Promise<string> {
   const form = page.getByTestId(effective ? 'teletext-effective-authoring-form' : 'teletext-authoring-form');
+  const publishAdvanced = page.getByTestId('teletext-publish-advanced');
+  if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
   await expect(form.locator('[name="selection_digest"]')).toHaveValue(/^[a-f0-9]{64}$/);
   await form.locator('[name="name"]').fill(name);
   await form.locator('[name="entry_addon_id"]').selectOption(fixture.addonId);
@@ -438,6 +442,8 @@ test('standalone Level 1.5 Lua scopes survive real host restarts and expire to a
     const finish = scopeUtc(off[0].Finish); expect(Number.isFinite(finish)).toBe(true);
     await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
     const form = page.getByTestId('teletext-effective-authoring-form');
+    const publishAdvanced = page.getByTestId('teletext-publish-advanced');
+    if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
     await expect(form.locator('[name="scope"]')).toHaveValue('effective');
     await form.locator('[name="name"]').fill('Scoped restart Lua Off');
     await submit(page, form, text('en_us')('TeletextValidateSaveDraft'), true);
@@ -886,6 +892,8 @@ for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: fal
         await captures('initial', [true, true]);
         await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], variant.js);
         const form = pages[0].locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id="${shared}"]`);
+        const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+        if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
         const details = form.locator('..');
         if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
         await form.locator('[data-setting-key="THEME"] [name$=".value"]').selectOption('night');

@@ -49,3 +49,53 @@
     outline: 2px solid var(--color-secondary);
     outline-offset: 3px;
 }
+
+/* Channel page layout: status line, page set, source islands, publish island. */
+.status {
+    margin-block: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    display: grid;
+    gap: 0.25rem;
+}
+.status_text { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; line-height: 1.5; }
+.check_details > summary, .advanced > summary {
+    cursor: pointer;
+    min-height: 2.75rem;
+    display: flex;
+    align-items: center;
+    color: var(--color-secondary);
+}
+.check_details > section { margin-block: 0.5rem 0; }
+.empty {
+    margin-block: 0.5rem;
+    padding: 1rem;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+    text-align: center;
+}
+.empty p { margin-block: 0.25rem; }
+.table_wrap { overflow-x: auto; }
+.page_set { width: 100%; border-collapse: collapse; }
+.page_set th, .page_set td { text-align: start; padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+.page_set th { font-weight: 500; font-size: 0.875rem; opacity: 0.75; }
+.page_set td:first-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.anchor { scroll-margin-top: 4rem; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-block: 0.5rem; }
+.advanced { margin-top: 1rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
+.enable { display: grid; gap: 0.5rem; justify-items: start; }
+.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.inline select { flex: 1 1 16rem; width: auto; }
+.settings_grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 0 1rem; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: 0.25rem 1rem; }
+.check { display: flex; align-items: center; gap: 0.5rem; min-height: 2.5rem; font-weight: 400 !important; }
+.page .check input[type="checkbox"] { width: 1.1rem; min-height: 1.1rem; height: 1.1rem; margin: 0; }
+.notice {
+    margin-block: 1rem;
+    padding: 0.75rem 1rem;
+    border-inline-start: 0.25rem solid var(--color-warning);
+    background: var(--color-warning-20);
+}
+.notice p { margin: 0; }

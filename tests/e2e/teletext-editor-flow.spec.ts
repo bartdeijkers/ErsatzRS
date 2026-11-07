@@ -40,6 +40,8 @@ async function submit(page: Page, form: Locator, javaScriptEnabled: boolean): Pr
 async function profile(page: Page, fixture: TeletextChannelFixture, theme: string, enabled: boolean): Promise<number> {
   const form = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
   await expect(form).toHaveCount(1);
+  const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+  if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
   const details = form.locator('..');
   if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
   await expect(form).toBeVisible();

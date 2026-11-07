@@ -6,5 +6,6 @@ pub mod numbers;
 pub mod preview;
 pub mod teletext;
 mod teletext_current_guide;
+mod teletext_custom_pages;
 pub mod teletext_drafts;
 pub mod watch;
