@@ -38663,6 +38663,21 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-07 recovery CI42420059326 at a424edc87d482caa3505a4bd8a15d44e34844525
+successfully verifies both retained producer products, including full workspace
+coverage, without compilation, installation or publication in the provider.
+The contract job identifies an inherited-environment fixture defect: two
+synthetic artifact tests observe the real CI_REUSE_ARTIFACTS reference. The
+small correction clears that variable only inside their fixture setup; real
+recovery admission and artifact verification remain unchanged. All67 artifact
+regressions then pass with the actual recovery environment present. The other
+six contract suites also pass in that environment; the loopback host-lock
+cases require the ordinary host network outside the local sandbox. Original
+failure and corrected local proof are retained in combined-main/
+ci-recovery-documentation.log and ci-*-contract-recovery-environment*.log.
+Keep the current runtime checks running; do not cancel their collected proof
+or start another artifact build. Final green CI/window acceptance remains open.
+
 2026-11-07 application candidate714e2032254224c3214cfbbe74525844eabfcb71 is
 pushed in PR125. Original qualification history is retained unchanged in
 build/ucu15-qualified-evidence and its verified bundle; message-only corrections

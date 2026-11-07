@@ -32,6 +32,11 @@ class BuildArtifacts(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
+        # Fixtures own their synthetic manifests and publish/verify scenarios;
+        # a real recovery dispatch must not replace them with its producer.
+        environment = patch.dict(os.environ, CI_REUSE_ARTIFACTS="")
+        environment.start()
+        self.addCleanup(environment.stop)
         self.commands = patch.object(artifacts.subprocess, "check_output", side_effect=(
             lambda command, **_: SHA + "\n" if command[0] == "git" else "rustc fixture\n"
         ))
