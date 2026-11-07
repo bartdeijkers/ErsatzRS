@@ -38663,6 +38663,28 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 CI-recovery component locally verified: all144 existing/new CI
+contract tests pass with actual artifact-reuse references, and installed
+actionlint passes. The bounded resume_run mode checks completed same-repository
+full-run inventory, exact original Rust/web archive identities in the verified
+provider log, clean source, unchanged artifact-consumer code/global settings
+and each reusable job's execution definition. Failed or changed checks remain
+required; browser recovery selects only affected suite/project entries. CI ok
+checks the composed proof and remaining current jobs, retaining provenance in
+the exact-tree marker. No Rust/runtime build input or acceptance is changed.
+Actual producer-log binding and all five consumer signatures are verified
+against a424edc8. This is a local component claim; execution/green CI remains.
+Evidence: combined-main/ci-resume-complete-contracts.log and
+ci-recovery-provider.log. CI42420059326 passes4108 general Rust tests, Clippy,
+deny, progress/architecture and immutable artifact admission. Next/Teletext
+setup hit public GitHub metadata HTTP504; the original CI provision helper now
+acquires210 successfully with both independently qualified payload hashes.
+General Chromium passes366, skips5 and fails one old no-JS profile assertion:
+successful Save stays on the edit page as required by row282, while the older
+test still expects the list page. Next bounded action: verify/correct that
+specific browser expectation and recheck its affected acceptance. Keep remaining
+browser jobs running; do not repeat completed builds or waive final CI.
+
 2026-11-07 recovery CI42420059326 at a424edc87d482caa3505a4bd8a15d44e34844525
 successfully verifies both retained producer products, including full workspace
 coverage, without compilation, installation or publication in the provider.

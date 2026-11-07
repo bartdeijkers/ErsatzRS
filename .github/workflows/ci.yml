@@ -125,6 +125,11 @@ on:
         type: string
         required: false
         default: ''
+      resume_run:
+        description: Completed full CI run whose successful unchanged checks may be reused (requires reuse_artifacts)
+        type: string
+        required: false
+        default: ''
 
 # Bursty pushing is common here (44% of recent consecutive commits landed
 # <10 min apart). On the single self-hosted runner that queues full clippy+test
@@ -210,10 +215,13 @@ jobs:
       tree: ${{ steps.duplicate.outputs.tree }}
       # Domain selection of a `pr` lane run. Empty for every other lane, which
       # the jobs read as "run".
-      run_next: ${{ steps.select.outputs.run_next }}
-      run_teletext: ${{ steps.select.outputs.run_teletext }}
-      run_browser: ${{ steps.select.outputs.run_browser }}
-      run_test: ${{ steps.select.outputs.run_test }}
+      run_next: ${{ steps.resume.outputs.run_next || steps.select.outputs.run_next }}
+      run_teletext: ${{ steps.resume.outputs.run_teletext || steps.select.outputs.run_teletext }}
+      run_browser: ${{ steps.resume.outputs.run_browser || steps.select.outputs.run_browser }}
+      run_test: ${{ steps.resume.outputs.run_test || steps.select.outputs.run_test }}
+      reuse_clippy: ${{ steps.resume.outputs.reuse_clippy }}
+      resumed_checks: ${{ steps.resume.outputs.resumed_checks }}
+      resume_matrix: ${{ steps.resume.outputs.resume_matrix }}
       build_rust: ${{ steps.select.outputs.build_rust }}
       build_web: ${{ steps.select.outputs.build_web }}
       build_smoke: ${{ steps.select.outputs.build_smoke }}
@@ -410,8 +418,44 @@ jobs:
             }
             await full();
       - uses: actions/checkout@v7
-        if: ${{ steps.duplicate.outputs.lane == 'pr' }}
+        if: ${{ steps.duplicate.outputs.lane == 'pr' || inputs.resume_run }}
         # Source-shape validation needs the actual merge-result source files.
+      - id: resume
+        name: Verify completed check inputs and provenance
+        if: ${{ inputs.resume_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESUME_RUN_ID: ${{ inputs.resume_run }}
+          RESUME_ARTIFACTS: ${{ inputs.reuse_artifacts }}
+          RESUME_ALLOWED: ${{ github.event_name == 'workflow_dispatch' && steps.duplicate.outputs.lane == 'full' && inputs.reuse_artifacts && inputs.runner == 'self-hosted' && !inputs.audit_only && !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import importlib.util, json, os, re, subprocess
+          if os.environ['RESUME_ALLOWED'] != 'true' or not re.fullmatch(r'[1-9][0-9]*', os.environ['RESUME_RUN_ID']):
+              raise ValueError('Check resumption requires a full self-hosted artifact-reuse dispatch')
+          spec = importlib.util.spec_from_file_location('artifacts', 'scripts/ci-build-artifacts.py')
+          artifacts = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(artifacts)
+          route = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['RESUME_RUN_ID']}"
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+          run, jobs = api(route), api(route + '/jobs?per_page=100&filter=latest')
+          producer = next(row for row in jobs['jobs'] if row['name'] == 'Verify reused CI artifacts')
+          log_args = ['gh', 'api',
+              f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/jobs/{producer['id']}/logs"]
+          if '--allow-escape-sequences' in subprocess.check_output(['gh', 'api', '--help'], text=True):
+              log_args.append('--allow-escape-sequences')
+          producer_log = subprocess.check_output(log_args, text=True)
+          proof = artifacts.resume_checks(run, jobs, os.environ['GITHUB_REPOSITORY'],
+              os.environ['GITHUB_SHA'], os.environ['RESUME_ARTIFACTS'], producer_log)
+          print('resumed_checks=' + json.dumps(proof, separators=(',', ':')))
+          for output, job in [('run_test', 'test'), ('run_next', 'next_engine'),
+                              ('run_teletext', 'teletext'), ('run_browser', 'hydration')]:
+              print(output + '=' + str(job not in proof['jobs']).lower())
+          print('reuse_clippy=' + str('clippy' in proof['jobs']).lower())
+          rows = proof['browser_pending'] or [{'suite':'general','project':'chromium','port':'18409'}]
+          print('resume_matrix=' + json.dumps({'include': rows}, separators=(',', ':')))
+          PY
       - id: select
         name: Select touched domains
         if: ${{ steps.duplicate.outputs.lane == 'pr' }}
@@ -551,7 +595,7 @@ jobs:
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
     needs: [preflight, fmt]
-    if: ${{ !inputs.audit_only }}
+    if: ${{ !inputs.audit_only && needs.preflight.outputs.reuse_clippy != 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -617,6 +661,7 @@ jobs:
           REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}
           RUNNER_POOL: ${{ inputs.runner }}
           RESET_TARGET_DIR: ${{ inputs.reset_target_dir }}
+          RESUME_RUN_ID: ${{ inputs.resume_run }}
         run: |
           python3 - <<'PYCODE'
           import json, os
@@ -624,6 +669,8 @@ jobs:
           modes += [os.environ[key] not in ('', 'none') for key in ('TELETEXT_ONLY', 'BROWSER_ONLY')]
           if sum(modes) > 1:
               raise SystemExit('Focused CI modes are mutually exclusive')
+          if os.environ.get('RESUME_RUN_ID') and (sum(modes) or not os.environ.get('REUSE_ARTIFACTS')):
+              raise SystemExit('Check resumption requires full artifact reuse')
           next_case_set = os.environ.get('NEXT_CASE_SET', 'all')
           if next_case_set not in ('all', 'subtitle-nul'):
               raise SystemExit('Unknown Next recovery case set')
@@ -1153,7 +1200,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.pr_matrix || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}') }}
+      matrix: ${{ fromJSON(needs.preflight.outputs.resume_matrix || inputs.browser_only == 'chromium' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.browser_only == 'both' && '{"include":[{"suite":"recovery","project":"chromium","port":"18409"},{"suite":"recovery","project":"firefox","port":"18410"}]}' || inputs.teletext_only == 'all' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"},{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || inputs.teletext_only == '1.5' && '{"include":[{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}' || inputs.teletext_only == '2.5' && '{"include":[{"suite":"2.5","project":"chromium","port":"18413"},{"suite":"2.5","project":"firefox","port":"18414"}]}' || needs.preflight.outputs.lane == 'pr' && needs.preflight.outputs.pr_matrix || '{"include":[{"suite":"general","project":"chromium","port":"18409"},{"suite":"general","project":"firefox","port":"18410"},{"suite":"1.5","project":"chromium","port":"18411"},{"suite":"1.5","project":"firefox","port":"18412"}]}') }}
     env:
       # Keep CI independent from the maintainer's live admin server on 8409.
       ERSATZRS_E2E_PORT: ${{ matrix.port }}
@@ -1375,9 +1422,10 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EVENT_NAME: ${{ github.event_name }}
+          RESUME_RUN_ID: ${{ inputs.resume_run }}
         run: |
           python3 - <<'PY'
-          import json, os, sys
+          import json, os, re, sys
 
           needs = json.loads(os.environ["NEEDS"])
           results = {job: data["result"] for job, data in needs.items()}
@@ -1399,6 +1447,42 @@ jobs:
               sys.exit(0)
           # Commit lint runs only for pull requests and manual dispatches.
           optional = {"commitlint"} if os.environ["EVENT_NAME"] in ("push", "schedule") else set()
+          raw_proof = outputs.get("resumed_checks", "")
+          if os.environ.get("RESUME_RUN_ID") or raw_proof:
+              proof = json.loads(raw_proof or "null")
+              if (lane != "full" or os.environ["EVENT_NAME"] != "workflow_dispatch"
+                      or not isinstance(proof, dict)
+                      or str(proof.get("run_id")) != os.environ.get("RESUME_RUN_ID")
+                      or proof.get("execution_sha") != os.environ.get("GITHUB_SHA")
+                      or not re.fullmatch(r"[0-9a-f]{40}", proof.get("execution_sha", ""))
+                      or not re.fullmatch(r"[0-9a-f]{40}", proof.get("source_sha", ""))):
+                  sys.exit("::error::Invalid completed-check source binding")
+              reused = proof.get("jobs", {})
+              if not isinstance(reused, dict) or set(reused) - {"clippy", "test", "next_engine", "teletext", "hydration"}:
+                  sys.exit("::error::Invalid completed-check scope")
+              ids = []
+              for job, values in reused.items():
+                  if (not isinstance(values, list) or len(values) != (4 if job == "hydration" else 1)
+                          or any(type(value) is not int or value <= 0 for value in values)):
+                      sys.exit("::error::Missing successful-job provenance")
+                  ids.extend(values)
+              if len(ids) != len(set(ids)):
+                  sys.exit("::error::Duplicate successful-job provenance")
+              browser_passed, browser_pending = proof.get("browser_passed", []), proof.get("browser_pending", [])
+              expected = [("general", "chromium", "18409"), ("general", "firefox", "18410"),
+                          ("1.5", "chromium", "18411"), ("1.5", "firefox", "18412")]
+              pending = [(row["suite"], row["project"], row["port"]) for row in browser_pending]
+              selected = json.loads(outputs.get("resume_matrix", "null"))
+              expected_matrix = browser_pending or [{"suite":"general","project":"chromium","port":"18409"}]
+              if (len(browser_passed) + len(pending) != 4 or len(set(pending)) != len(pending)
+                      or set(pending) - set(expected) or len(set(browser_passed)) != len(browser_passed)
+                      or any(type(value) is not int or value <= 0 for value in browser_passed)
+                      or (("hydration" in reused) != (not pending))
+                      or selected != {"include": expected_matrix}
+                      or ("hydration" in reused and set(reused["hydration"]) != set(browser_passed))):
+                  sys.exit("::error::Incomplete browser recovery scope")
+              optional |= set(reused)
+              print("Verified reused check provenance: " + json.dumps(proof, sort_keys=True))
           # Jobs a lane leaves out on purpose (see Preflight).
           optional |= {
               "light": {"next_engine", "teletext", "hydration"},
@@ -1450,7 +1534,8 @@ jobs:
         env:
           TREE: ${{ needs.preflight.outputs.tree }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: printf '%s\n%s\n' "$TREE" "$RUN_URL" > ci-full.txt
+          RESUMED_CHECKS: ${{ needs.preflight.outputs.resumed_checks }}
+        run: printf '%s\n%s\n%s\n' "$TREE" "$RUN_URL" "$RESUMED_CHECKS" > ci-full.txt
       # Read by Preflight on the nightly run: skip it when main's tree already
       # passed a full run.
       - uses: actions/upload-artifact@v7

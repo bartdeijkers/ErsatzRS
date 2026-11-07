@@ -241,6 +241,138 @@ def verify_reuse_options(manifest, reference, kind):
             raise ValueError("reused CI web artifact has incompatible Leptos output settings")
 
 
+def resume_job_signature(workflow, job):
+    """Compare consumer execution, allowing only its scheduling to change."""
+    body = re.search(rf"^  {job}:\n(.*?)(?=^  [a-z][a-z0-9_]*:|\Z)",
+                     workflow.split("\njobs:\n", 1)[1], re.M | re.S)[1]
+    body = re.sub(r"^    if: .*\n", "", body, flags=re.M)
+    if job == "hydration":
+        body = re.sub(r"^      matrix: .*\n", "", body, flags=re.M)
+    return body
+
+
+def resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow):
+    """Result reuse is stricter than executable reuse: selectors cannot drift."""
+    import ast
+
+    allowed = REUSE_SOURCE_EXCEPTIONS - {
+        "scripts/ci-teletext-selection.py", "scripts/ci-teletext-selection_test.py",
+    }
+    if set(changes) - allowed:
+        raise ValueError("completed CI check inputs changed")
+    def consumer_code(source):
+        tree = ast.parse(source)
+        tree.body = [node for node in tree.body if not (
+            isinstance(node, ast.FunctionDef) and node.name.startswith("resume_")
+            and not node.decorator_list)]
+        return ast.dump(tree, include_attributes=False)
+    if consumer_code(old_helper) != consumer_code(new_helper):
+        raise ValueError("CI artifact consumer implementation changed")
+    # Inputs are above concurrency. Global flags, defaults and permissions
+    # below it must be identical, independently of individual job signatures.
+    def settings(source):
+        return source.split("\nconcurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
+    if settings(old_workflow) != settings(new_workflow):
+        raise ValueError("global CI execution settings changed")
+
+
+def resume_artifacts_guard(log, references, execution_sha):
+    """Bind imported results to the same fully verified immutable products."""
+    for kind in ("rust", "web"):
+        reference = reuse_reference(references, kind)
+        records = []
+        for line in log.splitlines():
+            try:
+                value = json.loads(line[line.index('{'):])
+            except (ValueError, json.JSONDecodeError):
+                continue
+            if isinstance(value, dict) and f"{kind}_cache_key" in value:
+                records.append(value)
+        if len(records) != 1 or any(records[0].get(f"{kind}_{key}") != expected for key, expected in {
+            "cache_key": reference["cache_key"], "digest": reference["sha256"],
+            "source_sha": reference["source_sha"], "equivalent_execution_sha": execution_sha,
+        }.items()):
+            raise ValueError("completed CI check artifact provenance differs")
+
+
+def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
+                old_helper, new_helper, changes, references, producer_log):
+    """Reuse only actual successful jobs from a completed ordinary full run."""
+    if (run.get("status") != "completed" or run.get("conclusion") not in ("success", "failure")
+            or run.get("path") != ".github/workflows/ci.yml"
+            or run.get("event") not in ("push", "schedule", "workflow_dispatch")
+            or run.get("head_repository", {}).get("full_name") != repository
+            or not re.fullmatch(r"[0-9a-f]{40}", run.get("head_sha", ""))
+            or type(run.get("id")) is not int or run["id"] <= 0
+            or not re.fullmatch(r"[0-9a-f]{40}", sha)):
+        raise ValueError("resume requires a completed same-repository full CI run")
+    rows = jobs.get("jobs", [])
+    by_name = {row["name"]: row for row in rows}
+    browsers = [
+        {"suite": suite, "project": project, "port": str(port)}
+        for suite, project, port in (("general", "chromium", 18409),
+                                    ("general", "firefox", 18410),
+                                    ("1.5", "chromium", 18411), ("1.5", "firefox", 18412))
+    ]
+    browser_names = [f"Playwright E2E ({row['suite']}, {row['project']})" for row in browsers]
+    required = {"Preflight", "Format", "Documentation links", "Clippy", "Commit lint",
+                "Cargo deny", "Test", "Next engine", "Teletext 1.5", "CI ok", *browser_names}
+    producers = set(by_name) & {"Verify reused CI artifacts"}
+    if (len(producers) != 1 or set(by_name) != required | producers
+            or len(rows) != len(by_name) or jobs.get("total_count") != len(rows)
+            or any(row.get("status") != "completed" for row in rows)
+            or any(row.get("run_id") != run["id"] for row in rows)
+            or any(type(row.get("id")) is not int or row["id"] <= 0 for row in rows)
+            or len({row["id"] for row in rows}) != len(rows)):
+        raise ValueError("resume requires the complete ordinary full CI job inventory")
+    if by_name['Verify reused CI artifacts'].get('conclusion') != 'success':
+        raise ValueError('previous artifact verification did not pass')
+    if (by_name['Preflight'].get('conclusion') != 'success'
+            or by_name['CI ok'].get('conclusion') not in ('success', 'failure')):
+        raise ValueError('previous run did not execute the full gate')
+    resume_artifacts_guard(producer_log, references, run['head_sha'])
+    resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow)
+    scopes = {"clippy": ["Clippy"], "test": ["Test"], "next_engine": ["Next engine"],
+              "teletext": ["Teletext 1.5"], "hydration": browser_names}
+    reused = {}
+    passed_browsers = []
+    pending_browsers = list(browsers)
+    for job, names in scopes.items():
+        if resume_job_signature(old_workflow, job) != resume_job_signature(new_workflow, job):
+            continue
+        passed = [by_name[name]["id"] for name in names if by_name[name].get("conclusion") == "success"]
+        if len(passed) == len(names):
+            reused[job] = passed
+        if job == "hydration":
+            passed_browsers = passed
+            pending_browsers = [row for row, name in zip(browsers, names)
+                                if by_name[name].get("conclusion") != "success"]
+    return {"run_id": run["id"], "source_sha": run["head_sha"], "execution_sha": sha,
+            "jobs": reused, "browser_passed": passed_browsers,
+            "browser_pending": pending_browsers}
+
+
+def resume_checks(run, jobs, repository, sha, references, producer_log):
+    """Bind the API proof to clean exact source before exporting any skips."""
+    if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != sha:
+        raise ValueError("resume checkout differs from the execution SHA")
+    if subprocess.run(["git", "diff", "--quiet", "HEAD", "--"], check=False).returncode:
+        raise ValueError("resume requires a clean tracked source checkout")
+    producer = run.get("head_sha", "")
+    if (not re.fullmatch(r"[0-9a-f]{40}", producer)
+            or run.get("head_repository", {}).get("full_name") != repository):
+        raise ValueError("resume source is not a same-repository commit")
+    changes = verify_source_equivalence(producer, sha)
+    def source(revision, path):
+        return subprocess.check_output(["git", "show", f"{revision}:{path}"], text=True)
+    return resume_plan(run, jobs, repository, sha,
+                       source(producer, ".github/workflows/ci.yml"),
+                       source(sha, ".github/workflows/ci.yml"),
+                       source(producer, "scripts/ci-build-artifacts.py"),
+                       source(sha, "scripts/ci-build-artifacts.py"), changes,
+                       references, producer_log)
+
+
 def workspace_test_targets(metadata):
     """Match Cargo's default lib/bin/integration selection without compiling."""
     packages = {package["id"]: package for package in metadata["packages"]}

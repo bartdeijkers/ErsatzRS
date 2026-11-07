@@ -325,6 +325,20 @@ runtime do not become current proof. The original producer identity remains in
 the manifest. A later push whose exact tree already passed full verification
 uses that tested-tree marker to avoid a duplicate compilation and test run.
 
+For a completed full artifact-reuse run, `resume_run` may name its run ID to
+retry its failed checks without repeating successful unchanged checks. Supply
+the same `reuse_artifacts` references. Preflight verifies the original run and
+complete job inventory through GitHub, binds both archive hashes and producer
+identities to its successful provider log, and compares clean exact source,
+artifact-consumer code, global flags and each check's execution definition.
+Changed runtime, dependency, application-test, selector or embedded release-note inputs
+cannot reuse results. A changed job definition requires that check to run again.
+Only failed browser suite/project entries are selected when their execution is
+unchanged. Format, dependency audit, commit lint, contract tests and complete
+artifact verification still run; `CI ok` requires every remaining check and
+records the imported successful-job IDs in the fully tested tree marker.
+This is composed recovery evidence, not a newly executed complete test suite.
+
 The smoke runner accepts an explicitly selected server without rebuilding:
 
 ```bash
