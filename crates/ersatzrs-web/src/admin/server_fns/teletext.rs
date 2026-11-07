@@ -17,6 +17,9 @@ pub struct ChannelTeletextData {
     pub effective_authoring_error: Option<String>,
     /// Explicit source choices only; absence means the source list is unavailable.
     pub guide_channels: Option<Vec<TeletextGuideChannelData>>,
+    /// Saved guide source channels for this channel; `None` when never saved.
+    #[serde(default)]
+    pub guide_selection: Option<Vec<i64>>,
     /// Read-only preview availability; never publication or delivery authority.
     #[serde(default)]
     pub current_guide_available: Option<bool>,
@@ -253,6 +256,7 @@ pub async fn load_channel_teletext_for_application(
         } else {
             None
         };
+    let guide_selection = load_guide_selection(application, channel_id).await;
     let current_guide_available = match application
         .get_optional_setting(
             crate::host::teletext_runtime_policy::NATIVE_TELETEXT_RUNTIME_POLICY_SETTING,
@@ -279,10 +283,44 @@ pub async fn load_channel_teletext_for_application(
         effective_authoring,
         effective_authoring_error,
         guide_channels,
+        guide_selection,
         current_guide_available,
         addons,
         readiness,
     }))
+}
+
+/// Admin setting holding each channel's saved guide source channels as a JSON
+/// object (`{"<channel id>": [<source channel id>, ...]}`). It only prefills
+/// the channel page; every check still validates the submitted channel ids.
+pub const TELETEXT_GUIDE_SELECTION_SETTING: &str = "teletext.guide_selection";
+
+/// Parse the saved guide selection map; malformed content reads as empty.
+#[must_use]
+pub fn parse_guide_selection(raw: &str) -> std::collections::BTreeMap<i64, Vec<i64>> {
+    serde_json::from_str::<std::collections::BTreeMap<String, Vec<i64>>>(raw)
+        .map(|map| {
+            map.into_iter()
+                .filter_map(|(key, ids)| {
+                    let key = key.parse::<i64>().ok().filter(|key| *key > 0)?;
+                    let ids = ids.into_iter().filter(|id| *id > 0).collect();
+                    Some((key, ids))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(feature = "ssr")]
+async fn load_guide_selection(
+    application: &ersatzrs_app::ApplicationServices,
+    channel_id: i64,
+) -> Option<Vec<i64>> {
+    let raw = application
+        .get_optional_setting(TELETEXT_GUIDE_SELECTION_SETTING)
+        .await
+        .ok()??;
+    parse_guide_selection(&raw).remove(&channel_id)
 }
 
 /// Classify the channel's MPEG-TS route for authored teletext.

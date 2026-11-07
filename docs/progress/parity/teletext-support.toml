@@ -344,3 +344,14 @@ description = '''Teletext elements (/teletext-elements) store custom Level 1 pag
 discovered  = '2026-11-07'
 evidence    = 'Branch claude/project-thread-9pm6vy: domain/core/infra/app/web slices with focused domain, infra, app, ffmpeg and web unit tests. Library, upload and editor pages are localized in all nine cultures. No broadcast, engine-preview or browser-flow proof yet.'
 resolved    = false
+
+[[debt]]
+id          = 'teletext-channel-custom-pages-broadcast'
+adr         = '0120'
+description = '''Channel teletext admin redesign (branch claude/project-thread-g3jijz). Component state:
+(1) DONE (component): the channel teletext page shows a status line, a page set, one section per teletext add-on (no fields for a disabled, missing or unconfigured add-on), a custom pages section and one Check, Preview, Publish block, using shared primitives and the reference docs/reference/teletext-admin-ux.md. One-click enable creates a per-channel profile and binding; TV-guide channel selection is stored per channel in the admin setting teletext.guide_selection.
+(2) OPEN (functionality): custom pages from the teletext element library (/teletext-elements, separate branch) are listed in the page set but are not yet broadcast. Including channel-linked elements in draft preparation and publication needs an ADR 0120 amendment that lets ErsatzRS itself act as the producer of custom pages, with page-number conflict rules against add-on ranges.
+(3) OPEN (evidence): Playwright no-JS and hydrated runs of the updated teletext specs against the redesigned page.'''
+discovered  = '2026-11-07'
+evidence    = 'Branch claude/project-thread-g3jijz: focused ersatzrs-web unit tests for source sections, status line, guide selection parsing and authoring form defaults. Real-app screenshots of the redesigned page are on the progress artifact. Broadcasting custom pages and Playwright runs are not proven.'
+resolved    = false
