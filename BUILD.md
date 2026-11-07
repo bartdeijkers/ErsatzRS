@@ -278,7 +278,7 @@ available. Ordinary CI requires exact source identity. The explicitly selected
 focused-recovery exception below permits only an unchanged runtime/test/config
 tree with a small allowlist of CI orchestration and progress-document changes.
 
-### Reuse verified artifacts for focused recovery
+### Reuse verified artifacts for CI recovery
 
 On the self-hosted machine, `reuse_artifacts` accepts a JSON object keyed by
 `rust` and/or `web`. Each reference must supply the original 40-character
@@ -290,7 +290,7 @@ source. Use the existing `teletext_only=1.5-rust` or `browser_only` selection to
 recover the affected jobs without another artifact compilation.
 
 The artifact provider only checks out source and verifies the pinned local
-archives. It runs no Cargo commands, tool installation, target reset, artifact
+archives. It runs no Cargo compilation, tool installation, target reset, artifact
 publication or cache pruning. Missing/corrupt archives fail closed; no rebuild
 or alternative download starts. Consumers recheck archive hashes, the complete
 file inventory and permissions, host/libc, toolchain, flags and original source
@@ -307,9 +307,23 @@ component and build evidence; a warm cache or an old server with newer frontend
 files alone does not establish a reusable matched build. Keep the referenced
 immutable local cache group until all consumers finish.
 
-Reuse is restricted to one explicit focused mode, self-hosted execution and no
-target reset. Normal full CI and its exact-SHA rules remain unchanged; these
-scoped results never imply a fresh full-CI result for the execution commit.
+Reuse requires self-hosted execution and no target reset. A focused recovery
+keeps its existing scope and does not produce the required `CI ok` aggregate.
+Full verification requires both Rust and matched-web references. The provider
+also queries Cargo metadata offline and lists the archive with its verified
+nextest executable, without running tests or compiling. Workspace membership
+and nextest's all-features metadata catalog must match the current checkout.
+Every library, binary and integration test target eligible under the current
+default features must exist in the archive; the ordinary smoke server is
+required too. A selected-package archive cannot satisfy this full-workspace
+admission check. Missing coverage fails without rebuilding.
+
+Full recovery executes every normal gate, including current runtime checks and
+the required aggregate, against those verified products. CI-only runtime setup
+corrections must be exercised by the new execution; earlier results with another
+runtime do not become current proof. The original producer identity remains in
+the manifest. A later push whose exact tree already passed full verification
+uses that tested-tree marker to avoid a duplicate compilation and test run.
 
 The smoke runner accepts an explicitly selected server without rebuilding:
 

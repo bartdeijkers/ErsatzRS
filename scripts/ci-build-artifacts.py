@@ -241,13 +241,91 @@ def verify_reuse_options(manifest, reference, kind):
             raise ValueError("reused CI web artifact has incompatible Leptos output settings")
 
 
-def reuse_local(archive, sha, kind, reference, cache):
+def workspace_test_targets(metadata):
+    """Match Cargo's default lib/bin/integration selection without compiling."""
+    packages = {package["id"]: package for package in metadata["packages"]}
+    features = {node["id"]: set(node["features"]) for node in metadata["resolve"]["nodes"]}
+    targets = set()
+    for member in metadata["workspace_members"]:
+        package = packages[member]
+        for target in package["targets"]:
+            if not target["test"] or not set(target.get("required-features", ())) <= features[member]:
+                continue
+            kinds = set(target["kind"])
+            if kinds & {"lib", "rlib", "cdylib", "dylib", "staticlib", "proc-macro"}:
+                kind = "lib"
+            elif kinds in ({"bin"}, {"test"}):
+                kind = target["kind"][0]
+            else:
+                continue
+            targets.add((package["name"], target["name"], kind))
+    if not targets:
+        raise ValueError("workspace has no test targets")
+    return targets
+
+
+def verify_workspace_test_coverage(current, archived, binaries, catalog=None):
+    """A selected-package archive must never stand in for a full workspace."""
+    packages = {package["id"]: package["name"] for package in archived["packages"]}
+    members = {packages[member] for member in archived["workspace_members"]}
+    current_packages = {package["id"]: package["name"] for package in current["packages"]}
+    if members != {current_packages[member] for member in current["workspace_members"]}:
+        raise ValueError("reused archive has a different workspace membership")
+    def workspace_features(metadata):
+        nodes = {node["id"]: node["features"] for node in metadata["resolve"]["nodes"]}
+        names = {package["id"]: package["name"] for package in metadata["packages"]}
+        return {names[member]: sorted(nodes[member]) for member in metadata["workspace_members"]}
+    if workspace_features(current if catalog is None else catalog) != workspace_features(archived):
+        raise ValueError("reused archive has a different workspace feature graph")
+    actual = set()
+    for binary in binaries["rust-binaries"].values():
+        package = packages[binary["package-id"]]
+        if package not in members:
+            raise ValueError("reused archive contains a non-workspace test binary")
+        kind = "lib" if binary["kind"] == "proc-macro" else binary["kind"]
+        actual.add((package, binary["binary-name"], kind))
+    expected = workspace_test_targets(current)
+    missing = expected - actual
+    if missing:
+        names = ", ".join(f"{package}::{kind}/{name}" for package, name, kind in sorted(missing))
+        raise ValueError("reused archive omits workspace test targets: " + names)
+    return len(expected)
+
+
+def verify_full_workspace_archive(root):
+    """Use the verified nextest executable to inspect, never run, its archive."""
+    environment = dict(os.environ, RUSTUP_AUTO_INSTALL="0")
+    current = json.loads(subprocess.check_output(
+        ["cargo", "metadata", "--format-version", "1", "--locked", "--offline"],
+        text=True, env=environment))
+    # Nextest's archived Cargo metadata is an all-features catalog, even for
+    # default-feature test builds. Compare that catalog separately; eligible
+    # test targets still come from the current default-feature resolution.
+    catalog = json.loads(subprocess.check_output(
+        ["cargo", "metadata", "--format-version", "1", "--locked", "--offline", "--all-features"],
+        text=True, env=environment))
+    with tempfile.TemporaryDirectory(prefix="ci-full-coverage-") as temporary:
+        binaries = json.loads(subprocess.check_output([
+            str(root / "bin/cargo-nextest"), "nextest", "list",
+            "--archive-file", str(root / "nextest.tar.zst"),
+            "--extract-to", temporary, "--workspace-remap", str(Path.cwd()),
+            "--list-type", "binaries-only", "--message-format", "json",
+        ], text=True, env=environment))
+        archived = json.loads((Path(temporary) / "target/nextest/cargo-metadata.json").read_text())
+        return verify_workspace_test_coverage(current, archived, binaries, catalog)
+
+
+def reuse_local(archive, sha, kind, reference, cache, full_workspace=False):
     """Verify existing immutable bytes without building, relabelling or publishing."""
     changed = verify_source_equivalence(reference["source_sha"], sha)
     if not fetch_local(archive, reference["sha256"], reference["cache_key"], cache):
         raise ValueError("required reused CI artifact is unavailable; no rebuild was started")
     with tempfile.TemporaryDirectory(prefix="ci-reuse-") as temporary:
-        restore(archive, Path(temporary) / "verified", sha, None, kind, reference)
+        root = Path(temporary) / "verified"
+        restore(archive, root, sha, None, kind, reference,
+                required_capabilities=("rust-tests", "smoke-server") if full_workspace else ())
+        if full_workspace:
+            verify_full_workspace_archive(root)
     return {f"{kind}_cache_key": reference["cache_key"], f"{kind}_digest": reference["sha256"],
             f"{kind}_source_sha": reference["source_sha"],
             f"{kind}_equivalent_execution_sha": sha,
@@ -422,11 +500,15 @@ def main():
     parser.add_argument("--capability", action="append", help="pack: declare each provided capability")
     parser.add_argument("--require-capability", action="append", default=[],
                         help="restore/verify: refuse before exporting paths unless provided")
+    parser.add_argument("--require-full-workspace", action="store_true",
+                        help="reuse rust: require every current workspace test target and smoke server")
     args = parser.parse_args()
     if args.capability is not None and args.mode != "pack":
         parser.error("--capability is only valid when packing")
     if args.require_capability and args.mode not in ("restore", "verify"):
         parser.error("--require-capability is only valid when restoring or verifying")
+    if args.require_full_workspace and (args.mode != "reuse" or args.kind != "rust"):
+        parser.error("--require-full-workspace is only valid for Rust artifact reuse")
     if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
         parser.error("a full source SHA is required")
     local = args.mode in ("publish-local", "fetch-local")
@@ -450,7 +532,8 @@ def main():
     if args.mode == "reuse":
         if reference is None:
             parser.error("reuse requires explicit CI_REUSE_ARTIFACTS references")
-        values = reuse_local(args.archive, args.sha, args.kind, reference, cache)
+        values = reuse_local(args.archive, args.sha, args.kind, reference, cache,
+                             full_workspace=args.require_full_workspace)
         if args.output_file:
             with args.output_file.open("a") as handle:
                 for key, value in values.items():

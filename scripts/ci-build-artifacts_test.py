@@ -4,6 +4,7 @@
 import importlib.util
 import hashlib
 from contextlib import redirect_stdout
+from copy import deepcopy
 import io
 import json
 import os
@@ -209,6 +210,40 @@ class BuildArtifacts(unittest.TestCase):
             entry.unlink()
             with self.assertRaisesRegex(ValueError, "unavailable; no rebuild"):
                 artifacts.reuse_local(output, "b" * 40, "rust", reference, cache)
+
+    def test_full_reuse_requires_scope_proof_before_returning_artifacts(self):
+        with patch.dict(os.environ, {key: "0" if key == "CARGO_PROFILE_TEST_DEBUG" else ""
+                                     for key in artifacts.BUILD_FLAG_KEYS}):
+            root, archive = self.fixture()
+        reference = self.reference(root, archive, "rust")
+        cache = self.base / "cache"
+        artifacts.publish_local(archive, SHA, "rust", reference["cache_key"], cache)
+        with patch.object(artifacts, "verify_source_equivalence", return_value=[]), \
+             patch.object(artifacts, "verify_full_workspace_archive", return_value=4) as coverage:
+            result = artifacts.reuse_local(self.base / "reused.tar.gz", "b" * 40,
+                                           "rust", reference, cache, full_workspace=True)
+            coverage.assert_called_once()
+            self.assertEqual(result["rust_source_sha"], SHA)
+        with patch.object(artifacts, "verify_source_equivalence", return_value=[]), \
+             patch.object(artifacts, "verify_full_workspace_archive",
+                          side_effect=ValueError("omits workspace test targets")):
+            with self.assertRaisesRegex(ValueError, "omits workspace"):
+                artifacts.reuse_local(self.base / "refused.tar.gz", "b" * 40,
+                                      "rust", reference, cache, full_workspace=True)
+
+    def test_full_reuse_also_requires_the_runtime_smoke_server(self):
+        with patch.dict(os.environ, {key: "0" if key == "CARGO_PROFILE_TEST_DEBUG" else ""
+                                     for key in artifacts.BUILD_FLAG_KEYS}):
+            root, archive = self.fixture(capabilities=["rust-tests"])
+        reference = self.reference(root, archive, "rust")
+        cache = self.base / "cache"
+        artifacts.publish_local(archive, SHA, "rust", reference["cache_key"], cache)
+        with patch.object(artifacts, "verify_source_equivalence", return_value=[]), \
+             patch.object(artifacts, "verify_full_workspace_archive") as coverage:
+            with self.assertRaisesRegex(ValueError, "capabilities"):
+                artifacts.reuse_local(self.base / "refused.tar.gz", "b" * 40,
+                                      "rust", reference, cache, full_workspace=True)
+            coverage.assert_not_called()
 
     def test_reuse_requires_pinned_toolchain_flags_and_truthful_web_defaults(self):
         with patch.dict(os.environ, {key: "" for key in artifacts.BUILD_FLAG_KEYS}):
@@ -571,6 +606,75 @@ time.sleep(20)
         self.assertEqual({path.name: path.read_bytes() for path in (cache / "occupied").iterdir()}, occupied_before)
 
 
+class FullWorkspaceCoverage(unittest.TestCase):
+    def setUp(self):
+        self.metadata = {
+            "workspace_members": ["a", "b"],
+            "resolve": {"nodes": [{"id": "a", "features": []}, {"id": "b", "features": ["ssr"]}]},
+            "packages": [
+                {"id": "a", "name": "a", "targets": [
+                    {"name": "a", "kind": ["lib"], "test": True},
+                    {"name": "a-cli", "kind": ["bin"], "test": True}]},
+                {"id": "b", "name": "b", "targets": [
+                    {"name": "b", "kind": ["cdylib", "rlib"], "test": True},
+                    {"name": "live", "kind": ["test"], "test": True, "required-features": ["ssr"]},
+                    {"name": "gpu", "kind": ["test"], "test": True, "required-features": ["gpu"]},
+                    {"name": "server", "kind": ["bin"], "test": False}]},
+            ],
+        }
+        self.binaries = {"rust-binaries": {
+            "a-lib": {"package-id": "a", "binary-name": "a", "kind": "lib"},
+            "a-bin": {"package-id": "a", "binary-name": "a-cli", "kind": "bin"},
+            "b-lib": {"package-id": "b", "binary-name": "b", "kind": "lib"},
+            "b-test": {"package-id": "b", "binary-name": "live", "kind": "test"},
+        }}
+
+    def test_full_selection_includes_libraries_binaries_and_integration_tests(self):
+        self.assertEqual(artifacts.verify_workspace_test_coverage(
+            self.metadata, self.metadata, self.binaries), 4)
+
+    def test_subset_cannot_claim_full_coverage(self):
+        for missing in self.binaries["rust-binaries"]:
+            with self.subTest(missing=missing):
+                partial = deepcopy(self.binaries)
+                del partial["rust-binaries"][missing]
+                with self.assertRaisesRegex(ValueError, "omits workspace test targets"):
+                    artifacts.verify_workspace_test_coverage(self.metadata, self.metadata, partial)
+
+    def test_changed_membership_and_feature_graph_are_refused(self):
+        for field in ("membership", "features"):
+            with self.subTest(field=field):
+                archived = deepcopy(self.metadata)
+                if field == "membership":
+                    archived["workspace_members"].pop()
+                else:
+                    archived["resolve"]["nodes"][1]["features"] = []
+                with self.assertRaisesRegex(ValueError, "different workspace"):
+                    artifacts.verify_workspace_test_coverage(self.metadata, archived, self.binaries)
+
+    def test_binary_kind_does_not_substitute_for_a_missing_target(self):
+        changed = deepcopy(self.binaries)
+        changed["rust-binaries"]["b-test"]["kind"] = "bin"
+        with self.assertRaisesRegex(ValueError, "omits workspace"):
+            artifacts.verify_workspace_test_coverage(self.metadata, self.metadata, changed)
+
+    def test_enabled_required_feature_needs_its_actual_test_binary(self):
+        enabled = deepcopy(self.metadata)
+        enabled["resolve"]["nodes"][1]["features"].append("gpu")
+        with self.assertRaisesRegex(ValueError, "b::test/gpu"):
+            artifacts.verify_workspace_test_coverage(enabled, enabled, self.binaries)
+
+    def test_nextest_catalog_does_not_enable_optional_test_targets(self):
+        catalog = deepcopy(self.metadata)
+        catalog["resolve"]["nodes"][1]["features"].append("gpu")
+        self.assertEqual(artifacts.verify_workspace_test_coverage(
+            self.metadata, catalog, self.binaries, catalog), 4)
+        altered = deepcopy(catalog)
+        altered["resolve"]["nodes"][0]["features"].append("unexpected")
+        with self.assertRaisesRegex(ValueError, "different workspace feature graph"):
+            artifacts.verify_workspace_test_coverage(self.metadata, altered, self.binaries, catalog)
+
+
 class Outputs(SimpleNamespace):
     """Job outputs: an output a job did not set reads as '' on GitHub."""
 
@@ -631,6 +735,14 @@ class FocusedAuditSelection(unittest.TestCase):
 
     def test_default_manual_run_keeps_every_job(self):
         self.assertEqual(self.scheduled(), set(self.jobs))
+
+    def test_full_reuse_keeps_every_gate_and_requires_complete_scope(self):
+        self.assertEqual(self.scheduled(reuse_artifacts='{"rust":{},"web":{}}'), set(self.jobs))
+        provider = self.jobs["build"].split("name: Reuse verified CI artifacts", 1)[1].split("      - uses:", 1)[0]
+        self.assertIn("REQUIRE_FULL_WORKSPACE:", provider)
+        self.assertIn('"$kind" == \'rust\' && "$REQUIRE_FULL_WORKSPACE" == \'true\'', provider)
+        self.assertIn("coverage+=(--require-full-workspace)", provider)
+        self.assertIn('"${coverage[@]}"', provider)
 
     def test_runtime_jobs_match_the_managed_ffmpeg_default(self):
         runtime = (Path(__file__).resolve().parents[1]
@@ -964,6 +1076,42 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertIn("provenBy('ci-tree', tree, ['pull_request'])", self.workflow)
         self.assertIn("provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch'])", self.workflow)
 
+    def test_main_push_reuses_only_a_successful_exact_full_tree(self):
+        code = re.search(r"      - id: duplicate\n.*?          script: \|\n(.*?)^      - uses:",
+                         self.jobs["preflight"], re.S | re.M)[1]
+        code = "\n".join(line[12:] for line in code.splitlines())
+        harness = r"""
+        const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        const output = {};
+        const github = {rest: {git: {getCommit: async () => ({data:{tree:{sha:'current-tree'}}})},
+          actions: {listWorkflowRuns:'runs', listArtifactsForRepo:'artifacts',
+            getWorkflowRun:async () => ({data:{path:'.github/workflows/ci.yml',
+              event:'workflow_dispatch', head_repository:{full_name:'fixture/fixture'},
+              conclusion:'success', html_url:'fixture', ...input.run}})}},
+          paginate:async (method, args) => method === 'artifacts' && args.name === 'ci-full-current-tree'
+            && input.match !== false ? [{expired:false,workflow_run:{id:1},...input.artifact}] : []};
+        const core = {setOutput:(key,value)=>output[key]=value,info:()=>{},notice:()=>{}};
+        const context = {eventName:'push',sha:'new-merge',runId:2,
+                         repo:{owner:'fixture',repo:'fixture'}};
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        new AsyncFunction('github','context','core',input.code)(github,context,core)
+          .then(()=>console.log(JSON.stringify(output)))
+          .catch(error=>{console.error(error.message);process.exitCode=1});
+        """
+        cases = [({}, "skip"), ({"match": False}, "full"),
+                 ({"artifact": {"expired": True}}, "full"),
+                 ({"run": {"conclusion": "failure"}}, "full"),
+                 ({"run": {"event": "pull_request"}}, "full"),
+                 ({"run": {"path": "other.yml"}}, "full"),
+                 ({"run": {"head_repository": {"full_name": "foreign/repo"}}}, "full")]
+        for case, lane in cases:
+            with self.subTest(case=case):
+                result = subprocess.run(["node", "-e", harness],
+                                        input=json.dumps({"code": code, **case}),
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["lane"], lane)
+
     def test_test_job_narrows_to_the_selected_crates(self):
         body = self.jobs["test"]
         self.assertIn("NEXTEST_FILTER: ${{ needs.preflight.outputs.nextest_filter }}", body)
@@ -1027,6 +1175,10 @@ class FocusedAuditSelection(unittest.TestCase):
             ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust"}, True),
             ({"REUSE_ARTIFACTS": "{}", "BROWSER_ONLY": "both", "BROWSER_CASE_SET": "teletext-runtime"}, True),
             ({"REUSE_ARTIFACTS": "{}"}, False),
+            ({"REUSE_ARTIFACTS": '{"rust":{},"web":{}}'}, True),
+            ({"REUSE_ARTIFACTS": '{"rust":{}}'}, False),
+            ({"REUSE_ARTIFACTS": '{"rust":{},"web":{}}', "RUNNER_POOL": "github-hosted"}, False),
+            ({"REUSE_ARTIFACTS": '{"rust":{},"web":{}}', "RESET_TARGET_DIR": "true"}, False),
             ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust", "RUNNER_POOL": "github-hosted"}, False),
             ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust", "RESET_TARGET_DIR": "true"}, False),
             ({"REUSE_ARTIFACTS": "not-json", "TELETEXT_ONLY": "1.5-rust"}, False),
@@ -1038,7 +1190,7 @@ class FocusedAuditSelection(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, valid, result.stderr)
 
     def test_reuse_provider_never_builds_installs_resets_uploads_or_prunes(self):
-        for mode in ({"teletext_only": "1.5-rust"}, {"browser_only": "both", "browser_case_set": "teletext-runtime"}):
+        for mode in ({}, {"teletext_only": "1.5-rust"}, {"browser_only": "both", "browser_case_set": "teletext-runtime"}):
             inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="none",
                           runner="self-hosted", reset_target_dir=False, reuse_artifacts='{"explicit":"reference"}')
             inputs.update(mode)

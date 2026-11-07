@@ -121,7 +121,7 @@ on:
         required: false
         default: false
       reuse_artifacts:
-        description: Exact local artifact references as JSON (self-hosted focused recovery only; fails closed without rebuilding)
+        description: Exact local artifact references as JSON (self-hosted recovery; full CI requires complete workspace coverage; no rebuild)
         type: string
         required: false
         default: ''
@@ -229,11 +229,6 @@ jobs:
         if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts || (inputs.next_case_set && inputs.next_case_set != 'all')) }}
         run: |
           echo "::error::audit_only cannot be combined with another focused CI mode"
-          exit 1
-      - name: Reject unfocused artifact reuse
-        if: ${{ inputs.reuse_artifacts && !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
-        run: |
-          echo "::error::artifact reuse is restricted to an explicit focused recovery"
           exit 1
       - id: duplicate
         uses: actions/github-script@v9
@@ -405,6 +400,12 @@ jobs:
               core.notice(
                 `Tree ${tree} already passed the PR lane (${run.html_url}); skipping this run. The nightly run covers the rest.`,
               );
+              return;
+            }
+            const fullRun = await provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch']);
+            if (fullRun) {
+              lane('skip');
+              core.notice(`Tree ${tree} already passed full CI (${fullRun.html_url}); skipping this duplicate run.`);
               return;
             }
             await full();
@@ -634,10 +635,13 @@ jobs:
           if case_set != 'fixtures' and os.environ['BROWSER_ONLY'] in ('', 'none'):
               raise SystemExit('Browser recovery case set requires browser_only')
           if os.environ.get('REUSE_ARTIFACTS'):
-              if sum(modes) != 1 or os.environ.get('RUNNER_POOL') != 'self-hosted' or os.environ.get('RESET_TARGET_DIR') == 'true':
-                  raise SystemExit('Artifact reuse requires one self-hosted focused mode without target reset')
-              if not isinstance(json.loads(os.environ['REUSE_ARTIFACTS']), dict):
+              if os.environ.get('RUNNER_POOL') != 'self-hosted' or os.environ.get('RESET_TARGET_DIR') == 'true':
+                  raise SystemExit('Artifact reuse requires self-hosted execution without target reset')
+              references = json.loads(os.environ['REUSE_ARTIFACTS'])
+              if not isinstance(references, dict):
                   raise SystemExit('Artifact reuse references must be a JSON object')
+              if sum(modes) == 0 and set(references) != {'rust', 'web'}:
+                  raise SystemExit('Full CI reuse requires both Rust and matched web references')
           PYCODE
       - uses: actions/checkout@v7
       - name: Free hosted runner disk and memory
@@ -661,11 +665,16 @@ jobs:
         if: ${{ inputs.reuse_artifacts != '' }}
         env:
           REUSE_KINDS: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'web' || (inputs.test_only || inputs.next_engine_only || inputs.teletext_only == '1.5-rust') && 'rust' || 'rust web' }}
+          REQUIRE_FULL_WORKSPACE: ${{ !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
         run: |
           mkdir -p ci-artifacts
           for kind in $REUSE_KINDS; do
+            coverage=()
+            if [[ "$kind" == 'rust' && "$REQUIRE_FULL_WORKSPACE" == 'true' ]]; then
+              coverage+=(--require-full-workspace)
+            fi
             python3 scripts/ci-build-artifacts.py reuse --kind "$kind" --sha "$GITHUB_SHA" \
-              --archive "ci-artifacts/$kind.tar.gz" --output-file "$GITHUB_OUTPUT"
+              --archive "ci-artifacts/$kind.tar.gz" --output-file "$GITHUB_OUTPUT" "${coverage[@]}"
           done
       - uses: dtolnay/rust-toolchain@1.97.1
         if: ${{ !inputs.reuse_artifacts }}
@@ -889,7 +898,7 @@ jobs:
       CARGO_BUILD_JOBS: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '8' || '2' }}
       # Runtime fixtures share channel1's report path in this owned app-data root.
       NEXTEST_TEST_THREADS: "1"
-      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.9
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.10
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -1030,7 +1039,7 @@ jobs:
       CARGO_BUILD_JOBS: "1"
       TELETEXT_LEVEL: ${{ matrix.level }}
       NEXTEST_TEST_THREADS: "4"
-      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.9
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.10
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local rust artifact
@@ -1151,12 +1160,12 @@ jobs:
       # Keep each project's result JSON and host log separate; both jobs upload
       # from test-results/.
       ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.suite }}-${{ matrix.project }}
-      ERSATZRS_FFMPEG_RELEASE_TAG: 2.0.9
-      # Independently qualified Linux x64 2.0.9 payloads; never infer the
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.10
+      # Independently qualified Linux x64 2.0.10 payloads; never infer the
       # expected capability or identity from the Health result under test.
       ERSATZRS_TELETEXT_E2E_ORIGINAL_PTS: "true"
-      ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256: 50ee90f724b22c4706e782fa834670cb14539d798e2693f3466c248b724b3eab
-      ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256: f61fff7f05e615f22ffe1f5b0ae832d37167d83147a2357f06af9fd97872f85e
+      ERSATZRS_TELETEXT_E2E_FFMPEG_SHA256: bb2f58a41e252d115f878e84340317a17caa440e801a4c54126b60b9dcff8cb4
+      ERSATZRS_TELETEXT_E2E_FFPROBE_SHA256: 926fa9331508b8b8b20695fa749ea3fb70a0d17cf0877778420faf711719e403
     steps:
       - uses: actions/checkout@v7
       - name: Fetch local web artifact

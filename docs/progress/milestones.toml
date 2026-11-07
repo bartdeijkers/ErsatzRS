@@ -38663,6 +38663,34 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-07 application candidate714e2032254224c3214cfbbe74525844eabfcb71 is
+pushed in PR125. Original qualification history is retained unchanged in
+build/ucu15-qualified-evidence and its verified bundle; message-only corrections
+preserve every corresponding tree and the published recipe3bcf60f1. Local commit
+lint passes all eight delivery commits. CI42416435505 passes Format, Clippy,
+Commit lint and Cargo deny. Documentation links detects three stale workflow
+runtime pins2.0.9 against the accepted application defaultv2.0.10. The local
+correction updates those pins plus independently qualified Linux FFmpeg/ffprobe
+hashes. Producer job128535632280 completed successfully and published immutable
+Rust/web products from merge-source437fbcf1441b429911555dcae37ef57e8d208723.
+Test and Teletext1.5 also pass, though runtime-sensitive209 executions do not
+establish210 proof. No second build is started. The full-recovery admission
+checks pass67 regressions and confirm all123 eligible default-feature workspace
+test targets in the actual producer archive, plus its ordinary smoke server.
+Nextest's all-features metadata catalog is checked separately from default test
+target eligibility. Real selected-package archives are rejected. Full recovery
+retains every normal gate and the genuine CI ok aggregate; CI-only pin/setup
+changes are executed anew against source-equivalent immutable products.
+Next closure condition: recover the affected CI/runtime verification with
+source-bound existing products and satisfy the required CI ok aggregate. Focused
+manual jobs alone do not supply that aggregate. Retain complete workspace test
+coverage, exact source/environment/inventory validation and all final gates;
+never present a partial archive or old209 runtime execution as current210 proof.
+Evidence: combined-main/ci-documentation-initial.log,
+ci-complete-reuse-regressions.log, ci-workspace-coverage-controls.json,
+ci-producer-workspace-coverage.json and ci-full-reuse-references.json.
+No window acceptance or baseline advance yet.
+
 2026-11-07 all four current application package components now pass local
 acceptance after PR124 integration. Linux x64 and native Windows x64 run their
 independently extracted private development-profile archives; ARM64 and ARMv7
