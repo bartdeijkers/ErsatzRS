@@ -1,0 +1,121 @@
+{
+  "upstream_repository": "ErsatzTV/next",
+  "upstream_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+  "source_archive_sha256": "1eed86eac083766f53003d0f56bc329aa7d03ef96f910e67981b057ec43dcbd4",
+  "source_lock_sha256": "519da3f562660e08cf2dda1bd84c5d243631bcb88c0fe6309b51073fe8875b45",
+  "patched_lock_sha256": "061ba2cff6e7bb0cab8d074798e3d73a1ff7d55c36d35a25b571e856090a5794",
+  "distribution_version": "0.2.5-c5cb065-ersatzrs.1",
+  "rust_toolchain": "1.99.0",
+  "adr": "0130;0131",
+  "status": "local qualification in progress; not a production download pin or publication approval",
+  "patches": [
+    {
+      "file": "0001-bound-live-rtsp-shortest-buffer.patch",
+      "sha256": "591244c915ca42ff09b332be731751454c88edd3f84bed304c6a231c0aab2aee",
+      "retire_when": "Unpatched upstream passes the existing live RTSP startup and EOF/handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "The unchanged RTSP shortest-buffer test fails on the exact025 production source; the audio-copy control passes (unpatched-regressions.log).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0002-repeat-programme-images.patch",
+      "sha256": "0c4e9cafa2436d2846ae3d306560b29e6c59b85d2d759fc977a3e7c78d873176",
+      "retire_when": "Unpatched upstream passes static WebP and complete finite/infinite GIF/WebP seek, repeat, cancellation and schedule-boundary handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "The unchanged static-WebP and animation-loop tests fail on exact025 production source (unpatched-regressions.log).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0003-update-worker-security-lock.patch",
+      "sha256": "50807a9d63a226b9366546e5f6288a18acced7d3ddc52291f38e212430679e13",
+      "retire_when": "Remove when the adopted unpatched upstream worker passes the same six-target advisory/yanked-crate gate and affected source/runtime acceptance without this patch. Preserve the tests and exact source/lock verification.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Exact025 worker graph fails retained advisory/yanked policy for all four required targets; candidate passes full policy without dependency-resolution changes from the reviewed security lock (unpatched-worker-advisories-online-metadata.log).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0004-private-mpp-driver-readiness.patch",
+      "sha256": "a8ad711c4ac17283bb027fecf974e8419ad6f6e459a08d695b811bc0224b5712",
+      "retire_when": "Remove when the adopted upstream privately loads its verified ARM64 MPP companion and passes actual bundled-library/no-device fallback, positive native capability and complete ownership/provenance acceptance without this patch. Retain the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Actual stock025 ARM64 describe/probe falsely advertises H264/HEVC/VP8/VP9 decoding and H264/HEVC encoding as available with the exact bundled MPP library but no Rockchip drivers. Corrected candidate reports empty initialized sets and fails the hardware probe; source gate is not native hardware acceptance (arm64-unpatched-no-driver-describe.json and arm64-bundled-no-driver-current-describe.json).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0005-reject-empty-mpp-capabilities.patch",
+      "sha256": "9d5603607ca211889efd0ecdf2884eee303b0985323c100fb290179afcfe80b9",
+      "retire_when": "Remove when unpatched upstream returns whole-channel software fallback for bundled MPP without initialized hardware codecs and passes the same actual scaled Dutch-audio/subtitle playback regression. Preserve the regression.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Exact025 candidate minus only0005 still selects RKMPP/RGA with empty initialized hardware sets and produces no valid output. The final candidate selects whole-channel software fallback and independently decodes all200 scaled frames, selected880Hz Dutch audio and the retained subtitle-reference mask under ARM64 emulation (arm64-channel-fallback/qualification.json); native Rockchip remains unverified.",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0006-preserve-caption-source-outpoint.patch",
+      "sha256": "72aff2ec4f91eb6c97572c56508114d119b02309806f33830ba37f184ed1002a",
+      "retire_when": "Remove when adopted unpatched upstream preserves the immutable exclusive caption source outpoint through both copy-seek landing directions, full and partial passes and independent sidecar origins, and passes the same focused and unchanged Teletext 1.5 playback regressions. Preserve the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Actual exact025 worker fails unchanged copied-caption output: final cue634501 instead of597691 ticks, with the original verified209 runtime (unpatched-copy-caption.log).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0007-preserve-selected-audio-metadata.patch",
+      "sha256": "0374d2bd4da4ea112f5b56b2dd3afc1ebe851f6b238160bb6fb040e4636faee4",
+      "retire_when": "Remove when adopted unpatched upstream preserves metadata from the actual selected audio input and absolute stream index for copied and filtered output, including alternate and separate audio, and passes the unchanged real active-viewer language/cleanup regression. Preserve the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Unchanged selected-audio metadata regression fails exact025 source (unpatched-regressions.log).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0008-preserve-subtitle-burn-input-clock.patch",
+      "sha256": "d5b8532dd6c456ebe40200adda0cd3eef196230860c9d9f2f2e986181e66cf0f",
+      "retire_when": "Unpatched upstream passes the unchanged text-subtitle Burn regressions while preserving the incoming post-seek AV clock, including late decoded video start, the original selected source outpoint, exact caption transitions/clear, selected alternate audio and source ownership/cleanup, plus relevant compatibility/platform acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Two unchanged caption-clock regressions fail exact025 source; absent-subtitle control passes (unpatched-regressions.log).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0009-qualify-source-frame-cutoff.patch",
+      "sha256": "cdc091a5e87f5381b10d385566fbcc57fd0e295ae3043d3f07fc71679d522abf",
+      "retire_when": "Unpatched upstream passes exact source-complete seek2164/out9200 and seek2143/out9200 Burn regressions with unchanged encoder/profile, exact caption transitions and clear, selected alternate audio, strict transport, callback negotiation, bounded ownership and cleanup, plus compatibility/platform acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Actual exact025 stock worker fails the unchanged seek2164 ordinary retained-M2TS Burn regression at its required source-bound-cut assertion: the callback has no finite-video-cut-v1 capability. This current control stops before physical frame-coverage assessment; retained original physical negatives remain separately scoped. Final candidate passes both unchanged2164/2143 frame/caption/Dutch-audio/transport/cleanup oracles (app-route-stock-control and app-route-candidate).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0010-preserve-single-use-copy-input.patch",
+      "sha256": "f744c2c76efc898993d929bf938cbaf3a734f259a4b3460abdbfbe393c5bb2ac",
+      "retire_when": "Unpatched upstream passes ordinary single-use Copy Off/Convert and selected independent Burn caption delivery without consuming probes, provider reopening or weakened source/AV/audio/caption clocks, and preserves unknown-start fallback, truthful finite timing, long-interval ownership and joined cleanup. Remove this patch, not the tests.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Actual exact025 stock worker fails the unchanged ordinary single-use Copy/Convert/Burn delivery test because its callback lacks the required single-use input hint. This is a missing negotiated input-contract control, not a new physical timing claim. Final candidate passes the complete grouped delivery/AV/caption/cleanup regression unchanged (app-route-stock-control and app-route-candidate/runtime-copy).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0011-atomic-index-reader.patch",
+      "sha256": "2e013e87aae6016e815f54d56ee0dfc33953f2b8e7322d02a4419b609192fff3",
+      "retire_when": "Retire only when adopted unpatched upstream provides the accepted ADR0131 indexed snapshot/lease/capability contract and passes unchanged acceptance.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "Accepted local reader extension; exact292-file replay, existing52 reader/contract cases within455-case composed pass, and strict lint. Not an upstream fix. The retained prior indexed recipe permits an overlay to downgrade indexed ownership to folder scanning; the corrected reader rejects layout/folder replacement while preserving ordinary and normalization overlays (indexed-integration/).",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    },
+    {
+      "file": "0012-qualify-worker-package-metadata.patch",
+      "sha256": "925ce512c96fd8dbcc8062d63e94e986d8d11b6833e1103fb9831d8f08869435",
+      "retire_when": "Retire when upstream declares the same existing repository MIT license and pins internal workspace path versions so unmodified worker metadata passes the retained complete dependency policy.",
+      "upstream_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+      "unpatched_regression": "The initial full policy rejects missing private-package license metadata and unversioned path dependencies. Exact upstream root MIT license is preserved, path versions match existing025 and lock unchanged; final full policy passes.",
+      "evidence": "docs/progress/milestones.toml ucu-14/ucu-15; tmp/ucu14/next025/"
+    }
+  ],
+  "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
+  "windows_companions_sha256": {
+    "libvpl.dll": "d08c89d30705315a783ae59dbb21bf66a045f3a968d101190ac577baaa5b1b6b",
+    "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677"
+  },
+  "linux_arm64_companions_sha256": {
+    "librockchip_mpp.so.1": "9a7bf791e3c3206a21c79d3c4121d590e297abce98a8c8c19f9012ba83483412",
+    "librockchip_mpp-LICENSE-Apache-2.0.txt": "ed57d96d27be775b22f9571d3724ef84e0d0b8f24b805ec7f87a32189de19a9c",
+    "librockchip_mpp-LICENSE-MIT.txt": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
+    "librockchip_mpp-README.txt": "d2abb2750659d7336d54a522e613bdfe407a54ead4bcf8a3143527654add51a2",
+    "librockchip_mpp-rk_mpi.h": "96dbae7d90e91baaac38821fc06c74a327cac888007841fe5937798259193646"
+  }
+}
