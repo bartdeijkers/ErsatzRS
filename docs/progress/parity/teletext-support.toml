@@ -336,3 +336,11 @@ Finite completion list:
 discovered  = '2026-11-03'
 evidence    = 'Branch claude/project-thread-tdo1gf (uncommitted at time of writing). ersatzrs-ffmpeg teletext nextest: 1074/1074 pass, including the new burst, sustained-shortage, deferred-terminator and B.6 carousel regressions. The original strict behavior is reproduced by the replaced test interval_null_capacity_failure_never_exposes_partial_rewriting (one full 20 ms interval was fatal). ersatzrs-web teletext_admin integration tests cover capacity apply/confirm/replace/invalid repair and route classification. No real FFmpeg/TSDuck/client evidence yet.'
 resolved    = false
+
+[[debt]]
+id          = 'teletext-custom-pages-broadcast'
+adr         = '0120'
+description = '''Teletext elements (/teletext-elements) store custom Level 1 pages uploaded as TTI, T42, EP1 or HTT, with field links to channel name/number, date, time and now/next guide data, and channels can link them to a page number. Open: (1) include linked custom pages in the authored teletext publication and broadcast, which needs an ADR 0120 amendment for how custom pages coexist with add-on page ranges, refresh field values and fail; (2) replace the editorial Level 1 HTML preview with an engine-rendered preview; (3) import T42/EP1 enhancement packets (X/26, X/28) instead of reporting them as not imported; (4) Playwright no-JS and hydrated flow for upload, field links and channel linking.'''
+discovered  = '2026-11-07'
+evidence    = 'Branch claude/project-thread-9pm6vy: domain/core/infra/app/web slices with focused domain, infra, app, ffmpeg and web unit tests. Library, upload and editor pages are localized in all nine cultures. No broadcast, engine-preview or browser-flow proof yet.'
+resolved    = false

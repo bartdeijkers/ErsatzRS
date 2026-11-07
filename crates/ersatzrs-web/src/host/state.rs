@@ -304,6 +304,7 @@ fn application_with_teletext_storage(
     Arc::new(ApplicationServices::new(
         ports
             .with_teletext_designs(Arc::new(repositories.teletext_designs.clone()))
+            .with_teletext_elements(Arc::new(repositories.teletext_elements.clone()))
             .with_teletext_publications(Arc::new(repositories.teletext_publications.clone()))
             .with_teletext_generations(Arc::new(repositories.teletext_generations.clone())),
         operations,

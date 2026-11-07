@@ -17,6 +17,7 @@ mod base_display;
 mod buffer;
 mod carousel;
 mod charset;
+pub use charset::teletext_level1_preview_glyph;
 mod clock;
 mod colour_context;
 mod compile_context;
