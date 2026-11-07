@@ -147,12 +147,12 @@ fn pipeline_uses_persisted_stream_indexes_when_audio_precedes_video() {
     let args = pipeline.command(&request.inputs).arguments.join(" ");
 
     assert!(
-        args.contains("[0:1][wm0]overlay=x=W-w-38:y=H-h-22:format=0[vwm0]"),
+        args.contains("[0:1][wm0]overlay=x=W-w-38:y=H-h-22:format=0:shortest=1[vwm0]"),
         "{args}"
     );
     assert!(args.contains("[0:0]aresample=async=1,apad[a]"), "{args}");
     assert!(
-        args.contains("[1:0]scale=192:-1,format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa=0.30[wm0]"),
+        args.contains("[1:0]setpts=PTS-STARTPTS,scale=192:-1,format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa=0.30[wm0]"),
         "{args}"
     );
     assert!(!args.contains("[0:0]setparams="), "{args}");
@@ -4170,7 +4170,7 @@ fn nvenc_drawtext_downloads_and_reuploads_software_frames_snapshot() {
 
     assert!(arguments.contains("hwdownload,format=nv12"));
     assert!(arguments.contains("drawtext=fontfile="));
-    assert!(arguments.contains("hwupload_cuda,scale_cuda=format=nv12"));
+    assert!(arguments.contains("hwupload,scale_cuda=format=nv12"));
     insta::assert_snapshot!(arguments);
 }
 

@@ -74,7 +74,10 @@ pub async fn get_xmltv_xml(
 
     let scheme = request_scheme(&headers);
     let host = request_host(&headers);
-    let access_token = AccessToken::new(query.access_token);
+    let access_token = AccessToken::for_request(
+        query.access_token,
+        state.iptv_access_token_verifier.is_enabled(),
+    );
 
     match build_xmltv(
         &channels,

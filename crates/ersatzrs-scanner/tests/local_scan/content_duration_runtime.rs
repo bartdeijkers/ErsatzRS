@@ -34,6 +34,9 @@ use serde_json::{json, Value};
 use std::{panic::AssertUnwindSafe, sync::Arc, time::Duration as StdDuration};
 use tokio::{io::AsyncReadExt, process::Command, sync::RwLock, time::timeout};
 
+#[path = "aspect_ratio_runtime.rs"]
+mod aspect_ratio_runtime;
+
 struct Tools {
     ffmpeg: PathBuf,
     ffprobe: PathBuf,

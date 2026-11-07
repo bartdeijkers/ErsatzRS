@@ -518,10 +518,13 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
         assert!(!paths.output.join(".ready").exists());
         assert!(completed_output_ready(&paths.output, true).await.unwrap());
     }
-    assert!(build_troubleshooting_archive_from(&paths.output)
-        .await
-        .unwrap()
-        .is_some());
+    if let Err(error) = verify_actual_next_media_info_archive(&paths.output).await {
+        let retained = fixture.root.keep();
+        panic!(
+            "Next dossier archive: {error}; synthetic reports retained at {}",
+            retained.display()
+        );
+    }
     assert_decoded_tracks(&ffmpeg, &playlist).await;
     canvas.assert_frames(&ffmpeg, &playlist).await;
     let log = tokio::fs::read_to_string(paths.output.join("logs.txt"))
@@ -547,6 +550,65 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
         .await
         .unwrap();
     assert_eq!(count, 1);
+}
+
+async fn verify_actual_next_media_info_archive(
+    output: &FsPath,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    use std::{collections::BTreeSet, io::Read as _};
+
+    let bytes = build_troubleshooting_archive_from(output)
+        .await
+        .map_err(|_| "completed preview archive could not be built")?
+        .ok_or("completed preview has no downloadable reports")?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let names = archive
+        .file_names()
+        .map(|name| name.map(std::borrow::Cow::into_owned))
+        .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+    if names.len() != archive.len()
+        || names.iter().any(|name| {
+            name.contains('\\')
+                || name.contains(':')
+                || name.split('/').any(|part| matches!(part, "" | "." | ".."))
+        })
+    {
+        return Err("archive names are duplicated or not safe relative ZIP paths".into());
+    }
+    let mut host_info = Vec::new();
+    archive
+        .by_name("media_info.json")?
+        .read_to_end(&mut host_info)?;
+    if host_info != std::fs::read(output.join("media_info.json"))? {
+        return Err("host media info changed in the archive".into());
+    }
+    let mut dossiers = 0;
+    for name in names
+        .iter()
+        .filter(|name| name.ends_with("/media_info.json"))
+    {
+        let (folder, member) = name.split_once('/').ok_or("missing dossier folder")?;
+        if !folder.starts_with(".troubleshooting_") || member != "media_info.json" {
+            return Err("unexpected Next dossier depth or channel identity".into());
+        }
+        let expected = std::fs::read(output.join(name))?;
+        let info: serde_json::Value = serde_json::from_slice(&expected)?;
+        if info.as_object().is_none_or(serde_json::Map::is_empty) || expected == host_info {
+            return Err("Next dossier must contain its own actual nonempty media probe".into());
+        }
+        let mut actual = Vec::new();
+        archive.by_name(name)?.read_to_end(&mut actual)?;
+        if actual != expected {
+            return Err(
+                "Next media info is not preserved byte-for-byte in Download Results".into(),
+            );
+        }
+        dossiers += 1;
+    }
+    if dossiers == 0 {
+        return Err("actual Next media info is missing from Download Results".into());
+    }
+    Ok(())
 }
 
 fn configure_runtime_selector(query: &mut PlaybackPreviewQuery) -> tempfile::NamedTempFile {

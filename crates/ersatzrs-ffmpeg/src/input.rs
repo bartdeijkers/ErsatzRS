@@ -123,9 +123,9 @@ impl InputFile {
         Self::new(InputKind::Audio, filter, 0).with_input_options(["-f", "lavfi"])
     }
 
-    /// Still watermark image. Mirrors ErsatzTV's `SetWatermark`: a plain still
-    /// image gets no loop option — the overlay's default `eof_action=repeat`
-    /// holds the single decoded frame.
+    /// Still watermark image. The descriptor remains usable for one-shot probes;
+    /// the Native pipeline adds bounded input repetition so a graph rebuild
+    /// receives fresh image frames instead of losing an EOF-held watermark.
     #[must_use]
     pub fn watermark(path: impl Into<String>) -> Self {
         Self::new(InputKind::Watermark, path, 0)

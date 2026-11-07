@@ -24,7 +24,7 @@ use tokio::sync::OwnedMutexGuard;
 /// type does not make SQL commit and filesystem replacement atomic.
 #[must_use = "publish the candidate or drop it to discard its temporary file"]
 pub struct PreparedChannelPlayout {
-    file: publication::PreparedPlayout,
+    file: publication::PreparedPublication,
     admission: OwnedMutexGuard<()>,
     schedule: schedule::LockedSchedule,
     attempt: PublicationAttempt,
@@ -34,7 +34,7 @@ pub struct PreparedChannelPlayout {
 /// Finalizer-owned replacement. Its file restores before admission is released
 /// on unwinding; successful SQL commit disarms that compensation explicitly.
 pub(crate) struct AppliedChannelPlayout {
-    file: publication::AppliedPlayout,
+    file: publication::AppliedPublication,
     _admission: OwnedMutexGuard<()>,
     _schedule: schedule::LockedSchedule,
     _attempt: PublicationAttempt,
@@ -80,6 +80,13 @@ impl PreparedChannelPlayout {
     /// Returns cancellation, deadline, replacement or worker failures. The
     /// previous file survives failures before replacement starts.
     pub async fn publish(self) -> Result<RefreshOutcome, RefreshError> {
+        self.publish_committed(|| {}).await
+    }
+
+    pub(in crate::next_engine) async fn publish_committed(
+        self,
+        committed: impl FnOnce() + Send + 'static,
+    ) -> Result<RefreshOutcome, RefreshError> {
         let Self {
             file,
             admission,
@@ -91,7 +98,9 @@ impl PreparedChannelPlayout {
         tokio::task::spawn_blocking(move || {
             let _admission = admission;
             let _schedule = schedule;
-            file.publish(|| active.load(Ordering::Acquire))
+            file.publish(|| active.load(Ordering::Acquire))?;
+            committed();
+            Ok::<_, publication::PublicationError>(())
         })
         .await
         .map_err(|_| RefreshError::Worker)??;
@@ -162,6 +171,9 @@ impl ChannelPublisher {
         if channel.streaming_engine != StreamingEngine::Next {
             return Err(RefreshError::Retired);
         }
+        if !self.indexed_ready.load(Ordering::Acquire) {
+            return Err(publication::PublicationError::RecoveryRequired.into());
+        }
         let Some(mut locked) =
             schedule::read_pending(&self.pool, &self.locker, &channel, start, finish, pending)
                 .await
@@ -174,21 +186,34 @@ impl ChannelPublisher {
             .map_err(|_| RefreshError::Projection)?;
         let count = items.len();
         let folder = self.folder.clone();
+        let layout = self.layout.clone();
         let active = attempt.0.clone();
-        let (file, admission, schedule) = tokio::task::spawn_blocking(move || {
-            let file = publication::prepare_playout_checked(
+        let staged = tokio::task::spawn_blocking(move || {
+            let file = publication::prepare_layout(
                 &folder,
                 &protocol::Playout {
                     version: protocol::PLAYOUT_VERSION.to_owned(),
                     items,
                 },
+                &layout,
                 || active.load(Ordering::Acquire),
-                deadline,
+                Some(deadline),
             )?;
             Ok::<_, publication::PublicationError>((file, admission, locked))
         })
         .await
-        .map_err(|_| RefreshError::Worker)??;
+        .map_err(|_| RefreshError::Worker)?;
+        let (file, admission, schedule) = match staged {
+            Err(publication::PublicationError::ReadersBusy) => return Ok(None),
+            Err(error)
+                if matches!(&self.layout, publication::PlayoutLayout::Indexed(_))
+                    && publication::requires_index_recovery(&error) =>
+            {
+                self.indexed_ready.store(false, Ordering::Release);
+                return Err(error.into());
+            }
+            other => other?,
+        };
         Ok(Some(PreparedChannelPlayout {
             file,
             admission,

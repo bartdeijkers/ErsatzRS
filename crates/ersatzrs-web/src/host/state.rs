@@ -127,6 +127,7 @@ impl AppState {
             playout_build_tx,
             scan_work_tx,
             playout_locker,
+            None,
         )
     }
 
@@ -144,6 +145,7 @@ impl AppState {
         playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
         scan_work_tx: mpsc::UnboundedSender<ersatzrs_app::commands::ScanWorkRequest>,
         playout_locker: ersatzrs_core::locking::EntityLocker,
+        next_engine: Option<Arc<ersatzrs_infra::next_engine::host::NextHost>>,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
         let preview_hls_sessions = Arc::new(InMemoryHlsSessionRegistry::new());
@@ -154,7 +156,8 @@ impl AppState {
         let next_version = Arc::new(OnceLock::new());
         let tuner_count = Arc::new(AtomicI32::new(tuner_count));
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
-        let next_engine = next_engine_host(pool.clone(), playout_locker.clone());
+        let next_engine =
+            next_engine.unwrap_or_else(|| next_engine_host(pool.clone(), playout_locker.clone()));
         let operations = operation_coordinator(playout_locker);
         let teletext_outputs = super::teletext_output_observations::OutputObservations::default();
         let application = application_with_teletext_storage(
@@ -324,6 +327,66 @@ fn next_engine_host(
     )
 }
 
+/// Bind indexed publication only after the selected executable proves its
+/// private reader contract. Older readers retain complete-file publication.
+/// Construct this owner before application ports capture their shared host.
+pub(super) async fn selected_next_engine_host(
+    pool: DbPool,
+    locker: ersatzrs_core::locking::EntityLocker,
+    version: &str,
+) -> ersatzrs_app::Result<Option<Arc<ersatzrs_infra::next_engine::host::NextHost>>> {
+    use ersatzrs_infra::next_engine::manager::{qualify_indexed_reader, NextRuntimeError};
+
+    // Upstream introduced describe in 0.2.5. This only skips unsupported
+    // negotiation; a newer version still needs the full byte/contract proof.
+    if predates_next_description(version) {
+        return Ok(Some(Arc::new(
+            ersatzrs_infra::next_engine::host::NextHost::new_legacy(
+                pool,
+                locker,
+                file_system_layout::data_folder().join("next-playouts"),
+            )
+            .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
+        )));
+    }
+    let reader = match qualify_indexed_reader().await {
+        Ok(reader) => reader,
+        Err(NextRuntimeError::Contract) => {
+            tracing::debug!(
+                "selected Next has no qualified index contract; using complete playouts"
+            );
+            return Ok(None);
+        }
+        Err(error) => {
+            return Err(ersatzrs_app::ApplicationError::Unavailable {
+                operation: "qualify indexed Next runtime",
+                message: error.to_string(),
+            });
+        }
+    };
+    let clock = ersatzrs_core::programme::ProgrammeClock::system().map_err(|_| {
+        ersatzrs_app::ApplicationError::Unavailable {
+            operation: "initialize indexed playout clock",
+            message: "local programme timezone is unavailable".to_owned(),
+        }
+    })?;
+    Ok(Some(Arc::new(
+        ersatzrs_infra::next_engine::host::NextHost::new_indexed(
+            pool,
+            locker,
+            file_system_layout::data_folder().join("next-playouts"),
+            clock,
+            reader,
+        )
+        .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
+    )))
+}
+
+fn predates_next_description(version: &str) -> bool {
+    semver::Version::parse(version.strip_prefix('v').unwrap_or(version))
+        .is_ok_and(|v| (v.major, v.minor, v.patch) < (0, 2, 5))
+}
+
 fn operation_coordinator(
     playout_locker: ersatzrs_core::locking::EntityLocker,
 ) -> OperationCoordinator {
@@ -356,6 +419,22 @@ mod tests {
     use super::{AppState, IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_infra::db::DatabaseSchemaStatus;
     use std::sync::Arc;
+
+    #[test]
+    fn legacy_next_skips_description_but_successor_prereleases_require_negotiation() {
+        for version in ["0.1.0", "0.2.3-54c6cb9-ersatzrs.7", "v0.2.4"] {
+            assert!(super::predates_next_description(version), "{version}");
+        }
+        for version in [
+            "0.2.5-c5cb065-ersatzrs.1",
+            "0.2.5",
+            "0.3.0",
+            "1.0.0",
+            "custom",
+        ] {
+            assert!(!super::predates_next_description(version), "{version}");
+        }
+    }
 
     #[test]
     fn startup_is_ready_when_database_and_schema_are_clean() {

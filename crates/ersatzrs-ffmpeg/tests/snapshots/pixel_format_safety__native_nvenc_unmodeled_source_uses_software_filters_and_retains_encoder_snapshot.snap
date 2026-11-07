@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pixel_format_safety.rs
+assertion_line: 153
+expression: "command.arguments.join(\" \")"
+---
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -hwaccel none -c:v hevc -i /media/synthetic.mkv -filter_complex [0:0]scale=1920:1080:flags=fast_bilinear,setsar=1[v];[v]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709[vpf];[0:1]aresample=async=1,apad[a] -map [vpf] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v h264_nvenc -profile:v high -preset:v p1 -pix_fmt yuv420p -codec:a aac -b:a 192k -maxrate:a 192k -bufsize:a 384k -ar 48k -r 30000/1001 -fps_mode:v cfr -video_track_timescale 90000 -b:v 8000k -maxrate:v 8000k -bufsize:v 16000k -muxrate 9830400 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

@@ -31,6 +31,22 @@ fn main() {
         }
         return;
     }
+    // Own the state folder before migrations, runtime acquisition or workers.
+    // The private preparation worker/recovery command above has separate leases.
+    let _instance_guard = match ersatzrs_platform::single_instance::Guard::acquire(
+        &ersatzrs_infra::file_system_layout::app_state_folder(),
+    ) {
+        Ok(guard) => Some(guard),
+        Err(error @ ersatzrs_platform::single_instance::Error::AlreadyRunning) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        Err(error) => {
+            // Match upstream's non-contention fallback; logging is not ready yet.
+            eprintln!("Warning: {error}; continuing without the single-instance check");
+            None
+        }
+    };
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_stack_size(TOKIO_WORKER_STACK_SIZE)

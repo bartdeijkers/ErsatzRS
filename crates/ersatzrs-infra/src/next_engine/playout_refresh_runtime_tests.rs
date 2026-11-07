@@ -13,6 +13,16 @@ const INITIAL_SECONDS: i64 = 32;
 #[tokio::test]
 #[ignore = "requires exact Next, FFmpeg9 and pinned MediaMTX; active-playout replacement"]
 async fn real_next_playout_refresh_keeps_schedule_clock_picture_and_selected_audio() {
+    refresh_case(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires qualified indexed Next, FFmpeg9 and pinned MediaMTX"]
+async fn real_next_indexed_playout_refresh_preserves_clock_tracks_and_unchanged_files() {
+    refresh_case(true).await;
+}
+
+async fn refresh_case(indexed: bool) {
     let _owned_data = runtime_path(crate::file_system_layout::APP_DATA_DIR_ENV_VAR);
     let root = tempfile::tempdir().unwrap();
     tracing_subscriber::fmt()
@@ -24,15 +34,20 @@ async fn real_next_playout_refresh_keeps_schedule_clock_picture_and_selected_aud
         .try_init()
         .expect("dedicated nextest process diagnostic subscriber");
     let folder = root.path().to_owned();
-    let result = tokio::spawn(async move { run(&folder).await }).await;
+    let result = tokio::spawn(async move { run(&folder, indexed).await }).await;
+    let retained = root.keep();
+    eprintln!(
+        "active playout refresh indexed={indexed}: {}",
+        retained.display()
+    );
     assert!(
         matches!(&result, Ok(Ok(()))),
         "active playout refresh: {result:?}; retained at {}",
-        root.keep().display()
+        retained.display()
     );
 }
 
-async fn run(root: &Path) -> Result<(), String> {
+async fn run(root: &Path, indexed: bool) -> Result<(), String> {
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let original = root.join("original.mkv");
     generate_clip(&ffmpeg, &original).await;
@@ -87,11 +102,7 @@ async fn run(root: &Path) -> Result<(), String> {
         .upsert_item(&initial)
         .await
         .map_err(|error| error.to_string())?;
-    let host = Arc::new(host::NextHost::new(
-        pool.clone(),
-        locker,
-        root.join("playout"),
-    ));
+    let host = refresh_host(&pool, locker, root, indexed).await?;
     let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     let registry = Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
     let output = root.join("output");
@@ -117,7 +128,7 @@ async fn run(root: &Path) -> Result<(), String> {
         .try_get("1")
         .await
         .ok_or("refresh session handle")?;
-    let captured = observe(&pool, &initial, handle.as_ref(), &output, root).await;
+    let captured = observe(&pool, &initial, handle.as_ref(), &output, root, indexed).await;
     let stopped = registry.stop_channel("1").await;
     task.await.map_err(|error| error.to_string())?;
     callback.stop().await;
@@ -131,6 +142,37 @@ async fn run(root: &Path) -> Result<(), String> {
         retained_nut_runtime_tests::assert_selected_audio(&ffmpeg, &saved).await;
     }
     Ok(())
+}
+
+async fn refresh_host(
+    pool: &crate::db::DbPool,
+    locker: ersatzrs_core::locking::EntityLocker,
+    root: &Path,
+    indexed: bool,
+) -> Result<Arc<host::NextHost>, String> {
+    let folder = root.join("playout");
+    if !indexed {
+        return Ok(Arc::new(host::NextHost::new(pool.clone(), locker, folder)));
+    }
+    let permit = crate::next_engine::indexed_runtime::IndexedReaderPermit::qualify(
+        &runtime_path("ERSATZRS_NEXT_TEST_BIN"),
+        None,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    let clock = ersatzrs_core::programme::ProgrammeClock::named("UTC")
+        .map_err(|error| error.to_string())?;
+    let overlays = root.join("overlays");
+    std::fs::create_dir(&overlays).map_err(|error| error.to_string())?;
+    std::fs::write(
+        overlays.join("default.json"),
+        r#"{"version":"https://ersatztv.org/channel/version/0.1.0","normalization":{"audio":{"bitrate_kbps":176,"buffer_kbps":352}}}"#,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(Arc::new(
+        host::NextHost::new_indexed(pool.clone(), locker, folder, clock, permit)
+            .with_config_overlays(overlays),
+    ))
 }
 
 async fn prepare_remote(pool: &crate::db::DbPool, uri: &str) -> Result<(), String> {
@@ -196,6 +238,7 @@ async fn observe(
     handle: &dyn HlsSessionHandle,
     output: &Path,
     root: &Path,
+    indexed: bool,
 ) -> Result<Vec<PathBuf>, String> {
     timeout(Duration::from_secs(45), async {
         let before = loop {
@@ -219,6 +262,9 @@ async fn observe(
             || chrono::Utc::now() + chrono::Duration::seconds(3) >= initial.finish
         {
             return Err("fixture missed the active-item update window".into());
+        }
+        if indexed {
+            assert_unchanged_index(handle, root).await?;
         }
         let mut replacement = initial.clone();
         replacement.id = 2;
@@ -244,6 +290,11 @@ async fn observe(
             .publish_playout_update(std::time::Instant::now() + Duration::from_secs(5))
             .await
             .map_err(|error| error.to_string())?;
+        if indexed {
+            let index = root.join("playout/1/indexed/index.json");
+            let before = std::fs::read(root.join("unchanged-index.json")).unwrap();
+            assert_ne!(before, std::fs::read(index).unwrap());
+        }
         let mut captured = Vec::new();
         loop {
             handle.touch();
@@ -293,5 +344,50 @@ fn check_continuity(seen: &BTreeMap<u64, Segment>) -> Result<(), String> {
             ));
         }
     }
+    Ok(())
+}
+
+async fn assert_unchanged_index(handle: &dyn HlsSessionHandle, root: &Path) -> Result<(), String> {
+    let folder = root.join("playout/1/indexed");
+    let index = folder.join("index.json");
+    let bytes = std::fs::read(&index).map_err(|error| error.to_string())?;
+    std::fs::write(root.join("unchanged-index.json"), &bytes).map_err(|error| error.to_string())?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut paths = vec![index];
+    paths.extend(
+        value["days"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|day| folder.join(day["file"].as_str().unwrap())),
+    );
+    let marked = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_600_000_000);
+    let before: Vec<_> = paths
+        .iter()
+        .map(|path| {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_times(std::fs::FileTimes::new().set_modified(marked))
+                .unwrap();
+            (
+                std::fs::read(path).unwrap(),
+                path.metadata().unwrap().modified().unwrap(),
+            )
+        })
+        .collect();
+    handle
+        .publish_playout_update(std::time::Instant::now() + Duration::from_secs(5))
+        .await
+        .map_err(|error| error.to_string())?;
+    for (path, (content, modified)) in paths.iter().zip(before) {
+        assert_eq!(std::fs::read(path).unwrap(), content);
+        assert_eq!(path.metadata().unwrap().modified().unwrap(), modified);
+    }
+    assert!(!root
+        .join("playout/1")
+        .join(crate::next_engine::publication::PLAYOUT_FILENAME)
+        .exists());
     Ok(())
 }

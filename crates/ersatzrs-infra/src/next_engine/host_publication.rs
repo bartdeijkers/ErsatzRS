@@ -86,11 +86,15 @@ impl PreparedHostPlayout {
     /// Returns deadline, cancellation or file-publication failures. The caller
     /// remains responsible for coordinating and recovering SQL publication.
     pub async fn publish(self) -> std::result::Result<RefreshOutcome, RefreshError> {
-        let outcome = self.file.publish().await?;
-        self.host
-            .register_published_gaps(self.channel_id, &self.gaps)
-            .await;
-        Ok(outcome)
+        let runtime = tokio::runtime::Handle::current();
+        self.file
+            .publish_committed(move || {
+                runtime.block_on(
+                    self.host
+                        .register_published_gaps(self.channel_id, &self.gaps),
+                );
+            })
+            .await
     }
 }
 
@@ -163,15 +167,36 @@ impl NextHost {
             .lock()
             .await
             .entry(channel_id)
-            .or_insert_with(|| {
-                ChannelPublisher::new(
+            .or_insert_with(|| match &self.indexed {
+                Some(indexed) => ChannelPublisher::new_indexed(
                     self.pool.clone(),
                     self.locker.clone(),
                     &self.root,
                     channel_id,
-                )
+                    indexed.clock.clone(),
+                    indexed.reader.clone(),
+                ),
+                None => ChannelPublisher::new(
+                    self.pool.clone(),
+                    self.locker.clone(),
+                    &self.root,
+                    channel_id,
+                ),
             })
             .clone()
+    }
+
+    // Callback input must never create a publisher. A finite troubleshooting
+    // preview owns its own manifest and does not use this channel admission.
+    pub(in crate::next_engine) async fn callback_admission(
+        &self,
+        channel_id: i64,
+    ) -> Option<tokio::sync::OwnedMutexGuard<()>> {
+        let publisher = self.publishers.lock().await.get(&channel_id).cloned();
+        match publisher {
+            Some(publisher) => Some(publisher.callback_admission().await),
+            None => None,
+        }
     }
 
     /// Prepare the full channel projection from a pending SQL build.

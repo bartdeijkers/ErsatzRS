@@ -281,7 +281,7 @@ async fn stored_hdr10_absence_remains_unknown_while_positive_evidence_reaches_ne
 }
 
 #[tokio::test]
-async fn persisted_hint_preserves_all_selectable_tracks_and_refuses_incomplete_metadata() {
+async fn persisted_hint_preserves_all_selectable_tracks_and_refuses_invalid_geometry() {
     let pool = super::super::selection::tests::fixture_pool().await;
     let hint = persisted(&pool, 100).await.unwrap().unwrap();
     assert_eq!(hint.duration_ms, Some(60_000));
@@ -303,12 +303,10 @@ async fn persisted_hint_preserves_all_selectable_tracks_and_refuses_incomplete_m
             .collect::<Vec<_>>(),
         vec![3, 4]
     );
-    sqlx::query(
-        r#"UPDATE "MediaStream" SET "Codec"=NULL WHERE "MediaVersionId"=100 AND "Index"=2"#,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query(r#"UPDATE "MediaVersion" SET "Width"=0 WHERE "Id"=100"#)
+        .execute(&pool)
+        .await
+        .unwrap();
     assert!(persisted(&pool, 100).await.unwrap().is_none());
 }
 
@@ -353,7 +351,7 @@ fn ordinary_producer_rejects_incomplete_and_ambiguous_prefix_metadata() {
 }
 
 #[tokio::test]
-async fn persisted_image_formats_and_avi_use_the_selected_container() {
+async fn persisted_images_and_videos_use_the_selected_container() {
     let (pool, _, _) = crate::playout_duration::tests::image_fixture().await;
     for (codec, format) in [
         ("png", "png_pipe"),
@@ -386,7 +384,21 @@ async fn persisted_image_formats_and_avi_use_the_selected_container() {
     for (path, expected) in [
         ("synthetic.avi", Some("avi")),
         ("synthetic.AVI", Some("avi")),
-        ("synthetic.mkv", None),
+        ("synthetic.mkv", Some("matroska,webm")),
+        ("synthetic.MK3D", Some("matroska,webm")),
+        ("synthetic.webm", Some("matroska,webm")),
+        ("synthetic.mp4", Some("mov,mp4,m4a,3gp,3g2,mj2")),
+        ("synthetic.M4V", Some("mov,mp4,m4a,3gp,3g2,mj2")),
+        ("synthetic.mov", Some("mov,mp4,m4a,3gp,3g2,mj2")),
+        ("synthetic.WMV", Some("asf")),
+        ("synthetic.asf", Some("asf")),
+        ("synthetic.ts", Some("mpegts")),
+        ("synthetic.M2TS", Some("mpegts")),
+        ("synthetic.mts", Some("mpegts")),
+        ("synthetic.mpg", Some("mpeg")),
+        ("synthetic.MPEG", Some("mpeg")),
+        ("synthetic.vob", Some("mpeg")),
+        ("synthetic.rmvb", None),
         ("synthetic.avi/file", None),
         ("avi", None),
     ] {

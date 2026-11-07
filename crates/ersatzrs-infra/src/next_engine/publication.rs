@@ -13,6 +13,16 @@ use chrono::Datelike;
 
 use super::protocol::{Playout, PLAYOUT_VERSION};
 
+#[path = "indexed_publication.rs"]
+pub mod indexed;
+#[path = "publication_variant.rs"]
+mod variant;
+pub use variant::PlayoutLayout;
+pub(super) use variant::{
+    prepare_layout, publish_layout, requires_index_recovery, AppliedPublication,
+    PreparedPublication,
+};
+
 #[path = "publication_rollback.rs"]
 mod rollback;
 pub(super) use rollback::AppliedPlayout;
@@ -23,6 +33,14 @@ pub const PLAYOUT_FILENAME: &str = "00010101T000000Z_99991231T235959Z.json";
 /// Diagnostics deliberately omit paths and serialized source credentials.
 #[derive(Debug, thiserror::Error)]
 pub enum PublicationError {
+    #[error("Next indexed playout is malformed or inconsistent")]
+    InvalidIndex,
+    #[error("Next indexed playout exceeds its bounded publication budget")]
+    Limit,
+    #[error("Next indexed playout readers are busy")]
+    ReadersBusy,
+    #[error("Next indexed playout needs recovery from accepted SQL")]
+    RecoveryRequired,
     #[error("Next playout schema version is unsupported")]
     UnsupportedVersion,
     #[error("Next playout has an invalid item time window")]

@@ -12,7 +12,7 @@
 use std::fmt::Write;
 
 use leptos::prelude::*;
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::i18n::{
     ffmpeg_loudness_mode_label, ffmpeg_output_dynamic_range_label, ffmpeg_profile_error_message,
@@ -20,12 +20,13 @@ use crate::admin::i18n::{
     TextKey,
 };
 use crate::admin::server_fns::ffmpeg_profiles::{
-    copy_ffmpeg_profile, get_ffmpeg_profile_form, hdr_content_light_validation_error,
-    hdr_mastering_display_validation_error, list_resolutions_for_select,
-    list_supported_hw_accelerations, output_dynamic_range_validation_error, presets_for_profile,
-    save_ffmpeg_profile, tunes_for_profile, video_format_validation_error, video_profile_options,
-    FfmpegProfileForm, HardwareAccelerationOption, DOCUMENTED_MASTERING_DISPLAY,
-    VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P,
+    copy_ffmpeg_profile, get_ffmpeg_profile_form, h264_profile_for_bit_depth,
+    hdr_content_light_validation_error, hdr_mastering_display_validation_error,
+    list_resolutions_for_select, list_supported_hw_accelerations,
+    output_dynamic_range_validation_error, presets_for_profile, profile_form_error_message,
+    profile_save_feedback, save_ffmpeg_profile, tunes_for_profile, video_format_validation_error,
+    video_profile_options, FfmpegProfileForm, HardwareAccelerationOption,
+    DOCUMENTED_MASTERING_DISPLAY,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
@@ -61,8 +62,17 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
         .with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()))
         .unwrap_or(0);
     let language = use_i18n();
+    let form_error = use_query_map().with_untracked(|query| {
+        query
+            .get("error")
+            .and_then(|code| profile_form_error_message(&code))
+            .map(ffmpeg_profile_error_message)
+            .map(save_failed)
+            .unwrap_or_default()
+    });
     let no_script_html =
         ffmpeg_profile_no_script_html(load_ffmpeg_profile_no_script_data(profile_id));
+    let has_form_error = !form_error.is_empty();
 
     let data = Resource::new_blocking(
         move || profile_id,
@@ -89,6 +99,7 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
     );
 
     view! {
+        <p class=style::form_error role="alert" hidden=!has_form_error>{form_error}</p>
         <style>".ffmpeg-profile-noscript { display: none; } .ffmpeg-profile-js { display: block; }"</style>
         <noscript>
             <style>".ffmpeg-profile-noscript { display: block; } .ffmpeg-profile-js { display: none; }"</style>
@@ -470,10 +481,7 @@ fn FfmpegProfileEditorForm(
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(_) => set_browser_location("/ffmpeg"),
-                Err(e) => toast.push(
-                    save_failed(ffmpeg_profile_error_message(e)),
-                    ToastSeverity::Error,
-                ),
+                Err(e) => toast.push(profile_save_feedback(e), ToastSeverity::Error),
             }
         }
     });
@@ -560,16 +568,12 @@ fn FfmpegProfileEditorForm(
             return;
         }
 
-        if bd == 1 {
-            let required = if hw == 2 {
-                VIDEO_PROFILE_HIGH444P
-            } else {
-                VIDEO_PROFILE_HIGH10
-            };
-            if current != required {
-                video_profile.set(required.to_string());
+        let synchronized = h264_profile_for_bit_depth(hw, bd, &current);
+        if options.contains(&synchronized) {
+            if current != synchronized {
+                video_profile.set(synchronized.to_owned());
             }
-        } else if !current.is_empty() && !options.contains(&current.as_str()) {
+        } else if !current.is_empty() {
             video_profile.set(String::new());
         }
     });
