@@ -302,11 +302,11 @@ pub async fn load_channel_teletext_for_application(
         effective_authoring,
         effective_authoring_error,
         guide_channels,
-        guide_selection: load_guide_selection(application, channel_id).await,
+        guide_selection: load_guide_selection(application, channel_id).await?,
         current_guide_available,
         addons,
         readiness,
-        custom_pages: load_custom_pages(application, channel_id).await,
+        custom_pages: Some(load_custom_pages(application, channel_id).await?),
     }))
 }
 
@@ -314,13 +314,16 @@ pub async fn load_channel_teletext_for_application(
 async fn load_custom_pages(
     application: &ersatzrs_app::ApplicationServices,
     channel_id: i64,
-) -> Option<TeletextCustomPagesData> {
+) -> Result<TeletextCustomPagesData, ServerFnError> {
     use ersatzrs_domain::teletext_element_page_label;
     let links = application
         .channel_teletext_elements(channel_id)
         .await
-        .ok()?;
-    let library = application.list_teletext_elements().await.ok()?;
+        .map_err(|_| ServerFnError::new("unavailable"))?;
+    let library = application
+        .list_teletext_elements()
+        .await
+        .map_err(|_| ServerFnError::new("unavailable"))?;
     let default_page = |element_id: i64| {
         library
             .iter()
@@ -328,7 +331,7 @@ async fn load_custom_pages(
             .map(|element| teletext_element_page_label(element.page_number))
             .unwrap_or_default()
     };
-    Some(TeletextCustomPagesData {
+    Ok(TeletextCustomPagesData {
         links: links
             .iter()
             .map(|link| TeletextCustomPageData {
@@ -399,12 +402,12 @@ async fn current_guide_available(application: &ersatzrs_app::ApplicationServices
 async fn load_guide_selection(
     application: &ersatzrs_app::ApplicationServices,
     channel_id: i64,
-) -> Option<Vec<i64>> {
+) -> Result<Option<Vec<i64>>, ServerFnError> {
     let raw = application
         .get_optional_setting(TELETEXT_GUIDE_SELECTION_SETTING)
         .await
-        .ok()??;
-    parse_guide_selection(&raw).remove(&channel_id)
+        .map_err(|_| ServerFnError::new("unavailable"))?;
+    Ok(raw.and_then(|raw| parse_guide_selection(&raw).remove(&channel_id)))
 }
 
 /// Classify the channel's MPEG-TS route for authored teletext.

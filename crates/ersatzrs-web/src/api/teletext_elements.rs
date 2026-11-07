@@ -89,7 +89,12 @@ async fn read_upload(mut multipart: Multipart) -> Result<UploadForm, TeletextEle
                     )
                 })?
                 .to_vec();
-        } else if let Ok(value) = field.text().await {
+        } else {
+            let value = field.text().await.map_err(|_| {
+                TeletextElementError::Import(
+                    ersatzrs_app::teletext_elements::import::ElementImportError::TooLarge,
+                )
+            })?;
             form.fields.insert(name, value);
         }
     }

@@ -100,8 +100,7 @@ mod native {
                     .application
                     .get_teletext_element(summary.id)
                     .await
-                    .ok()
-                    .flatten()
+                    .map_err(|_| ())?
                     .and_then(|element| teletext_element_page(&element).ok())
                     .and_then(|page| {
                         page.subpages
@@ -167,7 +166,7 @@ mod native {
                         })
                         .collect()
                 })
-                .unwrap_or_default();
+                .map_err(|_| ())?;
             let preview_channel =
                 preview_channel.filter(|channel| channels.iter().any(|c| c.id == *channel));
             let preview = state
@@ -186,7 +185,7 @@ mod native {
                 .application
                 .teletext_element_usage(id)
                 .await
-                .unwrap_or_default()
+                .map_err(|_| ())?
                 .into_iter()
                 .map(|usage| UsageRow {
                     channel_id: usage.channel_id,
