@@ -54,32 +54,42 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
 }
 
 pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
-    let eligible = data.addons.iter().filter(|addon| {
-        addon.installed
-            && addon.availability == "configured"
-            && addon
-                .binding
-                .as_ref()
-                .is_some_and(|binding| binding.enabled && binding.availability == "configured")
-    });
-    let available = data.catalog_available
-        && data.authoring_selection.is_some()
-        && eligible.clone().next().is_some();
+    let eligible: Vec<_> =
+        data.addons
+            .iter()
+            .filter(|addon| {
+                addon.installed
+                    && addon.availability == "configured"
+                    && addon.binding.as_ref().is_some_and(|binding| {
+                        binding.enabled && binding.availability == "configured"
+                    })
+            })
+            .collect();
+    let available =
+        data.catalog_available && data.authoring_selection.is_some() && !eligible.is_empty();
+    let single = eligible.len() == 1;
+    let entry_page = eligible
+        .first()
+        .and_then(|addon| super::teletext::effective_setting(addon, &["INDEX_PAGE", "PAGE_START"]))
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|page| (100..=899).contains(page));
     let options = eligible
+        .iter()
         .map(|addon| {
             let name = if addon.name_labels.is_empty() {
                 addon.name.clone()
             } else {
                 super::teletext::manifest_label(&addon.name_labels)
             };
-            view! { <option value=addon.addon_id.clone()>{name}</option> }
+            view! { <option value=addon.addon_id.clone() selected=single>{name}</option> }
         })
         .collect_view();
+    let default_name = format!("{} · {}", data.channel_number, data.channel_name);
+    // Nothing can be checked before a source is on; keep the details folded.
+    let open_technical = !eligible.is_empty();
     view! {
-        <section class=style::authoring data-testid="teletext-authoring">
-            <h2>{tr(TextKey::TeletextAuthoringTitle)}</h2>
+        <div class=style::authoring data-testid="teletext-authoring">
             <p>{tr(TextKey::TeletextAuthoringHelp)}</p>
-            <p>{tr(TextKey::TeletextAuthoringStaticHelp)}</p>
             <p role="status" hidden=available>{draft_status_text(data.authoring_error.as_deref().unwrap_or("unavailable"))}</p>
             <form method="post" action="/admin-api/teletext/design/prepare"
                 data-testid="teletext-authoring-form">
@@ -87,33 +97,72 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
                 {hidden("selection_digest", data.authoring_selection.clone().unwrap_or_default())}
                 <fieldset disabled=!available class=style::fields>
                     <legend>{tr(TextKey::TeletextAuthoringTitle)}</legend>
-                    <label for="teletext-draft-name">{tr(TextKey::TeletextDesignName)}</label>
-                    <input id="teletext-draft-name" name="name" required
-                        maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
-                    <label for="teletext-entry-producer">{tr(TextKey::TeletextEntryProducer)}</label>
-                    <select id="teletext-entry-producer" name="entry_addon_id" required>
-                        <option value="" selected disabled>{tr(TextKey::TeletextEntryProducer)}</option>
-                        {options}
-                    </select>
-                    {entry_fields("teletext")}
-                    {guide_channel_fields(data, "teletext")}
-                    <label for="teletext-v1-region">{tr(TextKey::TeletextV1Region)}</label>
-                    <select id="teletext-v1-region" name="v1_region" required>
-                        <option value="" selected disabled>{tr(TextKey::TeletextV1Region)}</option>
-                        <option value="western_latin">{tr(TextKey::TeletextV1WesternLatin)}</option>
-                    </select>
-                    <label for="teletext-resources">{tr(TextKey::TeletextResourceLifecycle)}</label>
-                    <p id="teletext-resources-help">{tr(TextKey::TeletextResourceLifecycleHelp)}</p>
-                    <textarea id="teletext-resources" name="resource_transmissions" required
-                        rows="5" maxlength="65536" aria-describedby="teletext-resources-help"
-                        inner_html=textarea_content("")></textarea>
+                    {guide_summary(data)}
                     <button type="submit" class=btn_class(ButtonVariant::Primary)>
                         {tr(TextKey::TeletextValidateSaveDraft)}
                     </button>
+                    <details class=style::technical data-testid="teletext-authoring-technical" open=open_technical>
+                        <summary class=style::technical_title>{tr(TextKey::TeletextCheckTechnical)}</summary>
+                        <p>{tr(TextKey::TeletextCheckTechnicalHelp)}</p>
+                        <div class=style::technical_grid>
+                            <div>
+                                <label for="teletext-draft-name">{tr(TextKey::TeletextDesignName)}</label>
+                                <input id="teletext-draft-name" name="name" required value=default_name
+                                    maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
+                            </div>
+                            <div>
+                                <label for="teletext-entry-producer">{tr(TextKey::TeletextEntryProducer)}</label>
+                                <select id="teletext-entry-producer" name="entry_addon_id" required>
+                                    <option value="" selected=!single disabled>{tr(TextKey::TeletextEntryProducer)}</option>
+                                    {options}
+                                </select>
+                            </div>
+                            {entry_fields("teletext", entry_page)}
+                            <div>
+                                <label for="teletext-v1-region">{tr(TextKey::TeletextV1Region)}</label>
+                                <select id="teletext-v1-region" name="v1_region" required>
+                                    <option value="" disabled>{tr(TextKey::TeletextV1Region)}</option>
+                                    <option value="western_latin" selected>{tr(TextKey::TeletextV1WesternLatin)}</option>
+                                </select>
+                            </div>
+                            <div>{guide_channel_fields(data, "teletext")}</div>
+                            <div>
+                                <label for="teletext-resources">{tr(TextKey::TeletextResourceLifecycle)}</label>
+                                <p id="teletext-resources-help">{tr(TextKey::TeletextResourceLifecycleHelp)}</p>
+                                <textarea id="teletext-resources" name="resource_transmissions" required
+                                    rows="2" maxlength="65536" aria-describedby="teletext-resources-help"
+                                    inner_html=textarea_content("[]")></textarea>
+                            </div>
+                        </div>
+                    </details>
                 </fieldset>
             </form>
-        </section>
+        </div>
     }.into_any()
+}
+
+/// Saved guide source channels for the check, as a sentence.
+fn guide_summary(data: &ChannelTeletextData) -> AnyView {
+    let Some(channels) = data.guide_channels.as_deref() else {
+        return ().into_any();
+    };
+    let selected = super::teletext::effective_guide_selection(data);
+    let names: Vec<String> = channels
+        .iter()
+        .filter(|channel| selected.contains(&channel.id))
+        .map(|channel| format!("{} {}", channel.number, channel.name))
+        .collect();
+    let text = if names.is_empty() {
+        tr(TextKey::TeletextGuideSourceNone).to_owned()
+    } else {
+        names.join(", ")
+    };
+    view! {
+        <p data-testid="teletext-guide-summary">
+            <strong>{tr(TextKey::TeletextGuideSourceSummary)}</strong>" "{text}
+        </p>
+    }
+    .into_any()
 }
 
 pub(super) fn effective_authoring_controls(data: &ChannelTeletextData) -> AnyView {
@@ -146,7 +195,7 @@ pub(super) fn effective_authoring_controls(data: &ChannelTeletextData) -> AnyVie
         <select id="teletext-effective-entry-producer" name="entry_addon_id" required>
             <option value="" selected disabled>{tr(TextKey::TeletextEntryProducer)}</option>{options}
         </select>
-        {entry_fields("teletext-effective")}
+        {entry_fields("teletext-effective", None)}
         {guide_channel_fields(data, "teletext-effective")}
         <label for="teletext-effective-v1-region">{tr(TextKey::TeletextV1Region)}</label>
         <select id="teletext-effective-v1-region" name="v1_region" required>
@@ -162,7 +211,7 @@ pub(super) fn effective_authoring_controls(data: &ChannelTeletextData) -> AnyVie
     view! {
         <section class=style::authoring data-testid="teletext-effective-authoring"
             data-state=if absent { "absent" } else if available { "available" } else { "unavailable" }>
-            <h2>{tr(TextKey::TeletextEffectiveAuthoringTitle)}</h2>
+            <h3>{tr(TextKey::TeletextEffectiveAuthoringTitle)}</h3>
             <p>{tr(TextKey::TeletextEffectiveAuthoringHelp)}</p>
             <p role="status" hidden=available>{tr(TextKey::TeletextEffectiveAuthoringUnavailable)}</p>
             <p role="status" hidden=!absent>{tr(TextKey::TeletextEffectiveAuthoringAbsent)}</p>
@@ -204,17 +253,18 @@ fn preview_return_fields(owner: Option<TeletextPageAddress>) -> AnyView {
     }
 }
 
-fn entry_fields(prefix: &str) -> AnyView {
+fn entry_fields(prefix: &str, page: Option<u16>) -> AnyView {
     let page_id = format!("{prefix}-entry-page");
     let subcode_id = format!("{prefix}-entry-subcode");
+    let subcode = page.map(|_| "0000".to_owned());
     view! {
         <div class=style::address>
             <div><label for=page_id.clone()>{tr(TextKey::TeletextEntryPage)}</label>
                 <input id=page_id name="entry_page" type="number"
-                    min="100" max="899" step="1" required/></div>
+                    min="100" max="899" step="1" required value=page/></div>
             <div><label for=subcode_id.clone()>{tr(TextKey::TeletextEntrySubpage)}</label>
                 <input id=subcode_id name="entry_subcode" pattern="[0-9a-fA-F]{4}"
-                    minlength="4" maxlength="4" required/></div>
+                    minlength="4" maxlength="4" required value=subcode/></div>
         </div>
     }
     .into_any()
@@ -224,6 +274,13 @@ fn guide_channel_fields(data: &ChannelTeletextData, prefix: &str) -> AnyView {
     let id = format!("{prefix}-guide-channels");
     let help = format!("{id}-help");
     let available = data.guide_channels.is_some();
+    // The base check starts from the channel's saved guide selection; the
+    // Scripted check keeps its explicit, initially empty choice.
+    let selected = if prefix == "teletext" {
+        super::teletext::effective_guide_selection(data)
+    } else {
+        Vec::new()
+    };
     let options = data
         .guide_channels
         .as_deref()
@@ -231,7 +288,7 @@ fn guide_channel_fields(data: &ChannelTeletextData, prefix: &str) -> AnyView {
         .iter()
         .map(|channel| {
             view! {
-                <option value=channel.id.to_string()>
+                <option value=channel.id.to_string() selected=selected.contains(&channel.id)>
                     {format!("{} — {}", channel.number, channel.name)}
                 </option>
             }
@@ -240,7 +297,7 @@ fn guide_channel_fields(data: &ChannelTeletextData, prefix: &str) -> AnyView {
     view! {
         <label for=id.clone()>{tr(TextKey::TeletextGuideChannels)}</label>
         <p id=help.clone()>{tr(TextKey::TeletextGuideChannelsHelp)}</p>
-        <select id=id name="guide_channel_id" multiple size="6"
+        <select id=id name="guide_channel_id" multiple size="4"
             disabled=!available aria-describedby=help>
             {options}
         </select>
@@ -319,7 +376,7 @@ pub fn TeletextDraftPreview(
     };
     view! {
         <section class=style::preview data-testid="teletext-draft-preview">
-            <h2>{tr(TextKey::TeletextPreviewTitle)}</h2>
+            <h3>{tr(TextKey::TeletextPreviewTitle)}</h3>
             <p>{tr(TextKey::TeletextPreviewHelp)}</p>
             {redirected.map(|location| error_location(&location))}
             {content}
@@ -858,10 +915,12 @@ mod tests {
             catalog_available: true,
             authoring_selection: Some("observed-membership".to_owned()),
             readiness: None,
+            custom_pages: None,
             authoring_error: None,
             effective_authoring: None,
             effective_authoring_error: None,
             current_guide_available: Some(false),
+            guide_selection: None,
             guide_channels: Some(vec![
                 crate::admin::server_fns::teletext::TeletextGuideChannelData {
                     id: 12,
@@ -1103,7 +1162,9 @@ mod tests {
         assert!(html.contains("name=\"selection_digest\" value=\"observed-membership\""));
         assert!(html.contains("value=\"org.example.on\""));
         assert!(!html.contains("value=\"org.example.off\""));
-        for name in ["name", "entry_page", "entry_subcode"] {
+        // Without a page setting the entry address stays an explicit input;
+        // the draft name and empty lifecycle list are prefilled defaults.
+        for name in ["entry_page", "entry_subcode"] {
             let input = html
                 .split(&format!("name=\"{name}\""))
                 .nth(1)
@@ -1114,6 +1175,18 @@ mod tests {
             assert!(!input.contains("value="));
             assert!(input.contains("required"));
         }
+        let name = html
+            .split("name=\"name\"")
+            .nth(1)
+            .unwrap()
+            .split('>')
+            .next()
+            .unwrap();
+        assert!(name.contains("required"));
+        assert!(name.contains(&format!(
+            "value=\"{} · {}\"",
+            data.channel_number, data.channel_name
+        )));
         let textarea = html.split("<textarea").nth(1).unwrap();
         let content = textarea
             .split_once('>')
@@ -1122,7 +1195,7 @@ mod tests {
             .split_once("</textarea>")
             .unwrap()
             .0;
-        assert_eq!(content, "");
+        assert_eq!(content, "[]");
         assert!(!html.contains("<fieldset disabled"));
         data.catalog_available = false;
         let html = owner.with(|| authoring_controls(&data).to_html());

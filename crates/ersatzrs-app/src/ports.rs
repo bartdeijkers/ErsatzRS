@@ -1063,6 +1063,7 @@ pub struct ApplicationPorts {
     addons: Arc<dyn AddonRuntime>,
     teletext_profiles: Arc<dyn TeletextProfileRepository>,
     teletext_designs: Option<Arc<dyn TeletextDesignRepository>>,
+    teletext_elements: Option<Arc<dyn ersatzrs_core::repositories::TeletextElementRepository>>,
     teletext_publications: Option<Arc<dyn TeletextPublicationRepository>>,
     teletext_generations: Option<Arc<dyn TeletextGenerationRepository>>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
@@ -1149,6 +1150,7 @@ impl ApplicationPorts {
             addons,
             teletext_profiles,
             teletext_designs: None,
+            teletext_elements: None,
             teletext_publications: None,
             teletext_generations: None,
             media_source_runtime,
@@ -1352,6 +1354,24 @@ impl ApplicationPorts {
     #[must_use]
     pub fn teletext_designs(&self) -> Option<&(dyn TeletextDesignRepository + 'static)> {
         self.teletext_designs.as_deref()
+    }
+
+    /// Attach the teletext element library storage.
+    #[must_use]
+    pub fn with_teletext_elements(
+        mut self,
+        repository: Arc<dyn ersatzrs_core::repositories::TeletextElementRepository>,
+    ) -> Self {
+        self.teletext_elements = Some(repository);
+        self
+    }
+
+    /// Teletext element library; absent storage reports unavailable.
+    #[must_use]
+    pub fn teletext_elements(
+        &self,
+    ) -> Option<&(dyn ersatzrs_core::repositories::TeletextElementRepository + 'static)> {
+        self.teletext_elements.as_deref()
     }
 
     /// Remote media-source validation and synchronization effects.

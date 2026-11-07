@@ -15,6 +15,16 @@ release section when tagging a release.
 
 ### Added
 
+- A new **Teletext elements** page (`/teletext-elements`) keeps a library of
+  custom teletext pages. Upload a TTI, T42, EP1 or HTT file (for example from
+  QTeletextMaker), see a Level 1 preview with subpages, change name, page
+  number and cycle time, replace or download the file, and link fields marked
+  `%NAME%%%` in the page to the channel name or number, date, time or the
+  current and next programme. Each element shows which channels use it.
+  On a channel's teletext page, the custom pages section links elements to
+  that channel with their own page number and an on/off choice, and the page
+  set lists them. Broadcasting linked pages is not wired up yet; the page says
+  so.
 - Channel teletext pages show one ordered readiness checklist: add-on enabled,
   valid profile, teletext capacity, output route, published pages and
   broadcast confirmed by an active output. Each state is shown separately, and
@@ -35,6 +45,24 @@ release section when tagging a release.
 
 ### Changed
 
+- ADR 0120 now lets ErsatzRS deliver custom pages from the teletext element
+  library itself, next to add-ons. It sets the rules for fields, refresh,
+  conflicts with add-on page ranges, failures and revisions. Broadcasting
+  custom pages is not implemented yet.
+- The channel teletext page (`/channels/{id}/teletext`) is reorganised into
+  clearly bounded sections: a one-sentence status line with the broadcast
+  checklist folded away, a page set that lists every page number and its
+  source, one section per teletext add-on, a section for custom pages and one
+  Check → Preview → Publish block. Settings of a disabled, missing or
+  unconfigured add-on are no longer shown; the section explains the cause and
+  links to the fix. An add-on is switched on for a channel with one button,
+  its settings are labelled as this channel's settings, and shared profiles
+  move under Advanced. The channels shown in the TV guide are chosen once in
+  the add-on section and stored per channel instead of being picked again at
+  every check. Technical draft fields are prefilled. Shared teletext admin
+  building blocks and a UX reference (`docs/reference/teletext-admin-ux.md`)
+  keep this page and the upcoming teletext element library consistent. All
+  supported interface languages are updated.
 - Refresh the README with ADR-backed ErsatzTV differences, including interface
   languages, subtitle preferences, tagging, add-ons and graphics. Clarify the
   delivered teletext scope and current platform limitations.

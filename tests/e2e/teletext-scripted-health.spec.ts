@@ -32,14 +32,25 @@ async function submit(page: Page, form: Locator, button: string, js: boolean): P
   expect((await posted).status()).toBe(303);
   await navigated; await ready(page, js);
 }
+// The channel page folds shared settings and new profiles; open them like an operator would.
+async function openFolded(form: Locator): Promise<void> {
+  for (const testId of ['teletext-source-advanced', 'teletext-profile']) {
+    const details = form.locator(`xpath=ancestor::details[@data-testid="${testId}"]`);
+    if (await details.count() > 0 && await details.first().getAttribute('open') === null) {
+      await details.first().locator(':scope > summary').click();
+    }
+  }
+}
 async function profileAndBinding(page: Page, fixture: TeletextChannelFixture, js: boolean): Promise<number> {
   await page.goto(`/channels/${fixture.channels[1]}/teletext`); await ready(page, js);
   const form = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
+  await openFolded(form);
   await form.locator('[name="name"]').fill('Synthetic health profile');
   await submit(page, form, translations('en_us')('TeletextProfileCreate'), js);
   const profile = fixture.profiles().find(row => row.Name === 'Synthetic health profile')!;
   expect(profile).toBeDefined();
   const binding = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-binding-form"]`);
+  await openFolded(binding);
   await binding.locator('[name="profile_choice"]').selectOption(`${profile.Id}:${profile.Revision}`);
   await submit(page, binding, translations('en_us')('TeletextBindingSave'), js);
   return profile.Id;

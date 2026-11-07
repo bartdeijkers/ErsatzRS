@@ -24,6 +24,7 @@ pub mod sessions;
 pub mod settings;
 pub mod teletext;
 pub mod teletext_editorial;
+pub mod teletext_elements;
 pub mod templates;
 pub mod troubleshooting;
 pub mod watermarks;
