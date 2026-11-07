@@ -2,10 +2,11 @@
 //!
 //! Elements are user-supplied pages (for example made in `QTeletextMaker`).
 //! This module stores and previews them and records which channels should
-//! show them. It grants no publication or broadcast authority: including a
-//! linked element in a channel's live teletext service is a separate,
-//! explicitly published step that is not part of this module.
+//! show them. Saving grants no publication or broadcast authority: linked
+//! pages reach receivers only through the host-owned producer in
+//! [`broadcast`], as part of an explicitly checked and published service.
 
+pub mod broadcast;
 pub mod fields;
 pub mod import;
 pub mod level1;

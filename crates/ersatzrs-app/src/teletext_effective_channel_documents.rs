@@ -26,8 +26,8 @@ use crate::{
     teletext_effective_profiles::TeletextEffectiveProfileRuntimeReceipt,
     teletext_guide::SuppliedTeletextGuideContext,
     teletext_profile_documents::{
-        validate_document_response, TeletextProfileDocument, TeletextProfileDocumentBudget,
-        TeletextValidatedDocumentSource,
+        validate_document_response, DocumentProducer, TeletextProfileDocument,
+        TeletextProfileDocumentBudget, TeletextValidatedDocumentSource,
     },
     teletext_profiles::TeletextProfileRuntimeError,
     ApplicationServices,
@@ -79,8 +79,9 @@ impl BoundEffectiveChannelTeletextDocumentInput {
         for (binding, receipt) in self.receipts {
             let selected_contract =
                 contract(&self.selection.bindings[binding]).ok_or(Error::SelectionShape)?;
+            // Effective (Scripted) selections never contain the host producer.
             let (document, source) = validate_document_response(
-                selected_contract,
+                DocumentProducer::addon(selected_contract),
                 &receipt.generation,
                 receipt.stdout,
                 budget,

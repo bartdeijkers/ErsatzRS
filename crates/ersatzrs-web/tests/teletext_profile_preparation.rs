@@ -54,6 +54,8 @@ mod authoring_metadata;
 mod channel_documents;
 #[path = "teletext_profile_preparation/client_capture.rs"]
 mod client_capture;
+#[path = "teletext_profile_preparation/custom_pages.rs"]
+mod custom_pages;
 #[path = "teletext_profile_preparation/designs.rs"]
 mod designs;
 #[path = "teletext_profile_preparation/documents.rs"]

@@ -109,6 +109,8 @@ pub enum TeletextDocumentEncodingError {
         "teletext secondary-default agreement requires retained profile/design policy binding"
     )]
     SecondaryDefaultAgreement,
+    #[error("teletext custom pages are composed only with the complete channel selection")]
+    CustomPagesNeedChannel,
 }
 
 /// Invoke, validate and compile one exact bound document under one deadline.
@@ -168,6 +170,11 @@ fn encode_document(
             policy.validation.declarations,
         )?,
         TeletextProfileDocument::Authored(declared) => *declared,
+        // Single-producer adapters have no physical row stage; custom pages
+        // are only composed with the complete channel selection.
+        TeletextProfileDocument::CustomPages(_) => {
+            return Err(TeletextDocumentEncodingError::CustomPagesNeedChannel)
+        }
     };
     check_deadline(deadline)?;
     let (declared, presentations, None) = TeletextProducerPresentation::new(

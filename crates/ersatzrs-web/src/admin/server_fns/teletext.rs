@@ -53,6 +53,14 @@ pub struct TeletextCustomPageData {
     /// The element's own page number in display form.
     pub default_page: String,
     pub enabled: bool,
+    /// Why this enabled page cannot go out with the next Check, as a stable
+    /// code (`unreadable`, `page-number`, `unset-field`, `duplicate-page`,
+    /// `double-height`, `addon-range`); `None` when it can.
+    #[serde(default)]
+    pub issue: Option<String>,
+    /// Add-on id for an `addon-range` issue.
+    #[serde(default)]
+    pub issue_addon: Option<String>,
 }
 
 /// A library element that can be linked to a channel.
@@ -324,6 +332,26 @@ async fn load_custom_pages(
         .list_teletext_elements()
         .await
         .map_err(|_| ServerFnError::new("unavailable"))?;
+    // The same plan the host producer runs at Check, so the page shows exactly
+    // what would block it. A failed plan shows no per-page reasons.
+    let issues = Box::pin(application.plan_teletext_custom_pages(channel_id, chrono::Utc::now()))
+        .await
+        .map(|plan| plan.issues)
+        .unwrap_or_default();
+    let issue_for = |link_id: i64| {
+        use ersatzrs_app::teletext_elements::broadcast::CustomPageIssueKind as K;
+        issues
+            .iter()
+            .find(|issue| issue.link_id == link_id)
+            .map(|issue| match &issue.kind {
+                K::Unreadable => ("unreadable", None),
+                K::PageNumber => ("page-number", None),
+                K::UnsetField => ("unset-field", None),
+                K::DuplicatePage => ("duplicate-page", None),
+                K::DoubleHeight => ("double-height", None),
+                K::AddonRange { addon_id } => ("addon-range", Some(addon_id.clone())),
+            })
+    };
     let default_page = |element_id: i64| {
         library
             .iter()
@@ -345,6 +373,8 @@ async fn load_custom_pages(
                     .unwrap_or_default(),
                 default_page: default_page(link.element_id),
                 enabled: link.enabled,
+                issue: issue_for(link.id).map(|(code, _)| code.to_owned()),
+                issue_addon: issue_for(link.id).and_then(|(_, addon)| addon),
             })
             .collect(),
         library: library

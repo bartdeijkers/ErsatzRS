@@ -943,7 +943,10 @@ fn parse_sources(
     budget: TeletextProfileDocumentBudget,
 ) -> Result<ParsedSources, TeletextDesignDocumentError> {
     parse_source_documents(
-        selection.bindings.iter().map(|binding| binding.contract),
+        selection
+            .bindings
+            .iter()
+            .map(crate::teletext_profile_documents::DocumentProducer::of),
         generation,
         sources,
         budget,
@@ -951,7 +954,7 @@ fn parse_sources(
 }
 
 fn parse_source_documents(
-    contracts: impl ExactSizeIterator<Item = TeletextPageContract>,
+    contracts: impl ExactSizeIterator<Item = crate::teletext_profile_documents::DocumentProducer>,
     generation: &str,
     sources: &[BorrowedDocument<'_>],
     budget: TeletextProfileDocumentBudget,
@@ -968,10 +971,23 @@ fn parse_source_documents(
             binding: Some(index),
             reason,
         };
-        if source.contract != selected.schema_version() || source.generation != generation {
+        if source.contract != selected.contract.schema_version() || source.generation != generation
+        {
             return Err(error(TeletextDesignDocumentFailure::Association));
         }
-        let (document, metadata) = match selected {
+        let (document, metadata) = match selected.contract {
+            TeletextPageContract::V1 if selected.custom_pages => {
+                let custom = crate::teletext_profile_documents::parse_custom_pages(
+                    source.response.as_bytes(),
+                    generation,
+                )
+                .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
+                budget
+                    .service
+                    .validate_base_with_page_metadata(custom.draft())
+                    .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
+                (TeletextProfileDocument::CustomPages(Box::new(custom)), None)
+            }
             TeletextPageContract::V1 => {
                 let base = parse_page_set(source.response.as_bytes(), generation)
                     .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
@@ -1046,13 +1062,10 @@ fn validate_producer_entry(
     }
     let index = index.ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?;
     let entry = entry.ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?;
-    let base = match documents
+    let base = documents
         .get(index)
         .ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?
-    {
-        TeletextProfileDocument::Base(base) => base,
-        TeletextProfileDocument::Authored(service) => service.semantic().base(),
-    };
+        .pages_draft();
     if entry.page != base.initial_page || !base.pages.iter().any(|page| page.address == entry) {
         return Err(TeletextDesignDocumentError {
             binding: Some(index),
