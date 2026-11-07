@@ -10,7 +10,8 @@ macOS/runtime and hardware debt remains unverified; the feature status retains
 that debt without reopening the accepted UCU-12 window.
 Fixed catch-up extended2026-11-07: ucu-13 owns rows255–259 through
 v26.11.5; ucu-14 owns260–271 throughv26.11.6; ucu-15 owns272–285 through the
-fixed target in plans/upstream-catch-up.md. All31 are pending. Native is
+fixed target in plans/upstream-catch-up.md. All31 source dispositions and required
+local checks are complete; exact-source CI/window acceptance remain pending. Native is
 retained; upstream legacy removal does not authorize its retirement.
 Acceptance/evidence: ucu-12 (complete), ucu-13/14/15 (pending).
 Maintainer amendment2026-11-07: row271 Windows security applicability is retained
