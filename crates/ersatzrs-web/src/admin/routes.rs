@@ -91,6 +91,9 @@ use crate::admin::pages::system::{
         PlaybackTroubleshootingPage, SequentialScheduleValidationPage, TroubleshootingPage,
     },
 };
+use crate::admin::pages::teletext_elements::{
+    add::TeletextElementAddPage, editor::TeletextElementEditorPage, list::TeletextElementsListPage,
+};
 use crate::admin::pages::watermarks::{editor::WatermarkEditorPage, list::WatermarksListPage};
 
 stylance::import_crate_style!(style, "src/admin/app.module.css");
@@ -180,6 +183,16 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("graphics-elements"), ParamSegment("id"))
                 view=GraphicsElementEditorPage
+            />
+
+            <Route path=StaticSegment("teletext-elements") view=TeletextElementsListPage/>
+            <Route
+                path=(StaticSegment("teletext-elements"), StaticSegment("add"))
+                view=TeletextElementAddPage
+            />
+            <Route
+                path=(StaticSegment("teletext-elements"), ParamSegment("id"))
+                view=TeletextElementEditorPage
             />
 
             <Route path=StaticSegment("playouts") view=PlayoutsPage ssr=SsrMode::InOrder/>

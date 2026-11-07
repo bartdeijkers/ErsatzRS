@@ -17,6 +17,9 @@ pub struct ChannelTeletextData {
     pub effective_authoring_error: Option<String>,
     /// Explicit source choices only; absence means the source list is unavailable.
     pub guide_channels: Option<Vec<TeletextGuideChannelData>>,
+    /// Saved guide source channels for this channel; `None` when never saved.
+    #[serde(default)]
+    pub guide_selection: Option<Vec<i64>>,
     /// Read-only preview availability; never publication or delivery authority.
     #[serde(default)]
     pub current_guide_available: Option<bool>,
@@ -24,6 +27,40 @@ pub struct ChannelTeletextData {
     /// Ordered readiness facts; absent when an older server rendered the page.
     #[serde(default)]
     pub readiness: Option<TeletextReadinessData>,
+    /// Custom pages from the teletext element library; `None` when the
+    /// library is unavailable or an older server rendered the page.
+    #[serde(default)]
+    pub custom_pages: Option<TeletextCustomPagesData>,
+}
+
+/// Teletext elements linked to this channel plus the library to add from.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextCustomPagesData {
+    pub links: Vec<TeletextCustomPageData>,
+    pub library: Vec<TeletextElementOptionData>,
+}
+
+/// One teletext element linked to this channel.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextCustomPageData {
+    pub link_id: i64,
+    pub element_id: i64,
+    pub name: String,
+    /// Display page number the channel uses, for example `"150"`.
+    pub page: String,
+    /// Channel override in display form; empty when the element's own page is used.
+    pub page_override: String,
+    /// The element's own page number in display form.
+    pub default_page: String,
+    pub enabled: bool,
+}
+
+/// A library element that can be linked to a channel.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextElementOptionData {
+    pub id: i64,
+    pub name: String,
+    pub page: String,
 }
 
 /// Separately observed preconditions for teletext on this channel. Each fact
@@ -253,7 +290,98 @@ pub async fn load_channel_teletext_for_application(
         } else {
             None
         };
-    let current_guide_available = match application
+    let current_guide_available = current_guide_available(application).await;
+    let readiness = Some(readiness(application, &channel.form, channel_id).await);
+    Ok(Some(ChannelTeletextData {
+        channel_id,
+        channel_number: channel.form.number,
+        channel_name: channel.form.name,
+        catalog_available,
+        authoring_selection,
+        authoring_error,
+        effective_authoring,
+        effective_authoring_error,
+        guide_channels,
+        guide_selection: load_guide_selection(application, channel_id).await?,
+        current_guide_available,
+        addons,
+        readiness,
+        custom_pages: Some(load_custom_pages(application, channel_id).await?),
+    }))
+}
+
+#[cfg(feature = "ssr")]
+async fn load_custom_pages(
+    application: &ersatzrs_app::ApplicationServices,
+    channel_id: i64,
+) -> Result<TeletextCustomPagesData, ServerFnError> {
+    use ersatzrs_domain::teletext_element_page_label;
+    let links = application
+        .channel_teletext_elements(channel_id)
+        .await
+        .map_err(|_| ServerFnError::new("unavailable"))?;
+    let library = application
+        .list_teletext_elements()
+        .await
+        .map_err(|_| ServerFnError::new("unavailable"))?;
+    let default_page = |element_id: i64| {
+        library
+            .iter()
+            .find(|element| element.id == element_id)
+            .map(|element| teletext_element_page_label(element.page_number))
+            .unwrap_or_default()
+    };
+    Ok(TeletextCustomPagesData {
+        links: links
+            .iter()
+            .map(|link| TeletextCustomPageData {
+                link_id: link.id,
+                element_id: link.element_id,
+                name: link.element_name.clone(),
+                page: teletext_element_page_label(link.effective_page_number),
+                page_override: link
+                    .page_number
+                    .map(teletext_element_page_label)
+                    .unwrap_or_default(),
+                default_page: default_page(link.element_id),
+                enabled: link.enabled,
+            })
+            .collect(),
+        library: library
+            .iter()
+            .map(|element| TeletextElementOptionData {
+                id: element.id,
+                name: element.name.clone(),
+                page: teletext_element_page_label(element.page_number),
+            })
+            .collect(),
+    })
+}
+
+/// Admin setting holding each channel's saved guide source channels as a JSON
+/// object (`{"<channel id>": [<source channel id>, ...]}`). It only prefills
+/// the channel page; every check still validates the submitted channel ids.
+pub const TELETEXT_GUIDE_SELECTION_SETTING: &str = "teletext.guide_selection";
+
+/// Parse the saved guide selection map; malformed content reads as empty.
+#[must_use]
+pub fn parse_guide_selection(raw: &str) -> std::collections::BTreeMap<i64, Vec<i64>> {
+    serde_json::from_str::<std::collections::BTreeMap<String, Vec<i64>>>(raw)
+        .map(|map| {
+            map.into_iter()
+                .filter_map(|(key, ids)| {
+                    let key = key.parse::<i64>().ok().filter(|key| *key > 0)?;
+                    let ids = ids.into_iter().filter(|id| *id > 0).collect();
+                    Some((key, ids))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(feature = "ssr")]
+async fn current_guide_available(application: &ersatzrs_app::ApplicationServices) -> Option<bool> {
+    match application
         .get_optional_setting(
             crate::host::teletext_runtime_policy::NATIVE_TELETEXT_RUNTIME_POLICY_SETTING,
         )
@@ -267,22 +395,19 @@ pub async fn load_channel_teletext_for_application(
             }
         }
         Err(_) => None,
-    };
-    let readiness = Some(readiness(application, &channel.form, channel_id).await);
-    Ok(Some(ChannelTeletextData {
-        channel_id,
-        channel_number: channel.form.number,
-        channel_name: channel.form.name,
-        catalog_available,
-        authoring_selection,
-        authoring_error,
-        effective_authoring,
-        effective_authoring_error,
-        guide_channels,
-        current_guide_available,
-        addons,
-        readiness,
-    }))
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn load_guide_selection(
+    application: &ersatzrs_app::ApplicationServices,
+    channel_id: i64,
+) -> Result<Option<Vec<i64>>, ServerFnError> {
+    let raw = application
+        .get_optional_setting(TELETEXT_GUIDE_SELECTION_SETTING)
+        .await
+        .map_err(|_| ServerFnError::new("unavailable"))?;
+    Ok(raw.and_then(|raw| parse_guide_selection(&raw).remove(&channel_id)))
 }
 
 /// Classify the channel's MPEG-TS route for authored teletext.

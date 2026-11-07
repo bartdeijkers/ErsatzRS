@@ -26,6 +26,11 @@ backing = 'localized all-kind list + text-only add/`:id` editor with drawvg/draw
 routed  = true
 
 [[route]]
+nav     = '/teletext-elements'
+backing = 'localized custom teletext page library + upload (TTI/T42/EP1/HTT) and `:id` editor with Level 1 preview, field links, details, usage and file actions; server-rendered HTML POST forms'
+routed  = true
+
+[[route]]
 nav     = '/media/sources/local'
 backing = 'list + add/`:id/edit` with read-only television folder preview before save (v111-findings-03)'
 routed  = true
