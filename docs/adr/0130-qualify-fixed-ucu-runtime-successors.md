@@ -24,6 +24,12 @@ acceptance and application/operator authorization boundaries remain unchanged.
 The owning record is `ucu14-windows-advisory-applicability` in the baseline
 catch-up parity file; no advisory fix or non-applicability is accepted.
 
+Application delivery amendment, 2026-11-07: the maintainer authorizes application
+checkpoint commits and integration of current remote/main including PR124.
+After required local acceptance passes, application push, CI and final green
+integration into remote/main are authorized. Application release, Docker
+publication and operator installation remain excluded.
+
 ## Implementation
 
 Partial overall; the local FFmpeg2.0.10 source/build/package/software component
@@ -65,9 +71,15 @@ and finite troubleshooting. Windows publication/recovery and row261 background
 proof also pass. Corrected recipe/packages and retained prior negative:
 `tmp/ucu14/next025/indexed-integration/qualification.json`.
 
-Applicable final application/platform/window gates, published acquisition and
-managed adoption remain open. No runtime pin,
-publication, production installation or baseline acceptance is changed.
+Both runtime distributions are now published unchanged after authorized delivery:
+FFmpeg `v2.0.10` and Next `next-0.2.5-c5cb065-ersatzrs.1`. All37 anonymous asset
+downloads match their qualified hashes. Local application pins select these
+packages while preserving deferred platform identities. Current Linux managed
+cold/warm startup, matched assets,20 headed browser cases, Native/Next playback
+and93/86 transport checks pass. Current Windows/ARM application/package and final
+CI/window acceptance remain open. No operator installation, application release
+or baseline acceptance is changed. The owning milestones retain exact evidence,
+the approved unverified advisory follow-up and platform/hardware debt.
 
 ## Fixed release-tail scope amendment (2026-11-07)
 
