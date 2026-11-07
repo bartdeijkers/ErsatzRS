@@ -686,6 +686,8 @@ async function localized(page: Page, fixture: TeletextChannelFixture, url: strin
     await language(page, culture, dark); await page.goto(url); await ready(page, js);
     const text = translations(module);
     await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
+    const publishAdvanced = page.getByTestId('teletext-publish-advanced');
+    if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
     const active = page.getByTestId('teletext-effective-authoring');
     await expect(active).toHaveAttribute('data-state', 'available');
     await expect(active.getByRole('heading')).toHaveText(text('TeletextEffectiveAuthoringTitle'));

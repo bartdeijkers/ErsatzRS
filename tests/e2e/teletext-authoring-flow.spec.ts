@@ -199,7 +199,7 @@ for (const javaScriptEnabled of [true, false]) {
             await ready(page, javaScriptEnabled);
             await expect(page.getByRole('heading', { name: text('TeletextPreviewTitle'), exact: true })).toBeVisible();
             await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
-            await expect(page.getByTestId('teletext-authoring')).toContainText(text('TeletextAuthoringStaticHelp'));
+            await expect(page.getByTestId('teletext-authoring')).toContainText(text('TeletextAuthoringHelp'));
             await assertPublication(page, text, 'unrequested');
             await assertPreview(page, theme, '200');
             const navigation = page.getByTestId('teletext-preview-model').locator('ul a');

@@ -35,6 +35,8 @@ async function submit(page: Page, form: Locator, button: string, js: boolean): P
 async function profileAndBinding(page: Page, fixture: TeletextChannelFixture, js: boolean): Promise<number> {
   await page.goto(`/channels/${fixture.channels[1]}/teletext`); await ready(page, js);
   const form = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
+  const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+  if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
   await form.locator('[name="name"]').fill('Synthetic health profile');
   await submit(page, form, translations('en_us')('TeletextProfileCreate'), js);
   const profile = fixture.profiles().find(row => row.Name === 'Synthetic health profile')!;
