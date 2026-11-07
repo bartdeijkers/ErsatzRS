@@ -38672,9 +38672,14 @@ The unchanged release layout excludes FFmpeg; this private development-profile
 archive is acceptance evidence, not an application release. Initial extraction
 path and incorrect-route harness negatives are retained. Evidence:
 tmp/ucu14/combined-main/application-packages/win-x64-qualification.json and
-windows-package-launch.json. ARM64 application binaries now build successfully;
-its extracted package/emulation check is running, followed by ARMv7. Local
-platform acceptance and final exact-source CI remain mandatory.
+windows-package-launch.json. ARM64 application binaries and independently extracted package now pass
+software startup under QEMU: packaged readiness probe, bundled Next025 identity,
+FFmpeg9 validation and exact served JavaScript/WASM hashes. Its31.81-second
+result is arm64-package-emulation/qualification.json under the same evidence
+root. This is emulation, not native ARM or hardware acceptance. ARMv7 is still
+linking; the native Linux package healthcheck build is queued behind Cargo’s
+shared build-directory lock. Finish those package checks and final exact-source
+CI before ordered acceptance or baseline advancement.
 
 2026-11-07 current merged-source Windows component60664c3b completed:
 native Rust1.97.1 builds the server, scanner, hardware probe, launcher, xtask
