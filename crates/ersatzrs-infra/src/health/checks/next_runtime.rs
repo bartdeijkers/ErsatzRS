@@ -86,7 +86,7 @@ impl HealthCheck for NextRuntimeHealthCheck {
             ),
             Ok(Err(OverlayCheckError::Schema)) => (
                 HealthCheckStatus::Fail,
-                "Next configuration overlay needs a supported version URI (0.1.0 or 0.1.1); review copy settings before upgrading an older overlay",
+                "Next configuration overlay needs a supported version URI (0.1.0 through 0.1.4); review copy settings before upgrading an older overlay",
             ),
             Ok(Err(OverlayCheckError::Incomplete)) | Err(_) => (
                 HealthCheckStatus::Warning,
@@ -170,7 +170,7 @@ async fn check_overlay(path: &Path) -> std::result::Result<(), OverlayCheckError
                 compatible.parse::<u32>().ok()?,
             ))
         });
-    if !version.is_some_and(|(breaking, compatible)| breaking == 1 && compatible <= 1) {
+    if !version.is_some_and(|(breaking, compatible)| breaking == 1 && compatible <= 4) {
         return Err(OverlayCheckError::Schema);
     }
     Ok(())
@@ -247,7 +247,7 @@ mod tests {
     async fn overlays_require_the_pinned_runtimes_compatible_schema() {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("default.json");
-        for version in ["0.1.0", "0.1.1", "0.01.01"] {
+        for version in ["0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.01.01"] {
             let value = serde_json::json!({
                 "version": format!("https://ersatztv.org/channel/version/{version}")
             });
@@ -259,7 +259,7 @@ mod tests {
             serde_json::json!({"version": null}),
             serde_json::json!({"version": 1}),
             serde_json::json!({"version": "https://ersatztv.org/channel/version/0.0.5"}),
-            serde_json::json!({"version": "https://ersatztv.org/channel/version/0.1.2"}),
+            serde_json::json!({"version": "https://ersatztv.org/channel/version/0.1.5"}),
             serde_json::json!({"version": "https://ersatztv.org/channel/version/0.2.0"}),
             serde_json::json!({"version": "https://ersatztv.org/channel/version/1.1.0"}),
             serde_json::json!({"normalization": {"video": {"format": null}}}),

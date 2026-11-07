@@ -3,6 +3,8 @@
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{ChannelRepository as _, RepositoryError, Result};
 use ersatzrs_domain::{Channel, PlayoutItem, StreamingEngine};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::time::{timeout_at, Instant};
 use uuid::Uuid;
 
@@ -57,6 +59,47 @@ struct Projection {
     snapshot: dynamic_projection::Snapshot,
     credits: Option<String>,
     remote: bool,
+}
+
+type FallbackContext = (super::host::NextStart, Arc<Mutex<Option<Occurrence>>>);
+
+// Upstream ChannelConfigConverter and PlayoutItemConverter share the legacy
+// custom-background preference for emergency cards and ordinary offline gaps.
+pub(super) async fn background_image() -> std::path::PathBuf {
+    background_image_in(&crate::file_system_layout::resources_cache_folder()).await
+}
+
+pub(super) async fn background_image_in(folder: &std::path::Path) -> std::path::PathBuf {
+    let custom = folder.join("background.png");
+    if tokio::fs::metadata(&custom)
+        .await
+        .is_ok_and(|metadata| metadata.is_file())
+    {
+        custom
+    } else {
+        folder.join("_background.png")
+    }
+}
+
+fn background_item(
+    gap: Gap,
+    now: DateTime<Utc>,
+    image: &std::path::Path,
+) -> Result<protocol::PlayoutItem> {
+    Ok(protocol::PlayoutItem {
+        id: format!("{}-background", gap.id()),
+        start: now,
+        finish: gap.finish,
+        source: Some(protocol::Source::Local {
+            path: image.to_str().ok_or_else(unavailable)?.to_owned(),
+            probe_hint: None,
+            in_point_ms: None,
+            out_point_ms: None,
+        }),
+        tracks: None,
+        watermark: None,
+        graphics: Vec::new(),
+    })
 }
 
 /// Fill only internal gaps, retaining overlapping programmes and outer bounds.
@@ -167,26 +210,13 @@ impl NextHost {
         if gap.id() != dynamic_id || now < gap.start || now >= gap.finish || until != gap.finish {
             return Err(unavailable());
         }
-        let (request, state, published_gaps) = self
-            .dynamic_contexts
-            .lock()
-            .await
-            .get(&instance)
-            .filter(|context| {
-                context.request.channel_id == channel_id && context.request.number == number
-            })
-            .map(|context| {
-                (
-                    context.request.clone(),
-                    context.fallback.clone(),
-                    context.gaps.clone(),
-                )
-            })
-            .ok_or_else(unavailable)?;
-        if !published_gaps.lock().await.contains(&gap) {
-            return Err(unavailable());
-        }
         let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        let (request, state) = timeout_at(
+            deadline,
+            self.admitted_gap(channel_id, number, instance, gap),
+        )
+        .await
+        .map_err(|_| unavailable())??;
         timeout_at(
             deadline,
             Box::pin(async {
@@ -205,10 +235,21 @@ impl NextHost {
                     channel
                 };
                 let locked = self.validate_session_gap(&channel, gap, instance).await?;
-                let candidates =
+                let Some(candidates) =
                     fallback_playback::load_candidates(&self.pool, &channel, now, gap.finish)
                         .await?
-                        .ok_or_else(unavailable)?;
+                else {
+                    drop(locked);
+                    let image = background_image().await;
+                    // File lookup must not outlive publication revocation while SQL stays unchanged.
+                    self.admitted_gap(channel_id, number, instance, gap).await?;
+                    let _locked = self.validate_session_gap(&channel, gap, instance).await?;
+                    if !self.dynamic_contexts.lock().await.contains_key(&instance) {
+                        return Err(unavailable());
+                    }
+                    *state = None;
+                    return background_item(gap, now, &image);
+                };
                 if let Some(current) = state.as_ref().filter(|current| {
                     current.gap == gap && now >= current.item.start && now < current.item.finish
                 }) {
@@ -257,6 +298,44 @@ impl NextHost {
         )
         .await
         .map_err(|_| unavailable())?
+    }
+
+    // A reader can observe a rename before its gap registry is updated. Wait
+    // for that same publication owner, including private SQL commit/rollback,
+    // without holding a context/gap lock or extending the callback's budget.
+    async fn admitted_gap(
+        &self,
+        channel_id: i64,
+        number: &str,
+        instance: Uuid,
+        gap: Gap,
+    ) -> Result<FallbackContext> {
+        let _admission = if self.preview_session(instance).await.is_none() {
+            self.callback_admission(channel_id).await
+        } else {
+            None
+        };
+        // Recheck the active instance after any wait: Stop/revocation wins.
+        let (request, state, published) = self
+            .dynamic_contexts
+            .lock()
+            .await
+            .get(&instance)
+            .filter(|context| {
+                context.request.channel_id == channel_id && context.request.number == number
+            })
+            .map(|context| {
+                (
+                    context.request.clone(),
+                    context.fallback.clone(),
+                    context.gaps.clone(),
+                )
+            })
+            .ok_or_else(unavailable)?;
+        if !published.lock().await.contains(&gap) {
+            return Err(unavailable());
+        }
+        Ok((request, state))
     }
 
     async fn resolve_fallback_occurrence(
@@ -865,4 +944,4 @@ fn unavailable() -> RepositoryError {
 
 #[cfg(test)]
 #[path = "fallback_tests.rs"]
-mod tests;
+pub(super) mod tests;

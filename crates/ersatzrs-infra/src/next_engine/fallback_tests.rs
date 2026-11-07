@@ -147,7 +147,8 @@ async fn shared_manifest_gaps_reach_normal_and_preview_sessions_only_on_their_ch
         .is_empty());
 }
 
-pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::TempDir) {
+pub(in crate::next_engine) async fn fixture(
+) -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::TempDir) {
     let root = tempfile::tempdir().unwrap();
     let (pool, locker, mut channel, _) = schedule::tests::fixture().await;
     let start = DateTime::from_timestamp(Utc::now().timestamp(), 123_456_700).unwrap();
@@ -227,7 +228,7 @@ pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::
     (host, instance, start, root)
 }
 
-async fn resolve(
+pub(in crate::next_engine) async fn resolve(
     host: &NextHost,
     instance: Uuid,
     start: DateTime<Utc>,
@@ -289,12 +290,17 @@ async fn repeated_callbacks_seek_one_occurrence_and_clip_the_next() {
     assert_eq!(json["tracks"]["audio"]["stream_index"], 2);
     assert!(json["tracks"].get("subtitle").is_none());
     let again = resolve(&host, instance, start, 105).await.unwrap();
+    assert_eq!(again.id, initial.id, "callbacks retain their occurrence ID");
     assert_eq!(again.finish, initial.finish);
     assert_eq!(
         serde_json::to_value(again).unwrap()["tracks"]["video"]["source"]["in_point_ms"],
         15_000
     );
     let next = resolve(&host, instance, start, 155).await.unwrap();
+    assert_ne!(
+        next.id, initial.id,
+        "the next unsaved filler must not reuse caption/copy state"
+    );
     assert_eq!(next.finish, start + Duration::seconds(180));
     let rows: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
         .fetch_one(&host.pool)
@@ -659,4 +665,70 @@ async fn fallback_canvas_reissues_signed_origin_for_reused_occurrence() {
             );
         }
     }
+}
+
+#[tokio::test]
+async fn background_selection_prefers_custom_file_and_uses_bundled_default_otherwise() {
+    let root = tempfile::tempdir().unwrap();
+    let bundled = root.path().join("_background.png");
+    let custom = root.path().join("background.png");
+    tokio::fs::write(&bundled, b"synthetic bundled background")
+        .await
+        .unwrap();
+    assert_eq!(background_image_in(root.path()).await, bundled);
+    tokio::fs::create_dir(&custom).await.unwrap();
+    assert_eq!(background_image_in(root.path()).await, bundled);
+    tokio::fs::remove_dir(&custom).await.unwrap();
+    tokio::fs::write(&custom, b"synthetic custom background")
+        .await
+        .unwrap();
+    assert_eq!(background_image_in(root.path()).await, custom);
+}
+
+#[tokio::test]
+async fn gap_without_filler_returns_background_only_with_current_session_and_exact_bounds() {
+    let (host, instance, start, _root) = fixture().await;
+    sqlx::query(r#"UPDATE "Channel" SET "FallbackFillerId"=NULL WHERE "Id"=1"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    let item = resolve(&host, instance, start, 90).await.unwrap();
+    assert_eq!(item.start, start + Duration::seconds(90));
+    assert_eq!(item.finish, start + Duration::seconds(180));
+    let protocol::Source::Local {
+        path,
+        in_point_ms,
+        out_point_ms,
+        ..
+    } = item.source.unwrap()
+    else {
+        panic!("offline background must be a local image");
+    };
+    assert!(std::path::Path::new(&path)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .ends_with("background.png"));
+    assert!(in_point_ms.is_none() && out_point_ms.is_none());
+    assert!(item.tracks.is_none() && item.watermark.is_none() && item.graphics.is_empty());
+    assert!(resolve(&host, instance, start, 180).await.is_err());
+    sqlx::query(r#"UPDATE "PlayoutItem" SET "Start"=? WHERE "Id"=2"#)
+        .bind(crate::repositories::common::encode_datetime(
+            start + Duration::seconds(170),
+        ))
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    assert!(resolve(&host, instance, start, 100).await.is_err());
+    host.dynamic_contexts.lock().await.remove(&instance);
+    assert!(resolve(&host, instance, start, 100).await.is_err());
+    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(&host.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        count, 2,
+        "offline playback must not insert a scheduled item"
+    );
 }

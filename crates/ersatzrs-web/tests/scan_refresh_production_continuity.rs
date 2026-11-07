@@ -872,6 +872,7 @@ fn restarted_app_state(
         playout_build_tx,
         scan_work_tx,
         EntityLocker::new(),
+        None,
     );
     (state, playout_build_rx)
 }

@@ -5,8 +5,8 @@ use axum::{
 use serde::Deserialize;
 
 use crate::admin::server_fns::ffmpeg_profiles::{
-    video_format_validation_error, video_profile_options, VIDEO_PROFILE_HIGH10,
-    VIDEO_PROFILE_HIGH444P,
+    ffmpeg_profile_form_into_admin, h264_profile_for_bit_depth, video_format_validation_error,
+    video_profile_options, FfmpegProfileForm, HDR10_BIT_DEPTH_ERROR, HDR10_CODEC_ERROR,
 };
 use crate::host::state::AppState;
 
@@ -25,16 +25,26 @@ pub async fn save_ffmpeg_profile_form(
     Form(input): Form<FfmpegProfileSaveForm>,
 ) -> Redirect {
     let name = input.name.trim();
-    if input.id <= 0 || name.is_empty() || name.len() > 50 {
-        return Redirect::to(&format!("/ffmpeg/{}?error=save", input.id.max(0)));
+    if input.id < 0 {
+        return error_redirect(input.id, "validation");
+    }
+    if name.is_empty() {
+        return error_redirect(input.id, "name-required");
+    }
+    if name.chars().count() > 50 {
+        return error_redirect(input.id, "name-too-long");
     }
 
-    let mut form = match state.application.get_ffmpeg_profile(input.id).await {
-        Ok(Some(form)) => form,
-        Ok(None) => return Redirect::to(&format!("/ffmpeg/{}?error=save", input.id)),
-        Err(error) => {
-            tracing::error!(%error, profile_id = input.id, "failed to load FFmpeg profile for HTML form");
-            return Redirect::to(&format!("/ffmpeg/{}?error=save", input.id));
+    let mut form = if input.id == 0 {
+        ffmpeg_profile_form_into_admin(FfmpegProfileForm::new_defaults())
+    } else {
+        match state.application.get_ffmpeg_profile(input.id).await {
+            Ok(Some(form)) => form,
+            Ok(None) => return error_redirect(input.id, "save"),
+            Err(error) => {
+                tracing::error!(%error, profile_id = input.id, "failed to load FFmpeg profile for HTML form");
+                return error_redirect(input.id, "save");
+            }
         }
     };
     name.clone_into(&mut form.name);
@@ -44,8 +54,11 @@ pub async fn save_ffmpeg_profile_form(
         input.video_format,
         input.bit_depth,
     ) {
-        if video_format_validation_error(hw, vf).is_some() || vf == 3 && bit_depth == 1 {
-            return Redirect::to(&format!("/ffmpeg/{}?error=validation", input.id));
+        if video_format_validation_error(hw, vf).is_some() {
+            return error_redirect(input.id, &format!("format-{hw}"));
+        }
+        if vf == 3 && bit_depth == 1 {
+            return error_redirect(input.id, "mpeg2-ten-bit");
         }
 
         let requested_profile = input.video_profile.unwrap_or_default();
@@ -61,16 +74,38 @@ pub async fn save_ffmpeg_profile_form(
         .save_ffmpeg_profile(ersatzrs_app::commands::SaveFfmpegProfile { form })
         .await
     {
-        Ok(_) => Redirect::to("/ffmpeg"),
+        // The list is interactive. Complete HTML saves on the populated editor
+        // so a no-JS user can inspect the exact persisted result.
+        Ok(id) => Redirect::to(&format!("/ffmpeg/{id}")),
         Err(
             ersatzrs_app::ApplicationError::Validation { field: "name", .. }
             | ersatzrs_app::ApplicationError::Conflict(_),
-        ) => Redirect::to(&format!("/ffmpeg/{}?error=duplicate", input.id)),
+        ) => error_redirect(input.id, "duplicate"),
+        Err(ersatzrs_app::ApplicationError::Validation { message, .. }) => {
+            let code = match message.as_str() {
+                "VideoProfile cannot be high10 with 8-bit h264" => "profile-eight-bit",
+                "VideoProfile must be high10 with 10-bit h264" => "profile-ten-bit",
+                "VideoProfile must be high444p with 10-bit h264" => "profile-nvenc-ten-bit",
+                HDR10_CODEC_ERROR => "hdr-codec",
+                HDR10_BIT_DEPTH_ERROR => "hdr-depth",
+                _ => "validation",
+            };
+            error_redirect(input.id, code)
+        }
         Err(error) => {
             tracing::error!(%error, profile_id = input.id, "failed to save FFmpeg profile from HTML form");
-            Redirect::to(&format!("/ffmpeg/{}?error=save", input.id))
+            error_redirect(input.id, "save")
         }
     }
+}
+
+fn error_redirect(id: i64, code: &str) -> Redirect {
+    let path = if id <= 0 {
+        "/ffmpeg/add".to_owned()
+    } else {
+        format!("/ffmpeg/{id}")
+    };
+    Redirect::to(&format!("{path}?error={code}"))
 }
 
 fn fallback_video_profile(hw: i32, vf: i32, bit_depth: i32, requested: &str) -> Option<String> {
@@ -78,18 +113,10 @@ fn fallback_video_profile(hw: i32, vf: i32, bit_depth: i32, requested: &str) -> 
         return None;
     }
 
+    let requested = h264_profile_for_bit_depth(hw, bit_depth, requested);
     if bit_depth == 1 {
-        return Some(
-            if hw == 2 {
-                VIDEO_PROFILE_HIGH444P
-            } else {
-                VIDEO_PROFILE_HIGH10
-            }
-            .to_owned(),
-        );
+        return Some(requested.to_owned());
     }
-
-    let requested = requested.trim();
     video_profile_options(hw, vf)
         .contains(&requested)
         .then(|| requested.to_owned())
@@ -98,7 +125,9 @@ fn fallback_video_profile(hw: i32, vf: i32, bit_depth: i32, requested: &str) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::admin::server_fns::ffmpeg_profiles::{VIDEO_PROFILE_HIGH, VIDEO_PROFILE_MAIN};
+    use crate::admin::server_fns::ffmpeg_profiles::{
+        VIDEO_PROFILE_HIGH, VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P, VIDEO_PROFILE_MAIN,
+    };
 
     #[test]
     fn fallback_video_profile_persists_h264_select_values() {
@@ -123,5 +152,27 @@ mod tests {
             fallback_video_profile(0, 1, 1, VIDEO_PROFILE_HIGH),
             Some(VIDEO_PROFILE_HIGH10.to_owned())
         );
+    }
+
+    #[test]
+    fn fallback_depth_transition_preserves_valid_eight_bit_choices() {
+        for hw in 0..=7 {
+            assert_eq!(
+                fallback_video_profile(hw, 1, 0, VIDEO_PROFILE_HIGH10),
+                video_profile_options(hw, 1)
+                    .contains(&VIDEO_PROFILE_HIGH)
+                    .then(|| VIDEO_PROFILE_HIGH.to_owned())
+            );
+        }
+        for choice in [
+            VIDEO_PROFILE_MAIN,
+            VIDEO_PROFILE_HIGH,
+            VIDEO_PROFILE_HIGH444P,
+        ] {
+            assert_eq!(
+                fallback_video_profile(2, 1, 0, choice),
+                Some(choice.to_owned())
+            );
+        }
     }
 }

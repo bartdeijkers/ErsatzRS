@@ -58,6 +58,27 @@ def distribution_for(rid):
     return version, tag, [{"file": p["file"], "sha256": p["sha256"]} for p in patches]
 
 
+def source_for(rid):
+    """Resolve the complete original source/compiler identity of retained bytes."""
+    source = MANIFEST["runtime_packages"][rid].get("source_identity", {
+        "upstream_revision": PINNED_REVISION,
+        "source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        "prepared_lock_sha256": PREPARED_LOCK_SHA256,
+        "rust_toolchain": MANIFEST.get("rust_toolchain", "1.97.1"),
+    })
+    if not isinstance(source, dict) or set(source) != {
+        "upstream_revision", "source_archive_sha256", "prepared_lock_sha256", "rust_toolchain"
+    }:
+        raise ValueError("Next platform requires a complete source identity")
+    for key, pattern in (("upstream_revision", r"[0-9a-f]{40}"),
+                         ("source_archive_sha256", r"[0-9a-f]{64}"),
+                         ("prepared_lock_sha256", r"[0-9a-f]{64}"),
+                         ("rust_toolchain", r"[0-9]+\.[0-9]+\.[0-9]+")):
+        if not isinstance(source[key], str) or not re.fullmatch(pattern, source[key]):
+            raise ValueError("Invalid Next platform source identity")
+    return source
+
+
 def package_url(rid):
     version, tag, _ = distribution_for(rid)
     suffix = ".zip" if rid == "win-x64" else ".tar.gz"
@@ -189,17 +210,18 @@ def read_binaries(payload, rid, root, extra_names=()):
 
 def verify_patched_payload(files, rid):
     version, _, patches = distribution_for(rid)
+    source = source_for(rid)
     origin = json.loads(files["origin.json"])
     expected = {
         "kind": "patched-source-build", "repository": REPOSITORY,
-        "source_revision": PINNED_REVISION, "rid": rid, "target": TARGETS[rid],
-        "source_archive_sha256": SOURCE_ARCHIVE_SHA256,
-        "cargo_lock_sha256": PREPARED_LOCK_SHA256,
+        "source_revision": source["upstream_revision"], "rid": rid, "target": TARGETS[rid],
+        "source_archive_sha256": source["source_archive_sha256"],
+        "cargo_lock_sha256": source["prepared_lock_sha256"],
         "distribution_version": version, "patches": patches,
     }
     if any(origin.get(key) != value for key, value in expected.items()):
         raise ValueError("Next source/patch provenance differs from the accepted snapshot")
-    compiler = MANIFEST.get("rust_toolchain")
+    compiler = source["rust_toolchain"]
     if compiler is not None and (
         not isinstance(compiler, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", compiler)
         or not origin.get("rustc", "").startswith(f"rustc {compiler} ")

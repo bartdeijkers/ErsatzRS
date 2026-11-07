@@ -48,6 +48,21 @@ Network shares, `mysql://` and `mariadb://` URLs, and multiple active ErsatzRS
 servers sharing one database are unsupported. See
 [ADR 0080](../adr/0080-standardize-on-sqlite.md).
 
+## Single-instance state folder
+
+The server holds `ersatzrs.lock` in its persistent state folder for its lifetime.
+The default folder is `$HOME/.ersatzrs`; `ERSATZRS_APP_STATE_DIR` selects a
+separate state root. A second owner of the same lock exits with status1 before
+database initialization. The file is neither truncated nor deleted: a leftover
+file after a crash is safe because the OS releases its ownership.
+
+Read/write access is preferred, with an existing read-only lock as fallback.
+Contention stops startup; other lock errors print a warning and continue, matching
+upstream behavior. This does not make shared/network SQLite or active-active
+servers supported. Separate test deployments need separate state roots as well
+as isolated databases and ports; changing only the database URL does not isolate
+the state folder.
+
 ## Server listen address
 
 Leptos provides the native server listen setting:
@@ -327,8 +342,9 @@ Next merges the files in order, so channel settings override defaults, which
 override the FFmpeg profile. Relative paths in an overlay are resolved by Next
 against that file's directory. Consult the channel configuration schema shipped
 with your Next version for available fields. Every overlay must include a
-supported `version` URI; the copy-mode runtime accepts channel schemas 0.1.0
-and 0.1.1. Review older overlays before adding a version: a former
+supported `version` URI. The qualified Next 0.2.5 reader accepts channel schemas
+0.1.0 through 0.1.4, including older normalization overlays. Review older
+overlays before adding a version: a former
 `"format": null` copy request must become `"mode": "copy"`, retaining a
 supported `format` for transcoding items that cannot be copied. Unversioned
 overlays are rejected rather than silently changing their encoding policy.
@@ -362,7 +378,11 @@ black emergency fallback, set an overlay to:
 Changes take effect when the next engine session starts, including after an idle
 session has stopped. Existing sessions are not restarted by editing a file.
 Malformed configuration causes Next startup to fail; it is not silently ignored.
-Missing files leave profile settings unchanged. Native-engine channels do not
+Missing files leave profile settings unchanged. A qualified indexed reader uses
+schema 0.1.4 and an application-owned playout directory. Overlays may change
+encoding settings but must retain its generated `playout.folder` and
+`playout.layout`; remove a stale playout redirect instead of redirecting the
+indexed owner. Older readers keep complete-file publication. Native-engine channels do not
 read these overlays. Subtitle and audio overrides are explicit operator choices;
 omit those fields to preserve the channel's selections.
 

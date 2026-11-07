@@ -30,12 +30,27 @@ impl AccessToken {
         Self {
             token: token.and_then(|value| {
                 let value = value.into();
-                if value.trim().is_empty() {
-                    None
-                } else {
+                if !value.is_empty()
+                    && value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
+                    })
+                {
                     Some(value)
+                } else {
+                    None
                 }
             }),
+        }
+    }
+
+    /// Forward a query token only when JWT is enabled, matching upstream's
+    /// `QueryAccessToken`. A disabled verifier never lends a token authority.
+    #[must_use]
+    pub fn for_request(token: Option<impl Into<String>>, jwt_enabled: bool) -> Self {
+        if jwt_enabled {
+            Self::new(token)
+        } else {
+            Self::default()
         }
     }
 
@@ -309,6 +324,51 @@ mod tests {
         let token = AccessToken::new(Some("abc123"));
         assert_eq!(token.query(), "?access_token=abc123");
         assert_eq!(token.query_amp(), "&access_token=abc123");
+    }
+
+    #[test]
+    fn only_the_unmodified_jwt_alphabet_can_be_propagated() {
+        for invalid in [
+            "",
+            "abc def",
+            "abc&mode=ts",
+            "abc\"def",
+            "abc%20def",
+            "abc\n",
+            "abc<def>",
+            "abc!def",
+            "abc^def",
+            "abc/def",
+            "abc;def",
+            "abc\\def",
+            "abc=def",
+            " token",
+            "token ",
+            "é",
+            "token\0",
+        ] {
+            let token = AccessToken::new(Some(invalid));
+            assert!(token.query().is_empty(), "unsafe token {invalid:?}");
+            assert!(token.query_amp().is_empty(), "unsafe token {invalid:?}");
+        }
+        let valid = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjF9.abc-DEF_123";
+        assert_eq!(
+            AccessToken::new(Some(valid)).query(),
+            format!("?access_token={valid}")
+        );
+    }
+
+    #[test]
+    fn disabled_jwt_does_not_echo_even_a_valid_query_token() {
+        let disabled = AccessToken::for_request(Some("synthetic-token"), false);
+        assert!(disabled.query().is_empty());
+        assert!(disabled.query_amp().is_empty());
+        let enabled = AccessToken::for_request(Some("synthetic-token"), true);
+        assert_eq!(enabled.query(), "?access_token=synthetic-token");
+        assert_eq!(enabled.query_amp(), "&access_token=synthetic-token");
+        assert!(AccessToken::for_request(Some("token&mode=ts"), true)
+            .query()
+            .is_empty());
     }
 
     #[test]

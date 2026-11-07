@@ -2,20 +2,24 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.4)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125', '0128', '0129']
+adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125', '0128', '0129', '0130', '0131']
 summary    = """
 UCU-00–12 are Complete:254rows through fixed v26.11.4 are accepted.
 UCU-12 owns dispositions and source-bound composed proof. Open approved
 macOS/runtime and hardware debt remains unverified; the feature status retains
 that debt without reopening the accepted UCU-12 window.
-Current evidence: ucu-12.
-The authoritative current baseline is docs/automation/parity-baseline.md. Native, stored engine/profile choices
-and international audio/subtitle behavior remain supported. UCU-10 is delivered
-through PR105 on remote main 32c12793. Run 38623973857 passes every non-browser
-gate and Chromium; Firefox has 345 passes, 30 skips and only fixture-collision
-case 329 failed. The maintainer requires only that corrected headed case rerun:
-1 pass in 11.3s, no full CI rerun. The fixture-only commit uses [skip ci]; earlier
-passed checks are reused, not claimed as a new full green exact-commit run.
+Fixed catch-up extended2026-11-07: ucu-13 owns rows255–259 through
+v26.11.5; ucu-14 owns260–271 throughv26.11.6; ucu-15 owns272–285 through the
+fixed target in plans/upstream-catch-up.md. All31 are pending. Native is
+retained; upstream legacy removal does not authorize its retirement.
+Acceptance/evidence: ucu-12 (complete), ucu-13/14/15 (pending).
+Maintainer amendment2026-11-07: row271 Windows security applicability is retained
+as explicit unverified follow-up debt. It no longer blocks current runtime
+publication or UCU13-15 closure after all other required acceptance passes.
+Do not label the advisory fixed, covered or inapplicable without later evidence.
+Baseline: docs/automation/parity-baseline.md. Native, stored engine/profile choices
+and international audio/subtitle behavior remain supported. UCU-10 delivery/focused CI recovery and UCU-11 source-bound composed acceptance
+remain owned by their completed milestones; no fresh full CI is claimed.
 
 UCU-11 accepts rows233–236: Convert-only optional HLS text, media-only TS
 wrappers, reviewed released Next022 and the six-second remux burst. All20
@@ -58,10 +62,16 @@ and rows23–30 decoded/browser evidence. ADR0099 retains converted HLS text;
 ADR0100 embedded-text limitations remain explicitly refused. Earlier milestones
 own Remote Stream/add-on source, caption and normal/preview lifecycle proof,
 Classic/Plex continuity and NVIDIA overlay evidence. AMD live/hardware and
-approved ARM/macOS application acceptance remain unverified. All graphics kinds
-use the accepted FFmpeg canvas. See milestones for exact per-row counts,
+approved ARM/macOS application acceptance remain unverified. See milestones for exact per-row counts,
 source/runtime identities, failed history and acceptance receipts.
 """
+
+[[debt]]
+id = 'ucu14-windows-advisory-applicability'
+description = 'Identify the vulnerable Windows behavior and fixing revision for GHSA-qrh2-626h-76m2, assess ErsatzRS and correct/prove any affected behavior.'
+discovered = '2026-11-07'
+evidence = 'Maintainer explicitly approves logging this as later work and resuming UCU13-15 on2026-11-07. Applicability remains unverified; no security acceptance or non-applicability claim. UCU14 owns source/package comparison and the distinct UCU13 Unix-mutex follow-up in tmp/ucu14/security-source-audit/qualification.json. Resume when authoritative upstream advisory/fix details become available; then perform source applicability and affected regression/runtime checks. This debt does not defer any other required gate or authorize unrelated publication.'
+resolved = false
 
 [[debt]]
 id = 'ucu09-row201-channel-troubleshooting-window'
@@ -476,3 +486,26 @@ discovered = '2026-10-24'
 resolved = true
 adr = '0117'
 evidence = 'Next-only CI40134839105 is green on56938c95: all451 selected tests and both actual smokes pass, closing the missing-input/report-ownership failure. The original late-PGS negative is retained; no deadline is widened or cause inferred. Both finite-cut cases pass unchanged. All four non-Mac rs.5 caption candidates are complete within scope: Linux/native Windows each pass eight source controls and three unchanged actual cases; ARM64/ARMv7 each pass version/startup and eight controls under QEMU. Official023 retains the exact source-outpoint negative; Mac qualification, publication and adoption remain open. General Chromium additionally reveals hardware p5 controls reaching libx264 after graph denial. Its correction passes237 snapshots, two unchanged headed cases and93 Native transport checks on the real published runtime under deliberate denial, plus strict affected lint. Two-case Chromium CI40140755052 is green on ce749910. Original general Firefox passes. The obsolete Native-default fixture in Teletext1.5 Chromium is corrected and passes both headed browsers with all cultures/themes/JS paths retained. Its selected-audio language loss is localized before the wrapper; existing exact ADR0117 metadata correction is reused in combined rs.6. Linux passes53 source controls, the unchanged active-viewer decoding/language/lease/shutdown case, three caption cases and selected Dutch audio. All four non-Mac source packages pass53 controls each; Windows also passes four affected actual cases. ARM64 fallback output passes the retained200-frame/Dutch880Hz/caption oracle using verified native decoding. Chromium followers have composed passing recovery. Both original Level2.5 browser jobs pass. Level1.5 Firefox needs a complete64-case focused retry after runner disconnection; no per-case result survived. The equivalent retained ARMv7 software recipe now passes200frames, Dutch880Hz, captions and nld language identity under pinned QEMU. Both actual rs.6 Next smokes and86 Next copy TSDuck checks pass. Only missing Level1.5 Firefox coverage retries in CI40174546124 on bc69eb66; unchanged Native proof is reused. Published rs.4 and production pins are unchanged. Milestone ucu-12 owns the finite completion list, rejected trials and exact receipts. Mac builds remain deferred; hardware debt stays unverified. Subsequent maintainer amendment permits UCU-12 closure with explicit unverified macOS debt. The separately approved rs.6 release publishes23 assets with all anonymous downloads verified. Production manifest now selects four rs.6 packages and exact retained Mac rs.4 identities;15 manager cases,28 staging and27 CI-artifact checks plus strict infrastructure Clippy pass. Real six-archive staging/relocation does not execute Mac binaries. Native Windows14 manager checks and both Linux/Windows real-host public cold acquisition/unchanged managed restart now pass with exact runtime hashes and matched web assets; owned hosts stop cleanly. Bounded11-case browser and Level1.5 Rust-only CI selectors retain all assertions and unrelated passing evidence. Affected CI remains pending. Final recovery is complete: browser40181549125 passes10Chromium/9Firefox with only existing skips; Rust40183059576 passes1955workspace+17Next. Next40178558343 supplies451passes; one unchanged NUL fixture retry40184068956 and both following smokes pass. Original failures and valid prior gates are retained. Reuse preserves producer5a2d8460 and verifies CI-only source equivalence; embedded CHANGELOG drift is rejected and final bytes match. This is composed acceptance, not a full new-SHA suite.'
+
+[[debt]]
+id = 'ucu13-15-fixed-post-v26-11-4-catch-up'
+description = 'Reconcile pending rows255–285 in order through the fixed observed target in plans/upstream-catch-up.md, retaining Native and all approved platform limitations.'
+discovered = '2026-11-06'
+evidence = 'Owning milestones ucu-13/ucu-14/ucu-15 retain the finite functionality, mandatory proof and external prerequisite lists. All285 ordered identities are verified;254 accepted and31 pending. Row276 Native watermark software component passes339 composed checks, nine decoded scenarios, native Windows command/capture and one-request HTTP logo proof; ucu-15 retains hardware/application/final obligations. Row274 Native short-GOP/NVIDIA probe component has71 composed focused passes, native Windows numeric probe1/1, actual HLS/decoded output4/4 and strict affected lint; ucu-15 owns the proof and open application/platform/final gates. Row278 local notification functionality has13 focused passes and real clock/picture/Dutch-audio refresh1/1; affected strict lint/review pass and the local notification component is complete. Row275 local actual dossier/archive proof passes1/1 plus3/3 ordinary regressions and strict lint/review. Row279 local unnamed-codec correction passes55 composed focused cases, actual published-runtime decoded picture/Dutch-audio1/1 and strict affected lint; full hints and recorded video indexes/pins survive while Native policy and one-shot validation remain. Row277 Native source-format correction passes175 distinct selected checks, actual Linux software and native Windows NVENC generated-command/decoded output proof for4:4:4 H264/12-bit HEVC, plus strict affected lint. Full application/platform/final acceptance remains open. Row282 local profile editing passes22 distinct focused cases,12 composed headed Chromium/Firefox EN/NL cases, strict lint and matched-bundle proof; Native controls/policy and strict raw validation remain. ucu-15 owns exact source/run/input proof; required platform/window/final acceptance stays open. Accepted ADR0131 authorizes local daily-index implementation/tests; unchanged-day economy and platform/final gates remain open, with full proof in ucu-15. ARM64/ARMv7 now pass the same six process-lock cases through Nextest under emulation; this closes the local four-platform lock component, retaining native ARM and final application/window obligations. ucu-13 owns exact source/binary/run/image evidence. Registration and provisional triage do not advance the accepted baseline or prove runtime acceptance.'
+resolved = false
+
+[[debt]]
+id = 'ucu14-15-fixed-runtime-successors'
+description = 'Qualify the fixed Next contract and FFmpeg9 successor under accepted ADR0130, preserving Native and independent patch-retirement proof.'
+discovered = '2026-11-06'
+resolved = false
+adr = '0130'
+evidence = 'Accepted ADR0130 authorizes local work through fixed v26.12.0/Next025 c5cb065f. The local FFmpeg210 four-package software component and Next025 four-package bare-worker component are completed within their explicit scope: exact source, patches, payload/companion/checksum inventories,455 source/reader and13 schema cases,660 serial software playback,10 compatibility and3 strict ordinary route checks pass. Native Windows software/CUDA H264/HEVC and clean Linux/both ARM emulators preserve complete frames, selected Dutch audio and independent captions. All ten retained Next corrections still have failing independent stock/individual-control evidence. Milestones ucu-14/15 and tmp/ucu14/{ffmpeg210/acceptance.json,next025/qualification.json} own exact evidence and remaining application/indexed/platform/final gates. Row261 Linux background/callback integration is locally verified with60 distinct composed focused checks,3 grouped decoded background/error/handoff tests and strict infra/web lint; unchanged platform/final acceptance remains required. Publication, managed adoption and production pins remain unchanged; unavailable hardware stays unverified.'
+
+[[debt]]
+id = 'ucu15-row278-atomic-daily-publication'
+adr = '0131'
+description = 'Meet row278 unchanged-day write economy while preserving atomic complete-generation visibility, cancellation/deadlines and reversible SQL publication. Accepted ADR0131 uses immutable daily chunks plus an atomic index and a qualified Next reader contract; ordinary host construction retains the complete-file layout; the new opt-in ordinary writer is locally verified.'
+discovered = '2026-11-06'
+evidence = 'Source review of fbb3685b NextPlayoutFolderPlanner and fixed Next92e93d72 PlayoutLoader establishes the representation conflict: whole-file equality cannot preserve unchanged day-file writes when another day changes. ADR0095 explicitly owns the single broad-window file. ADR0131 was accepted2026-11-06 for local implementation/tests; its ordinary writer passes44 distinct focused cases, affected strict lint/review and real complete-format refresh1/1; filesystem/coordinator startup recovery additionally passes55 focused cases, strict lint and current-format playback1/1. Owned host visible-commit callback integration additionally passes56 distinct focused cases, strict affected lint and real complete-format decoded refresh1/1; cleanup failure/cancellation, exact normal/preview gap admission, revocation, the unchanged30-second budget and standalone Native-channel preview are covered locally. Fixed Next reader source passes52 distinct affected cases and strict lint, with explicit mode, schema/capability advertisement, shared lease, two-chunk concurrency and bounded validation/lookahead. Its exact-base patch is retained. Local application permit/admission/registered-Health guard passes37 distinct focused cases, strict lint and actual Complete-format decoded refresh1/1. Qualified successor, actual indexed configuration/overlays, platform/indexed-playback/adoption remain unproven; its required successor runtime builds also are authorized by accepted ADR0130. ucu-15 owns unchanged acceptance and the complete implementation/proof list. No runtime pin, release or accepted baseline changed.'
+resolved = false

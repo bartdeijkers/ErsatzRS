@@ -38303,3 +38303,1159 @@ both histories and newer teletext work; affected integration acceptance is still
 required. Required actual-host/final gates remain open. UCU-11 rows233–236 remain
 pending; no main push, application CI or publication is authorized or claimed.
 """
+
+[[milestone]]
+id         = 'ucu-13'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile v26.11.5 lock safety and runtime changes'
+status     = 'In progress'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-12']
+acceptance = '''
+Rows255–259, fixed released v26.11.5 at
+d5482b7f06b06de3f117bfb5010f4e27e37209a2. Process in order without expanding
+the window. Finite completion list:
+1. Audit the FFmpeg bump/revert against current FFmpeg9 and prove any applicable
+   bitmap/HDR behavior rather than adopting upstream version labels.
+2. Audit process singleton/lock ownership, crash/restart and filesystem safety;
+   preserve the local SQLite rule, not upstream NFS database support.
+3. Record each disposition, required current-platform proof and release-row
+   bookkeeping; complete required final gates before advancing the baseline.
+Preserve the accepted baseline until the corresponding ordered dispositions and
+acceptance pass; do not relabel provisional ledger notes as acceptance. Keep
+Native and Next supported, stored choices, international audio/subtitles,
+teletext, private callbacks and accurate engine-specific Health. Preserve
+completed Phase9/UCU and independent DCI work. Reuse valid evidence; required
+focused/local final gates, affected headed browsers and actual Native/Next
+playback plus smoke/TSDuck where affected remain mandatory. Linux x64/Windows
+x64 and ARM64/ARMv7 builds/packages/emulation are required. Native ARM, macOS
+and approved unavailable hardware remain explicitly unverified/deferred. No
+macOS/paid work. Commit/push/merge, CI dispatch, dependency publication and
+application releases require applicable separate authorization. Retain exact
+source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
+are not waived; retry only affected failed CI checks and reuse verified artifacts.
+'''
+evidence = '''
+2026-11-06 registration only: all five SHA/subject pairs match the ordered
+upstream history. Local and remote release tags resolve to the fixed terminal revision.
+All five rows remain pending. Registration did not claim implementation or acceptance.
+
+UCU-13 lock component2026-11-06: exact upstream diffs for all five rows and
+current Rust startup were reviewed; plans/upstream-catch-up.md owns the source
+map. Whole-tree diff38d17208^..12f52f2d is empty, so the runtime bump/revert pair
+requires no FFmpeg build or new hardware claim within this window. The later
+reapply remains UCU-14. Release row259 changes upstream CHANGELOG only.
+The demonstrated missing startup guard is implemented with the pinned standard
+library in existing ersatzrs-platform, composed in ordinary web main before
+Tokio/database initialization. Existing state-folder resolution and private
+worker/recovery ownership remain; no new dependency/unsafe/crate or engine
+change. Read/write first/read-only fallback, distinct busy versus warning-and-
+continue errors, retained file contents and OS-close release match upstream.
+Linux six actual lock regressions pass, including real competing processes,
+normal and forced owner exit, stale contents, separate folders, read-only
+fallback and unavailable-path classification. Run e66fe731-9a05-47c7-8abd-c2a56846282e
+passes6; full platform suite84cc9edf-1ae1-407d-b4bb-9d9c737aa18f passes11.
+Native Windows x64 runs the same six tests unchanged, allpass0.138s,
+run2b41167c-a59b-49d2-af51-0e86a68a798c, Rust1.97.1. The one ignored helper is
+executed by both process tests, not an omitted behavior. Windows lacked nextest;
+task-local official immutable0.9.140 ZIP GitHub digest ec39698dfe5bcfffb7d5da037f226bc1670584ba247123f4e684a0f224fe828d
+is verified before use, no system installation. Original missing-tool and UNC
+incremental-lock failures are retained; CARGO_INCREMENTAL=0 for the Windows
+process fixes the demonstrated cache issue without a target-directory override.
+Linux actual web binary entrypoint cargo check passes3m32s; strict platform
+Clippy, architecture lint, formatting/progress checks pass. No browser change.
+Evidence: tmp/ucu13/source-audit.json and single-instance-*.log; Windows recipe
+and nextest-source.json retain source/tool identity and exact invocation.
+Actual Linux host composition proof now passes1/1 in0.025s,
+run e7b804ab-d07a-464f-90e0-1daa43e3903d: the real newly built server exits1,
+prints the contention diagnostic, creates neither database nor cache, and never
+starts runtime acquisition. This opt-in integration test requires the exact
+server binary; the other seven cases were filtered, not repeated or waived.
+Actual build succeeds8m26s; final platform Clippy (including the opt-in test)
+passes after waiting for that build's lock. source-audit.json records exact
+server bytes/hash and source hashes. No matched-UI or full-suite claim follows
+from this early-startup test. Linux/Windows lock component is complete within
+that scope; no Native/Next behavior is changed.
+ARM64 and ARMv7 platform libraries also build successfully with pinned1.97.1
+(4.21s/0.31s), under the configured worktree target. This is build proof, not
+execution. Existing nativeARM debt is unchanged.
+External prerequisite for current ARM emulation: Docker Desktop Linux engine
+is unavailable. WSL docker reports integration unavailable; the native Windows
+client independently fails on missing npipe dockerDesktopLinuxEngine. No
+container or existing process is changed. Maintainer input requests starting
+that existing engine; closure is a successful engine query followed by the
+actual required emulated lock checks. Do not infer a missing image/cache from
+the earlier empty filtered wrapper output. No native/emulated pass is claimed.
+Finite remaining proof: ARM execution/emulation, applicable final platform/host/
+window gates and separately authorized delivery. UCU-13/rows255–259
+are not yet accepted and the baseline remains unchanged. No commit/push/CI/
+publication occurs. Existing macOS/nativeARM/hardware deferrals stay unverified.
+
+2026-11-07 ARM lock proof completes the local four-platform lock component.
+Docker's existing engine is now available. Exact cached builders and pinned
+Rust1.97.1 compile only the unchanged single_instance test target, under the
+configured worktree target; no new runtime/dependency build or Docker socket
+is used. Nextest's existing binary metadata/workspace remapping and isolated
+ARM runners execute all six unchanged ownership cases on both ARM64 and ARMv7:
+6/6 pass on each. Real child owners prove exclusion and normal/forced exit,
+read-only fallback, stale contents and independent folders under emulation.
+The ignored child helper is invoked by the two parent process tests; the
+separate ignored actual-web-host test is already proved on Linux and is not
+claimed for ARM. Exact binary/source/image hashes, invocation and run IDs:
+tmp/ucu13/source-audit.json arm_software_emulation and arm-lock/ logs.
+This resolves the previously recorded Docker/ARM software prerequisite and
+removes that item from the local lock component. Native ARM remains explicitly
+unverified; applicable final application/platform/window and delivery gates
+remain open. Reuse Linux/native Windows passing source-identical evidence.
+'''
+
+[[milestone]]
+id         = 'ucu-14'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile v26.11.6 playback, metadata and security behavior'
+status     = 'In progress'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-13']
+acceptance = '''
+Rows260–271, fixed released v26.11.6 at
+d3a653346fc5f3080f54c93e6b2c6dfbf22a812e. Finite completion list:
+1. Audit fallback backgrounds, format hints and Next/FFmpeg compatibility.
+2. Reconcile generated-list refresh, local aspect ratios, JWT-disabled URLs
+   and applicable dependency behavior with persistence/decoded proof.
+3. Establish row271 Windows security advisory applicability from authoritative
+   evidence and fix/prove any affected behavior; an unavailable advisory is an
+   explicit external prerequisite, not a non-applicability disposition.
+   Maintainer amendment2026-11-07: defer this obligation as explicit unverified
+   debt ucu14-windows-advisory-applicability for later work. It does not block
+   current runtime publication or window closure after every other required
+   check passes. Never mark the advisory fixed, covered or inapplicable from
+   this deferral; resume the retained obligation when upstream details appear.
+4. Record all twelve dispositions and required software/emulation/platform
+   proof and final gates before advancing the baseline.
+Preserve the accepted baseline until the corresponding ordered dispositions and
+acceptance pass; do not relabel provisional ledger notes as acceptance. Keep
+Native and Next supported, stored choices, international audio/subtitles,
+teletext, private callbacks and accurate engine-specific Health. Preserve
+completed Phase9/UCU and independent DCI work. Reuse valid evidence; required
+focused/local final gates, affected headed browsers and actual Native/Next
+playback plus smoke/TSDuck where affected remain mandatory. Linux x64/Windows
+x64 and ARM64/ARMv7 builds/packages/emulation are required. Native ARM, macOS
+and approved unavailable hardware remain explicitly unverified/deferred. No
+macOS/paid work. Commit/push/merge, CI dispatch, dependency publication and
+application releases require applicable separate authorization. Retain exact
+source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
+are not waived; retry only affected failed CI checks and reuse verified artifacts.
+'''
+evidence = '''
+2026-11-07 maintainer accepts row271 as explicit unverified later work and resumes
+the goal. The owning parity debt is ucu14-windows-advisory-applicability. This
+supersedes the publication/closure block in the historical entries below; it
+does not prove applicability or a security fix. Other acceptance stays required.
+
+2026-11-07 row271 fixed-source and actual Windows-package investigation:
+all38 changed source files were compared through the exact v26.11.6 boundary.
+Row271 itself changes only CHANGELOG; no fixing revision is attributed to the
+advisory. Both official Windows archives match their GitHub SHA256 digests;
+104 files each,24 changed. The launcher is byte-identical. Embedded dependency
+manifests confirm .NET10.0.13 to10.0.14 and dependency changes; FFmpeg, Next,
+SkiaSharp, the ASP.NET host DLL and libvpl also differ. Archives were inspected,
+not executed. Upstream0378f80c restricts tokens and omits them when JWT is off;
+the equivalent already-tested ErsatzRS row268 behavior is preserved. This is
+security-relevant source evidence, not authoritative attribution of this GHSA.
+PR3120 and3118 supply no explanatory body or discussion. Both canonical GitHub
+advisory API endpoints still return404 with authorized access. Consequently
+row271 applicability remains an external prerequisite, not N/A or accepted.
+The maintainer has no additional details. Closure needs an authoritative fixing
+revision/advisory followed by applicability and affected proof; unchanged searches
+must not be repeated. Source/package/dependency inputs and findings:
+tmp/ucu14/security-source-audit/qualification.json and fixed-window.diff.
+
+Maintainer lead follow-up: inspect the earlier UCU13/v26.11.5 security-related
+startup correction as a possible carrier. Exact cabd33df/de2f6043 replace the
+named singleton mutex with a config-folder lock; the release notes attribute
+the crash to a .NET runtime security update. Microsoft documents the matching
+.NET10.0.13 Unix mutex scope/storage change and Linux/macOS vulnerability under
+GHSA-2j93-m82w-73j2, a different identifier. Primary references:
+https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/11/named-mutexes-unix-default-scope
+and https://github.com/dotnet/runtime/security/advisories/GHSA-2j93-m82w-73j2.
+This supports the UCU13 compatibility explanation; it does not establish
+equivalence to ErsatzTV's later Windows GHSA-qrh2-626h-76m2. PR3110/3111 contain
+no advisory linkage. The existing UCU13 lock component already passes all six
+ownership cases on Linux/native Windows and both ARM emulators; reuse that
+proof. Row271 remains unresolved. No acceptance or publication change follows.
+
+2026-11-07 row261 native Windows follow-up closes the same three grouped
+software playback obligations: custom/bundled error background and overlay-off,
+unchanged Burn/Convert emergency-card controls, and silent custom gap returning
+to the scheduled programme. First gap attempt correctly refused pre-created
+app data; only that case was retried with the required nonexistent owned path
+and passed. No source or acceptance change. Evidence:
+tmp/ucu14/background-proof/qualification.json native_windows_followup.
+This completes Linux/native Windows row261 software proof; required overall
+application/platform/window gates and the row271 advisory prerequisite remain.
+
+2026-11-06 registration only: all twelve SHA/subject pairs match the ordered
+upstream history; local and remote v26.11.6 tags resolve to the fixed terminal revision.
+Existing ledger notes are provisional triage, not current behavior verification.
+All twelve rows remain pending; UCU-13 acceptance is the predecessor.
+Independent compatible package while ARM execution is externally blocked:
+rows263/268 container hints and request-token forwarding are implemented locally.
+Exact source maps are in plans/upstream-catch-up.md. The existing AVI-only hint
+now has upstream's full extension table, retaining null unknowns, codec-derived
+image formats and all selectable tracks. Request boundaries share JWT-enabled
+forwarding and the exact nonempty ASCII JWT alphabet; valid tokens remain
+unchanged and disabled-JWT requests emit none. Native remains supported.
+Focused run3be0af25-b684-4ae1-820e-4057a2ecdacf passes28/28 in1.051s: all probe-
+hint regressions, token/verifier/middleware/preview-scope checks and actual
+Next master/variant routing, including new disabled-token omission while
+subtitles remain present. 3932 filtered cases are unrun, not acceptance.
+Strict affected infra/web all-target Clippy passes4m23s. No UI/code dependency
+change, browser run, final gate or platform acceptance is inferred.
+Actual decoded proof uses exact published FFmpeg2.0.9 archive9a31e3da and
+retained Next0.2.3-rs7 payload552d6e0f, verified against published checksums/
+GitHub digest and the app manifest. tmp/ucu14/runtime/inputs.json owns full IDs.
+The first copy testd8778b6f-62b5-41e6-aa60-bb4cf6e9c333 proves Matroska as its
+first subcase, then fails MPEG-TS's exact selected AAC payload assertion.
+Diagnostic run9257ec23-e555-4b96-8f80-44902e662a2c retains a failing TS fixture:
+all469 copied AAC payloads match the complete selected Dutch source, none
+matches English, and the ten-second reference omits the final captured frame.
+This establishes a test-reference boundary defect, not altered product audio.
+The test now extracts the complete60s synthetic reference to a file bounded
+at1MiB, retaining exact coded-payload comparison and existing subprocess bounds.
+The original negative and retained bytes remain under tmp/ucu14/; the diagnosis
+is mpegts-aac-diagnosis.json and the fixture is mpegts-copy-failed-fixture/.
+Corrected run8fd838f0-23c8-4950-9d75-e786e7cbc1dd passes2/2 in38.270s:
+Matroska and MPEG-TS preserve original H.264 slices and selected Dutch AAC,
+retain source dimensions/audio parameters and fully decode without errors.
+No Next/FFmpeg source, package or installation change was needed. The production
+container/token diff and affected paths have no outstanding serious finding.
+Final affected infrastructure all-target strict Clippy passes (see
+container-copy-final-clippy.log); formatting, new-allow policy, progress and
+diff checks pass. Rows263/268's local Linux container/token component is verified
+within that scope, with its finite proof/review stopping condition satisfied.
+Do not add adjacent token/URI variants. Required integrated Windows/ARM/final
+gates remain; this component does not accept UCU-14 ahead of UCU-13 or advance
+the accepted baseline. Native remains selectable and its routes, controls,
+stored profiles and existing channel selections are retained.
+Next bounded package: source-audit the fixed UCU-14 Next/FFmpeg runtime and
+fallback-background changes, identifying demonstrated gaps before proposing
+runtime amendments. UCU-13 ARM emulation still needs the existing Docker engine.
+
+
+Independent rows264/267 application-proof package: run
+bb6a9ef9-6859-49ed-a56b-576d2ceae1b1 passes18/18 in0.749s, with final affected
+infra all-target strict Clippy passing37.25s. Existing generated-list controls
+plus the new regression prove removal of stale and final unpublished members,
+exact related playout intent, stable linked playlist identity, unchanged-row
+stability and atomic rollback. Trakt remains retired under accepted ADR0069;
+its provider is not restored. Parser regressions preserve the primary video's
+anamorphic SAR/DAR separately from the other video and retain international
+tracks, square SAR default and unknown DAR. Source inspection confirms local
+success parses stdout only and scanner insert/update binds both ratios directly.
+Real scanner run38e23db9-e1d0-4000-9a6b-9ab905cbe44f passes1/1 in0.620s
+against the exact pinned published FFmpeg9/ffprobe. A synthetic anamorphic
+Matroska file has English/Dutch AAC and Dutch embedded captions. Initial scan
+persists SAR32:27/DAR16:9; a deep scan repairs deliberately corrupted ratios,
+preserves the MediaVersion ID, retains all four track metadata rows and leaves
+one version. This proves real Linux scanning/persistence and corrective deep
+scan, not rendered captions or decoded engine output. Final affected scanner
+all-target strict Clippy passes1m22s; formatting/new-allow/progress/diff checks
+pass. The finite local list/aspect proof component is verified within that
+scope and has no outstanding serious review finding. No product correction,
+UI change, Trakt restoration or baseline advance was needed; integrated
+platform/final/decoded gates remain mandatory. Do not expand this component
+with adjacent list-provider or ratio variants after closure.
+
+Current runtime-audit package closes with two concrete software negatives and
+proposed ADR0130; no new runtime build/adoption or source acceptance is claimed.
+Fixed terminal Next92e93d72c0e3694417a22207374b9d12cbf38087 and upstream
+FFmpeg4089c1301508a503d277ff94adc8ec2957946198 are resolved from exact pins.
+Current Next config schema0.1.2 lacks row261 background_image; upstream requires
+0.1.3. Existing session admission/authentication must survive the adaptation.
+Read-only FFmpeg comparison uses retained base source atd32b387f with exact
+whole delta6654fb23, matching published2.0.9 base-source provenance. All fourteen
+new non-macOS amendments are compared in isolated file copies: nine apply with
+fuzz0; five need reviewed QSV/AMF context adaptation. Applicability alone is not
+runtime proof; existing AMF VC-1 wrapper removal and context-only Rockchip delta
+are included in the proposed reconciliation. macOS-only0020 remains Deferred.
+Published2.0.9 payload50ee90f7 fails unchanged upstream sync-queue reproduction:
+301 held video frames with separate inputs versus limit30, shared input1.
+It also fails unchanged software-only MPEG-2 caption reproduction:1680 bytes on
+a frame versus93. Synthetic sample SHA18e95ec9 and reproducer SHA9002e4aa are
+retained with full identities in tmp/ucu14/ffmpeg-source-audit/. Both negatives
+are required before/after obligations, not hardware observations or fixes.
+ADR0130 proposes local Next92e93d72 and ErsatzRS-ffmpeg2.0.10 candidates,
+regression-led review/retirement of all ten existing Next corrections, retained
+FFmpeg9/drawvg/teletext/concat behavior and unchanged platform/final gates.
+No Native retirement, new hardware waiver, later upstream scope, remote push,
+CI, publication or production replacement is included. Maintainer acceptance
+is required under ADR0001 and skills/new-adr.md before dependent implementation.
+Independent application/source proof can continue while that decision is pending.
+
+Independent external-prerequisite check2026-11-06: both primary GitHub URLs
+for GHSA-qrh2-626h-76m2 (global advisories and ErsatzTV/legacy repository
+security advisories) return404. This proves only that public details were
+unavailable to that request, not non-applicability or the identity of a fix.
+Closure requires authoritative advisory/fix details or maintainer evidence
+sufficient for a source-level Windows applicability assessment. Preserve this
+security prerequisite; do not infer that the JWT row is its fix. Existing
+28-row scope remains fixed; no later upstream code is silently adopted.
+
+2026-11-07 row261 local producer/background component completed. Exact0db2f355
+source maps custom background.png before bundled _background.png for both
+emergency cards and no-filler admitted gaps. The producer sends schema0.1.3;
+Health accepts matching supported overlays. Missing/duplicate/invalid end bounds,
+changed SQL gaps and stale sessions remain refused. Filesystem lookup is followed
+by fresh publication admission and the existing SQL fence within the unchanged
+callback budget. Offline images add no persisted schedule row or watermark.
+Sixty distinct focused cases compose45 initial passes plus2 affected schema
+retries and14 final host/transport passes(overlap1). Final actual playback passes
+3/3 grouped tests: custom/bundled images independently decoded with error-overlay
+off retained, eight existing Burn/Convert error controls, and a silent yellow
+offline gap followed by the scheduled English programme and owned cleanup.
+Strict infra/web all-target Clippy, formatting, progress and architecture checks
+pass. Concrete lint findings only extract bounded functions; final affected
+runtime checks pass after those extractions and late publication fencing.
+Evidence: tmp/ucu14/background-proof/qualification.json and its named logs.
+This closes the local Linux component, not row/window acceptance or other
+application/platform/adoption/final proof. Native is unchanged. No pin advances.
+'''
+
+[[milestone]]
+id         = 'ucu-15'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile v26.12.0 while preserving Native'
+status     = 'In progress'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-14']
+acceptance = '''
+Rows272–285, fixed released v26.12.0 at
+53b3b42a02533ad8e72af09565b494f2b19e40fc, approved2026-11-07. No later moving
+main changes. Finite completion list:
+1. Preserve ErsatzRS Native as a supported selectable engine; adapt upstream
+   legacy removal/hiding without stored-choice migration or route retirement.
+2. Audit terminal Next/FFmpeg behavior: separate-input memory, low-frame-rate
+   NVENC, OpenCL detection, colour transitions, watermark continuity and
+   non-4:2:0/12-bit safety. Keep FFmpeg9; hardware proof stays scoped.
+3. Prove troubleshooting dossier inclusion, describe/contract capability
+   validation and bounded refresh, per-engine Health/profile warnings.
+4. Prove dependent playout freshness and unchanged-day write economy, required
+   codec hints and collision-free stable dynamic/unsaved occurrence identities.
+5. Prove applicable profile validation/save errors while Native fields and
+   stored profiles survive. Required changed UI is localized with SSR fallback.
+6. Record all fourteen dispositions and complete affected playback/platform and
+   final gates, exact identities and baseline advancement only after acceptance.
+Preserve the accepted baseline until the corresponding ordered dispositions and
+acceptance pass; do not relabel provisional ledger notes as acceptance. Keep
+Native and Next supported, stored choices, international audio/subtitles,
+teletext, private callbacks and accurate engine-specific Health. Preserve
+completed Phase9/UCU and independent DCI work. Reuse valid evidence; required
+focused/local final gates, affected headed browsers and actual Native/Next
+playback plus smoke/TSDuck where affected remain mandatory. Linux x64/Windows
+x64 and ARM64/ARMv7 builds/packages/emulation are required. Native ARM, macOS
+and approved unavailable hardware remain explicitly unverified/deferred. No
+macOS/paid work. Commit/push/merge, CI dispatch, dependency publication and
+application releases require applicable separate authorization. Retain exact
+source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
+are not waived; retry only affected failed CI checks and reuse verified artifacts.
+'''
+evidence = '''
+2026-11-07 authorized runtime source/CI checkpoint complete. FFmpeg2.0.10 source
+4be9c7aac9178c3e7bc762554db6e0f116ba4385 is pushed and integrated into its
+remote/main after run42351713434 passes all four existing-package jobs: Linux
+x64, ARM64/ARMv7 software emulation and native Windows. No packages were rebuilt.
+Exact manifest remains f08f3b3eb95fbfe78e9acdf0169fffcb149ff2037a567f9d498d073dd08368d2;
+the ten original candidate assets remain an unpublished draft. Docker publication
+run42351980078 is skipped by the committed no-build marker. CI metadata and four
+uploaded proof artifacts are retained in ffmpeg210/packaging/ci-verification.json
+and ci-artifacts/. Native ARM/unavailable hardware remain unverified.
+The Next025 recipe and accepted ADR checkpoint3bcf60f1 is pushed only to
+build/ucu15-next025-candidate; all other application edits remain local. Twelve
+recipe inputs match the staged release manifest/patches exactly. No application
+main integration, application CI/release or operator installation is authorized.
+Stable runtime publication is approved after CI and row271 security applicability;
+the latter remains unresolved after the ucu-14 source/package investigation.
+Do not repeat successful builds/tests or publish while that prerequisite remains.
+
+Later2026-11-07 maintainer amendment defers row271 as explicit unverified debt
+and removes that publication block. Both authorized runtime distributions are
+now published unchanged: FFmpeg v2.0.10 (ten assets, source4be9c7a) and Next
+next-0.2.5-c5cb065-ersatzrs.1 (27 assets, recipe3bcf60f1). All37 anonymous asset
+downloads match their qualified SHA256 values and GitHub digests. All four Next
+archives pass the existing staging verifier against source/patch/payload pins.
+Managed pins now select FFmpeg2.0.10/Next025 for required targets; frozen deferred
+package/source identities remain explicit. A demonstrated cross-revision
+provenance gap requires a complete per-package source context in existing
+Rust/Python verifiers; retained bytes must not inherit the new global source or
+compiler. Staging regressions pass29/29, including mixed-identity rejection.
+Evidence: tmp/ucu14/published-runtime-acquisition/verification.json and staging
+logs. Current application/managed native acceptance is still required.
+The maintainer also authorizes application checkpoint commits and integration
+of latest remote/main including PR124/b108ad5c; after required local acceptance,
+push, CI and green final integration are authorized. No application release or
+Docker publication. Preserve unrelated root/DCI changes and PR124's new teletext
+behavior; earlier evidence does not by itself qualify the combined source.
+
+2026-11-07 row278 product startup binding locally verified on Linux. Startup now
+constructs the qualified indexed owner before application ports capture it.
+Actual full-host Next025 playback creates a hash-valid index and no complete
+file; selected Dutch audio, captions, HLS/TS, preview, reconnect and owned cleanup
+pass. The published older Next023 control passes the same playback gate using
+complete files and no index. Its lack of describe and schema1.3 support were
+reproduced before correction: older versions keep schema1.2 without background
+extensions, while successor prereleases still undergo full qualification.
+Pure/finite configurations retain compatible schema1.2; current ordinary hosts
+use1.3 and qualified indexed hosts1.4. Native smoke and the matched web-bundle
+gate pass. Eleven startup/Health and36 legacy/config/protocol/host focused cases
+pass. Probe execution/identity failures remain visible; only a genuine missing
+contract permits the ordinary-host fallback. Evidence and retained original
+negatives: tmp/ucu14/final-gates/{older-next-smoke-schema-corrected,
+indexed-next-smoke-final,bundle-schema-corrected,legacy-contract-tests}.
+Required Linux transport acceptance now passes unchanged: Native93/93 and
+indexed Next Copy86/86, including the prescribed ordered pipeline transitions.
+The original600-second outer timeout included calibration generation; its
+negative is retained. The separate cold HLS URL trial passes structural clocks
+and delivers36.4seconds in20seconds, but flags rolling network delivery during
+buffered bursts; retain that additional observation without calling its URL
+gate green. The prescribed warm Native gate passes all unchanged checks.
+Strict lint composes the unchanged workspace passes with corrected infra and
+web all-target consumer retries; both demonstrated compile/lint failures are
+retained. Full nextest/doctests are running. Evidence:
+tmp/ucu14/final-gates/{native-tsduck-warm,indexed-copy-tsduck,web-final-clippy}.
+The subsequent native Windows application, affected ARM and final Rust results
+below close their named local components. Runtime publication/pins and production installation stay
+separately gated. Reuse unchanged FFmpeg/Next/infra component evidence.
+
+The subsequent required workspace run executes8445 cases:8442 pass; three fail.
+Two filesystem assertions were given a disposable state path without the
+required .ersatzrs suffix; the focused retry corrects only the gate environment.
+The optional-GPU startup case exposes a real row274 safety defect: native driver
+encoder rows were imported even when the selected FFmpeg did not advertise
+those encoders, generating false required-preset/tune errors. Intersect native
+encoder rows with the FFmpeg inventory; retain genuine advertised encoder
+checks and numeric limits. A portable injected regression covers no/partial
+encoder advertising. The focused version/filesystem retry now passes37/37,
+including the three failures and new portable regression. The composed current
+unit/integration result is8446 distinct passes, not a second full run. Strict
+FFmpeg all-target lint also passes; the named encoder-inventory component is
+complete. The canonical doctest invocation also passes across11 targets with
+no registered doctest cases; do not repeat
+the8442 unchanged passes. The original Windows build finishes successfully;
+a corrected build and its
+actual bundle/playback gates must run. Unstarted waiting observers were removed
+before they could test the pre-correction executable. This does not amend or
+invalidate the unchanged FFmpeg210/Next025 runtime packages. No acceptance or
+publication is advanced. Exact failures and commands: tmp/ucu14/final-gates/
+{rust-closeout.log,closeout-correction-commands.json}.
+
+Current source platform follow-up: ARM64 and ARMv7 web all-target type-checks
+pass with the configured target and pinned existing builders. Fresh ARM64 infra
+test binary passes63 selected software-emulated publication/recovery/config/
+protocol/legacy-host cases, including the changed schema controls. ARMv7's fresh
+infra binary/emulation also passes63/63. Static parity passes progress, formatting,
+architecture and hydration checks; existing broad unit/integration and strict
+lint evidence are reused rather than rerun by that wrapper. Dependency audit
+passes advisories/bans/licences/sources using the available advisory cache.
+The corrected native Windows executable passes bundle consistency and actual
+Native/Next decoded playback, selected tracks/captions, preview, reconnect,
+wrapper restart and owned cleanup. Its actual private index and every referenced
+day hash pass, with no Complete-format fallback. Current Linux server-only build,
+bundle and Native smoke also pass after the startup-check correction; unchanged
+indexed/older-reader playback and transport components retain their scoped proof.
+The server-only build cleared the shared frontend output; the initial Windows
+observer therefore failed input bookkeeping before running any playback. The
+warm frontend restoration passes and has exactly the prior qualified WASM hash;
+matched-site/ retains the20-file site separately from mutable build output.
+Both native structural bundle checks and subsequent actual playback pass with
+this matched source/assets pair. No browser interaction source changed; reuse
+the existing12 headed profile-editor results. Logs/identities are in final-gates/
+{windows-full-host-inputs.json,windows-full-host-layout.json,health-server-inputs.json,
+matched-site-identity.json,arm64-latest-emulation.log,armv7-latest-emulation.log}.
+Local functional/software/final-Rust components are complete within these scopes;
+four-target application package/CI delivery and ordered window acceptance remain
+open, along with publication/managed adoption and authoritative row271 details.
+Next's27-asset exact local publication candidate, including four unchanged
+archives and source/patch/licence/provenance/checksums, is staged at
+tmp/ucu14/next025/distribution-ready/. Its indexed-integration/distribution-ready.json
+binds the asset set. Publication/adoption and all retained debt remain gated.
+
+2026-11-07 ADR0131 indexed host/configuration component: actual prior-candidate
+negative demonstrates overlay layout downgrade; corrected patch0011 preserves
+indexed ownership and ordinary/normalization overlays. Exact292 source files
+plus provenance replay;33 affected reader/config cases and strict reader lint
+pass. Four corrected packages and Linux/native Windows/ARM-emulated bare-worker
+playback pass unchanged independent200-frame/Dutch-audio/caption oracles.
+Linux host indexed active-edit/no-op file content+mtime proof, complete-format
+refresh, finite troubleshooting and simultaneous normal AC3/browser AAC preview
+all pass; all six post-edit segments also independently decode with published209.
+Native Windows subsequently passes13 host/reader/Health/actual-playback checks
+plus35 filesystem/recovery/callback cases. Independent published209 decoding
+also verifies all eight Windows post-edit segments; strict infra/web lint passes.
+The indexed host component is complete within this local scope. Reuse
+unaffected455/13/660 source/schema/pipeline and earlier writer/recovery evidence;
+do not repeat unchanged FFmpeg cases. Exact successor recipe, archives, prior
+negative and proof: tmp/ucu14/next025/indexed-integration/qualification.json;
+packages-indexed/ retains new archives separately from the previous candidate.
+No production pin, window disposition or acceptance is advanced.
+
+2026-11-07 maintainer-approved scope extension: UCU-15 now includes rows283–285
+and ends at released v26.12.0 /53b3b42a02533ad8e72af09565b494f2b19e40fc.
+Independent task-mirror verification establishes all285 ordered SHA/subject
+pairs; original282 unchanged.254 accepted/31 pending. UCU-13/14 boundaries,
+acceptance, deferrals and delivery approvals are unchanged. The maintainer
+reaffirms retaining the supported/selectable Native engine and stored choices.
+Exact three diffs reviewed. Next0.2.5/c5cb065f differs from92e93d72 only in
+versions, FFmpeg pins and release notes; no crate source changed. Upstream
+FFmpeg8.1.2-8/83b9746e differs from4089c130 only in release notes/revision.
+Complete reviewed deltas/identities: tmp/ucu15-target-refresh/.
+Earlier proof retains its original source identity; this is not final-source
+binary qualification or runtime adoption. Proposed ADR0130 consolidates release
+identities; accepted ADR0131's decision remains unchanged. No interim build.
+Historical counts/targets below identify their original audit.
+
+2026-11-06: GitHub main and isolated Git fetch independently agree on terminal
+06c008b49964cb9d8232aa2804cd8533eb5576e1, committed10:50:59UTC. All282 ledger
+SHA/subject pairs match the complete ordered history from the initial anchor;
+254 remain accepted and28 pending. Four new rows279–282 were appended without
+changing any prior SHA/subject or accepted disposition. Their exact diffs were
+read for provisional triage; no implementation/behavior acceptance is claimed.
+The maintainer explicitly reaffirms retaining ErsatzRS Native. UCU-14 acceptance
+is the predecessor. UCU-12 cleanup evidence is retained under tmp/evidence/ucu12-v26.11.4/;
+retention.json owns the source/evidence relocation and safe local cleanup.
+
+Independent row280 local component verified2026-11-06 while runtime acceptance
+waits for proposed ADR0130. The production fallback callback regression first
+fails on2914fa07-13cb-4696-a659-165d362da709: successive unsaved occurrences
+both export ID0. selection::occurrence_id now retains saved numeric IDs and
+names unsaved wire items by media plus full start/finish seconds/nanoseconds.
+This prevents collisions at the persisted100ns precision while repeated
+callbacks/republication retain identity. Existing gap IDs already include the
+full interval; numeric media/callback bindings and database scheduling state
+are unchanged. No new dependency, runtime package or architecture is introduced.
+Run d2de7a04-0aca-42a0-ba73-274c39f0f83b passes57 affected selection/fallback/
+dynamic-timing cases in5.035s, including different media/fractional bounds,
+unchanged saved IDs, selected tracks, explicit Off, provider eligibility,
+source seeking and session/policy invalidation. Real published-Next fallback
+run ad3e3d04-70f9-454c-84bf-5906671b3be3 passes1/1 in13.951s: decoded Dutch
+captions/audio during filler, then the ordinary programme without captions and
+its original audio, with owned shutdown. This is a local affected-behavior
+proof, not new-runtime, Windows/ARM or full window acceptance.
+Strict infra all-target Clippy passes37.20s; formatting, new-allow, progress and
+diff checks pass. The scoped correction has no outstanding serious review
+finding and its stopping condition is met. Source hashes, original negative,
+run IDs and exact runtime input reference are in
+ tmp/ucu14/occurrence-id-proof.json. Keep this component complete within scope;
+remaining ordered-window/platform/decoded final gates stay mandatory. Next
+bounded package: row278 dependency/freshness and unchanged-publication audit,
+preserving the accepted single-manifest/SQL rollback and scheduling semantics.
+
+Row278 profile-scaling notification component verified locally: the existing
+save_profile_and_refresh compared only Copy state and ResolutionId, omitting
+ScalingBehavior. The minimal correction adds scaling to that same comparison;
+it uses the existing profile runtime port and does not stop sessions, rebuild
+schedules or alter stored Native choices. Run0ff014ae-60b6-4d5b-b6cd-3353f3029278
+passes2/2 in0.007s: Scaling/Copy/resolution notify the saved profile ID, unchanged/
+name/bitrate edits do not; typed failed lookup/save paths do not notify. Initial
+build failure was only a test-module path and executed no cases; preserve
+profile-scaling-focused.log alongside the corrected result. Strict app all-
+target Clippy passes33.93s. This proves the application notification decision,
+not complete dependent-set, live editor-to-file or window acceptance.
+Row278 dependent-notification functional proof is verified locally2026-11-06.
+ApplicationServices now snapshots watermark/deco/deco-template/group, playout,
+global FFmpeg-setting and media-source path-replacement dependencies before
+mutation, then queues the existing session update only after success. The
+selector includes active Next mirrors of either engine's affected source,
+excludes Native destinations and dormant mirror pointers, and deduplicates
+channel numbers. The host bounds dependency reads to5s and reuses normal-to-
+preview forwarding; it neither stops playback nor changes scheduling state.
+The FFmpeg-settings follow-up playout read now precedes commit, so a failed
+read cannot conceal already-persisted changes from the notifier.
+Run8d074108-c26f-4aab-a317-9a060e3f5ed5 passes10 cases: application ordering,
+failed capture/mutation, unreferenced edits, actual application watermark save/
+delete through migrated repositories and both registries, settings precommit
+failure and existing settings cases. Three dependency cases initially failed
+only because the fixture omitted required PlayoutTemplate.DateUpdated. Narrow
+retry21b7569e-3388-49f2-a187-3c3ea2d5d26a passes those3/3 in0.563s, including
+the full root/mirror matrix, global/nullable watermark settings and group-delete
+reference loss. No unaffected passing test was rerun for that fixture repair.
+Existing real Next refresh run e952bdb8-a575-45fd-9903-248d9dee5155 passes1/1
+in34.322s: schedule-clock picture and selected Dutch audio survive publication,
+with joined owned-session shutdown. The published Next/FFmpeg209 payloads and
+existing pinned MediaMTX were checksum-verified together; no runtime build or
+download was needed. These are composed local component proofs, not the final
+Windows/ARM/editor-to-file or ordered-window acceptance gates.
+Strict domain/app/infra/web all-target Clippy passes3m30s. Earlier failures
+were three documentation-backtick diagnostics; their corrections changed no
+behavior and invalidated no runtime proof. Formatting, architecture, new-allow
+policy, progress and diff checks pass. Scoped review finds no outstanding
+serious defect in the twelve application mappings, pre-delete capture,
+nullable global setting, active-mirror filtering or bounded notification path.
+Source hashes, exact input reference and retained initial compiler/fixture/lint
+failures are in tmp/ucu14/dependent-projection-proof.json and its referenced
+logs. This closes the local dependency-notification component and its stopping
+condition. It does not close write economy or the required integrated Windows/
+ARM/editor-to-file, ordered-window and final gates.
+Initial publication audit demonstrated the write-economy gap: the original
+publisher always created, serialized and synced a new whole manifest.
+Upstream's planner compares live items after a five-minute finished margin,
+keeps identical days untouched, updates changed far-future files and swaps the
+complete generation for active-horizon changes. ADR0095 already owns ErsatzRS's
+single atomic broad-window file rather than day-folder symlinks/junctions.
+A same-file byte comparison by itself is not proof of unchanged-day economy;
+resolve the required semantics against that accepted representation, preserving
+cancellation, source locks and reversible SQL/file publication. Do not silently
+claim a narrower optimization as full row278 acceptance.
+Accepted ADR0131 now records the required representation change:
+immutable daily chunks behind one atomically replaced versioned index, retaining
+existing reversible SQL/file admission. Exact fixed Next92e93d72 loader source
+has no index support; its capability-negotiated reader extension and bounded
+reclamation need accepted local runtime work under ADR0130 as well. Neither
+proposal has completed runtime adoption proof. ADR0131 is accepted2026-11-06 for
+local implementation/tests; ADR0130 remains Proposed. ADR0131 preserves daily-economy,
+visibility, rollback and platform acceptance requirements; it does not waive
+them. Local ADR0131 implementation/tests are authorized; broader successor
+runtime builds remain subject to the separate ADR0130 decision.
+ADR0131's ordinary daily planner/index writer is implemented and verified within
+its local Linux scope2026-11-06. ChannelPublisher::new_indexed opts into the
+ProgrammeClock partitioner, deterministic live-day hashes and immutable chunks;
+ordinary host construction remains Complete and Native retirement guards remain.
+Both committed refresh and real private-SQL preparation use the existing owned
+blocking worker, publisher/source admission, cancellation/deadline checks and
+atomic/reversible file replacement. No new dependency, worker or route exists.
+The initial run c539ded4-d14d-430d-be47-ca6beb86497f passes36/36 in2.415s.
+Its26 unaffected complete-file/coordinator/session cases are retained. After a
+concrete review correction, narrow run ec5d4765-1b78-488f-b5b7-7de2fe111a1e
+passes17/17 in2.560s: final indexed cases plus the four previously unselected
+host-publication cases. It proves stable unchanged index/day metadata, active
+and far-future edits, finished-only no-op/empty withdrawal, DST/day seams and
+full cross-midnight source/track/precision identity. Real file leases prevent
+reclamation of a reader's captured index across compensation. Forty accepted
+edits bound obsolete chunks; stale staging is reclaimed. A retained rollback
+index is detected before any deletion and yields RecoveryRequired while all
+its chunks remain available. A real pending SQL timeline removes one row;
+commit refusal restores exact index bytes and all accepted rows through the
+ordinary compensation owner. Busy readers use the existing retry path; source
+review confirms the host only acknowledges Published and bounds its100ms retry
+loop by the original deadline. No silent acknowledgement or scheduler Reset.
+Focused run8f47c175-17c2-49e8-9b6a-4d01c7407583 adds1/1 in0.153s: a conflict
+injected after staging the first day prevents the second, discards the entire
+candidate, preserves accepted bytes and the foreign conflicting object, then
+permits a successful retry. Together these are44 distinct focused cases, not
+an unnecessary repeated full suite. The first compile executed no cases because
+sha2-0.11 arrays require byte-wise hex formatting; it was corrected using the
+existing repository pattern. Strict domain/app/infra/web all-target Clippy
+passes3m21s after explicit-import/test-iterator corrections; no lint allowance
+was introduced. Formatting, architecture, new-allow policy, progress and diff
+checks pass. Scoped review found no remaining serious defect in this writer
+scope, including ownership/drop order, reader/GC admission, rollback evidence,
+symlink/path/hash/budget refusal and Windows-independent filesystem primitives.
+Existing real complete-format playback run f8f1bb71-35a1-48be-9a59-c528e2c6b6e5
+passes1/1 in34.241s: active refresh preserves schedule clock, decoded picture and
+selected Dutch audio, then joins the owned session/callback/RTSP server. Published
+rs.7/FFmpeg209/MediaMTX inputs were verified together against retained hashes.
+Only explicit imports, equivalent test iteration and the new staging-failure
+case followed that runtime pass; Complete behavior and runtime inputs did not
+change. No indexed-reader playback is inferred from that result.
+Source/run/input identities and retained initial negatives are owned by
+ tmp/ucu14/indexed-publication-proof.json and its referenced logs. This closes
+the local ordinary-writer package and its stopping condition; ADR0131 remains
+Partial and the row/window stays pending. The next necessary functionality for
+this same finite requirement is a qualified Next reader/shared lease/lookahead
+and capability/Health guard plus accepted-SQL startup recovery for retained
+rollback/corrupt derived state. Native Windows/ARM emulation, actual indexed
+playback and final acceptance remain required. No runtime pin, managed adoption
+or ordered-row disposition changed.
+Accepted-SQL recovery is now implemented and functionally verified locally.
+Each indexed owner begins unready; its first committed read regenerates the
+cache before private preparation. Ordinary committed refresh also heals a
+reused owner's missing/corrupt index or chunk. Cache validation errors are
+separated from private input validation, so a bad private projection neither
+repairs from uncommitted rows nor invalidates a healthy accepted cache.
+Recovery retains publisher/source admission, leases readers exclusively,
+reuses correct chunks, atomically repairs regular derived files, and retires
+rollback evidence only after the accepted-SQL index is visible. Cancellation
+before replacement retains the prior index/evidence; cleanup failure afterward
+retains published chunks and leaves startup unready for an idempotent retry.
+Owned cache growth is bounded, and foreign files/unsafe objects are preserved.
+Initial run00390f6f-b404-460f-a3d9-b7d35854f3d1 passes53/54 in2.165s, including
+all new recovery/restart/private-SQL/Native cases. The lone existing fixture
+attempted private publication without an accepted index; new startup policy
+correctly refuses it. Seeding that fixture through accepted empty-index startup
+fixes it: narrow retry6e61fb5b-1212-4184-b60f-a07dd644ef44 passes1/1 in1.654s.
+Additional focused run3095d628-df69-4257-9ea5-cfb5c2c9a638 passes1/1 in1.036s:
+an invalid private projection preserves the healthy cache and a valid retry
+can prepare immediately. These are55 distinct functional cases; no whole suite
+was rerun for the fixture correction. Strict domain/app/infra/web all-target
+Clippy passes1m54s after replacing a destination allocation with clone_into;
+that correction changes no path values or publication behavior. Formatting,
+architecture, new-allow, progress and diff checks pass. Existing real complete-
+format refresh run1d5ac027-750c-4b80-9129-7543a942a723 passes1/1 in34.113s:
+programme clock, decoded picture and selected Dutch audio survive publication,
+then owned process/callback/RTSP cleanup joins. The existing published runtime
+inputs were batch-verified by checksum. No indexed playback is inferred.
+This closes only the local filesystem/coordinator recovery component and its
+explicit stopping condition, with source/run/input identities in
+ tmp/ucu14/indexed-startup-proof.json. The original fixture failure is retained.
+No indexed-reader, native Windows/ARM or new-runtime acceptance is claimed.
+
+The local host callback-commit component is now verified2026-11-06. The existing
+blocking worker registers exact gaps after visible publication and before
+recovery cleanup/admission release, even when its async awaiter is cancelled.
+Fallback admission waits for that same owner before reading the active instance
+and gap set; private SQL retains its existing commit/compensation boundary.
+The wait shares the existing30-second resolution budget, holds no callback/source
+lock and releases admission before media resolution. Finite troubleshooting
+previews retain their own manifests; callback input creates no publishers.
+No new worker, service, route, dependency or Native change is introduced.
+Runfdeda9d3-d50f-4cf2-9e59-7bb796608d9e passes54/54 in3.733s, covering recovery,
+coordinator/private-SQL compensation, fallback and host publication. The new
+real-coordinator case blocks registry registration after the accepted index is
+visible, then injects cleanup refusal or cancels the awaiter: exact callbacks
+still resolve selected Dutch audio, normal/preview readers receive the interval,
+unrelated readers remain untouched and published chunks survive. Refused-before-
+visible recovery admits no new gaps; a waiting callback honors session revocation.
+Prepared host publication also retains registration through caller cancellation.
+Run28b81070-e2f8-4acb-9e40-cb8e70c1cbdd passes20/20 in1.414s, including the added
+29/30-second simulated timeout boundary and the existing standalone preview of
+a stored Native channel. These are56 distinct focused cases, not74 distinct
+tests. Initial compilation's method-visibility error and incremental compiler
+panic are retained; the corrected build succeeds without cleaning shared caches.
+Strict domain/app/infra/web all-target Clippy passes1m28s. Real complete-format
+refresh927a9dcf-5057-4f34-acdf-cdb11c989c71 passes1/1 in34.055s, preserving the
+programme clock, decoded picture and selected Dutch audio and joining its owned
+process/callback/RTSP cleanup. All four cached runtime payload checksums match.
+The existing indexed-startup-proof.json retains the initial recovery receipt and
+adds this follow-up's exact source/run/log identities. This closes the named
+local callback-integration blocker. Qualified reader/shared-lease/lookahead,
+capability/Health guard, indexed playback, native Windows/ARM and full final
+acceptance remain required. Ordinary host construction remains Complete.
+
+Broader successor builds await ADR0130; local index implementation/tests are
+authorized. Full ordered UCU and platform/final proof remain open; no pin
+advancement or remote delivery is authorized.
+
+Row275 local Linux dossier/archive component is verified2026-11-06. Exact
+ff5208ad source scans immediate subdirectories already; its correction recognizes
+channel/timestamp dossier names when flattening duplicate media-info names and
+normalizes other ZIP relative paths. Next writes media_info.json; the upstream
+next_media_info.json name is an archive collision rename. ErsatzRS's existing
+relative-path ZIP representation preserves both records without flattening;
+no production correction or deeper recursive traversal was needed.
+The existing actual Next preview now requires a nonempty worker media probe
+under its actual .troubleshooting_<timestamp>[_<item>] folder, byte-identical
+archive/disk content, the separately preserved host media-info record, and
+unique safe forward-slash ZIP paths. It retains completed short-output readiness,
+decoded selected Dutch audio/subtitles, persisted schedule identity and joined
+producer/callback cleanup. Run9b2a7e21-d543-4970-9cb3-7ec806577010 passes1/1
+in0.803s with published rs.7/FFmpeg209 inputs, using the existing synthetic
+preview rather than a new harness. Run42160d50-f4f6-493f-b32d-0ca3f78c62ad
+passes3/3 in0.027s for archive membership, duplicate-name preservation and the
+existing one-level boundary. No unaffected ordinary archive case was rerun
+after a test-helper extraction. Strict affected Clippy passes51.59s; formatting,
+new-allow policy, progress and diff checks pass. Scoped review finds no remaining
+serious defect in the changed test path or the source-to-archive behavior.
+The first attempt executed no tests because the helper collected Result names
+as Option. The corrected real preview passed eedb559e-059b-4e0b-8d30-9ceeeea0fad7;
+lint then required extracting archive-fetch code from the100-line preview helper,
+so only the affected actual case was rerun at final source. Retain these negative
+and corrected logs with tmp/ucu14/dossier-proof.json, which owns source hashes,
+run IDs and the existing runtime input reference. This closes the explicit local
+component stopping condition; successor runtime, native Windows/ARM and ordered
+window/final acceptance remain required, with no baseline advancement.
+
+Row279 unnamed-codec component is verified locally2026-11-06. Exact source
+ eadb613b7831dea9b84d06b42a9f1b5a4cc1a732 normalizes missing/empty/whitespace
+persisted video/audio/subtitle codecs to unknown. ErsatzRS now retains the
+complete hint, including container, duration, indexes and all other metadata;
+named codecs are unchanged. Fresh one-shot producer/retained validation remains
+strict, and unidentifiable still-image formats retain ordinary probing.
+Next also retains a recorded video's exact index when its codec is unnamed,
+including an existing valid pin. The existing complete metadata loader gains
+an internal Next-only unknown-codec policy; Native keeps its original absent/
+pinned-null-codec behavior. Version/index/kind/artwork validation is unchanged.
+The old unpinned path delegated selection to probing; it did not necessarily
+generate black. No database state, engine selection, dependency or runtime pin
+changes. No new FFmpeg/Next package is needed for this local component.
+Focused runb62be901-f61c-47fa-ac0a-ebdd733f7ae3 passes51/55 in5.056s, including
+both new codec-matrix/Native-policy cases, existing source-loader, strict producer,
+selection, provider/subtitle, track, artwork and graphics checks. Three selector
+fixtures require isolated persistent state; one old expectation rejects unnamed
+exact video pins instead of retaining their verified index under the new contract.
+Narrow retryaee72d8e-6dbd-4cd1-9164-88002f6f3a0b passes the corrected expectation;
+its three selectors still fail because only the cache/data override was set.
+Setting both task-local ERSATZRS_APP_STATE_DIR and ERSATZRS_APP_DATA_DIR fixes
+those3/3 in3.619s on c45d13fa-fea9-49f6-8720-522a4ceec4f1. These compose55
+passing distinct cases; none of the51 passing cases was rerun for those fixes.
+Actual published Next rs.7/FFmpeg209 playback
+ f16068c3-1781-42c2-99ff-0a102d6fb8d3 passes1/1 in1.530s: a null video codec and
+blank audio codecs export unknown while retaining Matroska, video0 and selected
+Dutch audio2. Captured picture is blue, decoded audio is880Hz rather than the
+unselected440Hz track, the whole capture decodes and the owned session joins.
+All four cached runtime payload checksums match; no runtime download or package build occurs.
+Strict domain/app/infra/web all-target Clippy passes1m34s. Source/run/input
+identities and retained original negatives are in tmp/ucu14/codec-hint-proof.json.
+This closes the named local stopping condition. Windows/ARM, successor/runtime,
+ordered-window and required final gates remain open. Existing nativeARM/macOS/
+hardware deferrals stay explicitly unverified. Next independent work is row282
+profile validation/save errors while retaining Native controls and saved profiles;
+ADR0130 successor-build authority remains pending.
+
+
+Row282 profile-editing component verified locally2026-11-06. Exact terminal
+06c008b4 changes hidden H264 normalization and save-error feedback. ErsatzRS
+retains all eight visible Native controls and valid stored choices. The shared
+editor normalizer changes incompatible high10 to high on10-to8-bit edits;
+raw application requests remain strictly validated. Hydrated save failures
+unwrap typed validation causes for translation. HTML errors use closed localized
+codes, including HDR codec/depth; arbitrary query text is never echoed. Fallback
+Add uses ordinary defaults, counts Unicode characters consistently with the
+application, and successful HTML saves end on the populated saved editor.
+Failed writes preserve SQL and draft/policy state. All nine cultures are covered.
+Focused run35687c81-efdd-40ee-ab07-0c8920fc9a4c passes22/22. Affected HTML/helper
+follow-up abed7bc5-21d9-4d73-b242-23084628a6e0 passes7/7; these compose22 distinct
+cases, not29. Initial headed browsers pass8/12; four no-JS Add cases time out
+because creation succeeds but the interactive list remains Loading without JS.
+The smallest correction redirects HTML success to the populated editor. It also
+invalidates four passing HTML Native-policy cases; all eight affected headed
+Chromium/Firefox EN/NL cases then pass in42.2s. Four unchanged hydrated-only
+cases retain their initial proof, composing12 distinct selected browser cases.
+Unicode creation, actual localized errors, HDR causes, rejected-write atomicity,
+Native fields/policy, responsive layouts and clean browser diagnostics pass.
+Both candidates and original failed traces are retained; no full final-source
+12-case rerun is claimed. Initial E0382 compiled no tests; the corrected static
+alert computes its visibility before moving its text into the view.
+Corrected app/web all-target strict Clippy passes2m38s; architecture/hydration
+lint pass with the31 existing suppressions unchanged. Matched SSR/WASM bundle
+verification passes. The bundle structural gate auto-selects an existing local
+FFmpeg9 override; playback is not inferred from that gate. Headed browser inputs
+reuse hash-verified published FFmpeg209/Next rs.7, without runtime builds or
+downloads. The task-local node_modules link reuses byte-identical package/lock
+files and installed locked Playwright1.62.1. Source/artifact/report hashes and
+composed scope are retained in tmp/ucu14/profile-editor-proof.json. A scoped
+web-only dev-cache prune reduced63GiB to39GiB after preserving the initial
+candidate; dependencies, unrelated caches and evidence remain intact.
+This closes the local profile-editing stopping condition. Required Windows/ARM,
+qualified reader/successor runtime, ordered-window and final gates stay open;
+Native remains supported. No accepted row/baseline/pin or authorization changed.
+
+
+ADR0131 fixed Next reader source component verified locally2026-11-06 against
+92e93d72c0e3694417a22207374b9d12cbf38087. Explicit playout.layout selects
+ersatzrs.playout-index.v1; ordinary folder mode remains the default. The reader
+holds the publisher-compatible shared lease through one index snapshot and
+selected/lookahead chunk reads. It validates closed bounded references, regular
+non-symlink files, SHA256 and aggregate bytes; malformed indexes never scan
+unreferenced files. Empty/future days retain gap lookahead and finite end
+semantics. Existing per-slot invalid/probe-hint behavior and selected tracks,
+full fractional timing and cross-midnight identity survive. Blocking reads run
+outside Tokio workers; lease contention retries for250ms then returns Busy.
+The additive channel schema becomes0.1.4 and describe.contract.playout_layouts
+advertises the exact extension. Both schemas are regenerated by their existing
+source generators; the two examples and schema descriptions remain consistent.
+Run0bb17190-bc0f-45a7-bd93-c7a989d9e606 passes31 affected loader/playout cases.
+Strengthened two-chunk concurrency follow-up16eb9bbd-4809-4f12-9c67-f81c59c29a20
+passes1/1:100 atomic generations with exclusive reclamation and1000 reader
+attempts retain matching current/future identities, not mixed snapshots.
+Config/explicit-mode proof9f332bd0-4c38-467d-9811-7c55a65aaee0 passes20/20;
+schema descriptions af6e8065-98f5-4ab2-ace6-4ba8db437745 passes1/1. These compose
+52 distinct cases, not53; initial7 reader passes overlap the later31. Final
+strict playout/channel lib/bin/tests Clippy and formatting pass. Exact-base
+clean patch application passes. No broad or hardware/runtime test is inferred.
+The first offline attempt lacked a cached dependency; permitted source fetch
+then exposed only compile corrections: redacted Selection Debug, sha2.11 hex
+formatting and an owned folder for spawn_blocking. These compiled no tests.
+Original negative logs remain. The only new lock identities are sha2.11 and its
+six transitive dependencies; existing locked versions are unchanged. This is
+not completion of ADR0130 dependency/patch-retirement qualification.
+The durable17-file patch, source/prepared lock and per-file hashes, explicit
+pending status and retirement condition are in
+scripts/release/next-patches/ucu15-indexed-playout/manifest.json. Existing
+ tmp/ucu14/indexed-publication-proof.json appends reader_source_followup while
+preserving earlier source/run identities. No production worker package, pin,
+managed adoption, Native behavior or ordinary host layout changed. The local
+source-component stopping condition is met. Application capability/Health
+admission, qualified successor and actual indexed/native Windows/ARM/final
+acceptance remain mandatory. Successor runtime work still awaits ADR0130.
+
+
+ADR0131 indexed admission/registered-Health component verified locally2026-11-06.
+A bounded managed describe probe validates version1, schema URI/numeric agreement,
+channel>=0.1.4, playout>=0.0.7, the exact immutable layout capability and the four
+playlist/subtitle/ready/heartbeat filenames. It emits only redacted typed errors.
+Process output is capped128KiB, execution5s and managed cleanup5s. Binary hashing
+uses bounded blocking I/O, rejects nonregular/empty/excess128MiB inputs and checks
+before/after describe. Automatic package hashes are checked before launch.
+Only a successful probe creates a private-field permit, bound to canonical path
+and bytes. Indexed publisher construction requires that permit. The host checks
+it before capacity/publication and again immediately before spawn after waits.
+Existing runtime acquisition/Health stores only successful permits, validates
+identity before executing a version command and refuses stale publication state.
+Failed describes cannot create a cached success; custom overrides remain
+unverified against published source. Ordinary Complete/Native selection is
+unchanged; this component does not enable indexed sessions or change pins.
+Initial f3a6e0db-9e6c-4a44-a757-4c9f3c8c27e5 passes25/28; three HTTP fixtures fail
+only because the sandbox denies loopback. Socket-enabled narrow retry
+ d59faa46-bc96-46b8-9442-52c5116b5267 passes17/17, including those three, affected
+permit tests and seven indexed coordinator/startup cases missed by the original
+filter. Follow-up81581527-3c85-4999-93d2-fab10155c6f9 passes9/9 for corrected
+checksum code, cache success/failure and host refusal with no output/publication
+or leaked registry/context. Final Health-order/cache proof
+ a8e8466f-451d-4fb7-98a3-417bfb36d6a1 passes2/2, including refusal to execute
+changed bytes even for version probing. These compose37 distinct cases, not
+all summed executions. Original negative logs remain.
+All four retained runtime payload hashes match the existing input receipt.
+Actual complete-format refresh d6661da6-9534-4455-8265-c063af96228e passes1/1
+in34.066s: clock, decoded picture/selected Dutch audio and owned cleanup survive
+the host changes. Its path is unchanged by the later Health-only ordering fix;
+no unnecessary playback rerun occurs. This is not indexed-runtime acceptance.
+Final infra all-target strict Clippy passes1m44. Initial checksum-code stack/
+formatting lint findings are corrected without new allows. Architecture lint,
+formatting, progress/new-allow/diff checks pass. Existing
+ tmp/ucu14/indexed-publication-proof.json appends admission_followup with source/
+run/input identities and scope, retaining all earlier evidence. No new service,
+dependency, schema migration, runtime candidate/package, selection or adoption.
+The named local stopping condition is met. Actual indexed configuration/overlay
+integration, the ADR0130-qualified successor and actual indexed/native Windows/
+ARM/final acceptance remain mandatory. Row/window dispositions stay pending.
+
+
+Row277 Native source-format safety component verified locally2026-11-07.
+Fixed Next28bcbf7d7b30fdb343b3cb2c4d2e63f351a89024 refuses non4:2:0/12-bit
+hardware decoding and normalizes output. Native persisted/fresh loaders instead
+discarded format names outside the five-format state enum; missing values were
+assumed8-bit and software output could omit required4:2:0 conversion. Original
+production-loader/command regressions both fail on
+ tmp/ucu14/native-pixel-format-red.log. SourceVideoStream now retains the raw
+name separately, distinguishes absent metadata and positively unmodeled inputs,
+and enforces the gate in capability and decoder selection even without a report.
+The existing NVENC software-filter/retained-encoder split handles these inputs;
+other backends retain their existing encoder/fallback policy. Software frames
+explicitly convert to the requested profile format after scaling. Known formats,
+copy mode, stored profiles/engine choices, track and existing HDR policies survive.
+No schema, dependency, runtime build/pin, or Native retirement is introduced.
+Health availability still describes accelerator families; source-sensitive
+can_decode now reflects format safety without falsely removing the accelerator.
+Initial selected run175 cases passes172; two new snapshots await review and one
+fixture binds a format into Codec without its PixelFormat binding. The corrected
+fixture asserts retained raw metadata; run346c4814-211b-4ae0-acd5-66ce3df160ce
+passes8/8, including the two reviewed snapshots. These compose175 distinct
+selected cases, not183 or a full-suite claim; the initial native_ filter also
+selected unrelated checks. Absent/known format commands, decoder/backend matrix,
+no-report fallback, Native null-codec policy and selected fresh/persisted metadata
+are covered. cargo-insta is unavailable in this environment: the two proposed
+snapshots were read and promoted directly; the passing rerun leaves no .snap.new.
+Actual software output fe1b9850-e84c-40c4-b2a0-1a3b8d494618 passes1/1 for two
+source formats,4:4:4 H264 and12-bit HEVC. After extracting bounded helpers for
+lint and retaining generated hardware commands, final test-source followup
+ a42cc83b-63f5-494f-affb-c27edd0a09c2 passes1/1. Source formats, complete decode,
+blue picture, Dutch880Hz instead of440/660Hz, output160x90 and8-bit4:2:0 pass.
+Native Windows then executes both exact generated NVENC commands successfully
+on device0 RTX3080Ti/driver617.42, about0.6s each. Only media input/output paths
+are translated to UNC; no Windows Rust rebuild is credited. Independent capture
+verification90d494b4-ca4f-4d77-b1b8-74f07816bf46 passes1/1 for both captures with
+the same decoded picture/audio/profile checks. This proves the actual native
+Windows FFmpeg/NVENC command path, not full Windows application acceptance or
+native Linux NVIDIA interop. Existing unavailable hardware/ARM/macOS debt remains.
+Installed Windows FFmpeg/ffprobe match the published2.0.9 provenance payload
+hashes bdaaec8d1541e5c6482b8fdef8585ae5fa2ea9eec36552548bf055c8d51f67aa /
+ c2f36bbcf957cbf77865015468f1e37678964e3b728841f76351414d4ec1a590.
+Provenance and SHA256SUMS match GitHub asset digests; the archive identity is
+6970a9dd90e763317c4fbe654d8f95f67c9acd66503c650e96497970379ae840.
+No128MB archive download, installation replacement, runner/process interruption
+or execution-policy change occurred. Script-file execution was disabled; only
+inline read-only inventory and task-owned command execution were used.
+Final ffmpeg/infra/web all-target strict Clippy passes1m41; architecture lint
+passes. Source/run/runtime/command/capture hashes and original negatives are in
+ tmp/ucu14/native-pixel-format-proof.json. The local stopping condition is met.
+Full Windows application, required ARM/build/package/emulation, affected
+smoke/TSDuck and window/final gates remain mandatory; qualified Next work still
+awaits ADR0130. All28 rows remain pending with the baseline unchanged.
+
+
+Row274 Native short-GOP NVENC component locally verified2026-11-07.
+Exact Next90049eff behavior reviewed. Actual Windows FFmpeg209 H2641fps with
+B frames allowed fails exit-22: GOP must exceed B frames plus one. Native now
+clamps short HLS GOPs using the numeric device limit; GOP<=2 disables B frames
+even without it. Encoder identity, not a software-filter fallback, owns this
+option. Ordinary known-limit GOP presets, explicit B-off, other accelerators,
+copy/non-HLS output and stored profiles are preserved. The existing native
+probe also rejected every C-style symbol's terminator through CString; trimming
+one terminator restores lookup. Its numeric NVENC cap is retained separately
+from B-reference support. Native Windows test e78e7b7c passes1/1, reporting
+H264max7/HEVCmax5. A CLI fallback fixture previously assumed no native driver;
+it now injects the absent-probe input rather than depend on host hardware.
+Focused composition:71 distinct Linux cases pass (69 unaffected original passes
+plus corrected CLI and new limit-mapping cases). Final affected24613142 passes
+3/3, including the strengthened GOP boundary matrix. New argv snapshot reviewed;
+existing affected snapshots pass. Initial snapshot, encoder/graph selection,
+native-probe and fixture negatives are retained, not relabeled as passes.
+All four final generated1fps H264/HEVC B-on/off commands exit0 on the verified
+installed native Windows209 payload. The runner owns only its new processes;
+correct per-output working directories preserve each fMP4 init. Earlier shared-
+init captures are not credited as complete HLS proof. Independent Linux full
+capture decode proves8frames/8seconds,1fps,160x90/yuv420p, keyframes at0/2/4/6
+seconds, two4second segments, ENDLIST and the expected blue picture for4/4.
+Final strict hwprobe/ffmpeg all-target lint passes9.23s after explicit test-type
+cleanup; architecture, formatting, new-allow and progress checks pass. Source,
+runtime, command/capture hashes, exact run IDs and original negatives live in
+ tmp/ucu14/native-nvenc-timing-proof.json. No runtime package/pin or dependency
+changes. The named local stopping condition is met. Windows Rust/application,
+Next successor, required ARM/package/emulation and affected smoke/TSDuck/final
+acceptance remain mandatory. Native Linux GPU interop and approved hardware/
+nativeARM/macOS debt remain unverified. No UCU row/window or baseline advanced.
+
+
+Row276 Native still-watermark software component verified2026-11-07.
+Exact Next8cb37069 and fixed c5cb065f synthetic reconfiguration fixture reviewed;
+fixture blob3d9efa398b60ee86df75df857dcda20a00736707 /SHA256
+0eef01959b089e8e80a68865a805c6765532248b32a9b359ccac3095371791c1 has60video
+frames and changes profile/level/colour tags. Original Native209 output loses
+the watermark from frame15. Input repetition alone is timing-dependent and
+extends natural EOF; both original negatives are retained. The final Native
+pipeline repeats ordinary stills at input, rebases their frames before time-
+dependent effects and ends the overlay with its primary. Explicit animation/
+custom timing remains intact. A zero-margin VAAPI multiple-watermark branch
+uses the existing software-overlay gate so shortest is not silently discarded;
+hardware encoding remains selected. One-shot image descriptors/probes, primary
+track/timing and other graphics paths survive. No schema/dependency/runtime pin.
+Nine composed Linux runtime scenarios pass: finite/natural PNG, WebP, single-
+frame GIF and JPEG XL, plus a configured PNG fade. All544 decoded frames retain
+the expected image/phase; natural output timestamps exactly match the unchanged
+unwatermarked Native reference. This accounts for Native's61-frame CFR result
+without weakening the clock check to a tolerance. The initial shared finite/
+fade artifact path invalidated those captures; separate final paths and scoped
+reruns are retained. The first fade fixture disabled its filter after zero alpha,
+restoring the original image; the corrected enable window stays through item end.
+Native Windows209 executes the exact generated PNG command successfully0.209s,
+with only path binding translated; independent decode confirms all60 frames.
+The actual HTTP-logo command makes exactly one request through reconfiguration
+and independently decodes all60 marked frames. Task-owned child/server shutdown
+is terminal; unrelated processes/containers/caches are preserved.
+Initial focused338 cases pass315;15 reviewed snapshots, one exact argv assertion
+and seven read-only default-state fixtures are corrected.23/23 scoped retry
+passes with a private task state directory. Additional zero-margin VAAPI case
+and the overlapping two component unit cases pass3/3:339 distinct composed
+cases, not a fresh full-suite run. Fifteen final snapshots are reviewed; initial
+prototype snapshot states are not credited as final producer evidence.
+Final ffmpeg/infra all-target strict Clippy passes51.95s; formatting, architecture,
+new-allow and progress checks pass. Source/runtime/fixture/command/capture hashes,
+exact run IDs, composition and all negatives: tmp/ucu14/native-reconfiguration-proof.json.
+Native OpenCL soname applicability audit is also complete: exact Next03c05228
+changes its Rust loader to libOpenCL.so.1. Native delegates to FFmpeg; the verified
+Linux209 CLI reaches libnvidia-opencl.so.1 without opening libOpenCL.so, then
+returns no available OpenCL platform(-1001). Dynamic dependency/loader trace is
+retained. This proves neither an OpenCL device nor Intel/VAAPI tonemap operation.
+Next's fixed source contains the correction; successor runtime qualification
+still awaits ADR0130. The named Native software stopping condition is met.
+Hardware colour transitions, Windows Rust/packaged application, required ARM/
+package/emulation and affected smoke/TSDuck/final gates remain mandatory.
+NativeARM/macOS/approved hardware debt stays unverified. No row/window or pin advances.
+
+
+2026-11-07 ADR0130 accepted: local consolidated Next0.2.5/c5cb065f and FFmpeg
+2.0.10/FFmpeg9 implementation, builds and tests are authorized, including the
+accepted ADR0131 reader extension. Commit/push, GitHub CI, publication/adoption
+and production installation retain separate boundaries. The maintainer requests
+autonomous work through at least2026-11-07 08:00 Europe/Amsterdam(07:00UTC).
+The available Windows NVIDIA followup now proves the published209 Native CUDA
+command fails at the colour change after15 of60frames, exit-40 from overlay_cuda
+to auto_scale_0. Required filters are present; initial encoding succeeds. Exact
+command/export/source/capture/partial-probe evidence is appended as hardware_followup
+in tmp/ucu14/native-reconfiguration-proof.json. Retain the same regression for
+FFmpeg0032 qualification under the now accepted runtime decision.
+Host Docker was unavailable; no existing Desktop/backend process was running.
+Starting Desktop restores Linux Engine29.8.2 and relevant cached dependency images;
+there were no running containers. No restart/engine switch/socket mount/prune.
+An isolated build/ucu15-ffmpeg210 worktree is based on clean runtime main e267ec7.
+Existing main, UCU12 worktree, image identities and all evidence remain intact.
+The Native software component remains completed within its documented scope;
+this separate actual hardware failure does not erase its passing evidence.
+
+2026-11-07 successor component: local Linuxx64 and Windowsx64 FFmpeg2.0.10
+builds pass using exact cached dependency images. FFmpeg9's scheduler requires
+UNCHOKE_ALL as its third wakeup argument; the concrete compile failure and warm
+object retry are retained. The unchanged separate-input repro now holds4 frames
+(previous301; limit30); skipped MPEG-2 captions are60bytes on all30 frames
+(previous1680; maximum93). Ordinary Linux runtime/AV1, SVG, WebP, sparse streams,
+selected alternate audio and teletext scripts pass; the exact-library ICC/EXIF
+cleanup harness also passes. Required ARM and full package/runtime gates remain.
+The unchanged Windows CUDA command advances beyond the old graph-format error,
+then exposes upload-context replacement at the encoder. A stable named CUDA
+filter device plus shared uploads fixes that concrete Native failure without
+changing mixed Vulkan routing. The exact re-exported Native command passes on
+Windows, then the independent published209 decoder proves60 frames and the same
+original watermark blue-difference assertion (minimum252). Copy receives no new
+filter-device option. CUDA/NVENC54/54 focused checks and strict ffmpeg lint pass;
+the237 pipeline cases compose235 initial passes plus2 affected retry passes,
+and final copy-guard strict lint passes.
+Evidence and negatives: tmp/ucu14/ffmpeg210/ and the successor_component field in
+native-reconfiguration-proof.json. This closes only the named Native GPU command
+component; Windows application, Next integration/adoption, ARM/emulation and
+unchanged final gates remain open. No hardware debt is upgraded or pin advanced.
+
+2026-11-07 local FFmpeg successor software/package component closes: all four
+required2.0.10 archives pass safe extraction, exact executable/architecture,
+source/build/applied-patch inventories and their existing runtime software suite.
+Actual-library ICC/EXIF cleanup passes on Linux/native Windows and both ARM
+emulators. Unchanged separate-input scheduling, skipped MPEG-2 captions and
+heartbeat bounds pass on all four; ARM64 packed NV15/NV20 unpacking passes.
+Readrate source-clock and clean Bookworm runtime gates pass. The initial package
+copies lacked Phase9 libzvbi source/notices; exact per-RID dependency recipes
+stage original41477c97(x64/Windows) andd3a5ee9f(ARM) source/license archives.
+The strengthened verifier rejects the retained incomplete archive, then accepts
+all four corrected archives. Source inventory does not replace compiler/image
+provenance, which remains retained. Final immutable candidate manifest is
+f08f3b3eb95fbfe78e9acdf0169fffcb149ff2037a567f9d498d073dd08368d2.
+Evidence: tmp/ucu14/ffmpeg210/acceptance.json and packaging/complete-archive-verification.json.
+This completes local software/package qualification, not integrated application,
+published download/CI, hardware or managed-adoption acceptance. Keep all explicit
+native hardware and macOS debt unverified. No commit/push/publication is authorized.
+
+Next025 source now replays12 exact patches onto292 files. The additional patch
+only declares the verified existing repository MIT license and existing025
+internal path versions; it preserves the lock and Rust behavior. Initial full
+policy failures are retained; the final four-target worker passes advisories,
+licenses, bans and sources. Source/reader455 cases and13 core/schema-description
+checks pass. All four required local binaries build. Unpatched actual copied
+captions still exceed the immutable outpoint(634501 vs597691 ticks); ARM64
+stock describe falsely advertises MPP hardware with no drivers, while the
+corrected private-companion probe rejects empty initialized sets. Remaining
+independent corrections, actual worker/software/integration and full platform/
+window gates remain open. No source application pin or stored Native selection changes.
+
+2026-11-07 local Next025 bare-worker component completed within source/build/
+package/software scope: all four required exact12-patch archives pass provenance,
+payload and companion hashes;455 source/reader and13 schema cases, strict lint,
+660 serial software playback and10 actual integration compatibility cases pass.
+Clean Bookworm, native Windows software/CUDA H264/HEVC and both ARM emulators
+preserve all200 frames, selected880Hz Dutch audio and independent subtitle masks.
+Only removing0005 from the final source selects unusable RGA with no initialized
+codecs; the complete candidate safely takes whole-channel software fallback.
+Unchanged strict2164/2143 retained source-frame/caption/audio/transport/cleanup
+and grouped ordinary single-use delivery pass. Actual exact-stock controls fail
+at missing finite-cut/single-use negotiated hints, before a new physical timing
+claim; original physical negatives remain retained. All ten existing corrections
+remain required. Existing MIT/internal-version metadata correction closes the
+complete four-target dependency policy without changing the security lock.
+Canonical exact inputs, negative controls and package hashes:
+tmp/ucu14/next025/qualification.json. This closes the local bare-worker package,
+not row/window acceptance, full application/indexed playback, managed acquisition,
+publication/CI or unavailable native hardware. Production pins stay unchanged.
+
+
+2026-11-07 affected Native successor follow-up complete: freshly generated
+commands from the CUDA-corrected source run with exact local Windows FFmpeg210
+f9f3b9f3. All six pass: H2644:4:4 and HEVC12bit sources retain software decode,
+selected Dutch audio, blue picture and normalized8bit4:2:0 output, each50 frames;
+four H264/HEVC1fps B-frame-on/off combinations preserve all eight frames,
+timestamps0..7, keyframes0/2/4/6 and8s HLS duration. Existing unchanged Rust
+capture verification and independent published209 Linux decoding pass. Runtime
+and source/command hashes, process exits and complete decode observations:
+tmp/ucu14/ffmpeg210/native-followup/qualification.json. This revalidates the
+commands affected by the named-device correction; retained API-limit and unit
+proof remains source-identical. No new Windows application or native Linux GPU
+acceptance, production installation or unavailable-hardware claim follows.
+'''

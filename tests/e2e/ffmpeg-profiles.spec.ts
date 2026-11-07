@@ -337,7 +337,7 @@ test.describe('native-only profile guidance', () => {
         await expect(fallback.locator('select[name="video_profile"]')).toHaveValue('high444p');
         await expectApplicabilityContained(fallbackPage, 320);
         await fallback.getByRole('button', { name: save, exact: true }).click();
-        await expect(fallbackPage).toHaveURL(/\/ffmpeg$/);
+        await expect(fallbackPage).toHaveURL(new RegExp(`${href}$`));
         expect(nativePolicy(id)).toBe(baseline);
         await page.goto(href);
         await waitForHydration(page);
@@ -349,6 +349,145 @@ test.describe('native-only profile guidance', () => {
         await page.request.post('/admin-api/settings/ui/save', {
           form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
         });
+      }
+    });
+  }
+});
+
+test.describe('row282 profile validation and save feedback', () => {
+  test.skip(!dbPath, 'Requires the disposable E2E database for saved profile proof');
+
+  for (const language of ['en-us', 'nl']) {
+    const save = language === 'nl' ? 'Profiel opslaan' : 'Save Profile';
+    const add = language === 'nl' ? 'Profiel toevoegen' : 'Add Profile';
+    const setLanguage = async (page: Page, value: string) => {
+      await page.request.post('/admin-api/settings/ui/save', {
+        form: { is_dark_mode: 'true', language: value }, maxRedirects: 0,
+      });
+    };
+
+    test(`depth changes and hydrated save errors retain Native policy (${language})`, async ({ page }) => {
+      test.setTimeout(60_000);
+      let id: string | undefined;
+      await setLanguage(page, 'en-us');
+      try {
+        const name = uniqueName('Depth Policy');
+        await gotoAddProfile(page);
+        const editor = page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]');
+        await editor.locator('input[name="name"]').fill(name);
+        await editor.locator('select[name="video_profile"]').selectOption('main');
+        await editor.locator('select[name="bit_depth"]').selectOption('1');
+        await expect(editor.locator('select[name="video_profile"]')).toHaveValue('high10');
+        await editor.locator('select[name="bit_depth"]').selectOption('0');
+        await expect(editor.locator('select[name="video_profile"]')).toHaveValue('high');
+        await expect(editor.locator('[data-native-engine-only]')).toHaveCount(8);
+        await editor.getByRole('button', { name: 'Add Profile', exact: true }).first().click();
+        await expect(page).toHaveURL(/\/ffmpeg$/);
+        const href = await page.getByRole('row').filter({ hasText: name }).locator('a[href^="/ffmpeg/"]').first().getAttribute('href');
+        id = href?.match(/\/(\d+)$/)?.[1];
+        if (!id || !href) throw new Error('Created profile has no numeric ID');
+        sqlite(`UPDATE "FFmpegProfile" SET "ThreadCount"=3,"NormalizeColors"=1,"AllowBFrames"=1 WHERE "Id"=${id};`);
+        const baseline = nativePolicy(id);
+        await setLanguage(page, language);
+        await page.goto(href);
+        await waitForHydration(page);
+        await editor.locator('select[name="video_profile"]').selectOption('high10');
+        await editor.getByRole('button', { name: save, exact: true }).first().click();
+        await expect(page.getByText(language === 'nl'
+          ? 'Videoprofiel mag niet high10 zijn bij 8-bit h264.'
+          : 'Video Profile cannot be high10 with 8-bit h264.', { exact: false })).toBeVisible();
+        expect(nativePolicy(id)).toBe(baseline);
+        await expect(page).toHaveURL(new RegExp(`/ffmpeg/${id}$`));
+        await editor.locator('select[name="video_profile"]').selectOption('high');
+        const duplicate = sqlite('SELECT "Name" FROM "FFmpegProfile" WHERE "Id"=1;');
+        await editor.locator('input[name="name"]').fill(duplicate);
+        await editor.getByRole('button', { name: save, exact: true }).first().click();
+        await expect(page.getByText(language === 'nl'
+          ? /Er bestaat al een FFmpeg-profiel met de naam/
+          : /An FFmpeg profile named/)).toBeVisible();
+        await expect(editor.locator('input[name="name"]')).toHaveValue(duplicate);
+        expect(nativePolicy(id)).toBe(baseline);
+        expect(sqlite(`SELECT "Name" FROM "FFmpegProfile" WHERE "Id"=${id};`)).toBe(name);
+      } finally {
+        if (id) sqlite(`DELETE FROM "FFmpegProfile" WHERE "Id"=${id};`);
+        await setLanguage(page, 'en-us');
+      }
+    });
+
+    test(`no-JS Add, depth changes and actual errors preserve saved policy (${language})`, async ({ page, browser, baseURL }) => {
+      test.setTimeout(60_000);
+      let id: string | undefined;
+      const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+      await setLanguage(page, language);
+      try {
+        const fallbackPage = await context.newPage();
+        const name = uniqueName('界'.repeat(26));
+        expect(name.length).toBeLessThanOrEqual(50);
+        expect(Buffer.byteLength(name, 'utf8')).toBeGreaterThan(50);
+        await fallbackPage.goto('/ffmpeg/add');
+        const form = fallbackPage.locator('.ffmpeg-profile-noscript form');
+        await form.locator('input[name="name"]').fill(name);
+        await form.locator('select[name="hardware_acceleration"]').selectOption('0');
+        await form.locator('select[name="video_format"]').selectOption('1');
+        await form.locator('select[name="bit_depth"]').selectOption('1');
+        await form.getByRole('button', { name: add, exact: true }).click();
+        await expect(fallbackPage).toHaveURL(/\/ffmpeg\/\d+$/);
+        const href = new URL(fallbackPage.url()).pathname;
+        id = href.match(/\/(\d+)$/)?.[1];
+        if (!id) throw new Error('Fallback Add did not create a profile');
+        await expect(form.locator('input[name="name"]')).toHaveValue(name);
+        expect(sqlite(`SELECT "BitDepth","VideoProfile" FROM "FFmpegProfile" WHERE "Id"=${id};`)).toBe('1|high10');
+        sqlite(`UPDATE "FFmpegProfile" SET "ThreadCount"=3,"NormalizeColors"=1,"AllowBFrames"=1 WHERE "Id"=${id};`);
+        const expected = nativePolicy(id).split('|');
+        expected[2] = 'high';
+        await fallbackPage.goto(href);
+        await form.locator('select[name="bit_depth"]').selectOption('0');
+        await form.getByRole('button', { name: save, exact: true }).click();
+        await expect(fallbackPage).toHaveURL(new RegExp(`${href}$`));
+        await expect(form.locator('select[name="video_profile"]')).toHaveValue('high');
+        expect(nativePolicy(id)).toBe(expected.join('|'));
+        const baseline = nativePolicy(id);
+        await fallbackPage.goto(href);
+        await form.locator('input[name="name"]').fill(sqlite('SELECT "Name" FROM "FFmpegProfile" WHERE "Id"=1;'));
+        await form.getByRole('button', { name: save, exact: true }).click();
+        await expect(fallbackPage).toHaveURL(/\?error=duplicate$/);
+        await expect(fallbackPage.getByRole('alert')).toContainText(language === 'nl'
+          ? 'Er bestaat al een FFmpeg-profiel met deze naam.'
+          : 'An FFmpeg profile with this name already exists.');
+        expect(nativePolicy(id)).toBe(baseline);
+        await form.locator('select[name="video_format"]').selectOption('3');
+        await form.locator('select[name="bit_depth"]').selectOption('1');
+        await form.getByRole('button', { name: save, exact: true }).click();
+        await expect(fallbackPage).toHaveURL(/\?error=mpeg2-ten-bit$/);
+        await expect(fallbackPage.getByRole('alert')).toContainText('10-bit');
+        expect(nativePolicy(id)).toBe(baseline);
+        await form.locator('input[name="name"]').fill('');
+        await form.getByRole('button', { name: save, exact: true }).click();
+        await expect(fallbackPage).toHaveURL(/\?error=name-required$/);
+        await expect(fallbackPage.getByRole('alert')).toContainText(language === 'nl'
+          ? 'Profielnaam is verplicht.' : 'Profile name is required.');
+        expect(nativePolicy(id)).toBe(baseline);
+        expect(sqlite(`SELECT "Name" FROM "FFmpegProfile" WHERE "Id"=${id};`)).toBe(name);
+        // A valid saved HDR profile must retain the actual reason when an HTML
+        // edit selects an incompatible codec or depth, without committing it.
+        sqlite(`UPDATE "FFmpegProfile" SET "VideoFormat"=2,"BitDepth"=1,"OutputDynamicRange"=1,"VideoProfile"=NULL WHERE "Id"=${id};`);
+        const hdrBaseline = sqlite(`SELECT "VideoFormat","BitDepth","OutputDynamicRange" FROM "FFmpegProfile" WHERE "Id"=${id};`);
+        const hdrNative = nativePolicy(id);
+        await fallbackPage.goto(href);
+        await form.locator('select[name="video_format"]').selectOption('1');
+        await form.getByRole('button', { name: save, exact: true }).click();
+        await expect(fallbackPage).toHaveURL(/\?error=hdr-codec$/);
+        await expect(fallbackPage.getByRole('alert')).toContainText('HDR10');
+        await form.locator('select[name="bit_depth"]').selectOption('0');
+        await form.getByRole('button', { name: save, exact: true }).click();
+        await expect(fallbackPage).toHaveURL(/\?error=hdr-depth$/);
+        await expect(fallbackPage.getByRole('alert')).toContainText('10-bit');
+        expect(nativePolicy(id)).toBe(hdrNative);
+        expect(sqlite(`SELECT "VideoFormat","BitDepth","OutputDynamicRange" FROM "FFmpegProfile" WHERE "Id"=${id};`)).toBe(hdrBaseline);
+      } finally {
+        await context.close();
+        if (id) sqlite(`DELETE FROM "FFmpegProfile" WHERE "Id"=${id};`);
+        await setLanguage(page, 'en-us');
       }
     });
   }

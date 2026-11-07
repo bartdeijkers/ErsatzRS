@@ -1,7 +1,15 @@
 //! Prove copying with compressed payload identity, not codec names alone.
 use super::*;
 
-async fn capture(root: &Path, clip: &Path, codecs: (&str, &str), watermark: bool) -> PathBuf {
+#[path = "codec_hint_runtime_tests.rs"]
+mod codec_hints;
+
+async fn capture(
+    root: &Path,
+    clip: &Path,
+    codecs: (Option<&str>, Option<&str>),
+    watermark: bool,
+) -> PathBuf {
     let profile = FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::Copy,
         audio_format: FFmpegProfileAudioFormat::Copy,
@@ -163,12 +171,22 @@ async fn assert_copied_video(ffmpeg: &Path, source: &Path, output: &Path) {
 #[tokio::test]
 #[ignore = "requires real Next and FFmpeg 9; compares compressed selected-stream payloads"]
 async fn real_next_copies_selected_payloads_without_applying_fallback_normalization() {
+    assert_selected_payload_copy("mkv").await;
+}
+
+#[tokio::test]
+#[ignore = "requires published Next/FFmpeg9; checks MPEG-TS container hints and selected copy payloads"]
+async fn real_next_mpegts_container_hint_preserves_selected_payloads() {
+    assert_selected_payload_copy("ts").await;
+}
+
+async fn assert_selected_payload_copy(extension: &str) {
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
     let root = tempfile::tempdir().unwrap();
-    let clip = root.path().join("fixture.mkv");
+    let clip = root.path().join(format!("fixture.{extension}"));
     generate_clip(&ffmpeg, &clip).await;
-    let saved = capture(root.path(), &clip, ("h264", "aac"), false).await;
+    let saved = capture(root.path(), &clip, (Some("h264"), Some("aac")), false).await;
     let mut probe = Command::new(ffprobe);
     probe
         .args(["-v", "error", "-show_streams", "-of", "json"])
@@ -181,17 +199,36 @@ async fn real_next_copies_selected_payloads_without_applying_fallback_normalizat
     assert!(streams
         .iter()
         .any(|s| s["codec_name"] == "aac" && s["sample_rate"] == "48000" && s["channels"] == 1));
-    let source_audio = elementary(&ffmpeg, &clip, "0:a:1", "adts").await;
+    // Next's live seek can shift the captured interval by an AAC frame. Compare
+    // against the complete synthetic source, retaining exact payload identity.
+    // Write to a bounded file rather than exceeding tool's stdout limit.
+    let reference = root.path().join("reference.aac");
+    let mut extract = Command::new(&ffmpeg);
+    extract
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(&clip)
+        .args(["-map", "0:a:1", "-t", "60", "-c", "copy", "-f", "adts"])
+        .arg(&reference);
+    tool(extract).await;
+    assert!(tokio::fs::metadata(&reference).await.unwrap().len() <= 1024 * 1024);
+    let source_audio = tokio::fs::read(reference).await.unwrap();
     let copied_audio = elementary(&ffmpeg, &saved, "0:a:0", "adts").await;
     let source_frames = aac_frames(&source_audio);
     let copied_frames = aac_frames(&copied_audio);
     assert!(copied_frames.len() >= 40, "need a useful copy interval");
-    assert!(
-        copied_frames
-            .iter()
-            .all(|frame| source_frames.contains(frame)),
-        "AAC payloads must match the selected alternate track exactly"
-    );
+    if !copied_frames
+        .iter()
+        .all(|frame| source_frames.contains(frame))
+    {
+        tokio::fs::write(root.path().join("copied.aac"), &copied_audio)
+            .await
+            .unwrap();
+        let retained = root.keep();
+        panic!(
+            "AAC payloads must match the selected alternate track exactly; synthetic evidence retained at {}",
+            retained.display()
+        );
+    }
     assert_copied_video(&ffmpeg, &clip, &saved).await;
     let mut decode = Command::new(ffmpeg);
     decode
@@ -199,6 +236,9 @@ async fn real_next_copies_selected_payloads_without_applying_fallback_normalizat
         .arg(saved)
         .args(["-f", "null", "-"]);
     tool(decode).await;
+    println!(
+        "Verified {extension}: persisted container hint, original video slices, selected Dutch AAC and full decode"
+    );
 }
 
 #[tokio::test]
@@ -217,7 +257,7 @@ async fn real_next_copy_profile_transcodes_unsupported_codecs_with_profile_setti
         .args(["-map", "0", "-c:v", "ffv1", "-c:a", "pcm_s16le"])
         .arg(&clip);
     tool(convert).await;
-    let saved = capture(root.path(), &clip, ("ffv1", "pcm_s16le"), false).await;
+    let saved = capture(root.path(), &clip, (Some("ffv1"), Some("pcm_s16le")), false).await;
     let mut probe = Command::new(ffprobe);
     probe
         .args(["-v", "error", "-show_streams", "-of", "json"])
@@ -270,7 +310,7 @@ async fn real_next_copy_profile_omits_graphics_and_preserves_selected_payloads()
     let root = tempfile::tempdir().unwrap();
     let clip = root.path().join("fixture.mkv");
     generate_clip(&ffmpeg, &clip).await;
-    let saved = capture(root.path(), &clip, ("h264", "aac"), true).await;
+    let saved = capture(root.path(), &clip, (Some("h264"), Some("aac")), true).await;
     let mut probe = Command::new(ffprobe);
     probe
         .args(["-v", "error", "-show_streams", "-of", "json"])
@@ -335,7 +375,7 @@ async fn real_next_avi_hint_preserves_picture_and_selected_audio() {
         .args(["-map", "0", "-c", "copy", "-bsf:v", "h264_mp4toannexb"])
         .arg(&avi);
     tool(remux).await;
-    let saved = capture(root.path(), &avi, ("h264", "aac"), false).await;
+    let saved = capture(root.path(), &avi, (Some("h264"), Some("aac")), false).await;
     let mut probe = Command::new(runtime_path("ERSATZRS_NEXT_TEST_FFPROBE"));
     probe
         .args(["-v", "error", "-show_streams", "-of", "json"])

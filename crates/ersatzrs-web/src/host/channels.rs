@@ -41,6 +41,33 @@ impl NativeChannelRuntime {
 
 #[async_trait]
 impl ChannelRuntime for NativeChannelRuntime {
+    async fn playout_projection_dependents(
+        &self,
+        change: ersatzrs_domain::PlayoutProjectionChange,
+    ) -> Result<Vec<String>, ChannelRuntimeError> {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            ersatzrs_infra::next_engine::dependents::channel_numbers(&self.pool, change),
+        )
+        .await
+        .map_err(|_| ChannelRuntimeError::unavailable("playout dependency lookup timed out"))?
+        .map_err(|_| ChannelRuntimeError::unavailable("playout dependencies could not be loaded"))
+    }
+
+    async fn refresh_playout_projections(
+        &self,
+        mut channels: Vec<String>,
+    ) -> Result<(), ChannelRuntimeError> {
+        channels.sort();
+        channels.dedup();
+        for number in channels {
+            // The normal registry forwards to previews; queue only, never stop
+            // playback or wait for the bounded publication worker here.
+            self.hls_sessions.playout_updated(&number).await;
+        }
+        Ok(())
+    }
+
     fn observe_teletext_output(
         &self,
         channel_id: EntityId,
@@ -254,3 +281,7 @@ mod tests {
         assert_eq!(old.touches.load(Ordering::Relaxed), 0);
     }
 }
+
+#[cfg(test)]
+#[path = "projection_refresh_tests.rs"]
+mod projection_refresh_tests;

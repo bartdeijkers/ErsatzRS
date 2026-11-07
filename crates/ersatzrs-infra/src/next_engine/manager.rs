@@ -47,6 +47,7 @@ pub struct NextRuntimeAcquisition {
     pub published_pin_verified: bool,
     folder: PathBuf,
     split_bundle: bool,
+    indexed_reader: Option<super::indexed_runtime::IndexedReaderPermit>,
 }
 
 /// Runtime source, without exposing operator paths.
@@ -82,6 +83,9 @@ pub enum NextRuntimeError {
         "accepted Next runtime cannot start; check package permissions and platform dependencies"
     )]
     Execution,
+    /// Indexed publication requires a successfully described, unchanged reader.
+    #[error("Next indexed reader contract is unavailable or has changed")]
+    Contract,
     /// Persistent state cannot be read/staged/published safely.
     #[error(
         "Next runtime state is inaccessible; check the persistent state directory permissions"
@@ -143,9 +147,37 @@ struct Package {
     distribution_version: Option<String>,
     distribution_tag: Option<String>,
     patches: Option<Vec<Patch>>,
+    source_identity: Option<SourceIdentity>,
+}
+
+/// Retained packages keep the source identity that produced their immutable bytes.
+#[derive(Clone, Deserialize)]
+struct SourceIdentity {
+    upstream_revision: String,
+    source_archive_sha256: String,
+    prepared_lock_sha256: String,
 }
 
 impl Package {
+    fn source_identity<'a>(&'a self, manifest: &'a Manifest) -> (&'a str, &'a str, &'a str) {
+        self.source_identity.as_ref().map_or_else(
+            || {
+                (
+                    manifest.upstream_revision.as_str(),
+                    manifest.source_archive_sha256.as_str(),
+                    manifest.prepared_lock_sha256(),
+                )
+            },
+            |source| {
+                (
+                    source.upstream_revision.as_str(),
+                    source.source_archive_sha256.as_str(),
+                    source.prepared_lock_sha256.as_str(),
+                )
+            },
+        )
+    }
+
     fn version<'a>(&'a self, manifest: &'a Manifest) -> &'a str {
         self.distribution_version
             .as_deref()
@@ -198,6 +230,7 @@ impl Manifest {
         // A deferred platform retains one complete identity, never a mixture
         // of the new filename/tag and the older source patch set (ADR 0128).
         if !matches!(override_count, 0 | 3)
+            || (package.source_identity.is_some() && override_count != 3)
             || [package.version(self), package.tag(self)]
                 .iter()
                 .any(|value| {
@@ -347,15 +380,13 @@ fn verify_files(
     let origin: serde_json::Value =
         serde_json::from_slice(files.get("origin.json").ok_or(NextRuntimeError::Identity)?)
             .map_err(|_| NextRuntimeError::Identity)?;
+    let (revision, source_archive, prepared_lock) = package.source_identity(manifest);
     for (name, expected) in [
         ("kind", "patched-source-build"),
         ("repository", manifest.upstream_repository.as_str()),
-        ("source_revision", manifest.upstream_revision.as_str()),
-        (
-            "source_archive_sha256",
-            manifest.source_archive_sha256.as_str(),
-        ),
-        ("cargo_lock_sha256", manifest.prepared_lock_sha256()),
+        ("source_revision", revision),
+        ("source_archive_sha256", source_archive),
+        ("cargo_lock_sha256", prepared_lock),
         ("distribution_version", package.version(manifest)),
         ("rid", rid),
         ("target", package.target.as_str()),
@@ -433,6 +464,7 @@ fn automatic_result(
         published_pin_verified: true,
         folder,
         split_bundle,
+        indexed_reader: None,
     })
 }
 
@@ -522,6 +554,7 @@ async fn acquire(
             version,
             published_pin_verified: false,
             split_bundle: false,
+            indexed_reader: None,
         });
     }
     let check_config = config.clone();
@@ -844,6 +877,11 @@ pub async fn validate_published() -> Result<(), NextRuntimeError> {
     let Some(accepted) = accepted else {
         return Ok(());
     };
+    validate_selected(&accepted).await
+}
+
+async fn validate_selected(accepted: &NextRuntimeAcquisition) -> Result<(), NextRuntimeError> {
+    validate_indexed(accepted).await?;
     if accepted.source == NextRuntimeSource::Override {
         if super::version::probe_binary(&accepted.binary)
             .await
@@ -855,11 +893,99 @@ pub async fn validate_published() -> Result<(), NextRuntimeError> {
         return Ok(());
     }
     validate_automatic(
-        &accepted,
+        accepted,
         Manifest::accepted()?,
         super::version::probe_binary(&accepted.binary),
     )
     .await
+}
+
+async fn validate_indexed(accepted: &NextRuntimeAcquisition) -> Result<(), NextRuntimeError> {
+    if let Some(reader) = &accepted.indexed_reader {
+        reader.health().await.map_err(indexed_runtime_error)?;
+    }
+    Ok(())
+}
+
+fn indexed_runtime_error(error: super::indexed_runtime::IndexedRuntimeError) -> NextRuntimeError {
+    use super::indexed_runtime::IndexedRuntimeError;
+    match error {
+        IndexedRuntimeError::Contract => NextRuntimeError::Contract,
+        IndexedRuntimeError::Identity => NextRuntimeError::Identity,
+        IndexedRuntimeError::Probe => NextRuntimeError::Execution,
+    }
+}
+
+/// Qualify the already selected runtime for indexed publication and register
+/// its byte identity with the existing Health path. This never acquires a new
+/// package or changes the runtime/engine selection.
+/// # Errors
+/// Refuses an unavailable/changed published runtime or unsupported describe data.
+pub async fn qualify_indexed_reader(
+) -> Result<super::indexed_runtime::IndexedReaderPermit, NextRuntimeError> {
+    let accepted = RESOLVED
+        .read()
+        .map_err(|_| NextRuntimeError::Storage)?
+        .clone()
+        .ok_or(NextRuntimeError::Contract)?;
+    let reader = qualify_selected_indexed(&accepted).await?;
+    let mut published = RESOLVED.write().map_err(|_| NextRuntimeError::Storage)?;
+    let current = published.as_mut().ok_or(NextRuntimeError::Contract)?;
+    register_indexed(current, &accepted, reader.clone())?;
+    Ok(reader)
+}
+
+async fn qualify_selected_indexed(
+    accepted: &NextRuntimeAcquisition,
+) -> Result<super::indexed_runtime::IndexedReaderPermit, NextRuntimeError> {
+    validate_selected(accepted).await?;
+    if let Some(reader) = &accepted.indexed_reader {
+        return Ok(reader.clone());
+    }
+    let expected_hash = if accepted.published_pin_verified {
+        let manifest = Manifest::accepted()?;
+        let name = accepted
+            .binary
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(NextRuntimeError::Identity)?;
+        Some(
+            manifest
+                .package(&accepted.rid)?
+                .payload_sha256
+                .get(name)
+                .cloned()
+                .ok_or(NextRuntimeError::Identity)?,
+        )
+    } else {
+        None
+    };
+    let reader = super::indexed_runtime::IndexedReaderPermit::qualify(
+        &accepted.binary,
+        expected_hash.as_deref(),
+    )
+    .await
+    .map_err(indexed_runtime_error)?;
+    Ok(reader)
+}
+
+fn register_indexed(
+    current: &mut NextRuntimeAcquisition,
+    expected: &NextRuntimeAcquisition,
+    reader: super::indexed_runtime::IndexedReaderPermit,
+) -> Result<(), NextRuntimeError> {
+    if current.binary != expected.binary
+        || current.source != expected.source
+        || current.version != expected.version
+        || current.rid != expected.rid
+        || current.folder != expected.folder
+        || current.split_bundle != expected.split_bundle
+        || current.published_pin_verified != expected.published_pin_verified
+    {
+        return Err(NextRuntimeError::Contract);
+    }
+    current.indexed_reader = Some(reader);
+    Ok(())
 }
 
 // The lazy probe must not be polled until the automatic package is trusted.

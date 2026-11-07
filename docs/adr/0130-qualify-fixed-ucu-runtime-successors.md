@@ -16,6 +16,14 @@ integration, application CI/release and operator installation remain separately
 gated. The maintainer has no additional advisory details; investigate the fixed
 ErsatzTV source and published Windows packages without inferring non-applicability.
 
+Later amendment, 2026-11-07: the maintainer approves retaining the unresolved
+row271 applicability obligation as explicit unverified later-work debt and
+resumes the goal. This removes that prerequisite from the already-authorized
+runtime publication sequence. Verification, exact assets, all other required
+acceptance and application/operator authorization boundaries remain unchanged.
+The owning record is `ucu14-windows-advisory-applicability` in the baseline
+catch-up parity file; no advisory fix or non-applicability is accepted.
+
 ## Implementation
 
 Partial overall; the local FFmpeg2.0.10 source/build/package/software component

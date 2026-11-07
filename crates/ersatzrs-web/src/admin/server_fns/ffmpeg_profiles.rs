@@ -2,6 +2,14 @@ use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[path = "ffmpeg_profile_editor_options.rs"]
+mod editor_options;
+#[cfg(feature = "ssr")]
+pub(crate) use editor_options::profile_save_server_error;
+pub(crate) use editor_options::{
+    h264_profile_for_bit_depth, profile_form_error_message, profile_save_feedback,
+};
+
 /// Lightweight row for the `FFmpegProfile` list table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FfmpegProfileListRow {
@@ -123,7 +131,7 @@ impl FfmpegProfileForm {
 }
 
 #[cfg(feature = "ssr")]
-fn ffmpeg_profile_form_into_admin(
+pub(crate) fn ffmpeg_profile_form_into_admin(
     form: FfmpegProfileForm,
 ) -> ersatzrs_app::commands::FfmpegProfileAdminForm {
     ersatzrs_app::commands::FfmpegProfileAdminForm {
@@ -623,7 +631,7 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
             form: ffmpeg_profile_form_into_admin(form),
         })
         .await
-        .map_err(ServerFnError::new)
+        .map_err(profile_save_server_error)
 }
 
 #[cfg(all(test, feature = "ssr"))]
