@@ -45,6 +45,10 @@ release section when tagging a release.
 
 ### Changed
 
+- ADR 0120 now lets ErsatzRS deliver custom pages from the teletext element
+  library itself, next to add-ons. It sets the rules for fields, refresh,
+  conflicts with add-on page ranges, failures and revisions. Broadcasting
+  custom pages is not implemented yet.
 - The channel teletext page (`/channels/{id}/teletext`) is reorganised into
   clearly bounded sections: a one-sentence status line with the broadcast
   checklist folded away, a page set that lists every page number and its
