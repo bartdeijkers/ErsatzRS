@@ -51,29 +51,16 @@ release section when tagging a release.
   identity. Native remains selectable. The unresolved ErsatzTV Windows advisory
   is recorded as explicit, unverified follow-up work approved by the maintainer.
 
-- Track the next upstream catch-up as three fixed windows after the accepted
-  v26.11.4 baseline, through the fixed v26.12.0 release. ErsatzRS retains
-  its Native engine, stored engine choices and Native profile controls.
-  The new rows remain pending until their behavioral acceptance passes.
-  Accepted ADR 0130 consolidates the required Next/FFmpeg 9 runtime work after
-  reproducing separate-input queue growth and MPEG-2 caption overflow in the
-  current package; it does not claim a fixed or newly adopted runtime.
-  ADR 0131 adds an opt-in atomic daily Next playout publisher that retains
-  unchanged day files and coordinates index/SQL rollback. Ordinary sessions
-  retain the complete-file format. Accepted-SQL startup recovery repairs the
-  opt-in derived cache without changing the timeline. Exact fallback gaps follow
-  the owned visible-file commit even after cleanup failure or caller cancellation;
-  callback admission waits within its existing timeout. Indexed publishers require
-  a described reader permit bound to the selected executable; session admission
-  and runtime Health reject changed identities. Startup binds ordinary playback and browser
-  preview sessions to the indexed directory only after qualifying the selected
-  reader; older readers keep complete-file publication with their compatible
-  schema and without unsupported background extensions. Overlays
-  cannot redirect or downgrade its publication owner. Health recognizes the
-  indexed schema, and failed identity/process probes remain startup errors. Local Linux decoded
-  playback preserves selected tracks, programme clocks and independent preview
-  shutdown through active edits. Production enablement, managed successor
-  adoption and remaining platform/window acceptance remain pending.
+- Bring the upstream catch-up through ErsatzTV v26.12.0 while retaining Native
+  alongside Next, stored engine choices and Native profile controls. Next can
+  publish daily playout files through one atomic index, retain unchanged days,
+  and refresh active channels when profiles, watermarks or decorations change.
+  Publication and SQL rollback remain coordinated; accepted-state recovery
+  repairs derived files without changing the timeline. Reader qualification,
+  private callback ownership and Health checks prevent incompatible sessions.
+  Older readers retain complete-file publication with a compatible schema.
+  Preview sessions keep independent ownership and shutdown. Indexed overlays
+  cannot replace or downgrade the publication directory.
 
 - ADR 0120 now lets ErsatzRS deliver custom pages from the teletext element
   library itself, next to add-ons. It sets the rules for fields, refresh,

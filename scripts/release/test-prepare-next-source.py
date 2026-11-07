@@ -18,7 +18,7 @@ class SourceReviewTests(unittest.TestCase):
     def test_current_patch_is_verified(self):
         value = module.reviewed_manifest()
         self.assertTrue(value["patches"])
-        self.assertEqual(value["adr"], "0128")
+        self.assertEqual(value["adr"], "0130;0131")
 
     def test_new_revision_cannot_silently_reuse_patch(self):
         with self.assertRaisesRegex(ValueError, "retirement assessment"):
