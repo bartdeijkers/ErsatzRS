@@ -422,8 +422,9 @@ test.describe('media browser action parity', () => {
     await gotoHydrated(page, `/media/music/songs?query=${encodeURIComponent(seed.songTitle)}`);
     await expect(page.getByRole('heading', { name: 'Songs' })).toBeVisible();
     await expect(page.getByText(seed.songTitle)).toBeVisible();
+    // With JavaScript the page size applies on selection; Apply is the no-JS fallback.
+    await expect(page.getByRole('button', { name: 'Apply' })).toBeHidden();
     await page.getByRole('combobox', { name: 'Rows per page' }).selectOption('25');
-    await page.getByRole('button', { name: 'Apply' }).click();
     await expect(page).toHaveURL(/page_size=25/);
     await waitForHydration(page);
     await expect(page.getByText(seed.songTitle)).toBeVisible();

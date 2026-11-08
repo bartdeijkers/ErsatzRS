@@ -144,3 +144,9 @@
         transition: none;
     }
 }
+
+/* With JavaScript the page size applies on selection (pagination-auto-apply.js);
+   the Apply button remains the no-JavaScript submitter. */
+:global([data-pagination-auto-apply]) .apply {
+    display: none;
+}

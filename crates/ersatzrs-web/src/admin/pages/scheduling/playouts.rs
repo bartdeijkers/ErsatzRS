@@ -23,6 +23,7 @@ use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::form::{CheckBox, TextField};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::pagination::PaginationControls;
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
@@ -75,6 +76,7 @@ fn PlayoutsIsland(
     // -- list state --
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
+    let list_page_size = RwSignal::new(LIST_PAGE_SIZE);
     let add_menu_open = RwSignal::new(false);
 
     let current_list_rows = RwSignal::new(initial_rows);
@@ -83,7 +85,8 @@ fn PlayoutsIsland(
     let list_rows: LocalResource<Vec<PlayoutListRow>> = LocalResource::new(move || {
         let query = search.get();
         let page = page.get();
-        async move { load_or_notify(list_playouts(query, page, LIST_PAGE_SIZE).await, load_toast) }
+        let page_size = list_page_size.get();
+        async move { load_or_notify(list_playouts(query, page, page_size).await, load_toast) }
     });
     let list_count: LocalResource<u64> =
         LocalResource::new(
@@ -115,6 +118,7 @@ fn PlayoutsIsland(
     });
     let show_filler = RwSignal::new(initial_show_filler);
     let detail_page = RwSignal::new(0u32);
+    let detail_page_size = RwSignal::new(DETAIL_PAGE_SIZE);
 
     // Refresh the persisted Show Filler preference after hydration.
     let filler_pref: LocalResource<bool> = LocalResource::new(move || async move {
@@ -132,10 +136,11 @@ fn PlayoutsIsland(
         let id = selected_id.get();
         let filler = show_filler.get();
         let page = detail_page.get();
+        let page_size = detail_page_size.get();
         async move {
             match id {
                 Some(id) => load_or_notify(
-                    list_playout_detail_items(id, filler, page, DETAIL_PAGE_SIZE).await,
+                    list_playout_detail_items(id, filler, page, page_size).await,
                     load_toast,
                 ),
                 None => Vec::new(),
@@ -501,7 +506,7 @@ fn PlayoutsIsland(
                     </table>
                 </div>
 
-                <PlayoutPager page=page total=list_total page_size=LIST_PAGE_SIZE/>
+                <PlayoutPager page=page total=list_total page_size=list_page_size/>
 
                 // ---- detail section ----
                 <section
@@ -568,7 +573,7 @@ fn PlayoutsIsland(
                             </table>
                         </div>
 
-                        <PlayoutPager page=detail_page total=detail_total page_size=DETAIL_PAGE_SIZE/>
+                        <PlayoutPager page=detail_page total=detail_total page_size=detail_page_size/>
                     </div>
                 </section>
             </section>
@@ -1060,78 +1065,39 @@ fn detail_row(
     }
 }
 
-/// Prev/next pager footer with a range label. `total` is the raw
-/// resource-backed count; it is read inside `<Suspense>` so the resource read
-/// stays inside a tracked boundary (mirrors `PagedTable`).
+/// Shared pagination footer for the playout list and detail tables.
 #[component]
-fn PlayoutPager(page: RwSignal<u32>, total: Signal<Option<u64>>, page_size: u32) -> impl IntoView {
-    use crate::admin::i18n::{item_count, range_of, rows_per_page};
-
-    let go_prev = move |_| page.update(|p| *p = p.saturating_sub(1));
-    let go_next = move |_| {
-        let total_items = total.get().unwrap_or(0);
-        let max = total_items.saturating_sub(1) / u64::from(page_size.max(1));
+fn PlayoutPager(
+    page: RwSignal<u32>,
+    total: Signal<Option<u64>>,
+    page_size: RwSignal<u32>,
+) -> impl IntoView {
+    let go_prev = Callback::new(move |()| page.update(|p| *p = p.saturating_sub(1)));
+    let go_next = Callback::new(move |()| {
+        let total_items = total.get_untracked().unwrap_or(0);
+        let max = total_items.saturating_sub(1) / u64::from(page_size.get_untracked().max(1));
         page.update(|p| {
             if u64::from(*p) < max {
                 *p += 1;
             }
         });
-    };
+    });
+    let change_size = Callback::new(move |value: u32| {
+        page_size.set(value.max(1));
+        page.set(0);
+    });
 
     view! {
-        <Suspense fallback=move || {
-            view! {
-                <div class=style::pagination>
-                    <span>{move || rows_per_page(page_size)}</span>
-                    <div class=style::page_btns>
-                        <button class=style::page_btn disabled=true>"‹"</button>
-                        <button class=style::page_btn disabled=true>"›"</button>
-                    </div>
-                </div>
-            }
-        }>
-            {move || {
-                total
-                    .get()
-                    .map(|total_items| {
-                        view! {
-                            <div class=style::pagination>
-                                <span>{move || rows_per_page(page_size)}</span>
-                                <span>
-                                    {move || {
-                                        let p = page.get();
-                                        let start = p * page_size + 1;
-                                        let end = ((p + 1) * page_size)
-                                            .min(u32::try_from(total_items).unwrap_or(u32::MAX));
-                                        if total_items == 0 {
-                                            item_count(0)
-                                        } else {
-                                            range_of(start, end, total_items)
-                                        }
-                                    }}
-                                </span>
-                                <div class=style::page_btns>
-                                    <button
-                                        class=style::page_btn
-                                        disabled=move || page.get() == 0
-                                        on:click=go_prev
-                                        title=tr(TextKey::PreviousPage)
-                                    >"‹"</button>
-                                    <button
-                                        class=style::page_btn
-                                        disabled=move || {
-                                            total_items == 0
-                                                || u64::from((page.get() + 1) * page_size) >= total_items
-                                        }
-                                        on:click=go_next
-                                        title=tr(TextKey::NextPage)
-                                    >"›"</button>
-                                </div>
-                            </div>
-                        }
-                    })
-            }}
-        </Suspense>
+        <div class=style::pagination>
+            <PaginationControls
+                page=page.into()
+                total=total
+                page_size=page_size.into()
+                on_previous=go_prev
+                on_next=go_next
+                on_page_size_change=change_size
+            />
+        </div>
     }
 }
 

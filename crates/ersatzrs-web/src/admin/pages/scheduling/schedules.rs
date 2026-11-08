@@ -6,8 +6,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::i18n::{
-    media_item_fallback_label, range_of, schedule_error_message, schedule_item_fallback_label, tr,
-    TextKey,
+    media_item_fallback_label, schedule_error_message, schedule_item_fallback_label, tr, TextKey,
 };
 use crate::admin::server_fns::schedules::{
     copy_schedule, defer_schedule_items, delete_schedule, get_schedule_form,
@@ -28,6 +27,7 @@ use crate::admin::server_fns::schedules::{
 };
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::pagination::PaginationControls;
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
@@ -205,13 +205,6 @@ fn SchedulesIsland(
                             let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
                                 .unwrap_or(u32::MAX)
                                 .max(1);
-                            let current_page = page.get().min(total_pages.saturating_sub(1));
-                            let range_start = if total == 0 {
-                                0
-                            } else {
-                                u64::from(current_page) * u64::from(size) + 1
-                            };
-                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
                             view! {
                                 <div class=style::table_wrap>
@@ -293,44 +286,21 @@ fn SchedulesIsland(
                                     </table>
                                 </div>
                                 <div class=style::pager>
-                                    <span>{tr(TextKey::RowsPerPage)}</span>
-                                    <select
-                                        class=style::page_size
-                                        aria-label=tr(TextKey::RowsPerPage)
-                                        prop:value=move || page_size.get().to_string()
-                                        on:change=move |event| {
-                                            if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                                page_size.set(value.max(1));
-                                                page.set(0);
-                                            }
-                                        }
-                                    >
-                                        <option value="10">"10"</option>
-                                        <option value="25">"25"</option>
-                                        <option value="50">"50"</option>
-                                        <option value="100">"100"</option>
-                                    </select>
-                                    <span>{range_of(u32::try_from(range_start).unwrap_or(u32::MAX), u32::try_from(range_end).unwrap_or(u32::MAX), total)}</span>
-                                    <button
-                                        class=style::icon_button
-                                        disabled=move || { page.get() == 0 }
-                                        on:click=move |_| {
+                                    <PaginationControls
+                                        page=Signal::derive(move || page.get().min(total_pages.saturating_sub(1)))
+                                        total=Signal::derive(move || Some(total))
+                                        page_size=page_size.into()
+                                        on_previous=Callback::new(move |()| {
                                             page.update(|value| *value = value.saturating_sub(1));
-                                        }
-                                        title=tr(TextKey::PreviousPage)
-                                    >
-                                        <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                    </button>
-                                    <button
-                                        class=style::icon_button
-                                        disabled=move || { page.get() + 1 >= total_pages }
-                                        on:click=move |_| {
+                                        })
+                                        on_next=Callback::new(move |()| {
                                             page.update(|value| *value = (*value + 1).min(total_pages.saturating_sub(1)));
-                                        }
-                                        title=tr(TextKey::NextPage)
-                                    >
-                                        <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                    </button>
+                                        })
+                                        on_page_size_change=Callback::new(move |value: u32| {
+                                            page_size.set(value.max(1));
+                                            page.set(0);
+                                        })
+                                    />
                                 </div>
                             }
                     }}
@@ -347,12 +317,6 @@ fn SchedulesIsland(
                                     .unwrap_or(u32::MAX)
                                     .max(1);
                                 let current_page = detail_page.get().min(total_pages.saturating_sub(1));
-                                let range_start = if total == 0 {
-                                    0
-                                } else {
-                                    u64::from(current_page) * u64::from(size) + 1
-                                };
-                                let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
                                 let skip_count = usize::try_from(u64::from(current_page) * u64::from(size))
                                     .unwrap_or(usize::MAX);
                                 let take_count = usize::try_from(size).unwrap_or(usize::MAX);
@@ -390,46 +354,23 @@ fn SchedulesIsland(
                                         </table>
                                     </div>
                                     <div class=style::pager>
-                                        <span>{tr(TextKey::RowsPerPage)}</span>
-                                        <select
-                                            class=style::page_size
-                                            aria-label=tr(TextKey::DetailRowsPerPage)
-                                            prop:value=move || detail_page_size.get().to_string()
-                                            on:change=move |event| {
-                                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                                    let value = value.max(1);
-                                                    detail_page_size.set(value);
-                                                    detail_page.set(0);
-                                                    detail_page_size_action.dispatch(value);
-                                                }
-                                            }
-                                        >
-                                            <option value="10">"10"</option>
-                                            <option value="25">"25"</option>
-                                            <option value="50">"50"</option>
-                                            <option value="100">"100"</option>
-                                        </select>
-                                        <span>{range_of(u32::try_from(range_start).unwrap_or(u32::MAX), u32::try_from(range_end).unwrap_or(u32::MAX), total)}</span>
-                                        <button
-                                            class=style::icon_button
-                                            disabled=move || { detail_page.get() == 0 }
-                                            on:click=move |_| {
+                                        <PaginationControls
+                                            page=Signal::derive(move || detail_page.get().min(total_pages.saturating_sub(1)))
+                                            total=Signal::derive(move || Some(total))
+                                            page_size=detail_page_size.into()
+                                            on_previous=Callback::new(move |()| {
                                                 detail_page.update(|value| *value = value.saturating_sub(1));
-                                            }
-                                            title=tr(TextKey::PreviousPage)
-                                        >
-                                            <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                        </button>
-                                        <button
-                                            class=style::icon_button
-                                            disabled=move || { detail_page.get() + 1 >= total_pages }
-                                            on:click=move |_| {
+                                            })
+                                            on_next=Callback::new(move |()| {
                                                 detail_page.update(|value| *value = (*value + 1).min(total_pages.saturating_sub(1)));
-                                            }
-                                            title=tr(TextKey::NextPage)
-                                        >
-                                            <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                        </button>
+                                            })
+                                            on_page_size_change=Callback::new(move |value: u32| {
+                                                let value = value.max(1);
+                                                detail_page_size.set(value);
+                                                detail_page.set(0);
+                                                detail_page_size_action.dispatch(value);
+                                            })
+                                        />
                                     </div>
                                 }
                         }}
