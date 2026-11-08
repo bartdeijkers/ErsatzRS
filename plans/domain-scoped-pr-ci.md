@@ -1,12 +1,14 @@
 # Domain-scoped pull request CI
 
-> **Status:** Implementation started as the active maintainer goal on 2026-11-06.
+> **Status:** Implementation rolled out through PR #121 and fully verified on
+> 2026-11-06. Milestone `dci` tracks the remaining performance acceptance.
 > **Outcome:** Make ordinary code PRs merge-ready in approximately 15–30 minutes
 > by selecting the builds and tests their changes actually require.
 > **Authorization:** The original task wrote this plan only. The subsequent
 > active goal authorizes its implementation. On 2026-11-06 the maintainer also
 > authorized a second Codex review, fixes, commit/push, a PR and full candidate CI.
-> Merge and publication remain separate; the performance cohort requires real PRs.
+> The maintainer subsequently enabled auto-merge for PR #121. Release publication
+> remains separate; the performance cohort requires real PRs.
 > **Baseline:** Repository `ce01d498`; Actions evidence inspected on 2026-11-06.
 
 ## 1. Purpose and ownership
@@ -32,8 +34,8 @@ Canonical sources:
 - [Testing and hydration constraints](../TEST.md).
 - [Delivery and completion rules](../AGENTS.md#delivery-accountability).
 
-The numbered work packages below describe intended implementation, not delivered
-behavior. The `dci` milestone in [structured progress](../docs/progress/README.md)
+The numbered work packages below define the agreed implementation scope.
+The `dci` milestone in [structured progress](../docs/progress/README.md)
 owns the six package IDs, acceptance and evidence. Query it with
 `cargo xtask progress milestones --id dci --full`. Keep completion status there;
 do not maintain a second live checklist here. Phase 9 acceptance and the
