@@ -32,9 +32,10 @@ publication and operator installation remain excluded.
 
 ## Implementation
 
-Partial overall: the accepted runtime and local application implementation
-components are complete; exact-source application CI, ordered window acceptance
-and authorized main integration remain in milestones `ucu-13/14/15`.
+Implemented within the required scope. Runtime and application qualification,
+source-bound full CI recovery, eligible PR CI and authorized main delivery are
+complete. Milestones `ucu-13/14/15` record ordered acceptance through v26.12.0;
+PR125 is merged as10ffff4e. Approved unverified debt remains explicitly retained.
 
 FFmpeg2.0.10 is published from source4be9c7a on the retained FFmpeg9 base.
 Its four qualified packages bind dependency images, source deltas, patches,
