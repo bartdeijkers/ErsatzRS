@@ -1036,7 +1036,17 @@ jobs:
             python3 scripts/ci-capacity-proofs.py report next | tee -a "$GITHUB_STEP_SUMMARY"
             echo "::notice title=Capacity proofs skipped::This runner has $(nproc) CPUs; the Next capacity proofs need more than four."
           fi
+          # This fixture requires a nonexistent app-data root, unlike the
+          # shared report directory used by the rest of this serial suite.
+          filter="($filter) & not test(=next_engine::process::runtime_tests::text_subtitle_runtime_tests::fallback_runtime_tests::real_next_background_gap_is_silent_and_returns_to_scheduled_programme)"
           "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all -E "$filter" 2>&1 | tee ci-artifacts/next-engine/tests.log
+          report="target/nextest/ci/junit.xml"
+          if [ ! -f "$report" ]; then report="$CARGO_TARGET_DIR/nextest/ci/junit.xml"; fi
+          if [ -f "$report" ]; then cp "$report" ci-artifacts/next-engine/components-junit.xml; fi
+      - name: Next background gap with fresh application data
+        if: ${{ !inputs.next_case_set || inputs.next_case_set == 'all' }}
+        run: |
+          ERSATZRS_APP_DATA_DIR="$TMPDIR/background-app-data" "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all --test-threads 1 -E 'package(=ersatzrs-infra) & test(=next_engine::process::runtime_tests::text_subtitle_runtime_tests::fallback_runtime_tests::real_next_background_gap_is_silent_and_returns_to_scheduled_programme)' 2>&1 | tee ci-artifacts/next-engine/background-tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
@@ -1065,6 +1075,9 @@ jobs:
               reports = pathlib.Path(data) / 'ffmpeg-reports'
               if reports.is_dir():
                   shutil.copytree(reports, destination / 'ffmpeg-reports', dirs_exist_ok=True)
+          background_reports = runtime / 'background-app-data/ffmpeg-reports'
+          if background_reports.is_dir():
+              shutil.copytree(background_reports, destination / 'background-ffmpeg-reports', dirs_exist_ok=True)
           PYCODE
       - name: Upload Next diagnostics
         if: always()
@@ -1151,7 +1164,10 @@ jobs:
           proof_parent="$GITHUB_WORKSPACE/ci-artifacts/teletext-$TELETEXT_LEVEL/source-proofs"
           mkdir -p "$proof_parent"
           export ERSATZRS_NEXT_TELETEXT_PROOF_PARENT="$proof_parent"
-          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all --no-tests pass -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime) & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/next-tests.log
+          # These real-time fixtures must join before their early cue ends.
+          # Concurrent fixture encoders delay that join and invalidate the
+          # precondition, even when every delivered cue matches its exact clock.
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" --profile ci --run-ignored all --test-threads 1 --no-tests pass -E "$(python3 scripts/ci-teletext-selection.py rust "$TELETEXT_LEVEL" --next-runtime) & (package(=ersatzrs-infra) | package(=ersatzrs-web)) & kind(lib)" 2>&1 | tee ci-artifacts/teletext-${{ matrix.level }}/next-tests.log
       - name: Collect teletext diagnostics
         if: always()
         run: |

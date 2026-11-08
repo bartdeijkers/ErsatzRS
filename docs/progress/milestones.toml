@@ -38663,6 +38663,26 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 CI42447535972 at1fc61f72 verifies both current archives without a
+build and passes general Rust4109/4109, strict lint and static/dependency checks.
+Teletext workspace regressions pass; its17-case real Next stage has14 passes
+and3 failures requiring an already-ended early cue. The checksum-verified
+diagnostics show actual cues equal the independent exact timing oracle in all
+three cases, but fixture contention delays source joins to5559ms, after that
+cue ends. The same three archived tests pass serially3/3, preserving every
+cue/copy/timing assertion and all timeouts. Serialize only this real-time CI
+step; workspace parallelism and production concurrency are unchanged. Evidence:
+tmp/ucu14/combined-main/integrated-main-producer/ci-42447535972/teletext15-diagnostics/
+and teletext-serial-recheck/{result.json,run.log,proofs/}. The separate Next job
+passes509/510; its sole failure is a fresh-app-data precondition contradicted
+by CI's existing shared directory, before playback starts. Run that exact case
+separately with a fresh child root, retaining both timing reports. Its unchanged
+archived test passes1/1 with all silence/background/handoff assertions intact:
+background-gap-recheck/{result.json,run.log}. No Rust/runtime artifact changes
+are required. Existing CI/selector regressions pass99. Unchanged browser jobs
+continue; corrected Next/Teletext CI execution remains required. Do not restart
+the complete run or relabel partial CI as acceptance. Baseline254/31 is unchanged.
+
 2026-11-08 integrated-source components verified at1000fd07855d4c336b378d35a7624c5df66d3523,
 including remote/main6fbf73b4/PR126. Fresh existing CI producer products close
 the invalidated Linux artifact identity: all8483 distinct workspace cases pass
