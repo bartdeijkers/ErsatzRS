@@ -1,8 +1,8 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/{FFmpegStreamSelector,HlsPlaylistFilter}.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
-adr        = ['0015', '0016', '0061', '0084', '0106']
+status     = 'In progress'
+adr        = ['0015', '0016', '0061', '0084', '0106', '0132']
 summary    = '''
 ADR 0106 retains native AV1 with automatic fMP4 HLS selection and explicit
 MPEG-TS rejection. UCU-09 row183 owns passing runtime evidence.
@@ -177,3 +177,11 @@ description = 'UCU-08 row132 requires identity-safe readiness and one bounded re
 discovered = '2026-09-28'
 resolved = true
 evidence = 'Removed-worker stale Ready reproduced (cfe9e3de). Registry-owned readiness, exact-identity publication and one bounded existing-worker recovery now cover variant/preview/hybrid paths. All 28 HLS tests pass (90673701), including concurrent waiters, cancellation independence, replacement adoption, removal during blocked I/O and no timeout restart. Three real routed Next lifecycle tests pass (37382233) using verified official 4cc93e4 and published FFmpeg v2.0.2. Strict affected lint and native lifecycle smoke pass (ersatzrs-smoke-9846-1790608956). Source map and ucu-08 own evidence; substantive review passes. Row132 is Port.'
+
+[[debt]]
+id = 'native-legacy-subtitle-encoding-failure'
+adr = '0132'
+discovered = '2026-11-08'
+description = 'An invalid UTF-8 byte in a legacy burned sidecar passes through the stream-copy compatibility fallback and stops native HLS video. Position-zero admission and path-only cache reuse also require shared safe normalization.'
+evidence = 'The correction and local SENC-01/SENC-02/SENC-03 components are complete under milestone subtitle-encoding: strict Unicode/legacy preparation, content-bound atomic cache, native admission failures, bounded localized Health preflight,175 focused regressions, four browser scenarios, decoded seeks0/44/45, ordinary smoke and93 TSDuck checks. The milestone retains composed workspace closeout and the original environment negatives. Exact-head PR checks remain mandatory before feature acceptance; no installed Windows repair is claimed.'
+resolved = false

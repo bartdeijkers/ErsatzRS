@@ -104,6 +104,7 @@ pub mod source_teletext_delivery;
 pub mod startup_config;
 pub mod subtitle_cache_nul;
 pub mod subtitle_cleanup;
+mod subtitle_text;
 pub mod subtitles;
 pub mod teletext_source;
 pub mod transcode_capacity;

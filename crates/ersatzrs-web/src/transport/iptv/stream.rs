@@ -2089,7 +2089,22 @@ async fn serve_channel_stream_admitted_inner(
     let subtitle_input = if interval_source.is_some() {
         retained_subtitle_input
     } else {
-        rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await
+        match rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await {
+            Ok(input) => input,
+            Err(error) => {
+                cancel_retained_startup(
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
+                return (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response();
+            }
+        }
     };
     fence_cancelled_startup!(&[], None);
     let watermark_inputs = match async {

@@ -2060,10 +2060,14 @@ impl HlsSessionWorker {
                 subtitle.as_ref(),
                 audio_selection,
             );
-            let subtitle_input = if interval_playback.is_some() {
-                retained_subtitle_input
+            let subtitle_preparation = if interval_playback.is_some() {
+                Ok(retained_subtitle_input)
             } else {
                 rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await
+            };
+            let (subtitle_input, subtitle_preparation_error) = match subtitle_preparation {
+                Ok(input) => (input, None),
+                Err(error) => (None, Some(error)),
             };
             let watermark_channel = Channel {
                 id: self.channel_id,
@@ -2485,7 +2489,13 @@ impl HlsSessionWorker {
                     request,
                 )
             };
-            let command = source_caption_request.build();
+            let command = if let Some(error) = subtitle_preparation_error {
+                Err(ersatzrs_ffmpeg::UnsupportedSource {
+                    reason: error.to_string(),
+                })
+            } else {
+                source_caption_request.build()
+            };
             let live_completed_media_duration = std::sync::Mutex::new(None);
             let retained_failure = Arc::new(std::sync::Mutex::new(RetainedHlsFailure::default()));
             let (mut outcome, selected_graph_for_denial) = match command {

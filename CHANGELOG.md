@@ -150,6 +150,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Normalize legacy native text subtitles to UTF-8 before playback, preserving
+  accents and seek timing instead of stopping the stream. Source-level charset
+  declarations resolve uncertain encodings, cache entries follow source changes,
+  and Health checks upcoming local subtitles before playback.
+
+
 - Limit native NVIDIA encoder capabilities to encoders advertised by the
   selected FFmpeg build, so optional GPU support cannot make a software-only
   runtime fail startup checks.

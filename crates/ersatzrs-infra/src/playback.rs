@@ -4093,7 +4093,7 @@ pub(crate) fn subtitle_is_http(path: &str) -> bool {
         .is_ok_and(|uri| matches!(uri.scheme(), "http" | "https") && uri.host_str().is_some())
 }
 
-fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<String> {
+pub(crate) fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<String> {
     let path = subtitle.path.as_deref()?.trim();
     if path.is_empty() {
         return None;

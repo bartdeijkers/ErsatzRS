@@ -39,9 +39,9 @@ use checks::{
     RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
     ScanRefreshStateHealthCheck, ScriptedPlayoutStateHealthCheck, SearchProjectionHealthCheck,
     SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck,
-    TeletextDecoderHealthCheck, TeletextWorkHealthCheck, TsduckAvailabilityHealthCheck,
-    UnavailableHealthCheck, VaapiDeviceHealthCheck, VaapiDriverHealthCheck,
-    ZeroDurationHealthCheck,
+    SubtitleEncodingHealthCheck, TeletextDecoderHealthCheck, TeletextWorkHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -65,7 +65,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 51] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 52] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -92,6 +92,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 51] = [
     "Artwork Cardinality",
     "Artwork Orphans",
     "Subtitle Cleanup",
+    "Subtitle Encoding",
     "Zero Duration",
     "Remote Streams",
     "Remote Stream add-on readiness",
@@ -292,6 +293,7 @@ fn registered_health_checks(
         Box::new(ArtworkCardinalityHealthCheck::new(pool.clone())),
         Box::new(ArtworkOrphansHealthCheck::new(pool.clone())),
         Box::new(SubtitleCleanupHealthCheck::new(pool.clone())),
+        Box::new(SubtitleEncodingHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamAddonReadinessHealthCheck::new(pool.clone())),

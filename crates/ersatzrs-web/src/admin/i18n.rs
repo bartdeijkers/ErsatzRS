@@ -2567,6 +2567,9 @@ pub enum TextKey {
     PlayoutContinuityUnavailable,
     ScriptedTimelineRejected,
     ScanRefreshState,
+    SubtitleEncoding,
+    SubtitleEncodingBrief,
+    SubtitleEncodingMessage,
     SubtitleCleanup,
     SubtitleCleanupMessage,
     SubtitleCleanupBrief,
@@ -5224,6 +5227,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::PlayoutContinuityUnavailable,
     TextKey::ScriptedTimelineRejected,
     TextKey::ScanRefreshState,
+    TextKey::SubtitleEncoding,
+    TextKey::SubtitleEncodingBrief,
+    TextKey::SubtitleEncodingMessage,
     TextKey::SubtitleCleanup,
     TextKey::SubtitleCleanupMessage,
     TextKey::SubtitleCleanupBrief,
@@ -5968,6 +5974,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
             text(language, TextKey::ExternalJsonPlayoutState).to_owned()
         }
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
+        "Subtitle Encoding" => text(language, TextKey::SubtitleEncoding).to_owned(),
         "Subtitle Cleanup" => text(language, TextKey::SubtitleCleanup).to_owned(),
         "Artwork Orphans" => text(language, TextKey::ArtworkOrphans).to_owned(),
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
@@ -6697,6 +6704,24 @@ fn artwork_health_message(
                 counts.hierarchy_episodes,
             ],
         ));
+    }
+    if title == "Subtitle Encoding" {
+        let (count, unchecked) = brief_message.split_once(" subtitle encoding problem(s); ")?;
+        let count = count.parse::<u64>().ok()?;
+        let unchecked = unchecked
+            .strip_suffix(" unchecked source(s)")?
+            .parse::<u64>()
+            .ok()?;
+        let key = if message.is_empty() {
+            TextKey::SubtitleEncodingBrief
+        } else {
+            TextKey::SubtitleEncodingMessage
+        };
+        return Some(
+            text(language, key)
+                .replace("{count}", &count.to_string())
+                .replace("{unchecked}", &unchecked.to_string()),
+        );
     }
     if title == "Subtitle Cleanup" {
         if brief_message == "Subtitle cache repair pending" {
@@ -8087,6 +8112,24 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, SCAN_REFRESH_STATE_TITLE);
                 assert!(!localized.starts_with(SCAN_REFRESH_STATE_MESSAGE_PREFIX));
+            }
+        }
+    }
+
+    #[test]
+    fn subtitle_encoding_health_is_localized_in_every_supported_culture() {
+        let brief = "2 subtitle encoding problem(s); 1 unchecked source(s)";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = health_check_title_text(language, "Subtitle Encoding");
+            let full = health_check_message_text(language, "Subtitle Encoding", "preflight", brief);
+            let short = health_check_message_text(language, "Subtitle Encoding", "", brief);
+            assert!(full.contains("UTF-8") && full.contains(".charset"));
+            assert!(full.contains('2') && full.contains('1'));
+            assert!(!full.contains("{count}") && !full.contains("{unchecked}"));
+            assert!(!short.contains("{count}") && !short.contains("{unchecked}"));
+            if language != UiLanguage::English {
+                assert_ne!(title, "Subtitle Encoding");
             }
         }
     }
