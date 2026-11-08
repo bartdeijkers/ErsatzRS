@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `f640c252276d008a5e1697fbfbb65a65fc352a5a` |
-| **Commit subject** | `docs: prep for release v26.11.4` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f640c252276d008a5e1697fbfbb65a65fc352a5a |
+| **Pinned commit** | `53b3b42a02533ad8e72af09565b494f2b19e40fc` |
+| **Commit subject** | `prep for release v26.12.0` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/53b3b42a02533ad8e72af09565b494f2b19e40fc |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -85,15 +85,21 @@ hardware debt; supported targets remain. Latest delivery scope is CI and
 source push/merge into remote/main only, without another release or later
 catch-up work. The shared upstream checkout remains untouched.
 
-The maintainer authorizes fixed catch-up on2026-11-06 and extends its terminal
-to released v26.12.0 on2026-11-07:
-UCU-13/14/15 own the pending rows255–285 through the observed target recorded
-in plans/upstream-catch-up.md. All285 ordered identities are verified, but
-254 accepted/31 pending remains the behavioral acceptance state. This
-registration does not advance the Pin table. ErsatzRS retains its Native engine;
-upstream removal and global hiding of Native controls are not authorized.
-The owning milestone records preserve current platform deferrals and separate
-commit/push/merge, CI and publication approvals.
+UCU-13/14/15 accept the ordered rows255–285 through fixed v26.12.0 on
+2026-11-08. All285 observed rows are processed,0 pending. This advances the
+Pin table after required local acceptance, full source-bound CI recovery and
+eligible PR CI; PR125 delivers the source into main. Milestone ucu-15 owns
+exact source/runtime/package/CI identities and original failures. Row271's
+Windows advisory applicability remains Deferred by maintainer approval and
+explicitly unverified; processing its disposition does not assert a security
+fix or non-applicability. Native remains supported/selectable alongside Next.
+Existing native ARM, macOS and unavailable-hardware debt is not upgraded.
+Published runtimes are FFmpeg2.0.10/Next0.2.5; this closure does not publish an
+application release or Docker image or replace an operator installation.
+Retained source/evidence: tmp/evidence/ucu13-15-v26.12.0/. Later upstream
+commits remain outside this completed goal until explicitly selected. The shared
+upstream checkout remains untouched; ordinary gap discovery must verify the new
+Pin table before reading a checkout, as required above.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not

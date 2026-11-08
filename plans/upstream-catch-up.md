@@ -1,38 +1,40 @@
 # Upstream ErsatzTV catch-up
 
-## Active catch-up target (2026-11-07)
+## Accepted catch-up target (2026-11-08)
 
-Local disposition checkpoint2026-11-07: rows255–285 now have source dispositions
-and completed required local evidence. The accepted baseline remains unchanged
-until exact-source CI and ordered window acceptance pass. Row271 is approved
-unverified later-work debt, not a security-fix claim. Milestones ucu-13/14/15
-own acceptance; the combined four-target proof is in milestone ucu-15.
+UCU-13, UCU-14 and UCU-15 are Complete in order. Rows255–285 have accepted
+source dispositions and all required non-deferred local/platform/final proof.
+Full source-bound recovery CI42460252936 and eligible PR CI42464500817 are green;
+PR125 is merged as10ffff4e. Row271 retains its approved Deferred/unverified
+Windows advisory disposition. Milestone ucu-15 owns exact proof and retained
+failures. The accepted baseline is owned by docs/automation/parity-baseline.md.
 
 The maintainer extends the fixed goal through released **v26.12.0** at
 [`53b3b42a02533ad8e72af09565b494f2b19e40fc`](https://github.com/ErsatzTV/legacy/commit/53b3b42a02533ad8e72af09565b494f2b19e40fc),
 `prep for release v26.12.0` (2026-11-06 20:59:20 UTC).
 This supersedes the earlier unreleased target at `06c008b4`; do not chase
 commits after this release. Acceptance and delivery approval boundaries remain.
-UCU-00–12 and the accepted baseline remain unchanged. The accepted pin remains
-owned by docs/automation/parity-baseline.md until ordered acceptance advances it.
+UCU-00–12 retain their completed scope. Ordered acceptance advances the pin
+owned by docs/automation/parity-baseline.md; no later moving tip is adopted.
 
 | Window | Ordered rows | Fixed terminal revision | Current state |
 | --- | --- | --- | --- |
-| UCU-13 | 255–259 | v26.11.5 / `d5482b7f06b06de3f117bfb5010f4e27e37209a2` | Source reconciliation pending |
-| UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Source reconciliation pending |
-| UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Source reconciliation pending |
+| UCU-13 | 255–259 | v26.11.5 / `d5482b7f06b06de3f117bfb5010f4e27e37209a2` | Complete |
+| UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Complete; advisory debt remains unverified |
+| UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Complete; Native retained |
 
-There are **285 observed, 254 accepted and 31 pending rows**. Earlier tail
-notes are provisional triage, not accepted dispositions or proof of present
-ErsatzRS behavior. The owning milestones ucu-13, ucu-14 and ucu-15 contain the
-finite acceptance and evidence lists. Process the windows and rows in order;
-compatible implementation/proof may be batched without skipping dispositions.
-Do not chase later moving-main commits or reopen completed UCU-12.
+There are **285 observed, 285 processed and 0 pending rows**. Each row has
+its own disposition; row271 remains explicitly Deferred rather than fixed or
+inapplicable. The owning milestones contain acceptance and evidence, including
+all required Linux/Windows and ARM build/package/emulation scopes. Earlier
+source notes remain historical; they do not reopen completed windows or erase
+approved unverified debt. No later moving-main commit is part of this goal.
 
-### Successor goal
+### Accepted scope and delivery constraints
 
-Reconcile these three fixed windows against a separate branch/worktree based on
-verified current remote/main. Preserve completed Phase9 and UCU deliveries,
+The completed catch-up reconciles these three fixed windows against verified
+current remote/main. The following constraints and requirements retain their
+accepted scope; current completion is recorded in the owning milestones. Preserve completed Phase9 and UCU deliveries,
 ongoing DCI work, unrelated changes, processes, shared caches and existing
 source/runtime/negative evidence. Read the exact upstream changes before each
 small coherent package and record the affected user behavior, smallest change,
@@ -78,8 +80,9 @@ Close required focused tests, affected headed Chromium/Firefox, actual Native/
 Next decoded playback, smoke/TSDuck where affected, and required local final
 gates before acceptance. Record original failures and source-bound recoveries;
 do not re-run whole CI or rebuild identical artifacts for one failed job.
-This planning update authorizes no commit/push, merge, CI dispatch, release or
-dependency publication. Seek the applicable separate authorization when needed;
+Initial registration authorized no commit/push, merge, CI dispatch, release or
+dependency publication. Later application/runtime approvals and completed delivery
+are recorded in the milestones. Seek separate authorization for new scope;
 prior UCU-12 approvals do not grant those actions for UCU-13–15. Keep required
 final exact-source CI gates when remote delivery is authorized. Update canonical
 progress, changelog, docs and pins truthfully; clean only inactive task-owned
@@ -90,7 +93,8 @@ publication and unrelated CI engineering implementation are outside this goal.
 
 - Approved extension2026-11-07: freeze at v26.12.0 / `53b3b42a`.
   All285 ordered SHA/subject pairs agree with the independently fetched tag;
-  the existing282 rows are an unchanged prefix. Acceptance remains254/31.
+  the existing282 rows are an unchanged prefix. At registration, acceptance
+  remained254/31.
 - Row283 `03c206ee` switches upstream FFmpeg to released8.1.2-8 and Next
   to02a2f12d. Row284 `de40b158` selects released Next0.2.5 at
   `c5cb065f9f35dbbcb7c05845f0f92c70f576a480`. Row285 only prepares release notes.
@@ -107,7 +111,8 @@ publication and unrelated CI engineering implementation are outside this goal.
   Intel VAAPI watermark performance limitation. These tail commits add no
   implementation; retain applicable proof in the existing runtime audit.
 - Exact receipts/reviewed complete deltas: `tmp/ucu15-target-refresh/`.
-  Rows remain pending until ordered acceptance; no window is accepted here.
+  This source receipt did not itself accept a window; current ordered acceptance
+  is recorded in milestones ucu-13/14/15.
 
 ## UCU-13 source map: rows255–259
 
@@ -525,15 +530,18 @@ application/platform/Next successor and final gates remain separate and open.
 
 ## Accepted release boundary
 
-UCU-12 is accepted through fixed v26.11.4/row254 on2026-10-25. All254
-ledger rows have justified dispositions. Required local gates and source-bound
-composed CI recoveries pass; exact evidence and retained negatives are owned by
-milestone ucu-12. Source push/merge into remote/main is authorized; no further
-release, Phase9/UCU14 implementation or cleanup is included in this closeout.
-The authoritative pin is docs/automation/parity-baseline.md. Earlier UCU10/11
-deliveries and unrelated work remain intact. Approved macOS/runtime and hardware
-debt stays explicitly unverified; acceptance does not claim uniform six-platform
-qualification or a new full-suite run on one SHA.
+UCU-13/14/15 are accepted in order through fixed v26.12.0/row285 on
+2026-11-08. All285 rows have justified processed dispositions. Required local,
+four-target and source-bound final CI gates pass; PR125 delivers source to main
+as10ffff4e. Milestone ucu-15 owns exact identities, scope and retained negatives.
+The authoritative pin is docs/automation/parity-baseline.md. Row271 remains
+approved Deferred/unverified advisory work. Native ARM, macOS and approved
+unavailable hardware are not accepted as tested. No application release,
+Docker publication, operator installation or Phase10 delivery is included.
+Earlier completed UCU/Phase9 and independent DCI work remain intact.
+Evidence retention: tmp/evidence/ucu13-15-v26.12.0/; historical task-relative
+references resolve beneath raw/. Preserve temporary runtime corrections until
+their independent upstream-equivalence controls pass.
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
@@ -6456,7 +6464,11 @@ stream-copy options remain unchanged. Row 30 requires Adapt (ADR 0099), with
 corrected real Burn/Convert, command snapshot and JS/no-JS browser evidence
 before acceptance. Canonical diagnosis and outcomes belong to UCU-02.
 
-## Provisional triage and ledger
+## Processed ledger
+
+All285 rows below are processed; current window acceptance belongs to the
+structured milestones. The following original triage notes are historical,
+followed by each row's reviewed disposition.
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
 The maintainer selected Next as an optional second engine on 2026-09-22.

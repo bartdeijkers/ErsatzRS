@@ -8,7 +8,7 @@ their separate authorization boundaries. Runtime candidate work is now authorize
 
 ## Implementation
 
-Partial overall: local daily planning/index publication, accepted-SQL recovery,
+Implemented within the required scope: daily planning/index publication, accepted-SQL recovery,
 callback ownership and reader identity admission are implemented and verified.
 Startup binds playback and preview to the qualified indexed owner before
 creating application ports. Older readers retain complete-file publication and
@@ -29,18 +29,20 @@ post-edit outputs.
 
 Current Linux/Windows full-host Native/Next playback and managed cold/cache
 startup pass with published FFmpeg2.0.10/Next025. Native93 and Next Copy86
-transport checks,20 headed browser cases,8472 composed workspace cases, strict
+transport checks,20 headed browser cases,8483 composed workspace cases, strict
 lint, static/dependency gates and canonical doctests pass within their recorded
 source scopes. Four independently extracted application packages pass startup,
 packaged readiness, bundled identity and served asset checks. ARM64/ARMv7 use
 QEMU; native ARM and other approved unavailable hardware/macOS remain unverified.
 
-Exact-source application CI, ordered window acceptance and authorized main
-integration remain required. Earlier failures and their scoped recoveries remain
-retained. Milestone `ucu-15` owns the finite completion list and current proof;
-`tmp/ucu14/next025/indexed-integration/qualification.json` and
-`tmp/ucu14/combined-main/` contain the source/runtime/package evidence. The
-accepted baseline has not advanced yet.
+Source-bound full CI recovery42460252936 and eligible PR CI42464500817 pass;
+PR125 delivers the implementation into main as10ffff4e. Ordered window
+acceptance and the accepted baseline advance are recorded in milestones
+`ucu-13/14/15` and docs/automation/parity-baseline.md. Earlier failures and their
+scoped recoveries remain retained. Milestone `ucu-15` owns exact component
+identities and proof; historical `tmp/ucu14/` paths resolve beneath
+`tmp/evidence/ucu13-15-v26.12.0/raw/`. Native ARM, macOS and approved hardware
+debt remain unverified; no application release or installation is claimed.
 
 ## Context
 

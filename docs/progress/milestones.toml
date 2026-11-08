@@ -38308,7 +38308,7 @@ pending; no main push, application CI or publication is authorized or claimed.
 id         = 'ucu-13'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile v26.11.5 lock safety and runtime changes'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-12']
@@ -38337,6 +38337,17 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 ordered acceptance: Complete, rows255–259 through v26.11.5.
+The withdrawn FFmpeg bump/revert has an empty complete tree delta; no FFmpeg8
+adoption is required. All six ownership/crash/restart/read-only lock cases pass
+on Linux, native Windows and both ARM emulators. Local SQLite constraints stay
+intact. All five dispositions, release bookkeeping and required integrated
+four-target/final gates are complete; ucu-15 owns the shared current-source
+package, playback and composed CI evidence. PR125 is merged as10ffff4e after
+green required PR CI42464500817 and full recovery42460252936. This closes the
+window before ucu-14. Native ARM, macOS and approved hardware debt remain
+explicitly unverified; no runtime/package/source claim is broadened.
+
 2026-11-06 registration only: all five SHA/subject pairs match the ordered
 upstream history. Local and remote release tags resolve to the fixed terminal revision.
 All five rows remain pending. Registration did not claim implementation or acceptance.
@@ -38414,7 +38425,7 @@ remain open. Reuse Linux/native Windows passing source-identical evidence.
 id         = 'ucu-14'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile v26.11.6 playback, metadata and security behavior'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-13']
@@ -38449,6 +38460,19 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 ordered acceptance: Complete after ucu-13, rows260–271 through
+v26.11.6. Fallback/error/background/handoff, container hints, transactional
+list reconciliation, persisted aspect ratios and conditional JWT URL behavior
+have their recorded source, focused and decoded/persisted proof. The published
+FFmpeg2.0.10/Next0.2.5 pair passes exact source, package, checksum, anonymous
+acquisition and four-target software qualification. Shared integrated platform
+and final gates are complete in ucu-15; PR125/10ffff4e delivers the source.
+Row271 remains Deferred by explicit maintainer approval, with the unresolved
+ucu14-windows-advisory-applicability debt still open. Closure accepts that
+recorded disposition, not a Windows security fix or non-applicability finding.
+Resume that obligation only when authoritative upstream details become available.
+All other required checks pass; no additional deferral is introduced.
+
 2026-11-07 maintainer accepts row271 as explicit unverified later work and resumes
 the goal. The owning parity debt is ucu14-windows-advisory-applicability. This
 supersedes the publication/closure block in the historical entries below; it
@@ -38627,7 +38651,7 @@ application/platform/adoption/final proof. Native is unchanged. No pin advances.
 id         = 'ucu-15'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile v26.12.0 while preserving Native'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-14']
@@ -38663,6 +38687,62 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 ordered acceptance: Complete after ucu-13 and ucu-14, rows272–285
+through fixed released v26.12.0. All31 catch-up dispositions are recorded;
+285 rows are processed with no pending in-scope row. Row271 retains its approved
+Deferred/unverified advisory disposition. Native remains supported/selectable,
+with stored engines/profiles, routes, controls, international audio/subtitles,
+teletext, callbacks and engine-specific Health preserved.
+
+The finite requirements are closed by the component evidence below: fixed
+FFmpeg9/Next025 source and independent patch-retirement controls; Native low-fps,
+source-format and watermark/colour-transition safety; bounded describe/refresh,
+diagnostics and Health/profile warnings; atomic daily publication with unchanged
+days, stable occurrence identities, accepted-SQL rollback and actual indexed
+playback; localized validation/save behavior and SSR fallback. Required Linux
+and native Windows operation plus both ARM build/package/emulation scopes pass.
+Approved unavailable hardware, native ARM and macOS remain unverified.
+
+Current compiled source1000fd07 includes main/PR124/PR126. Its8,483 distinct
+workspace cases, canonical doctest gate, strict workspace lint, parity,
+architecture/hydration/bundle gates,20 affected headed cases, Native/Next decoded
+playback, Native93/93 and Next Copy86/86 transport checks and all four independent
+private package startup/readiness/served-asset checks pass. These remain private
+development-profile packages, not a new application release. Exact inputs,
+commands, original failures and raw decoding/captures remain retained.
+
+Full CI42447535972 at1fc61f72 passes general Rust4,109, strict lint/static/audit
+and all four browsers: general Chromium367pass/5skip, general Firefox342pass/30skip,
+Teletext Chromium62pass/14skip and Teletext Firefox57pass/19skip. Recovery42460252936
+at10013e51 verifies both original current-source archives without rebuilding,
+imports the unchanged passing checks and passes Next509 components,1 isolated
+background-gap case, real HTTP/burned-caption/preview/Hybrid checks,2,437
+Teletext workspace cases and17 real Next Teletext cases. CI ok passes with bound
+job/source/archive provenance. Fixtures retain every playback/timing assertion;
+only fresh app-data isolation and serial real-time fixture execution change.
+
+GitHub's required PR rule does not accept manual-dispatch job checks. CI-only
+checkpoint2e89195d bridges the completed full marker through an eligible PR
+preflight, rejecting changed compiled/runtime/browser inputs, global settings
+or any consumer/aggregate definition. All137 focused policy/selector/domain
+checks and actionlint pass. Actual PR CI42464500817 passes qualification and
+CI ok without a build or replay. PR125 merges as10ffff4e; its tree matches the
+qualified head. Production inputs remain identical to compiled source1000fd07;
+only the qualified CI/BUILD/progress paths differ.
+
+The accepted pin is advanced in docs/automation/parity-baseline.md with the
+ordered closure. Runtime releases remain the already-published FFmpeg2.0.10 and
+Next0.2.5; no application release, Docker publication or operator installation
+is included. No further implementation or mandatory functional evidence remains
+inside the fixed window. Independent DCI and Phase10 are unchanged.
+
+Canonical retained evidence: tmp/evidence/ucu13-15-v26.12.0/. Historical
+tmp/ucu13/, tmp/ucu14/ and tmp/ucu15-target-refresh/ references resolve beneath
+its raw/ directory. The integrated-main-producer/ci-{run}/ logs, command/results,
+ci-dispatch-result.json and ci-recovery-result.json retain all actual CI proof.
+Bundles retain source identities; compressed producer/private-package archives,
+checksums, dependency provenance and original negatives survive cache cleanup.
+
 2026-11-08 CI42447535972 at1fc61f72 verifies both current archives without a
 build and passes general Rust4109/4109, strict lint and static/dependency checks.
 Teletext workspace regressions pass; its17-case real Next stage has14 passes
