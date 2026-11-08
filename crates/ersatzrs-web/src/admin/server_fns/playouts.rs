@@ -452,6 +452,9 @@ pub async fn list_playouts(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    let settings = state.application.ports().admin_settings();
+    let language = crate::admin::server_fns::settings::load_ui_language_for_api(settings).await?;
+    let notation = crate::admin::datetime::load_date_time_preferences(settings).await;
     state
         .application
         .list_playouts(&query, page, page_size)
@@ -468,9 +471,13 @@ pub async fn list_playouts(
                     daily_rebuild_minutes: row.daily_rebuild_minutes,
                     build_success: row.build_success,
                     build_message: row.build_message,
-                    last_successful_build: row
-                        .last_successful_build
-                        .map(|time| time.format("%Y-%m-%d %H:%M:%S UTC").to_string()),
+                    last_successful_build: row.last_successful_build.map(|time| {
+                        crate::admin::datetime::format_date_time(
+                            &time.with_timezone(&chrono::Local),
+                            language,
+                            notation,
+                        )
+                    }),
                     source_revision: row.source_revision,
                     refresh_work: row.refresh_work.into(),
                     source_work: row.source_work.into(),
@@ -553,6 +560,20 @@ pub async fn list_playout_detail_items(
         state.application.ports().admin_settings(),
     )
     .await?;
+    let notation = crate::admin::datetime::load_date_time_preferences(
+        state.application.ports().admin_settings(),
+    )
+    .await;
+    // Detail start/finish arrive as server-local `YYYY-MM-DD HH:MM:SS` text.
+    let localize = move |value: String| -> String {
+        use chrono::TimeZone;
+        chrono::NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S")
+            .ok()
+            .and_then(|naive| chrono::Local.from_local_datetime(&naive).earliest())
+            .map_or(value, |local| {
+                crate::admin::datetime::format_date_time(&local, language, notation)
+            })
+    };
     state
         .application
         .list_playout_detail_items(playout_id, show_filler, page, page_size)
@@ -569,8 +590,8 @@ pub async fn list_playout_detail_items(
                         .unwrap_or(item.title);
                     PlayoutDetailItem {
                         title,
-                        start: item.start,
-                        finish: item.finish,
+                        start: localize(item.start),
+                        finish: localize(item.finish),
                         duration: item.duration,
                         scheduling_context: item.scheduling_context,
                         filler_kind: item.filler_kind,

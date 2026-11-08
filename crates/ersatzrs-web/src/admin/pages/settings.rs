@@ -466,6 +466,30 @@ fn render_ui(data: UiSettingsPageData) -> impl IntoView {
                     include_none=false
                 />
                 <SelectField label=tr(TextKey::Language) name="language" selected=form.language options=supported_ui_language_options() include_none=false/>
+                <SelectField
+                    label=tr(TextKey::DateNotation)
+                    name="date_format"
+                    selected=form.date_format
+                    options=vec![
+                        SelectOption { value: "auto".to_owned(), label: tr(TextKey::FollowLanguage).to_owned() },
+                        SelectOption { value: "dmy".to_owned(), label: tr(TextKey::DateNotationDmy).to_owned() },
+                        SelectOption { value: "mdy".to_owned(), label: tr(TextKey::DateNotationMdy).to_owned() },
+                        SelectOption { value: "ymd".to_owned(), label: tr(TextKey::DateNotationYmd).to_owned() },
+                    ]
+                    include_none=false
+                />
+                <SelectField
+                    label=tr(TextKey::TimeNotation)
+                    name="time_format"
+                    selected=form.time_format
+                    options=vec![
+                        SelectOption { value: "auto".to_owned(), label: tr(TextKey::FollowLanguage).to_owned() },
+                        SelectOption { value: "24h".to_owned(), label: tr(TextKey::TimeNotation24h).to_owned() },
+                        SelectOption { value: "12h".to_owned(), label: tr(TextKey::TimeNotation12h).to_owned() },
+                    ]
+                    include_none=false
+                />
+                <p class=style::caption>{tr(TextKey::DateTimeNotationHelp)}</p>
             </SettingsSection>
             {windows_startup}
         </SettingsForm>
@@ -1065,6 +1089,8 @@ mod tests {
             form: crate::admin::server_fns::settings::UiSettingsForm {
                 is_dark_mode: true,
                 language: "en-us".to_owned(),
+                date_format: "auto".to_owned(),
+                time_format: "auto".to_owned(),
             },
             windows_startup,
         }

@@ -1,4 +1,5 @@
 pub mod app;
+pub mod datetime;
 pub mod home;
 #[cfg(not(target_arch = "wasm32"))]
 mod hydration;

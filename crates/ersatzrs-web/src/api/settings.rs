@@ -138,6 +138,8 @@ pub async fn save_ui_settings_form(State(state): State<AppState>, body: Bytes) -
     let form = UiSettingsForm {
         is_dark_mode: field(&fields, "is_dark_mode") == "true",
         language: field(&fields, "language"),
+        date_format: field(&fields, "date_format"),
+        time_format: field(&fields, "time_format"),
     };
     let result = save_ui_settings_with_state(&state, form).await;
     let result = match (

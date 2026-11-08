@@ -36,6 +36,10 @@ pub const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "hdhr.tuner_count";
 pub const CONFIG_KEY_HDHR_UUID: &str = "hdhr.uuid";
 pub const CONFIG_KEY_PAGES_IS_DARK_MODE: &str = "pages.is_dark_mode";
 pub const CONFIG_KEY_PAGES_LANGUAGE: &str = "pages.language";
+/// ErsatzRS extension: admin date notation (`auto`, `dmy`, `mdy`, `ymd`).
+pub const CONFIG_KEY_PAGES_DATE_FORMAT: &str = "pages.date_format";
+/// ErsatzRS extension: admin time notation (`auto`, `24h`, `12h`).
+pub const CONFIG_KEY_PAGES_TIME_FORMAT: &str = "pages.time_format";
 pub const CONFIG_KEY_LIBRARY_REFRESH_INTERVAL: &str = "scanner.library_refresh_interval";
 pub const CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS: &str = "addons.detail_wait.minimum_seconds";
 pub const CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS: &str = "addons.detail_wait.maximum_seconds";

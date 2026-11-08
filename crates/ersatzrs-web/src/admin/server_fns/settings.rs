@@ -114,6 +114,12 @@ pub struct PlayoutSettingsForm {
 pub struct UiSettingsForm {
     pub is_dark_mode: bool,
     pub language: String,
+    /// Date notation: `auto`, `dmy`, `mdy` or `ymd`.
+    #[serde(default)]
+    pub date_format: String,
+    /// Clock notation: `auto`, `24h` or `12h`.
+    #[serde(default)]
+    pub time_format: String,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -267,9 +273,17 @@ pub async fn load_ui_settings() -> Result<UiSettingsPageData, ServerFnError> {
         .await
         .map_err(ServerFnError::new)?;
     Ok(UiSettingsPageData {
-        form: UiSettingsForm {
-            is_dark_mode: settings.is_dark_mode,
-            language: normalize_ui_language(&settings.language),
+        form: {
+            let notation = crate::admin::datetime::load_date_time_preferences(
+                state.application.ports().admin_settings(),
+            )
+            .await;
+            UiSettingsForm {
+                is_dark_mode: settings.is_dark_mode,
+                language: normalize_ui_language(&settings.language),
+                date_format: notation.date.config_value().to_owned(),
+                time_format: notation.clock.config_value().to_owned(),
+            }
         },
         windows_startup: state.application.windows_startup_status().into(),
     })
@@ -624,6 +638,8 @@ pub async fn save_ui_settings_with_state(
     state: &crate::host::state::AppState,
     form: UiSettingsForm,
 ) -> Result<(), ServerFnError> {
+    use crate::admin::datetime::{ClockFormat, DateOrder};
+
     let language = normalize_ui_language(&form.language);
     state
         .application
@@ -632,7 +648,20 @@ pub async fn save_ui_settings_with_state(
             language,
         })
         .await
-        .map_err(ServerFnError::new)
+        .map_err(ServerFnError::new)?;
+    let settings = state.application.ports().admin_settings();
+    save_config_value(
+        settings,
+        ersatzrs_domain::CONFIG_KEY_PAGES_DATE_FORMAT,
+        DateOrder::from_config(&form.date_format).config_value(),
+    )
+    .await?;
+    save_config_value(
+        settings,
+        ersatzrs_domain::CONFIG_KEY_PAGES_TIME_FORMAT,
+        ClockFormat::from_config(&form.time_format).config_value(),
+    )
+    .await
 }
 
 #[cfg(feature = "ssr")]
