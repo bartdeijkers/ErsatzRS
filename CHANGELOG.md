@@ -58,6 +58,17 @@ release section when tagging a release.
 
 ### Changed
 
+- Update MiniJinja to 3.x and refresh the semver-compatible Cargo lockfile
+  (Leptos 0.8.23 with its now syn-3-compatible server-function macros, zip
+  9.4, ammonia 4.2.4 kept). Bundled XMLTV guide templates, dynamic text and
+  graphics templates render unchanged, and `true`/`false`/`none` keep their
+  lowercase spelling. **Custom templates** now follow Jinja2 more closely in
+  edge cases: lists and maps print with single quotes (`['A', 'B']`), `round`
+  rounds half to even (`2.5|round` is `2.0`), floor division and modulo with a
+  negative divisor floor like Python, `title` no longer capitalizes after an
+  apostrophe, `min`/`max` compare strings case-insensitively, and division by
+  zero is a render error.
+
 - Pin managed playback to the published FFmpeg 2.0.10 and qualified Next 0.2.5
   packages for the four required targets, with exact archive/payload checksums
   and source provenance. Retained platform packages keep their original source

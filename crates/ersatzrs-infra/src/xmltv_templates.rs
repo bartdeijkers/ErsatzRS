@@ -517,7 +517,10 @@ fn render<S: Serialize>(
     name: &str,
     context: &S,
 ) -> Result<String, ChannelGuideTemplateError> {
-    Ok(templates.env.get_template(name)?.render(context)?)
+    Ok(templates
+        .env
+        .get_template(name)?
+        .render(minijinja::value::Serde(context))?)
 }
 
 #[derive(Serialize)]
@@ -851,6 +854,49 @@ mod tests {
         assert!(xml.contains("Rock &amp; Roll"));
         assert!(xml.contains("Fish &amp; Chips &lt;Tonight&gt;"));
         assert!(xml.contains("tag=a&amp;fillHeight=440"));
+    }
+
+    #[tokio::test]
+    async fn bundled_song_template_joins_artists_and_lists_genres() {
+        let templates = load_templates_from_empty_temp_folder().await;
+        let song_content = XmltvProgrammeContent {
+            sub_title: Some("Under & Over".to_owned()),
+            year: Some(1999),
+            genres: vec!["Pop".to_owned(), "Rock".to_owned()],
+            artists: vec!["Ana".to_owned(), "Bo & Co".to_owned()],
+            ..content(XmltvItemKind::Song)
+        };
+        let input = RenderProgrammeInput {
+            programme_start: "20260417200000 +0000",
+            programme_stop: "20260417200400 +0000",
+            channel_id: "C1.145.ersatztv.org",
+            channel_number: "1",
+            custom_title: None,
+            title: "Under & Over",
+            content: &song_content,
+            icon_url: None,
+            thumbnail_url: None,
+        };
+
+        let xml = render_programme(&templates, &input).expect("render song");
+
+        assert!(
+            xml.contains(r#"<title lang="en">Ana, Bo &amp; Co</title>"#),
+            "{xml}"
+        );
+        assert!(
+            xml.contains(r#"<sub-title lang="en">Under &amp; Over</sub-title>"#),
+            "{xml}"
+        );
+        assert!(xml.contains("<date>1999</date>"), "{xml}");
+        assert!(
+            xml.contains(
+                r#"<category lang="en">Pop</category><category lang="en">Rock</category>"#
+            ),
+            "{xml}"
+        );
+        assert!(!xml.contains("<icon"), "{xml}");
+        assert!(!xml.contains("True") && !xml.contains("None"), "{xml}");
     }
 
     #[tokio::test]

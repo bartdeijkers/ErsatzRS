@@ -87,7 +87,7 @@ impl DynamicTextTemplate {
         let rendered = self
             .environment
             .get_template(TEMPLATE_NAME)?
-            .render(Value::Object(variables))?;
+            .render(minijinja::value::Serde(Value::Object(variables)))?;
         validate_text("output", &rendered, MAX_DYNAMIC_TEXT_BYTES)?;
         Ok(rendered)
     }
@@ -526,6 +526,35 @@ mod tests {
         );
         assert!(!rendered.starts_with('\u{feff}'));
         assert!(!rendered.ends_with('\n'));
+    }
+
+    #[test]
+    fn renders_typed_graphics_variables_with_stable_spelling() {
+        let template = DynamicTextTemplate::compile(
+            "{{ Live }}|{{ Missing }}|{{ Count }}|{{ Ratio }}|{{ Names | join('/') }}|{{ Title | upper }}|{% if Live %}on{% else %}off{% endif %}|{{ (Playback.RemainingSeconds // 1) | int }}".to_owned(),
+        )
+        .unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 8, 25, 12, 34, 56).unwrap();
+
+        let rendered = template
+            .render(
+                &json!({
+                    "Live": true,
+                    "Missing": null,
+                    "Count": 3,
+                    "Ratio": 0.5,
+                    "Names": ["Ana", "Bo"],
+                    "Title": "Rock & Roll",
+                }),
+                DynamicTextRenderContext {
+                    now,
+                    playback_elapsed_seconds: 12.5,
+                    playback_duration_seconds: 30.0,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(rendered, "true|none|3|0.5|Ana/Bo|ROCK & ROLL|on|17");
     }
 
     #[test]

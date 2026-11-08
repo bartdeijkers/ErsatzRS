@@ -48,4 +48,55 @@ mod tests {
             "true|false|none"
         );
     }
+
+    /// Pins the rendering contract of the shared environment across the
+    /// `MiniJinja` 3 upgrade. Persisted XMLTV, dynamic-text, and graphics
+    /// templates render through this environment, so a future dependency
+    /// update that changes any of these spellings must fail here first and be
+    /// recorded in the changelog instead of silently altering output.
+    #[test]
+    fn pins_rendered_output_contract_for_persisted_templates() {
+        let environment = environment();
+        let render = |source: &str| {
+            environment
+                .render_str(
+                    source,
+                    context! {
+                        title => "Tom & Jerry <3>",
+                        year => 2026,
+                        rating => 7.5,
+                        whole => 2.0,
+                        names => vec!["A", "B"],
+                        enabled => true,
+                        empty => (),
+                    },
+                )
+                .unwrap()
+        };
+
+        // Unchanged from MiniJinja 2: scalars, numbers, joins, escaping-free
+        // `render_str` output (auto-escape is decided by template name), and
+        // positive integer arithmetic used by bundled templates.
+        assert_eq!(render("{{ title }}"), "Tom & Jerry <3>");
+        assert_eq!(
+            render("{{ year }}|{{ rating }}|{{ whole }}"),
+            "2026|7.5|2.0"
+        );
+        assert_eq!(render("{{ names | join(', ') }}"), "A, B");
+        assert_eq!(render("{{ enabled }}|{{ empty }}"), "true|none");
+        assert_eq!(
+            render("{{ 1080 // 20 }}|{{ 1080 / 20 }}|{{ 7 % 3 }}"),
+            "54|54.0|1"
+        );
+        assert_eq!(render("{{ '%02d' | format(4) }}"), "04");
+        assert_eq!(render("{{ 1234567.5 }}"), "1234567.5");
+
+        // Accepted MiniJinja 3 changes that align custom templates with Jinja2.
+        assert_eq!(render("{{ names }}"), "['A', 'B']");
+        assert_eq!(render("{{ 2.5 | round }}|{{ 3.5 | round }}"), "2.0|4.0");
+        assert_eq!(render("{{ 7 // -2 }}|{{ 7 % -2 }}"), "-4|-1");
+        assert_eq!(render("{{ \"don't stop\" | title }}"), "Don't Stop");
+        assert_eq!(render("{{ ['b', 'P', 'n'] | max }}"), "P");
+        assert!(environment.render_str("{{ 1 / 0 }}", ()).is_err());
+    }
 }
