@@ -6,9 +6,10 @@ Accepted (2026-11-08)
 
 ## Implementation
 
-Partial — the implementation components and local verification are complete;
-exact-head PR checks remain under milestone `subtitle-encoding`. This does not
-claim installed Windows or release acceptance.
+Implemented (PR #129, 2026-11-08) — local decoding/playback proof and exact-head
+CI are complete; the maintainer merged the change as `d275f1b9`. Milestone
+`subtitle-encoding` owns the evidence and explicit source/PR boundary. Production
+installation and release acceptance are excluded.
 
 ## Context
 
