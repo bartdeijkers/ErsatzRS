@@ -54,9 +54,11 @@ clippy-final.log, clippy-final-infra.log and doctests.log. No broad retry is hid
 The scoped runtime binary predates only the final relaxation for literal source
 replacement glyphs; focused-final.log proves that final strict decoding policy.
 Its legacy-input/seek evidence is reused within that explicit input scope.
-Remaining mandatory evidence: exact-head PR checks. Delivery: the scoped branch
-is ready for the requested commit/push and PR. No installed Windows or release
-acceptance is claimed.
+Delivered: PR129 (https://github.com/bartdeijkers/ErsatzRS/pull/129) from
+fix/subtitle-text-encoding; implementation checkpoint f9e0f07c. Local components
+and proof are complete. Remaining mandatory evidence: exact-head PR checks.
+Feature parity remains In progress until that evidence is available. No
+installed Windows or release acceptance is claimed.
 '''
 
 [[milestone]]
