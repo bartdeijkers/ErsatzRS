@@ -170,6 +170,13 @@ release section when tagging a release.
   same title style, with the primary "Add" action (plus icon) on the right
   of the title instead of in a separate bar. Headings and action labels wrap
   on narrow screens instead of being cut off.
+- Admin form fields are consistently labelled: the shared text, number,
+  select and textarea fields and the channel and FFmpeg profile editors now
+  associate each visible label with its control, so clicking a label focuses
+  the field and screen readers announce it. Shared fields use one 36 px
+  height. Collection, multi-collection, rerun collection, playlist, filler
+  preset and watermark editors gain a Cancel link next to Save, matching the
+  channel and FFmpeg profile editors.
 
 ### Fixed
 

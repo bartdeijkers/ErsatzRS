@@ -22,6 +22,7 @@ use crate::admin::ui::primitives::{
 // collections.module.css is shared with multi_collections.rs and
 // smart_collections.rs; classes unused in this file's per-invocation
 // generated constants are used there.
+use crate::admin::ui::primitives::button::CancelLink;
 stylance::import_crate_style!(
     #[allow(dead_code)]
     style,
@@ -367,6 +368,7 @@ fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView
                         tr(TextKey::SaveCollection).to_string()
                     }}
                 </button>
+                <CancelLink href="/media/collections"/>
             </div>
 
             <div class=style::editor>

@@ -93,3 +93,15 @@ pub fn IconButton(
         </button>
     }
 }
+
+/// "Cancel" link for editor action bars: leaves the editor without saving and
+/// returns to `href` (usually the overview). Shown next to the save button on
+/// every editor so leaving without saving looks the same everywhere.
+#[component]
+pub fn CancelLink(#[prop(into)] href: String) -> impl IntoView {
+    view! {
+        <a href=href class=style::btn_text data-cancel-editor>
+            {crate::admin::i18n::tr(crate::admin::i18n::TextKey::Cancel)}
+        </a>
+    }
+}

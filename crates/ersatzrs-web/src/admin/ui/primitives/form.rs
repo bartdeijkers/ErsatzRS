@@ -21,7 +21,8 @@ pub fn TextField(
 
     view! {
         <div class=style::field>
-            <label class=style::label>{label}</label>
+            <label class=style::control>
+            <span class=style::label>{label}</span>
             <input
                 type=input_type
                 placeholder=placeholder
@@ -34,6 +35,7 @@ pub fn TextField(
                 prop:value=move || value.get()
                 on:input=move |e| value.set(event_target_value(&e))
             />
+            </label>
             {move || error.and_then(|s| s.get()).map(|msg| view! {
                 <span class=style::error>{msg}</span>
             })}
@@ -55,7 +57,8 @@ pub fn NumberField(
 
     view! {
         <div class=style::field>
-            <label class=style::label>{label}</label>
+            <label class=style::control>
+            <span class=style::label>{label}</span>
             <input
                 type="number"
                 disabled=disabled
@@ -70,6 +73,7 @@ pub fn NumberField(
                     }
                 }
             />
+            </label>
             {move || error.and_then(|s| s.get()).map(|msg| view! {
                 <span class=style::error>{msg}</span>
             })}
@@ -105,7 +109,8 @@ where
 
     view! {
         <div class=style::field>
-            <label class=style::label>{label}</label>
+            <label class=style::control>
+            <span class=style::label>{label}</span>
             <select
                 disabled=disabled
                 name=name
@@ -119,6 +124,7 @@ where
             >
                 {items_view}
             </select>
+            </label>
             {move || error.and_then(|s| s.get()).map(|msg| view! {
                 <span class=style::error>{msg}</span>
             })}
@@ -168,7 +174,8 @@ pub fn TextArea(
 
     view! {
         <div class=style::field>
-            <label class=style::label>{label}</label>
+            <label class=style::control>
+            <span class=style::label>{label}</span>
             <textarea
                 rows=rows
                 placeholder=placeholder
@@ -179,6 +186,7 @@ pub fn TextArea(
             >
                 {initial_value}
             </textarea>
+            </label>
             {move || error.and_then(|s| s.get()).map(|msg| view! {
                 <span class=style::error>{msg}</span>
             })}
