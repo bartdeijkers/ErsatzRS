@@ -177,8 +177,8 @@ jobs:
   #
   # Push only. A pull_request must be evaluated on its own merge result, and a
   # manual dispatch is an explicit request to re-run. A PR merge commit is a
-  # new SHA, so this never skips one. A pull_request is skipped only when it
-  # changes nothing but the non-code paths ignored for `push`.
+  # new SHA, so this never skips one. A pull_request skips for non-code changes
+  # or a source-bound complete proof qualified in its PR preflight below.
   #
   # Pinned to a hosted runner on purpose: the self-hosted pool is one machine
   # with two runners, and adding a gate job there would charge every run
@@ -210,8 +210,8 @@ jobs:
       # `github-hosted` when no self-hosted runner is online (see the
       # "Choose the runner pool" step); empty means the self-hosted pool.
       pool: ${{ steps.pool.outputs.pool }}
-      skip: ${{ steps.select.outputs.skip || steps.duplicate.outputs.skip }}
-      lane: ${{ steps.select.outputs.lane || steps.duplicate.outputs.lane }}
+      skip: ${{ steps.pr_proof.outputs.skip || steps.select.outputs.skip || steps.duplicate.outputs.skip }}
+      lane: ${{ steps.pr_proof.outputs.lane || steps.select.outputs.lane || steps.duplicate.outputs.lane }}
       tree: ${{ steps.duplicate.outputs.tree }}
       # Domain selection of a `pr` lane run. Empty for every other lane, which
       # the jobs read as "run".
@@ -420,6 +420,9 @@ jobs:
       - uses: actions/checkout@v7
         if: ${{ steps.duplicate.outputs.lane == 'pr' || inputs.resume_run }}
         # Source-shape validation needs the actual merge-result source files.
+        with:
+          # Include the PR head's direct parent, even through the merge ref.
+          fetch-depth: 3
       - id: resume
         name: Verify completed check inputs and provenance
         if: ${{ inputs.resume_run }}
@@ -463,9 +466,29 @@ jobs:
           rows = proof['browser_pending'] or [{'suite':'general','project':'chromium','port':'18409'}]
           print('resume_matrix=' + json.dumps({'include': rows}, separators=(',', ':')))
           PY
+      - id: pr_proof
+        name: Verify completed full proof for the required PR check
+        if: ${{ steps.duplicate.outputs.lane == 'pr' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 scripts/ci-build-artifacts_test.py
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import importlib.util, json, os
+          spec = importlib.util.spec_from_file_location('artifacts', 'scripts/ci-build-artifacts.py')
+          artifacts = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(artifacts)
+          proof = artifacts.resume_pr_checks(os.environ['GITHUB_REPOSITORY'],
+              os.environ['PR_HEAD_SHA'], os.environ['GITHUB_SHA'])
+          if proof:
+              print('qualified_pr_proof=' + json.dumps(proof, separators=(',', ':')))
+              print('lane=skip')
+              print('skip=true')
+          PY
       - id: select
         name: Select touched domains
-        if: ${{ steps.duplicate.outputs.lane == 'pr' }}
+        if: ${{ steps.duplicate.outputs.lane == 'pr' && steps.pr_proof.outputs.skip != 'true' }}
         run: |
           python3 scripts/ci-domains.py select "$RUNNER_TEMP/changed-files.txt" \
             --added-files "$RUNNER_TEMP/added-files.txt" > "$RUNNER_TEMP/selection.json"

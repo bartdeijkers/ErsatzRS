@@ -408,6 +408,84 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
             "browser_case_proof": case_proof}
 
 
+def resume_pr_plan(run, artifact, repository, producer, tree, execution,
+                   changes, old_helper, new_helper, old_workflow, new_workflow):
+    """Bridge a completed full proof into an eligible PR check without retesting."""
+    if (any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (producer, tree, execution))
+            or run.get("head_sha") != producer or run.get("status") != "completed"
+            or run.get("conclusion") != "success" or run.get("display_title") != "CI"
+            or run.get("event") not in ("push", "schedule", "workflow_dispatch")
+            or run.get("path") != ".github/workflows/ci.yml"
+            or run.get("head_repository", {}).get("full_name") != repository
+            or type(run.get("id")) is not int or run["id"] <= 0
+            or type(artifact.get("id")) is not int or artifact["id"] <= 0
+            or artifact.get("expired") is not False
+            or artifact.get("name") != f"ci-full-{tree}"
+            or artifact.get("workflow_run", {}).get("id") != run["id"]):
+        raise ValueError("PR proof requires a completed same-source full CI marker")
+    allowed = {".github/workflows/ci.yml", "scripts/ci-build-artifacts.py",
+               "scripts/ci-build-artifacts_test.py", "BUILD.md",
+               "docs/progress/milestones.toml", "docs/progress/phase.toml",
+               "docs/progress/sessions.ndjson",
+               "docs/progress/parity/upstream-baseline-catch-up.toml"}
+    if set(changes) - allowed:
+        raise ValueError("PR proof compiled, runtime or browser inputs changed")
+    resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow)
+    if old_workflow.split("\njobs:\n", 1)[0] != new_workflow.split("\njobs:\n", 1)[0]:
+        raise ValueError("PR proof workflow settings changed")
+    def consumers(source):
+        return {match[1]: match[2] for match in re.finditer(
+            r"^  ([a-z][a-z0-9_]*):\n(.*?)(?=^  [a-z][a-z0-9_]*:|\Z)",
+            source.split("\njobs:\n", 1)[1], re.M | re.S) if match[1] != "preflight"}
+    if consumers(old_workflow) != consumers(new_workflow):
+        raise ValueError("PR proof check execution definitions changed")
+    return {"run_id": run["id"], "source_sha": producer, "execution_sha": execution,
+            "source_tree": tree, "artifact_id": artifact["id"]}
+
+
+def resume_pr_checks(repository, head, execution):
+    """Consider only the PR head's direct parent; absent proof keeps ordinary CI."""
+    if any(not re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (head, execution)):
+        raise ValueError("PR proof requires full commit SHAs")
+    if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != execution:
+        raise ValueError("PR proof checkout differs from execution SHA")
+    if subprocess.run(["git", "diff", "--quiet", "HEAD", "--"], check=False).returncode:
+        raise ValueError("PR proof requires a clean tracked checkout")
+    parents = subprocess.check_output(["git", "show", "-s", "--format=%P", head], text=True).split()
+    if len(parents) != 1:
+        return None
+    producer = parents[0]
+    tree = subprocess.check_output(["git", "rev-parse", f"{producer}^{{tree}}"], text=True).strip()
+    def api(path):
+        return json.loads(subprocess.check_output(["gh", "api", f"repos/{repository}/{path}"], text=True))
+    try:
+        inventory = api(f"actions/artifacts?name=ci-full-{tree}&per_page=100")
+    except subprocess.CalledProcessError:
+        print("Full proof lookup unavailable; ordinary PR checks remain required", file=sys.stderr)
+        return None
+    if inventory.get("total_count", 0) > 100:
+        return None
+    def source(revision, path):
+        return subprocess.check_output(["git", "show", f"{revision}:{path}"], text=True)
+    for artifact in inventory.get("artifacts", []):
+        if artifact.get("expired") or not artifact.get("workflow_run"):
+            continue
+        try:
+            run = api(f"actions/runs/{artifact['workflow_run']['id']}")
+        except subprocess.CalledProcessError:
+            continue
+        try:
+            return resume_pr_plan(run, artifact, repository, producer, tree, execution,
+                verify_source_equivalence(producer, execution),
+                source(producer, "scripts/ci-build-artifacts.py"),
+                source(execution, "scripts/ci-build-artifacts.py"),
+                source(producer, ".github/workflows/ci.yml"),
+                source(execution, ".github/workflows/ci.yml"))
+        except ValueError as error:
+            print(f"Full proof not reusable; ordinary PR checks remain required: {error}", file=sys.stderr)
+    return None
+
+
 def resume_checks(run, jobs, repository, sha, references, producer_log, browser_logs=None):
     """Bind the API proof to clean exact source before exporting any skips."""
     if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != sha:

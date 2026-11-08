@@ -687,6 +687,106 @@ class FullWorkspaceCoverage(unittest.TestCase):
             artifacts.verify_workspace_test_coverage(self.metadata, altered, self.binaries, catalog)
 
 
+class RequiredPrProof(unittest.TestCase):
+    def setUp(self):
+        self.workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()
+        self.helper = 'def restore():\n    return True\n'
+        self.run = dict(id=123, status='completed', conclusion='success', display_title='CI',
+                        path='.github/workflows/ci.yml', event='workflow_dispatch',
+                        head_sha=SHA, head_repository={'full_name': 'fixture/repo'})
+        self.artifact = dict(id=456, name='ci-full-' + 'c' * 40, expired=False,
+                             workflow_run={'id':123})
+
+    def plan(self, **changes):
+        options = dict(run=self.run, artifact=self.artifact, repository='fixture/repo',
+                       producer=SHA, tree='c' * 40, execution='b' * 40,
+                       changes=['.github/workflows/ci.yml'], old_helper=self.helper,
+                       new_helper=self.helper, old_workflow=self.workflow, new_workflow=self.workflow)
+        options.update(changes)
+        return artifacts.resume_pr_plan(**options)
+
+    def test_full_manual_proof_is_bound_to_source_tree_and_execution(self):
+        self.assertEqual(self.plan(), dict(run_id=123, source_sha=SHA, execution_sha='b' * 40,
+                                          source_tree='c' * 40, artifact_id=456))
+        for event in ['push', 'schedule']:
+            self.assertEqual(self.plan(run=dict(self.run, event=event))['run_id'], 123)
+
+    def test_failed_partial_foreign_live_or_different_source_runs_cannot_qualify(self):
+        for field, value in [('conclusion','failure'), ('status','in_progress'),
+                             ('display_title','CI (Next engine only)'), ('event','pull_request'),
+                             ('head_sha','d' * 40), ('head_repository',{'full_name':'other/repo'}),
+                             ('path','.github/workflows/release.yml'), ('id',True)]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.plan(run=dict(self.run, **{field:value}))
+
+    def test_marker_must_be_full_current_nonexpired_and_owned_by_the_run(self):
+        for field, value in [('name','ci-tree-' + 'c' * 40), ('name','ci-full-' + 'd' * 40),
+                             ('expired',True), ('expired',None), ('id',0),
+                             ('workflow_run',{'id':999})]:
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.plan(artifact=dict(self.artifact, **{field:value}))
+
+    def test_compiled_runtime_browser_and_selector_changes_keep_the_full_gate(self):
+        for path in ['crates/ersatzrs-web/src/main.rs', 'Cargo.lock', 'CHANGELOG.md',
+                     'scripts/release/next-packages.json', 'tests/e2e/ffmpeg-profiles.spec.ts',
+                     'tests/e2e/local-library-scan-lifecycle.spec.ts', 'scripts/ci-teletext-selection.py']:
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.plan(changes=[path])
+
+    def test_every_consumer_and_aggregate_definition_and_global_setting_is_bound(self):
+        for before, after in [('Next components, real-engine decoding and HTTP EOF','different checks'),
+                              ('Require every gate job to pass','different aggregate'),
+                              ('  next_engine:\n','  omitted_engine:\n'),
+                              ('concurrency:\n','concurrency:\n  changed: true\n')]:
+            self.assertIn(before, self.workflow)
+            with self.subTest(before=before), self.assertRaises(ValueError):
+                self.plan(new_workflow=self.workflow.replace(before, after, 1))
+        with self.assertRaisesRegex(ValueError, 'consumer implementation'):
+            self.plan(new_helper=self.helper.replace('True','False'))
+
+    def test_only_qualification_and_status_changes_can_bridge_the_complete_proof(self):
+        proof = self.plan(new_helper=self.helper + '\ndef resume_additional_policy():\n    return False\n',
+                          new_workflow=self.workflow.replace('  preflight:\n',
+                              '  preflight:\n    # qualified preflight-only change\n', 1),
+                          changes=['.github/workflows/ci.yml', 'scripts/ci-build-artifacts.py',
+                                   'scripts/ci-build-artifacts_test.py', 'BUILD.md',
+                                   'docs/progress/milestones.toml'])
+        self.assertEqual(proof['run_id'], 123)
+
+    def test_eligible_pr_preflight_validates_policy_before_publishing_skip(self):
+        self.assertIn('steps.pr_proof.outputs.lane ||', self.workflow)
+        self.assertIn('steps.pr_proof.outputs.skip ||', self.workflow)
+        proof = self.workflow.split('      - id: pr_proof\n',1)[1].split('      - id: select\n',1)[0]
+        self.assertIn("steps.duplicate.outputs.lane == 'pr'", proof)
+        self.assertLess(proof.index('ci-build-artifacts_test.py'), proof.index('resume_pr_checks'))
+        self.assertLess(proof.index('if proof:'), proof.index("print('skip=true')"))
+        self.assertIn("steps.pr_proof.outputs.skip != 'true'", self.workflow)
+        self.assertIn('fetch-depth: 3', self.workflow)
+
+    def test_missing_optional_api_access_keeps_ordinary_pr_checks(self):
+        def output(command, **_):
+            if command[:3] == ['git', 'rev-parse', 'HEAD']:
+                return 'b' * 40 + '\n'
+            if command[:2] == ['git', 'show']:
+                return SHA + '\n'
+            if command[:2] == ['git', 'rev-parse']:
+                return 'c' * 40 + '\n'
+            raise subprocess.CalledProcessError(1, command)
+        with patch.object(artifacts.subprocess, 'check_output', side_effect=output), \
+                patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                redirect_stdout(io.StringIO()):
+            self.assertIsNone(artifacts.resume_pr_checks('fixture/repo', 'b' * 40, 'b' * 40))
+
+    def test_wrong_or_dirty_pr_checkout_cannot_qualify(self):
+        with patch.object(artifacts.subprocess, 'check_output', return_value=SHA + '\n'):
+            with self.assertRaisesRegex(ValueError, 'checkout differs'):
+                artifacts.resume_pr_checks('fixture/repo', 'b' * 40, 'b' * 40)
+        with patch.object(artifacts.subprocess, 'check_output', return_value='b' * 40 + '\n'), \
+                patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
+            with self.assertRaisesRegex(ValueError, 'clean tracked checkout'):
+                artifacts.resume_pr_checks('fixture/repo', 'b' * 40, 'b' * 40)
+
+
 class CompletedCheckReuse(unittest.TestCase):
     def setUp(self):
         self.workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()

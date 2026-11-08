@@ -350,6 +350,17 @@ artifact verification still run; `CI ok` requires every remaining check and
 records the imported successful-job IDs in the fully tested tree marker.
 This is composed recovery evidence, not a newly executed complete test suite.
 
+GitHub does not accept `workflow_dispatch` job checks as required pull-request
+checks ([GitHub's rule](https://docs.github.com/en/enterprise-cloud%40latest/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)).
+A ready PR can bridge a completed full proof from its head's direct
+parent through the ordinary PR preflight. It requires the same repository,
+successful full-tree marker, unchanged compiled/runtime/browser inputs, global
+settings and every consumer/aggregate job definition. Only CI qualification
+and the existing status-document exceptions may differ. Preflight runs the
+qualification regressions before reporting the eligible PR check; missing or
+incompatible proof retains the ordinary PR lane. This does not waive a gate or
+turn a focused run into full acceptance.
+
 The smoke runner accepts an explicitly selected server without rebuilding:
 
 ```bash
