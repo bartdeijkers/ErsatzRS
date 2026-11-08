@@ -11,6 +11,7 @@ use crate::admin::server_fns::media_sources::{
     ManagedAddonMediaSourceRow,
 };
 use crate::admin::ui::primitives::{
+    page_header::{PageAction, PageHeader},
     dialog::DeleteDialog,
     resource_state::{admin_loading_resource_view, admin_result_view},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
@@ -173,12 +174,9 @@ fn LocalLibrariesIsland() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::toolbar>
-                <h1 class=style::page_title>{tr(TextKey::LocalLibraries)}</h1>
-                <div class=style::toolbar_actions>
-                    <a href="/media/sources/local/add" class=style::btn_primary>{format!("+ {}", tr(TextKey::AddLibrary))}</a>
-                </div>
-            </div>
+            <PageHeader title=tr(TextKey::LocalLibraries)>
+                <PageAction href="/media/sources/local/add" label=tr(TextKey::AddLibrary)/>
+            </PageHeader>
 
             <PagedTable
                 rows=rows

@@ -12,6 +12,7 @@ use crate::admin::server_fns::channels::{
     stop_channel_session, ChannelListRow, ChannelWatchAvailability, ChannelWatchData,
 };
 use crate::admin::ui::primitives::{
+    page_header::{PageAction, PageActionKind, PageHeader},
     dialog::{DeleteDialog, Modal},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
@@ -257,18 +258,15 @@ fn ChannelsListIsland() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
-                <a href="/channels/add" class=style::btn_add>
-                    {tr(TextKey::AddChannel)}
-                </a>
-                <a href="/channels/numbers" class=style::btn_numbers>
-                    {tr(TextKey::EditNumbers)}
-                </a>
-            </div>
-
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::Channels)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::Channels)>
+                    <PageAction
+                        href="/channels/numbers"
+                        label=tr(TextKey::EditNumbers)
+                        kind=PageActionKind::Secondary
+                    />
+                    <PageAction href="/channels/add" label=tr(TextKey::AddChannel)/>
+                </PageHeader>
 
                 <div class=style::table_panel>
                     <div class=style::table_toolbar>

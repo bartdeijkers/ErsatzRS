@@ -18,6 +18,8 @@ use crate::admin::ui::primitives::resource_state::{
 };
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
+use crate::admin::ui::primitives::page_header::PageHeader;
+
 stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module.css");
 
 #[component]
@@ -329,7 +331,7 @@ fn LibrariesIsland(
     view! {
         <AdminResourceState state=resource_state>
         <div class=style::page>
-            <h1 class=style::page_title>{tr(TextKey::Libraries)}</h1>
+            <PageHeader title=tr(TextKey::Libraries)/>
             <p
                 data-library-scan-javascript-required
                 class=style::scan_status

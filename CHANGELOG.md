@@ -157,6 +157,11 @@ release section when tagging a release.
   is picked (Apply remains for browsers without JavaScript), long card grids
   repeat the pager below the cards, and "Select all" is hidden when a page has
   no items.
+- Admin overview pages for channels, FFmpeg profiles, local libraries,
+  libraries, watermarks and graphics elements share one page heading: the
+  same title style, with the primary "Add" action (plus icon) on the right
+  of the title instead of in a separate bar. Headings and action labels wrap
+  on narrow screens instead of being cut off.
 
 ### Fixed
 
