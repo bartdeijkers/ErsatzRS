@@ -38663,6 +38663,23 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 final integration source changes: remote/main advances to6fbf73b4
+(PR126 custom-page broadcast) while the original CI browser checks run. Merge
+efc4aa00 preserves both source branches; only the session-log conflict needed
+resolution, retaining both histories. Formatting, progress, architecture and
+hydration checks pass. The web parity wrapper is interrupted before its broad
+test build; no parity-test pass is claimed. The inactive task target exceeds
+the required60GiB threshold and is cleaned, reclaiming114.2GiB. Four private
+acceptance archives are retained outside the worktree and checksum-verified;
+raw evidence/source controls remain retained. No shared cache or CI process is
+cleaned. The merged Rust and embedded changelog invalidate the old compiled
+artifact references for this final source; do not relax source equivalence.
+Prepare fresh application products with the existing producer commands and
+reuse those exact products for local acceptance and authorized CI. FFmpeg and
+Next remain the already-qualified published runtimes. Existing scoped proof
+stays retained; affected integration/platform and final exact-source acceptance
+remain pending. Native, the fixed v26.12.0 boundary and approved debt are unchanged.
+
 2026-11-08 both Firefox lifecycle failures are corrected and pass the exact
 headed two-case recheck2/2 in14.7s against unchanged producer437fbcf1. Original
 trace events place each native AbortError22–28ms after the fixture navigates
