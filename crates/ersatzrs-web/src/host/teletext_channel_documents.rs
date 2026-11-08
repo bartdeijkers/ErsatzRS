@@ -368,7 +368,7 @@ fn encode_channel(
     }
     let region = documents
         .iter()
-        .any(|document| matches!(document, TeletextProfileDocument::Base(_)))
+        .any(TeletextProfileDocument::is_base)
         .then_some(policy.v1_region);
     let originals = encode_original_channel_documents(
         &selection,
@@ -709,9 +709,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     if documents.is_empty() {
         return Ok(empty_editorial_originals());
     }
-    let has_v1 = documents
-        .iter()
-        .any(|document| matches!(document, TeletextProfileDocument::Base(_)));
+    let has_v1 = documents.iter().any(TeletextProfileDocument::is_base);
     if has_v1 != region.is_some() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
@@ -723,6 +721,15 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
         editorial.resource_additions.len(),
         &policy,
     )?;
+    // Host custom pages carry exact Level 1 rows (ADR 0120 amendment). They
+    // join any editorial rows as one physical overlay set; an editorial row
+    // on a custom page is rejected by the composition as a repeated owner.
+    let mut physical_rows = std::mem::take(&mut editorial.programs.0);
+    for document in &documents {
+        if let TeletextProfileDocument::CustomPages(custom) = document {
+            physical_rows.extend(custom.overlays().iter().cloned());
+        }
+    }
     let producers = prepare_producers_with_agreements(
         documents,
         deadline,
@@ -735,12 +742,9 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     let mut composition =
         TeletextColdProducerComposition::new(producers, metadata, policy.composition)
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
-    if !editorial.programs.0.is_empty() {
+    if !physical_rows.is_empty() {
         composition = composition
-            .with_physical_base_overlays(
-                std::mem::take(&mut editorial.programs.0),
-                policy.composition,
-            )
+            .with_physical_base_overlays(physical_rows, policy.composition)
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
     }
     let (producers, provenance, metadata, declared) = composition.into_parts();
@@ -973,6 +977,9 @@ impl ObjectResourcePreflight {
             match document {
                 TeletextProfileDocument::Base(base) => {
                     add_object_resource_count(&mut self.input_items, base.pages.len())?;
+                }
+                TeletextProfileDocument::CustomPages(custom) => {
+                    add_object_resource_count(&mut self.input_items, custom.draft().pages.len())?;
                 }
                 TeletextProfileDocument::Authored(original) => {
                     let semantic = original.semantic();
@@ -1462,6 +1469,16 @@ fn prepare_producers_with_agreements(
         let declared = match document {
             TeletextProfileDocument::Base(base) => lift_base(
                 base,
+                region.ok_or(ChannelTeletextDocumentEncodingError::Association)?,
+                policy.validation.service,
+                policy.validation.declarations,
+            )
+            .map_err(|error| ChannelTeletextDocumentEncodingError::Lift {
+                binding,
+                error: Box::new(error),
+            })?,
+            TeletextProfileDocument::CustomPages(custom) => lift_base(
+                custom.draft().clone(),
                 region.ok_or(ChannelTeletextDocumentEncodingError::Association)?,
                 policy.validation.service,
                 policy.validation.declarations,

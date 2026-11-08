@@ -23,8 +23,21 @@ release section when tagging a release.
   current and next programme. Each element shows which channels use it.
   On a channel's teletext page, the custom pages section links elements to
   that channel with their own page number and an on/off choice, and the page
-  set lists them. Broadcasting linked pages is not wired up yet; the page says
-  so.
+  set lists them.
+- Linked custom pages are now broadcast. Every switched-on page goes out with
+  the channel's next Check and publish, as the built-in source "Custom pages"
+  next to any add-on, or on its own on a channel without add-ons. The page is
+  sent exactly as uploaded (rows 1–24, all subpages); the header row stays the
+  channel's and enhancement packets are not sent. Fields are filled when you
+  check. A page that cannot go out blocks Check, and the channel page names the
+  reason per page: unreadable element, a field without a data link, a page
+  number with letters, two custom pages on one number, text hidden under a
+  double-height line, or a page inside an enabled add-on's range. Editing an element or link never changes what is on
+  air until you publish again; switching the first page on or the last page
+  off changes the channel's sources like an add-on does. Automatic field
+  refresh after publishing, custom pages during published Lua/Scripted
+  intervals and the element's own subpage cycle time are not done yet. The add-on id
+  `ersatzrs.host.custom-pages` is reserved.
 - Channel teletext pages show one ordered readiness checklist: add-on enabled,
   valid profile, teletext capacity, output route, published pages and
   broadcast confirmed by an active output. Each state is shown separately, and

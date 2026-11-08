@@ -422,9 +422,16 @@ impl ApplicationServices {
         ),
     ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
         let (deadline, hold, expected_selection) = admission;
-        let invoke = |selected, input, deadline| {
+        let invoke = |selected: TeletextSelectionSnapshot, input: Vec<u8>, deadline| {
             let hold = hold.clone();
             async move {
+                // The host-owned custom pages source runs in process.
+                if ersatzrs_domain::is_teletext_custom_pages_producer(&selected.addon_id) {
+                    return Box::pin(
+                        self.produce_teletext_custom_pages(selected, &input, deadline),
+                    )
+                    .await;
+                }
                 match hold {
                     Some(hold) => {
                         self.ports()

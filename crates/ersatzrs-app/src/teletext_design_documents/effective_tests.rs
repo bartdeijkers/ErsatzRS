@@ -183,7 +183,7 @@ impl Fixture {
         .into_iter()
         .map(|(contract, page)| {
             validate_document_response(
-                contract,
+                crate::teletext_profile_documents::DocumentProducer::addon(contract),
                 GENERATION,
                 response(contract, page),
                 budget().validation,

@@ -181,14 +181,15 @@ fn channel_page(
         ("", "", "status")
     };
     let channel_id = data.channel_id;
+    let custom_on = super::teletext_custom_pages::custom_pages_on(data);
     let status = data
         .readiness
         .as_ref()
-        .map(|readiness| status_line(readiness, &data.addons));
+        .map(|readiness| status_line(readiness, &data.addons, custom_on));
     let readiness = data
         .readiness
         .as_ref()
-        .map(|readiness| readiness::view(channel_id, readiness, &data.addons));
+        .map(|readiness| readiness::view(channel_id, readiness, &data.addons, custom_on));
     let guide_available = data.current_guide_available == Some(true);
     let guide_unreadable = data.current_guide_available.is_none();
     let current_guide = (guide_available || current.is_some() || guide_unreadable).then(|| {
@@ -331,8 +332,10 @@ fn page_range(addon: &TeletextAddonData) -> Option<String> {
 fn status_line(
     readiness: &crate::admin::server_fns::teletext::TeletextReadinessData,
     addons: &[TeletextAddonData],
+    custom_pages_on: bool,
 ) -> AnyView {
-    let on = addons.iter().any(source_on);
+    // Custom pages are a source of their own (ADR 0120 amendment).
+    let on = custom_pages_on || addons.iter().any(source_on);
     let route_ready = matches!(readiness.route.as_str(), "legacy" | "hybrid-builtin");
     let (tone, label, detail, state) = if !on {
         (
@@ -1343,7 +1346,7 @@ mod tests {
             last_failure_at: None,
         };
         let state = |readiness: &TeletextReadinessData, addons: &[TeletextAddonData]| {
-            let html = owner.with(|| status_line(readiness, addons).to_html());
+            let html = owner.with(|| status_line(readiness, addons, false).to_html());
             html.split("data-state=\"")
                 .nth(1)
                 .unwrap()

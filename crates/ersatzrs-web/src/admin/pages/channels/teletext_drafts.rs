@@ -43,6 +43,7 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "editorial-no-pages" => TextKey::TeletextPreviewAbsent,
         "editorial-syntax" => TextKey::TeletextEditorSyntax,
         "editorial-missing-receipt" => TextKey::TeletextEditorMissingReceipt,
+        "custom-pages" => TextKey::TeletextCustomPagesBlocked,
         "busy" => TextKey::TeletextWorkBusy,
         "expired" => TextKey::TeletextWorkExpired,
         "missing-design" | "foreign-channel" => TextKey::TeletextDraftMissing,
@@ -65,14 +66,26 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
                     })
             })
             .collect();
-    let available =
-        data.catalog_available && data.authoring_selection.is_some() && !eligible.is_empty();
-    let single = eligible.len() == 1;
+    // Switched-on custom pages are a host-owned source (ADR 0120 amendment).
+    let custom_on = super::teletext_custom_pages::custom_pages_on(data);
+    let available = data.catalog_available
+        && data.authoring_selection.is_some()
+        && (!eligible.is_empty() || custom_on);
+    let single = eligible.len() + usize::from(custom_on) == 1;
     let entry_page = eligible
         .first()
         .and_then(|addon| super::teletext::effective_setting(addon, &["INDEX_PAGE", "PAGE_START"]))
         .and_then(|value| value.parse::<u16>().ok())
-        .filter(|page| (100..=899).contains(page));
+        .filter(|page| (100..=899).contains(page))
+        .or_else(|| super::teletext_custom_pages::first_custom_page(data));
+    let custom_option = custom_on.then(|| {
+        view! {
+            <option value=ersatzrs_domain::TELETEXT_CUSTOM_PAGES_PRODUCER_ID selected=single>
+                {tr(TextKey::TeletextCustomPagesTitle)}
+            </option>
+        }
+        .into_any()
+    });
     let options = eligible
         .iter()
         .map(|addon| {
@@ -83,10 +96,21 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
             };
             view! { <option value=addon.addon_id.clone() selected=single>{name}</option> }
         })
-        .collect_view();
+        .collect_view()
+        .into_any();
     let default_name = format!("{} · {}", data.channel_number, data.channel_name);
     // Nothing can be checked before a source is on; keep the details folded.
-    let open_technical = !eligible.is_empty();
+    let open_technical = !eligible.is_empty() || custom_on;
+    // A separate view keeps the server render of this form shallow.
+    let technical = technical_details(
+        data,
+        open_technical,
+        default_name,
+        single,
+        options,
+        custom_option,
+        entry_page,
+    );
     view! {
         <div class=style::authoring data-testid="teletext-authoring">
             <p>{tr(TextKey::TeletextAuthoringHelp)}</p>
@@ -101,44 +125,61 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
                     <button type="submit" class=btn_class(ButtonVariant::Primary)>
                         {tr(TextKey::TeletextValidateSaveDraft)}
                     </button>
-                    <details class=style::technical data-testid="teletext-authoring-technical" open=open_technical>
-                        <summary class=style::technical_title>{tr(TextKey::TeletextCheckTechnical)}</summary>
-                        <p>{tr(TextKey::TeletextCheckTechnicalHelp)}</p>
-                        <div class=style::technical_grid>
-                            <div>
-                                <label for="teletext-draft-name">{tr(TextKey::TeletextDesignName)}</label>
-                                <input id="teletext-draft-name" name="name" required value=default_name
-                                    maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
-                            </div>
-                            <div>
-                                <label for="teletext-entry-producer">{tr(TextKey::TeletextEntryProducer)}</label>
-                                <select id="teletext-entry-producer" name="entry_addon_id" required>
-                                    <option value="" selected=!single disabled>{tr(TextKey::TeletextEntryProducer)}</option>
-                                    {options}
-                                </select>
-                            </div>
-                            {entry_fields("teletext", entry_page)}
-                            <div>
-                                <label for="teletext-v1-region">{tr(TextKey::TeletextV1Region)}</label>
-                                <select id="teletext-v1-region" name="v1_region" required>
-                                    <option value="" disabled>{tr(TextKey::TeletextV1Region)}</option>
-                                    <option value="western_latin" selected>{tr(TextKey::TeletextV1WesternLatin)}</option>
-                                </select>
-                            </div>
-                            <div>{guide_channel_fields(data, "teletext")}</div>
-                            <div>
-                                <label for="teletext-resources">{tr(TextKey::TeletextResourceLifecycle)}</label>
-                                <p id="teletext-resources-help">{tr(TextKey::TeletextResourceLifecycleHelp)}</p>
-                                <textarea id="teletext-resources" name="resource_transmissions" required
-                                    rows="2" maxlength="65536" aria-describedby="teletext-resources-help"
-                                    inner_html=textarea_content("[]")></textarea>
-                            </div>
-                        </div>
-                    </details>
+                    {technical}
                 </fieldset>
             </form>
         </div>
     }.into_any()
+}
+
+/// The folded technical fields of the Check form.
+fn technical_details(
+    data: &ChannelTeletextData,
+    open_technical: bool,
+    default_name: String,
+    single: bool,
+    options: AnyView,
+    custom_option: Option<AnyView>,
+    entry_page: Option<u16>,
+) -> AnyView {
+    view! {
+        <details class=style::technical data-testid="teletext-authoring-technical" open=open_technical>
+            <summary class=style::technical_title>{tr(TextKey::TeletextCheckTechnical)}</summary>
+            <p>{tr(TextKey::TeletextCheckTechnicalHelp)}</p>
+            <div class=style::technical_grid>
+                <div>
+                    <label for="teletext-draft-name">{tr(TextKey::TeletextDesignName)}</label>
+                    <input id="teletext-draft-name" name="name" required value=default_name
+                        maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
+                </div>
+                <div>
+                    <label for="teletext-entry-producer">{tr(TextKey::TeletextEntryProducer)}</label>
+                    <select id="teletext-entry-producer" name="entry_addon_id" required>
+                        <option value="" selected=!single disabled>{tr(TextKey::TeletextEntryProducer)}</option>
+                        {options}
+                        {custom_option}
+                    </select>
+                </div>
+                {entry_fields("teletext", entry_page)}
+                <div>
+                    <label for="teletext-v1-region">{tr(TextKey::TeletextV1Region)}</label>
+                    <select id="teletext-v1-region" name="v1_region" required>
+                        <option value="" disabled>{tr(TextKey::TeletextV1Region)}</option>
+                        <option value="western_latin" selected>{tr(TextKey::TeletextV1WesternLatin)}</option>
+                    </select>
+                </div>
+                <div>{guide_channel_fields(data, "teletext")}</div>
+                <div>
+                    <label for="teletext-resources">{tr(TextKey::TeletextResourceLifecycle)}</label>
+                    <p id="teletext-resources-help">{tr(TextKey::TeletextResourceLifecycleHelp)}</p>
+                    <textarea id="teletext-resources" name="resource_transmissions" required
+                        rows="2" maxlength="65536" aria-describedby="teletext-resources-help"
+                        inner_html=textarea_content("[]")></textarea>
+                </div>
+            </div>
+        </details>
+    }
+    .into_any()
 }
 
 /// Saved guide source channels for the check, as a sentence.

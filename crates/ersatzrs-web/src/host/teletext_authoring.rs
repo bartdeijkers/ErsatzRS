@@ -114,6 +114,9 @@ pub enum TeletextAuthoringStatus {
     PreviewFailed,
     StorageFailed,
     WorkerFailed,
+    /// At least one switched-on custom page cannot go out; the channel page
+    /// names the reason per page (ADR 0120 amendment).
+    CustomPagesBlocked,
 }
 
 /// Original numeric engine locations; no offending text or setting values.
@@ -151,6 +154,7 @@ impl TeletextAuthoringError {
             TeletextAuthoringStatus::WorkerFailed => "worker",
             TeletextAuthoringStatus::PreviewFailed => "preview",
             TeletextAuthoringStatus::ResourceLimit => "limit",
+            TeletextAuthoringStatus::CustomPagesBlocked => "custom-pages",
             TeletextAuthoringStatus::InvalidPages
             | TeletextAuthoringStatus::ProducerFailed
             | TeletextAuthoringStatus::EncodingFailed => "encoding",
@@ -956,6 +960,7 @@ async fn prepare_design_inner(
     let owner = input.entry();
     let selection = observed_selection(application, request.channel_id, operation.deadline).await?;
     let selection = checked_selection(selection, &request.selection_digest, &operation).await?;
+    Box::pin(check_custom_pages(application, &selection)).await?;
     let candidate = if input.guide_channel_ids().is_some() {
         guide::prepare_base(
             application,
@@ -1005,6 +1010,30 @@ async fn prepare_design_inner(
     )
     .await;
     Ok(TeletextAuthoringSaved { identity, preview })
+}
+
+/// Name the blocked custom pages before any producer runs, so Check reports
+/// the per-page reasons the channel page shows instead of a producer failure.
+async fn check_custom_pages(
+    application: &ApplicationServices,
+    selection: &TeletextChannelSelectionSnapshot,
+) -> Result<(), TeletextAuthoringError> {
+    if !selection
+        .bindings
+        .iter()
+        .any(|binding| ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id))
+    {
+        return Ok(());
+    }
+    let plan = application
+        .plan_teletext_custom_pages(selection.channel_id, Utc::now())
+        .await
+        .map_err(|_| failure(TeletextAuthoringStatus::Unavailable))?;
+    if plan.is_ready() {
+        Ok(())
+    } else {
+        Err(failure(TeletextAuthoringStatus::CustomPagesBlocked))
+    }
 }
 
 async fn prepare_static_candidate(

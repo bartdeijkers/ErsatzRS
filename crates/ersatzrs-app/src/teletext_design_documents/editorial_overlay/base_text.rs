@@ -266,10 +266,7 @@ pub(super) fn validate_association(
             return Err(invalid());
         }
         let document = super::unique_original_owner(edit.owner(), documents)?;
-        let base = match document {
-            TeletextProfileDocument::Base(base) => base,
-            TeletextProfileDocument::Authored(service) => service.semantic().base(),
-        };
+        let base = document.pages_draft();
         let character = base
             .pages
             .iter()
