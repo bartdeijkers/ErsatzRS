@@ -24,6 +24,7 @@ use crate::admin::ui::primitives::{
 // smart_collections.rs; classes unused in this file's per-invocation
 // generated constants are used there.
 use crate::admin::ui::primitives::button::CancelLink;
+use crate::admin::ui::primitives::empty_state::EmptyState;
 stylance::import_crate_style!(
     #[allow(dead_code)]
     style,
@@ -138,8 +139,13 @@ fn MultiCollectionsIsland(
             {move || {
                 let (rows, total) = current_data.get();
                 let rows_view = if rows.is_empty() {
-                    view! { <p class=style::empty>{tr(TextKey::NoMultiCollections)}</p> }
-                        .into_any()
+                    view! {
+                        <EmptyState
+                            title=tr(TextKey::NoMultiCollections)
+                            action=("/media/multi-collections/add".to_owned(), tr(TextKey::AddMultiCollection))
+                        />
+                    }
+                    .into_any()
                 } else {
                     view! {
                         <div class=style::table_wrap>
@@ -194,6 +200,7 @@ fn MultiCollectionsIsland(
 
                 view! {
                     {rows_view}
+                    <div style:display=if total == 0 { "none" } else { "" }>
                     <PaginationControls
                         page=Signal::derive(move || page.get())
                         total=Signal::derive(move || Some(total))
@@ -214,6 +221,7 @@ fn MultiCollectionsIsland(
                             page.update(|value| *value = value.saturating_add(1).min(max_page));
                         })
                     />
+                    </div>
                 }
                 .into_any()
             }}

@@ -20,6 +20,7 @@ use crate::admin::ui::primitives::{
 };
 
 use crate::admin::ui::primitives::button::CancelLink;
+use crate::admin::ui::primitives::empty_state::EmptyState;
 stylance::import_crate_style!(style, "src/admin/pages/media/rerun_collections.module.css");
 
 const COLLECTION_TYPE_COLLECTION: i32 = 0;
@@ -154,6 +155,9 @@ fn RerunCollectionsList(
 
                 {move || {
                     let (rows, total) = current_data.get();
+                    let is_empty = rows.is_empty();
+                    let searching = !search.get_untracked().trim().is_empty();
+                    let hidden_when_empty = if is_empty { "none" } else { "" };
                     view! {
                         <div class=style::table_wrap>
                             <div class=style::table_toolbar>
@@ -171,7 +175,20 @@ fn RerunCollectionsList(
                                     />
                                 </label>
                             </div>
-                            <table>
+                            <div style:display=if is_empty { "" } else { "none" }>
+                                {if searching {
+                                    view! { <EmptyState title=tr(TextKey::EmptyListTitle)/> }.into_any()
+                                } else {
+                                    view! {
+                                        <EmptyState
+                                            title=tr(TextKey::NoRerunCollections)
+                                            help=tr(TextKey::NoRerunCollectionsHelp)
+                                            action=("/media/rerun-collections/add".to_owned(), tr(TextKey::AddRerunCollection))
+                                        />
+                                    }.into_any()
+                                }}
+                            </div>
+                            <table style:display=hidden_when_empty>
                                 <tbody>
                                     {rows.into_iter().map(|row| {
                                         let id = row.id;
@@ -213,6 +230,7 @@ fn RerunCollectionsList(
                                     }).collect_view()}
                                 </tbody>
                             </table>
+                            <div style:display=hidden_when_empty>
                             <PaginationControls
                                 page=Signal::derive(move || page.get())
                                 total=Signal::derive(move || Some(total))
@@ -233,6 +251,7 @@ fn RerunCollectionsList(
                                     page.update(|value| *value = value.saturating_add(1).min(max_page));
                                 })
                             />
+                            </div>
                         </div>
                     }
                     .into_any()
