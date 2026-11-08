@@ -1,4 +1,8 @@
 .guide {
+    /* Text and row sizes below use em so the whole grid scales with this
+       base size. Wide (4K) viewports get a larger base; the channel column
+       stays in rem because guide.rs measures it as CHANNEL_COLUMN_PIXELS. */
+    font-size: 1rem;
     overflow: hidden;
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
@@ -9,21 +13,21 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.65rem;
-    min-height: 2.75rem;
-    padding: 0.45rem 0.75rem;
+    gap: 0.65em;
+    min-height: 2.75em;
+    padding: 0.45em 0.75em;
     border-bottom: 1px solid var(--color-border);
 }
 
 .visible-label,
 .visible-time {
     color: var(--color-muted);
-    font-size: 0.72rem;
+    font-size: 0.875em;
     white-space: nowrap;
 }
 
 .visible-time {
-    min-width: 3.25rem;
+    min-width: 3.75em;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -39,15 +43,15 @@
 }
 
 .step-controls button {
-    min-height: 1.8rem;
+    min-height: 2.25em;
     border: 1px solid var(--color-border);
     border-radius: 0.25rem;
-    padding: 0 0.45rem;
+    padding: 0 0.6em;
     background: transparent;
     color: var(--color-muted);
     cursor: pointer;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.68rem;
+    font-size: 0.8125em;
 }
 
 .step-controls button:hover,
@@ -58,7 +62,7 @@
 }
 
 .scroll {
-    max-height: min(70vh, 52rem);
+    max-height: max(24rem, calc(100vh - 13rem));
     overflow: auto;
     outline: none;
     scroll-behavior: smooth;
@@ -81,7 +85,7 @@
     position: sticky;
     top: 0;
     z-index: 8;
-    min-height: 2.4rem;
+    min-height: 2.75em;
     border-bottom: 1px solid var(--color-border);
     background: var(--color-surface);
 }
@@ -102,9 +106,9 @@
     z-index: 10;
     display: flex;
     align-items: center;
-    padding: 0 0.85rem;
+    padding: 0 0.85em;
     color: var(--color-muted);
-    font-size: 0.72rem;
+    font-size: 0.8125em;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -132,22 +136,22 @@
     display: flex;
     align-items: center;
     border-left: 1px solid var(--color-border);
-    padding-left: 0.35rem;
+    padding-left: 0.4em;
     color: var(--color-muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.68rem;
+    font-size: 0.8125em;
 }
 
 .lane {
-    min-height: 3.15rem;
+    min-height: 4em;
     border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .channel {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
-    padding: 0.35rem 0.75rem;
+    gap: 0.7em;
+    padding: 0.35em 0.75em;
     color: var(--color-text-primary);
     text-decoration: none;
 }
@@ -160,15 +164,15 @@
 }
 
 .channel img {
-    width: 3rem;
-    height: 2.2rem;
+    width: 3em;
+    height: 2.4em;
     object-fit: contain;
 }
 
 .channel-identity {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 0.55em;
     min-width: 0;
 }
 
@@ -180,22 +184,22 @@
 
 .active {
     border-radius: 999px;
-    padding: 0.12rem 0.38rem;
+    padding: 0.12em 0.45em;
     background: rgba(187, 27, 27, 0.22);
     color: #ffb4ab;
-    font-size: 0.58rem;
+    font-size: 0.75em;
     font-weight: 700;
     text-transform: uppercase;
 }
 
 .lane-track {
-    min-height: 3.15rem;
+    min-height: 4em;
 }
 
 .programme {
     position: absolute;
-    top: 0.25rem;
-    bottom: 0.25rem;
+    top: 0.3em;
+    bottom: 0.3em;
     box-sizing: border-box;
     display: grid;
     align-content: center;
@@ -203,7 +207,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--color-action-default) 30%, var(--color-border));
     border-radius: 0.28rem;
-    padding: 0.18rem 0.4rem;
+    padding: 0.2em 0.5em;
     background: rgba(0, 144, 144, 0.18);
     color: var(--color-text-primary);
     text-decoration: none;
@@ -231,18 +235,18 @@
 }
 
 .programme strong {
-    font-size: 0.7rem;
+    font-size: 0.875em;
 }
 
 .programme small {
     color: var(--color-muted);
-    font-size: 0.58rem;
+    font-size: 0.8125em;
 }
 
 .filler-label {
     color: currentColor;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.54rem;
+    font-size: 0.75em;
     font-weight: 800;
 }
 
@@ -285,6 +289,21 @@
     color: var(--color-muted);
 }
 
+/* Large and 4K displays: scale the whole grid up so titles and times stay
+   readable from a normal viewing distance. 4K at 150% OS scaling reports
+   about 2560 CSS px; at 100% scaling it reports 3840 CSS px. */
+@media (min-width: 2200px) {
+    .guide {
+        font-size: 1.2rem;
+    }
+}
+
+@media (min-width: 3000px) {
+    .guide {
+        font-size: 1.45rem;
+    }
+}
+
 @media (max-width: 767px) {
     .controls {
         align-items: stretch;
@@ -313,6 +332,6 @@
     }
 
     .channel img {
-        width: 2.25rem;
+        width: 2.25em;
     }
 }
