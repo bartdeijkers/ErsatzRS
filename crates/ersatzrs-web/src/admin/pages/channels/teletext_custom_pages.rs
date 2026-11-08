@@ -9,12 +9,12 @@ use leptos::prelude::*;
 
 use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::teletext::{
-    ChannelTeletextData, TeletextAddonData, TeletextCustomPageData, TeletextCustomPagesData,
+    ChannelTeletextData, TeletextCustomPageData, TeletextCustomPagesData,
 };
 use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::teletext::{island, status_badge, TeletextIsland, TeletextTone};
 
-use super::teletext::{addon_name, effective_setting, source_on, style};
+use super::teletext::{addon_name, style};
 
 stylance::import_crate_style!(
     custom_style,
@@ -42,27 +42,46 @@ pub(super) fn feedback(error: &str, saved: &str) -> Option<(&'static str, &'stat
     }
 }
 
-/// Decimal page range `(start, end)` an enabled add-on uses on this channel.
-fn addon_range(addon: &TeletextAddonData) -> Option<(u16, u16)> {
-    if !source_on(addon) {
-        return None;
-    }
-    let start = effective_setting(addon, &["PAGE_START"])?
-        .parse::<u16>()
-        .ok()?;
-    let end = effective_setting(addon, &["PAGE_END"])
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(start);
-    Some((start, end.max(start)))
+/// Why an enabled custom page cannot go out with the next Check, in words.
+/// The server computes the reason with the same plan the host producer runs.
+fn issue_text(data: &ChannelTeletextData, link: &TeletextCustomPageData) -> Option<String> {
+    let code = link.issue.as_deref()?;
+    Some(match code {
+        "addon-range" => {
+            let addon = link.issue_addon.as_deref().unwrap_or_default();
+            let name = data
+                .addons
+                .iter()
+                .find(|candidate| candidate.addon_id == addon)
+                .map_or_else(|| addon.to_owned(), addon_name);
+            tr(TextKey::TeletextElementChannelClash).replace("{addon}", &name)
+        }
+        "page-number" => tr(TextKey::TeletextCustomPageIssuePageNumber).to_owned(),
+        "unset-field" => tr(TextKey::TeletextCustomPageIssueUnsetField).to_owned(),
+        "duplicate-page" => tr(TextKey::TeletextElementChannelErrorPageInUse).to_owned(),
+        "double-height" => tr(TextKey::TeletextCustomPageIssueDoubleHeight).to_owned(),
+        _ => tr(TextKey::TeletextCustomPageIssueUnreadable).to_owned(),
+    })
 }
 
-/// Name of the add-on whose page range contains `page`, if any.
-fn clashing_addon(data: &ChannelTeletextData, page: &str) -> Option<String> {
-    let page = page.parse::<u16>().ok()?;
-    data.addons.iter().find_map(|addon| {
-        let (start, end) = addon_range(addon)?;
-        (start..=end).contains(&page).then(|| addon_name(addon))
-    })
+/// Whether any linked custom page is switched on, so the host source exists.
+pub(super) fn custom_pages_on(data: &ChannelTeletextData) -> bool {
+    data.custom_pages
+        .as_ref()
+        .is_some_and(|custom| custom.links.iter().any(|link| link.enabled))
+}
+
+/// Lowest switched-on custom page number, the entry page when custom pages
+/// are the only source.
+pub(super) fn first_custom_page(data: &ChannelTeletextData) -> Option<u16> {
+    data.custom_pages
+        .as_ref()?
+        .links
+        .iter()
+        .filter(|link| link.enabled)
+        .filter_map(|link| link.page.parse::<u16>().ok())
+        .filter(|page| (100..=899).contains(page))
+        .min()
 }
 
 /// Page-set rows contributed by custom pages linked to this channel.
@@ -75,13 +94,10 @@ pub(super) fn page_set_rows(data: &ChannelTeletextData) -> Vec<AnyView> {
         .iter()
         .filter(|link| link.enabled)
         .map(|link| {
-            let badge = match clashing_addon(data, &link.page) {
-                Some(addon) => status_badge(
-                    TeletextTone::Error,
-                    tr(TextKey::TeletextElementChannelClash).replace("{addon}", &addon),
-                ),
+            let badge = match issue_text(data, link) {
+                Some(reason) => status_badge(TeletextTone::Error, reason),
                 None => status_badge(
-                    TeletextTone::Neutral,
+                    TeletextTone::Success,
                     tr(TextKey::TeletextElementChannelLinked),
                 ),
             };
@@ -100,7 +116,6 @@ pub(super) fn page_set_rows(data: &ChannelTeletextData) -> Vec<AnyView> {
 }
 
 pub(super) fn custom_pages_island(data: &ChannelTeletextData) -> AnyView {
-    let channel_id = data.channel_id;
     let (badge, body) = match data.custom_pages.as_ref() {
         None => (
             None,
@@ -122,7 +137,7 @@ pub(super) fn custom_pages_island(data: &ChannelTeletextData) -> AnyView {
                     },
                 )
             };
-            (Some(badge), body(channel_id, custom))
+            (Some(badge), body(data, custom))
         }
     };
     view! {
@@ -144,7 +159,8 @@ fn return_path(channel_id: i64) -> String {
     format!("/channels/{channel_id}/teletext#{ANCHOR}")
 }
 
-fn body(channel_id: i64, custom: &TeletextCustomPagesData) -> AnyView {
+fn body(data: &ChannelTeletextData, custom: &TeletextCustomPagesData) -> AnyView {
+    let channel_id = data.channel_id;
     let links = if custom.links.is_empty() {
         view! {
             <div class=style::empty>
@@ -156,7 +172,7 @@ fn body(channel_id: i64, custom: &TeletextCustomPagesData) -> AnyView {
     } else {
         view! {
             <ul class=custom_style::links data-testid="teletext-custom-page-links">
-                {custom.links.iter().map(|link| link_row(channel_id, link)).collect_view()}
+                {custom.links.iter().map(|link| link_row(channel_id, link, issue_text(data, link))).collect_view()}
             </ul>
         }
         .into_any()
@@ -209,7 +225,7 @@ fn body(channel_id: i64, custom: &TeletextCustomPagesData) -> AnyView {
         .into_any()
     };
     view! {
-        <p class=style::notice>{tr(TextKey::TeletextElementChannelNotBroadcast)}</p>
+        <p class=style::notice>{tr(TextKey::TeletextElementChannelBroadcastHelp)}</p>
         {links}
         {add}
         <p><a class=style::manage href="/teletext-elements">{tr(TextKey::TeletextElementChannelLibrary)}</a></p>
@@ -217,7 +233,11 @@ fn body(channel_id: i64, custom: &TeletextCustomPagesData) -> AnyView {
     .into_any()
 }
 
-fn link_row(channel_id: i64, link: &TeletextCustomPageData) -> impl IntoView {
+fn link_row(
+    channel_id: i64,
+    link: &TeletextCustomPageData,
+    issue: Option<String>,
+) -> impl IntoView {
     let save = format!("/admin-api/channels/{channel_id}/teletext-elements/save");
     let remove = format!(
         "/admin-api/channels/{channel_id}/teletext-elements/{}/remove",
@@ -231,6 +251,9 @@ fn link_row(channel_id: i64, link: &TeletextCustomPageData) -> impl IntoView {
                 <a href=format!("/teletext-elements/{}", link.element_id)><strong>{link.name.clone()}</strong></a>
                 " · "{tr(TextKey::TeletextElementPageNumber)}" "{link.page.clone()}
             </div>
+            {issue.filter(|_| link.enabled).map(|reason| view! {
+                <p role="alert" data-testid="teletext-custom-page-issue">{reason}</p>
+            })}
             <form method="post" action=save class=custom_style::link_form>
                 <input type="hidden" name="return" value=return_path(channel_id)/>
                 <input type="hidden" name="element_id" value=link.element_id.to_string()/>

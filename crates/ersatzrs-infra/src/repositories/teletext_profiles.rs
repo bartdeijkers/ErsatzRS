@@ -402,6 +402,32 @@ pub(super) async fn channel_snapshot_in_transaction(
             M::Rejected(reason) => return Ok(M::Rejected(reason)),
         }
     }
+    // ADR 0120 amendment (2026-11-07): one host-owned custom pages producer
+    // while at least one linked element is switched on. Its identity is
+    // constant, so element and link edits never disturb live output.
+    let custom_pages: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "ChannelTeletextElement"
+            WHERE "ChannelId" = ? AND "IsEnabled" = 1"#,
+    )
+    .bind(channel_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if custom_pages > 0 {
+        let custom = ersatzrs_domain::teletext_custom_pages_selection(channel_id);
+        let index = bindings.partition_point(|binding| binding.addon_id < custom.addon_id);
+        if bindings
+            .get(index)
+            .is_some_and(|binding| binding.addon_id == custom.addon_id)
+        {
+            // An installed package can never own the reserved producer id.
+            return Ok(M::Rejected(R::WrongAddon));
+        }
+        if bindings.len() >= MAX_TELETEXT_PAGE_RECORDS {
+            return Ok(M::Rejected(R::BindingLimit));
+        }
+        bindings.insert(index, custom);
+    }
     Ok(M::Saved(TeletextChannelSelectionSnapshot {
         channel_id,
         bindings,

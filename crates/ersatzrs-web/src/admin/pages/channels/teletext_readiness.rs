@@ -19,15 +19,19 @@ pub(super) fn view(
     channel_id: i64,
     readiness: &TeletextReadinessData,
     addons: &[TeletextAddonData],
+    custom_pages_on: bool,
 ) -> AnyView {
-    let enabled = addons
+    let addon_enabled = addons
         .iter()
         .filter_map(|addon| addon.binding.as_ref())
         .any(|binding| binding.enabled);
+    // Switched-on custom pages are a complete source without add-on settings.
+    let enabled = addon_enabled || custom_pages_on;
     let profile = addons
         .iter()
         .filter_map(|addon| addon.binding.as_ref())
-        .any(|binding| binding.enabled && binding.availability == "configured");
+        .any(|binding| binding.enabled && binding.availability == "configured")
+        || (custom_pages_on && !addon_enabled);
     let capacity_ready = readiness.authoring_policy != "absent"
         && readiness.output_policy != "absent"
         && !matches!(

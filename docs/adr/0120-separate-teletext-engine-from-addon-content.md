@@ -95,7 +95,7 @@ with a page number. These pages are the operator's own content, so no add-on is
 needed to deliver them. ErsatzRS acts as their producer under these rules:
 
 - **Source.** One host-owned source per channel with the reserved producer id
-  `ersatzrs.custom-pages`. It is not an installable add-on, runs no child
+  `ersatzrs.host.custom-pages`. It is not an installable add-on, runs no child
   process and has no manifest or settings. Each enabled channel link
   contributes one page: the link's page number, or the element's own number
   when the link has none. Rows 1–24 and all subpages come from the element;
@@ -135,6 +135,19 @@ needed to deliver them. ErsatzRS acts as their producer under these rules:
 
 The add-on contract, add-on ranges and the TV-guide add-on are unchanged.
 Lua and channel profiles do not control custom pages in this amendment.
+
+Implementation (partial, 2026-11-07): the host producer takes part in Check,
+stored revisions, preview, publication and encoding. While at least one link
+is on, the channel selection carries one constant-identity member for
+`ersatzrs.host.custom-pages` (installable manifests cannot claim the id), so element
+and link edits do not disturb live output; switching the first page on or the
+last page off changes the selection like an add-on binding does. Its response
+carries exact seven-bit rows that the engine applies as physical base rows on
+empty Base pages. The engine's no-hidden-row rule applies unchanged: a page
+with text under a double-height line, or double height on row 23 or 24, is a
+per-page Check issue rather than having those bytes dropped. Refresh after publication, custom pages during published
+Scripted intervals, the element's subpage cycle time and the acceptance
+evidence remain open in the `teletext-support` parity record.
 Acceptance needs unit and native publication evidence, one independently decoded
 stream that carries a custom page with refreshed fields next to the TV-guide
 pages, and the Playwright flows for upload, field binding, channel linking and

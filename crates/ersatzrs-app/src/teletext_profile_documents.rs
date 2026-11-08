@@ -42,6 +42,50 @@ pub struct TeletextProfileDocumentBudget {
 pub enum TeletextProfileDocument {
     Base(TeletextPageSetDraft),
     Authored(Box<TeletextDeclaredService>),
+    /// Host-owned custom pages (ADR 0120): empty Base pages plus exact Level 1
+    /// rows. Only the reserved host producer may supply this document.
+    CustomPages(Box<ersatzrs_domain::TeletextCustomPagesDocument>),
+}
+
+impl TeletextProfileDocument {
+    /// Base pages lifted with the host's V1 region, including custom pages.
+    #[must_use]
+    pub fn base_draft(&self) -> Option<&TeletextPageSetDraft> {
+        match self {
+            Self::Base(base) => Some(base),
+            Self::CustomPages(custom) => Some(custom.draft()),
+            Self::Authored(_) => None,
+        }
+    }
+
+    /// The Level 1 page plane every producer kind declares.
+    #[must_use]
+    pub fn pages_draft(&self) -> &TeletextPageSetDraft {
+        match self {
+            Self::Base(base) => base,
+            Self::CustomPages(custom) => custom.draft(),
+            Self::Authored(service) => service.semantic().base(),
+        }
+    }
+
+    /// True when the document needs the host's explicit V1 region.
+    #[must_use]
+    pub const fn is_base(&self) -> bool {
+        matches!(self, Self::Base(_) | Self::CustomPages(_))
+    }
+}
+
+/// Parse and check a host custom pages response for one correlation.
+/// # Errors
+/// Rejects syntax, correlation and page/row failures.
+pub fn parse_custom_pages(
+    bytes: &[u8],
+    generation: &str,
+) -> Result<ersatzrs_domain::TeletextCustomPagesDocument, ersatzrs_domain::TeletextCustomPagesError>
+{
+    let wire: ersatzrs_domain::TeletextCustomPagesWire = serde_json::from_slice(bytes)
+        .map_err(|_| ersatzrs_domain::TeletextCustomPagesError::Syntax)?;
+    ersatzrs_domain::TeletextCustomPagesDocument::from_wire(wire, generation)
 }
 
 /// Exact bounded UTF-8 producer response after selected-contract/model validation.
@@ -123,7 +167,7 @@ impl BoundTeletextDocumentInput {
         budget: TeletextProfileDocumentBudget,
     ) -> Result<PreparedBoundTeletextDocument, BoundTeletextDocumentError> {
         let (document, source) = validate_document_response(
-            self.receipt.selection.contract,
+            DocumentProducer::of(&self.receipt.selection),
             &self.receipt.generation,
             self.receipt.stdout,
             budget,
@@ -139,10 +183,37 @@ impl BoundTeletextDocumentInput {
     }
 }
 
+/// Which parser a producer response needs: its selected contract, and whether
+/// the producer is the reserved host-owned custom pages source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocumentProducer {
+    pub contract: TeletextPageContract,
+    pub custom_pages: bool,
+}
+
+impl DocumentProducer {
+    #[must_use]
+    pub fn of(selection: &TeletextSelectionSnapshot) -> Self {
+        Self {
+            contract: selection.contract,
+            custom_pages: ersatzrs_domain::is_teletext_custom_pages_producer(&selection.addon_id),
+        }
+    }
+
+    /// An installable add-on producer with this contract.
+    #[must_use]
+    pub const fn addon(contract: TeletextPageContract) -> Self {
+        Self {
+            contract,
+            custom_pages: false,
+        }
+    }
+}
+
 // Shared content validation only: callers authenticate their distinct base or
 // published-interval receipt first. This function grants no producer authority.
 pub(super) fn validate_document_response(
-    contract: TeletextPageContract,
+    producer: DocumentProducer,
     generation: &str,
     stdout: Vec<u8>,
     budget: TeletextProfileDocumentBudget,
@@ -151,7 +222,16 @@ pub(super) fn validate_document_response(
 {
     check_deadline(Instant::now(), deadline)?;
     let mut authoring = None;
+    let contract = producer.contract;
     let document = match contract {
+        TeletextPageContract::V1 if producer.custom_pages => {
+            let custom = parse_custom_pages(&stdout, generation)?;
+            budget
+                .service
+                .validate_base_with_page_metadata(custom.draft())
+                .map_err(|error| BoundTeletextDocumentError::ServiceBudget(Box::new(error)))?;
+            TeletextProfileDocument::CustomPages(Box::new(custom))
+        }
         TeletextPageContract::V1 => {
             let base = parse_page_set(&stdout, generation)?;
             budget
@@ -296,6 +376,8 @@ pub enum BoundTeletextDocumentError {
     AuthoredMetadataResponse(Box<TeletextAuthoredPagesV3Error>),
     #[error(transparent)]
     ServiceBudget(Box<TeletextServiceError>),
+    #[error(transparent)]
+    CustomPages(#[from] ersatzrs_domain::TeletextCustomPagesError),
     #[error("teletext document preparation exceeded its shared deadline")]
     TimedOut,
 }

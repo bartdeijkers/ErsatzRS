@@ -291,7 +291,7 @@ fn encode_effective_channel(
     });
     let region = documents
         .iter()
-        .any(|document| matches!(document, TeletextProfileDocument::Base(_)))
+        .any(TeletextProfileDocument::is_base)
         .then_some(policy.v1_region);
     let originals = encode_original_producer_documents(
         entry_producer,

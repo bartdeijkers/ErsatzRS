@@ -271,11 +271,11 @@ where
     if selection.bindings.len() > MAX_TELETEXT_PAGE_RECORDS {
         return Err(ChannelTeletextPagesError::BindingCount);
     }
-    if selection
-        .bindings
-        .iter()
-        .any(|binding| binding.contract != ersatzrs_domain::TeletextPageContract::V1)
-    {
+    if selection.bindings.iter().any(|binding| {
+        // Custom pages carry exact rows that only the composed path applies.
+        binding.contract != ersatzrs_domain::TeletextPageContract::V1
+            || ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id)
+    }) {
         return Err(ChannelTeletextPagesError::EnhancedCompositionRequired);
     }
     let entry = select_entry(&selection, entry_addon_id)?;
