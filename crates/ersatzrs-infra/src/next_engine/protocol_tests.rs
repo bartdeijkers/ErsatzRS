@@ -57,6 +57,9 @@ fn current_schemas_preserve_dynamic_retry_and_scaling_contracts() {
         serde_json::to_value(fallback).unwrap(),
         json!({"duration_seconds": 120, "show_error": true})
     );
+    let background = json!({"background_image":"resources/背景.png","show_error":false});
+    let parsed: Fallback = serde_json::from_value(background.clone()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap(), background);
     for flags in ["bicubic", "lanczos", "fast_bilinear+accurate_rnd"] {
         let value = json!({"flags": flags});
         let parsed: ScaleOptions = serde_json::from_value(value.clone()).unwrap();

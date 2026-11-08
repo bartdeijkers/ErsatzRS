@@ -4110,6 +4110,10 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
     }
 
     match trimmed {
+        "An FFmpeg profile with this name already exists." => "Esiste già un profilo FFmpeg con questo nome.".to_owned(),
+        "The FFmpeg profile settings are invalid. Review the selected options." => "Le impostazioni del profilo FFmpeg non sono valide. Controlla le opzioni selezionate.".to_owned(),
+        "The FFmpeg profile could not be saved. Check the application log." => "Impossibile salvare il profilo FFmpeg. Controlla il registro dell’applicazione.".to_owned(),
+
         "Profile name is required." => "Il nome del profilo è richiesto.".to_owned(),
         "Profile name must be 50 characters or fewer." => {
             "Il nome del profilo deve essere di 50 caratteri o meno.".to_owned()

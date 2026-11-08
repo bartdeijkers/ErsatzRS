@@ -250,6 +250,7 @@ fn application_state(pool: SqlitePool) -> (AppState, UnboundedReceiver<ScanWorkR
         playout_tx,
         scan_tx,
         EntityLocker::new(),
+        None,
     );
     (state, scan_rx)
 }

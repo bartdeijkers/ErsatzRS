@@ -1,5 +1,528 @@
 # Upstream ErsatzTV catch-up
 
+## Active catch-up target (2026-11-07)
+
+Local disposition checkpoint2026-11-07: rows255–285 now have source dispositions
+and completed required local evidence. The accepted baseline remains unchanged
+until exact-source CI and ordered window acceptance pass. Row271 is approved
+unverified later-work debt, not a security-fix claim. Milestones ucu-13/14/15
+own acceptance; the combined four-target proof is in milestone ucu-15.
+
+The maintainer extends the fixed goal through released **v26.12.0** at
+[`53b3b42a02533ad8e72af09565b494f2b19e40fc`](https://github.com/ErsatzTV/legacy/commit/53b3b42a02533ad8e72af09565b494f2b19e40fc),
+`prep for release v26.12.0` (2026-11-06 20:59:20 UTC).
+This supersedes the earlier unreleased target at `06c008b4`; do not chase
+commits after this release. Acceptance and delivery approval boundaries remain.
+UCU-00–12 and the accepted baseline remain unchanged. The accepted pin remains
+owned by docs/automation/parity-baseline.md until ordered acceptance advances it.
+
+| Window | Ordered rows | Fixed terminal revision | Current state |
+| --- | --- | --- | --- |
+| UCU-13 | 255–259 | v26.11.5 / `d5482b7f06b06de3f117bfb5010f4e27e37209a2` | Source reconciliation pending |
+| UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Source reconciliation pending |
+| UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Source reconciliation pending |
+
+There are **285 observed, 254 accepted and 31 pending rows**. Earlier tail
+notes are provisional triage, not accepted dispositions or proof of present
+ErsatzRS behavior. The owning milestones ucu-13, ucu-14 and ucu-15 contain the
+finite acceptance and evidence lists. Process the windows and rows in order;
+compatible implementation/proof may be batched without skipping dispositions.
+Do not chase later moving-main commits or reopen completed UCU-12.
+
+### Successor goal
+
+Reconcile these three fixed windows against a separate branch/worktree based on
+verified current remote/main. Preserve completed Phase9 and UCU deliveries,
+ongoing DCI work, unrelated changes, processes, shared caches and existing
+source/runtime/negative evidence. Read the exact upstream changes before each
+small coherent package and record the affected user behavior, smallest change,
+required proof and stopping condition. Retain the source SHA/subject for every
+row and accepted dispositions before advancing the baseline.
+
+**ErsatzRS keeps its Native engine.** Upstream row272 does not authorize removing
+it, migrating stored Native channels, redirecting its routes to Next, or hiding
+Native-only profile controls globally. Preserve Native and Next as supported
+selectable engines, existing profiles and choices, international audio/subtitles,
+teletext, private callbacks, persistence and accurate engine-specific Health.
+Adapt rows272/282 to the retained two-engine design and existing accepted ADRs;
+request a decision only for genuinely new deviations outside those decisions.
+
+Audit, implement and prove applicable lock/single-instance safety, fallback and
+probe/container/codec hints, generated-list reconciliation, aspect ratios,
+JWT-disabled behavior, troubleshooting dossiers, contract/describe hardware
+probes, dependent playout synchronization, unique dynamic/unsaved item identity,
+profile validation, and runtime/FFmpeg compatibility. Independently resolve the
+row271 Windows security advisory's applicability using authoritative evidence;
+absence of a public advisory is not evidence of non-applicability. Keep an exact
+external blocker if necessary. Maintainer amendment2026-11-07 explicitly defers
+row271 as unverified later work under parity debt
+`ucu14-windows-advisory-applicability`; it no longer blocks this catch-up or
+the approved runtime publication. Retain the applicability/fix obligation and
+resume it when upstream details become available; do not claim a security fix.
+Audit the terminal Next and FFmpeg changes as
+behavior, not a reason to adopt ErsatzTV's FFmpeg8 or remove working features.
+Retain FFmpeg9, drawvg and current verified packages unless a demonstrated gap
+requires an authorized amendment. Retire temporary patches only after equivalent
+unpatched behavior passes. Dependency changes, substantial architecture or new
+intentional deviations retain their normal ADR/approval requirements.
+
+Reuse existing runners, scripts and still-valid acceptance; rebuild/retest only
+when affected inputs or assumptions invalidate it. Keep exact source identities,
+checksums and matched SSR/WASM. Required scope is Linux x64 and native Windows
+x64, plus ARM64/ARMv7 builds/packages/software emulation; native ARM and approved
+hardware debt remain explicitly unverified. No macOS build/package/toolchain/
+acceptance or paid runners/services. Preserve experimental Level2.5 and its
+safeguards, without reopening deferred enhanced/client/editor work.
+
+Close required focused tests, affected headed Chromium/Firefox, actual Native/
+Next decoded playback, smoke/TSDuck where affected, and required local final
+gates before acceptance. Record original failures and source-bound recoveries;
+do not re-run whole CI or rebuild identical artifacts for one failed job.
+This planning update authorizes no commit/push, merge, CI dispatch, release or
+dependency publication. Seek the applicable separate authorization when needed;
+prior UCU-12 approvals do not grant those actions for UCU-13–15. Keep required
+final exact-source CI gates when remote delivery is authorized. Update canonical
+progress, changelog, docs and pins truthfully; clean only inactive task-owned
+resources after deliverables and evidence are safely retained. Phase10, Docker
+publication and unrelated CI engineering implementation are outside this goal.
+
+## UCU-15 release-tail source map: rows283–285
+
+- Approved extension2026-11-07: freeze at v26.12.0 / `53b3b42a`.
+  All285 ordered SHA/subject pairs agree with the independently fetched tag;
+  the existing282 rows are an unchanged prefix. Acceptance remains254/31.
+- Row283 `03c206ee` switches upstream FFmpeg to released8.1.2-8 and Next
+  to02a2f12d. Row284 `de40b158` selects released Next0.2.5 at
+  `c5cb065f9f35dbbcb7c05845f0f92c70f576a480`. Row285 only prepares release notes.
+- Released Next differs from audited92e93d72 only in FFmpeg pins, release notes
+  and workspace/package versions; no crate source changed. Released FFmpeg
+  at83b9746e differs from audited4089c130 only in release notes/revision.
+  Retain existing behavioral/source evidence with its original identity; this
+  does not qualify a new binary or retire any patch.
+- Consolidate release identities into accepted ADR0130 rather than building an
+  interim candidate. Preserve ADR0131's exact-base reader evidence and verify
+  its application/identity on the final source. No package pin/build/adoption
+  is authorized by this scope extension. Keep FFmpeg9 and Native.
+- Release notes mention Vulkan decode-format/CPU-device selection and the free
+  Intel VAAPI watermark performance limitation. These tail commits add no
+  implementation; retain applicable proof in the existing runtime audit.
+- Exact receipts/reviewed complete deltas: `tmp/ucu15-target-refresh/`.
+  Rows remain pending until ordered acceptance; no window is accepted here.
+
+## UCU-13 source map: rows255–259
+
+- Rows255/256: build/package/Next pins plus release notes, exact bump and revert.
+  `git diff 38d17208^ 12f52f2d` is empty across the entire upstream tree.
+  No lasting UI/validator/schema/repository/runtime change remains in this window;
+  the later reapply belongs to UCU-14. No FFmpeg rebuild or new capability claim.
+- Rows257/258: `ErsatzTV/Program.cs`, `Main`, `TryLockConfigFolder` and
+  `IsSharingViolation`; Docker changes only pin the .NET runtime. No admin UI,
+  view model, schema migration or repository query changes. The lasting behavior
+  is a process-lifetime config lock, read/write first and read-only fallback;
+  contention exits1, other failures warn and continue. The read/write preference
+  fixes upstream NFS locking but does not add network SQLite support here.
+- ErsatzRS: existing `ersatzrs-platform` owns the OS guard; the ordinary web
+  `main` holds it before database initialization until host exit. Reuse
+  `file_system_layout::app_state_folder()` and `ERSATZRS_APP_STATE_DIR`; the
+  private preparation worker/recovery command keep their existing separate
+  ownership. Standard-library `File::try_lock` is available on the pinned
+  Rust1.97.1; no new dependency/crate/unsafe code or platform exception is needed.
+- Preserve upstream's distinct contention/unavailable policy, stale-file reuse,
+  handle-close release, read-only fallback and independent state-folder scopes.
+  Never truncate/unlink the lock; refuse nonregular/symlink paths consistently
+  with existing lease safety. ADR0080 continues to prohibit shared/network
+  SQLite or active-active operation; this is a safety guard, not cluster support.
+- Row259: upstream CHANGELOG release date/compare links only. Bookkeeping is
+  N/A to ErsatzRS versioning; no release is authorized by catch-up registration.
+- Mandatory current component proof: real competing processes, graceful and
+  abrupt owner release, stale contents, independent folders, read-only fallback
+  and unavailable-folder classification on Linux and native Windows; ARM build/
+  emulation and ordinary host rejection before DB startup remain final evidence.
+  A guard-library pass alone is not host/milestone acceptance.
+
+## UCU-14 source map: container hints and IPTV token forwarding
+
+- Row263 exact source: `Infrastructure/Scheduling/PlayoutItemConverter.cs`
+  and its tests at cc0596d6. The version's first media-file extension supplies
+  AVI, Matroska/WebM, MOV/MP4, ASF, MPEG-TS or MPEG format hints. Unknown and
+  extensionless paths retain null; images keep codec-derived demuxer hints.
+  No UI, schema, validator, repository or track-selection policy changes.
+- ErsatzRS target: `infra/next_engine/probe_hint.rs::persisted` and existing
+  `probe_hint_tests.rs` SQLite fixture. The current AVI-only branch is the
+  demonstrated gap. Port the exact extension table without a migration or
+  guessing remote formats. Preserve generated/retained producers and all
+  selected audio/subtitle indexes. Stopping proof is the complete mapping/
+  unknown/image fixture plus affected actual Next container playback.
+- Row268 exact source: `Core/Iptv/AccessToken.cs`, `IptvController.cs`,
+  `Core/FFmpeg/FFmpegLibraryProcessService.cs` and AccessTokenTests at0378f80c.
+  Forward query tokens only with JWT enabled; tokens must be nonempty and
+  consist solely of ASCII letters/digits/underscore/dot/hyphen. Do not trim
+  invalid tokens into a new token. Public playlist/guide/HLS/preview/subtitle/
+  wrapper paths share that policy. Authentication and private callbacks remain.
+- ErsatzRS target: `web/transport/iptv/access_token.rs` and its existing
+  playlist, guide, HLS, stream and converted-subtitle request boundaries.
+  The current constructor accepts other non-whitespace values, and callers
+  forward them even with a disabled verifier. Add a request-aware constructor,
+  retain the existing pure URL builder contract and use the common policy at
+  those request boundaries. Existing enabled Next routing proofs are retained.
+  Stopping proof: disabled tokens never appear in generated URLs; valid enabled
+  tokens propagate unchanged; unsafe alphabet is rejected; Native/Next routing
+  and selected-caption URLs keep their required behavior.
+- No admin page/visual layout, database migration, dependency or new deliberate
+  deviation is introduced by these direct ports. This is an independent source
+  package while UCU-13 ARM execution waits for the existing Docker engine; it
+  does not accept a later window or advance the accepted baseline.
+
+## Authorized FFmpeg successor build package (2026-11-07)
+
+- Requirement: accepted ADR0130, including reproduced separate-input buffering,
+  skipped MPEG-2 captions and Windows CUDA colour-transition failures. Complete
+  playback must survive those cases with Native and the qualified Next worker.
+- Smallest change: retain the pinned FFmpeg9 base/dependency images and existing
+  fixes; apply the fourteen audited non-macOS amendments with four reviewed AMF
+  source-context adaptations and FFmpeg9's required scheduler wakeup flag, plus remove the unusable AMF VC-1 wrapper. The QSV
+  VC-1 amendment applies without adaptation after its prerequisite corrections.
+- All34 common patches and both retained Windows patches apply exactly in order.
+  Exact source deltas, scripts, image IDs and patch hashes are in
+  `tmp/ucu14/ffmpeg210/{linux64,win64}/inputs.json`. Two isolated local builds use
+  host Docker directly, with no network or Docker socket mount. Shared caches,
+  retained UCU12 source/evidence and production installations remain untouched.
+- Stop when four candidate packages pass required build, software/emulation and
+  available native Windows runtime acceptance, including unchanged reproductions.
+  Build success alone is not runtime or hardware acceptance. Native ARM/macOS and
+  approved unavailable hardware remain explicitly unverified/deferred.
+- Local software/package stopping proof is complete for all four FFmpeg RIDs;
+  the qualified Native CUDA command and all unchanged reproducers pass. Next025
+  four-package bare-worker qualification and independent retirement proof also
+  pass. Canonical results: milestones ucu-14/15 and
+  `tmp/ucu14/{ffmpeg210/acceptance.json,next025/qualification.json}`. Remaining
+  integrated application/adoption and final gates stay required; commit/push,
+  CI, publication and production installation remain separately gated.
+
+## UCU-14/15 runtime source map
+
+- Initial audited Next source: `92e93d72c0e3694417a22207374b9d12cbf38087`;
+  fixed release source is c5cb065f (see the release-tail comparison above).
+  Review `ersatztv-channel` channel config/session/fallback,
+  describe and dynamic resolvers, and `ffpipeline` capability, input, filter
+  and output paths. Relevant upstream schemas are channel0.1.3, playout0.0.8
+  and describe. Native removal is expressly excluded.
+- Row261 sources: `ChannelConfigConverter`, `PlayoutItemConverter`,
+  `InternalController` at0db2f355, plus Next fallback-image support atc4b1e5b.
+  Prefer custom `background.png`, otherwise generated `_background.png`;
+  preserve callback authentication and admitted interval/instance ownership.
+  ErsatzRS targets are `next_engine/{protocol,config,fallback,host}` and
+  `transport/iptv/next_media`, with the existing resource background provider.
+- Runtime source: upstream FFmpeg4089c1301508a503d277ff94adc8ec2957946198,
+  compared against exact published FFmpeg9 base source/provenance and existing
+  teletext/concat amendments. Patch applicability is source evidence only.
+  Milestone ucu-14 owns the actual two software negatives and full input IDs.
+- Accepted decision: [ADR0130](../docs/adr/0130-qualify-fixed-ucu-runtime-successors.md)
+  consolidates the candidate policy and unchanged mandatory proof. It is
+  Accepted for local implementation/builds/tests; adoption/publication remain separate. Review all ten Next
+  patches against unpatched regressions before retaining or retiring them.
+- User behavior: correct fallback backgrounds and reliable normal playback,
+  selected tracks/captions and compatible hardware/software selection under
+  both retained engines. Reuse existing managers, readiness, Health and
+  generation-fenced probe/worker infrastructure; no new runtime service.
+- Audit stopping condition is met: identify fixed source/contract differences,
+  demonstrate actual current-runtime gaps and prepare one bounded proposal.
+  Dependent local implementation/builds/tests are now authorized by acceptance. Ordered row/window
+  acceptance and the accepted baseline remain unchanged.
+
+## UCU-14 source map: generated lists and aspect ratios
+
+- Row264: `MediaCollections/Commands/TraktCommandBase.cs` at7eef077f loads
+  the existing playlist and removes every rank without a current match.
+  Trakt itself remains retired under ADR0069. The generic ErsatzRS counterpart
+  is `AddonMediaListSynchronizer::match_list_items_with_report_inner` and its
+  transactional complete desired/persisted comparison, replacement and exact
+  playout-refresh intent. Verify stale-member removal, final-member removal,
+  unchanged-row stability and rollback; do not restore Trakt or change the
+  accepted staged-publication/removal-confirmation policy.
+- Row267: `Metadata/LocalStatisticsProvider.cs` atb634e142 stops replacing
+  structured per-video SAR/DAR with one stderr regex result. ErsatzRS local
+  extraction already parses stdout JSON only and derives the selected video's
+  aspect ratios in `infra/ffprobe.rs`; scanner writes them to MediaVersion.
+  Verify distinct multi-video ratios, primary-stream choice, missing SAR's
+  existing square-pixel default, unknown DAR and retained international tracks.
+- This is a bounded proof package using existing SQLite/parser fixtures. Add
+  only missing regressions, retain current behavior, and stop after the focused
+  cases and affected lint pass. Window/platform/final gates remain separate.
+
+## UCU-15 source map: occurrence identity and publication freshness
+
+- Row280: `PlayoutItemConverter` and tests at160a96c1 give dynamic items stable
+  window IDs and unsaved items occurrence/media IDs. Next uses equality to
+  retain subtitle/copy state. ErsatzRS gap IDs already include both full-
+  precision bounds, but `selection.rs` exports every unsaved filler as `0`.
+  `fallback_playback::materialize_at` deliberately creates these items without
+  SQL rows. Correct only their opaque wire identity; preserve saved row IDs,
+  numeric callback bindings, source seeks, session admission and persistence.
+  Verify repeated callbacks retain identity and a new occurrence changes it,
+  including fractional bounds and a different selected media item. Existing
+  fallback and selected-track fixtures plus affected actual playback own proof.
+- Row278: `NextPlayoutDependents`, `NextPlayoutFolderPlanner`,
+  `SyncNextPlayoutHandler` and the editing handlers/tests atfbb3685b define
+  dependent-only freshness and deterministic unchanged publication. ErsatzRS
+  uses one atomic broad-window manifest instead of per-day symlink trees.
+  Audit its shared publisher/coordinator/finalizer and existing edit notifications
+  before changing them. Preserve locks, cancellation/deadlines and SQL/file
+  rollback. Do not change scheduling state or replace Refresh with Reset.
+  The notification implementation uses domain `PlayoutProjectionChange`,
+  application `playout_projection::refresh_after`, infrastructure
+  `next_engine/dependents.rs` and the existing `ChannelRuntime` session-update
+  adapter. Resolve before a mutation removes references; enqueue after success.
+  Global settings target all Next channels; other roots include active mirrors,
+  exclude Native destinations and dormant mirror pointers, and deduplicate.
+  Reuse normal-to-preview forwarding and its existing bounded publisher; no
+  new worker/service or scheduler rebuild. The selected test graph is app +
+  infra + web, --lib/locked/offline; keep it stable through the correction loop.
+  Stopping proof: dependency matrix, pre-delete/application ordering, real
+  application save/delete dispatch and existing live projection-update proof,
+  strict affected lint and scoped review. This component is verified locally.
+  Write economy remains separate: accepted ADR0131 resolves the representation
+  conflict with immutable daily chunks and one atomic index, preserving SQL/file
+  compensation and requiring a qualified Next reader extension. It remains
+  Partial: the opt-in ordinary writer passes44 distinct focused cases, affected
+  strict lint/review and real complete-format refresh1/1 locally. The qualified
+  Next reader/capability/Health guard and actual indexed/platform proof remain
+  required. Filesystem/coordinator accepted-SQL recovery is now verified with55
+  focused cases, strict lint and complete-format playback1/1. Owned host callback
+  commit is now verified locally: visible gaps remain admitted after cleanup
+  failure or awaiter cancellation, with bounded callback waits, session revocation
+  and channel isolation. Milestone ucu-15 owns exact proof and the remaining
+  qualified-reader/indexed/platform requirements. Broader successor builds await
+  ADR0130. No narrower whole-file
+  comparison is credited as daily economy.
+- Close the ID correction and its affected proof before implementing the
+  adjacent freshness changes. Window/platform/final acceptance remains open.
+
+## UCU-15 Native NVIDIA colour-transition command trial
+
+- Requirement: row276 / FFmpeg0032 hardware colour reconfiguration on this
+  available Windows NVIDIA GPU. Software watermark proof does not establish it.
+- Reuse the verified reconfiguration clip, Native builder and pinned installed
+  Windows209 runtime/owned process runner. Export one exact Native CUDA/NVENC
+  command and check the runtime advertises its required filters before launch.
+- Stop at a decoded complete item with persistent watermark, or a retained
+  concrete failure identifying a required correction. This is command-path
+  proof, not a Windows host/capability-manager build. Successor runtime work is now authorized by accepted ADR0130; retain approved unavailable hardware
+  limitations and do not substitute them for this available-device trial.
+
+## UCU-15 Native watermark reconfiguration proof
+
+- Requirement: row276 / fixed Next8cb37069 keeps a still watermark present
+  through video-parameter changes. Native must deliver the complete item,
+  including every decoded watermark frame, rather than treating exit0 as proof.
+- Source: Next `ffpipeline/src/pipeline.rs` and its existing synthetic
+  `480p_h264_reinit.ts` fixture, unchanged through released0.2.5/c5cb065f.
+  Upstream moves still-image repetition from the filter graph to the input.
+  Its FFmpeg0032 colour patch concerns hardware-frame output separately.
+- Native map: `InputFile::watermark`, `build_transcode_pipeline` watermark
+  attachment and `watermark_overlay_filter`. No UI/validator/schema/repository
+  change; existing graphics/animated-image/duration policies remain required.
+- Smallest trial: reuse the exact source clip and existing blue PNG with the
+  real Native software command. Decode the full result, verify the two-second
+  timeline and watermark pixels on every frame before/after reconfiguration.
+  Correct only a demonstrated failure; qualify affected image/graphics inputs,
+  argv snapshots and native Windows command behavior if production changes.
+- Stop once the named Native behavior and affected checks pass with exact
+  source/runtime/command identity. Next successor, hardware colour chains,
+  application/ARM and final gates remain separately mandatory.
+- OpenCL audit uses Next03c05228 and Native's FFmpeg CLI boundary. Distinguish
+  an absent ICD/platform from a wrong shared-library name; do not claim native
+  Intel/OpenCL operation on this NVIDIA-only test environment.
+
+Local software component verified2026-11-07. Original Native output loses the
+watermark from frame15 of60. Repetition alone is insufficient and can extend
+natural EOF. Native now rebases repeated stills before opacity/fade evaluation
+and lets the primary own overlay EOF. Explicit animated/custom input policies
+are retained, and the existing VAAPI software-overlay gate preserves the new
+end condition instead of discarding it.339 composed focused cases, nine decoded
+software scenarios/544frames, native Windows command/capture1/1 and actual HTTP
+logo1/1 with one request pass; strict affected lint passes. Exact identities,
+original negatives and composition: milestone ucu-15 and
+`tmp/ucu14/native-reconfiguration-proof.json`. Native OpenCL reaches the vendor
+ICD without the Next Rust loader; the absent platform remains unverified.
+No full application/hardware, successor or final-gate acceptance is inferred.
+
+## UCU-15 Native low-frame-rate NVENC proof
+
+- Requirement: row274 / fixed Next90049efff9056bc4aa503dc9860ab899cb2cab55
+  clamps preset B frames to the short GOP for low-fps output. Native has its
+  own encoder/HLS options; do not assume either a shared defect or coverage.
+- Map: Native `video_encoder`, `no_b_frames` and `hls_encoding_options` in
+  pipeline/mod.rs; image looping and ordinary HLS/fMP4 output remain existing
+  paths. No UI, schema, persistence or runtime change is initially proposed.
+- Smallest proof: existing builder generates H264/HEVC1fps still-image HLS
+  commands with Allow B Frames both on/off. Run the exact commands on the
+  verified installed Windows FFmpeg209/NVIDIA device, then independently
+  decode/inspect completed HLS output. Fix only a demonstrated failure.
+- Stop once all four cases establish initialization and correctly timed decoded
+  output, source/command/runtime identity is retained and affected local checks
+  pass. Native Windows application builds and other platform/final gates remain
+  separate; do not infer Next successor acceptance or other hardware proof.
+
+Local component verified2026-11-07: actual1fps H264 B-on startup failure
+reproduced and corrected using the encoder identity and native numeric maximum.
+The symbol-terminator lookup prerequisite is also fixed and natively verified.
+71 composed focused checks, one reviewed argv snapshot, native Windows numeric
+probe1/1 and complete generated HLS output/independent decode4/4 pass. Exact
+proof and retained negatives: milestone ucu-15 and
+`tmp/ucu14/native-nvenc-timing-proof.json`. Local stopping condition met;
+application/platform/Next successor and final gates remain separate and open.
+
+## UCU-15 Native pixel-format safety source map
+
+- Requirement: row277 / fixed Next28bcbf7 refuses non-4:2:0 or12-bit hardware
+  decoding and normalizes encoder input after deinterlace/scaling. Preserve
+  Native instead of inheriting upstream engine removal.
+- Source: fixed Next `hw_accel.rs`, `capabilities/nvidia/mod.rs` and the input
+  PixelFormat model in `pipeline.rs`; no UI/schema/SQL mutation is required.
+- Native gap: persisted/fresh loaders parse raw pixel names into a five-format
+  output enum and discard other names. Capability/decoder selection then
+  treats missing format as8-bit, and software output can omit4:2:0 conversion.
+- Smallest package: retain the raw source pixel name beside the normalized
+  state enum; positively unmodeled inputs use existing software decode/filters
+  and explicit output normalization, retaining supported hardware encoding.
+  Preserve absent metadata, known format behavior, copy mode, tracks and HDR.
+- Stop after loader/decoder regressions, reviewed generated-command snapshots,
+  actual decoded non-4:2:0/12-bit software output with selected tracks and
+  applicable strict lint pass. Available Windows NVIDIA proof remains required
+  where this changes hardware output; approved unavailable hardware/platform
+  debt stays unverified. This does not require a new FFmpeg build or decide
+  ADR0130 successor qualification. Health remains truthful about accelerator
+  availability and ordinary supported software fallback.
+- The local stopping proof is complete:175 distinct selected cases, actual
+  Linux software output and native Windows NVENC command/capture proof pass;
+  strict affected lint passes. Full application/platform/final acceptance and
+  qualified Next successor work remain open in milestone ucu-15.
+
+## UCU-15 indexed admission and Health source map
+
+- Open obligation: ADR0131 requires reader capability before indexed publication/
+  session admission and truthful Health after the selected binary changes.
+- Fixed source: Next92e93d72 `describe.rs` supplies describe version1 and schema
+  metadata; the accepted reader extension advertises its immutable layout URI.
+  Existing ErsatzRS runtime-manager identity/version checks, managed process
+  ownership, host startup and Next Runtime Availability are reused.
+- Smallest package: bounded redacted describe probe plus a binary-identity permit;
+  indexed publisher construction requires it, host startup rechecks the request
+  executable before capacity/publication and existing published-runtime Health
+  rechecks a registered permit. Ordinary complete-file acquisition remains valid.
+- Stopping proof: unsupported/malformed/oversized/nonterminating probes refuse a
+  permit; changed/other binary cannot use one; failed probes cannot enter Health
+  state; constructor/host and existing publisher/runtime regressions pass with
+  strict affected lint. No runtime selection, schema pin or package adoption.
+- Local stopping proof is complete:37 distinct focused cases, strict affected
+  lint and real Complete-format decoded refresh1/1. Milestone ucu-15 and
+  indexed-publication-proof.json own the exact source/run/input/reuse scope.
+- Actual indexed launch/configuration (including operator overlays), runtime
+  successor qualification and required platform/playback/final proof remain
+  mandatory before enablement; broader runtime work is authorized by accepted ADR0130.
+
+## UCU-15 reader source component: ADR0131
+
+- Required outcome: a Next worker explicitly selects one complete indexed
+  generation, preserves programme/gap/end semantics and cannot lose a chunk to
+  concurrent reclamation. Fixed upstream loader at92e93d72 scans filenames and
+  cannot read the accepted publisher's atomic index.
+- Smallest extension: retain folder mode; add explicit layout/capability and
+  a bounded shared-lease reader using the ordinary playout parser. Validate
+  immutable references/hash/size and read cross-day lookahead under that lease.
+  Use existing blocking filesystem execution and a250ms contention retry;
+  no new service or application runtime selection.
+- Local source stopping proof is complete:52 distinct affected source cases,
+  including current/future identity through100 atomic generations/1000 reader
+  attempts, strict affected lint, generated schemas and exact-base clean patch
+  application. Milestone ucu-15 owns run/input identity and original negatives.
+  Patch and retirement policy:
+  `scripts/release/next-patches/ucu15-indexed-playout/manifest.json`.
+- This is not a qualified runtime candidate. ADR0130 successor/retirement work,
+  application capability/Health admission, actual indexed playback and required
+  Windows/ARM/final gates remain open. Ordinary host layout and Native remain.
+
+## UCU-15 source map: Next troubleshooting dossiers
+
+- Row275 exact source is `ArchiveTroubleshootingResultsHandler` atff5208ad.
+  Upstream scans the root and immediate subdirectories, then flattens names;
+  its old `.troubleshooting_` prefix test missed channel dossier name collisions.
+  The correction recognizes `<number>_<timestamp>[_<item>]` for `next_` collision
+  names and normalizes other relative ZIP paths. It does not add recursion.
+- ErsatzRS already preserves relative names and `/` separators in
+  `build_troubleshooting_archive_from`. Both producers write `media_info.json`;
+  upstream's `next_media_info.json` is an archive rename, not the worker's
+  generated filename. Keep the existing own unique folder naming.
+- Reuse the actual local Next troubleshooting preview in
+  `host/troubleshooting_next_tests.rs` with published pinned tools and isolated
+  data. Strengthen its existing Download Results assertion to require the
+  nonempty actual Next probe under its generated dossier folder, byte-identical
+  to disk, alongside the unchanged host media-info record and unique safe ZIP
+  paths. Retain decoded selected audio/subtitles, complete preview and cleanup.
+- Stopping condition: that real preview plus existing archive filter/collision/
+  depth tests pass, affected strict lint/review and canonical evidence agree.
+  Do not add production recursion or filename changes without a demonstrated
+  omission. Platform/final gates and ordered window acceptance remain open.
+
+## UCU-15 source map: unnamed codec hints
+
+- Row279 at `eadb613b7831dea9b84d06b42a9f1b5a4cc1a732` changes
+  `PlayoutItemConverter.CodecHint` and its tests: null/empty/whitespace stored
+  video/audio/subtitle codec names become `unknown`; named codecs are unchanged.
+  Current and fixed Next both carry codec strings through `probe_hint_to_result`.
+- ErsatzRS `next_engine/probe_hint.rs::persisted` currently discards the whole
+  hint when any recorded codec is absent/blank. Preserve container, indexes,
+  selected tracks and all other metadata, normalizing only those codec names.
+  Fresh one-shot producer/retained validation stays strict. Still images without
+  a recognizable codec must retain ordinary probing rather than invent a demuxer.
+- `selection::source_video` additionally discards an unpinned video with a null
+  codec, and the shared loader rejects a pinned null codec. Reuse the existing
+  complete metadata projection with a Next-only unknown-codec policy, retaining
+  stream index and metadata. Preserve the Native loader's existing policy and
+  missing/invalid index checks; never lose a recorded video's index solely
+  because its codec is unnamed. The old unpinned path delegates stream choice
+  to probing; it does not necessarily generate black video.
+- Reuse persisted-hint/selection fixtures and the actual local copy/fallback
+  playback fixture with published checksum-verified Next/FFmpeg. Stop after the
+  codec matrix, selected metadata/Native-policy safety, decoded unknown-codec
+  playback and affected lint pass. Reader/runtime-successor/platform/final gates
+  remain separate; no pin or accepted row changes at this checkpoint.
+
+## UCU-15 source and visual map: profile validation and save feedback
+
+- Row282 at fixed `06c008b49964cb9d8232aa2804cd8533eb5576e1` changes
+  `FFmpegEditor.razor`, `FFmpegProfileEditViewModel.SyncHiddenVideoProfile`
+  and its validator tests. The upstream branch hides Native fields globally
+  and derives their hidden H264 profile before validation. ErsatzRS retains
+  Native and its visible controls under the existing two-engine decisions.
+- Existing targets: application `commands::save_ffmpeg_profile` owns strict
+  validation/persistence and refresh; web `server_fns::ffmpeg_profiles` bridges
+  the island; `/admin-api/ffmpeg/save` owns the populated no-JS form. The
+  `FfmpegProfileEditorPage` SSR wrapper and `FfmpegProfileEditorIsland` retain
+  their current routes, form layout, action bars, CSS and eight Native fields.
+  No shared primitives, router or island boundary changes are needed.
+- Demonstrated gaps: the island's10-to8-bit transition retains incompatible
+  high10; HTML save errors redirect to codes that this page never renders.
+  Leptos/application error wrappers also prevent exact translation matching.
+  Normalize only the editor's bit-depth-dependent H264 choice; raw application
+  requests remain strictly validated. Render whitelisted localized HTML causes
+  and unwrap typed save failures for localized island feedback. Omitted Native
+  settings must remain populated from the existing stored profile. Reuse the
+  existing new-form defaults for the fallback Add action instead of redirecting
+  id0 to a missing profile. The first browser trial proves creation succeeds,
+  but the interactive list stays Loading without JavaScript. Complete HTML saves
+  on the populated editor instead. Retain specific HDR10 codec/depth causes when
+  HTML edits make a valid saved HDR profile incompatible; refuse the write.
+- Reuse existing form/select/toast primitives and add only an inline alert in
+  the SSR wrapper, visible with and without JavaScript. Translate new messages
+  in every supported culture. Preserve saved valid profiles, other Native fields,
+  international names, failed-write atomicity and strict output validation.
+- Stopping proof: focused shared helper/application/server/form/localization
+  cases; one matched SSR/WASM build; affected headed Chromium/Firefox depth,
+  actual-error and existing Native-policy preservation flows. Retain required
+  hydration/bundle/lint and final gates. No runtime package/engine or pin change.
+
 ## Accepted release boundary
 
 UCU-12 is accepted through fixed v26.11.4/row254 on2026-10-25. All254
@@ -915,14 +1438,14 @@ Canonical acceptance, finite completion list and evidence: `ucu-12` in
 ## Accepted UCU-12 target and ledger state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest observed target (`origin/main`, 2026-10-24): `c1beb854fd03dd0dc3b33c29109712ba4d536767`
-  — Reapply "build: ffmpeg 8.1.2-6 (#3109)" (#3112).
+- Latest approved fixed target (2026-11-07): v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc`
+  — prep for release v26.12.0; supersedes the earlier `06c008b4` observation.
 - Fixed accepted UCU-12 target (verified 2026-10-24): `f640c252276d008a5e1697fbfbb65a65fc352a5a`
   — docs: prep for release v26.11.4.
-- Ledger: **278 observed commits**, **254 accepted**, **24 pending outside the accepted boundary**.
+- Ledger: **285 observed commits**, **254 accepted**, **31 pending in UCU-13–15**.
 - Accepted release baseline: **254 commits**, **0 pending in the fixed window**
   through v26.11.4. UCU-10/UCU-11 retain their original completed boundaries;
-  UCU-13 rows255–259 and UCU-14 row260 remain pending observations.
+  UCU-13 rows255–259, UCU-14 rows260–271 and UCU-15 rows272–285 remain pending.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
@@ -6203,27 +6726,35 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 252 | `a0b181b6` | chore: update empty db (#3107) | N/A | upstream-baseline-catch-up | `dcd9f036` | ucu-12; accepted2026-10-25. Upstream refreshes its bundled SQLite database:58schema-object changes, no new tables, identical existing seeds. ErsatzRS ships embedded SQLx migrations/initialization instead; fresh/upgrade proof passes and no upstream database is shipped. Milestone ucu-12 owns exact/composed evidence and approved unverified debt. |
 | 253 | `234dce3e` | chore: update next (#3108) | Adapt (ADRs 0117, 0128) | upstream-baseline-catch-up | `dcd9f036; 5a2d8460` | ucu-12; accepted2026-10-25. Adopt released023/source54c6cb9 as qualified four-platform rs.6 with independent patch retirement and exact public hashes. macOS keeps original rs.4 identities under approved unverified debt. Linux/native Windows cold/cache/bundle startup, selected tracks, decoded lifecycle, headed integration and Native93/Next86 transport proof pass. This does not close separate Phase9 managed-source-output acceptance. Milestone ucu-12 owns exact/composed evidence and approved unverified debt. |
 | 254 | `f640c252` | docs: prep for release v26.11.4 | N/A / Covered | upstream-baseline-catch-up | `05c97355` | ucu-12; accepted2026-10-25. Exact upstream diff dates26.11.4 and changes two changelog comparison links. Fixed boundary f640c252 is accepted with all18ordered rows; advance the authoritative baseline without an ErsatzRS version/release change. Milestone ucu-12 owns exact/composed evidence and approved unverified debt. |
-| 255 | `38d17208` | build: ffmpeg 8.1.2-6 (#3109) |  |  |  | ucu-13; first row of the window opened after v26.11.4. Provisional: Adapt, with one filter decision to take. Upstream moves to ErsatzTV-ffmpeg 8.1.2-6 in docker images and Windows/macOS packages (Vulkan-to-VAAPI reverse mapping synchronisation, duplicate HDR side data from the av1_qsv decoder, and a VideoToolbox h264 decode failure on content with many reference frames), and adds one engine behaviour: the Next engine now tonemaps VAAPI content with libplacebo when a Vulkan device on the same GPU is available, Intel or AMD. The version bump itself does not transfer, because ErsatzRS ships its own managed runtime on the FFmpeg 9 line from the ErsatzRS-ffmpeg repo. The libplacebo-on-VAAPI selection does transfer: ErsatzRS admits Vulkan/libplacebo graphs today through `crates/ersatzrs-ffmpeg/src/graph_probe.rs:35` and `dolby_vision.rs:40`, which are NVENC/CUDA-shaped, while the VAAPI tonemap path in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` has no equivalent same-GPU Vulkan admission. The audit should decide whether to add that selection and prove it on an Intel and an AMD device, or record why not. Claude 2026-10-24 triage. |
-| 256 | `12f52f2d` | Revert "build: ffmpeg 8.1.2-6 (#3109)" |  |  |  | ucu-13; provisional: N/A, and it cancels row 255. A clean revert of 38d17208: the diff between its parent and this commit is empty, so the ErsatzTV-ffmpeg 8.1.2-6 bump, its changelog entry and the Next engine's new libplacebo tonemap selection for VAAPI are all withdrawn, and the next pin returns to its earlier tag. Upstream gives no reason in the message. The audit should treat 255 and 256 as a pair that nets to nothing unless upstream re-lands the bump, and should not act on the VAAPI/Vulkan selection recorded in row 255 while it stands reverted; the fixes named there (Vulkan-to-VAAPI synchronisation, av1_qsv duplicate HDR side data, VideoToolbox h264 reference frames) remain worth watching for a later re-land. Claude 2026-10-24 triage. |
-| 257 | `cabd33df` | fix: replace singleton mutex with lock file (#3110) |  |  |  | ucu-13; provisional: Port, and it fills a gap we have. A .NET 10.0.13 security update moved where named mutexes are stored, so ErsatzTV crashed at startup with `The system cannot open the device or file specified` for non-root users and read-only root filesystems. Upstream replaces the mutex with an exclusive `ersatztv.lock` in the config folder (opened read-only so it still locks when the file belongs to another uid), which additionally stops two containers sharing one config folder; failure to lock logs and continues rather than blocking startup. ErsatzRS has no startup single-instance guard at all (`crates/ersatzrs-web/src/main.rs`), while two processes on one SQLite database is exactly what ADR 0080 rules out, so the hazard applies to us even though the .NET cause does not. The same fs4 file-lock pattern is already in the tree at `crates/ersatzrs-infra/src/addon_preparation_worker.rs:112` and `addon_tool_gate.rs:103`. The audit should decide whether to add a config-folder lock on that pattern, keeping the permissive failure path, and prove a second instance refuses to start. Claude 2026-10-24 triage. |
-| 258 | `de2f6043` | fix: lock file update for nfs (#3111) |  |  |  | ucu-13; provisional: fold into row 257 rather than port separately. A same-day correction to the config-folder lock: NFS silently skips the lock on a read-only handle, so upstream now opens the lock file read-write first and only falls back to read-only for the cases that need it (a lock file owned by another uid, a read-only config folder), reporting the real error from the second attempt instead of the first. If the audit adopts the lock from row 257, it should adopt this shape straight away and prove it on a config folder over NFS; fs4 takes its lock from the open handle in the same way (`crates/ersatzrs-infra/src/addon_preparation_worker.rs:112`), so the access mode matters for us too. Note the maintainer's own deployment keeps the database on a local filesystem per ADR 0080, which bounds how much this case matters here. Claude 2026-10-24 triage. |
-| 259 | `d5482b7f` | prep for release v26.11.5 |  |  |  | ucu-13; provisional: N/A / Covered, and this row closes the UCU-13 window under the maintainer's release rule. CHANGELOG only: dates the 26.11.5 section and relinks the compare URLs. The window is unusually small and nearly self-cancelling: rows 255 and 256 are a bump and its revert, and 257/258 are one single-instance lock plus its NFS correction, so v26.11.5 is in practice the lock-file fix. The accepted boundary for the window is the ordered set of rows 255-259; anything committed upstream after this row opens UCU-14. Audit should confirm the ordered SHA/subject pairs against the fixed v26.11.5 tag before advancing the baseline table. Claude 2026-10-24 triage. |
-| 260 | `c1beb854` | Reapply "build: ffmpeg 8.1.2-6 (#3109)" (#3112) |  |  |  | ucu-14; first row of the window opened after v26.11.5. Provisional: Adapt, reviving row 255 with one change. The 8.1.2-6 bump reverted in row 256 is reapplied with the same artifact set and the same engine behaviour (VAAPI tonemapped through libplacebo when a Vulkan device sits on the same GPU), but this time the next pin does not return to released `v0.2.3`: it moves to `v0.2.4-848acba6-develop`, so upstream is back on the develop line one row after row 253 adopted the release. For ErsatzRS the version bump still does not transfer (our managed runtime is the FFmpeg 9 line from the ErsatzRS-ffmpeg repo), and the audit question from row 255 is live again: our Vulkan/libplacebo admission is NVENC/CUDA-shaped (`crates/ersatzrs-ffmpeg/src/graph_probe.rs:35`, `dolby_vision.rs:40`) while the VAAPI tonemap path in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` has no same-GPU Vulkan selection. Decide and prove it on an Intel and an AMD device, or record why not, and state which Next build we pin now that upstream has left v0.2.3. Claude 2026-10-24 triage. |
-| 261 | `0db2f355` | feat: next engine fallback background (#3113) |  |  |  | ucu-14; provisional: Port, and it may expose a missing surface here. The next engine now falls back to the legacy `background.png` for offline and error streams, carried through `ChannelConfig` (a 385-line addition), `ChannelConfigConverter`, `PlayoutItemConverter` and `InternalController`, so a channel with nothing to play or a failing item still shows the familiar background instead of a bare error. ErsatzRS sends its own channel configuration to Next (`crates/ersatzrs-infra/src/next_engine/protocol.rs`) and already composes a background image for songs (`next_engine/song_host.rs`, `song_background.rs`), but a search of the tree finds no offline or error stream path at all. The audit should first establish what ErsatzRS does today when a channel has no playable item, and record the gap as parity debt if that behaviour is genuinely missing, before porting the fallback itself. Claude 2026-10-25 triage. |
-| 262 | `028408ad` | chore: update next (#3114) |  |  |  | ucu-14; provisional: Adapt for the pin, with two VAAPI behaviours to check. Pin moves to `v0.2.4-c4b1e5b8-develop`. The build encodes HEVC through the VAAPI low-power entrypoint where available, which upstream says can greatly improve performance, carries the row 261 background fallback, and fixes a VAAPI stream failing to start on AMD when an OpenCL runtime such as NVIDIA's or rusticl is installed. Both VAAPI items reach us independently of the pin: ErsatzRS sets `-low_power` only for QSV (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:3816`) and builds its VAAPI encoder options from `vaapi_encoder_options` just above, so the audit should decide whether to select the low-power entrypoint for VAAPI HEVC when the device reports it, and prove an AMD VAAPI channel starts with an OpenCL runtime present. Claude 2026-10-25 triage. |
-| 263 | `cc0596d6` | fix: pass format name hint to next (#3115) |  |  |  | ucu-14; provisional: Port, and the same defect is present here. Next defaults a missing `format_name` to mpegts, which hides the real container; upstream previously hinted only `.avi` and now maps the common extensions (.mkv/.mk3d/.webm, .mp4/.m4v/.mov, .wmv/.asf, .ts/.m2ts/.mts, .mpg/.mpeg/.vob) to the matching ffprobe format names, with everything else still null. ErsatzRS carries the identical avi-only hint at `crates/ersatzrs-infra/src/next_engine/probe_hint.rs:104` (it filters the version Path for an `avi` extension and emits `"avi"`), so every other container reaches Next unhinted today. The mapping is a mechanical port into that same expression; the audit should mirror the table, keep the null fallback, and prove an MKV and an MPEG-TS source play with the correct container through Next rather than as assumed mpegts. Note we do read ffprobe's real `format_name` elsewhere (`ffprobe.rs:938`), so the audit may also decide whether persisting it would retire the extension table altogether. Claude 2026-10-28 triage. |
-| 264 | `7eef077f` | fix: trakt playlist sync (#3116) |  |  |  | ucu-14; provisional: Adapt, and check our generated-list refresh for both halves. Two defects in `TraktCommandBase`: a Trakt list refresh failed to match items once `Generate Playlist` was enabled, and the generated playlist never dropped items that had disappeared from the Trakt list. ErsatzRS has no Trakt provider, but it carries the same shape in its add-on media lists, which take ErsatzTV's Trakt scheduler as their compatibility baseline (`crates/ersatzrs-infra/src/addon_media_list_refresh.rs:3`) and carry the same `generate_playlist` flag (`crates/ersatzrs-core/src/repositories/addon_media_list.rs:34`). The audit should prove a refresh with the flag on still matches existing items and removes entries that vanished upstream, and record Trakt itself as out of scope if that stays true. Claude 2026-10-30 triage. |
-| 265 | `1fede8fe` | build: pin develop ffmpeg (#3117) |  |  |  | ucu-14; provisional: Adapt the health check, N/A for the pin itself. Upstream moves its packages to an ErsatzTV-ffmpeg develop build and, more interestingly, embeds that pin (`.github/ffmpeg.json`) into the application as `FFmpegPin`, so the FFmpeg version health check can now say which exact build is expected and link its release. The listed fixes are QSV/VAAPI runtime work. ErsatzRS ships its own managed runtime and its FFmpeg health check only compares major/minor against REQUIRED_MAJOR/MINOR (`crates/ersatzrs-infra/src/health/checks/ffmpeg_version.rs:24`), so it cannot tell a user that the resolved runtime differs from the build we ship against. The audit should decide whether to surface our own managed-runtime identity in that check, which is the health-check parity contract in AGENTS.md, and leave upstream's tag out of it. Claude 2026-10-30 triage. |
-| 266 | `534a2932` | chore: update dependencies (#3118) |  |  |  | ucu-14; provisional: N/A. Routine NuGet package bumps across every project file, no behaviour. ErsatzRS tracks its own crates through the dependency rollup and `cargo deny`; nothing transfers. Claude 2026-10-30 triage. |
-| 267 | `b634e142` | fix: local library aspect ratio (#3119) |  |  |  | ucu-14; provisional: likely Covered, worth one check. Upstream deleted the block in `LocalStatisticsProvider` that scraped `[SAR x:y DAR x:y]` out of ffprobe's stderr and overwrote the per-stream values with it; that scraping broke aspect-ratio detection for new local items, and a deep scan repairs existing ones. ErsatzRS reads both ratios straight from the ffprobe JSON streams (`crates/ersatzrs-infra/src/ffprobe.rs:908`) and has no stderr regex, so the defect should not exist here. The audit should confirm that on an anamorphic local file and record it as Covered rather than porting a deletion. Claude 2026-10-30 triage. |
-| 268 | `0378f80c` | fix: dont pass jwt when disabled (#3120) |  |  |  | ucu-14; provisional: Port, and both halves look open here. Upstream stops propagating the `access_token` into generated IPTV URLs when JWT is disabled, and adds `AccessToken.Sanitize`, which rejects anything that is not a bare JWT - spaces, `&`, quotes, `%`, newlines, `<>`, `!`, `^`, `/`. ErsatzRS builds its token straight from the query parameter with only an empty check (`crates/ersatzrs-web/src/transport/iptv/access_token.rs:29`) and then interpolates it into URLs as `?access_token={token}` and `&access_token={token}`, while the playlist route constructs it unconditionally, with no reference to `iptv_access_token_verifier.is_enabled()` (`transport/iptv/playlist.rs:60`). A crafted token can therefore ride into the M3U and XMLTV output and append its own query parameters. The audit should gate propagation on the verifier being enabled and add the same sanitising at construction, with a regression over the rejected shapes. Claude 2026-10-30 triage. |
-| 269 | `507002dd` | build: bump next and ffmpeg (#3121) |  |  |  | ucu-14; provisional: Adapt for the pin, with two hardware behaviours to watch. Pin moves to another develop build and the next tag advances; `ffmpeg-pin.sh` grows to resolve develop builds. The fixes are AMF (corrupted frames on mid-GOP H.264/HEVC, AV1 HDR10 and 10-bit decode, HEVC header ordering on some AMD drivers) and QSV VC-1 on pre-Tiger Lake Windows. None of it transfers through the tag, since ErsatzRS resolves its own FFmpeg 9 runtime, and our hardware coverage for AMF is thin; the audit should state which of these we can observe at all and record the rest as unverifiable here rather than assumed fixed. Claude 2026-10-30 triage. |
-| 270 | `d314d147` | build: next v0.2.4 and ffmpeg 8.1.2-7 (#3122) |  |  |  | ucu-14; provisional: Adapt for the pin, and the release line is back. Both pins leave the develop branch together: next moves from `v0.2.4-8a2e0408-develop` to released `v0.2.4`, and ErsatzTV-ffmpeg from a develop build to released `8.1.2-7` with its digest and checksum refreshed, dropping the `last_release` field the develop pin needed. The two fixes are AMF-only: channels crashing on Windows before any output with some AMD drivers (RX 9000 series), and washed-out colours in 10-bit AMF output. ErsatzRS resolves its own FFmpeg 9 runtime, so neither tag transfers, and p9a-managed-adoption is the milestone that owns which build we pin; the audit should state which Next release ErsatzRS follows now that upstream sits on v0.2.4 (rows 253 and 262 track the earlier moves), and record the AMF fixes as unverifiable here while we have no AMD hardware in scope. Claude 2026-10-31 triage. |
-| 271 | `d3a65334` | prep for release v26.11.6 |  |  |  | ucu-14; provisional: N/A / Covered for the changelog itself, but this row closes the window with a security item the audit must not pass over. CHANGELOG only: it dates the 26.11.6 section and relinks the compare URLs, and it adds `Fix GHSA-qrh2-626h-76m2 (CVE-PENDING)` with the note that all ErsatzTV users on Windows should upgrade as soon as possible. The advisory is not public yet (both the repository and global GitHub advisory pages return 404 on 2026-10-31), so the fixing commit is not identifiable from the window; upstream published no code change under that id in rows 260-270. The audit should ask the upstream maintainer, or wait for publication, before deciding whether ErsatzRS is affected, and should not assume the IPTV access-token work in row 268 is the carrier merely because it is the only security-shaped change here - that row stands on its own evidence. The accepted boundary for UCU-14 is the ordered set of rows 260-271; anything after this row opens UCU-15. Claude 2026-10-31 triage. |
-| 272 | `4e17aad3` | feat!: remove legacy engine (#3123) |  |  |  | ucu-15; first row of the window opened after v26.11.6, and the largest product decision in the ledger so far. Upstream removes the legacy streaming engine: every channel moves to Next on startup through a non-EF statement (`StreamingEngine=1`, `MPEG-TS (Legacy)`->`MPEG-TS` hybrid, `HLS Direct`->`HLS Segmenter`), the `ts-legacy` and `hls-direct` playlist and lineup URLs redirect to the Next routes, old hls-direct playlists are rewritten as single long TS segments, and the channel editor drops the choice. Legacy survives only behind the compile-time `LegacyStreamingEngine.Enabled` flag, for hotfix builds and for playback troubleshooting comparison. For ErsatzRS this is not a port but a maintainer decision about our own architecture: our FFmpeg pipeline crate is the legacy builder, new channels still default to Legacy (`crates/ersatzrs-domain/src/channel.rs:9`, `migrations/202609221530_channel_streaming_engine.sql:3`), and we serve both legacy surfaces today (`crates/ersatzrs-web/src/transport/iptv/playlist.rs:131,137` and `hls.rs:946`). Row 251 already raised the default-engine question; this row makes it unavoidable. The audit should put the choice to the maintainer - follow upstream and retire our legacy paths, keep both engines, or diverge deliberately - and record it in an ADR before any code moves. Claude 2026-10-31 triage. |
-| 273 | `244c6a15` | build: bump next and ffmpeg (#3124) |  |  |  | ucu-15; provisional: Adapt for the pin, with one memory behaviour that reaches us independently of it. Both pins go back to the develop line: next `v0.2.5-3ca158e7-develop` and ErsatzTV-ffmpeg `8.1.2-8115e89c-develop`, one day after row 270 adopted the released pair. Two fixes: the Next engine no longer fails QSV streams about ten seconds in on pre-Tiger Lake Intel GPUs (a regression they introduced in 26.11.6), and the ffmpeg build stops video piling up in memory, or exhausting QSV surfaces, when audio is read from a separate input. The second one matters here regardless of the tag: ErsatzRS builds exactly that two-input shape for song backgrounds and for separate audio files (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:304-308`, `command.rs:372` for the shared input options), so the audit should watch resident memory over a long song-background or external-audio playout on our own FFmpeg 9 runtime before deciding this is upstream-only. The QSV regression is theirs, not ours. Claude 2026-11-02 triage. |
-| 274 | `4df5b69e` | build: bump next (#3125) |  |  |  | ucu-15; provisional: Adapt for the pin, with two behaviours worth proving here. Next moves to `v0.2.5-03c05228-develop`; the build carries the same QSV pre-Tiger Lake fix as row 273 plus two new ones. NVENC failing to start with `Gop Length should be greater than number of B frames + 1` on very low frame rate sources (1 fps slideshows) can reach us: ErsatzRS sets GOP and B-frame options per profile (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:922,1031` for `allow_b_frames`, with `closed_gop`/`no_b_frames` beside it), so the audit should play a very low frame rate still-image source through an NVENC profile. The VAAPI item is closer still: upstream found `tonemap_opencl` and `pad_opencl` never being selected on Intel when only the OpenCL runtime is installed, as in docker. Our own VAAPI tonemap path builds exactly that `hwmap=derive_device=opencl,tonemap_opencl` chain (`crates/ersatzrs-ffmpeg/src/filter/tonemap.rs:141`), so the audit should check how we decide that chain is available and whether a container with only libOpenCL.so.1 silently falls back. Claude 2026-11-02 triage. |
-| 275 | `ff5208ad` | fix: next_media_info.json in channel troubleshooter (#3126) |  |  |  | ucu-15; provisional: likely Covered, with one bounded check. The troubleshooting archive missed the Next engine's `next_media_info.json`: upstream only descended into folders whose name began with `.troubleshooting_`, while Next writes its dossier to `<channel number>_<timestamp>[_<playout item id>]`, so they now match that shape with a regex and additionally normalise `\\` to `/` in zip entry names. ErsatzRS builds its archive in `crates/ersatzrs-web/src/host/troubleshooting.rs:2163` (`build_troubleshooting_archive_from`): it takes every subdirectory of the troubleshooting folder without filtering on the name, and it joins path components with `/` explicitly, so neither defect should exist here. The one gap worth proving is depth: our walk collects the top folder and its immediate subdirectories only, so a dossier written one level deeper would still be left out of the archive. The audit should produce a real Next dossier and confirm `next_media_info.json` lands in the zip. Claude 2026-11-02 triage. |
-| 276 | `fb542e55` | feat: read describe data from next (#3127) |  |  |  | ucu-15; provisional: Adapt, a contract check we lack, gated on a newer Next pin. Upstream now runs `ersatztv-channel describe` once, caches only a successful answer, and checks it against a `NextContract` before starting any Next session or troubleshooting playback; a binary that cannot describe itself is refused with "it may be older than this version of ErsatzTV" instead of failing mid-stream, and the troubleshooting page and media-info dialogs show the describe data. ErsatzRS pins an exact accepted Next snapshot by manifest and checksum (`crates/ersatzrs-infra/src/next_engine/manager.rs:1`) and probes only that a binary launches and prints a version (`next_engine/version.rs:16`); the module says outright that an operator-supplied source build is not checked for equivalence. That override path is where a describe-style contract check would earn its keep, but it needs a Next build that implements `describe`, so the audit should first establish whether our pinned 0.2.3 build does. The same commit bumps both pins; its FFmpeg build fixes QSV, VAAPI and CUDA items failing when colour tags change mid-stream and still-image watermarks vanishing when video parameters change mid-stream (spliced or smart-cut files), which the audit should replay against our own watermark path (`next_engine/canvas_binding.rs`). Claude 2026-11-03 triage. |
-| 277 | `466d08cd` | chore: update next (#3128) |  |  |  | ucu-15; provisional: Adapt for the pin, with one behaviour to prove on our side. Next moves from `v0.2.5-8cb37069-develop` to `v0.2.5-28bcbf7d-develop` (`.github/next-tag`); the CHANGELOG records that 4:2:2, 4:4:4 and 12-bit sources (ProRes, camera HEVC/H.264) no longer attempt hardware decode and are converted to 4:2:0 after deinterlacing and scaling. Our Next pin stays on the retained `0.2.3` line (`crates/ersatzrs-infra/src/next_engine/manager_tests.rs:209`), so the pin follows the next ErsatzRS-next rebase; independently, audit whether our own hardware-decode gate refuses non-4:2:0/12-bit sources starting at `crates/ersatzrs-ffmpeg/src/capabilities.rs:426` (it keys on bit depth only, not chroma subsampling). |
-| 278 | `fbb3685b` | fix: sync next playouts more frequently (#3129) |  |  |  | ucu-15; provisional: Adapt, two behaviours to prove. (1) Freshness: edits to watermarks, decos and deco templates, playout template items, FFmpeg settings, path replacements (Plex/Jellyfin/Emby) and the FFmpeg profile (now also `ScalingBehavior`) queue `SyncNextPlayout` for exactly the dependent channels through a new `NextPlayoutDependents` resolver, instead of waiting for the hourly build. (2) Write economy: a `NextPlayoutFolderPlanner` plus deterministic playout JSON (`PlayoutItemConverter`) skip rewriting unchanged days. Audit starts at `crates/ersatzrs-infra/src/next_engine/publication.rs:57` (`publish_playout`: does it rewrite unchanged day files?) and at which admin edits re-trigger Next publication (`crates/ersatzrs-infra/src/next_engine/playout_refresh_runtime_tests.rs`); upstream test suites `NextPlayoutDependentsTests`/`NextPlayoutFolderPlannerTests` enumerate the dependent set. |
+| 255 | `38d17208` | build: ffmpeg 8.1.2-6 (#3109) | N/A | Withdrawn runtime/VAAPI bump | `21419be2` | ucu-13; the complete tree delta through row256 is empty. The later reapply is handled in row260; no FFmpeg8 adoption or hardware claim. |
+| 256 | `12f52f2d` | Revert "build: ffmpeg 8.1.2-6 (#3109)" | N/A | Exact upstream revert | `21419be2` | ucu-13; cancels row255, including its temporary VAAPI/libplacebo selection. Ordered source/tree audit is recorded in milestone ucu-13. |
+| 257 | `cabd33df` | fix: replace singleton mutex with lock file (#3110) | Port | Pre-database process ownership | `21419be2` | ucu-13; standard-library file ownership precedes Tokio/database startup. Six lock cases pass on Linux, native Windows and both ARM emulators, including contention, owner exit/crash and retained contents. |
+| 258 | `de2f6043` | fix: lock file update for nfs (#3111) | Adapt (ADR 0080) | Read/write-first lock with safe fallback | `21419be2` | ucu-13; preserve read-only fallback and error classification while retaining the local SQLite filesystem contract. No NFS database acceptance is claimed. |
+| 259 | `d5482b7f` | prep for release v26.11.5 | N/A | Upstream release bookkeeping | `21419be2` | ucu-13; verified v26.11.5 terminal changes only upstream release notes/links. It does not authorize an ErsatzRS release. |
+| 260 | `c1beb854` | Reapply "build: ffmpeg 8.1.2-6 (#3109)" (#3112) | Adapt (ADR 0130) | Qualified FFmpeg9 and Next successor | `3bcf60f1; 21419be2` | ucu-14; reintroduced runtime behavior is reconciled in published FFmpeg2.0.10 and Next025/c5cb065f. Exact source/patch/checksum and four-target software proof pass; Intel/AMD hardware remains explicitly unverified. |
+| 261 | `0db2f355` | feat: next engine fallback background (#3113) | Port | Owned fallback backgrounds and callbacks | `21419be2` | ucu-14; sixty focused cases and three grouped decoded background/error/handoff checks pass on Linux and native Windows. Custom/bundled resources, selected tracks, overlays and bounded ownership survive. |
+| 262 | `028408ad` | chore: update next (#3114) | Adapt (ADR 0130) | Consolidated Next025 runtime behavior | `3bcf60f1; 21419be2` | ucu-14; audited VAAPI low-power/OpenCL fixes are retained through the fixed qualified successor, not copied by develop-tag label. Software, source and capability guards pass; unavailable native hardware remains unverified. |
+| 263 | `cc0596d6` | fix: pass format name hint to next (#3115) | Port | Complete container-format hints | `21419be2` | ucu-14; common persisted/probed container formats reach Next without reverting unknown inputs to a false transport hint. Focused export/selection regressions and decoded application checks pass. |
+| 264 | `7eef077f` | fix: trakt playlist sync (#3116) | Adapt (ADR 0069) | Transactional generated-list synchronization | `21419be2` | ucu-14; Trakt remains retired. Generic synchronization compares current persisted membership and replaces the complete desired list transactionally, including stale/final-member removal, ownership and rollback controls. |
+| 265 | `1fede8fe` | build: pin develop ffmpeg (#3117) | Adapt (ADR 0130) | Exact managed-runtime pin in Health | `21419be2` | ucu-14; Health identifies the expected first-party release and resolved managed/override identity. FFmpeg9 capability checks and explicit overrides remain; upstream develop labels are not adopted. |
+| 266 | `534a2932` | chore: update dependencies (#3118) | N/A | Upstream .NET dependency updates | `21419be2` | ucu-14; NuGet/runtime packaging is not a Rust dependency port. Current Rust dependency policy passes; the separate unattributed Windows advisory is explicitly retained in row271. |
+| 267 | `b634e142` | fix: local library aspect ratio (#3119) | Port | Persisted local-media aspect ratios | `21419be2` | ucu-14; actual scan/deep-rescan preserves SAR32:27/DAR16:9 on the same MediaVersion with English/Dutch audio and captions. Multi-video/default parsing and stdout-only JSON controls pass. |
+| 268 | `0378f80c` | fix: dont pass jwt when disabled (#3120) | Port | JWT-safe conditional IPTV URLs | `21419be2` | ucu-14; bare-token validation rejects URL/control metacharacters and disabled JWT emits no token. This tested behavior is not attributed to the unpublished advisory. |
+| 269 | `507002dd` | build: bump next and ffmpeg (#3121) | Adapt (ADR 0130) | Fixed runtime and hardware-safety corrections | `3bcf60f1; 21419be2` | ucu-14; consolidate applicable AMF/QSV/runtime source corrections in FFmpeg9/Next025 with independent source/software proof. Unsupported native hardware remains approved unverified debt, not inferred success. |
+| 270 | `d314d147` | build: next v0.2.4 and ffmpeg 8.1.2-7 (#3122) | Adapt (ADR 0130) | Stable checksum-pinned first-party runtimes | `3bcf60f1; 21419be2` | ucu-14; released FFmpeg2.0.10 and Next025 replace intermediate upstream pins. All37 anonymous assets and four package sets match qualified checksums; AMF-specific physical behavior remains unverified. |
+| 271 | `d3a65334` | prep for release v26.11.6 | Deferred (maintainer approval) | Unverified Windows advisory applicability | `21419be2; bac9e119` | ucu-14; explicit2026-11-07 amendment permits closure while retaining ucu14-windows-advisory-applicability. Source and official-package audits do not identify an authoritative fix. GHSA-qrh2-626h-76m2 is neither fixed nor inapplicable by this disposition; resume when authoritative details appear. |
+| 272 | `4e17aad3` | feat!: remove legacy engine (#3123) | Adapt (maintainer decision) | Native and Next remain supported | `21419be2` | ucu-15; decline upstream Native removal and bulk migration. Stored engine/profile choices, Native routes, controls, tracks and teletext remain supported beside the managed Next default. Current both-engine playback and UI proof pass. |
+| 273 | `244c6a15` | build: bump next and ffmpeg (#3124) | Adapt (ADR 0130) | Separate-input buffering and runtime safety | `3bcf60f1; 21419be2` | ucu-15; qualified FFmpeg9/Next025 retain applicable queue/surface and clock corrections. Existing unchanged buffering/caption regressions and four-target software playback pass; unavailable QSV hardware is unverified. |
+| 274 | `4df5b69e` | build: bump next (#3125) | Adapt (ADR 0130) | Low-frame-rate Native NVENC and OpenCL safety | `21419be2` | ucu-15; numeric B-frame/GOP limits, vendor loader behavior and software fallback are reconciled.71 focused cases and four actual Windows FFmpeg210 H264/HEVC1fps outputs preserve frames, timestamps and keyframes; Next retains its fixed source. |
+| 275 | `ff5208ad` | fix: next_media_info.json in channel troubleshooter (#3126) | Port | Complete safe Next troubleshooting dossiers | `21419be2` | ucu-15; actual preview retains nonempty worker media-info bytes alongside host diagnostics with safe unique relative paths. Decoded selected-track proof, archive regressions and current host integration pass. |
+| 276 | `fb542e55` | feat: read describe data from next (#3127) | Adapt (ADR 0130) | Qualified describe contract and graphics continuity | `3bcf60f1; 21419be2` | ucu-15; retain the fixed Next description/runtime contract and Native still-watermark/colour-transition safety.339 focused cases, nine software scenarios, one-request HTTP logos and actual Windows FFmpeg210 CUDA continuity pass. Hardware scope remains explicit. |
+| 277 | `466d08cd` | chore: update next (#3128) | Adapt | Native source-format safety and fixed Next | `21419be2` | ucu-15; non4:2:0,12-bit and unmodeled source formats take safe software decode plus explicit profile conversion.175 focused cases and actual Linux/Windows selected-audio/picture checks pass with the qualified successor. |
+| 278 | `fbb3685b` | fix: sync next playouts more frequently (#3129) | Adapt (ADR 0131) | Frequent atomic daily-index publication | `3bcf60f1; 21419be2` | ucu-15; dependencies refresh promptly while unchanged days retain metadata. Accepted-SQL rollback, shared reader leases, callback ownership and complete-generation visibility pass source/recovery tests and actual Linux/Windows indexed playback; both ARM runtime packages pass software playback. |
+| 279 | `eadb613b` | fix: always send a codec hint to next (#3130) | Port | Explicit codec hints for every item | `21419be2` | ucu-15; absent/blank persisted codecs export unknown without losing valid exact pins or recorded indexes.55 focused cases, actual decoded selected-track playback and integrated successor checks pass. |
+| 280 | `160a96c1` | fix: pass unique dynamic/unsaved ids to next (#3131) | Port | Stable collision-free occurrence identities | `21419be2` | ucu-15; unsaved filler uses opaque full-occurrence wire IDs while saved IDs, SQL state and callback ownership remain.57 focused cases and actual decoded fallback/handoff pass. |
+| 281 | `29e9af78` | feat: detect hw from next's describe probe (#3132) | Adapt | Bounded generation-fenced capability refresh | `21419be2` | ucu-15; validated Next describe/probe data drives truthful per-engine Health, diagnostics and profile guidance through one bounded shared refresh. Keep Native capability checks; unavailable hardware is never inferred available. |
+| 282 | `06c008b4` | fix: hide legacy ffmpeg profile fields (#3133) | Adapt (maintainer decision) | Localized profile editing with Native controls | `21419be2` | ucu-15; preserve all eight Native policy controls while providing contextual Next guidance. Bit-depth changes retain valid choices, Unicode no-JS Add works, and save failures remain actionable/localized. Focused tests and20 current headed Chromium/Firefox cases pass. |
+
+| 283 | `03c206ee` | build: update ffmpeg and next (#3134) | Adapt (ADR 0130) | Qualified consolidated runtime pair | `3bcf60f1; 21419be2` | ucu-15; reconcile terminal runtime deltas in first-party FFmpeg2.0.10/FFmpeg9 and Next025. Source, patch retirement, payload/provenance and actual published download checks pass; no mutable Docker-tag evidence is used. |
+| 284 | `de40b158` | build: next v0.2.5 (#3135) | Adapt (ADR 0130) | Fixed released Next0.2.5 source | `3bcf60f1; 21419be2` | ucu-15; qualified source is c5cb065f9f35dbbcb7c05845f0f92c70f576a480.455 reader/worker,13 schema and660 serial software cases plus four actual platform runtime packages pass; maintained private corrections retain their removal criteria. |
+| 285 | `53b3b42a` | prep for release v26.12.0 | N/A | Upstream release bookkeeping | `21419be2` | ucu-15; exact terminal53b3b42a moves release notes/compare links only. v26.12.0 is the frozen catch-up boundary, not permission to publish an ErsatzRS application release. |

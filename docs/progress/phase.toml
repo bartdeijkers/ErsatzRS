@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "Engineering DCI-05 — verify domain-scoped CI integration; Phase 9 remains complete"
+current_focus = "UCU-13–15 through v26.12.0 — accepted runtime work; Native retained"
 
 summary = '''
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
@@ -70,7 +70,96 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Active maintainer goal: plans/domain-scoped-pr-ci.md. Milestone dci owns the
+Current integrated candidate1000fd07 includes remote/main6fbf73b4/PR126 and
+passes all required local acceptance:8483 distinct Rust cases, strict workspace
+lint, canonical doctests, parity/bundle checks,20 affected headed cases, actual
+Native/Next playback and transport, native Linux/Windows packages and both ARM
+package/emulation checks. Milestone ucu-15 owns the exact component identities
+and evidence. Push the authorized evidence checkpoint and run full exact-source
+CI using the verified current-source archives without rebuilding. Require green
+CI before main delivery and ordered window/baseline acceptance. Preserve the
+fixed v26.12.0 boundary, Native and all approved unverified debt; no app release.
+
+Continue UCU-13/14/15 through fixed v26.12.0, retaining Native alongside Next.
+There are31 pending rows; no baseline/window acceptance has advanced. Milestones
+ucu-13/14/15 own the finite remaining requirements and exact component evidence;
+plans/upstream-catch-up.md owns the fixed source map and ordered ledger.
+
+Accepted ADR0130 local source/build/package/software components now close for
+FFmpeg210 and the Next025 bare worker on all four required RIDs. Exact source,
+patches, payloads/companions and checksums pass. Next passes455 source/reader,
+13 schema and660 serial software playback cases, ten compatibility and three
+strict retained/single-use routes. Available Windows CUDA and both ARM emulator
+proofs retain their explicit scope; no unavailable native hardware is accepted.
+Evidence: tmp/ucu14/{ffmpeg210/acceptance.json,next025/qualification.json}.
+
+Row261 background/callback component now has Linux and native Windows software
+proof: sixty distinct Linux focused cases, the same three grouped actual decoded
+error/background/handoff checks on both native platforms and strict infra/web lint
+pass. Reuse its qualification.json and unchanged component
+proof. UCU-13's unchanged six process-lock tests now pass on both ARM emulators,
+closing the local four-platform lock component without native ARM acceptance.
+Affected Native generated commands now pass with qualified Windows FFmpeg210:
+six captures independently decode with unchanged track/picture/frame-clock
+oracles. Corrected indexed reader ownership now prevents overlay downgrade;
+four revised worker packages and Linux/native Windows indexed active-edit,
+normal-preview, ordinary and finite controls pass. Windows13 host checks and35
+filesystem/recovery cases plus strict consumer lint close this local component.
+Product startup now selects its qualified indexed owner before application
+ports capture it. Full Linux startup/playback passes with the successor and
+published older reader, preserving legacy schema compatibility. Matched bundle,
+Native93/93 and indexed Next Copy86/86 transport checks pass; ucu-15 owns the
+retained timeout and additional cold-URL monitor observation. Composed workspace
+unit/integration proof now covers8446 distinct passes:8442 unchanged original
+passes plus a37-case focused retry that closes the three failures and adds a
+portable encoder-inventory regression. Strict lint and static parity pass.
+Both current ARM application type-checks and63 selected current infrastructure
+cases per emulator pass. Corrected native Windows full-host Native/Next decoded
+playback and index ownership/hash proof pass. Both native bundle checks, current
+Linux startup smoke, the canonical doctest gate and dependency policy pass.
+The retained frontend is byte-identical after restoring a site cleared by the
+server-only build. ucu-15 owns identities, negatives, scoped reuse and results.
+Runtime source checkpoint/push, four existing FFmpeg package-verification jobs,
+verified source integration without Docker publication, exact runtime publication
+after verification/security resolution, and disposable managed adoption tests are
+authorized on2026-11-07. The maintainer now retains unresolved Windows row271
+applicability as explicit unverified later-work debt and resumes delivery.
+Four-target application
+package/CI delivery and ordered window acceptance remain open.
+The approved FFmpeg source checkpoint4be9c7a is integrated into its remote/main;
+run42351713434 passes all four exact existing-package verification jobs, without
+rebuilding. Docker run42351980078 is skipped. The Next025 recipe checkpoint
+3bcf60f1 is pushed only to its source-candidate branch. Stable runtime publication
+and disposable managed acquisition can now proceed under existing authorization;
+final application packages/CI retain their acceptance and authorization boundaries.
+Revalidate latest remote/main including merged PR124 before local application
+integration; preserve the new teletext behavior and unrelated root checkout.
+Current checkpoint60664c3b includes PR124/b108ad5c. Published runtimes pass all37
+anonymous checks. Combined Rust proof is8472 distinct composed passes plus
+canonical doctests and three real-package installer gates; strict lint and
+static/dependency gates pass. Current matched Linux Native/Next playback,
+93 Native/86 Next transport checks,20 headed browser cases and actual automatic
+managed cold/warm startup pass. The native Windows candidate build, matched bundle, Native/Next playback and
+actual default managed cold/warm startup pass. All four current private package
+checks now pass: native Linux/Windows and ARM64/ARMv7 QEMU execution, with exact
+served assets, packaged readiness and bundled Next identity. ARMv7 retains its
+original cancelled GNU-link negative plus successful identical-input LLD control
+and corrected full Cargo build. All31 local source dispositions are recorded.
+Finish exact-source CI before ordered acceptance/baseline advancement and
+authorized main delivery. Application
+checkpoint/integration and, after local acceptance, push/CI/green main merge are
+authorized. No application release, Docker publication or operator installation.
+Exact remaining application/platform acceptance and final gates stay in the milestones.
+Do not repeat unchanged components or add adjacent variants. macOS, nativeARM
+and approved unavailable-hardware debt remain unverified. Preserve Native UI,
+stored engine/track choices, completed Phase9/UCU12 and independent DCI work.
+Continue autonomous authorized work through at least2026-11-07 08:00 Amsterdam.
+The explicit runtime/application delivery approvals above supersede the initial
+registration gate. Application push/CI/green merge still require completed local
+acceptance. Operator installation, application release, Phase10 and Docker
+publication remain unauthorized.
+
+Independent engineering goal: plans/domain-scoped-pr-ci.md. Milestone dci owns the
 finite six-package completion list. DCI-01 through DCI-04 are locally verified
 components. DCI-05 owns independent selection review and exact-candidate full
 CI before implementation acceptance; DCI-06 measures the next ten real code PRs.

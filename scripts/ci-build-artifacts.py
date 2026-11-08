@@ -37,12 +37,16 @@ LOCAL_GROUP_MARKER = ".ersatzrs-ci-artifacts"
 LOCAL_GROUP_OWNER = b"ersatzrs-ci-artifacts-group-v1\n"
 BUILD_FLAG_KEYS = ("RUSTFLAGS", "CARGO_PROFILE_TEST_DEBUG", "LEPTOS_OUTPUT_NAME", "LEPTOS_HASH_FILES")
 # Explicit recovery-only edits that cannot change compiled/runtime inputs.
-# Everything else, including tests, runtime pins and Cargo configuration, fails closed.
+# The qualified browser spec is executed from the checkout, never compiled
+# into these products. Its changes invalidate its browser suite's results.
+# Rust tests, runtime pins and Cargo configuration still fail closed.
 REUSE_SOURCE_EXCEPTIONS = {
     ".github/workflows/ci.yml", "scripts/ci-build-artifacts.py", "scripts/ci-build-artifacts_test.py",
     "scripts/ci-teletext-selection.py", "scripts/ci-teletext-selection_test.py",
     "BUILD.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
     "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
+    "tests/e2e/ffmpeg-profiles.spec.ts",
+    "tests/e2e/local-library-scan-lifecycle.spec.ts",
 }
 
 
@@ -241,13 +245,353 @@ def verify_reuse_options(manifest, reference, kind):
             raise ValueError("reused CI web artifact has incompatible Leptos output settings")
 
 
-def reuse_local(archive, sha, kind, reference, cache):
+def resume_job_signature(workflow, job):
+    """Compare consumer execution, allowing only its scheduling to change."""
+    body = re.search(rf"^  {job}:\n(.*?)(?=^  [a-z][a-z0-9_]*:|\Z)",
+                     workflow.split("\njobs:\n", 1)[1], re.M | re.S)[1]
+    body = re.sub(r"^    if: .*\n", "", body, flags=re.M)
+    if job == "hydration":
+        body = re.sub(r"^      matrix: .*\n", "", body, flags=re.M)
+    return body
+
+
+def resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow):
+    """Result reuse is stricter than executable reuse: selectors cannot drift."""
+    import ast
+
+    allowed = {
+        ".github/workflows/ci.yml", "scripts/ci-build-artifacts.py", "scripts/ci-build-artifacts_test.py",
+        "BUILD.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
+        "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
+        "tests/e2e/ffmpeg-profiles.spec.ts",
+        "tests/e2e/local-library-scan-lifecycle.spec.ts",
+    }
+    if set(changes) - allowed:
+        raise ValueError("completed CI check inputs changed")
+    def consumer_code(source):
+        tree = ast.parse(source)
+        # Qualification is independently checked above. Archive validation,
+        # restoration and execution must remain byte-for-byte equivalent ASTs.
+        tree.body = [node for node in tree.body if not (
+            isinstance(node, ast.FunctionDef) and node.name.startswith("resume_")
+            and not node.decorator_list) and not (
+            isinstance(node, ast.Assign) and any(isinstance(target, ast.Name)
+                and target.id == 'REUSE_SOURCE_EXCEPTIONS' for target in node.targets))]
+        return ast.dump(tree, include_attributes=False)
+    if consumer_code(old_helper) != consumer_code(new_helper):
+        raise ValueError("CI artifact consumer implementation changed")
+    # Inputs are above concurrency. Global flags, defaults and permissions
+    # below it must be identical, independently of individual job signatures.
+    def settings(source):
+        return source.split("\nconcurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
+    if settings(old_workflow) != settings(new_workflow):
+        raise ValueError("global CI execution settings changed")
+
+
+def resume_artifacts_guard(log, references, execution_sha):
+    """Bind imported results to the same fully verified immutable products."""
+    for kind in ("rust", "web"):
+        reference = reuse_reference(references, kind)
+        records = []
+        for line in log.splitlines():
+            try:
+                value = json.loads(line[line.index('{'):])
+            except (ValueError, json.JSONDecodeError):
+                continue
+            if isinstance(value, dict) and f"{kind}_cache_key" in value:
+                records.append(value)
+        if len(records) != 1 or any(records[0].get(f"{kind}_{key}") != expected for key, expected in {
+            "cache_key": reference["cache_key"], "digest": reference["sha256"],
+            "source_sha": reference["source_sha"], "equivalent_execution_sha": execution_sha,
+        }.items()):
+            raise ValueError("completed CI check artifact provenance differs")
+
+
+def resume_browser_cases(rows, logs, changes):
+    """Narrow replay only after both original general suites fully reported."""
+    selected = set(changes) & {'tests/e2e/ffmpeg-profiles.spec.ts',
+                               'tests/e2e/local-library-scan-lifecycle.spec.ts'}
+    evidence = []
+    for row in rows:
+        project = 'chromium' if row['name'].endswith('chromium)') else 'firefox'
+        log = logs.get(row['name'], '')
+        plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', log)
+        plain = re.sub(r'^\ufeff?\d{4}-\d\d-\d\dT\S+ ', '', plain, flags=re.M)
+        runs = re.findall(r'^Running (\d+) tests? using ', plain, re.M)
+        projects = set(re.findall(r'^\[\d+/\d+\] \[([^]]+)\]', plain, re.M))
+        def count(word):
+            matches = re.findall(rf'^\s*(\d+) {word}(?:\s|$)', plain, re.M)
+            return int(matches[-1]) if matches else 0
+        passed, failed, skipped = count('passed'), count('failed'), count('skipped')
+        failures = re.findall(r'^\s*\d+\) \[' + re.escape(project)
+                              + r'\] › (tests/e2e/[^\s:]+\.spec\.ts):', plain, re.M)
+        if (len(runs) != 1 or projects != {project} or passed <= 0
+                or int(runs[0]) != passed + failed + skipped
+                or len(failures) != failed
+                or row.get('conclusion') not in ('success', 'failure')
+                or (row['conclusion'] == 'failure') != bool(failed)
+                or any(not re.fullmatch(r'tests/e2e/[^/]+\.spec\.ts', path) for path in failures)):
+            return '', []
+        selected.update(failures)
+        evidence.append({'job_id': row['id'], 'project': project, 'listed': int(runs[0]),
+                         'passed': passed, 'failed': failed, 'skipped': skipped,
+                         'failed_specs': sorted(set(failures)),
+                         'log_sha256': hashlib.sha256(log.encode()).hexdigest()})
+    if not selected or len(evidence) != 2:
+        return '', []
+    pattern = '(?:' + '|'.join(re.escape(path) for path in sorted(selected)) + ')$'
+    return pattern, evidence
+
+
+def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
+                old_helper, new_helper, changes, references, producer_log, browser_logs=None):
+    """Reuse only actual successful jobs from a completed ordinary full run."""
+    if (run.get("status") != "completed" or run.get("conclusion") not in ("success", "failure")
+            or run.get("path") != ".github/workflows/ci.yml"
+            or run.get("event") not in ("push", "schedule", "workflow_dispatch")
+            or run.get("head_repository", {}).get("full_name") != repository
+            or not re.fullmatch(r"[0-9a-f]{40}", run.get("head_sha", ""))
+            or type(run.get("id")) is not int or run["id"] <= 0
+            or not re.fullmatch(r"[0-9a-f]{40}", sha)):
+        raise ValueError("resume requires a completed same-repository full CI run")
+    rows = jobs.get("jobs", [])
+    by_name = {row["name"]: row for row in rows}
+    browsers = [
+        {"suite": suite, "project": project, "port": str(port)}
+        for suite, project, port in (("general", "chromium", 18409),
+                                    ("general", "firefox", 18410),
+                                    ("1.5", "chromium", 18411), ("1.5", "firefox", 18412))
+    ]
+    browser_names = [f"Playwright E2E ({row['suite']}, {row['project']})" for row in browsers]
+    required = {"Preflight", "Format", "Documentation links", "Clippy", "Commit lint",
+                "Cargo deny", "Test", "Next engine", "Teletext 1.5", "CI ok", *browser_names}
+    producers = set(by_name) & {"Verify reused CI artifacts"}
+    if (len(producers) != 1 or set(by_name) != required | producers
+            or len(rows) != len(by_name) or jobs.get("total_count") != len(rows)
+            or any(row.get("status") != "completed" for row in rows)
+            or any(row.get("run_id") != run["id"] for row in rows)
+            or any(type(row.get("id")) is not int or row["id"] <= 0 for row in rows)
+            or len({row["id"] for row in rows}) != len(rows)):
+        raise ValueError("resume requires the complete ordinary full CI job inventory")
+    if by_name['Verify reused CI artifacts'].get('conclusion') != 'success':
+        raise ValueError('previous artifact verification did not pass')
+    if (by_name['Preflight'].get('conclusion') != 'success'
+            or by_name['CI ok'].get('conclusion') not in ('success', 'failure')):
+        raise ValueError('previous run did not execute the full gate')
+    resume_artifacts_guard(producer_log, references, run['head_sha'])
+    resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow)
+    scopes = {"clippy": ["Clippy"], "test": ["Test"], "next_engine": ["Next engine"],
+              "teletext": ["Teletext 1.5"], "hydration": browser_names}
+    reused = {}
+    passed_browsers = []
+    pending_browsers = list(browsers)
+    for job, names in scopes.items():
+        if resume_job_signature(old_workflow, job) != resume_job_signature(new_workflow, job):
+            continue
+        invalidated = {name for name in names if job == 'hydration'
+                       and set(changes) & {'tests/e2e/ffmpeg-profiles.spec.ts',
+                                           'tests/e2e/local-library-scan-lifecycle.spec.ts'}
+                       and name.startswith('Playwright E2E (general,')}
+        passed = [by_name[name]["id"] for name in names
+                  if by_name[name].get("conclusion") == "success" and name not in invalidated]
+        if len(passed) == len(names):
+            reused[job] = passed
+        if job == "hydration":
+            passed_browsers = passed
+            pending_browsers = [row for row, name in zip(browsers, names)
+                                if by_name[name].get("conclusion") != "success" or name in invalidated]
+    general = [by_name[name] for name in browser_names[:2]]
+    replay_filter, case_proof = resume_browser_cases(general, browser_logs or {}, changes)
+    return {"run_id": run["id"], "source_sha": run["head_sha"], "execution_sha": sha,
+            "jobs": reused, "browser_passed": passed_browsers,
+            "browser_pending": pending_browsers, "general_filter": replay_filter,
+            "browser_case_proof": case_proof}
+
+
+def resume_pr_plan(run, artifact, repository, producer, tree, execution,
+                   changes, old_helper, new_helper, old_workflow, new_workflow):
+    """Bridge a completed full proof into an eligible PR check without retesting."""
+    if (any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (producer, tree, execution))
+            or run.get("head_sha") != producer or run.get("status") != "completed"
+            or run.get("conclusion") != "success" or run.get("display_title") != "CI"
+            or run.get("event") not in ("push", "schedule", "workflow_dispatch")
+            or run.get("path") != ".github/workflows/ci.yml"
+            or run.get("head_repository", {}).get("full_name") != repository
+            or type(run.get("id")) is not int or run["id"] <= 0
+            or type(artifact.get("id")) is not int or artifact["id"] <= 0
+            or artifact.get("expired") is not False
+            or artifact.get("name") != f"ci-full-{tree}"
+            or artifact.get("workflow_run", {}).get("id") != run["id"]):
+        raise ValueError("PR proof requires a completed same-source full CI marker")
+    allowed = {".github/workflows/ci.yml", "scripts/ci-build-artifacts.py",
+               "scripts/ci-build-artifacts_test.py", "BUILD.md",
+               "docs/progress/milestones.toml", "docs/progress/phase.toml",
+               "docs/progress/sessions.ndjson",
+               "docs/progress/parity/upstream-baseline-catch-up.toml"}
+    if set(changes) - allowed:
+        raise ValueError("PR proof compiled, runtime or browser inputs changed")
+    resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow)
+    if old_workflow.split("\njobs:\n", 1)[0] != new_workflow.split("\njobs:\n", 1)[0]:
+        raise ValueError("PR proof workflow settings changed")
+    def consumers(source):
+        return {match[1]: match[2] for match in re.finditer(
+            r"^  ([a-z][a-z0-9_]*):\n(.*?)(?=^  [a-z][a-z0-9_]*:|\Z)",
+            source.split("\njobs:\n", 1)[1], re.M | re.S) if match[1] != "preflight"}
+    if consumers(old_workflow) != consumers(new_workflow):
+        raise ValueError("PR proof check execution definitions changed")
+    return {"run_id": run["id"], "source_sha": producer, "execution_sha": execution,
+            "source_tree": tree, "artifact_id": artifact["id"]}
+
+
+def resume_pr_checks(repository, head, execution):
+    """Consider only the PR head's direct parent; absent proof keeps ordinary CI."""
+    if any(not re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (head, execution)):
+        raise ValueError("PR proof requires full commit SHAs")
+    if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != execution:
+        raise ValueError("PR proof checkout differs from execution SHA")
+    if subprocess.run(["git", "diff", "--quiet", "HEAD", "--"], check=False).returncode:
+        raise ValueError("PR proof requires a clean tracked checkout")
+    parents = subprocess.check_output(["git", "show", "-s", "--format=%P", head], text=True).split()
+    if len(parents) != 1:
+        return None
+    producer = parents[0]
+    tree = subprocess.check_output(["git", "rev-parse", f"{producer}^{{tree}}"], text=True).strip()
+    def api(path):
+        return json.loads(subprocess.check_output(["gh", "api", f"repos/{repository}/{path}"], text=True))
+    try:
+        inventory = api(f"actions/artifacts?name=ci-full-{tree}&per_page=100")
+    except subprocess.CalledProcessError:
+        print("Full proof lookup unavailable; ordinary PR checks remain required", file=sys.stderr)
+        return None
+    if inventory.get("total_count", 0) > 100:
+        return None
+    def source(revision, path):
+        return subprocess.check_output(["git", "show", f"{revision}:{path}"], text=True)
+    for artifact in inventory.get("artifacts", []):
+        if artifact.get("expired") or not artifact.get("workflow_run"):
+            continue
+        try:
+            run = api(f"actions/runs/{artifact['workflow_run']['id']}")
+        except subprocess.CalledProcessError:
+            continue
+        try:
+            return resume_pr_plan(run, artifact, repository, producer, tree, execution,
+                verify_source_equivalence(producer, execution),
+                source(producer, "scripts/ci-build-artifacts.py"),
+                source(execution, "scripts/ci-build-artifacts.py"),
+                source(producer, ".github/workflows/ci.yml"),
+                source(execution, ".github/workflows/ci.yml"))
+        except ValueError as error:
+            print(f"Full proof not reusable; ordinary PR checks remain required: {error}", file=sys.stderr)
+    return None
+
+
+def resume_checks(run, jobs, repository, sha, references, producer_log, browser_logs=None):
+    """Bind the API proof to clean exact source before exporting any skips."""
+    if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != sha:
+        raise ValueError("resume checkout differs from the execution SHA")
+    if subprocess.run(["git", "diff", "--quiet", "HEAD", "--"], check=False).returncode:
+        raise ValueError("resume requires a clean tracked source checkout")
+    producer = run.get("head_sha", "")
+    if (not re.fullmatch(r"[0-9a-f]{40}", producer)
+            or run.get("head_repository", {}).get("full_name") != repository):
+        raise ValueError("resume source is not a same-repository commit")
+    changes = verify_source_equivalence(producer, sha)
+    def source(revision, path):
+        return subprocess.check_output(["git", "show", f"{revision}:{path}"], text=True)
+    return resume_plan(run, jobs, repository, sha,
+                       source(producer, ".github/workflows/ci.yml"),
+                       source(sha, ".github/workflows/ci.yml"),
+                       source(producer, "scripts/ci-build-artifacts.py"),
+                       source(sha, "scripts/ci-build-artifacts.py"), changes,
+                       references, producer_log, browser_logs)
+
+
+def workspace_test_targets(metadata):
+    """Match Cargo's default lib/bin/integration selection without compiling."""
+    packages = {package["id"]: package for package in metadata["packages"]}
+    features = {node["id"]: set(node["features"]) for node in metadata["resolve"]["nodes"]}
+    targets = set()
+    for member in metadata["workspace_members"]:
+        package = packages[member]
+        for target in package["targets"]:
+            if not target["test"] or not set(target.get("required-features", ())) <= features[member]:
+                continue
+            kinds = set(target["kind"])
+            if kinds & {"lib", "rlib", "cdylib", "dylib", "staticlib", "proc-macro"}:
+                kind = "lib"
+            elif kinds in ({"bin"}, {"test"}):
+                kind = target["kind"][0]
+            else:
+                continue
+            targets.add((package["name"], target["name"], kind))
+    if not targets:
+        raise ValueError("workspace has no test targets")
+    return targets
+
+
+def verify_workspace_test_coverage(current, archived, binaries, catalog=None):
+    """A selected-package archive must never stand in for a full workspace."""
+    packages = {package["id"]: package["name"] for package in archived["packages"]}
+    members = {packages[member] for member in archived["workspace_members"]}
+    current_packages = {package["id"]: package["name"] for package in current["packages"]}
+    if members != {current_packages[member] for member in current["workspace_members"]}:
+        raise ValueError("reused archive has a different workspace membership")
+    def workspace_features(metadata):
+        nodes = {node["id"]: node["features"] for node in metadata["resolve"]["nodes"]}
+        names = {package["id"]: package["name"] for package in metadata["packages"]}
+        return {names[member]: sorted(nodes[member]) for member in metadata["workspace_members"]}
+    if workspace_features(current if catalog is None else catalog) != workspace_features(archived):
+        raise ValueError("reused archive has a different workspace feature graph")
+    actual = set()
+    for binary in binaries["rust-binaries"].values():
+        package = packages[binary["package-id"]]
+        if package not in members:
+            raise ValueError("reused archive contains a non-workspace test binary")
+        kind = "lib" if binary["kind"] == "proc-macro" else binary["kind"]
+        actual.add((package, binary["binary-name"], kind))
+    expected = workspace_test_targets(current)
+    missing = expected - actual
+    if missing:
+        names = ", ".join(f"{package}::{kind}/{name}" for package, name, kind in sorted(missing))
+        raise ValueError("reused archive omits workspace test targets: " + names)
+    return len(expected)
+
+
+def verify_full_workspace_archive(root):
+    """Use the verified nextest executable to inspect, never run, its archive."""
+    environment = dict(os.environ, RUSTUP_AUTO_INSTALL="0")
+    current = json.loads(subprocess.check_output(
+        ["cargo", "metadata", "--format-version", "1", "--locked", "--offline"],
+        text=True, env=environment))
+    # Nextest's archived Cargo metadata is an all-features catalog, even for
+    # default-feature test builds. Compare that catalog separately; eligible
+    # test targets still come from the current default-feature resolution.
+    catalog = json.loads(subprocess.check_output(
+        ["cargo", "metadata", "--format-version", "1", "--locked", "--offline", "--all-features"],
+        text=True, env=environment))
+    with tempfile.TemporaryDirectory(prefix="ci-full-coverage-") as temporary:
+        binaries = json.loads(subprocess.check_output([
+            str(root / "bin/cargo-nextest"), "nextest", "list",
+            "--archive-file", str(root / "nextest.tar.zst"),
+            "--extract-to", temporary, "--workspace-remap", str(Path.cwd()),
+            "--list-type", "binaries-only", "--message-format", "json",
+        ], text=True, env=environment))
+        archived = json.loads((Path(temporary) / "target/nextest/cargo-metadata.json").read_text())
+        return verify_workspace_test_coverage(current, archived, binaries, catalog)
+
+
+def reuse_local(archive, sha, kind, reference, cache, full_workspace=False):
     """Verify existing immutable bytes without building, relabelling or publishing."""
     changed = verify_source_equivalence(reference["source_sha"], sha)
     if not fetch_local(archive, reference["sha256"], reference["cache_key"], cache):
         raise ValueError("required reused CI artifact is unavailable; no rebuild was started")
     with tempfile.TemporaryDirectory(prefix="ci-reuse-") as temporary:
-        restore(archive, Path(temporary) / "verified", sha, None, kind, reference)
+        root = Path(temporary) / "verified"
+        restore(archive, root, sha, None, kind, reference,
+                required_capabilities=("rust-tests", "smoke-server") if full_workspace else ())
+        if full_workspace:
+            verify_full_workspace_archive(root)
     return {f"{kind}_cache_key": reference["cache_key"], f"{kind}_digest": reference["sha256"],
             f"{kind}_source_sha": reference["source_sha"],
             f"{kind}_equivalent_execution_sha": sha,
@@ -422,11 +766,15 @@ def main():
     parser.add_argument("--capability", action="append", help="pack: declare each provided capability")
     parser.add_argument("--require-capability", action="append", default=[],
                         help="restore/verify: refuse before exporting paths unless provided")
+    parser.add_argument("--require-full-workspace", action="store_true",
+                        help="reuse rust: require every current workspace test target and smoke server")
     args = parser.parse_args()
     if args.capability is not None and args.mode != "pack":
         parser.error("--capability is only valid when packing")
     if args.require_capability and args.mode not in ("restore", "verify"):
         parser.error("--require-capability is only valid when restoring or verifying")
+    if args.require_full_workspace and (args.mode != "reuse" or args.kind != "rust"):
+        parser.error("--require-full-workspace is only valid for Rust artifact reuse")
     if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
         parser.error("a full source SHA is required")
     local = args.mode in ("publish-local", "fetch-local")
@@ -450,7 +798,8 @@ def main():
     if args.mode == "reuse":
         if reference is None:
             parser.error("reuse requires explicit CI_REUSE_ARTIFACTS references")
-        values = reuse_local(args.archive, args.sha, args.kind, reference, cache)
+        values = reuse_local(args.archive, args.sha, args.kind, reference, cache,
+                             full_workspace=args.require_full_workspace)
         if args.output_file:
             with args.output_file.open("a") as handle:
                 for key, value in values.items():

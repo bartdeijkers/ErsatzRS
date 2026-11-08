@@ -101,6 +101,26 @@ pub trait ChannelRuntime: Send + Sync {
         &self,
         profile_id: EntityId,
     ) -> Result<(), ChannelRuntimeError>;
+
+    /// Snapshot dependent Next channels before a mutation can remove references.
+    async fn playout_projection_dependents(
+        &self,
+        _change: ersatzrs_domain::PlayoutProjectionChange,
+    ) -> Result<Vec<String>, ChannelRuntimeError> {
+        Err(ChannelRuntimeError::unavailable(
+            "playout dependency resolution is unavailable",
+        ))
+    }
+
+    /// Enqueue existing bounded session updates after the mutation commits.
+    async fn refresh_playout_projections(
+        &self,
+        _channels: Vec<String>,
+    ) -> Result<(), ChannelRuntimeError> {
+        Err(ChannelRuntimeError::unavailable(
+            "playout projection refresh is unavailable",
+        ))
+    }
 }
 
 /// Failure returned by process-local settings effects.

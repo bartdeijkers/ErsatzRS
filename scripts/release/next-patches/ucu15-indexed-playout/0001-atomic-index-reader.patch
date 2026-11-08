@@ -1,0 +1,1176 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -56,6 +56,7 @@
+ schemars = "1.2"
+ serde = { version = "1", features = ["derive"] }
+ serde_json = "1"
++sha2 = "0.11"
+ serde_path_to_error = "0.1"
+ simple-expand-tilde = "0.5.3"
+ strum = { version = "0.28", features = ["derive"] }
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -160,6 +160,15 @@
+ checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
+ 
+ [[package]]
++name = "block-buffer"
++version = "0.12.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
++dependencies = [
++ "hybrid-array",
++]
++
++[[package]]
+ name = "bumpalo"
+ version = "3.20.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -272,6 +281,12 @@
+ ]
+ 
+ [[package]]
++name = "const-oid"
++version = "0.10.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
++
++[[package]]
+ name = "convert_case"
+ version = "0.10.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -303,6 +318,15 @@
+ checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+ dependencies = [
+  "libc",
++]
++
++[[package]]
++name = "crypto-common"
++version = "0.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
++dependencies = [
++ "hybrid-array",
+ ]
+ 
+ [[package]]
+@@ -336,6 +360,17 @@
+  "rustc_version",
+  "syn",
+  "unicode-xid",
++]
++
++[[package]]
++name = "digest"
++version = "0.11.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2"
++dependencies = [
++ "block-buffer",
++ "const-oid",
++ "crypto-common",
+ ]
+ 
+ [[package]]
+@@ -453,6 +488,7 @@
+  "serde",
+  "serde_json",
+  "serde_path_to_error",
++ "sha2",
+  "simple-expand-tilde",
+  "tempfile",
+  "thiserror",
+@@ -482,9 +518,11 @@
+ version = "0.2.4"
+ dependencies = [
+  "ersatztv-core",
++ "libc",
+  "serde",
+  "serde_json",
+  "serde_path_to_error",
++ "sha2",
+  "tempfile",
+  "thiserror",
+  "time",
+@@ -763,6 +801,15 @@
+ version = "1.0.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
++
++[[package]]
++name = "hybrid-array"
++version = "0.4.15"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17"
++dependencies = [
++ "typenum",
++]
+ 
+ [[package]]
+ name = "hyper"
+@@ -1912,6 +1959,17 @@
+ ]
+ 
+ [[package]]
++name = "sha2"
++version = "0.11.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
++dependencies = [
++ "cfg-if",
++ "cpufeatures",
++ "digest",
++]
++
++[[package]]
+ name = "sharded-slab"
+ version = "0.1.7"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -2369,6 +2427,12 @@
+ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+ 
+ [[package]]
++name = "typenum"
++version = "1.20.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
++
++[[package]]
+ name = "unicase"
+ version = "2.9.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,7 @@
+ 
+ ## [Unreleased]
+ ### Added
++- Optional `playout.layout: "ersatzrs.playout-index.v1"` reads bounded, hash-verified daily files through one atomic index and shared reader lease. Ordinary folder loading remains the default; invalid indexes never fall back to directory scanning. `describe.contract.playout_layouts` advertises the reader contract (channel config schema `0.1.4`).
+ - `ersatztv-channel describe` prints a JSON document describing the binary; its schema is `schema/describe.json` and it includes:
+   - Version and commit
+   - Playout and channel config schema versions it accepts
+--- a/crates/ersatztv-playout/Cargo.toml
++++ b/crates/ersatztv-playout/Cargo.toml
+@@ -7,6 +7,7 @@
+ [dependencies]
+ ersatztv-core = { workspace = true }
+ serde = { workspace = true }
++sha2 = { workspace = true }
+ serde_json = { workspace = true, features = ["raw_value"] }
+ serde_path_to_error = { workspace = true }
+ thiserror = { workspace = true }
+@@ -15,3 +16,6 @@
+ 
+ [dev-dependencies]
+ tempfile = { workspace = true }
++
++[target.'cfg(unix)'.dependencies]
++libc = { workspace = true }
+--- a/crates/ersatztv-playout/src/lib.rs
++++ b/crates/ersatztv-playout/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub mod error;
++pub mod indexed;
+ pub mod playout;
+ pub mod template;
+--- a/crates/ersatztv-playout/src/playout.rs
++++ b/crates/ersatztv-playout/src/playout.rs
+@@ -462,17 +462,6 @@
+ 
+ /// Only envelope errors (read, JSON, version, `items`) fail the whole file.
+ pub async fn from_file(path: &str) -> Result<PlayoutLoadResult, PlayoutError> {
+-    #[derive(Deserialize)]
+-    struct PlayoutVersion {
+-        version: String,
+-    }
+-
+-    #[derive(Deserialize)]
+-    struct PlayoutEnvelope<'a> {
+-        #[serde(borrow)]
+-        items: Vec<&'a serde_json::value::RawValue>,
+-    }
+-
+     let contents = tokio::fs::read_to_string(path).await.map_err(|e| {
+         if e.kind() == std::io::ErrorKind::NotFound {
+             PlayoutError::PlayoutJsonDoesNotExist
+@@ -480,13 +469,28 @@
+             PlayoutError::PlayoutJsonLoadError(e.to_string())
+         }
+     })?;
+-
+-    let version_only: PlayoutVersion = serde_json::from_str(&contents)
++    from_str(&contents)
++}
++
++/// Parse a single already-read playout document with the ordinary item policy.
++pub fn from_str(contents: &str) -> Result<PlayoutLoadResult, PlayoutError> {
++    #[derive(Deserialize)]
++    struct PlayoutVersion {
++        version: String,
++    }
++
++    #[derive(Deserialize)]
++    struct PlayoutEnvelope<'a> {
++        #[serde(borrow)]
++        items: Vec<&'a serde_json::value::RawValue>,
++    }
++
++    let version_only: PlayoutVersion = serde_json::from_str(contents)
+         .map_err(|e| PlayoutError::PlayoutJsonLoadError(e.to_string()))?;
+ 
+     SCHEMA.check(&version_only.version)?;
+ 
+-    let envelope: PlayoutEnvelope = serde_json::from_str(&contents)
++    let envelope: PlayoutEnvelope = serde_json::from_str(contents)
+         .map_err(|e| PlayoutError::PlayoutJsonLoadError(e.to_string()))?;
+ 
+     let mut items = Vec::with_capacity(envelope.items.len());
+--- /dev/null
++++ b/crates/ersatztv-playout/src/indexed.rs
+@@ -0,0 +1,201 @@
++//! Explicit atomic-index reader. Ordinary folder scanning does not use this module.
++use std::fs::{File, OpenOptions, TryLockError};
++use std::io::Read;
++use std::path::Path;
++
++use serde::{Deserialize, Serialize};
++use sha2::{Digest, Sha256};
++use time::OffsetDateTime;
++
++use crate::playout::{self, PlayoutLoadResult};
++
++pub const VERSION: &str = "ersatzrs.playout-index.v1";
++const MAX_DAYS: usize = 366;
++const MAX_INDEX_BYTES: usize = 128 * 1024;
++const MAX_DAY_BYTES: usize = 32 * 1024 * 1024;
++const MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
++
++#[derive(Debug, thiserror::Error, PartialEq, Eq)]
++pub enum IndexError {
++    #[error("indexed playout is busy; retry selection")]
++    Busy,
++    #[error("indexed playout is unavailable")]
++    Unavailable,
++    #[error("indexed playout contract or content is invalid")]
++    Invalid,
++}
++
++#[derive(Debug, Deserialize, Serialize)]
++#[serde(deny_unknown_fields)]
++pub struct Index {
++    pub version: String,
++    pub days: Vec<Day>,
++}
++
++#[derive(Debug, Deserialize, Serialize)]
++#[serde(deny_unknown_fields)]
++pub struct Day {
++    #[serde(with = "time::serde::rfc3339")]
++    pub start: OffsetDateTime,
++    #[serde(with = "time::serde::rfc3339")]
++    pub finish: OffsetDateTime,
++    pub file: String,
++    pub sha256: String,
++}
++
++/// One snapshot's selected document and earliest later slot, including invalid slots.
++pub struct Selection {
++    pub current: Option<PlayoutLoadResult>,
++    pub next_start: Option<OffsetDateTime>,
++    pub identity: String,
++}
++
++impl std::fmt::Debug for Selection {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.debug_struct("Selection")
++            .field("has_current", &self.current.is_some())
++            .field("next_start", &self.next_start)
++            .field("identity", &self.identity)
++            .finish()
++    }
++}
++
++fn digest(bytes: &[u8]) -> String {
++    Sha256::digest(bytes)
++        .iter()
++        .map(|b| format!("{b:02x}"))
++        .collect()
++}
++
++impl Index {
++    pub fn validate(&self) -> Result<(), IndexError> {
++        if self.version != VERSION || self.days.len() > MAX_DAYS {
++            return Err(IndexError::Invalid);
++        }
++        for day in &self.days {
++            if day.start >= day.finish
++                || day.sha256.len() != 64
++                || !day
++                    .sha256
++                    .bytes()
++                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++                || day.file != format!("day-{}.json", day.sha256)
++            {
++                return Err(IndexError::Invalid);
++            }
++        }
++        if self.days.windows(2).any(|w| w[0].finish > w[1].start) {
++            return Err(IndexError::Invalid);
++        }
++        Ok(())
++    }
++}
++
++/// Read one generation under the same shared lease that fences publisher reclamation.
++/// No retry or sleep occurs here: Busy returns to the worker's bounded selection loop.
++pub fn select(folder: &Path, now: OffsetDateTime) -> Result<Selection, IndexError> {
++    let folder = folder.canonicalize().map_err(|_| IndexError::Unavailable)?;
++    let lease = regular_file(&folder.join(".index-readers.lock"), true)?;
++    match lease.try_lock_shared() {
++        Ok(()) => {}
++        Err(TryLockError::WouldBlock) => return Err(IndexError::Busy),
++        Err(TryLockError::Error(_)) => return Err(IndexError::Unavailable),
++    }
++    // Keep the handle alive through every chunk open/read, not just index parsing.
++    let result = select_locked(&folder, now);
++    drop(lease);
++    result
++}
++
++fn select_locked(folder: &Path, now: OffsetDateTime) -> Result<Selection, IndexError> {
++    let bytes = bounded_read(&folder.join("index.json"), MAX_INDEX_BYTES)?;
++    let index: Index = serde_json::from_slice(&bytes).map_err(|_| IndexError::Invalid)?;
++    index.validate()?;
++    let mut declared_total = 0u64;
++    for day in &index.days {
++        let meta = std::fs::symlink_metadata(folder.join(&day.file))
++            .map_err(|_| IndexError::Unavailable)?;
++        if !meta.is_file() || meta.is_symlink() || meta.len() > MAX_DAY_BYTES as u64 {
++            return Err(IndexError::Invalid);
++        }
++        declared_total = declared_total
++            .checked_add(meta.len())
++            .ok_or(IndexError::Invalid)?;
++        if declared_total > MAX_TOTAL_BYTES as u64 {
++            return Err(IndexError::Invalid);
++        }
++    }
++    let mut result = Selection {
++        current: None,
++        next_start: None,
++        identity: digest(&bytes),
++    };
++    let mut total = 0usize;
++    for day in index.days.iter().filter(|day| now < day.finish) {
++        let bytes = bounded_read(&folder.join(&day.file), MAX_DAY_BYTES)?;
++        total = total.checked_add(bytes.len()).ok_or(IndexError::Invalid)?;
++        if total > MAX_TOTAL_BYTES || digest(&bytes) != day.sha256 {
++            return Err(IndexError::Invalid);
++        }
++        let text = std::str::from_utf8(&bytes).map_err(|_| IndexError::Invalid)?;
++        let playout = playout::from_str(text).map_err(|_| IndexError::Invalid)?;
++        let later = playout
++            .items
++            .iter()
++            .map(|item| item.start())
++            .filter(|start| *start > now)
++            .min();
++        result.next_start = result.next_start.into_iter().chain(later).min();
++        if day.start <= now {
++            result.current = Some(playout);
++        }
++        // A matching chunk with a later slot, or the first later day with a slot,
++        // completes lookahead without reading every future document on each tick.
++        if result.next_start.is_some() {
++            break;
++        }
++    }
++    Ok(result)
++}
++
++fn bounded_read(path: &Path, limit: usize) -> Result<Vec<u8>, IndexError> {
++    let file = regular_file(path, false)?;
++    if file.metadata().map_err(|_| IndexError::Unavailable)?.len() > limit as u64 {
++        return Err(IndexError::Invalid);
++    }
++    let mut bytes = Vec::new();
++    file.take(limit as u64 + 1)
++        .read_to_end(&mut bytes)
++        .map_err(|_| IndexError::Unavailable)?;
++    if bytes.len() > limit {
++        return Err(IndexError::Invalid);
++    }
++    Ok(bytes)
++}
++
++fn regular_file(path: &Path, writable: bool) -> Result<File, IndexError> {
++    let mut options = OpenOptions::new();
++    options.read(true).write(writable);
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::OpenOptionsExt;
++        // Refuse symlinks atomically; nonblocking open also avoids waiting on a FIFO.
++        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
++    }
++    #[cfg(windows)]
++    {
++        use std::os::windows::fs::OpenOptionsExt;
++        // Open the reparse point itself and reject it below. Allow the publisher's
++        // same-directory atomic index replacement while this handle is open.
++        options.custom_flags(0x0020_0000).share_mode(7);
++    }
++    let file = options.open(path).map_err(|_| IndexError::Unavailable)?;
++    let meta = file.metadata().map_err(|_| IndexError::Unavailable)?;
++    if !meta.is_file() || meta.is_symlink() {
++        return Err(IndexError::Invalid);
++    }
++    Ok(file)
++}
++
++#[cfg(test)]
++mod tests;
+--- /dev/null
++++ b/crates/ersatztv-playout/src/indexed/tests.rs
+@@ -0,0 +1,344 @@
++use super::*;
++use crate::playout::{Playout, PlayoutItem};
++use time::Duration;
++
++fn at(seconds: i64) -> OffsetDateTime {
++    OffsetDateTime::from_unix_timestamp(1_790_000_000 + seconds).unwrap()
++}
++
++fn item(id: &str, start: i64, finish: i64) -> PlayoutItem {
++    PlayoutItem::new(
++        id.into(),
++        at(start),
++        at(finish),
++        None,
++        None,
++        Path::new("item.mkv"),
++    )
++    .unwrap()
++}
++
++fn day(folder: &Path, start: i64, finish: i64, items: Vec<PlayoutItem>) -> Day {
++    let bytes = serde_json::to_vec(&Playout::new(items)).unwrap();
++    let sha256 = digest(&bytes);
++    let file = format!("day-{sha256}.json");
++    std::fs::write(folder.join(&file), bytes).unwrap();
++    Day {
++        start: at(start),
++        finish: at(finish),
++        file,
++        sha256,
++    }
++}
++
++fn publish(folder: &Path, days: Vec<Day>) {
++    let bytes = serde_json::to_vec(&Index {
++        version: VERSION.into(),
++        days,
++    })
++    .unwrap();
++    std::fs::write(folder.join("index.json"), bytes).unwrap();
++}
++
++fn folder() -> tempfile::TempDir {
++    let folder = tempfile::tempdir().unwrap();
++    File::create(folder.path().join(".index-readers.lock")).unwrap();
++    folder
++}
++
++#[test]
++fn selected_day_retains_fractional_timing_tracks_and_cross_day_identity() {
++    let folder = folder();
++    let path = folder.path();
++    let mut crossing = item("occurrence", 5, 25);
++    crossing.start += Duration::nanoseconds(123_456_700);
++    crossing.tracks = Some(crate::playout::PlayoutItemTracks {
++        audio: Some(crate::playout::TrackSelection {
++            source: None,
++            stream_index: Some(2),
++        }),
++        video: None,
++        subtitle: None,
++    });
++    let bytes = serde_json::to_vec(&crossing).unwrap();
++    let d1 = day(path, 0, 10, vec![serde_json::from_slice(&bytes).unwrap()]);
++    let d2 = day(path, 10, 30, vec![crossing]);
++    publish(path, vec![d1, d2]);
++    for now in [at(6), at(11)] {
++        let selected = select(path, now).unwrap().current.unwrap();
++        assert_eq!(
++            serde_json::to_vec(selected.valid_items().next().unwrap()).unwrap(),
++            bytes
++        );
++    }
++}
++
++#[test]
++fn lookahead_crosses_empty_days_and_stops_at_the_end() {
++    let folder = folder();
++    let path = folder.path();
++    let days = vec![
++        day(path, 0, 10, vec![item("a", 0, 5)]),
++        day(path, 10, 20, vec![]),
++        day(path, 20, 30, vec![item("b", 22, 25)]),
++    ];
++    publish(path, days);
++    for seconds in [6, 15, 21] {
++        assert_eq!(select(path, at(seconds)).unwrap().next_start, Some(at(22)));
++    }
++    assert_eq!(select(path, at(25)).unwrap().next_start, None);
++    assert!(select(path, at(30)).unwrap().current.is_none());
++    publish(path, vec![]);
++    let empty = select(path, at(0)).unwrap();
++    assert!(empty.current.is_none() && empty.next_start.is_none());
++}
++
++#[test]
++fn malformed_missing_or_unsupported_index_never_scans_an_unreferenced_file() {
++    let folder = folder();
++    let path = folder.path();
++    day(path, 0, 10, vec![item("must-not-play", 0, 10)]);
++    for bytes in [
++        b"{".as_slice(),
++        br#"{"version":"unknown","days":[]}"#,
++        br#"{"version":"ersatzrs.playout-index.v1","days":[],"secret":"omitted"}"#,
++    ] {
++        std::fs::write(path.join("index.json"), bytes).unwrap();
++        assert_eq!(select(path, at(1)).unwrap_err(), IndexError::Invalid);
++    }
++    std::fs::remove_file(path.join("index.json")).unwrap();
++    assert_eq!(select(path, at(1)).unwrap_err(), IndexError::Unavailable);
++}
++
++#[test]
++fn bounds_names_and_digest_are_strict() {
++    let folder = folder();
++    let path = folder.path();
++    for name in ["../private", "/private", "C:\\private", "day-deadbeef.json"] {
++        let mut d = day(path, 0, 10, vec![]);
++        d.file = name.into();
++        publish(path, vec![d]);
++        assert_eq!(select(path, at(1)).unwrap_err(), IndexError::Invalid);
++    }
++    let a = day(path, 0, 10, vec![]);
++    let b = day(path, 9, 20, vec![]);
++    publish(path, vec![a, b]);
++    assert_eq!(select(path, at(1)).unwrap_err(), IndexError::Invalid);
++    let d = day(path, 0, 10, vec![]);
++    let file = d.file.clone();
++    publish(path, vec![d]);
++    std::fs::write(path.join(file), b"{}").unwrap();
++    assert_eq!(select(path, at(1)).unwrap_err(), IndexError::Invalid);
++}
++
++#[test]
++fn exclusive_publisher_returns_busy_without_waiting_and_shared_readers_coexist() {
++    let folder = folder();
++    let path = folder.path();
++    publish(path, vec![]);
++    let lease = OpenOptions::new()
++        .read(true)
++        .write(true)
++        .open(path.join(".index-readers.lock"))
++        .unwrap();
++    lease.try_lock().unwrap();
++    assert_eq!(select(path, at(0)).unwrap_err(), IndexError::Busy);
++    lease.unlock().unwrap();
++    lease.try_lock_shared().unwrap();
++    assert!(select(path, at(0)).is_ok());
++}
++
++#[test]
++fn size_budgets_refuse_excess_without_loading_it() {
++    let folder = folder();
++    let path = folder.path();
++    publish(path, vec![]);
++    OpenOptions::new()
++        .write(true)
++        .open(path.join("index.json"))
++        .unwrap()
++        .set_len(MAX_INDEX_BYTES as u64 + 1)
++        .unwrap();
++    assert_eq!(select(path, at(0)).unwrap_err(), IndexError::Invalid);
++    let d = day(path, 0, 10, vec![]);
++    let file = d.file.clone();
++    publish(path, vec![d]);
++    OpenOptions::new()
++        .write(true)
++        .open(path.join(file))
++        .unwrap()
++        .set_len(MAX_DAY_BYTES as u64 + 1)
++        .unwrap();
++    assert_eq!(select(path, at(0)).unwrap_err(), IndexError::Invalid);
++}
++
++#[test]
++fn count_and_total_budgets_are_checked_before_lookahead() {
++    let folder = folder();
++    let path = folder.path();
++    let days: Vec<_> = (0..367).map(|i| day(path, i, i + 1, vec![])).collect();
++    publish(path, days);
++    assert_eq!(select(path, at(0)).unwrap_err(), IndexError::Invalid);
++    let mut days = Vec::new();
++    for i in 0..9 {
++        let d = day(
++            path,
++            i * 10,
++            i * 10 + 10,
++            vec![item(&i.to_string(), i * 10, i * 10 + 1)],
++        );
++        OpenOptions::new()
++            .write(true)
++            .open(path.join(&d.file))
++            .unwrap()
++            .set_len(MAX_DAY_BYTES as u64)
++            .unwrap();
++        days.push(d);
++    }
++    publish(path, days);
++    assert_eq!(select(path, at(0)).unwrap_err(), IndexError::Invalid);
++}
++
++#[test]
++fn malformed_items_keep_the_ordinary_slot_and_probe_hint_policy() {
++    let folder = folder();
++    let path = folder.path();
++    let mut bad = serde_json::to_value(item("invalid", 20, 30)).unwrap();
++    bad["source"] = serde_json::json!({"source_type":"invalid"});
++    let mut hinted = serde_json::to_value(item("hinted", 0, 10)).unwrap();
++    hinted["source"]["probe_hint"] = serde_json::json!({"video":[{"stream_index":0}]});
++    let bytes = serde_json::to_vec(
++        &serde_json::json!({"version":playout::SCHEMA.uri(),"items":[hinted,bad]}),
++    )
++    .unwrap();
++    let sha256 = digest(&bytes);
++    let file = format!("day-{sha256}.json");
++    std::fs::write(path.join(&file), bytes).unwrap();
++    publish(
++        path,
++        vec![Day {
++            start: at(0),
++            finish: at(40),
++            file,
++            sha256,
++        }],
++    );
++    let selected = select(path, at(15)).unwrap();
++    assert_eq!(selected.next_start, Some(at(20)));
++    let current = selected.current.unwrap();
++    assert!(matches!(&current.items[1], playout::LoadedItem::Invalid(_)));
++    assert!(
++        current
++            .valid_items()
++            .next()
++            .unwrap()
++            .source
++            .as_ref()
++            .unwrap()
++            .probe_hint()
++            .is_none()
++    );
++}
++
++#[test]
++fn atomic_replacement_and_exclusive_reclamation_keep_reader_snapshots_complete() {
++    use std::sync::{
++        Arc, Barrier,
++        atomic::{AtomicUsize, Ordering},
++    };
++    let folder = folder();
++    let path = folder.path();
++    // Use nanoseconds for generation identity without moving the next slot out
++    // of its civil-day reference.
++    let generation = |number: i64| {
++        let a = day(path, 0, 10, vec![item(&number.to_string(), 0, 5)]);
++        let mut b = item("lookahead", 12, 13);
++        b.start += Duration::nanoseconds(number);
++        vec![a, day(path, 10, 30, vec![b])]
++    };
++    let initial = generation(0);
++    let mut previous: Vec<_> = initial.iter().map(|d| d.file.clone()).collect();
++    publish(path, initial);
++    let barrier = Arc::new(Barrier::new(2));
++    let ready = barrier.clone();
++    let successes = AtomicUsize::new(0);
++    std::thread::scope(|scope| {
++        let reader = scope.spawn(|| {
++            ready.wait();
++            for _ in 0..1000 {
++                match select(path, at(1)) {
++                    Ok(snapshot) => {
++                        let current = snapshot.current.unwrap();
++                        let number = current
++                            .valid_items()
++                            .next()
++                            .unwrap()
++                            .id
++                            .parse::<i64>()
++                            .unwrap();
++                        assert_eq!(
++                            snapshot.next_start,
++                            Some(at(12) + Duration::nanoseconds(number))
++                        );
++                        successes.fetch_add(1, Ordering::Relaxed);
++                    }
++                    Err(IndexError::Busy) => std::thread::yield_now(),
++                    other => panic!("reader lost a published snapshot: {other:?}"),
++                }
++            }
++        });
++        barrier.wait();
++        for number in 1..101 {
++            let days = generation(number);
++            let current = days.iter().map(|d| d.file.clone()).collect();
++            let bytes = serde_json::to_vec(&Index {
++                version: VERSION.into(),
++                days,
++            })
++            .unwrap();
++            let mut staged = tempfile::NamedTempFile::new_in(path).unwrap();
++            std::io::Write::write_all(&mut staged, &bytes).unwrap();
++            staged.persist(path.join("index.json")).unwrap();
++            let lease = OpenOptions::new()
++                .read(true)
++                .write(true)
++                .open(path.join(".index-readers.lock"))
++                .unwrap();
++            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
++            while let Err(error) = lease.try_lock() {
++                assert!(matches!(error, TryLockError::WouldBlock));
++                assert!(std::time::Instant::now() < deadline);
++                std::thread::yield_now();
++            }
++            for old in previous {
++                std::fs::remove_file(path.join(old)).unwrap();
++            }
++            previous = current;
++        }
++        reader.join().unwrap();
++    });
++    assert!(successes.load(Ordering::Relaxed) > 0);
++}
++
++// Unix symlink creation needs no privileges; native Windows held-handle/reparse
++// qualification remains a required separate platform proof.
++#[cfg(unix)]
++#[test]
++fn refuses_symlinks_for_index_chunk_and_reader_lease() {
++    use std::os::unix::fs::symlink;
++    for target in ["index.json", ".index-readers.lock", "chunk"] {
++        let folder = folder();
++        let path = folder.path();
++        let d = day(path, 0, 10, vec![]);
++        let name = if target == "chunk" {
++            d.file.clone()
++        } else {
++            target.into()
++        };
++        publish(path, vec![d]);
++        std::fs::rename(path.join(&name), path.join("unrelated")).unwrap();
++        symlink(path.join("unrelated"), path.join(name)).unwrap();
++        assert!(select(path, at(1)).is_err());
++        assert!(path.join("unrelated").is_file());
++    }
++}
+--- a/crates/ersatztv-channel/Cargo.toml
++++ b/crates/ersatztv-channel/Cargo.toml
+@@ -36,3 +36,6 @@
+ [[bin]]
+ name = "gen-describe-schema"
+ path = "src/bin/gen_describe_schema.rs"
++
++[dev-dependencies]
++sha2 = { workspace = true }
+--- a/crates/ersatztv-channel/src/config.rs
++++ b/crates/ersatztv-channel/src/config.rs
+@@ -14,7 +14,7 @@
+ 
+ pub const SUPPORTED_SCHEMA: SchemaVersion = SchemaVersion {
+     breaking: 1,
+-    compatible: 3,
++    compatible: 4,
+ };
+ pub const SCHEMA: VersionedSchema =
+     VersionedSchema::new("https://ersatztv.org/channel/version/", SUPPORTED_SCHEMA);
+@@ -58,8 +58,22 @@
+     number: String,
+ }
+ 
++#[derive(Deserialize, Serialize, Clone, Copy, Debug, Default, PartialEq, Eq, JsonSchema)]
++pub enum PlayoutLayout {
++    /// Ordinary upstream folder filenames, selected by their half-open time bounds.
++    #[default]
++    #[serde(rename = "folder")]
++    Folder,
++    /// Atomic index and immutable hashed day files; requires matching publisher leases.
++    #[serde(rename = "ersatzrs.playout-index.v1")]
++    Indexed,
++}
++
+ #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+ pub struct PlayoutConfig {
++    /// Explicit reader layout. Ordinary folder scanning remains the default.
++    #[serde(default)]
++    pub layout: PlayoutLayout,
+     /// Folder of playout files, named `{start}_{finish}.json`.
+     pub folder: String,
+     /// Play the playout as if the channel started at this time instead of now. RFC 3339, e.g.
+@@ -1305,3 +1319,32 @@
+         );
+     }
+ }
++
++#[cfg(test)]
++mod indexed_contract_tests {
++    use super::*;
++
++    #[test]
++    fn index_layout_requires_explicit_supported_mode_and_is_advertised() {
++        let ordinary: PlayoutConfig =
++            serde_json::from_value(serde_json::json!({"folder":"playout"})).unwrap();
++        assert_eq!(ordinary.layout, PlayoutLayout::Folder);
++        let indexed: PlayoutConfig = serde_json::from_value(
++            serde_json::json!({"folder":"playout","layout":"ersatzrs.playout-index.v1"}),
++        )
++        .unwrap();
++        assert_eq!(indexed.layout, PlayoutLayout::Indexed);
++        assert!(
++            serde_json::from_value::<PlayoutConfig>(
++                serde_json::json!({"folder":"playout","layout":"unsupported"})
++            )
++            .is_err()
++        );
++        let describe = crate::describe::Describe::new();
++        assert_eq!(
++            describe.contract.playout_layouts,
++            vec!["folder", "ersatzrs.playout-index.v1"]
++        );
++        assert_eq!(describe.contract.channel_config_schema.uri, SCHEMA.uri());
++    }
++}
+--- a/crates/ersatztv-channel/src/error.rs
++++ b/crates/ersatztv-channel/src/error.rs
+@@ -8,6 +8,9 @@
+ 
+ #[derive(Error, Debug)]
+ pub enum ChannelError {
++    #[error("{0}")]
++    IndexedPlayout(#[from] ersatztv_playout::indexed::IndexError),
++
+     #[error("unable to load channel config: {0}")]
+     ChannelConfigFailure(String),
+ 
+--- a/crates/ersatztv-channel/src/describe.rs
++++ b/crates/ersatztv-channel/src/describe.rs
+@@ -60,6 +60,9 @@
+     /// Headers sent on every dynamic source request. `DynamicSource` in the playout schema
+     /// defines them.
+     pub dynamic_callback_headers: Vec<String>,
++    /// Explicit playout reader layouts supported by this binary. Indexed mode uses
++    /// a shared reader lease through all chunk reads and never falls back to scanning.
++    pub playout_layouts: Vec<String>,
+ }
+ 
+ #[derive(Serialize, Deserialize, Debug, JsonSchema, PartialEq)]
+@@ -135,6 +138,7 @@
+                 segment_seconds: SEGMENT_SECONDS,
+                 keyframe_seconds: KEYFRAME_INTERVAL_SECONDS,
+                 dynamic_callback_headers: CALLBACK_HEADERS.map(String::from).to_vec(),
++                playout_layouts: vec!["folder".into(), ersatztv_playout::indexed::VERSION.into()],
+             },
+             schema_capability: SchemaCapability {
+                 video_formats: enum_values::<VideoFormat>(),
+--- a/crates/ersatztv-channel/src/playout_loader.rs
++++ b/crates/ersatztv-channel/src/playout_loader.rs
+@@ -1,7 +1,7 @@
+ use std::sync::Mutex;
+ use std::time::SystemTime;
+ 
+-use ersatztv_channel::config::ChannelConfig;
++use ersatztv_channel::config::{ChannelConfig, PlayoutLayout};
+ use ersatztv_channel::error::{ChannelError, IoContext};
+ use ersatztv_playout::playout::{
+     ItemIssueKind, LoadedItem, PlayoutItem, PlayoutLoadResult, parse_playout_filename,
+@@ -35,15 +35,24 @@
+                 .to_string_lossy()
+         );
+ 
+-        let path = self.playout_file_for_time(now).await?;
+-        log::debug!("playout JSON is {path}");
+-
+-        // load playout JSON
+-        let playout_result = ersatztv_playout::playout::from_file(&path).await?;
+-        self.report_issues(&path, &playout_result).await;
+-
+-        // in case current item isn't found
+-        let next_start = self.next_start(&playout_result, now);
++        let (playout_result, next_start, report_key, indexed) =
++            if self.channel_config.playout.layout == PlayoutLayout::Indexed {
++                let snapshot = self.indexed_selection(*now).await?;
++                let current = snapshot.current.unwrap_or(PlayoutLoadResult {
++                    version: ersatztv_playout::playout::SCHEMA.uri(),
++                    items: Vec::new(),
++                    issues: Vec::new(),
++                });
++                (current, snapshot.next_start, snapshot.identity, true)
++            } else {
++                let path = self.playout_file_for_time(now).await?;
++                log::debug!("playout JSON is {path}");
++                let playout = ersatztv_playout::playout::from_file(&path).await?;
++                let next_start = self.next_start(&playout, now);
++                (playout, next_start, path, false)
++            };
++        self.report_issues(&report_key, &playout_result, indexed)
++            .await;
+ 
+         // find current item
+         match playout_result
+@@ -62,15 +71,19 @@
+         }
+     }
+ 
+-    async fn report_issues(&self, path: &str, playout_result: &PlayoutLoadResult) {
++    async fn report_issues(&self, path: &str, playout_result: &PlayoutLoadResult, indexed: bool) {
+         if playout_result.issues.is_empty() {
+             return;
+         }
+ 
+-        let modified = tokio::fs::metadata(path)
+-            .await
+-            .and_then(|m| m.modified())
+-            .ok();
++        let modified = if indexed {
++            None
++        } else {
++            tokio::fs::metadata(path)
++                .await
++                .and_then(|m| m.modified())
++                .ok()
++        };
+         let key = (path.to_owned(), modified);
+         let first_report = {
+             let mut reported = self.reported_file.lock().unwrap_or_else(|e| e.into_inner());
+@@ -121,6 +134,28 @@
+         }
+     }
+ 
++    async fn indexed_selection(
++        &self,
++        now: OffsetDateTime,
++    ) -> Result<ersatztv_playout::indexed::Selection, ChannelError> {
++        use ersatztv_playout::indexed::{self, IndexError};
++        // Readers never retain the lease while waiting. A short bounded retry
++        // covers publisher recovery/reclamation without blocking a Tokio worker.
++        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(250);
++        loop {
++            let folder = self.channel_config.expanded_playout_folder().to_owned();
++            let result = tokio::task::spawn_blocking(move || indexed::select(&folder, now))
++                .await
++                .map_err(|_| IndexError::Unavailable)?;
++            match result {
++                Err(IndexError::Busy) if tokio::time::Instant::now() < deadline => {
++                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
++                }
++                other => return other.map_err(ChannelError::from),
++            }
++        }
++    }
++
+     async fn playout_file_for_time(&self, now: &OffsetDateTime) -> Result<String, ChannelError> {
+         // resolve the link once; it can be swapped before the file is read
+         let folder = tokio::fs::canonicalize(self.channel_config.expanded_playout_folder())
+@@ -185,7 +220,7 @@
+         json_loader(folder, start, finish, playout).await
+     }
+ 
+-    async fn json_loader(
++    pub(super) async fn json_loader(
+         folder: &Path,
+         start: OffsetDateTime,
+         finish: OffsetDateTime,
+@@ -468,3 +503,94 @@
+         assert!(item.source.unwrap().probe_hint().is_none());
+     }
+ }
++
++#[cfg(test)]
++mod indexed_tests {
++    use super::*;
++    use ersatztv_playout::indexed::{Day, Index, IndexError, VERSION};
++    use ersatztv_playout::playout::Playout;
++    use sha2::{Digest, Sha256};
++    use std::fs::{File, OpenOptions};
++    use std::path::Path;
++    use time::Duration;
++
++    #[tokio::test]
++    async fn indexed_loader_keeps_cross_day_gaps_and_end_detection() {
++        let folder = tempfile::tempdir().unwrap();
++        let path = folder.path();
++        File::create(path.join(".index-readers.lock")).unwrap();
++        let start = OffsetDateTime::from_unix_timestamp(1_790_000_000).unwrap();
++        let item = PlayoutItem::new(
++            "later".into(),
++            start + Duration::seconds(20),
++            start + Duration::seconds(25),
++            None,
++            None,
++            Path::new("later.mkv"),
++        )
++        .unwrap();
++        let bytes = serde_json::to_vec(&Playout::new(vec![item])).unwrap();
++        let sha256: String = Sha256::digest(&bytes)
++            .iter()
++            .map(|b| format!("{b:02x}"))
++            .collect();
++        let file = format!("day-{sha256}.json");
++        std::fs::write(path.join(&file), bytes).unwrap();
++        let index = Index {
++            version: VERSION.into(),
++            days: vec![Day {
++                start: start + Duration::seconds(15),
++                finish: start + Duration::seconds(30),
++                file,
++                sha256,
++            }],
++        };
++        std::fs::write(path.join("index.json"), serde_json::to_vec(&index).unwrap()).unwrap();
++        // Reuse the ordinary fixture and explicitly opt in. Its valid ordinary
++        // file must never be scanned by an indexed worker.
++        let mut loader = super::tests::json_loader(
++            path,
++            start,
++            start + Duration::seconds(30),
++            serde_json::json!({"version":ersatztv_playout::playout::SCHEMA.uri(),"items":[]}),
++        )
++        .await;
++        loader.channel_config.playout.layout = PlayoutLayout::Indexed;
++        assert!(loader.has_remaining(&start).await.unwrap());
++        assert!(
++            matches!(loader.get_current_item(&start).await,Err(ChannelError::PlayoutJsonNoItem{next_start:Some(s)}) if s==start+Duration::seconds(20))
++        );
++        assert_eq!(
++            loader
++                .get_current_item(&(start + Duration::seconds(21)))
++                .await
++                .unwrap()
++                .id,
++            "later"
++        );
++        assert!(
++            !loader
++                .has_remaining(&(start + Duration::seconds(25)))
++                .await
++                .unwrap()
++        );
++        let lease = OpenOptions::new()
++            .read(true)
++            .write(true)
++            .open(path.join(".index-readers.lock"))
++            .unwrap();
++        lease.try_lock().unwrap();
++        let began = std::time::Instant::now();
++        assert!(matches!(
++            loader.get_current_item(&start).await,
++            Err(ChannelError::IndexedPlayout(IndexError::Busy))
++        ));
++        assert!(began.elapsed() < std::time::Duration::from_secs(2));
++        lease.unlock().unwrap();
++        std::fs::write(path.join("index.json"), b"invalid").unwrap();
++        assert!(matches!(
++            loader.has_remaining(&start).await,
++            Err(ChannelError::IndexedPlayout(IndexError::Invalid))
++        ));
++    }
++}
+--- a/examples/channel.json
++++ b/examples/channel.json
+@@ -1,5 +1,5 @@
+ {
+-  "version": "https://ersatztv.org/channel/version/0.1.3",
++  "version": "https://ersatztv.org/channel/version/0.1.4",
+   "playout": {
+     "folder": "./playout"
+   },
+--- a/examples/channel_copy.json
++++ b/examples/channel_copy.json
+@@ -1,5 +1,5 @@
+ {
+-  "version": "https://ersatztv.org/channel/version/0.1.3",
++  "version": "https://ersatztv.org/channel/version/0.1.4",
+   "playout": {
+     "folder": "./playout"
+   },
+--- a/schema/channel_config.json
++++ b/schema/channel_config.json
+@@ -1,5 +1,5 @@
+ {
+-  "$id": "https://ersatztv.org/channel/version/0.1.3",
++  "$id": "https://ersatztv.org/channel/version/0.1.4",
+   "$schema": "https://json-schema.org/draft/2020-12/schema",
+   "title": "ChannelConfig",
+   "description": "Settings for one channel: where its playout is, which ffmpeg to use, and the output format.\nA relative path in any of these settings is relative to the file that sets it.",
+@@ -406,6 +406,11 @@
+           "description": "Folder of playout files, named `{start}_{finish}.json`.",
+           "type": "string"
+         },
++        "layout": {
++          "description": "Explicit reader layout. Ordinary folder scanning remains the default.",
++          "$ref": "#/$defs/PlayoutLayout",
++          "default": "folder"
++        },
+         "virtual_start": {
+           "description": "Play the playout as if the channel started at this time instead of now. RFC 3339, e.g.\n`2026-04-13T00:24:21.527-05:00`. For testing.",
+           "type": [
+@@ -417,6 +422,20 @@
+       },
+       "required": [
+         "folder"
++      ]
++    },
++    "PlayoutLayout": {
++      "oneOf": [
++        {
++          "description": "Ordinary upstream folder filenames, selected by their half-open time bounds.",
++          "type": "string",
++          "const": "folder"
++        },
++        {
++          "description": "Atomic index and immutable hashed day files; requires matching publisher leases.",
++          "type": "string",
++          "const": "ersatzrs.playout-index.v1"
++        }
+       ]
+     },
+     "ScaleOptions": {
+--- a/schema/describe.json
++++ b/schema/describe.json
+@@ -158,6 +158,13 @@
+           "description": "Files written to the channel's output folder.",
+           "$ref": "#/$defs/OutputFiles"
+         },
++        "playout_layouts": {
++          "description": "Explicit playout reader layouts supported by this binary. Indexed mode uses\na shared reader lease through all chunk reads and never falls back to scanning.",
++          "type": "array",
++          "items": {
++            "type": "string"
++          }
++        },
+         "playout_schema": {
+           "description": "Playout schema version. Playout files load when their `breaking` matches and their\n`compatible` is not newer.",
+           "$ref": "#/$defs/SchemaInfo"
+@@ -175,7 +182,8 @@
+         "output_files",
+         "segment_seconds",
+         "keyframe_seconds",
+-        "dynamic_callback_headers"
++        "dynamic_callback_headers",
++        "playout_layouts"
+       ]
+     },
+     "DecodeSupport": {

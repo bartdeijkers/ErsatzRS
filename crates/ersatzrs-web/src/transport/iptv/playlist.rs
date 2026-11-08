@@ -57,7 +57,10 @@ pub async fn get_channels_m3u(
         .get(header::USER_AGENT)
         .and_then(|value| value.to_str().ok())
         .unwrap_or("");
-    let access_token = AccessToken::new(query.access_token);
+    let access_token = AccessToken::for_request(
+        query.access_token,
+        state.iptv_access_token_verifier.is_enabled(),
+    );
 
     let body = build_m3u(
         &scheme,

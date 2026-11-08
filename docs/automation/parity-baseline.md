@@ -85,6 +85,16 @@ hardware debt; supported targets remain. Latest delivery scope is CI and
 source push/merge into remote/main only, without another release or later
 catch-up work. The shared upstream checkout remains untouched.
 
+The maintainer authorizes fixed catch-up on2026-11-06 and extends its terminal
+to released v26.12.0 on2026-11-07:
+UCU-13/14/15 own the pending rows255–285 through the observed target recorded
+in plans/upstream-catch-up.md. All285 ordered identities are verified, but
+254 accepted/31 pending remains the behavioral acceptance state. This
+registration does not advance the Pin table. ErsatzRS retains its Native engine;
+upstream removal and global hiding of Native controls are not authorized.
+The owning milestone records preserve current platform deferrals and separate
+commit/push/merge, CI and publication approvals.
+
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not
 automatically checkout or change the pin to repair it. Then fetch the upstream target while

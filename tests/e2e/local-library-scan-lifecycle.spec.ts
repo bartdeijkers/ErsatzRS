@@ -49,6 +49,8 @@ test.describe('scanned local library lifecycle', () => {
     const episodes = writeShowTree(root, 'Delete');
 
     const id = await addLocalLibrary(page, name, MediaKind.Shows, [root]);
+    // Let the landing page finish hydrating before the next navigation.
+    await hydrated(page);
     await scanLibrary(page, id, name, episodes);
     const scanned = scanCounts(id);
     // The scan must have produced the shape that used to break the cascade.
@@ -82,6 +84,7 @@ test.describe('scanned local library lifecycle', () => {
     const episodes = writeShowTree(removed, 'Removed') + writeShowTree(kept, 'Kept');
 
     const id = await addLocalLibrary(page, name, MediaKind.Shows, [removed, kept]);
+    await hydrated(page);
     await scanLibrary(page, id, name, episodes);
     const keptPath = sqlite(`SELECT "Id" FROM "LibraryPath" WHERE "LibraryId"=${id} AND "Path"=${quote(kept)};`);
     const keptItems = sqlite(`SELECT COUNT(*) FROM "MediaItem" WHERE "LibraryPathId"=${keptPath};`);

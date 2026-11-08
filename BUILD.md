@@ -278,7 +278,7 @@ available. Ordinary CI requires exact source identity. The explicitly selected
 focused-recovery exception below permits only an unchanged runtime/test/config
 tree with a small allowlist of CI orchestration and progress-document changes.
 
-### Reuse verified artifacts for focused recovery
+### Reuse verified artifacts for CI recovery
 
 On the self-hosted machine, `reuse_artifacts` accepts a JSON object keyed by
 `rust` and/or `web`. Each reference must supply the original 40-character
@@ -290,7 +290,7 @@ source. Use the existing `teletext_only=1.5-rust` or `browser_only` selection to
 recover the affected jobs without another artifact compilation.
 
 The artifact provider only checks out source and verifies the pinned local
-archives. It runs no Cargo commands, tool installation, target reset, artifact
+archives. It runs no Cargo compilation, tool installation, target reset, artifact
 publication or cache pruning. Missing/corrupt archives fail closed; no rebuild
 or alternative download starts. Consumers recheck archive hashes, the complete
 file inventory and permissions, host/libc, toolchain, flags and original source
@@ -307,9 +307,59 @@ component and build evidence; a warm cache or an old server with newer frontend
 files alone does not establish a reusable matched build. Keep the referenced
 immutable local cache group until all consumers finish.
 
-Reuse is restricted to one explicit focused mode, self-hosted execution and no
-target reset. Normal full CI and its exact-SHA rules remain unchanged; these
-scoped results never imply a fresh full-CI result for the execution commit.
+Reuse requires self-hosted execution and no target reset. A focused recovery
+keeps its existing scope and does not produce the required `CI ok` aggregate.
+Full verification requires both Rust and matched-web references. The provider
+also queries Cargo metadata offline and lists the archive with its verified
+nextest executable, without running tests or compiling. Workspace membership
+and nextest's all-features metadata catalog must match the current checkout.
+Every library, binary and integration test target eligible under the current
+default features must exist in the archive; the ordinary smoke server is
+required too. A selected-package archive cannot satisfy this full-workspace
+admission check. Missing coverage fails without rebuilding.
+
+Full recovery executes every normal gate, including current runtime checks and
+the required aggregate, against those verified products. CI-only runtime setup
+corrections must be exercised by the new execution; earlier results with another
+runtime do not become current proof. The original producer identity remains in
+the manifest. A later push whose exact tree already passed full verification
+uses that tested-tree marker to avoid a duplicate compilation and test run.
+
+For a completed full artifact-reuse run, `resume_run` may name its run ID to
+retry its failed checks without repeating successful unchanged checks. Supply
+the same `reuse_artifacts` references. Preflight verifies the original run and
+complete job inventory through GitHub, binds both archive hashes and producer
+identities to its successful provider log, and compares clean exact source,
+artifact-consumer code, global flags and each check's execution definition.
+Changed native runtime, dependency, Rust-test, selector or embedded release-note
+inputs cannot reuse results. A changed job definition requires that check to run
+again. The explicitly qualified `ffmpeg-profiles.spec.ts` and
+`local-library-scan-lifecycle.spec.ts` are evaluated from the current checkout
+and are not compiled into Rust/server/WASM artifacts. Changing either
+invalidates both general browser results, while unchanged Level1.5 browser
+and native checks may retain their source-bound proof. Shared browser fixtures
+and other application tests remain outside this exception.
+When both original general-browser logs prove complete execution, recovery may
+rerun only changed and failed spec files, using the existing browser filter.
+Unchanged successful cases retain their original proof. Missing logs, incomplete
+counts, unrelated projects or setup/global failures keep the full browser scope;
+the exact log hashes and counts remain in the composed proof.
+Only failed browser suite/project entries are selected when their execution is
+unchanged. Format, dependency audit, commit lint, contract tests and complete
+artifact verification still run; `CI ok` requires every remaining check and
+records the imported successful-job IDs in the fully tested tree marker.
+This is composed recovery evidence, not a newly executed complete test suite.
+
+GitHub does not accept `workflow_dispatch` job checks as required pull-request
+checks ([GitHub's rule](https://docs.github.com/en/enterprise-cloud%40latest/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)).
+A ready PR can bridge a completed full proof from its head's direct
+parent through the ordinary PR preflight. It requires the same repository,
+successful full-tree marker, unchanged compiled/runtime/browser inputs, global
+settings and every consumer/aggregate job definition. Only CI qualification
+and the existing status-document exceptions may differ. Preflight runs the
+qualification regressions before reporting the eligible PR check; missing or
+incompatible proof retains the ordinary PR lane. This does not waive a gate or
+turn a focused run into full acceptance.
 
 The smoke runner accepts an explicitly selected server without rebuilding:
 

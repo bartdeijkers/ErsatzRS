@@ -1464,6 +1464,39 @@ struct FfprobeTags {
 mod retained_probe_tests {
     use super::*;
 
+    #[test]
+    fn aspect_ratios_follow_the_primary_video_json_without_overwriting_tracks() {
+        let json = br#"{"streams":[
+            {"index":0,"codec_type":"video","codec_name":"h264","bit_rate":"1000",
+             "width":320,"height":240,"sample_aspect_ratio":"1:1","display_aspect_ratio":"4:3"},
+            {"index":1,"codec_type":"video","codec_name":"mpeg2video","bit_rate":"4000000",
+             "width":720,"height":480,"sample_aspect_ratio":"32:27","display_aspect_ratio":"16:9"},
+            {"index":2,"codec_type":"audio","codec_name":"aac","tags":{"language":"nld"}},
+            {"index":3,"codec_type":"subtitle","codec_name":"subrip","tags":{"language":"fra"}}
+        ]}"#;
+        let parsed = parse_ffprobe_json("synthetic.mkv", json).unwrap();
+        assert_eq!(parsed.version.sample_aspect_ratio.as_deref(), Some("32:27"));
+        assert_eq!(parsed.version.display_aspect_ratio.as_deref(), Some("16:9"));
+        assert_eq!((parsed.version.width, parsed.version.height), (720, 480));
+        assert_eq!(parsed.streams.len(), 4);
+        assert_eq!(parsed.streams[2].language.as_deref(), Some("nld"));
+        assert_eq!(parsed.streams[3].language.as_deref(), Some("fra"));
+    }
+
+    #[test]
+    fn missing_sample_aspect_ratio_keeps_square_default_and_unknown_display_ratio() {
+        for sar in [serde_json::Value::Null, serde_json::json!("")] {
+            let json = serde_json::json!({"streams":[{
+                "index":0,"codec_type":"video","width":640,"height":480,
+                "sample_aspect_ratio":sar
+            }]});
+            let parsed =
+                parse_ffprobe_json("synthetic.mkv", &serde_json::to_vec(&json).unwrap()).unwrap();
+            assert_eq!(parsed.version.sample_aspect_ratio.as_deref(), Some("1:1"));
+            assert_eq!(parsed.version.display_aspect_ratio, None);
+        }
+    }
+
     #[tokio::test]
     async fn watermark_count_rejects_cancelled_or_expired_startup_before_spawn() {
         let extractor = FfprobeExtractor::new("nonexistent-watermark-probe");

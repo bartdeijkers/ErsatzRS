@@ -6,7 +6,7 @@ use ersatzrs_domain::{Channel, ChannelStreamSelectorMode, PlayoutItem, Resolutio
 use crate::db::DbPool;
 use crate::ffmpeg_config::{playback_language_preferences, PlaybackLanguagePreferences};
 use crate::playback::{
-    load_source_audio_streams, load_source_video_stream_by_index,
+    load_next_source_video_stream_by_index, load_source_audio_streams,
     select_custom_playback_streams_with_subtitle_candidates, select_next_pinned_playback_subtitle,
     select_next_playback_subtitle_for_version, select_playback_audio_stream_index,
     subtitle_input_for_stream, CustomStreamSelection, PlaybackSubtitle,
@@ -392,7 +392,7 @@ async fn project_deferred_item_selected(
         item: wire::PlayoutItem {
             watermark: None,
             graphics: Vec::new(),
-            id: item.id.to_string(),
+            id: occurrence_id(item),
             start: item.start,
             finish: item.finish,
             source: None,
@@ -403,6 +403,23 @@ async fn project_deferred_item_selected(
             }),
         },
     })
+}
+
+// UCU-15 row280: equal IDs let Next reuse subtitle and copy state. Unsaved
+// fallback items all have SQL ID zero; retain their complete occurrence window
+// and media identity without rounding distinct persisted 100ns timestamps.
+fn occurrence_id(item: &PlayoutItem) -> String {
+    if item.id != 0 {
+        return item.id.to_string();
+    }
+    format!(
+        "unsaved-{}-{}-{}-{}-{}",
+        item.start.timestamp(),
+        item.start.timestamp_subsec_nanos(),
+        item.finish.timestamp(),
+        item.finish.timestamp_subsec_nanos(),
+        item.media_item_id,
+    )
 }
 
 fn project_source_text_subtitle(
@@ -580,9 +597,9 @@ async fn eligible_video_index(
     pool: &DbPool,
     version_id: i64,
     pinned: Option<i32>,
-) -> Result<Option<(i32, Option<String>)>> {
+) -> Result<Option<i32>> {
     let row = sqlx::query(
-        r#"SELECT "Index", "Codec" FROM "MediaStream"
+        r#"SELECT "Index" FROM "MediaStream"
            WHERE "MediaVersionId"=? AND "MediaStreamKind"=1 AND "AttachedPic"=0
              AND (? IS NULL OR "Index"=?) ORDER BY "Index", "Id" LIMIT 1"#,
     )
@@ -605,7 +622,7 @@ async fn eligible_video_index(
     if index < 0 {
         return Err(invalid("source video index is invalid"));
     }
-    Ok(Some((index, row.try_get("Codec").repository()?)))
+    Ok(Some(index))
 }
 
 pub(super) async fn source_video(
@@ -614,9 +631,7 @@ pub(super) async fn source_video(
     pinned: Option<i32>,
 ) -> Result<Option<SourceVideoStream>> {
     match eligible_video_index(pool, version_id, pinned).await? {
-        Some((index, codec)) if codec.is_some() || pinned.is_some() => {
-            load_source_video_stream_by_index(pool, version_id, Some(index)).await
-        }
+        Some(index) => load_next_source_video_stream_by_index(pool, version_id, Some(index)).await,
         _ => Ok(None),
     }
 }

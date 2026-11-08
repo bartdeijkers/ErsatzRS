@@ -389,6 +389,9 @@ pub struct WatermarkOverlay {
     pub opacity_expression: Option<String>,
     pub enable: Option<String>,
     pub eof_action_pass: bool,
+    /// End when either input ends. Native enables this for repeated stills so
+    /// the secondary image cannot extend the primary video's natural EOF.
+    pub shortest: bool,
     pub z_index: i32,
 }
 
@@ -406,6 +409,7 @@ impl Default for WatermarkOverlay {
             opacity_expression: None,
             enable: None,
             eof_action_pass: false,
+            shortest: false,
             z_index: 0,
         }
     }
@@ -563,6 +567,9 @@ fn watermark_overlay_coordinates(
 }
 
 fn append_overlay_timing_options(filter: &mut String, watermark: &WatermarkOverlay) {
+    if watermark.shortest {
+        filter.push_str(":shortest=1");
+    }
     if watermark.eof_action_pass {
         filter.push_str(":eof_action=pass");
     }

@@ -53,6 +53,9 @@ pub(crate) fn item() -> PlayoutItem {
     }
 }
 
+#[path = "occurrence_identity_tests.rs"]
+mod occurrence_identity;
+
 #[tokio::test]
 async fn unqualified_teletext_pins_fail_before_burn_preparation_and_keep_explicit_off() {
     use ersatzrs_domain::NextEngineTextSubtitleMode;
@@ -318,7 +321,7 @@ async fn songs_defer_signed_output_sized_video_and_preserve_original_track_pins(
 }
 
 #[tokio::test]
-async fn real_video_ignores_attached_artwork_and_unknown_metadata_keeps_source_probing() {
+async fn real_video_ignores_attached_artwork_and_unnamed_codec_keeps_recorded_index() {
     let pool = audio_only_fixture(true, false).await;
     sqlx::query(r#"INSERT INTO "MediaStream" ("Id","Index","Codec","MediaStreamKind","Channels","Default","Forced","MediaVersionId") VALUES (6,5,'h264',1,0,0,0,100)"#).execute(&pool).await.unwrap();
     let value =
@@ -349,15 +352,17 @@ async fn real_video_ignores_attached_artwork_and_unknown_metadata_keeps_source_p
         value["tracks"]["video"]["source"]["path"],
         "media/fixture.mkv"
     );
-    assert!(value["tracks"]["video"].get("stream_index").is_none());
+    assert_eq!(value["tracks"]["video"]["stream_index"], 5);
     pinned
         .pinned_stream_selection
         .as_mut()
         .unwrap()
         .video_stream_index = 5;
-    assert!(
-        project(&pool, &Channel::default(), &pinned).await.is_err(),
-        "unknown pinned codec remains strict"
+    let value =
+        serde_json::to_value(project(&pool, &Channel::default(), &pinned).await.unwrap()).unwrap();
+    assert_eq!(
+        value["tracks"]["video"]["stream_index"], 5,
+        "an unnamed codec must not invalidate an existing exact stream pin"
     );
     sqlx::query(r#"DELETE FROM "MediaStream" WHERE "MediaVersionId"=100"#)
         .execute(&pool)

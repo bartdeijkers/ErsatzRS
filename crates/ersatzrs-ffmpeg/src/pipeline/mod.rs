@@ -457,6 +457,9 @@ pub struct SourceVideoStream {
     pub codec: SourceVideoCodec,
     pub profile: Option<String>,
     pub pixel_format: Option<PixelFormat>,
+    /// Original probed/persisted format, including formats outside the normalized
+    /// output-state enum. Absence is distinct from a positively unmodeled input.
+    pub pixel_format_name: Option<String>,
     pub color_params: SourceColorParams,
     pub has_multiple_profiles: bool,
     pub is_still_image: bool,
@@ -495,6 +498,7 @@ impl SourceVideoStream {
             codec,
             profile: None,
             pixel_format: None,
+            pixel_format_name: None,
             color_params: SourceColorParams {
                 color_range: None,
                 color_space: None,
@@ -517,6 +521,22 @@ impl SourceVideoStream {
             dolby_vision: None,
             incomplete_dolby_vision: None,
         }
+    }
+
+    /// Whether positive source metadata is outside Native's qualified 8/10-bit
+    /// 4:2:0 decode formats. Unknown names must not become assumed 8-bit inputs.
+    /// Missing metadata retains the established discovery policy.
+    #[must_use]
+    pub fn requires_software_pixel_format(&self) -> bool {
+        self.pixel_format_name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .is_some_and(|name| {
+                !matches!(
+                    PixelFormat::from_ffmpeg_name(name),
+                    Some(PixelFormat::Yuv420P | PixelFormat::Yuv420P10Le | PixelFormat::Nv12)
+                )
+            })
     }
 
     /// True when the display matrix turns the picture on its side, so stored
@@ -1351,7 +1371,11 @@ fn build_transcode_pipeline(
         .is_none_or(crate::capabilities::nvenc_cuda_filters_available);
     let effective_acceleration = if effective_acceleration == HardwareAccelerationKind::Nvenc
         && effective_decode_acceleration != HardwareAccelerationKind::Nvenc
-        && !cuda_filters_available
+        && (!cuda_filters_available
+            || request
+                .source_video_stream
+                .as_ref()
+                .is_some_and(SourceVideoStream::requires_software_pixel_format))
     {
         HardwareAccelerationKind::None
     } else {
@@ -1403,6 +1427,11 @@ fn build_transcode_pipeline(
         steps.push(closed_gop());
         if !request.desired.allow_b_frames {
             steps.push(no_b_frames());
+        } else if let Some(limit) = nvidia_hls_b_frame_limit(&request, encoder_acceleration) {
+            steps.push(PipelineStep::generic(
+                "nvenc_short_gop_b_frames",
+                ["-bf".to_owned(), limit.to_string()],
+            ));
         }
     }
 
@@ -1467,6 +1496,9 @@ fn build_transcode_pipeline(
             .collect()
     };
     watermark_pairs.sort_by_key(|(_, overlay)| overlay.z_index);
+    for (input, overlay) in &mut watermark_pairs {
+        prepare_still_watermark_repetition(input, overlay);
+    }
 
     // Port of `FFmpegLibraryProcessService`: "use ffmpeg for single permanent
     // watermark, graphics engine for all others". A permanent watermark has no
@@ -1547,6 +1579,7 @@ fn build_transcode_pipeline(
         // path for VAAPI encoding; never silently discard a programme gate.
         matches!(graphics, GraphicsPipelineOverlay::NativeImage { input, overlay, .. }
             if overlay.enable.is_some()
+                || overlay.shortest
                 || overlay.horizontal_margin_percent != 0.0
                 || overlay.vertical_margin_percent != 0.0
                 || overlay.place_within_source_content
@@ -1598,6 +1631,7 @@ fn build_transcode_pipeline(
         ));
         target_state.pixel_format = PixelFormat::Yuv420P;
     }
+    let cuda_overlay_upload = cuda_pipeline_upload_filter(&request);
     for (input, watermark) in request
         .inputs
         .iter_mut()
@@ -1640,10 +1674,7 @@ fn build_transcode_pipeline(
             .unwrap_or(request.desired.frame_size);
         if use_cuda_overlay {
             input.filter_steps.push(watermark_alpha_format_filter());
-            input.filter_steps.push(hardware_upload_filter(
-                HardwareAccelerationKind::Nvenc,
-                QSV_EXTRA_HARDWARE_FRAMES,
-            ));
+            input.filter_steps.push(cuda_overlay_upload.clone());
             filter_chain
                 .watermark_overlay
                 .push(watermark_overlay_cuda_filter(
@@ -1680,10 +1711,7 @@ fn build_transcode_pipeline(
         } else if use_cuda_overlay {
             if use_cuda_subtitle_scale_npp(&request) {
                 filter_chain.subtitle.push(watermark_alpha_format_filter());
-                filter_chain.subtitle.push(hardware_upload_filter(
-                    HardwareAccelerationKind::Nvenc,
-                    QSV_EXTRA_HARDWARE_FRAMES,
-                ));
+                filter_chain.subtitle.push(cuda_overlay_upload.clone());
                 filter_chain
                     .subtitle
                     .push(subtitle_scale_npp_filter(request.desired.frame_size));
@@ -1692,10 +1720,7 @@ fn build_transcode_pipeline(
                     .subtitle
                     .push(scale_subtitle_image_filter(request.desired.frame_size));
                 filter_chain.subtitle.push(watermark_alpha_format_filter());
-                filter_chain.subtitle.push(hardware_upload_filter(
-                    HardwareAccelerationKind::Nvenc,
-                    QSV_EXTRA_HARDWARE_FRAMES,
-                ));
+                filter_chain.subtitle.push(cuda_overlay_upload.clone());
             }
             filter_chain
                 .subtitle_overlay
@@ -1797,10 +1822,7 @@ fn build_transcode_pipeline(
                     graphics_overlay_vaapi_filter()
                 } else if use_cuda_overlay {
                     input.filter_steps.push(watermark_alpha_format_filter());
-                    input.filter_steps.push(hardware_upload_filter(
-                        HardwareAccelerationKind::Nvenc,
-                        QSV_EXTRA_HARDWARE_FRAMES,
-                    ));
+                    input.filter_steps.push(cuda_overlay_upload.clone());
                     watermark_overlay_cuda_filter(
                         &overlay,
                         request.desired.frame_size,
@@ -1832,6 +1854,7 @@ fn build_transcode_pipeline(
         && request.desired.video_format != FFmpegProfileVideoFormat::Copy
     {
         upload_software_frames_for_hardware_encoder_filters(
+            &request,
             effective_acceleration,
             &mut target_state,
             &mut filter_chain.pixel_format,
@@ -2095,7 +2118,12 @@ fn apply_source_video_geometry(
         target_state.frame_data_location = crate::FrameDataLocation::Software;
         target_state.pixel_format = request.desired.pixel_format();
         if profile_5_operation.is_none() {
-            upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+            upload_software_frames_for_hardware_encoder(
+                request,
+                acceleration,
+                target_state,
+                filter_chain,
+            );
         }
     }
 }
@@ -2116,7 +2144,7 @@ fn apply_unknown_source_video_geometry(
     target_state.cropped_size = None;
     target_state.frame_data_location = crate::FrameDataLocation::Software;
     target_state.pixel_format = request.desired.pixel_format();
-    upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+    upload_software_frames_for_hardware_encoder(request, acceleration, target_state, filter_chain);
 }
 
 fn initialize_source_video_state(
@@ -2855,7 +2883,12 @@ fn apply_pad_filter(
         if acceleration == HardwareAccelerationKind::Vaapi {
             upload_vaapi_frames(request.desired.bit_depth, target_state, filter_chain);
         } else {
-            upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+            upload_software_frames_for_hardware_encoder(
+                request,
+                acceleration,
+                target_state,
+                filter_chain,
+            );
         }
     }
 }
@@ -3005,12 +3038,38 @@ fn apply_colorspace_normalization(
             should_emit_pixel_format_output_option(request, acceleration, target_state);
         if acceleration == HardwareAccelerationKind::Vaapi {
             upload_software_frames_for_hardware_encoder_filters(
+                request,
                 acceleration,
                 target_state,
                 &mut filter_chain.pixel_format,
             );
         }
     }
+}
+
+fn prepare_still_watermark_repetition(input: &mut InputFile, overlay: &mut WatermarkOverlay) {
+    if input.input_options.iter().any(|option| {
+        matches!(
+            option.as_str(),
+            "-ignore_loop" | "-stream_loop" | "-t" | "-to"
+        )
+    }) {
+        return;
+    }
+    // Next8cb37069: a rebuilt graph cannot reuse an already-consumed image.
+    // Demuxer-level repetition also works for single-frame GIFs, which reject
+    // image2's -loop option. Preserve explicit animation/custom input timing.
+    if !input.input_options.iter().any(|option| option == "-loop") {
+        input
+            .input_options
+            .extend(["-stream_loop".into(), "-1".into()]);
+    }
+    // Rebase before opacity/fade evaluation. After a rebuild the secondary
+    // catches up to the primary clock, with the same programme-time effects.
+    // Keep it available until the primary ends, rather than exhausting a
+    // separately bounded image timeline during that catch-up.
+    input.filter_steps.insert(0, "setpts=PTS-STARTPTS".into());
+    overlay.shortest = true;
 }
 
 fn apply_still_image_loop_filter(request: &PipelineRequest, filter_chain: &mut FilterChain) {
@@ -3044,11 +3103,13 @@ fn apply_still_image_loop_filter(request: &PipelineRequest, filter_chain: &mut F
 }
 
 fn upload_software_frames_for_hardware_encoder(
+    request: &PipelineRequest,
     acceleration: HardwareAccelerationKind,
     target_state: &mut FrameState,
     filter_chain: &mut FilterChain,
 ) {
     upload_software_frames_for_hardware_encoder_filters(
+        request,
         acceleration,
         target_state,
         &mut filter_chain.video,
@@ -3056,6 +3117,7 @@ fn upload_software_frames_for_hardware_encoder(
 }
 
 fn upload_software_frames_for_hardware_encoder_filters(
+    request: &PipelineRequest,
     acceleration: HardwareAccelerationKind,
     target_state: &mut FrameState,
     filters: &mut Vec<String>,
@@ -3066,10 +3128,7 @@ fn upload_software_frames_for_hardware_encoder_filters(
 
     match acceleration {
         HardwareAccelerationKind::Nvenc => {
-            filters.push(hardware_upload_filter(
-                acceleration,
-                QSV_EXTRA_HARDWARE_FRAMES,
-            ));
+            filters.push(cuda_pipeline_upload_filter(request));
             let surface_format = cuda_surface_pixel_format_for_software_upload(target_state);
             filters.push(cuda_format_filter(surface_format));
             target_state.frame_data_location = crate::FrameDataLocation::Hardware;
@@ -3259,10 +3318,9 @@ fn apply_text_subtitle_burn_filters(
         filter_chain.video.push(subtitle);
 
         if use_cuda_overlay && has_later_cuda_overlay {
-            filter_chain.video.push(hardware_upload_filter(
-                HardwareAccelerationKind::Nvenc,
-                QSV_EXTRA_HARDWARE_FRAMES,
-            ));
+            filter_chain
+                .video
+                .push(cuda_pipeline_upload_filter(request));
             target_state.frame_data_location = crate::FrameDataLocation::Hardware;
         }
 
@@ -3366,6 +3424,22 @@ fn effective_video_acceleration(
     request: &PipelineRequest,
     acceleration: HardwareAccelerationKind,
 ) -> HardwareAccelerationKind {
+    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && request
+            .source_video_stream
+            .as_ref()
+            .is_some_and(SourceVideoStream::requires_software_pixel_format)
+        && !matches!(
+            acceleration,
+            HardwareAccelerationKind::Nvenc
+                | HardwareAccelerationKind::Qsv
+                | HardwareAccelerationKind::VideoToolbox
+        )
+    {
+        // These backends already demote the whole graph when decode is not
+        // supported. Keep that policy even without a runtime capability report.
+        return HardwareAccelerationKind::None;
+    }
     // Profile 5 admission has already positively proved its exact operation.
     // It must not inherit the unrelated NvencCudaScale gate.
     if acceleration == HardwareAccelerationKind::Nvenc && profile_5_operation(request).is_some() {
@@ -3429,6 +3503,14 @@ fn effective_decode_acceleration(
     requested_acceleration: HardwareAccelerationKind,
     effective_acceleration: HardwareAccelerationKind,
 ) -> HardwareAccelerationKind {
+    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && request
+            .source_video_stream
+            .as_ref()
+            .is_some_and(SourceVideoStream::requires_software_pixel_format)
+    {
+        return HardwareAccelerationKind::None;
+    }
     if requested_acceleration == HardwareAccelerationKind::Nvenc
         && profile_5_operation(request).is_some()
     {
@@ -3485,7 +3567,9 @@ fn add_video_decoder(
         return;
     };
 
-    let decode_acceleration = if acceleration == HardwareAccelerationKind::Nvenc
+    let decode_acceleration = if source.requires_software_pixel_format() {
+        HardwareAccelerationKind::None
+    } else if acceleration == HardwareAccelerationKind::Nvenc
         && profile_5_operation(request).is_some()
     {
         HardwareAccelerationKind::Nvenc
@@ -4016,7 +4100,7 @@ fn should_emit_pixel_format_output_option(
     // represent, so the state comparison below misses them; without the
     // output option libx264 rejects the frames ("high profile doesn't
     // support 4:4:4") and nvenc encodes the wrong format.
-    if source.is_still_image
+    if (source.is_still_image || source.requires_software_pixel_format())
         && target_state.frame_data_location == crate::FrameDataLocation::Software
     {
         return true;
@@ -4146,6 +4230,17 @@ fn configure_hardware_acceleration(
     state
 }
 
+// Hardware graph rebuilds must retain the encoder's CUDA context. A standalone
+// hwupload_cuda creates a new context on every rebuild; NVENC cannot register
+// those replacement surfaces. Mixed Vulkan graphs retain their qualified path.
+fn cuda_pipeline_upload_filter(request: &PipelineRequest) -> String {
+    if profile_5_operation(request).is_none() && !nvidia_vulkan_hdr_tonemap(request) {
+        "hwupload".to_owned()
+    } else {
+        hardware_upload_filter(HardwareAccelerationKind::Nvenc, QSV_EXTRA_HARDWARE_FRAMES)
+    }
+}
+
 fn configure_nvenc_hardware_acceleration(
     request: &PipelineRequest,
     steps: &mut Vec<PipelineStep>,
@@ -4184,6 +4279,12 @@ fn configure_nvenc_hardware_acceleration(
             "cuda_hw_device",
             ["-init_hw_device", "cuda=nv:0"],
         ));
+        if request.desired.video_format != FFmpegProfileVideoFormat::Copy {
+            steps.push(PipelineStep::global(
+                "cuda_filter_hw_device",
+                ["-filter_hw_device", "nv"],
+            ));
+        }
     }
 
     if decode_acceleration != HardwareAccelerationKind::Nvenc {
@@ -4783,6 +4884,57 @@ fn add_metadata_output_options(steps: &mut Vec<PipelineStep>, metadata: &OutputM
                 format!("title={subtitle_title}"),
             ],
         ));
+    }
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Rounded positive GOP is bounded by the queried u32 device limit plus one."
+)]
+fn nvidia_hls_b_frame_limit(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+) -> Option<u32> {
+    if acceleration != HardwareAccelerationKind::Nvenc
+        || !matches!(
+            request.state.output_format,
+            OutputFormat::Hls | OutputFormat::HlsMp4
+        )
+        || !matches!(
+            request.desired.video_format,
+            FFmpegProfileVideoFormat::H264 | FFmpegProfileVideoFormat::Hevc
+        )
+    {
+        return None;
+    }
+    let gop = (request
+        .desired
+        .frame_rate
+        .unwrap_or(FrameRate::DEFAULT)
+        .parsed()
+        * 2.0)
+        .round();
+    let encoder = crate::hardware_encoder_name(acceleration, request.desired.video_format)?;
+    let max_b_frames = request
+        .runtime_capabilities
+        .as_ref()
+        .and_then(|report| {
+            report
+                .nvidia_encoders
+                .iter()
+                .find(|entry| entry.encoder_matches(encoder))
+        })
+        .and_then(|entry| entry.max_b_frames);
+    // Next90049ef: NVENC requires GOP > B frames + 1. Even without a
+    // numeric device limit, a GOP of two or less can never permit B frames.
+    if gop <= 2.0 {
+        Some(0)
+    } else if max_b_frames.is_some_and(|max| gop <= f64::from(max) + 1.0) {
+        let limit = (gop - 2.0) as u32;
+        Some(limit)
+    } else {
+        None
     }
 }
 

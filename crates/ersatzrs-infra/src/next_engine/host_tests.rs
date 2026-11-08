@@ -1,6 +1,6 @@
 use super::*;
 
-fn request(preview: bool) -> NextStart {
+pub(super) fn request(preview: bool) -> NextStart {
     NextStart {
         channel_id: 1,
         preview,
@@ -13,6 +13,69 @@ fn request(preview: bool) -> NextStart {
         idle_timeout: None,
         deadline: Instant::now() + Duration::from_secs(30),
     }
+}
+
+#[tokio::test]
+async fn indexed_host_binds_live_and_browser_preview_to_the_qualified_layout() {
+    let root = tempfile::tempdir().unwrap();
+    let (ordinary, channel, _) = output_frame_rate_host_fixture().await;
+    let pool = ordinary.pool.clone();
+    let indexed = NextHost::new_indexed(
+        pool.clone(),
+        ordinary.locker.clone(),
+        root.path().join("qualified"),
+        ersatzrs_core::programme::ProgrammeClock::named("UTC").unwrap(),
+        super::super::indexed_runtime::IndexedReaderPermit::fixture(),
+    );
+    for preview in [false, true] {
+        let mut start = request(preview);
+        start.channel_id = channel.id;
+        let config = indexed.configuration(&start).await.unwrap();
+        assert_eq!(
+            config.version.as_deref(),
+            Some("https://ersatztv.org/channel/version/0.1.4")
+        );
+        assert_eq!(
+            config.playout.layout.as_deref(),
+            Some(super::super::publication::indexed::INDEX_VERSION)
+        );
+        assert_eq!(
+            PathBuf::from(config.playout.folder),
+            root.path().join("qualified/2/indexed")
+        );
+        let config = ordinary.configuration(&start).await.unwrap();
+        assert!(config.playout.layout.is_none());
+        assert_eq!(
+            config.version.as_deref(),
+            Some("https://ersatztv.org/channel/version/0.1.3")
+        );
+    }
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn legacy_host_preserves_live_and_preview_schema_without_background_extension() {
+    let root = tempfile::tempdir().unwrap();
+    let (ordinary, channel, _) = output_frame_rate_host_fixture().await;
+    let pool = ordinary.pool.clone();
+    let legacy = NextHost::new_legacy(
+        pool.clone(),
+        ordinary.locker.clone(),
+        root.path().to_owned(),
+    );
+    for preview in [false, true] {
+        let mut start = request(preview);
+        start.channel_id = channel.id;
+        let config = legacy.configuration(&start).await.unwrap();
+        assert_eq!(
+            config.version.as_deref(),
+            Some("https://ersatztv.org/channel/version/0.1.2")
+        );
+        assert!(config.playout.layout.is_none());
+        assert!(config.fallback.unwrap().background_image.is_none());
+        assert_eq!(PathBuf::from(config.playout.folder), root.path().join("2"));
+    }
+    pool.close().await;
 }
 
 #[tokio::test]
@@ -490,9 +553,16 @@ async fn output_frame_rate_host_ordinary_and_preview_use_mirror_source_and_reque
             start_request.number.clone_from(&mirror.number);
             let config = host.configuration(&start_request).await.unwrap();
             let wire = serde_json::to_value(config).unwrap();
+            let background = wire["fallback"]["background_image"].as_str().unwrap();
+            assert!(PathBuf::from(background)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .ends_with("background.png"));
             assert_eq!(
                 wire["version"],
-                "https://ersatztv.org/channel/version/0.1.2"
+                "https://ersatztv.org/channel/version/0.1.3"
             );
             if normalize {
                 assert_eq!(wire["normalization"]["video"]["frame_rate"], "25");
@@ -558,7 +628,7 @@ async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_ex
             assert!(config.normalization.video.frame_rate.is_none());
             assert_eq!(
                 config.version.as_deref(),
-                Some("https://ersatztv.org/channel/version/0.1.2")
+                Some("https://ersatztv.org/channel/version/0.1.3")
             );
             assert_output_frame_rate_host_preserves_exact_tracks(&host, &mirror, start).await;
             assert_eq!(repos.playout.items_in_range(1,start,finish).await.unwrap(),items_before,

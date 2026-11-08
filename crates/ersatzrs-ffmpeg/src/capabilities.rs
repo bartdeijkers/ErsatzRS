@@ -167,6 +167,9 @@ impl HardwareCapabilities for ReportHardwareCapabilities<'_> {
     }
 
     fn can_decode(&self, source: &SourceVideoStream) -> FfmpegCapability {
+        if source.requires_software_pixel_format() {
+            return FfmpegCapability::Software;
+        }
         match self.rules {
             HardwareRules::Vaapi => vaapi_decode(self.report, source),
             HardwareRules::Qsv => qsv_decode(self.report, source),

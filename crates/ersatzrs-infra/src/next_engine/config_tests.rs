@@ -69,6 +69,7 @@ fn persisted_profile_maps_units_loudness_resolution_and_video_policy() {
     assert_eq!(config["ffmpeg"]["ffmpeg_path"], "ffmpeg");
     assert_eq!(config["ffmpeg"]["ffprobe_path"], "ffprobe");
     assert_eq!(config["playout"]["folder"], "playouts/1/current");
+    assert!(config["playout"].get("layout").is_none());
 }
 
 #[test]

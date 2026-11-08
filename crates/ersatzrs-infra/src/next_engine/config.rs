@@ -62,9 +62,11 @@ pub fn channel_config(
         fallback: Some(wire::Fallback {
             show_error: Some(true),
             duration_seconds: None,
+            background_image: None,
         }),
         playout: wire::PlayoutFolder {
             folder: runtime_path(playout_folder)?,
+            layout: None,
             virtual_start: None,
         },
         ffmpeg: wire::Ffmpeg {

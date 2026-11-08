@@ -58,10 +58,26 @@ release section when tagging a release.
 
 ### Changed
 
+- Pin managed playback to the published FFmpeg 2.0.10 and qualified Next 0.2.5
+  packages for the four required targets, with exact archive/payload checksums
+  and source provenance. Retained platform packages keep their original source
+  identity. Native remains selectable. The unresolved ErsatzTV Windows advisory
+  is recorded as explicit, unverified follow-up work approved by the maintainer.
+
+- Bring the upstream catch-up through ErsatzTV v26.12.0 while retaining Native
+  alongside Next, stored engine choices and Native profile controls. Next can
+  publish daily playout files through one atomic index, retain unchanged days,
+  and refresh active channels when profiles, watermarks or decorations change.
+  Publication and SQL rollback remain coordinated; accepted-state recovery
+  repairs derived files without changing the timeline. Reader qualification,
+  private callback ownership and Health checks prevent incompatible sessions.
+  Older readers retain complete-file publication with a compatible schema.
+  Preview sessions keep independent ownership and shutdown. Indexed overlays
+  cannot replace or downgrade the publication directory.
+
 - ADR 0120 now lets ErsatzRS deliver custom pages from the teletext element
   library itself, next to add-ons. It sets the rules for fields, refresh,
-  conflicts with add-on page ranges, failures and revisions. Broadcasting
-  custom pages is not implemented yet.
+  conflicts with add-on page ranges, failures and revisions.
 - The channel teletext page (`/channels/{id}/teletext`) is reorganised into
   clearly bounded sections: a one-sentence status line with the broadcast
   checklist folded away, a page set that lists every page number and its
@@ -122,6 +138,62 @@ release section when tagging a release.
   Windows x64 and their required verification remain in scope.
 
 ### Fixed
+
+- Limit native NVIDIA encoder capabilities to encoders advertised by the
+  selected FFmpeg build, so optional GPU support cannot make a software-only
+  runtime fail startup checks.
+- Next offline gaps and error cards use the custom `background.png`, or the
+  bundled default when no custom image is present. Offline callbacks retain
+  their admitted session and exact interval, and ambiguous end headers are
+  rejected. The required channel schema is 0.1.3; runtime adoption remains gated.
+
+- Native CUDA uploads reuse the named device across source colour changes, so
+  graph rebuilds keep the running NVENC encoder's context. Mixed Vulkan paths
+  retain their existing device routing. The FFmpeg9 successor is locally built;
+  runtime qualification and package adoption remain separate.
+
+- Native still-image watermarks stay visible when a video's parameters change
+  mid-item. Repeated images follow the primary video's natural end, and
+  watermark fades retain their programme clock through graph rebuilds.
+
+- Native HLS slideshow output limits NVENC B frames to fit a short GOP,
+  preventing low-frame-rate H.264/HEVC encoder startup failures. NVIDIA native
+  capability lookup now accepts its C-style symbol names and retains the
+  reported B-frame limit instead of silently skipping the probe.
+
+- Native playback retains source pixel-format metadata. Non-4:2:0, 12-bit and
+  unmodeled inputs use software decoding and explicit output-format conversion
+  instead of being mistaken for 8-bit hardware inputs; supported hardware
+  encoding and existing track/HDR policies remain available.
+
+- FFmpeg profile edits keep H.264 profile choices valid when switching between
+  10-bit and 8-bit. Save failures show localized causes with and without
+  JavaScript; HTML saves return to the populated editor and the fallback Add
+  form uses the ordinary defaults. Native controls,
+  valid stored choices and strict application validation are retained.
+
+- Next retains container and track hints when stored codec names are missing or
+  blank. Unnamed codecs use `unknown`, and recorded video indexes and valid
+  exact stream pins remain selected. Native playback validation is preserved.
+
+- Watermark, deco/template, playout-template, global FFmpeg settings and
+  provider path-replacement edits notify dependent Next playouts, including
+  mirrors and previews. Deletions capture dependencies before references
+  disappear; scheduling state and Native engine selections are preserved.
+- Changing a Next profile's scaling behavior refreshes its active playout
+  projection, so graphics use the saved scaling policy without a schedule reset.
+- Next assigns stable, distinct IDs to unsaved fallback occurrences, preventing
+  later filler from inheriting another occurrence's caption or copy position.
+- IPTV URLs no longer echo supplied access tokens when JWT authentication is
+  disabled. Enabled propagation accepts only the JWT-safe ASCII alphabet,
+  preserving valid authenticated Native/Next media and subtitle URLs.
+- Next receives container hints for Matroska/WebM, MP4/MOV, ASF, MPEG-TS and
+  MPEG programme files, retaining image handling and selected audio/subtitles.
+
+- The server now holds a single-instance lock in its persistent state folder
+  before opening the database. A competing server exits before startup;
+  stale files are reusable after exit. Read-only lock files remain usable,
+  while other lock failures warn and retain upstream's startup fallback.
 
 - Authored teletext no longer stops the stream with "teletext needs … null
   packets but the window has 0" when a video burst, such as an I-frame, fills

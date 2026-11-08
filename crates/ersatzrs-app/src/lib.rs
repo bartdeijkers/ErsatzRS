@@ -11,6 +11,7 @@ pub mod artwork_cleanup;
 pub mod commands;
 pub mod error;
 pub mod operations;
+mod playout_projection;
 pub mod ports;
 pub mod queries;
 pub mod scripted_teletext;
@@ -1158,12 +1159,22 @@ impl ApplicationServices {
 
     /// Validate and persist one watermark.
     pub async fn save_watermark(&self, command: commands::SaveWatermark) -> Result<i64> {
-        commands::save_watermark(command, self.ports.watermarks()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::Watermark(command.form.id),
+            commands::save_watermark(command, self.ports.watermarks()),
+        )
+        .await
     }
 
     /// Delete one watermark.
     pub async fn delete_watermark(&self, command: commands::DeleteWatermark) -> Result<()> {
-        commands::delete_watermark(command, self.ports.watermarks()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::Watermark(command.id),
+            commands::delete_watermark(command, self.ports.watermarks()),
+        )
+        .await
     }
 
     /// Copy one watermark.
@@ -1357,12 +1368,22 @@ impl ApplicationServices {
 
     /// Delete one deco group.
     pub async fn delete_deco_group(&self, command: commands::DeleteDecoGroup) -> Result<()> {
-        commands::delete_deco_group(command, self.ports.decos()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::DecoGroup(command.id),
+            commands::delete_deco_group(command, self.ports.decos()),
+        )
+        .await
     }
 
     /// Delete one deco.
     pub async fn delete_deco(&self, command: commands::DeleteDeco) -> Result<()> {
-        commands::delete_deco(command, self.ports.decos()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::Deco(command.id),
+            commands::delete_deco(command, self.ports.decos()),
+        )
+        .await
     }
 
     /// Load one complete deco editor form with valid absence.
@@ -1379,7 +1400,12 @@ impl ApplicationServices {
 
     /// Validate and atomically replace one deco graph.
     pub async fn save_deco(&self, command: commands::SaveDeco) -> Result<()> {
-        commands::save_deco(command, self.ports.decos()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::Deco(command.form.id),
+            commands::save_deco(command, self.ports.decos()),
+        )
+        .await
     }
 
     /// List deco-template groups.
@@ -1415,12 +1441,22 @@ impl ApplicationServices {
         &self,
         command: commands::DeleteDecoTemplateGroup,
     ) -> Result<()> {
-        commands::delete_deco_template_group(command, self.ports.decos()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::DecoTemplateGroup(command.id),
+            commands::delete_deco_template_group(command, self.ports.decos()),
+        )
+        .await
     }
 
     /// Delete one deco template.
     pub async fn delete_deco_template(&self, command: commands::DeleteDecoTemplate) -> Result<()> {
-        commands::delete_deco_template(command, self.ports.decos()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::DecoTemplate(command.id),
+            commands::delete_deco_template(command, self.ports.decos()),
+        )
+        .await
     }
 
     /// Load one deco-template row with valid absence.
@@ -1441,7 +1477,12 @@ impl ApplicationServices {
 
     /// Validate and atomically replace one deco-template item graph.
     pub async fn save_deco_template(&self, command: commands::SaveDecoTemplate) -> Result<()> {
-        commands::save_deco_template(command, self.ports.decos()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::DecoTemplate(command.id),
+            commands::save_deco_template(command, self.ports.decos()),
+        )
+        .await
     }
 
     /// Load the complete `FFmpeg` settings read model.
@@ -2146,10 +2187,14 @@ impl ApplicationServices {
 
     /// Validate, atomically save, and apply `FFmpeg` settings.
     pub async fn save_ffmpeg_settings(&self, command: commands::SaveFfmpegSettings) -> Result<()> {
-        commands::save_ffmpeg_settings(
-            command,
-            self.ports.admin_settings(),
-            self.ports.settings_runtime(),
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::All,
+            commands::save_ffmpeg_settings(
+                command,
+                self.ports.admin_settings(),
+                self.ports.settings_runtime(),
+            ),
         )
         .await
     }
@@ -2770,11 +2815,18 @@ impl ApplicationServices {
                 message: "must be greater than zero".to_owned(),
             });
         }
-        self.ports
-            .media_sources()
-            .save_path_replacements_admin(kind, source_id, paths)
-            .await
-            .map_err(Into::into)
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::MediaSource(source_id),
+            async {
+                self.ports
+                    .media_sources()
+                    .save_path_replacements_admin(kind, source_id, paths)
+                    .await
+                    .map_err(Into::into)
+            },
+        )
+        .await
     }
 
     pub async fn sign_out_plex(&self) -> Result<()> {
@@ -3197,7 +3249,12 @@ impl ApplicationServices {
         &self,
         command: commands::SavePlayoutDefaultDeco,
     ) -> Result<()> {
-        commands::save_playout_default_deco(command, self.ports.playouts()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::Playout(command.id),
+            commands::save_playout_default_deco(command, self.ports.playouts()),
+        )
+        .await
     }
 
     pub async fn get_playout_alternate_schedules(
@@ -3231,7 +3288,12 @@ impl ApplicationServices {
         &self,
         command: commands::SavePlayoutTemplates,
     ) -> Result<()> {
-        commands::save_playout_templates(command, self.ports.playouts()).await
+        playout_projection::refresh_after(
+            self.ports.channel_runtime(),
+            ersatzrs_domain::PlayoutProjectionChange::Playout(command.id),
+            commands::save_playout_templates(command, self.ports.playouts()),
+        )
+        .await
     }
 
     pub async fn erase_playout_items(&self, command: commands::DeletePlayout) -> Result<()> {

@@ -16,7 +16,16 @@ pub async fn get_playlist(
     Path(number): Path<String>,
     Query(query): Query<hls::HlsQuery>,
 ) -> Response {
-    serve_playlist(&*state.hls_sessions, &number, false, query).await
+    serve_playlist(
+        &*state.hls_sessions,
+        &number,
+        false,
+        AccessToken::for_request(
+            query.access_token,
+            state.iptv_access_token_verifier.is_enabled(),
+        ),
+    )
+    .await
 }
 
 pub async fn get_preview_playlist(
@@ -24,14 +33,23 @@ pub async fn get_preview_playlist(
     Path(number): Path<String>,
     Query(query): Query<hls::HlsQuery>,
 ) -> Response {
-    serve_playlist(&*state.preview_hls_sessions, &number, true, query).await
+    serve_playlist(
+        &*state.preview_hls_sessions,
+        &number,
+        true,
+        AccessToken::for_request(
+            query.access_token,
+            state.iptv_access_token_verifier.is_enabled(),
+        ),
+    )
+    .await
 }
 
 async fn serve_playlist(
     registry: &dyn HlsSessionRegistry,
     number: &str,
     preview: bool,
-    query: hls::HlsQuery,
+    access_token: AccessToken,
 ) -> Response {
     if !hls::is_safe_channel_number_path_component(number) {
         return StatusCode::BAD_REQUEST.into_response();
@@ -56,7 +74,7 @@ async fn serve_playlist(
     }
     hls::hls_response(hls::propagate_playlist_access_token(
         &playlist,
-        &AccessToken::new(query.access_token),
+        &access_token,
     ))
 }
 

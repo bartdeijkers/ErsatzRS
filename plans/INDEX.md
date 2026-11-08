@@ -26,7 +26,7 @@ These plans include proposals and deferred work, not blanket implementation appr
 - [Video jukebox](application-layer-and-video-jukebox.md) — Phase 10, after teletext.
 - [Official add-on distribution and Sources design](official-addon-distribution.md) — OAD-01 through OAD-04, after both teletext and jukebox acceptance; visual design v0.1 is locked, with further refinement in new revisions.
 - [Channel packages](channel-packages.md) — Phase 11 draft; product/feed ADR first.
-- [Upstream catch-up](upstream-catch-up.md) — latest-upstream ledger and per-commit procedure; original triage remains in [the seed plan](ErsatzRS_catchup.md).
+- [Upstream catch-up](upstream-catch-up.md) — UCU-13–15 through fixed v26.12.0, ordered pending ledger and explicit Native-engine preservation; original triage remains in [the seed plan](ErsatzRS_catchup.md).
 - [Hardware residue](phase-8-hardware-residue.md) — deferred hardware-dependent proof and Vulkan decision.
 - [Prebuilt Docker images](docker-prebuilt-binary-images.md) — assemble release images from native artifacts.
 - [Persistent Docker cache](docker-persistent-build-cache.md) — retain BuildKit work between attempts.

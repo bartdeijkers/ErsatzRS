@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-assertion_line: 2198
+assertion_line: 2729
 expression: "command.arguments.join(\"\\n\")"
 ---
 -nostdin
@@ -16,10 +16,12 @@ error
 h264
 -i
 /media/movie.mkv
+-stream_loop
+-1
 -i
 https://example.test/logo%20image.png?revision=2
 -filter_complex
-[1:0]scale=192:-1[wm0];[0:0][wm0]overlay=x=W-w-38:y=H-h-22:format=0[vwm0];[vwm0]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709[vpf];[0:1]aresample=async=1,apad[a]
+[1:0]setpts=PTS-STARTPTS,scale=192:-1[wm0];[0:0][wm0]overlay=x=W-w-38:y=H-h-22:format=0:shortest=1[vwm0];[vwm0]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709[vpf];[0:1]aresample=async=1,apad[a]
 -map
 [vpf]
 -map

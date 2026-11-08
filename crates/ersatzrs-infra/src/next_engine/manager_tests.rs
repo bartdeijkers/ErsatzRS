@@ -30,8 +30,10 @@ fn synthetic_manifest(mut manifest: Manifest, rid: &str) -> (Manifest, BTreeMap<
             *hash = digest(&files[name]);
         }
     }
-    let prepared_lock = manifest.prepared_lock_sha256().to_owned();
     let identity = manifest.runtime_packages.get(rid).unwrap();
+    let (revision, archive, lock) = identity.source_identity(&manifest);
+    let (revision, archive, prepared_lock) =
+        (revision.to_owned(), archive.to_owned(), lock.to_owned());
     let version = identity.version(&manifest).to_owned();
     let patches = identity.patches(&manifest).to_vec();
     let package = manifest.runtime_packages.get_mut(rid).unwrap();
@@ -45,8 +47,8 @@ fn synthetic_manifest(mut manifest: Manifest, rid: &str) -> (Manifest, BTreeMap<
         .collect();
     let origin = serde_json::json!({
         "kind": "patched-source-build", "repository": manifest.upstream_repository,
-        "source_revision": manifest.upstream_revision,
-        "source_archive_sha256": manifest.source_archive_sha256,
+        "source_revision": revision,
+        "source_archive_sha256": archive,
         "cargo_lock_sha256": prepared_lock,
         "distribution_version": version,
         "rid": rid, "target": package.target,
@@ -293,6 +295,51 @@ async fn managed_next_deferred_platform_retains_exact_download_cache_origin_and_
             relabelled.package(rid),
             Err(NextRuntimeError::Manifest)
         ));
+    }
+}
+
+#[test]
+fn retained_source_identity_rejects_a_mixture_with_the_new_global_source() {
+    let rid = "linux-x64";
+    let mut manifest = Manifest::accepted().unwrap();
+    let package = manifest.runtime_packages.get_mut(rid).unwrap();
+    package.distribution_version = Some("0.2.3-retained".to_owned());
+    package.distribution_tag = Some("next-retained".to_owned());
+    package.patches = Some(manifest.patches[..1].to_vec());
+    package.asset = format!("ersatzrs-next-0.2.3-retained-{rid}.tar.gz");
+    package.source_identity = Some(SourceIdentity {
+        upstream_revision: "a".repeat(40),
+        source_archive_sha256: "b".repeat(64),
+        prepared_lock_sha256: "c".repeat(64),
+    });
+    manifest
+        .artifact_sha256
+        .insert(package.asset.clone(), "0".repeat(64));
+    let (manifest, files) = synthetic_manifest(manifest, rid);
+    verify_files(&manifest, rid, &files).unwrap();
+    for (key, replacement) in [
+        ("source_revision", manifest.upstream_revision.as_str()),
+        (
+            "source_archive_sha256",
+            manifest.source_archive_sha256.as_str(),
+        ),
+        ("cargo_lock_sha256", manifest.prepared_lock_sha256()),
+    ] {
+        let mut changed = files.clone();
+        let mut origin: serde_json::Value =
+            serde_json::from_slice(&changed["origin.json"]).unwrap();
+        origin[key] = replacement.into();
+        changed.insert(
+            "origin.json".to_owned(),
+            serde_json::to_vec(&origin).unwrap(),
+        );
+        assert!(
+            matches!(
+                verify_files(&manifest, rid, &changed),
+                Err(NextRuntimeError::Identity)
+            ),
+            "{key}"
+        );
     }
 }
 
@@ -799,4 +846,105 @@ async fn real_next_candidate_package_acquisition_and_health_validation() {
         Err(NextRuntimeError::Offline)
     ));
     assert!(try_install_lock(&offline.managed_root).unwrap().is_some());
+}
+
+#[tokio::test]
+async fn managed_next_indexed_health_requires_a_registered_unchanged_reader() {
+    let root = tempfile::tempdir().unwrap();
+    let rid = ersatzrs_ffmpeg::runtime::current_ersatzrs_ffmpeg_rid().unwrap();
+    let (manifest, files) = synthetic(rid);
+    let mut cfg = config(root.path());
+    cfg.allow_download = false;
+    let folder = cfg
+        .managed_root
+        .join(manifest.package(rid).unwrap().tag(&manifest))
+        .join(rid);
+    write_folder(&folder, &files, false);
+    let mut accepted = acquire(cfg, manifest, "http://127.0.0.1:1").await.unwrap();
+    assert!(accepted.indexed_reader.is_none());
+    assert_eq!(validate_indexed(&accepted).await, Ok(()));
+    let expected = accepted.clone();
+    let mut replaced = accepted.clone();
+    replaced.version.push_str("-replacement");
+    assert_eq!(
+        register_indexed(
+            &mut replaced,
+            &expected,
+            super::super::indexed_runtime::IndexedReaderPermit::fixture()
+        ),
+        Err(NextRuntimeError::Contract)
+    );
+    assert!(replaced.indexed_reader.is_none());
+    register_indexed(
+        &mut accepted,
+        &expected,
+        super::super::indexed_runtime::IndexedReaderPermit::fixture(),
+    )
+    .unwrap();
+    assert_eq!(
+        validate_indexed(&accepted).await,
+        Err(NextRuntimeError::Identity)
+    );
+}
+
+// Shell fixture verifies successful caching without changing global startup
+// state or requiring a published indexed runtime; native qualification is open.
+#[cfg(unix)]
+#[tokio::test]
+async fn managed_next_indexed_cache_rechecks_identity_and_does_not_cache_failed_probes() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let binary = root.path().join("next");
+    let marker = root.path().join("described");
+    let description = crate::next_engine::indexed_runtime::tests::description();
+    let body=format!("#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'ersatztv-channel synthetic'; else printf 'call\\n' >> '{}'; printf '%s' '{}'; fi\n",marker.display(),description);
+    std::fs::write(&binary, body).unwrap();
+    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let mut selected = NextRuntimeAcquisition {
+        binary: binary.clone(),
+        source: NextRuntimeSource::Override,
+        rid: ersatzrs_ffmpeg::runtime::current_ersatzrs_ffmpeg_rid()
+            .unwrap()
+            .into(),
+        version: "synthetic".into(),
+        published_pin_verified: false,
+        folder: root.path().into(),
+        split_bundle: false,
+        indexed_reader: None,
+    };
+    let reader = qualify_selected_indexed(&selected).await.unwrap();
+    let expected = selected.clone();
+    register_indexed(&mut selected, &expected, reader).unwrap();
+    assert!(qualify_selected_indexed(&selected).await.is_ok());
+    assert_eq!(std::fs::read_to_string(&marker).unwrap().lines().count(), 1);
+    assert_eq!(validate_selected(&selected).await, Ok(()));
+    let changed_marker = root.path().join("changed-must-not-run");
+    std::fs::write(&binary,format!("#!/bin/sh\ntouch '{}'\nif [ \"$1\" = --version ]; then printf 'ersatztv-channel synthetic'; else printf '{{}}'; fi\n",changed_marker.display())).unwrap();
+    assert_eq!(
+        qualify_selected_indexed(&selected).await.unwrap_err(),
+        NextRuntimeError::Identity
+    );
+    assert_eq!(
+        validate_selected(&selected).await,
+        Err(NextRuntimeError::Identity)
+    );
+    assert!(!changed_marker.exists());
+    selected.indexed_reader = None;
+    assert_eq!(
+        qualify_selected_indexed(&selected).await.unwrap_err(),
+        NextRuntimeError::Contract
+    );
+    assert!(selected.indexed_reader.is_none());
+    // Process failure is not an unsupported legacy contract: startup must fail.
+    std::fs::write(&binary, "#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'ersatztv-channel synthetic'; else exit 7; fi\n").unwrap();
+    assert_eq!(
+        qualify_selected_indexed(&selected).await.unwrap_err(),
+        NextRuntimeError::Execution
+    );
+    // A changed executable during describe cannot select the ordinary fallback.
+    std::fs::write(&binary, format!("#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'ersatztv-channel synthetic'; else printf '# changed\\n' >> \"$0\"; printf '%s' '{description}'; fi\n")).unwrap();
+    assert_eq!(
+        qualify_selected_indexed(&selected).await.unwrap_err(),
+        NextRuntimeError::Identity
+    );
 }

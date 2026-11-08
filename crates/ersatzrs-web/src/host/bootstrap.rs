@@ -9,7 +9,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::registry::Registry;
@@ -212,6 +212,14 @@ pub async fn run() {
         "Next runtime ready"
     );
 
+    let next_engine = super::state::selected_next_engine_host(
+        startup.pool.clone(),
+        playout_locker.clone(),
+        &next_runtime.version,
+    )
+    .await
+    .expect("failed to qualify selected Next publication layout");
+
     let mut app_state = build_app_state(
         startup.pool,
         startup.database_backend,
@@ -219,7 +227,10 @@ pub async fn run() {
         ffmpeg_runtime,
         playout_build_tx,
         scan_work_tx,
-        playout_locker.clone(),
+        NextHostStartup {
+            locker: playout_locker.clone(),
+            host: next_engine,
+        },
     )
     .await
     .expect("failed to build application state");
@@ -999,6 +1010,11 @@ const fn vaapi_driver_name(driver: VaapiDriver) -> Option<&'static str> {
     }
 }
 
+struct NextHostStartup {
+    locker: ersatzrs_core::locking::EntityLocker,
+    host: Option<Arc<ersatzrs_infra::next_engine::host::NextHost>>,
+}
+
 async fn build_app_state(
     pool: DbPool,
     database_backend: DatabaseBackend,
@@ -1008,7 +1024,7 @@ async fn build_app_state(
         ersatzrs_core::scheduling::PlayoutBuildRequest,
     >,
     scan_work_tx: tokio::sync::mpsc::UnboundedSender<ersatzrs_app::commands::ScanWorkRequest>,
-    playout_locker: ersatzrs_core::locking::EntityLocker,
+    next_engine: NextHostStartup,
 ) -> ersatzrs_app::Result<AppState> {
     let api_key = tokio::task::spawn_blocking(|| {
         ersatzrs_infra::api_security::load_or_create(
@@ -1072,7 +1088,8 @@ async fn build_app_state(
         iptv_access_token_verifier,
         playout_build_tx,
         scan_work_tx,
-        playout_locker,
+        next_engine.locker,
+        next_engine.host,
     );
     state.api_key = Some(api_key);
     Ok(state)

@@ -4,6 +4,7 @@
 import importlib.util
 import hashlib
 from contextlib import redirect_stdout
+from copy import deepcopy
 import io
 import json
 import os
@@ -31,6 +32,11 @@ class BuildArtifacts(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
+        # Fixtures own their synthetic manifests and publish/verify scenarios;
+        # a real recovery dispatch must not replace them with its producer.
+        environment = patch.dict(os.environ, CI_REUSE_ARTIFACTS="")
+        environment.start()
+        self.addCleanup(environment.stop)
         self.commands = patch.object(artifacts.subprocess, "check_output", side_effect=(
             lambda command, **_: SHA + "\n" if command[0] == "git" else "rustc fixture\n"
         ))
@@ -210,6 +216,40 @@ class BuildArtifacts(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unavailable; no rebuild"):
                 artifacts.reuse_local(output, "b" * 40, "rust", reference, cache)
 
+    def test_full_reuse_requires_scope_proof_before_returning_artifacts(self):
+        with patch.dict(os.environ, {key: "0" if key == "CARGO_PROFILE_TEST_DEBUG" else ""
+                                     for key in artifacts.BUILD_FLAG_KEYS}):
+            root, archive = self.fixture()
+        reference = self.reference(root, archive, "rust")
+        cache = self.base / "cache"
+        artifacts.publish_local(archive, SHA, "rust", reference["cache_key"], cache)
+        with patch.object(artifacts, "verify_source_equivalence", return_value=[]), \
+             patch.object(artifacts, "verify_full_workspace_archive", return_value=4) as coverage:
+            result = artifacts.reuse_local(self.base / "reused.tar.gz", "b" * 40,
+                                           "rust", reference, cache, full_workspace=True)
+            coverage.assert_called_once()
+            self.assertEqual(result["rust_source_sha"], SHA)
+        with patch.object(artifacts, "verify_source_equivalence", return_value=[]), \
+             patch.object(artifacts, "verify_full_workspace_archive",
+                          side_effect=ValueError("omits workspace test targets")):
+            with self.assertRaisesRegex(ValueError, "omits workspace"):
+                artifacts.reuse_local(self.base / "refused.tar.gz", "b" * 40,
+                                      "rust", reference, cache, full_workspace=True)
+
+    def test_full_reuse_also_requires_the_runtime_smoke_server(self):
+        with patch.dict(os.environ, {key: "0" if key == "CARGO_PROFILE_TEST_DEBUG" else ""
+                                     for key in artifacts.BUILD_FLAG_KEYS}):
+            root, archive = self.fixture(capabilities=["rust-tests"])
+        reference = self.reference(root, archive, "rust")
+        cache = self.base / "cache"
+        artifacts.publish_local(archive, SHA, "rust", reference["cache_key"], cache)
+        with patch.object(artifacts, "verify_source_equivalence", return_value=[]), \
+             patch.object(artifacts, "verify_full_workspace_archive") as coverage:
+            with self.assertRaisesRegex(ValueError, "capabilities"):
+                artifacts.reuse_local(self.base / "refused.tar.gz", "b" * 40,
+                                      "rust", reference, cache, full_workspace=True)
+            coverage.assert_not_called()
+
     def test_reuse_requires_pinned_toolchain_flags_and_truthful_web_defaults(self):
         with patch.dict(os.environ, {key: "" for key in artifacts.BUILD_FLAG_KEYS}):
             root, archive = self.fixture("web")
@@ -276,6 +316,13 @@ class BuildArtifacts(unittest.TestCase):
                  patch.object(artifacts.subprocess, "check_output", side_effect=changes), \
                  self.assertRaisesRegex(ValueError, "source inputs changed: CHANGELOG.md"):
                 artifacts.verify_source_equivalence(SHA, "b" * 40)
+
+    def test_qualified_browser_spec_does_not_require_recompiling_native_products(self):
+        for path in ('tests/e2e/ffmpeg-profiles.spec.ts', 'tests/e2e/local-library-scan-lifecycle.spec.ts'):
+            with self.subTest(path=path), \
+                 patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(artifacts.subprocess, 'check_output', side_effect=[(path + '\0').encode(), b'']):
+                self.assertEqual(artifacts.verify_source_equivalence(SHA, 'b' * 40), [path])
 
     def test_browser_wrapper_uses_verified_bundle_without_any_build_tools(self):
         root, _ = self.fixture("web")
@@ -571,6 +618,347 @@ time.sleep(20)
         self.assertEqual({path.name: path.read_bytes() for path in (cache / "occupied").iterdir()}, occupied_before)
 
 
+class FullWorkspaceCoverage(unittest.TestCase):
+    def setUp(self):
+        self.metadata = {
+            "workspace_members": ["a", "b"],
+            "resolve": {"nodes": [{"id": "a", "features": []}, {"id": "b", "features": ["ssr"]}]},
+            "packages": [
+                {"id": "a", "name": "a", "targets": [
+                    {"name": "a", "kind": ["lib"], "test": True},
+                    {"name": "a-cli", "kind": ["bin"], "test": True}]},
+                {"id": "b", "name": "b", "targets": [
+                    {"name": "b", "kind": ["cdylib", "rlib"], "test": True},
+                    {"name": "live", "kind": ["test"], "test": True, "required-features": ["ssr"]},
+                    {"name": "gpu", "kind": ["test"], "test": True, "required-features": ["gpu"]},
+                    {"name": "server", "kind": ["bin"], "test": False}]},
+            ],
+        }
+        self.binaries = {"rust-binaries": {
+            "a-lib": {"package-id": "a", "binary-name": "a", "kind": "lib"},
+            "a-bin": {"package-id": "a", "binary-name": "a-cli", "kind": "bin"},
+            "b-lib": {"package-id": "b", "binary-name": "b", "kind": "lib"},
+            "b-test": {"package-id": "b", "binary-name": "live", "kind": "test"},
+        }}
+
+    def test_full_selection_includes_libraries_binaries_and_integration_tests(self):
+        self.assertEqual(artifacts.verify_workspace_test_coverage(
+            self.metadata, self.metadata, self.binaries), 4)
+
+    def test_subset_cannot_claim_full_coverage(self):
+        for missing in self.binaries["rust-binaries"]:
+            with self.subTest(missing=missing):
+                partial = deepcopy(self.binaries)
+                del partial["rust-binaries"][missing]
+                with self.assertRaisesRegex(ValueError, "omits workspace test targets"):
+                    artifacts.verify_workspace_test_coverage(self.metadata, self.metadata, partial)
+
+    def test_changed_membership_and_feature_graph_are_refused(self):
+        for field in ("membership", "features"):
+            with self.subTest(field=field):
+                archived = deepcopy(self.metadata)
+                if field == "membership":
+                    archived["workspace_members"].pop()
+                else:
+                    archived["resolve"]["nodes"][1]["features"] = []
+                with self.assertRaisesRegex(ValueError, "different workspace"):
+                    artifacts.verify_workspace_test_coverage(self.metadata, archived, self.binaries)
+
+    def test_binary_kind_does_not_substitute_for_a_missing_target(self):
+        changed = deepcopy(self.binaries)
+        changed["rust-binaries"]["b-test"]["kind"] = "bin"
+        with self.assertRaisesRegex(ValueError, "omits workspace"):
+            artifacts.verify_workspace_test_coverage(self.metadata, self.metadata, changed)
+
+    def test_enabled_required_feature_needs_its_actual_test_binary(self):
+        enabled = deepcopy(self.metadata)
+        enabled["resolve"]["nodes"][1]["features"].append("gpu")
+        with self.assertRaisesRegex(ValueError, "b::test/gpu"):
+            artifacts.verify_workspace_test_coverage(enabled, enabled, self.binaries)
+
+    def test_nextest_catalog_does_not_enable_optional_test_targets(self):
+        catalog = deepcopy(self.metadata)
+        catalog["resolve"]["nodes"][1]["features"].append("gpu")
+        self.assertEqual(artifacts.verify_workspace_test_coverage(
+            self.metadata, catalog, self.binaries, catalog), 4)
+        altered = deepcopy(catalog)
+        altered["resolve"]["nodes"][0]["features"].append("unexpected")
+        with self.assertRaisesRegex(ValueError, "different workspace feature graph"):
+            artifacts.verify_workspace_test_coverage(self.metadata, altered, self.binaries, catalog)
+
+
+class RequiredPrProof(unittest.TestCase):
+    def setUp(self):
+        self.workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()
+        self.helper = 'def restore():\n    return True\n'
+        self.run = dict(id=123, status='completed', conclusion='success', display_title='CI',
+                        path='.github/workflows/ci.yml', event='workflow_dispatch',
+                        head_sha=SHA, head_repository={'full_name': 'fixture/repo'})
+        self.artifact = dict(id=456, name='ci-full-' + 'c' * 40, expired=False,
+                             workflow_run={'id':123})
+
+    def plan(self, **changes):
+        options = dict(run=self.run, artifact=self.artifact, repository='fixture/repo',
+                       producer=SHA, tree='c' * 40, execution='b' * 40,
+                       changes=['.github/workflows/ci.yml'], old_helper=self.helper,
+                       new_helper=self.helper, old_workflow=self.workflow, new_workflow=self.workflow)
+        options.update(changes)
+        return artifacts.resume_pr_plan(**options)
+
+    def test_full_manual_proof_is_bound_to_source_tree_and_execution(self):
+        self.assertEqual(self.plan(), dict(run_id=123, source_sha=SHA, execution_sha='b' * 40,
+                                          source_tree='c' * 40, artifact_id=456))
+        for event in ['push', 'schedule']:
+            self.assertEqual(self.plan(run=dict(self.run, event=event))['run_id'], 123)
+
+    def test_failed_partial_foreign_live_or_different_source_runs_cannot_qualify(self):
+        for field, value in [('conclusion','failure'), ('status','in_progress'),
+                             ('display_title','CI (Next engine only)'), ('event','pull_request'),
+                             ('head_sha','d' * 40), ('head_repository',{'full_name':'other/repo'}),
+                             ('path','.github/workflows/release.yml'), ('id',True)]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.plan(run=dict(self.run, **{field:value}))
+
+    def test_marker_must_be_full_current_nonexpired_and_owned_by_the_run(self):
+        for field, value in [('name','ci-tree-' + 'c' * 40), ('name','ci-full-' + 'd' * 40),
+                             ('expired',True), ('expired',None), ('id',0),
+                             ('workflow_run',{'id':999})]:
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.plan(artifact=dict(self.artifact, **{field:value}))
+
+    def test_compiled_runtime_browser_and_selector_changes_keep_the_full_gate(self):
+        for path in ['crates/ersatzrs-web/src/main.rs', 'Cargo.lock', 'CHANGELOG.md',
+                     'scripts/release/next-packages.json', 'tests/e2e/ffmpeg-profiles.spec.ts',
+                     'tests/e2e/local-library-scan-lifecycle.spec.ts', 'scripts/ci-teletext-selection.py']:
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.plan(changes=[path])
+
+    def test_every_consumer_and_aggregate_definition_and_global_setting_is_bound(self):
+        for before, after in [('Next components, real-engine decoding and HTTP EOF','different checks'),
+                              ('Require every gate job to pass','different aggregate'),
+                              ('  next_engine:\n','  omitted_engine:\n'),
+                              ('concurrency:\n','concurrency:\n  changed: true\n')]:
+            self.assertIn(before, self.workflow)
+            with self.subTest(before=before), self.assertRaises(ValueError):
+                self.plan(new_workflow=self.workflow.replace(before, after, 1))
+        with self.assertRaisesRegex(ValueError, 'consumer implementation'):
+            self.plan(new_helper=self.helper.replace('True','False'))
+
+    def test_only_qualification_and_status_changes_can_bridge_the_complete_proof(self):
+        proof = self.plan(new_helper=self.helper + '\ndef resume_additional_policy():\n    return False\n',
+                          new_workflow=self.workflow.replace('  preflight:\n',
+                              '  preflight:\n    # qualified preflight-only change\n', 1),
+                          changes=['.github/workflows/ci.yml', 'scripts/ci-build-artifacts.py',
+                                   'scripts/ci-build-artifacts_test.py', 'BUILD.md',
+                                   'docs/progress/milestones.toml'])
+        self.assertEqual(proof['run_id'], 123)
+
+    def test_eligible_pr_preflight_validates_policy_before_publishing_skip(self):
+        self.assertIn('steps.pr_proof.outputs.lane ||', self.workflow)
+        self.assertIn('steps.pr_proof.outputs.skip ||', self.workflow)
+        proof = self.workflow.split('      - id: pr_proof\n',1)[1].split('      - id: select\n',1)[0]
+        self.assertIn("steps.duplicate.outputs.lane == 'pr'", proof)
+        self.assertLess(proof.index('ci-build-artifacts_test.py'), proof.index('resume_pr_checks'))
+        self.assertLess(proof.index('if proof:'), proof.index("print('skip=true')"))
+        self.assertIn("steps.pr_proof.outputs.skip != 'true'", self.workflow)
+        self.assertIn('fetch-depth: 3', self.workflow)
+
+    def test_missing_optional_api_access_keeps_ordinary_pr_checks(self):
+        def output(command, **_):
+            if command[:3] == ['git', 'rev-parse', 'HEAD']:
+                return 'b' * 40 + '\n'
+            if command[:2] == ['git', 'show']:
+                return SHA + '\n'
+            if command[:2] == ['git', 'rev-parse']:
+                return 'c' * 40 + '\n'
+            raise subprocess.CalledProcessError(1, command)
+        with patch.object(artifacts.subprocess, 'check_output', side_effect=output), \
+                patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                redirect_stdout(io.StringIO()):
+            self.assertIsNone(artifacts.resume_pr_checks('fixture/repo', 'b' * 40, 'b' * 40))
+
+    def test_wrong_or_dirty_pr_checkout_cannot_qualify(self):
+        with patch.object(artifacts.subprocess, 'check_output', return_value=SHA + '\n'):
+            with self.assertRaisesRegex(ValueError, 'checkout differs'):
+                artifacts.resume_pr_checks('fixture/repo', 'b' * 40, 'b' * 40)
+        with patch.object(artifacts.subprocess, 'check_output', return_value='b' * 40 + '\n'), \
+                patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
+            with self.assertRaisesRegex(ValueError, 'clean tracked checkout'):
+                artifacts.resume_pr_checks('fixture/repo', 'b' * 40, 'b' * 40)
+
+
+class CompletedCheckReuse(unittest.TestCase):
+    def setUp(self):
+        self.workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()
+        self.helper = 'def restore():\n    return True\n'
+        self.run = dict(id=123, status='completed', conclusion='failure',
+                        path='.github/workflows/ci.yml', event='workflow_dispatch',
+                        head_sha=SHA, head_repository={'full_name': 'fixture/repo'})
+        names = ['Preflight', 'Format', 'Documentation links', 'Clippy', 'Commit lint',
+                 'Cargo deny', 'Test', 'Next engine', 'Teletext 1.5', 'CI ok',
+                 'Verify reused CI artifacts']
+        names += [f'Playwright E2E ({suite}, {project})' for suite in ('general', '1.5')
+                  for project in ('chromium', 'firefox')]
+        self.jobs = {'total_count': len(names), 'jobs': [
+            dict(id=1000 + index, run_id=123, name=name, status='completed',
+                 conclusion='failure' if name in ('Documentation links', 'Next engine',
+                                                   'Teletext 1.5', 'CI ok') else 'success')
+            for index, name in enumerate(names)]}
+        references, records = {}, []
+        for kind in ('rust', 'web'):
+            references[kind] = dict(source_sha='d' * 40, cache_key=f'producer-{kind}', sha256='e' * 64,
+                                    toolchain='rustc fixture', build_flags={k: '' for k in artifacts.BUILD_FLAG_KEYS})
+            records.append(json.dumps({f'{kind}_cache_key': f'producer-{kind}', f'{kind}_digest': 'e' * 64,
+                                       f'{kind}_source_sha': 'd' * 40, f'{kind}_equivalent_execution_sha': SHA}))
+        self.references, self.producer_log = json.dumps(references), '\n'.join(records)
+
+    def plan(self, **changes):
+        options = dict(run=self.run, jobs=self.jobs, repository='fixture/repo', sha='b' * 40,
+                       old_workflow=self.workflow, new_workflow=self.workflow,
+                       old_helper=self.helper, new_helper=self.helper,
+                       changes=['scripts/ci-build-artifacts_test.py'],
+                       references=self.references, producer_log=self.producer_log)
+        options.update(changes)
+        return artifacts.resume_plan(**options)
+
+    def test_only_actual_successes_are_reused_and_failed_checks_remain_required(self):
+        proof = self.plan()
+        self.assertEqual(set(proof['jobs']), {'clippy', 'test', 'hydration'})
+        self.assertEqual(proof['source_sha'], SHA)
+        self.assertEqual(proof['execution_sha'], 'b' * 40)
+        self.assertEqual(proof['browser_pending'], [])
+        self.assertEqual(len(proof['jobs']['hydration']), 4)
+
+    def test_foreign_live_cancelled_focused_and_wrong_workflow_runs_are_refused(self):
+        for field, value in [('head_repository', {'full_name': 'foreign/repo'}),
+                             ('status', 'in_progress'), ('conclusion', 'cancelled'),
+                             ('event', 'pull_request'), ('path', '.github/workflows/other.yml'),
+                             ('head_sha', 'short'), ('id', 0)]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.plan(run=dict(self.run, **{field: value}))
+
+    def test_incomplete_duplicate_or_mixed_run_job_inventory_is_refused(self):
+        for field in ('missing', 'duplicate', 'count', 'run', 'live', 'id'):
+            jobs = deepcopy(self.jobs)
+            if field == 'missing': jobs['jobs'].pop()
+            if field == 'duplicate': jobs['jobs'].append(jobs['jobs'][0])
+            if field == 'count': jobs['total_count'] += 1
+            if field == 'run': jobs['jobs'][0]['run_id'] = 999
+            if field == 'live': jobs['jobs'][0]['status'] = 'in_progress'
+            if field == 'id': jobs['jobs'][0]['id'] = jobs['jobs'][1]['id']
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.plan(jobs=jobs)
+
+    def test_runtime_tests_selectors_and_embedded_release_notes_cannot_drift(self):
+        for path in ('Cargo.lock', 'CHANGELOG.md', 'tests/e2e/channels.spec.ts',
+                     'scripts/ci-teletext-selection.py', 'crates/ersatzrs-web/src/lib.rs'):
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'inputs changed'):
+                self.plan(changes=[path])
+
+    def test_artifact_consumer_changes_fail_but_new_resume_functions_are_independent(self):
+        with self.assertRaisesRegex(ValueError, 'consumer implementation changed'):
+            self.plan(new_helper=self.helper.replace('True', 'False'))
+        proof = self.plan(new_helper=self.helper + '\ndef resume_fixture():\n    return False\n')
+        self.assertIn('test', proof['jobs'])
+
+    def test_global_environment_changes_fail_closed(self):
+        with self.assertRaisesRegex(ValueError, 'global CI execution settings changed'):
+            self.plan(new_workflow=self.workflow.replace('  INSTA_WORKSPACE_ROOT:', '  DIFFERENT_ROOT:'))
+
+    def test_other_artifacts_duplicate_records_or_wrong_execution_are_refused(self):
+        for log in (self.producer_log.replace('e' * 64, 'f' * 64),
+                    self.producer_log.replace(SHA, 'c' * 40), '',
+                    self.producer_log + '\n' + self.producer_log):
+            with self.subTest(log=log), self.assertRaisesRegex(ValueError, 'artifact provenance differs'):
+                self.plan(producer_log=log)
+
+    def test_changed_job_execution_is_rerun_while_unchanged_successes_are_retained(self):
+        changed = self.workflow.replace('run: cargo clippy --workspace', 'run: cargo clippy -p changed')
+        proof = self.plan(new_workflow=changed)
+        self.assertNotIn('clippy', proof['jobs'])
+        self.assertIn('test', proof['jobs'])
+
+    def test_only_the_failed_browser_matrix_entry_is_retried(self):
+        jobs = deepcopy(self.jobs)
+        for row in jobs['jobs']:
+            if row['name'] == 'Playwright E2E (general, firefox)': row['conclusion'] = 'failure'
+        proof = self.plan(jobs=jobs)
+        self.assertNotIn('hydration', proof['jobs'])
+        self.assertEqual(len(proof['browser_passed']), 3)
+        self.assertEqual(proof['browser_pending'],
+                         [{'suite': 'general', 'project': 'firefox', 'port': '18410'}])
+
+    def test_profile_spec_changes_invalidate_both_general_browsers_but_not_level15(self):
+        for path in ('tests/e2e/ffmpeg-profiles.spec.ts', 'tests/e2e/local-library-scan-lifecycle.spec.ts'):
+            with self.subTest(path=path):
+                proof = self.plan(changes=[path])
+                self.assertEqual(proof['browser_pending'], [
+                    {'suite':'general', 'project':'chromium', 'port':'18409'},
+                    {'suite':'general', 'project':'firefox', 'port':'18410'}])
+                self.assertEqual(len(proof['browser_passed']), 2)
+                self.assertNotIn('hydration', proof['jobs'])
+                self.assertIn('test', proof['jobs'])
+                self.assertIn('clippy', proof['jobs'])
+
+    @staticmethod
+    def browser_log(project, failed=0):
+        text = f'Running 3 tests using 1 worker\n[1/3] [{project}] › tests/e2e/ffmpeg-profiles.spec.ts:1:1 › example\n'
+        if failed:
+            text += f'  1) [{project}] › tests/e2e/ffmpeg-profiles.spec.ts:1:1 › example\n  1 failed\n'
+        return text + f'  {3 - failed} passed (1s)\n'
+
+    def test_completed_logs_narrow_replay_to_changed_and_failed_specs(self):
+        for row in self.jobs['jobs']:
+            if row['name'] == 'Playwright E2E (general, chromium)': row['conclusion'] = 'failure'
+        logs = {f'Playwright E2E (general, {project})': self.browser_log(project, project == 'chromium')
+                for project in ('chromium', 'firefox')}
+        proof = self.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'], browser_logs=logs)
+        self.assertEqual(proof['general_filter'], r'(?:tests/e2e/ffmpeg\-profiles\.spec\.ts)$')
+        self.assertEqual({case['project'] for case in proof['browser_case_proof']}, {'chromium', 'firefox'})
+        self.assertEqual(sum(case['failed'] for case in proof['browser_case_proof']), 1)
+        self.assertEqual(len(proof['browser_pending']), 2)
+
+    def test_incomplete_wrong_project_or_global_failure_logs_keep_full_browser_scope(self):
+        logs = {f'Playwright E2E (general, {project})': self.browser_log(project)
+                for project in ('chromium', 'firefox')}
+        key = 'Playwright E2E (general, chromium)'
+        for log in ('', logs[key].replace('3 passed', '2 passed'),
+                    logs[key].replace('[chromium]', '[foreign]'),
+                    logs[key].replace('Running 3 tests using', 'Interrupted 3 tests using')):
+            with self.subTest(log=log):
+                proof = self.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'],
+                                  browser_logs=dict(logs, **{key:log}))
+                self.assertEqual(proof['general_filter'], '')
+        for row in self.jobs['jobs']:
+            if row['name'] == key: row['conclusion'] = 'failure'
+        self.assertEqual(self.plan(browser_logs=logs)['general_filter'], '')
+
+    def test_qualification_allowlist_change_cannot_import_changed_native_inputs(self):
+        with self.assertRaisesRegex(ValueError, 'inputs changed'):
+            self.plan(changes=['Cargo.lock'], new_helper=self.helper +
+                      '\nREUSE_SOURCE_EXCEPTIONS = {"Cargo.lock"}\n')
+
+    def test_browser_runtime_pin_change_invalidates_every_browser_result(self):
+        before, body = self.workflow.split('  hydration:\n', 1)
+        changed = before + '  hydration:\n' + body.replace(
+            'ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.10', 'ERSATZRS_FFMPEG_RELEASE_TAG: unqualified')
+        proof = self.plan(new_workflow=changed)
+        self.assertEqual(len(proof['browser_pending']), 4)
+        self.assertNotIn('hydration', proof['jobs'])
+        self.assertIn('test', proof['jobs'])
+
+    def test_dirty_or_wrong_checkout_cannot_export_reuse(self):
+        with patch.object(artifacts.subprocess, 'check_output', return_value='c' * 40), \
+             self.assertRaisesRegex(ValueError, 'checkout differs'):
+            artifacts.resume_checks(self.run, self.jobs, 'fixture/repo', 'b' * 40,
+                                    self.references, self.producer_log)
+        with patch.object(artifacts.subprocess, 'check_output', return_value='b' * 40), \
+             patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=1)), \
+             self.assertRaisesRegex(ValueError, 'clean tracked'):
+            artifacts.resume_checks(self.run, self.jobs, 'fixture/repo', 'b' * 40,
+                                    self.references, self.producer_log)
+
+
 class Outputs(SimpleNamespace):
     """Job outputs: an output a job did not set reads as '' on GitHub."""
 
@@ -631,6 +1019,14 @@ class FocusedAuditSelection(unittest.TestCase):
 
     def test_default_manual_run_keeps_every_job(self):
         self.assertEqual(self.scheduled(), set(self.jobs))
+
+    def test_full_reuse_keeps_every_gate_and_requires_complete_scope(self):
+        self.assertEqual(self.scheduled(reuse_artifacts='{"rust":{},"web":{}}'), set(self.jobs))
+        provider = self.jobs["build"].split("name: Reuse verified CI artifacts", 1)[1].split("      - uses:", 1)[0]
+        self.assertIn("REQUIRE_FULL_WORKSPACE:", provider)
+        self.assertIn('"$kind" == \'rust\' && "$REQUIRE_FULL_WORKSPACE" == \'true\'', provider)
+        self.assertIn("coverage+=(--require-full-workspace)", provider)
+        self.assertIn('"${coverage[@]}"', provider)
 
     def test_runtime_jobs_match_the_managed_ffmpeg_default(self):
         runtime = (Path(__file__).resolve().parents[1]
@@ -737,7 +1133,7 @@ class FocusedAuditSelection(unittest.TestCase):
 
     def test_actual_selection_outputs_match_gate_and_matrix(self):
         code = re.search(r"          python3 - .*? <<'PY'\n(.*?)^          PY$",
-                         self.jobs["preflight"], re.S | re.M)[1]
+                         self.jobs["preflight"].split("name: Select touched domains", 1)[1], re.S | re.M)[1]
         code = "\n".join(line[10:] for line in code.splitlines())
         root = Path(__file__).resolve().parents[1]
         paths = ("crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css",
@@ -824,11 +1220,11 @@ class FocusedAuditSelection(unittest.TestCase):
                                      {"chromium", "firefox"})
 
     @staticmethod
-    def browser_matrix(expression, lane="full", pr_matrix="", **inputs):
+    def browser_matrix(expression, lane="full", pr_matrix="", resume_matrix="", **inputs):
         inputs = dict(dict(teletext_only="none", browser_only="none"), **inputs)
         return eval(expression, {"__builtins__": {}}, {
             "inputs": SimpleNamespace(**inputs), "fromJSON": json.loads,
-            "needs": preflight(lane=lane, pr_matrix=pr_matrix),
+            "needs": preflight(lane=lane, pr_matrix=pr_matrix, resume_matrix=resume_matrix),
         })["include"]
 
     def test_lanes_schedule_only_their_jobs(self):
@@ -901,7 +1297,8 @@ class FocusedAuditSelection(unittest.TestCase):
         needs.test = SimpleNamespace(result="skipped")
         self.assertTrue(self.evaluate(condition, inputs, needs))
 
-    def ci_ok_exit(self, lane, results, event="pull_request", skip="false", deselected="[]", outputs=None):
+    def ci_ok_exit(self, lane, results, event="pull_request", skip="false", deselected="[]", outputs=None,
+                   resume=""):
         code = re.search(r"python3 - <<'PY'\n(.*?)^          PY$", self.jobs["ci_ok"], re.S | re.M)[1]
         code = "\n".join(line[10:] for line in code.splitlines())
         needs = {job: {"result": results.get(job, "success"), "outputs": {}}
@@ -917,8 +1314,80 @@ class FocusedAuditSelection(unittest.TestCase):
             needs["preflight"]["outputs"]["required_jobs"] = json.dumps(sorted(set(needs) - omitted))
         needs["preflight"]["outputs"].update(outputs or {})
         result = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True,
-                                env=dict(os.environ, NEEDS=json.dumps(needs), EVENT_NAME=event))
+                                env=dict(os.environ, NEEDS=json.dumps(needs), EVENT_NAME=event,
+                                         RESUME_RUN_ID=resume, GITHUB_SHA='b' * 40))
         return result.returncode
+
+    def test_resumption_schedules_only_failed_consumers_and_keeps_current_guards(self):
+        flags = dict(run_test='false', run_next='true', run_teletext='true',
+                     run_browser='false', reuse_clippy='true')
+        self.assertEqual(self.scheduled(selection=flags, reuse_artifacts='{"rust":{},"web":{}}'),
+                         set(self.jobs) - {'test', 'hydration', 'clippy'})
+        expression = re.search(r"^      matrix: (.+)$", self.jobs["hydration"], re.M)[1]
+        expression = expression.removeprefix("${{").removesuffix("}}").strip()
+        expression = expression.replace("&&", " and ").replace("||", " or ")
+        rows = [{'suite':'general', 'project':'firefox', 'port':'18410'}]
+        self.assertEqual(self.browser_matrix(expression, resume_matrix=json.dumps({'include':rows})), rows)
+
+    def test_ci_ok_resumption_requires_bound_successful_proof_and_all_remaining_checks(self):
+        fixture = CompletedCheckReuse()
+        fixture.setUp()
+        proof = fixture.plan()
+        skipped = {job:'skipped' for job in proof['jobs']}
+        def result(value, changes=None, resume='123'):
+            return self.ci_ok_exit('full', dict(skipped, **(changes or {})), event='workflow_dispatch',
+                                   outputs={'resumed_checks':json.dumps(value), 'resume_matrix': json.dumps({
+                                       'include': value['browser_pending'] or [
+                                           {'suite':'general','project':'chromium','port':'18409'}]})}, resume=resume)
+        self.assertEqual(result(proof), 0)
+        self.assertNotEqual(result(proof, {'docs':'skipped'}), 0)
+        self.assertNotEqual(result(proof, {'next_engine':'failure'}), 0)
+        self.assertNotEqual(result(proof, resume=''), 0)
+        for field, value in [('execution_sha','c' * 40), ('source_sha','short'),
+                             ('run_id',999), ('browser_pending',[]), ('browser_passed',[])]:
+            changed = deepcopy(proof)
+            changed[field] = value
+            if changed == proof: continue
+            with self.subTest(field=field): self.assertNotEqual(result(changed), 0)
+        for job, ids in [('docs',[999]), ('test',[]), ('hydration',[1,2,3])]:
+            changed = deepcopy(proof)
+            changed['jobs'][job] = ids
+            with self.subTest(job=job): self.assertNotEqual(result(changed), 0)
+
+    def test_ci_ok_partial_browser_recovery_requires_the_failed_matrix_entry(self):
+        fixture = CompletedCheckReuse()
+        fixture.setUp()
+        for row in fixture.jobs['jobs']:
+            if row['name'] == 'Playwright E2E (general, firefox)': row['conclusion'] = 'failure'
+        proof = fixture.plan()
+        outputs = {'resumed_checks':json.dumps(proof),
+                   'resume_matrix':json.dumps({'include':proof['browser_pending']})}
+        results = {job:'skipped' for job in proof['jobs']}
+        self.assertEqual(self.ci_ok_exit('full', results, event='workflow_dispatch',
+                                         outputs=outputs, resume='123'), 0)
+        for result in ('skipped', 'failure', 'cancelled'):
+            self.assertNotEqual(self.ci_ok_exit('full', dict(results, hydration=result),
+                event='workflow_dispatch', outputs=outputs, resume='123'), 0)
+        self.assertNotEqual(self.ci_ok_exit('full', results, event='workflow_dispatch',
+            outputs=dict(outputs, resume_matrix='{"include":[]}'), resume='123'), 0)
+
+    def test_ci_ok_case_replay_requires_complete_logs_and_the_verified_filter(self):
+        fixture = CompletedCheckReuse()
+        fixture.setUp()
+        logs = {f'Playwright E2E (general, {p})': fixture.browser_log(p) for p in ('chromium', 'firefox')}
+        proof = fixture.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'], browser_logs=logs)
+        results = {job:'skipped' for job in proof['jobs']}
+        def gate(value, filter_override=None):
+            outputs = dict(resumed_checks=json.dumps(value), resume_matrix=json.dumps({
+                'include':value['browser_pending']}), general_filter=value['general_filter'])
+            if filter_override is not None: outputs['general_filter'] = filter_override
+            return self.ci_ok_exit('full', results, event='workflow_dispatch', outputs=outputs, resume='123')
+        self.assertEqual(gate(proof), 0)
+        self.assertNotEqual(gate(proof, 'unproven.spec.ts'), 0)
+        for field, value in [('log_sha256','short'), ('listed',999), ('project','wrong')]:
+            changed = deepcopy(proof)
+            changed['browser_case_proof'][0][field] = value
+            with self.subTest(field=field): self.assertNotEqual(gate(changed), 0)
 
     def test_ci_ok_accepts_only_the_jobs_a_lane_leaves_out(self):
         light = {"next_engine": "skipped", "teletext": "skipped", "hydration": "skipped"}
@@ -963,6 +1432,42 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertEqual(body.count("if: ${{ needs.preflight.outputs.lane == 'full' && needs.preflight.outputs.tree != '' }}"), 2)
         self.assertIn("provenBy('ci-tree', tree, ['pull_request'])", self.workflow)
         self.assertIn("provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch'])", self.workflow)
+
+    def test_main_push_reuses_only_a_successful_exact_full_tree(self):
+        code = re.search(r"      - id: duplicate\n.*?          script: \|\n(.*?)^      - uses:",
+                         self.jobs["preflight"], re.S | re.M)[1]
+        code = "\n".join(line[12:] for line in code.splitlines())
+        harness = r"""
+        const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        const output = {};
+        const github = {rest: {git: {getCommit: async () => ({data:{tree:{sha:'current-tree'}}})},
+          actions: {listWorkflowRuns:'runs', listArtifactsForRepo:'artifacts',
+            getWorkflowRun:async () => ({data:{path:'.github/workflows/ci.yml',
+              event:'workflow_dispatch', head_repository:{full_name:'fixture/fixture'},
+              conclusion:'success', html_url:'fixture', ...input.run}})}},
+          paginate:async (method, args) => method === 'artifacts' && args.name === 'ci-full-current-tree'
+            && input.match !== false ? [{expired:false,workflow_run:{id:1},...input.artifact}] : []};
+        const core = {setOutput:(key,value)=>output[key]=value,info:()=>{},notice:()=>{}};
+        const context = {eventName:'push',sha:'new-merge',runId:2,
+                         repo:{owner:'fixture',repo:'fixture'}};
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        new AsyncFunction('github','context','core',input.code)(github,context,core)
+          .then(()=>console.log(JSON.stringify(output)))
+          .catch(error=>{console.error(error.message);process.exitCode=1});
+        """
+        cases = [({}, "skip"), ({"match": False}, "full"),
+                 ({"artifact": {"expired": True}}, "full"),
+                 ({"run": {"conclusion": "failure"}}, "full"),
+                 ({"run": {"event": "pull_request"}}, "full"),
+                 ({"run": {"path": "other.yml"}}, "full"),
+                 ({"run": {"head_repository": {"full_name": "foreign/repo"}}}, "full")]
+        for case, lane in cases:
+            with self.subTest(case=case):
+                result = subprocess.run(["node", "-e", harness],
+                                        input=json.dumps({"code": code, **case}),
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["lane"], lane)
 
     def test_test_job_narrows_to_the_selected_crates(self):
         body = self.jobs["test"]
@@ -1027,6 +1532,10 @@ class FocusedAuditSelection(unittest.TestCase):
             ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust"}, True),
             ({"REUSE_ARTIFACTS": "{}", "BROWSER_ONLY": "both", "BROWSER_CASE_SET": "teletext-runtime"}, True),
             ({"REUSE_ARTIFACTS": "{}"}, False),
+            ({"REUSE_ARTIFACTS": '{"rust":{},"web":{}}'}, True),
+            ({"REUSE_ARTIFACTS": '{"rust":{}}'}, False),
+            ({"REUSE_ARTIFACTS": '{"rust":{},"web":{}}', "RUNNER_POOL": "github-hosted"}, False),
+            ({"REUSE_ARTIFACTS": '{"rust":{},"web":{}}', "RESET_TARGET_DIR": "true"}, False),
             ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust", "RUNNER_POOL": "github-hosted"}, False),
             ({"REUSE_ARTIFACTS": "{}", "TELETEXT_ONLY": "1.5-rust", "RESET_TARGET_DIR": "true"}, False),
             ({"REUSE_ARTIFACTS": "not-json", "TELETEXT_ONLY": "1.5-rust"}, False),
@@ -1038,7 +1547,7 @@ class FocusedAuditSelection(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, valid, result.stderr)
 
     def test_reuse_provider_never_builds_installs_resets_uploads_or_prunes(self):
-        for mode in ({"teletext_only": "1.5-rust"}, {"browser_only": "both", "browser_case_set": "teletext-runtime"}):
+        for mode in ({}, {"teletext_only": "1.5-rust"}, {"browser_only": "both", "browser_case_set": "teletext-runtime"}):
             inputs = dict(test_only=False, next_engine_only=False, browser_only="none", teletext_only="none",
                           runner="self-hosted", reset_target_dir=False, reuse_artifacts='{"explicit":"reference"}')
             inputs.update(mode)
