@@ -6,8 +6,10 @@ Accepted (2026-08-03)
 
 ## Implementation
 
-Partial — the original cue-aware rewrite is delivered; legacy encoding admission
-and cache identity are reopened under ADR 0132 and milestone `subtitle-encoding`.
+Implemented (PR #129, 2026-11-08) — the original cue-aware rewrite and the
+ADR 0132 legacy encoding/cache correction are complete. Milestone
+`subtitle-encoding` records local proof, exact-head CI and maintainer merge;
+production installation and release acceptance are excluded.
 
 Original component (2026-08-03) — source normalization plus in-process cue rewrite
 for SRT/WebVTT/ASS, a narrow ffmpeg compatibility fallback, versioned

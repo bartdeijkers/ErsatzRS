@@ -6,7 +6,7 @@
 id = 'subtitle-encoding'
 phase = 'Corrective engineering — subtitle playback'
 title = 'Preserve legacy subtitle text and timing through native playback starts'
-status = 'In progress'
+status = 'Complete'
 feature = 'hls-variant-playlists-segmenter'
 depends_on = []
 acceptance = '''
@@ -24,7 +24,7 @@ No accepted Phase9 requirement or recorded platform deferral changes.
 evidence = '''
 2026-11-08: read-only incident correlation matched a subtitle source path hash
 and exact invalid-byte offset; no private source data is retained in fixtures.
-SENC-01 implementation is complete: strict/lossless decoding, explicit local
+SENC-01 Complete: strict/lossless decoding, explicit local
 and HTTP charsets, versioned byte/charset/format/seek cache identity, atomic
 promotion and explicit native admission errors. The focused infra selection
 passes 175 tests on the final decoder, including synthetic byte-1284, SRT/ASS/
@@ -54,11 +54,20 @@ clippy-final.log, clippy-final-infra.log and doctests.log. No broad retry is hid
 The scoped runtime binary predates only the final relaxation for literal source
 replacement glyphs; focused-final.log proves that final strict decoding policy.
 Its legacy-input/seek evidence is reused within that explicit input scope.
-Delivered: PR129 (https://github.com/bartdeijkers/ErsatzRS/pull/129) from
-fix/subtitle-text-encoding; implementation checkpoint f9e0f07c. Local components
-and proof are complete. Remaining mandatory evidence: exact-head PR checks.
-Feature parity remains In progress until that evidence is available. No
-installed Windows or release acceptance is claimed.
+SENC-03 Complete: PR129 (https://github.com/bartdeijkers/ErsatzRS/pull/129)
+was merged by the maintainer on 2026-11-08 as
+d275f1b9142b76d2ccb9b74e67cdc5d32e0a58ef. Exact tested head
+1c1a1c032ebe3e424b77cbbea4b4948849dc729a passed CI 42484974514:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/42484974514.
+All 13 jobs succeeded: Preflight, Build CI artifacts, Format, Clippy, Test,
+Teletext 1.5, Next engine, both Chromium E2E suites, Cargo deny, Documentation
+links, Commit lint and CI ok. The merged tree is identical to the tested head;
+this records that head's evidence rather than relabeling it as a merge-SHA run.
+The finite SENC-01/SENC-02/SENC-03 list is complete with no remaining mandatory
+evidence or external prerequisite within the agreed source/PR boundary.
+Production installation, source-media repair, release publication and Next's
+separate subtitle contract remain explicit exclusions. No installed Windows
+repair or release acceptance is claimed.
 '''
 
 [[milestone]]
