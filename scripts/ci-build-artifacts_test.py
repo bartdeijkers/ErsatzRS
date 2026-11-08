@@ -318,10 +318,11 @@ class BuildArtifacts(unittest.TestCase):
                 artifacts.verify_source_equivalence(SHA, "b" * 40)
 
     def test_qualified_browser_spec_does_not_require_recompiling_native_products(self):
-        path = 'tests/e2e/ffmpeg-profiles.spec.ts'
-        with patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
-             patch.object(artifacts.subprocess, 'check_output', side_effect=[(path + '\0').encode(), b'']):
-            self.assertEqual(artifacts.verify_source_equivalence(SHA, 'b' * 40), [path])
+        for path in ('tests/e2e/ffmpeg-profiles.spec.ts', 'tests/e2e/local-library-scan-lifecycle.spec.ts'):
+            with self.subTest(path=path), \
+                 patch.object(artifacts.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(artifacts.subprocess, 'check_output', side_effect=[(path + '\0').encode(), b'']):
+                self.assertEqual(artifacts.verify_source_equivalence(SHA, 'b' * 40), [path])
 
     def test_browser_wrapper_uses_verified_bundle_without_any_build_tools(self):
         root, _ = self.fixture("web")
@@ -788,14 +789,16 @@ class CompletedCheckReuse(unittest.TestCase):
                          [{'suite': 'general', 'project': 'firefox', 'port': '18410'}])
 
     def test_profile_spec_changes_invalidate_both_general_browsers_but_not_level15(self):
-        proof = self.plan(changes=['tests/e2e/ffmpeg-profiles.spec.ts'])
-        self.assertEqual(proof['browser_pending'], [
-            {'suite':'general', 'project':'chromium', 'port':'18409'},
-            {'suite':'general', 'project':'firefox', 'port':'18410'}])
-        self.assertEqual(len(proof['browser_passed']), 2)
-        self.assertNotIn('hydration', proof['jobs'])
-        self.assertIn('test', proof['jobs'])
-        self.assertIn('clippy', proof['jobs'])
+        for path in ('tests/e2e/ffmpeg-profiles.spec.ts', 'tests/e2e/local-library-scan-lifecycle.spec.ts'):
+            with self.subTest(path=path):
+                proof = self.plan(changes=[path])
+                self.assertEqual(proof['browser_pending'], [
+                    {'suite':'general', 'project':'chromium', 'port':'18409'},
+                    {'suite':'general', 'project':'firefox', 'port':'18410'}])
+                self.assertEqual(len(proof['browser_passed']), 2)
+                self.assertNotIn('hydration', proof['jobs'])
+                self.assertIn('test', proof['jobs'])
+                self.assertIn('clippy', proof['jobs'])
 
     @staticmethod
     def browser_log(project, failed=0):

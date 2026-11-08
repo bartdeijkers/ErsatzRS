@@ -46,6 +46,7 @@ REUSE_SOURCE_EXCEPTIONS = {
     "BUILD.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
     "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
     "tests/e2e/ffmpeg-profiles.spec.ts",
+    "tests/e2e/local-library-scan-lifecycle.spec.ts",
 }
 
 
@@ -263,6 +264,7 @@ def resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workf
         "BUILD.md", "docs/progress/milestones.toml", "docs/progress/phase.toml",
         "docs/progress/sessions.ndjson", "docs/progress/parity/upstream-baseline-catch-up.toml",
         "tests/e2e/ffmpeg-profiles.spec.ts",
+        "tests/e2e/local-library-scan-lifecycle.spec.ts",
     }
     if set(changes) - allowed:
         raise ValueError("completed CI check inputs changed")
@@ -307,7 +309,8 @@ def resume_artifacts_guard(log, references, execution_sha):
 
 def resume_browser_cases(rows, logs, changes):
     """Narrow replay only after both original general suites fully reported."""
-    selected = {path for path in changes if path == 'tests/e2e/ffmpeg-profiles.spec.ts'}
+    selected = set(changes) & {'tests/e2e/ffmpeg-profiles.spec.ts',
+                               'tests/e2e/local-library-scan-lifecycle.spec.ts'}
     evidence = []
     for row in rows:
         project = 'chromium' if row['name'].endswith('chromium)') else 'firefox'
@@ -386,7 +389,8 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
         if resume_job_signature(old_workflow, job) != resume_job_signature(new_workflow, job):
             continue
         invalidated = {name for name in names if job == 'hydration'
-                       and 'tests/e2e/ffmpeg-profiles.spec.ts' in changes
+                       and set(changes) & {'tests/e2e/ffmpeg-profiles.spec.ts',
+                                           'tests/e2e/local-library-scan-lifecycle.spec.ts'}
                        and name.startswith('Playwright E2E (general,')}
         passed = [by_name[name]["id"] for name in names
                   if by_name[name].get("conclusion") == "success" and name not in invalidated]

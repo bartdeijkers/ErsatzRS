@@ -333,9 +333,10 @@ identities to its successful provider log, and compares clean exact source,
 artifact-consumer code, global flags and each check's execution definition.
 Changed native runtime, dependency, Rust-test, selector or embedded release-note
 inputs cannot reuse results. A changed job definition requires that check to run
-again. The explicitly qualified `ffmpeg-profiles.spec.ts` is evaluated from the
-current checkout and is not compiled into Rust/server/WASM artifacts. Changing
-it invalidates both general browser results, while unchanged Level1.5 browser
+again. The explicitly qualified `ffmpeg-profiles.spec.ts` and
+`local-library-scan-lifecycle.spec.ts` are evaluated from the current checkout
+and are not compiled into Rust/server/WASM artifacts. Changing either
+invalidates both general browser results, while unchanged Level1.5 browser
 and native checks may retain their source-bound proof. Shared browser fixtures
 and other application tests remain outside this exception.
 When both original general-browser logs prove complete execution, recovery may

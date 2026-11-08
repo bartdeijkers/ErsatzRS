@@ -38663,6 +38663,23 @@ source/checksums, matched SSR/WASM and patch-retirement evidence. Final gates
 are not waived; retry only affected failed CI checks and reuse verified artifacts.
 '''
 evidence = '''
+2026-11-08 both Firefox lifecycle failures are corrected and pass the exact
+headed two-case recheck2/2 in14.7s against unchanged producer437fbcf1. Original
+trace events place each native AbortError22–28ms after the fixture navigates
+from the just-created library landing page to /media/libraries, before scanning
+or deletion begins. The fixture now awaits the existing hydration-ready marker
+on that landing page. No error is filtered, timeout increased, application
+changed or SQL assertion removed: deletion still proves zero folders/media and
+path removal still proves retained unrelated content. Both qualified browser
+spec changes invalidate only general-browser results; native and Level1.5
+inputs remain unchanged. Recovery guards pass87, with the existing63 other
+contract checks retained; workflow syntax/progress validation stays valid.
+Evidence: combined-main/firefox-lifecycle-failure/ original traces and
+firefox-lifecycle-recheck/qualification.json, run.log and results/;
+ci-lifecycle-correction-contracts.log. This closes the local fixture correction,
+not final CI/window acceptance. Keep original Level1.5 jobs running; then run
+the authorized source-bound recovery and require green CI before main delivery.
+
 2026-11-08 profile fallback correction passes its exact headed Chromium
 recheck1/1 in5.1s against the unchanged, hash-verified CI producer437fbcf1
 server/site. The assertion now expects the accepted row282 edit-page redirect;
