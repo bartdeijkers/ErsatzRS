@@ -649,7 +649,7 @@ async fn start_channel_playback_preview(
                 .await?;
                 (
                     None,
-                    rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
+                    rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await?,
                 )
             }
             Err(error) => {
@@ -665,7 +665,7 @@ async fn start_channel_playback_preview(
                 .await?;
                 (
                     None,
-                    rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
+                    rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await?,
                 )
             }
         }
@@ -681,7 +681,7 @@ async fn start_channel_playback_preview(
         .await?;
         (
             None,
-            rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
+            rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await?,
         )
     };
     let selected_audio_stream_index =
@@ -1428,7 +1428,7 @@ async fn subtitle_input_from_optional_subtitle(
             StreamingMode::HttpLiveStreamingSegmenter,
         )
     });
-    Ok(rebase_burned_text_subtitle_input(input, seek_seconds).await)
+    Ok(rebase_burned_text_subtitle_input(input, seek_seconds).await?)
 }
 
 async fn fallback_channel_subtitle_input(

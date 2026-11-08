@@ -3,6 +3,63 @@
 # order. Query runnable work with `cargo xtask progress milestones --runnable`.
 
 [[milestone]]
+id = 'subtitle-encoding'
+phase = 'Corrective engineering — subtitle playback'
+title = 'Preserve legacy subtitle text and timing through native playback starts'
+status = 'In progress'
+feature = 'hls-variant-playlists-segmenter'
+depends_on = []
+acceptance = '''
+Correct the demonstrated non-UTF-8 native subtitle stream failure under ADR0132.
+Finite completion list: SENC-01 strict Unicode/legacy decoding, explicit local
+and HTTP declarations, immutable originals, byte/charset/format/seek-bound atomic
+cache and explicit native HLS/MPEG-TS/troubleshooting admission failures.
+SENC-02 bounded read-only upcoming-local Health preflight and all-culture messages.
+SENC-03 synthetic byte-1284 reproduction, international and source/cache-change
+regressions, decoded FFmpeg9 timing/restart proof, smoke/TSDuck and applicable
+PR checks; deliver a scoped branch and PR. Production installation, source-media
+repair, release publication and Next's separate subtitle contract are excluded.
+No accepted Phase9 requirement or recorded platform deferral changes.
+'''
+evidence = '''
+2026-11-08: read-only incident correlation matched a subtitle source path hash
+and exact invalid-byte offset; no private source data is retained in fixtures.
+SENC-01 implementation is complete: strict/lossless decoding, explicit local
+and HTTP charsets, versioned byte/charset/format/seek cache identity, atomic
+promotion and explicit native admission errors. The focused infra selection
+passes 175 tests on the final decoder, including synthetic byte-1284, SRT/ASS/
+WebVTT, Unicode/BOM, literal source-glyph, charset, cache and admission cases.
+SENC-02 Complete: the read-only local Health preflight and recovery regression
+pass, the all-culture i18n test passes, and four Chromium/Firefox scenarios prove
+warning, charset correction and Refresh recovery with/without JavaScript at 320 px.
+SENC-03 local playback evidence Complete: a raw legacy source reproduces Invalid
+UTF-8 in FFmpeg9 n9.0-20260805; normalized decoded frames match Unicode at seeks
+0/44/45. The ordinary smoke gate passes both MPEG-TS modes and HLS; TSDuck passes
+93 checks with zero failures. Its VBR PCR jitter remains informational under the
+unchanged gate. Dependency advisories/bans/licenses/sources, progress validation,
+architecture/hydration lint, new-Clippy-allow policy and documentation links pass.
+Evidence is retained in tmp/subtitle-encoding/ (candidate.json, focused-infra.log,
+focused-web.log, decoded-runtime.log, browser/, smoke.log, tsduck.log, deny.log
+and health-query-plan.json). The candidate hash identifies the locally tested
+binary; this is neither an installed Windows repair nor release acceptance.
+Local closeout Complete: strict workspace Clippy and final focused infra Clippy
+pass. Nextest exercised 8,494 workspace tests: 8,492 passed in the initial run; two
+existing default-path assertions failed because the isolated state directory was
+named state. All 10 file-system-layout tests pass with the corrected isolated
+.ersatzrs basename, without product/test changes. The final 175 subtitle selection
+passes after the last decoder policy correction. Cargo workspace doctests pass.
+This is composed closeout evidence; the original two environment negatives are
+retained in test-closeout.log alongside path-fixture-recovery.log, focused-final.log,
+clippy-final.log, clippy-final-infra.log and doctests.log. No broad retry is hidden.
+The scoped runtime binary predates only the final relaxation for literal source
+replacement glyphs; focused-final.log proves that final strict decoding policy.
+Its legacy-input/seek evidence is reused within that explicit input scope.
+Remaining mandatory evidence: exact-head PR checks. Delivery: the scoped branch
+is ready for the requested commit/push and PR. No installed Windows or release
+acceptance is claimed.
+'''
+
+[[milestone]]
 id         = 'dci'
 phase      = 'Engineering — domain-scoped PR CI'
 title      = 'Make PR checks cover affected domains within a measured 15–30 minute average'

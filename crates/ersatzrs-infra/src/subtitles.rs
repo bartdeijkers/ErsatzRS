@@ -28,8 +28,9 @@
 //!     only). ErsatzRS normalizes local or HTTP(S) UTF-8/UTF-16 sources and
 //!     rewrites their cue timestamps directly ([`rebase_subtitle_cues`]),
 //!     clamping a straddling cue's start to the new chunk's zero instead of
-//!     dropping it. `FFmpeg` remains the compatibility fallback for syntax or
-//!     encodings the cue-aware rewriter cannot safely handle.
+//!     dropping it. ADR 0132 adds assessed/declared legacy decoding and content-
+//!     bound atomic cache entries; `FFmpeg` compatibility is limited to syntax
+//!     over normalized UTF-8, never undecodable source bytes.
 use crate::repositories::SqlxResultExt as _;
 
 use std::path::{Path, PathBuf};
@@ -50,6 +51,12 @@ use crate::file_system_layout::{
 use crate::metadata::subtitle_kind;
 use crate::repositories::common::encode_datetime;
 use crate::subtitle_cache_nul::{self, StripResult};
+pub use crate::subtitle_text::SubtitlePreparationError;
+
+#[cfg(test)]
+#[path = "subtitle_text_playback_tests.rs"]
+mod text_playback_tests;
+use crate::subtitle_text::{self, MAX_TEXT_BYTES};
 
 /// Image-subtitle codecs that cannot be extracted as text. Mirrors
 /// `Subtitle.IsImage` (`Subtitle.cs`) and the filters in
@@ -151,17 +158,6 @@ fn format_seek_seconds(seek_seconds: i64) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
-fn seek_subtitle_output_path(
-    input_path: &str,
-    format_hint: Option<SubtitleTextFormat>,
-    seek_seconds: i64,
-) -> PathBuf {
-    let (_, extension) = seek_subtitle_output_format(input_path, format_hint);
-    let name = md5_upper_hex(input_path);
-
-    subtitle_seek_cache_folder().join(format!("{name}_{seek_seconds}.{extension}"))
-}
-
 /// Build the compatibility ffmpeg subtitle-seek argv used when a supported
 /// source cannot be normalized or parsed by the cue-aware rewriter.
 fn build_seek_subtitle_args(
@@ -191,10 +187,6 @@ fn build_seek_subtitle_args(
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum SubtitleTextSourceError {
-    #[error("failed to read local subtitle: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("failed to fetch remote subtitle: {0}")]
-    Http(reqwest::Error),
     #[error("subtitle is not valid UTF-8: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("subtitle is not valid UTF-16: {0}")]
@@ -203,27 +195,11 @@ pub(crate) enum SubtitleTextSourceError {
     OddUtf16ByteLength,
 }
 
-/// Read a local or HTTP(S) subtitle source and normalize the encodings ffmpeg
-/// commonly accepts without an explicit character-set option. UTF-8 BOMs are
-/// stripped, and BOM-marked UTF-16 is decoded in its declared byte order.
+#[cfg(test)]
 async fn read_subtitle_text_source(
     input_path: &str,
-) -> std::result::Result<String, SubtitleTextSourceError> {
-    let bytes = if input_path.starts_with("http://") || input_path.starts_with("https://") {
-        reqwest::get(input_path)
-            .await
-            .map_err(|error| SubtitleTextSourceError::Http(error.without_url()))?
-            .error_for_status()
-            .map_err(|error| SubtitleTextSourceError::Http(error.without_url()))?
-            .bytes()
-            .await
-            .map_err(|error| SubtitleTextSourceError::Http(error.without_url()))?
-            .to_vec()
-    } else {
-        tokio::fs::read(input_path).await?
-    };
-
-    decode_subtitle_text(bytes)
+) -> std::result::Result<String, SubtitlePreparationError> {
+    Ok(subtitle_text::read_source(input_path).await?.text)
 }
 
 pub(crate) fn decode_subtitle_text(
@@ -816,13 +792,18 @@ fn rebase_ass_cues_at(
 /// dropped, so it keeps showing for its remaining visible duration in the new
 /// chunk.
 ///
-/// Local and HTTP(S) sources are normalized to Unicode before parsing,
-/// including UTF-8 and BOM-marked UTF-16. If normalization or cue parsing is
-/// unsupported, the previous ffmpeg seek-and-copy rebase remains as a
-/// compatibility fallback rather than passing absolute cue timestamps to a
-/// zero-based playback chunk. Returns `None` when no cues remain after
-/// rebasing: an empty file is written and cached as a skip-burn marker.
-pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> Option<String> {
+/// Local and HTTP(S) sources are normalized to UTF-8, including Unicode and
+/// assessed or explicitly declared legacy encodings (ADR 0132). Syntax-only
+/// `FFmpeg` compatibility reads normalized text; failed decoding never returns
+/// the original undecodable path. Returns `None` when no cues remain after
+/// rebasing. Position zero still normalizes and retains all original cue times.
+///
+/// # Errors
+/// Refuses uncertain encodings, invalid cues and unavailable sources/caches.
+pub async fn rebase_text_subtitle(
+    input_path: &str,
+    seek_seconds: i64,
+) -> std::result::Result<Option<String>, SubtitlePreparationError> {
     rebase_text_subtitle_with_format(input_path, None, seek_seconds).await
 }
 
@@ -904,118 +885,98 @@ async fn rebase_text_subtitle_with_format(
     input_path: &str,
     format_hint: Option<SubtitleTextFormat>,
     seek_seconds: i64,
-) -> Option<String> {
-    if seek_seconds <= 0 {
-        return Some(input_path.to_owned());
-    }
-
-    let output_path = seek_subtitle_output_path(input_path, format_hint, seek_seconds);
-    if output_path.exists() {
-        return non_empty_subtitle_path(&output_path).await;
-    }
-
-    if let Some(parent) = output_path.parent() {
-        if let Err(error) = tokio::fs::create_dir_all(parent).await {
-            tracing::warn!(
-                %error,
-                input_hash = %md5_upper_hex(input_path),
-                seek_seconds,
-                "failed to create subtitle seek cache directory"
-            );
-            return Some(input_path.to_owned());
-        }
-    }
-
-    let content = match read_subtitle_text_source(input_path).await {
-        Ok(content) => content,
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                input_hash = %md5_upper_hex(input_path),
-                seek_seconds,
-                "failed to normalize subtitle for cue-aware playback seek; falling back to ffmpeg"
-            );
-            return rebase_text_subtitle_with_ffmpeg(
-                input_path,
-                format_hint,
-                seek_seconds,
-                &output_path,
-            )
-            .await;
-        }
-    };
-
-    let (format, _extension) = seek_subtitle_output_format(input_path, format_hint);
-    let rebased = match rebase_subtitle_cues(&content, format, seek_seconds) {
-        Ok(rebased) => rebased,
-        Err(error) => {
-            tracing::warn!(
-                ?error,
-                input_hash = %md5_upper_hex(input_path),
-                seek_seconds,
-                "failed to parse subtitle for cue-aware playback seek; falling back to ffmpeg"
-            );
-            return rebase_text_subtitle_with_ffmpeg(
-                input_path,
-                format_hint,
-                seek_seconds,
-                &output_path,
-            )
-            .await;
-        }
-    };
-
-    let bytes: &[u8] = if rebased.remaining_cues == 0 {
-        b""
-    } else {
-        rebased.text.as_bytes()
-    };
-    match tokio::fs::write(&output_path, bytes).await {
-        Ok(()) => non_empty_subtitle_path(&output_path).await,
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                input_hash = %md5_upper_hex(input_path),
-                seek_seconds,
-                "failed to write rebased subtitle for playback seek"
-            );
-            Some(input_path.to_owned())
-        }
-    }
+) -> std::result::Result<Option<String>, SubtitlePreparationError> {
+    prepare_text_subtitle_in(
+        input_path,
+        format_hint,
+        seek_seconds,
+        &subtitle_seek_cache_folder(),
+    )
+    .await
 }
 
-async fn rebase_text_subtitle_with_ffmpeg(
+async fn prepare_text_subtitle_in(
     input_path: &str,
     format_hint: Option<SubtitleTextFormat>,
     seek_seconds: i64,
-    output_path: &Path,
-) -> Option<String> {
-    let args = build_seek_subtitle_args(input_path, format_hint, seek_seconds, output_path);
-    let output = match Command::new(ffmpeg_path()).args(&args).output().await {
-        Ok(output) => output,
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                input_hash = %md5_upper_hex(input_path),
-                seek_seconds,
-                "failed to spawn ffmpeg compatibility subtitle seek rebase"
-            );
-            return Some(input_path.to_owned());
+    cache: &Path,
+) -> std::result::Result<Option<String>, SubtitlePreparationError> {
+    let source = subtitle_text::read_source(input_path).await.map_err(|error| {
+        tracing::warn!(%error, input_hash = %md5_upper_hex(input_path), "subtitle preparation refused");
+        error
+    })?;
+    let (format, extension) = seek_subtitle_output_format(input_path, format_hint);
+    // Read and fingerprint source bytes before using any cache entry. Same-path
+    // replacements, changed declarations and format hints cannot reuse stale text.
+    let normalized = cache.join(format!("text-{}.{}", source.fingerprint, extension));
+    subtitle_text::cache_text(&normalized, &source.text).await?;
+    let seek_seconds = seek_seconds.max(0);
+    let output = cache.join(format!(
+        "seek-{}_{seek_seconds}.{extension}",
+        source.fingerprint
+    ));
+    match rebase_subtitle_cues(&source.text, format, seek_seconds) {
+        Ok(rebased) => {
+            let text = if rebased.remaining_cues == 0 {
+                ""
+            } else {
+                &rebased.text
+            };
+            subtitle_text::cache_text(&output, text).await?;
         }
-    };
-
-    if output.status.success() {
-        non_empty_subtitle_path(output_path).await
-    } else {
-        tracing::warn!(
-            input_hash = %md5_upper_hex(input_path),
-            seek_seconds,
-            status = %output.status,
-            stderr_bytes = output.stderr.len(),
-            "failed ffmpeg compatibility subtitle seek rebase"
-        );
-        Some(input_path.to_owned())
+        Err(_) => {
+            // Syntax compatibility only: FFmpeg always receives normalized UTF-8,
+            // never raw legacy bytes. A failed fallback is an explicit refusal.
+            rebase_text_subtitle_with_ffmpeg(&normalized, format_hint, seek_seconds, &output)
+                .await?;
+        }
     }
+    Ok(non_empty_subtitle_path(&output).await)
+}
+
+async fn rebase_text_subtitle_with_ffmpeg(
+    normalized: &Path,
+    format_hint: Option<SubtitleTextFormat>,
+    seek_seconds: i64,
+    output_path: &Path,
+) -> std::result::Result<(), SubtitlePreparationError> {
+    let parent = output_path
+        .parent()
+        .ok_or(SubtitlePreparationError::Cache)?;
+    let temporary = tempfile::tempdir_in(parent).map_err(|_| SubtitlePreparationError::Cache)?;
+    let (_, extension) = seek_subtitle_output_format(&normalized.to_string_lossy(), format_hint);
+    let output = temporary.path().join(format!("rebased.{extension}"));
+    let args = build_seek_subtitle_args(
+        &normalized.to_string_lossy(),
+        format_hint,
+        seek_seconds,
+        &output,
+    );
+    let mut command = Command::new(ffmpeg_path());
+    command
+        .args(&args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let mut child = crate::addons::spawn_managed_addon_process(command)
+        .map_err(|_| SubtitlePreparationError::Cues)?;
+    let status = if let Ok(status) =
+        tokio::time::timeout(std::time::Duration::from_secs(10), child.wait()).await
+    {
+        status.map_err(|_| SubtitlePreparationError::Cues)?
+    } else {
+        child
+            .kill()
+            .await
+            .map_err(|_| SubtitlePreparationError::Cues)?;
+        return Err(SubtitlePreparationError::Limit);
+    };
+    if !status.success() {
+        return Err(SubtitlePreparationError::Cues);
+    }
+    let bytes = subtitle_text::read_bounded(&output, MAX_TEXT_BYTES).await?;
+    let text = String::from_utf8(bytes).map_err(|_| SubtitlePreparationError::Cues)?;
+    subtitle_text::cache_text(output_path, &text).await
 }
 
 /// A successfully re-based subtitle with no remaining cues is written as an
@@ -1037,22 +998,30 @@ async fn non_empty_subtitle_path(output_path: &Path) -> Option<String> {
 
 /// Re-base only burned text subtitle inputs. Image subtitles and copied
 /// subtitle streams already ride the seeked media input and must not be
-/// rewritten.
+/// rewritten. Text sources are normalized even at position zero.
+///
+/// # Errors
+/// Refuses unsafe encoding or preparation failures instead of dropping captions.
 pub async fn rebase_burned_text_subtitle_input(
     input: Option<InputFile>,
     seek_seconds: i64,
-) -> Option<InputFile> {
-    let mut input = input?;
+) -> std::result::Result<Option<InputFile>, SubtitlePreparationError> {
+    let Some(mut input) = input else {
+        return Ok(None);
+    };
     if input.kind == InputKind::Subtitle
         && input.subtitle_method == Some(SubtitleMethod::Burn)
         && !input.is_image_based_subtitle
-        && seek_seconds > 0
     {
-        input.path =
+        let Some(path) =
             rebase_text_subtitle_with_format(&input.path, input.subtitle_text_format, seek_seconds)
-                .await?;
+                .await?
+        else {
+            return Ok(None);
+        };
+        input.path = path;
     }
-    Some(input)
+    Ok(Some(input))
 }
 
 /// One subtitle row scheduled for extraction.
@@ -2009,7 +1978,7 @@ mod tests {
             .expect_err("non-success status should fail");
         mock.assert_async().await;
         let rendered = error.to_string();
-        assert!(rendered.contains("401"));
+        assert!(rendered.contains("availability"));
         assert!(!rendered.contains("X-Plex-Token"));
         assert!(!rendered.contains("redacted-sensitive-value"));
         assert!(!rendered.contains(&server.base_url()));
@@ -2264,26 +2233,14 @@ Dialogue: 0,0:00:46.00,0:00:42.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles
     }
 
     #[tokio::test]
-    async fn rebase_text_subtitle_falls_back_to_original_on_unparseable_cue() {
+    async fn rebase_text_subtitle_refuses_unparseable_cues() {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join("broken.srt");
         tokio::fs::write(&path, b"1\nnot-a-timestamp --> also-not\nHallo\n")
             .await
             .expect("write broken srt");
         let path_str = path.to_string_lossy().into_owned();
-        assert_eq!(rebase_text_subtitle(&path_str, 10).await, Some(path_str));
-    }
-
-    #[tokio::test]
-    async fn rebase_text_subtitle_skips_non_positive_seek() {
-        assert_eq!(
-            rebase_text_subtitle("/srv/media/show/subtitle.srt", 0).await,
-            Some("/srv/media/show/subtitle.srt".to_owned())
-        );
-        assert_eq!(
-            rebase_text_subtitle("/srv/media/show/subtitle.srt", -1).await,
-            Some("/srv/media/show/subtitle.srt".to_owned())
-        );
+        assert!(rebase_text_subtitle(&path_str, 10).await.is_err());
     }
 
     #[tokio::test]
@@ -2307,20 +2264,18 @@ Dialogue: 0,0:00:46.00,0:00:42.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles
     async fn rebase_burned_text_subtitle_input_skips_non_text_burn_inputs() {
         let image = InputFile::image_subtitle("/srv/media/show/video.mkv", SubtitleMethod::Burn);
         assert_eq!(
-            rebase_burned_text_subtitle_input(Some(image.clone()), 900).await,
+            rebase_burned_text_subtitle_input(Some(image.clone()), 900)
+                .await
+                .unwrap(),
             Some(image)
         );
 
         let copied = InputFile::text_subtitle("/srv/media/show/video.mkv", SubtitleMethod::Copy);
         assert_eq!(
-            rebase_burned_text_subtitle_input(Some(copied.clone()), 900).await,
+            rebase_burned_text_subtitle_input(Some(copied.clone()), 900)
+                .await
+                .unwrap(),
             Some(copied)
-        );
-
-        let burned = InputFile::text_subtitle("/srv/media/show/subtitle.srt", SubtitleMethod::Burn);
-        assert_eq!(
-            rebase_burned_text_subtitle_input(Some(burned.clone()), 0).await,
-            Some(burned)
         );
     }
 

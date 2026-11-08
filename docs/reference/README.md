@@ -17,6 +17,7 @@ supported combinations. Procedures and background are indexed from the
 ## Media and integration formats
 
 - [Media source support](media-source-support.md)
+- [Native text subtitle preparation](subtitle-text.md)
 - [Classic chapter expressions](classic-chapter-expressions.md)
 - [Scripted build context](scripted-build-context.md)
 - [Remote Stream playlist manifests](remote-stream-playlist-manifests.md)

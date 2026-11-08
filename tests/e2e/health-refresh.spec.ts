@@ -1,7 +1,78 @@
 import { expect, Page, test } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
+
+for (const javaScriptEnabled of [true, false]) {
+  test(`subtitle encoding preflight and charset recovery (JavaScript ${javaScriptEnabled})`, async ({ browser, baseURL }, testInfo) => {
+    test.skip(!databasePath, 'Requires the disposable E2E database.');
+    const db = new DatabaseSync(databasePath!);
+    db.exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON;');
+    const id = 7_138_000 + (testInfo.project.name === 'firefox' ? 100 : 0) + Number(javaScriptEnabled);
+    const root = mkdtempSync(join(dirname(databasePath!), 'subtitle-encoding-'));
+    const source = join(root, 'synthetic.nl.srt');
+    const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 320, height: 800 } });
+    const cleanup = () => {
+      db.prepare('DELETE FROM "Channel" WHERE "Id"=?').run(id);
+      db.prepare('DELETE FROM "MediaItem" WHERE "Id"=?').run(id);
+      db.prepare('DELETE FROM "LibraryFolder" WHERE "Id"=?').run(id);
+      db.prepare('DELETE FROM "LibraryPath" WHERE "Id"=?').run(id);
+      db.prepare('DELETE FROM "Library" WHERE "Id"=?').run(id);
+      db.prepare('DELETE FROM "MediaSource" WHERE "Id"=?').run(id);
+    };
+    try {
+      cleanup();
+      writeFileSync(source, Buffer.from('1\n00:00:00,000 --> 00:00:03,000\ncaf\xe9\n', 'latin1'));
+      const profile = db.prepare('SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1').get() as { Id: number };
+      db.prepare('INSERT INTO "MediaSource" ("Id") VALUES (?)').run(id);
+      db.prepare('INSERT INTO "LocalMediaSource" ("Id") VALUES (?)').run(id);
+      db.prepare('INSERT INTO "Library" ("Id","MediaKind","MediaSourceId") VALUES (?,1,?)').run(id,id);
+      db.prepare('INSERT INTO "LocalLibrary" ("Id") VALUES (?)').run(id);
+      db.prepare('INSERT INTO "LibraryPath" ("Id","LibraryId","Path") VALUES (?,?,?)').run(id,id,root);
+      db.prepare('INSERT INTO "LibraryFolder" ("Id","LibraryPathId","Path") VALUES (?,?,?)').run(id,id,root);
+      db.prepare('INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (?,?,0)').run(id,id);
+      db.prepare('INSERT INTO "Movie" ("Id") VALUES (?)').run(id);
+      db.prepare('INSERT INTO "MovieMetadata" ("Id","MovieId","MetadataKind","DateAdded","DateUpdated","Title") VALUES (?,?,0,?,?,?)').run(id,id,'2026-01-01','2026-01-01','Synthetic subtitle encoding');
+      db.prepare('INSERT INTO "MediaVersion" ("Id","MovieId","DateAdded","DateUpdated","Duration","Height","Width","VideoScanKind") VALUES (?,?,?, ?,\'00:01:00\',180,320,0)').run(id,id,'2026-01-01','2026-01-01');
+      db.prepare('INSERT INTO "MediaFile" ("Id","LibraryFolderId","MediaVersionId","Path","PathHash") VALUES (?,?,?,?,?)').run(id,id,id,join(root,'synthetic.mkv'),String(id));
+      db.prepare('INSERT INTO "Subtitle" ("MovieMetadataId","SubtitleKind","StreamIndex","Codec","Path","Default","Forced","DateAdded","DateUpdated") VALUES (?,1,0,\'subrip\',?,0,0,?,?)').run(id,source,'2026-01-01','2026-01-01');
+      db.prepare('INSERT INTO "Channel" ("Id","Number","Name","FFmpegProfileId","IdleBehavior","MusicVideoCreditsMode","PlayoutMode","PlayoutSource","SongVideoMode","SortNumber","StreamSelectorMode","StreamingMode","SubtitleMode","TranscodeMode","UniqueId") VALUES (?,?,?,?,0,0,0,0,0,?,0,0,3,0,?)').run(id,String(id),'Synthetic subtitle encoding',profile.Id,id,String(id));
+      db.prepare('INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","Seed") VALUES (?,?,0,0)').run(id,id);
+      const now = Date.now();
+      db.prepare('INSERT INTO "PlayoutItem" ("PlayoutId","MediaItemId","DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint","OutPoint","Start") VALUES (?,?,0,0,?,0,\'00:00:00\',\'00:01:00\',?)').run(id,id,new Date(now+3_600_000).toISOString(),new Date(now).toISOString());
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      for (const [language,title,refresh,warning] of [
+        ['en-us','Subtitle encoding','Refresh','1 unreadable or uncertain source(s)'],
+        ['nl','Tekencodering van ondertitels','Vernieuwen','1 onleesbare bronnen'],
+      ]) {
+        rmSync(`${source}.charset`, { force: true });
+        expect((await page.request.post('/admin-api/settings/ui/save',{ form:{ language,is_dark_mode:'true' }, maxRedirects:0 })).status()).toBe(303);
+        expect((await page.request.post('/admin-api/system/health/refresh',{maxRedirects:0})).status()).toBe(303);
+        await page.goto('/system/health');
+        if (javaScriptEnabled) await hydrated(page);
+        const row = page.getByRole('row').filter({ hasText: title });
+        await expect(row).toContainText(warning);
+        await expect(row).toContainText('.charset');
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth+2)).toBe(true);
+        await row.screenshot({path:testInfo.outputPath(`subtitle-encoding-${language}.png`)});
+        writeFileSync(`${source}.charset`,'windows-1252\n');
+        const refreshed = page.waitForResponse(response => response.request().method()==='POST' && response.url().includes(javaScriptEnabled?'/admin-api/refresh_health_snapshot':'/admin-api/system/health/refresh'));
+        await page.getByRole('button',{ name:refresh,exact:true }).click();
+        expect((await refreshed).status()).toBe(javaScriptEnabled?200:303);
+        await expect(row).not.toContainText(warning);
+        const snapshot = db.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=\'health.results\'').get() as { Value:string };
+        expect((JSON.parse(snapshot.Value) as { title:string;status:string }[]).find(result=>result.title==='Subtitle Encoding')?.status).toBe('Pass');
+      }
+      expect(errors).toEqual([]);
+    } finally {
+      cleanup(); db.close(); rmSync(root,{recursive:true,force:true}); await context.close();
+    }
+  });
+}
 
 // Row250: expose incomplete filesystem repair through the existing Health flow.
 for (const javaScriptEnabled of [true, false]) {

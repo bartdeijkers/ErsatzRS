@@ -272,12 +272,11 @@ pub fn subtitle_cache_folder() -> PathBuf {
     streams_cache_folder().join("subtitles")
 }
 
-/// `<AppDataFolder>/cache/streams/subtitles/seek-v2` — playback-time
-/// re-based subtitle files for non-zero seeks. Versioned (`v2`) because the
-/// cache key is a content offset, not wall-clock time, so a looping channel
-/// would otherwise keep re-serving pre-ADR-0061 cached files that silently
-/// dropped straddling cues; the old unversioned `seek/` folder is simply
-/// orphaned, not actively cleaned up.
+/// `<AppDataFolder>/cache/streams/subtitles/seek-v2` — normalized and rebased
+/// subtitle files, including position zero. ADR 0132's versioned byte/charset
+/// identities and format/seek filenames ignore the older path-only entries.
+/// The `v2` directory originally invalidated pre-ADR-0061 cue-dropping output;
+/// the old unversioned `seek/` directory is not actively cleaned up.
 #[must_use]
 pub fn subtitle_seek_cache_folder() -> PathBuf {
     subtitle_cache_folder().join("seek-v2")
