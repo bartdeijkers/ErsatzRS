@@ -13,6 +13,7 @@ v26.11.5; ucu-14 owns260–271 throughv26.11.6; ucu-15 owns272–285 through the
 fixed target in plans/upstream-catch-up.md. All31 source dispositions and required
 local checks are complete; exact-source CI/window acceptance remain pending. Native is
 retained; upstream legacy removal does not authorize its retirement.
+Refreshed four-target local proof at1000fd07/PR126 is owned by ucu-15.
 Acceptance/evidence: ucu-12 (complete), ucu-13/14/15 (pending).
 Maintainer amendment2026-11-07: row271 Windows security applicability is retained
 as explicit unverified follow-up debt. It no longer blocks current runtime

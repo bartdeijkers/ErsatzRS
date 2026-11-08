@@ -70,6 +70,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Current integrated candidate1000fd07 includes remote/main6fbf73b4/PR126 and
+passes all required local acceptance:8483 distinct Rust cases, strict workspace
+lint, canonical doctests, parity/bundle checks,20 affected headed cases, actual
+Native/Next playback and transport, native Linux/Windows packages and both ARM
+package/emulation checks. Milestone ucu-15 owns the exact component identities
+and evidence. Push the authorized evidence checkpoint and run full exact-source
+CI using the verified current-source archives without rebuilding. Require green
+CI before main delivery and ordered window/baseline acceptance. Preserve the
+fixed v26.12.0 boundary, Native and all approved unverified debt; no app release.
+
 Continue UCU-13/14/15 through fixed v26.12.0, retaining Native alongside Next.
 There are31 pending rows; no baseline/window acceptance has advanced. Milestones
 ucu-13/14/15 own the finite remaining requirements and exact component evidence;
