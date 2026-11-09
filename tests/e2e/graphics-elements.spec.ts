@@ -116,7 +116,7 @@ test.describe('localized graphics-elements selector and editor', () => {
     await expect(page.getByText('Changes affect newly started streams and do not restart active streams.'))
       .toBeVisible();
 
-    await page.locator('[data-add-graphics-element]').click();
+    await page.locator('[data-page-action="add-graphics-element"]').click();
     await waitForHydration(page);
     const editor = page.locator('[data-graphics-element-editor]');
     await expect(editor).toBeVisible();

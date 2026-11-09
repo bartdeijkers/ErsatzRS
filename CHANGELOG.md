@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Security
+
+- `cargo deny` temporarily ignores RUSTSEC-2026-0459 (bundled SQLite before
+  3.54.0, via `libsqlite3-sys` 0.37): the fixed `libsqlite3-sys` 0.39 cannot be
+  used until sqlx allows it. The issue needs an attacker who can already write
+  the server's local database and its `-wal` file; the ignore is removed when
+  sqlx updates.
+
 ### Added
 
 - A new **Teletext elements** page (`/teletext-elements`) keeps a library of
@@ -157,6 +165,11 @@ release section when tagging a release.
   is picked (Apply remains for browsers without JavaScript), long card grids
   repeat the pager below the cards, and "Select all" is hidden when a page has
   no items.
+- Admin overview pages for channels, FFmpeg profiles, local libraries,
+  libraries, watermarks and graphics elements share one page heading: the
+  same title style, with the primary "Add" action (plus icon) on the right
+  of the title instead of in a separate bar. Headings and action labels wrap
+  on narrow screens instead of being cut off.
 
 ### Fixed
 

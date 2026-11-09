@@ -9,6 +9,7 @@ use crate::admin::server_fns::ffmpeg_profiles::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
+    page_header::{PageAction, PageHeader},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -114,12 +115,9 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::toolbar>
-                <h1 class=style::page_title>{tr(TextKey::FfmpegProfiles)}</h1>
-                <div class=style::toolbar_actions>
-                    <a href="/ffmpeg/add" class=style::btn_add>{tr(TextKey::AddProfile)}</a>
-                </div>
-            </div>
+            <PageHeader title=tr(TextKey::FfmpegProfiles)>
+                <PageAction href="/ffmpeg/add" label=tr(TextKey::AddProfile)/>
+            </PageHeader>
 
             <PagedTable
                 rows=rows_resource

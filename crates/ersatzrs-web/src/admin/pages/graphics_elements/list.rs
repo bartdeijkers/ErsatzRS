@@ -8,6 +8,8 @@ use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
 
+use crate::admin::ui::primitives::page_header::{PageAction, PageHeader};
+
 stylance::import_crate_style!(style, "src/admin/pages/graphics_elements/list.module.css");
 
 #[component]
@@ -16,16 +18,16 @@ pub fn GraphicsElementsListPage() -> impl IntoView {
 
     view! {
         <div class=style::page data-graphics-elements-page="list">
-            <div class=style::action_bar>
-                <a href="/graphics-elements/add" class=style::btn_add data-add-graphics-element>
-                    {tr(TextKey::AddGraphicsElement)}
-                </a>
-            </div>
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::GraphicsElements)}</h1>
+                <PageHeader title=tr(TextKey::GraphicsElements)>
+                    <PageAction
+                        href="/graphics-elements/add"
+                        label=tr(TextKey::AddGraphicsElement)
+                        marker="add-graphics-element"
+                    />
+                </PageHeader>
                 <p class=style::help>{tr(TextKey::GraphicsExistingDrawvgHelp)}</p>
                 <p class=style::help>{tr(TextKey::GraphicsStreamRestartHelp)}</p>
-                <div class=style::divider/>
                 <Suspense fallback=admin_loading_resource_view>
                     {move || {
                         rows.get().map(|result| admin_result_view(result, graphics_elements_table))

@@ -8,6 +8,7 @@ use crate::admin::server_fns::watermarks::{
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     form::TextField,
+    page_header::{PageAction, PageHeader},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -176,15 +177,10 @@ fn WatermarksListIsland() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
-                <a href="/watermarks/add" class=style::btn_add>
-                    {tr(TextKey::AddWatermark)}
-                </a>
-            </div>
-
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::Watermarks)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::Watermarks)>
+                    <PageAction href="/watermarks/add" label=tr(TextKey::AddWatermark)/>
+                </PageHeader>
 
                 <PagedTable
                     rows=rows_resource

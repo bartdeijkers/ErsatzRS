@@ -5,36 +5,11 @@
     margin: -1.875rem;
 }
 
-.action-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    min-height: 4rem;
-    padding: 0 1.5rem;
-    background-color: var(--color-surface);
-    box-shadow: 0 1px 0 var(--color-table-line);
-    z-index: 1;
-}
-
 .content {
     width: 100%;
     max-width: 120rem;
     margin: 0 auto;
     padding: 2rem 1.5rem 0;
-}
-
-.page-title {
-    font-size: 1.5rem;
-    line-height: 1.334;
-    font-weight: 400;
-    color: var(--color-text-primary);
-    margin: 0 0 0.5rem;
-}
-
-.divider {
-    height: 1px;
-    background-color: var(--color-border);
-    margin-bottom: 1.5rem;
 }
 
 .table-panel {
@@ -96,48 +71,6 @@
 .switch-input:focus-visible + .switch-track {
     outline: 2px solid var(--color-secondary);
     outline-offset: 4px;
-}
-
-.btn-add {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-height: 2.25rem;
-    padding: 0 1rem;
-    border-radius: var(--radius);
-    background-color: var(--color-primary);
-    color: var(--color-on-primary);
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: background-color 150ms;
-    text-decoration: none;
-}
-.btn-add:hover { background-color: var(--color-primary-h); }
-.btn-add::before {
-    content: "+";
-    font-size: 1.25rem;
-    line-height: 1;
-}
-
-.btn-numbers {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-height: 2.25rem;
-    padding: 0 1rem;
-    border-radius: var(--radius);
-    background-color: var(--color-secondary);
-    color: var(--color-on-primary);
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: background-color 150ms;
-    text-decoration: none;
-}
-.btn-numbers:hover { background-color: var(--color-secondary); }
-.btn-numbers::before {
-    content: "✎";
-    font-size: 1rem;
-    line-height: 1;
 }
 
 .row-actions {
@@ -208,7 +141,6 @@
         margin: -1.5rem;
     }
 
-    .action-bar,
     .table-toolbar {
         padding: 0 1rem;
     }
