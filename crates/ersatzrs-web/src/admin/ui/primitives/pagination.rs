@@ -194,6 +194,10 @@ pub fn PaginationLinks(
     page_size_action: String,
     #[prop(default = Vec::new())] page_size_fields: Vec<PaginationFormField>,
     #[prop(default = None)] page_size_options: Option<Vec<u32>>,
+    /// `false` renders only the counter and page links, for a repeated pager
+    /// below long result lists; the page-size choice stays in the top pager.
+    #[prop(default = true)]
+    show_page_size: bool,
 ) -> impl IntoView {
     let metrics = pagination_metrics(page, total, page_size);
     let previous_href = (!metrics.previous_disabled).then_some(previous_href);
@@ -206,26 +210,28 @@ pub fn PaginationLinks(
             data-pagination
             aria-label=page_of(metrics.current_page + 1, metrics.total_pages)
         >
-            <form method="get" action=page_size_action class=style::page_size_form>
-                {page_size_fields.into_iter().map(|field| view! {
-                    <input type="hidden" name=field.name value=field.value/>
-                }).collect_view()}
-                <label class=style::page_size>
-                    <span>{tr(TextKey::RowsPerPage)}</span>
-                    <select
-                        name="page_size"
-                        data-pagination-page-size
-                        aria-label=tr(TextKey::RowsPerPage)
-                    >
-                        {options.into_iter().map(|size| view! {
-                            <option value=size.to_string() selected=size == page_size>
-                                {if size == 0 { tr(TextKey::All).to_owned() } else { size.to_string() }}
-                            </option>
-                        }).collect_view()}
-                    </select>
-                </label>
-                <button type="submit" class=style::apply>{tr(TextKey::Apply)}</button>
-            </form>
+            {show_page_size.then(|| view! {
+                <form method="get" action=page_size_action class=style::page_size_form data-pagination-form>
+                    {page_size_fields.into_iter().map(|field| view! {
+                        <input type="hidden" name=field.name value=field.value/>
+                    }).collect_view()}
+                    <label class=style::page_size>
+                        <span>{tr(TextKey::RowsPerPage)}</span>
+                        <select
+                            name="page_size"
+                            data-pagination-page-size
+                            aria-label=tr(TextKey::RowsPerPage)
+                        >
+                            {options.into_iter().map(|size| view! {
+                                <option value=size.to_string() selected=size == page_size>
+                                    {if size == 0 { tr(TextKey::All).to_owned() } else { size.to_string() }}
+                                </option>
+                            }).collect_view()}
+                        </select>
+                    </label>
+                    <button type="submit" class=style::apply>{tr(TextKey::Apply)}</button>
+                </form>
+            })}
             <div class=style::status>
                 <span class=style::range>
                     {range_of(metrics.range_start, metrics.range_end, total)}

@@ -151,6 +151,12 @@ release section when tagging a release.
 - Defer Docker image delivery for application release 1.2.0 by maintainer
   decision. Preserve container code and evidence; the three Linux archives,
   Windows x64 and their required verification remain in scope.
+- Admin pagination is consistent across lists: playouts and schedules use the
+  shared pager (page-size choice, localized "x–y of z" and "Page x of y"
+  counters, icon arrows), media browsers apply a new page size as soon as it
+  is picked (Apply remains for browsers without JavaScript), long card grids
+  repeat the pager below the cards, and "Select all" is hidden when a page has
+  no items.
 
 ### Fixed
 
