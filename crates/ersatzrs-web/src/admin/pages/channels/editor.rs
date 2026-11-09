@@ -670,9 +670,11 @@ fn select_i32_field(
     let select_class = format!("{} {}", style::input, style::select);
     let disabled = disabled.unwrap_or_else(|| Signal::derive(|| false));
     let disabled_initial = disabled.get_untracked();
+    // Keeps its pre-existing bare `id`; browser proofs pin selectors such as
+    // `label[for="source_teletext_delivery"]`.
     view! {
         <div class=style::field>
-            <label for=field_id(name) class=style::label inner_html=label></label>
+            <label for=name class=style::label inner_html=label></label>
             {disabled_initial.then(|| {
                 view! {
                     <input
@@ -683,7 +685,7 @@ fn select_i32_field(
                 }
             })}
             <select
-                id=field_id(name)
+                id=name
                 name=name
                 class=select_class
                 disabled=move || disabled.get()
