@@ -10,6 +10,14 @@ ignore = [
   # upstream upgrade is available yet; revisit when Leptos migrates away from
   # proc-macro-error2.
   "RUSTSEC-2026-0173",
+  # libsqlite3-sys 0.37 bundles SQLite < 3.54.0 (uninitialized page-cache read
+  # when a database is opened with a crafted `-wal` file of a different page
+  # size). It arrives through sqlx-sqlite 0.9.0, which pins
+  # libsqlite3-sys < 0.38, so the patched 0.39 is unreachable. ErsatzRS only
+  # opens its own local database (ADR 0080); exploitation needs an attacker
+  # who can already write that database and its WAL. Temporary by maintainer
+  # decision (2026-11-09): remove once sqlx accepts libsqlite3-sys >= 0.39.
+  "RUSTSEC-2026-0459",
 ]
 
 [licenses]
