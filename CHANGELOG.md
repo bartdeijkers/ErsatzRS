@@ -13,15 +13,139 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- A new **Teletext elements** page (`/teletext-elements`) keeps a library of
+  custom teletext pages. Upload a TTI, T42, EP1 or HTT file (for example from
+  QTeletextMaker), see a Level 1 preview with subpages, change name, page
+  number and cycle time, replace or download the file, and link fields marked
+  `%NAME%%%` in the page to the channel name or number, date, time or the
+  current and next programme. Each element shows which channels use it.
+  On a channel's teletext page, the custom pages section links elements to
+  that channel with their own page number and an on/off choice, and the page
+  set lists them.
+- Linked custom pages are now broadcast. Every switched-on page goes out with
+  the channel's next Check and publish, as the built-in source "Custom pages"
+  next to any add-on, or on its own on a channel without add-ons. The page is
+  sent exactly as uploaded (rows 1–24, all subpages); the header row stays the
+  channel's and enhancement packets are not sent. Fields are filled when you
+  check. A page that cannot go out blocks Check, and the channel page names the
+  reason per page: unreadable element, a field without a data link, a page
+  number with letters, two custom pages on one number, text hidden under a
+  double-height line, or a page inside an enabled add-on's range. Editing an element or link never changes what is on
+  air until you publish again; switching the first page on or the last page
+  off changes the channel's sources like an add-on does. Automatic field
+  refresh after publishing, custom pages during published Lua/Scripted
+  intervals and the element's own subpage cycle time are not done yet. The add-on id
+  `ersatzrs.host.custom-pages` is reserved.
+- Channel teletext pages show one ordered readiness checklist: add-on enabled,
+  valid profile, teletext capacity, output route, published pages and
+  broadcast confirmed by an active output. Each state is shown separately, and
+  display in a client is never claimed. A missing or invalid
+  `teletext.authoring.policy` / `teletext.output.policy` can now be repaired
+  from the admin by applying the reviewed `tvguide-16` capacity profile. The
+  form needs an explicit confirmation of its global scope, validates on the
+  server before writing, and replaces hand-tuned policies only after a
+  separate confirmation. No manual JSON or SQL is needed.
+- The readiness checklist explains which output routes carry teletext. HLS does
+  not. A global MPEG-TS script owns the final Hybrid mux. The checklist names a
+  fix for only this channel (MPEG-TS streaming mode) separately from the global
+  alternative (built-in wrapper).
+- A `Clean up old workflow runs` workflow deletes completed GitHub Actions
+  runs older than 30 days, and failed or cancelled runs older than 7 days,
+  every week. Manual runs start as a dry run. Active runs, runs for open pull
+  requests and successful Release runs are kept.
+
 ### Changed
 
 - The EPG/tv guide grid is easier to read: programme titles, times and the
   time ruler use at least 13-14 px text, rows are taller, the grid fills the
   available window height, and on large and 4K displays the guide uses the
   full page width and scales its text up. The zoom control works as before.
+- Update MiniJinja to 3.x and refresh the semver-compatible Cargo lockfile
+  (Leptos 0.8.23 with its now syn-3-compatible server-function macros, zip
+  9.4, ammonia 4.2.4 kept). Bundled XMLTV guide templates, dynamic text and
+  graphics templates render unchanged, and `true`/`false`/`none` keep their
+  lowercase spelling. **Custom templates** now follow Jinja2 more closely in
+  edge cases: lists and maps print with single quotes (`['A', 'B']`), `round`
+  rounds half to even (`2.5|round` is `2.0`), floor division and modulo with a
+  negative divisor floor like Python, `title` no longer capitalizes after an
+  apostrophe, `min`/`max` compare strings case-insensitively, and division by
+  zero is a render error.
+
+- Pin managed playback to the published FFmpeg 2.0.10 and qualified Next 0.2.5
+  packages for the four required targets, with exact archive/payload checksums
+  and source provenance. Retained platform packages keep their original source
+  identity. Native remains selectable. The unresolved ErsatzTV Windows advisory
+  is recorded as explicit, unverified follow-up work approved by the maintainer.
+
+- Bring the upstream catch-up through ErsatzTV v26.12.0 while retaining Native
+  alongside Next, stored engine choices and Native profile controls. Next can
+  publish daily playout files through one atomic index, retain unchanged days,
+  and refresh active channels when profiles, watermarks or decorations change.
+  Publication and SQL rollback remain coordinated; accepted-state recovery
+  repairs derived files without changing the timeline. Reader qualification,
+  private callback ownership and Health checks prevent incompatible sessions.
+  Older readers retain complete-file publication with a compatible schema.
+  Preview sessions keep independent ownership and shutdown. Indexed overlays
+  cannot replace or downgrade the publication directory.
+
+- ADR 0120 now lets ErsatzRS deliver custom pages from the teletext element
+  library itself, next to add-ons. It sets the rules for fields, refresh,
+  conflicts with add-on page ranges, failures and revisions.
+- The channel teletext page (`/channels/{id}/teletext`) is reorganised into
+  clearly bounded sections: a one-sentence status line with the broadcast
+  checklist folded away, a page set that lists every page number and its
+  source, one section per teletext add-on, a section for custom pages and one
+  Check → Preview → Publish block. Settings of a disabled, missing or
+  unconfigured add-on are no longer shown; the section explains the cause and
+  links to the fix. An add-on is switched on for a channel with one button,
+  its settings are labelled as this channel's settings, and shared profiles
+  move under Advanced. The channels shown in the TV guide are chosen once in
+  the add-on section and stored per channel instead of being picked again at
+  every check. Technical draft fields are prefilled. Shared teletext admin
+  building blocks and a UX reference (`docs/reference/teletext-admin-ux.md`)
+  keep this page and the upcoming teletext element library consistent. All
+  supported interface languages are updated.
+- Refresh the README with ADR-backed ErsatzTV differences, including interface
+  languages, subtitle preferences, tagging, add-ons and graphics. Clarify the
+  delivered teletext scope and current platform limitations.
+- The CI domain selector now separates presentation, server and playback inputs,
+  identifies the affected Level 1.5 browser families, and traces shared browser
+  helpers to their consumers. Shared and unknown inputs retain conservative
+  coverage; embedded release notes and served images are treated as application
+  inputs. PR builds now follow their selected consumers: presentation-only
+  changes omit Rust test archives, backend-only changes omit unused web bundles,
+  and only runtime smoke consumers request the ordinary smoke server. Artifact
+  capabilities and an explicit required-job set reject missing products or
+  unintended skips. PR browsers remain Chromium; full release-candidate CI
+  retains Chromium and Firefox. The 15–30 minute target still requires
+  measurement after rollout.
+- Audio and video now keep playing when authored teletext fails during a
+  stream, for example when the multiplex stays full for too long. The stream
+  continues without teletext: the teletext entry is withdrawn from the PMT
+  with a new version, and every other packet is forwarded unchanged. The
+  failure is still shown in the channel's teletext readiness and in Health.
+  Previously such a failure ended the whole stream.
 - CI now ends with a single `CI ok` job that passes only when every gate job
   passed, so `main` can require one status check. Docs-only pull requests
   start CI and report `CI ok` quickly instead of never reporting a status.
+- CI no longer tests each change twice in full. Draft pull requests run only
+  the fast Rust checks. Ready pull requests run only the domains they touch:
+  the Rust tests of the changed crates and their dependents, the Teletext and
+  Next jobs when those areas change, and the Chromium Playwright specs of the
+  touched admin areas plus a hydration smoke set. A merge whose code its pull
+  request already tested is not rerun; a nightly full run on `main` covers
+  everything else, including Firefox. Browser suites wait for a passing `Test`
+  job, and the build uses six parallel compile jobs instead of one and
+  compiles only the test binaries a pull request selects. Browser suites of
+  different workflow runs no longer run at the same time on the shared runner
+  machine, which also stops their fixed ports from colliding.
+- CI moves a run to GitHub-hosted runners when no self-hosted runner is online
+  at its start, once the optional `CI_RUNNER_STATUS_TOKEN` secret is set.
+  On such a four-CPU runner the CPU-bound capacity proofs (a 4K Next stream and
+  a JPEG XL broadcast graph) are reported as skipped, not run with weaker
+  budgets.
 - The daily progress and nightly clippy-cleanup routines now land their
   commits through an auto-merged pull request instead of pushing to `main`.
 - Defer Docker image delivery for application release 1.2.0 by maintainer
@@ -30,6 +154,89 @@ release section when tagging a release.
 
 ### Fixed
 
+- Normalize legacy native text subtitles to UTF-8 before playback, preserving
+  accents and seek timing instead of stopping the stream. Source-level charset
+  declarations resolve uncertain encodings, cache entries follow source changes,
+  and Health checks upcoming local subtitles before playback.
+
+
+- Limit native NVIDIA encoder capabilities to encoders advertised by the
+  selected FFmpeg build, so optional GPU support cannot make a software-only
+  runtime fail startup checks.
+- Next offline gaps and error cards use the custom `background.png`, or the
+  bundled default when no custom image is present. Offline callbacks retain
+  their admitted session and exact interval, and ambiguous end headers are
+  rejected. The required channel schema is 0.1.3; runtime adoption remains gated.
+
+- Native CUDA uploads reuse the named device across source colour changes, so
+  graph rebuilds keep the running NVENC encoder's context. Mixed Vulkan paths
+  retain their existing device routing. The FFmpeg9 successor is locally built;
+  runtime qualification and package adoption remain separate.
+
+- Native still-image watermarks stay visible when a video's parameters change
+  mid-item. Repeated images follow the primary video's natural end, and
+  watermark fades retain their programme clock through graph rebuilds.
+
+- Native HLS slideshow output limits NVENC B frames to fit a short GOP,
+  preventing low-frame-rate H.264/HEVC encoder startup failures. NVIDIA native
+  capability lookup now accepts its C-style symbol names and retains the
+  reported B-frame limit instead of silently skipping the probe.
+
+- Native playback retains source pixel-format metadata. Non-4:2:0, 12-bit and
+  unmodeled inputs use software decoding and explicit output-format conversion
+  instead of being mistaken for 8-bit hardware inputs; supported hardware
+  encoding and existing track/HDR policies remain available.
+
+- FFmpeg profile edits keep H.264 profile choices valid when switching between
+  10-bit and 8-bit. Save failures show localized causes with and without
+  JavaScript; HTML saves return to the populated editor and the fallback Add
+  form uses the ordinary defaults. Native controls,
+  valid stored choices and strict application validation are retained.
+
+- Next retains container and track hints when stored codec names are missing or
+  blank. Unnamed codecs use `unknown`, and recorded video indexes and valid
+  exact stream pins remain selected. Native playback validation is preserved.
+
+- Watermark, deco/template, playout-template, global FFmpeg settings and
+  provider path-replacement edits notify dependent Next playouts, including
+  mirrors and previews. Deletions capture dependencies before references
+  disappear; scheduling state and Native engine selections are preserved.
+- Changing a Next profile's scaling behavior refreshes its active playout
+  projection, so graphics use the saved scaling policy without a schedule reset.
+- Next assigns stable, distinct IDs to unsaved fallback occurrences, preventing
+  later filler from inheriting another occurrence's caption or copy position.
+- IPTV URLs no longer echo supplied access tokens when JWT authentication is
+  disabled. Enabled propagation accepts only the JWT-safe ASCII alphabet,
+  preserving valid authenticated Native/Next media and subtitle URLs.
+- Next receives container hints for Matroska/WebM, MP4/MOV, ASF, MPEG-TS and
+  MPEG programme files, retaining image handling and selected audio/subtitles.
+
+- The server now holds a single-instance lock in its persistent state folder
+  before opening the database. A competing server exits before startup;
+  stale files are reusable after exit. Read-only lock files remain usable,
+  while other lock failures warn and retain upstream's startup fallback.
+
+- Authored teletext no longer stops the stream with "teletext needs … null
+  packets but the window has 0" when a video burst, such as an I-frame, fills
+  one or more 20 ms intervals of the constant-rate output. A batch that finds
+  no null capacity now waits for a later interval. It waits at most four further
+  intervals (the 100 ms packet spacing the gate attributes to EN 300 706 B.9) and never beyond the B.6 20 s
+  acquisition bound. Its PTS names the interval that actually carries it, and
+  a cycle boundary counts only once the closing packet is sent. A multiplex
+  that stays full for longer fails explicitly with a new "multiplex had only N
+  null packets within 100 ms" error. Pages are never silently dropped, and
+  audio/video packets, PCR and continuity remain byte-identical. A new page now
+  waits (at most 5 s) while the received output has no room for the whole
+  page, because the 100 ms spacing applies within a page. ErsatzRS's own
+  segmenter and MPEG-TS wrapper output at the ordinary 1.2 × muxrate, with
+  pauses of up to 2.7 s, now carries teletext without failures. A source that
+  has shown no null packet at all is still rejected immediately, so optional
+  output keeps falling back to ordinary playback. During a burst a
+  page arrives later instead (see `docs/reference/teletext-capacity-profiles.md`).
+- A teletext output that stops on a transport failure is now shown on the
+  channel's **Teletext readiness** checklist and as a **Teletext transport**
+  warning in Health, with the cause and the next step. The notice remains after
+  the output ended until teletext is delivered on that channel again.
 - Deleting a scanned local library, or removing a scanned path from one, no
   longer fails with a `FOREIGN KEY constraint failed` error when the path
   contains nested folders or media files.

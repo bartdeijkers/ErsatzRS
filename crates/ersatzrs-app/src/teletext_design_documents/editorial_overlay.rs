@@ -2093,10 +2093,7 @@ fn unique_original_owner(
     documents: &[TeletextProfileDocument],
 ) -> Result<&TeletextProfileDocument, TeletextDesignDocumentError> {
     let mut owners = documents.iter().filter(|document| {
-        let base = match document {
-            TeletextProfileDocument::Base(base) => base,
-            TeletextProfileDocument::Authored(service) => service.semantic().base(),
-        };
+        let base = document.pages_draft();
         base.pages.iter().any(|page| page.address == owner)
     });
     let document = owners.next().ok_or_else(invalid)?;

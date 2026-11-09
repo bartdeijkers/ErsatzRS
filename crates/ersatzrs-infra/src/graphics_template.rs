@@ -595,7 +595,7 @@ fn render_expression(expression: &str, variables: &Value) -> Result<String> {
         let input = serde_json::json!({"value": resolve_path(path.trim(), variables).unwrap_or(&Value::Null)});
         let value = environment
             .compile_expression(&source)
-            .and_then(|expression| expression.eval(input))
+            .and_then(|expression| expression.eval(minijinja::value::Serde(input)))
             .map_err(|error| RepositoryError::Decode {
                 kind: "graphics template default",
                 value: error.to_string(),
@@ -821,6 +821,18 @@ mod tests {
             assert_eq!(
                 render_graphics_template(expression, &variables).unwrap(),
                 expected
+            );
+        }
+        for (expression, expected) in [
+            ("{{ Missing | default(5) }}", "5"),
+            ("{{ Missing | default(1.5, true) }}", "1.5"),
+            ("{{ Missing | default(false) }}", "false"),
+            ("{{ Empty | default(0, true) }}", "0"),
+        ] {
+            assert_eq!(
+                render_graphics_template(expression, &variables).unwrap(),
+                expected,
+                "{expression}"
             );
         }
         for expression in [

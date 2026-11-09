@@ -615,7 +615,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 
     async fn delete_local_library_admin(&self, id: EntityId) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let managed: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*) FROM "AddonMediaListLibrary" WHERE "LibraryId" = ?"#,
         )

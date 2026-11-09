@@ -1,0 +1,83 @@
+{
+  "status": "local-source-extension-tested; not a qualified runtime candidate or adoption",
+  "adr": "0131",
+  "upstream_commit": "92e93d72c0e3694417a22207374b9d12cbf38087",
+  "git_archive_sha256": "fe066b99e773180718d10115e910e4e87627e90fb070dd1ee7ebe0ad82c99b59",
+  "patch": "0001-atomic-index-reader.patch",
+  "patch_sha256": "50855adefd5f9a86e765d1775d68a8280ef9361d71c61ea73b105d2c620286c1",
+  "files": {
+    "Cargo.toml": {
+      "original_sha256": "4f4461ecabb76b2e339d744a870fd41bdb79981ee9f94cd8141769241c51c4c6",
+      "prepared_sha256": "194167fdedb78c4ca155565681c07bb06eb05d9bc13ebbc75c2b903cf94b8e8e"
+    },
+    "Cargo.lock": {
+      "original_sha256": "c5b0de576720b5a06f78e6961cd482e69326e3c9a0b7d2e5f70a21e48430ce8f",
+      "prepared_sha256": "cc7d5ea2a7a388d90fd9d3eb2b502ef49cb7cf1f82edd2d4d1539fbb1b0ff6b4"
+    },
+    "CHANGELOG.md": {
+      "original_sha256": "00418be5f3211e0bdb40fb01cc706ecc1f62bf9666e78e6c829b6311c0e3a296",
+      "prepared_sha256": "29122ac6ede0e5cbca51760c7dd7e34fa215c889631ea27d1605151e822f4386"
+    },
+    "crates/ersatztv-playout/Cargo.toml": {
+      "original_sha256": "028e3f5f417a4ee9ce56290932a04303e570ab9f4c86ab2c49e493ea3f03ad42",
+      "prepared_sha256": "90eff4613b9af86afc34d4d5e8b7fb49b378105ab64ec521b75ec30658877486"
+    },
+    "crates/ersatztv-playout/src/lib.rs": {
+      "original_sha256": "be597c3d54ded8af31e08e1cb1102c62831dd79067cc94264f71102e4514ce13",
+      "prepared_sha256": "16d990af4102ee68d490eb19a8708905e0c34c53fea97fc8bf578808644b71af"
+    },
+    "crates/ersatztv-playout/src/playout.rs": {
+      "original_sha256": "e4d083792142515ffba1934c75c4f775119ad8e5c1504a0d525609e6c5d380fd",
+      "prepared_sha256": "6e3acb472ebf67054fed7be06436aa41d57fdd86a3adf3f69cbbe22988751d95"
+    },
+    "crates/ersatztv-playout/src/indexed.rs": {
+      "original_sha256": null,
+      "prepared_sha256": "7cdd12da3a1f140cceb50d9b48e9c2c457f8ed3a9715ecdc6d295229cfc07bfe"
+    },
+    "crates/ersatztv-playout/src/indexed/tests.rs": {
+      "original_sha256": null,
+      "prepared_sha256": "101159a960cbdcb71cb0d0952cbebc49ae4372a2eecc5a6cc594945e8812765a"
+    },
+    "crates/ersatztv-channel/Cargo.toml": {
+      "original_sha256": "540cadada37c4be66aaaf418f65796428c526bb3dba2d9e7146253168d97fcde",
+      "prepared_sha256": "653c5ec10f45691bc124463a24be16a5f74dc0491bfcf7c5bc4dce39c10fec27"
+    },
+    "crates/ersatztv-channel/src/config.rs": {
+      "original_sha256": "4152e3dbfeb678c14fb23e04ed3efc84c37282996b7a31970f977828e770596d",
+      "prepared_sha256": "8c0eebcb3fe875c8bdb6f3bed42517a96f9ebf3eb65ca04338a350b9bd6f9bf2"
+    },
+    "crates/ersatztv-channel/src/error.rs": {
+      "original_sha256": "42e24ef977e45f503ee23dffaea1aa045c655123b7dd3ad813f2b30eb49d64b9",
+      "prepared_sha256": "854261af5acbc239c4ec0ffaedcd767233defb53b51e2431d2239bed6ccc6c5d"
+    },
+    "crates/ersatztv-channel/src/describe.rs": {
+      "original_sha256": "2684ce0356ba0fd259b413574c3160dc8a559a714ca4f5158de372fd8d567758",
+      "prepared_sha256": "522e30a7796416ac2a3e8397ebad40787b5fd0e3bd2293da0e9713929931cbea"
+    },
+    "crates/ersatztv-channel/src/playout_loader.rs": {
+      "original_sha256": "14415a86950d43863d721f5bfb6bb9d12c78f96fa44565dfa017774a9061d3eb",
+      "prepared_sha256": "6ff17fb2eaf39e8cceb702b8c2dc0a3db9d1b4234d7a0cca6092d78d339d3873"
+    },
+    "examples/channel.json": {
+      "original_sha256": "f4e2fdf2a80e216585b1028fa2cb10690f2c5d101055c747228097a18312b2c3",
+      "prepared_sha256": "0a9090f9bcd85a0582341e539743645639d3b61ca932effd6cb8346e33f03a35"
+    },
+    "examples/channel_copy.json": {
+      "original_sha256": "31753000b5c55cdcbf9c01231aa34bd1098f093619ce8304a61f430ff2ad8ded",
+      "prepared_sha256": "d00c3796a11fbdcd0a324f5b1796aa165a09d75894695e1a5c07e03fdeab173c"
+    },
+    "schema/channel_config.json": {
+      "original_sha256": "f181ef18e2453608c39a2d2190bfc94567cd9c9e079ff1ab336e75fc9e915a47",
+      "prepared_sha256": "bbdda183fb5128b5d306993f80e9858afac33049b33d41909e0261a892ac3fd9"
+    },
+    "schema/describe.json": {
+      "original_sha256": "a2c72018c15294f5a6f329408007e631b6a99f64e0177a816ca9c0226cccd8c5",
+      "prepared_sha256": "e5042979f60be0114ef5b99d4418516d3c912c43628cd5fe9fa809bea4964209"
+    }
+  },
+  "channel_schema": "https://ersatztv.org/channel/version/0.1.4",
+  "capability": "describe.contract.playout_layouts contains ersatzrs.playout-index.v1",
+  "configuration": "playout.layout = ersatzrs.playout-index.v1; folder remains the default",
+  "retirement_condition": "Retire only after an adopted unpatched upstream implements equivalent atomic index snapshots, shared reader/reclamation leases, bounded validation/lookahead and capability negotiation, and passes these unchanged regressions plus required rollback, runtime and platform acceptance. Patch context conflicts alone are not retirement proof.",
+  "remaining": "ADR0130 successor runtime work and independent retirement of the ten existing patches; application capability/Health guard and actual indexed playback; native Windows and required ARM/emulation/platform/final gates. No runtime pins changed."
+}

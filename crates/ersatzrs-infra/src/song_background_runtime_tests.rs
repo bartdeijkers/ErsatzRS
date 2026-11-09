@@ -223,7 +223,9 @@ async fn fixture_assets(root: &Path) -> (DbPool, PathBuf, Option<InputFile>) {
         captions.to_string_lossy(),
         ersatzrs_ffmpeg::SubtitleMethod::Burn,
     );
-    let subtitle = crate::subtitles::rebase_burned_text_subtitle_input(Some(subtitle), 2).await;
+    let subtitle = crate::subtitles::rebase_burned_text_subtitle_input(Some(subtitle), 2)
+        .await
+        .unwrap();
     (pool, audio, subtitle)
 }
 

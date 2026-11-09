@@ -1,6 +1,7 @@
 # Project Status
 
-**Phase 9 — Teletext support** (Phases 0–8 complete).
+**Phase 9 — Teletext support: Complete** (Phases 0–9 complete; recorded
+Phase 9 deferrals stay Deferred).
 
 The "The Box" video-jukebox extension is Phase 10.
 

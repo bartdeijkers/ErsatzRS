@@ -806,9 +806,11 @@ async fn save_profile_and_refresh(
         (
             previous.video_format == FFmpegProfileVideoFormat::Copy,
             previous.resolution_id,
+            previous.scaling_behavior,
         ) != (
             profile.video_format == FFmpegProfileVideoFormat::Copy,
             profile.resolution_id,
+            profile.scaling_behavior,
         )
     }) {
         runtime
@@ -4560,6 +4562,13 @@ pub async fn save_ffmpeg_settings(
         ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
         command.global_fallback_filler_id,
     ));
+    // Prepare fallible follow-up reads before committing. A later read failure
+    // must not hide committed settings from the projection-refresh notifier.
+    let subtitle_playouts = if command.extract_embedded_subtitles {
+        Some(repository.list_playout_ids().await?)
+    } else {
+        None
+    };
     runtime
         .commit_ffmpeg_settings(&paths.ffmpeg, &paths.ffprobe, mutations)
         .await
@@ -4571,8 +4580,8 @@ pub async fn save_ffmpeg_settings(
     if command.save_reports {
         runtime.ensure_ffmpeg_report_directory();
     }
-    if command.extract_embedded_subtitles {
-        runtime.request_embedded_subtitle_extraction(repository.list_playout_ids().await?);
+    if let Some(playouts) = subtitle_playouts {
+        runtime.request_embedded_subtitle_extraction(playouts);
     }
     Ok(())
 }
@@ -7145,6 +7154,7 @@ mod tests {
         values: Mutex<BTreeMap<String, String>>,
         batches: Mutex<Vec<Vec<SettingsMutation>>>,
         playout_ids: Vec<EntityId>,
+        fail_playout_lookup: bool,
     }
 
     type EpisodeNumberAssignment = (EntityId, i32, i32, Option<u32>, bool);
@@ -7832,6 +7842,12 @@ mod tests {
         }
 
         async fn list_playout_ids(&self) -> ersatzrs_core::repositories::Result<Vec<EntityId>> {
+            if self.fail_playout_lookup {
+                return Err(RepositoryError::unavailable(
+                    "load playouts",
+                    "synthetic fixture failure",
+                ));
+            }
             Ok(self.playout_ids.clone())
         }
 
@@ -8495,14 +8511,14 @@ mod tests {
         }
     }
 
-    enum OptionalFfmpegProfile {
+    pub(super) enum OptionalFfmpegProfile {
         Missing,
         DecodeFailure,
         Unavailable,
     }
 
-    struct FailingFfmpegRepository {
-        optional: OptionalFfmpegProfile,
+    pub(super) struct FailingFfmpegRepository {
+        pub(super) optional: OptionalFfmpegProfile,
     }
 
     #[async_trait]
@@ -9389,6 +9405,7 @@ mod tests {
             ])),
             batches: Mutex::default(),
             playout_ids: vec![2, 3],
+            fail_playout_lookup: false,
         };
         let runtime = RecordingSettingsRuntime::default();
 
@@ -9432,6 +9449,26 @@ mod tests {
                 "validate:ffmpeg-custom:ffprobe-custom",
                 "commit:resolved-ffmpeg:resolved-ffprobe"
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn ffmpeg_settings_follow_up_lookup_failure_prevents_commit() {
+        let repository = RecordingSettingsRepository {
+            fail_playout_lookup: true,
+            ..Default::default()
+        };
+        let runtime = RecordingSettingsRuntime::default();
+        let mut command = ffmpeg_settings();
+        command.use_embedded_subtitles = true;
+        command.extract_embedded_subtitles = true;
+        assert!(save_ffmpeg_settings(command, &repository, &runtime)
+            .await
+            .is_err());
+        assert!(runtime.committed_mutations.lock().unwrap().is_empty());
+        assert_eq!(
+            *runtime.events.lock().unwrap(),
+            ["validate:ffmpeg-custom:ffprobe-custom"]
         );
     }
 
@@ -11003,3 +11040,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "profile_refresh_tests.rs"]
+mod profile_refresh_tests;

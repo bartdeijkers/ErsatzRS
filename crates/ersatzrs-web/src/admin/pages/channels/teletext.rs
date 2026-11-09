@@ -18,8 +18,14 @@ use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
+use crate::admin::ui::primitives::teletext::{
+    island, status_badge, step_bar, TeletextIsland, TeletextStepState, TeletextTone,
+};
 
-stylance::import_crate_style!(style, "src/admin/pages/channels/teletext.module.css");
+stylance::import_crate_style!(pub(super) style, "src/admin/pages/channels/teletext.module.css");
+
+#[path = "teletext_readiness.rs"]
+mod readiness;
 
 #[component]
 pub fn ChannelTeletextPage() -> impl IntoView {
@@ -54,7 +60,7 @@ pub fn ChannelTeletextPage() -> impl IntoView {
                     result.map_err(|_| tr(TextKey::TeletextAdminUnavailable).to_owned()),
                     |data| match data {
                         Some((data, preview, current)) => channel_page(
-                            data, &error, &saved, preview, current,
+                            &data, &error, &saved, preview, current,
                             query.with(|values| values.get("design_id").is_some()),
                             query.with(super::teletext_drafts::redirected_error_location),
                         ),
@@ -99,8 +105,12 @@ async fn load_channel_page(
     Ok(Some((channel, preview, current)))
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one view lists the page sections in their fixed order"
+)]
 fn channel_page(
-    data: ChannelTeletextData,
+    data: &ChannelTeletextData,
     error: &str,
     saved: &str,
     preview: Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
@@ -134,7 +144,11 @@ fn channel_page(
             | "secondary-default-invalid"
             | "object-add-invalid"
     );
-    let (code, message, role) = if !error.is_empty() {
+    let custom_page = super::teletext_custom_pages::feedback(error, saved);
+    let (code, message, role) = if let Some((message, role)) = custom_page {
+        let code = if error.is_empty() { saved } else { error };
+        (code, message, role)
+    } else if !error.is_empty() {
         if draft_code {
             (
                 error,
@@ -144,7 +158,8 @@ fn channel_page(
         } else {
             let code = match error {
                 "conflict" | "invalid" | "unavailable" | "wrong-addon" | "missing-profile"
-                | "deleted-profile" | "limit" | "storage" => error,
+                | "deleted-profile" | "limit" | "storage" | "policy-exists"
+                | "scope-unconfirmed" => error,
                 _ => "invalid",
             };
             (code, teletext_admin_error_text(language, code), "alert")
@@ -158,13 +173,23 @@ fn channel_page(
             super::teletext_drafts::draft_status_text(saved),
             "status",
         )
+    } else if saved == "capacity" {
+        (saved, tr(TextKey::TeletextCapacitySaved), "status")
     } else if matches!(saved, "profile" | "binding" | "off") {
         (saved, tr(TextKey::TeletextAdminSaved), "status")
     } else {
         ("", "", "status")
     };
     let channel_id = data.channel_id;
-    let empty = data.addons.is_empty();
+    let custom_on = super::teletext_custom_pages::custom_pages_on(data);
+    let status = data
+        .readiness
+        .as_ref()
+        .map(|readiness| status_line(readiness, &data.addons, custom_on));
+    let readiness = data
+        .readiness
+        .as_ref()
+        .map(|readiness| readiness::view(channel_id, readiness, &data.addons, custom_on));
     let guide_available = data.current_guide_available == Some(true);
     let guide_unreadable = data.current_guide_available.is_none();
     let current_guide = (guide_available || current.is_some() || guide_unreadable).then(|| {
@@ -174,80 +199,556 @@ fn channel_page(
             current.or_else(|| guide_unreadable.then(|| Err(ServerFnError::new("unavailable")))),
         )
     });
-    let authoring = super::teletext_drafts::authoring_controls(&data);
-    let effective_authoring = super::teletext_drafts::effective_authoring_controls(&data);
+    let page_set = page_set_island(data);
+    let sources = data
+        .addons
+        .iter()
+        .filter(|addon| source_visible(addon))
+        .map(|addon| addon_section(data, addon))
+        .collect_view();
+    let no_sources = !data.addons.iter().any(source_visible);
+    let custom_pages = super::teletext_custom_pages::custom_pages_island(data);
+    let publish = publish_island(data, preview, requested, redirected, current_guide);
     view! {
         <div class=style::page data-testid="channel-teletext-page" data-channel-id=channel_id>
             <header class=style::header>
                 <a href=format!("/channels/{channel_id}")>{tr(TextKey::EditChannel)}</a>
                 <h1>{tr(TextKey::TeletextChannelTitle)}</h1>
-                <p>{data.channel_number}" · "{data.channel_name}</p>
+                <p>{data.channel_number.clone()}" · "{data.channel_name.clone()}</p>
             </header>
             <p class=style::help>{tr(TextKey::TeletextChannelBaseHelp)}</p>
             <p role="alert" hidden=data.catalog_available>{tr(TextKey::TeletextAdminUnavailable)}</p>
             <p class=style::feedback role=role data-testid="teletext-feedback"
                 data-code=code.to_owned() hidden=message.is_empty()>{message}</p>
-            <p class=style::help hidden=!empty>{tr(TextKey::TeletextChannelEmpty)}</p>
-            <a class=style::manage href="/settings/addons">{tr(TextKey::Addons)}</a>
-            {data.addons.into_iter().map(|addon| addon_section(channel_id, &addon)).collect_view()}
-            {authoring}
-            {effective_authoring}
-            {current_guide}
-            <super::teletext_drafts::TeletextDraftPreview preview=preview requested=requested redirected=redirected/>
+            {status.map(|status| view! {
+                <div class=style::status data-testid="teletext-status">
+                    {status}
+                    <details class=style::check_details data-testid="teletext-broadcast-check">
+                        <summary>{tr(TextKey::TeletextBroadcastCheck)}</summary>
+                        {readiness}
+                    </details>
+                </div>
+            })}
+            {page_set}
+            <div hidden=!no_sources class=style::empty data-testid="teletext-no-sources">
+                <p><strong>{tr(TextKey::TeletextChannelEmpty)}</strong></p>
+                <a class=style::manage href="/settings/addons">{tr(TextKey::TeletextSourceFixAddon)}</a>
+            </div>
+            {sources}
+            {custom_pages}
+            {publish}
         </div>
     }
     .into_any()
 }
 
-fn addon_section(channel_id: i64, addon: &TeletextAddonData) -> AnyView {
-    let language = use_i18n();
-    let name = if addon.name_labels.is_empty() {
+/// Whether an add-on gets an island: usable add-ons always, unusable ones only
+/// while this channel still holds a selection for them.
+fn source_visible(addon: &TeletextAddonData) -> bool {
+    source_usable(addon) || addon.binding.is_some()
+}
+
+fn source_usable(addon: &TeletextAddonData) -> bool {
+    addon.installed && addon.availability == "configured" && addon.installation.is_some()
+}
+
+pub(super) fn source_on(addon: &TeletextAddonData) -> bool {
+    source_usable(addon)
+        && addon
+            .binding
+            .as_ref()
+            .is_some_and(|binding| binding.enabled && binding.availability == "configured")
+}
+
+pub(super) fn addon_name(addon: &TeletextAddonData) -> String {
+    if addon.name_labels.is_empty() {
         addon.name.clone()
     } else {
         manifest_label(&addon.name_labels)
+    }
+}
+
+fn island_anchor(addon: &TeletextAddonData) -> String {
+    let id: String = addon
+        .addon_id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    format!("teletext-source-{id}")
+}
+
+/// The effective value of the first listed setting key for the channel's
+/// selected profile: profile override, then installation value, then default.
+pub(super) fn effective_setting(addon: &TeletextAddonData, keys: &[&str]) -> Option<String> {
+    let profile = addon.binding.as_ref().and_then(|binding| {
+        addon
+            .profiles
+            .iter()
+            .find(|profile| profile.id == binding.profile_id)
+    });
+    keys.iter().find_map(|key| {
+        let setting = addon
+            .settings
+            .iter()
+            .find(|setting| setting.definition.key == *key)?;
+        profile
+            .and_then(|profile| profile.settings.iter().find(|value| value.key == *key))
+            .or(setting.inherited.as_ref())
+            .filter(|value| value.mode == "literal" && !value.redacted)
+            .map(|value| value.value.clone())
+            .or_else(|| setting.definition.default.clone())
+            .filter(|value| !value.trim().is_empty())
+    })
+}
+
+/// The saved guide source channels, restricted to channels that still exist.
+pub(super) fn effective_guide_selection(data: &ChannelTeletextData) -> Vec<i64> {
+    let Some(channels) = data.guide_channels.as_deref() else {
+        return Vec::new();
     };
+    data.guide_selection
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .copied()
+        .filter(|id| channels.iter().any(|channel| channel.id == *id))
+        .collect()
+}
+
+fn page_range(addon: &TeletextAddonData) -> Option<String> {
+    let start = effective_setting(addon, &["PAGE_START"])?
+        .parse::<u16>()
+        .ok()?;
+    let end = effective_setting(addon, &["PAGE_END"])
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(start);
+    Some(if end > start {
+        format!("{start}–{end}")
+    } else {
+        start.to_string()
+    })
+}
+
+fn status_line(
+    readiness: &crate::admin::server_fns::teletext::TeletextReadinessData,
+    addons: &[TeletextAddonData],
+    custom_pages_on: bool,
+) -> AnyView {
+    // Custom pages are a source of their own (ADR 0120 amendment).
+    let on = custom_pages_on || addons.iter().any(source_on);
+    let route_ready = matches!(readiness.route.as_str(), "legacy" | "hybrid-builtin");
+    let (tone, label, detail, state) = if !on {
+        (
+            TeletextTone::Neutral,
+            TextKey::TeletextStatusNotLive,
+            TextKey::TeletextStatusNoSource,
+            "no-source",
+        )
+    } else if !route_ready {
+        (
+            TeletextTone::Error,
+            TextKey::TeletextStatusNotLive,
+            TextKey::TeletextStatusRouteBlocked,
+            "route",
+        )
+    } else if readiness.last_failure.is_some() {
+        (
+            TeletextTone::Error,
+            TextKey::TeletextStatusNotLive,
+            TextKey::TeletextStatusFailed,
+            "failed",
+        )
+    } else if readiness.published_generation.is_none() {
+        (
+            TeletextTone::Warning,
+            TextKey::TeletextStatusNotLive,
+            TextKey::TeletextStatusNotPublished,
+            "unpublished",
+        )
+    } else if readiness.publication_pending {
+        (
+            TeletextTone::Warning,
+            TextKey::TeletextStatusUnpublished,
+            TextKey::TeletextStatusPendingDetail,
+            "pending",
+        )
+    } else if readiness.delivering_outputs > 0 {
+        (
+            TeletextTone::Success,
+            TextKey::TeletextStatusLive,
+            TextKey::TeletextStatusLiveDetail,
+            "live",
+        )
+    } else {
+        (
+            TeletextTone::Success,
+            TextKey::TeletextStatusPublished,
+            TextKey::TeletextStatusPublishedIdle,
+            "published",
+        )
+    };
+    view! {
+        <p class=style::status_text data-state=state>
+            {status_badge(tone, tr(label))}" "{tr(detail)}
+        </p>
+    }
+    .into_any()
+}
+
+fn page_set_island(data: &ChannelTeletextData) -> AnyView {
+    let mut rows: Vec<AnyView> = data
+        .addons
+        .iter()
+        .filter(|addon| {
+            source_visible(addon)
+                && addon
+                    .binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.enabled)
+        })
+        .map(|addon| {
+            let on = source_on(addon);
+            let pages = if on {
+                page_range(addon)
+                    .unwrap_or_else(|| tr(TextKey::TeletextPageSetRangeUnknown).to_owned())
+            } else {
+                "—".to_owned()
+            };
+            let badge = if on {
+                status_badge(TeletextTone::Success, tr(TextKey::TeletextSourceOn))
+            } else {
+                status_badge(
+                    TeletextTone::Error,
+                    tr(TextKey::TeletextSourceNeedsAttention),
+                )
+            };
+            view! {
+                <tr data-testid="teletext-page-set-row" data-source=addon.addon_id.clone()>
+                    <td>{pages}</td>
+                    <td><a href=format!("#{}", island_anchor(addon))>{addon_name(addon)}</a>
+                        " ("{tr(TextKey::TeletextPageSetAddon)}")"</td>
+                    <td>{badge}</td>
+                </tr>
+            }
+            .into_any()
+        })
+        .collect();
+    rows.extend(super::teletext_custom_pages::page_set_rows(data));
+    let empty = rows.is_empty();
+    let start = data
+        .addons
+        .iter()
+        .find(|addon| source_on(addon))
+        .and_then(|addon| effective_setting(addon, &["INDEX_PAGE", "PAGE_START"]));
+    let body = if empty {
+        view! {
+            <div class=style::empty>
+                <p><strong>{tr(TextKey::TeletextPageSetEmpty)}</strong></p>
+                <p>{tr(TextKey::TeletextPageSetEmptyHelp)}</p>
+            </div>
+        }
+        .into_any()
+    } else {
+        view! {
+            <div class=style::table_wrap>
+                <table class=style::page_set>
+                    <thead><tr>
+                        <th scope="col">{tr(TextKey::TeletextPageSetPages)}</th>
+                        <th scope="col">{tr(TextKey::TeletextPageSetSource)}</th>
+                        <th scope="col">{tr(TextKey::TeletextPageSetStatus)}</th>
+                    </tr></thead>
+                    <tbody>{rows}</tbody>
+                </table>
+            </div>
+            {start.map(|start| view! {
+                <p class=style::help>{tr(TextKey::TeletextPageSetStart)}" "<strong>{start}</strong></p>
+            })}
+        }
+        .into_any()
+    };
+    island(TeletextIsland {
+        test_id: "teletext-page-set",
+        title: tr(TextKey::TeletextPageSetTitle).to_owned(),
+        badge: None,
+        help: Some(tr(TextKey::TeletextPageSetHelp).to_owned()),
+        data_id: None,
+        body,
+    })
+}
+
+fn publish_island(
+    data: &ChannelTeletextData,
+    preview: Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
+    requested: bool,
+    redirected: Option<TeletextDraftErrorLocation>,
+    current_guide: Option<AnyView>,
+) -> AnyView {
+    let checked = matches!(&preview, Some(Ok(result)) if result.preview.is_some());
+    let selected = matches!(&preview, Some(Ok(result)) if result.preview.as_ref().and_then(|preview| preview.publication.as_ref()).is_some_and(|publication| matches!(publication.state, crate::admin::server_fns::teletext_drafts::TeletextDraftPublicationState::Selected)));
+    let steps = if selected {
+        vec![
+            TeletextStepState::Done,
+            TeletextStepState::Done,
+            TeletextStepState::Done,
+        ]
+    } else if checked {
+        vec![
+            TeletextStepState::Done,
+            TeletextStepState::Current,
+            TeletextStepState::Todo,
+        ]
+    } else {
+        vec![
+            TeletextStepState::Current,
+            TeletextStepState::Todo,
+            TeletextStepState::Todo,
+        ]
+    };
+    let labels = [
+        TextKey::TeletextStepCheck,
+        TextKey::TeletextStepPreview,
+        TextKey::TeletextStepPublish,
+    ];
+    let steps = step_bar(
+        tr(TextKey::TeletextPublishTitle),
+        labels
+            .iter()
+            .zip(steps)
+            .map(|(label, state)| (tr(*label).to_owned(), state))
+            .collect(),
+    );
+    let scripted = data.effective_authoring.is_some().then(|| {
+        view! {
+            <div class=style::notice role="status" data-testid="teletext-script-notice">
+                <p><strong>{tr(TextKey::TeletextScriptNotice)}</strong></p>
+            </div>
+        }
+    });
+    let body = view! {
+        {steps}
+        {super::teletext_drafts::authoring_controls(data)}
+        {scripted}
+        <super::teletext_drafts::TeletextDraftPreview preview=preview requested=requested redirected=redirected/>
+        <details class=style::advanced data-testid="teletext-publish-advanced">
+            <summary>{tr(TextKey::TeletextPublishAdvanced)}</summary>
+            {super::teletext_drafts::effective_authoring_controls(data)}
+            {current_guide}
+        </details>
+    }
+    .into_any();
+    island(TeletextIsland {
+        test_id: "teletext-publish",
+        title: tr(TextKey::TeletextPublishTitle).to_owned(),
+        badge: None,
+        help: Some(tr(TextKey::TeletextPublishHelp).to_owned()),
+        data_id: None,
+        body,
+    })
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "one view keeps the badge and both source states together"
+)]
+fn addon_section(data: &ChannelTeletextData, addon: &TeletextAddonData) -> AnyView {
+    let channel_id = data.channel_id;
+    let language = use_i18n();
+    let name = addon_name(addon);
     let installation = addon
         .installation
         .as_ref()
         .and_then(|value| serde_json::to_string(value).ok());
     let writable = addon.installed && addon.availability == "configured" && installation.is_some();
     let addon_id = addon.addon_id.clone();
-    let binding = binding_controls(channel_id, addon, installation.as_deref(), writable);
+    let on = source_on(addon);
     let selected = addon.binding.as_ref().map(|binding| binding.profile_id);
-    let editors = addon
+    let bound = addon
+        .binding
+        .as_ref()
+        .filter(|binding| binding.enabled)
+        .and_then(|binding| {
+            addon
+                .profiles
+                .iter()
+                .find(|profile| profile.id == binding.profile_id)
+        });
+    let usable = source_usable(addon);
+    let badge = if !usable {
+        let key = if addon.installed {
+            TextKey::TeletextSourceDisabled
+        } else {
+            TextKey::TeletextSourceMissing
+        };
+        status_badge(TeletextTone::Error, tr(key))
+    } else if on {
+        status_badge(TeletextTone::Success, tr(TextKey::TeletextSourceOn))
+    } else {
+        status_badge(TeletextTone::Neutral, tr(TextKey::TeletextSourceOff))
+    };
+    let off = off_form(channel_id, addon);
+    let body = if usable {
+        usable_body(data, addon, bound, installation.as_deref(), writable, off)
+    } else {
+        view! {
+            <p class=style::availability data-availability=addon.availability.clone()>
+                {teletext_profile_availability_text(language, &addon.availability)}
+            </p>
+            <p class=style::help>{tr(TextKey::TeletextSourceUnavailableHelp)}</p>
+            <div class=style::actions>
+                <a class=style::manage href="/settings/addons">{tr(TextKey::TeletextSourceFixAddon)}</a>
+                {off}
+            </div>
+            <details class=style::advanced data-testid="teletext-source-advanced">
+                <summary>{tr(TextKey::TeletextSourceAdvanced)}</summary>
+                {binding_controls(channel_id, addon, installation.as_deref(), writable)}
+            </details>
+        }
+        .into_any()
+    };
+    let _ = selected;
+    view! {
+        <div id=island_anchor(addon) class=style::anchor data-testid="teletext-addon" data-addon-id=addon_id>
+            {island(TeletextIsland {
+                test_id: "teletext-source",
+                title: name,
+                badge: Some(badge),
+                help: Some(tr(TextKey::TeletextSourceHelp).to_owned()),
+                data_id: Some(addon.addon_id.clone()),
+                body,
+            })}
+        </div>
+    }
+    .into_any()
+}
+
+fn usable_body(
+    data: &ChannelTeletextData,
+    addon: &TeletextAddonData,
+    bound: Option<&TeletextProfileData>,
+    installation: Option<&str>,
+    writable: bool,
+    off: Option<AnyView>,
+) -> AnyView {
+    let channel_id = data.channel_id;
+    let primary = match bound {
+        Some(profile) => profile_editor(
+            channel_id,
+            addon,
+            Some(profile),
+            installation,
+            writable,
+            true,
+            Some(guide_choices(data)),
+        ),
+        None => enable_form(data, addon, installation.unwrap_or_default()),
+    };
+    let others = addon
         .profiles
         .iter()
+        .filter(|profile| bound.is_none_or(|bound| bound.id != profile.id))
         .map(|profile| {
             profile_editor(
                 channel_id,
                 addon,
                 Some(profile),
-                installation.as_deref(),
+                installation,
                 writable,
-                selected == Some(profile.id),
+                false,
+                None,
             )
         })
         .collect_view();
-    let create = profile_editor(
-        channel_id,
-        addon,
-        None,
-        installation.as_deref(),
-        writable,
-        addon.profiles.is_empty(),
-    );
+    let create = profile_editor(channel_id, addon, None, installation, writable, false, None);
+    // Choosing between saved settings only makes sense once some exist;
+    // a first-time channel sees the single enable action.
+    let choice = binding_controls(channel_id, addon, installation, writable);
+    let (visible_choice, advanced_choice) = if addon.profiles.is_empty() {
+        (None, Some(choice))
+    } else {
+        (Some(choice), None)
+    };
     view! {
-        <section class=style::addon data-testid="teletext-addon" data-addon-id=addon_id>
-            <h2>{name}</h2>
-            <p class=style::availability data-availability=addon.availability.clone()>
-                {teletext_profile_availability_text(language, &addon.availability)}
-            </p>
-            {binding}
-            <h3>{tr(TextKey::TeletextChannelProfiles)}</h3>
+        {primary}
+        <div class=style::actions>{off}</div>
+        {visible_choice}
+        <details class=style::advanced data-testid="teletext-source-advanced">
+            <summary>{tr(TextKey::TeletextSourceAdvanced)}</summary>
             <p class=style::help>{tr(TextKey::TeletextProfileSharedHelp)}</p>
-            {editors}
+            {advanced_choice}
+            {others}
             {create}
-        </section>
+        </details>
+    }
+    .into_any()
+}
+
+fn off_form(channel_id: i64, addon: &TeletextAddonData) -> Option<AnyView> {
+    addon.binding.as_ref().filter(|binding| binding.enabled).map(|binding| view! {
+        <form method="post" action="/admin-api/teletext/binding/off" data-testid="teletext-disable-form">
+            {hidden("channel_id", channel_id.to_string())}
+            {hidden("addon_id", addon.addon_id.clone())}
+            {hidden("expected_binding_revision", binding.revision.to_string())}
+            <button type="submit" class=btn_class(ButtonVariant::Secondary)>{tr(TextKey::TeletextBindingOff)}</button>
+        </form>
+    }.into_any())
+}
+
+fn enable_form(
+    data: &ChannelTeletextData,
+    addon: &TeletextAddonData,
+    installation: &str,
+) -> AnyView {
+    let revision = addon
+        .binding
+        .as_ref()
+        .map_or_else(String::new, |binding| binding.revision.to_string());
+    view! {
+        <form method="post" action="/admin-api/teletext/source/enable"
+            class=style::enable data-testid="teletext-enable-form">
+            {hidden("channel_id", data.channel_id.to_string())}
+            {hidden("addon_id", addon.addon_id.clone())}
+            {hidden("expected_binding_revision", revision)}
+            {hidden("expected_installation", installation.to_owned())}
+            {hidden("name", format!("{} · {}", data.channel_number, data.channel_name))}
+            <p class=style::help>{tr(TextKey::TeletextSourceEnableHelp)}</p>
+            <button type="submit" class=btn_class(ButtonVariant::Primary)>{tr(TextKey::TeletextSourceEnable)}</button>
+        </form>
+    }
+    .into_any()
+}
+
+/// Guide source checkboxes saved with the selected settings for this channel.
+fn guide_choices(data: &ChannelTeletextData) -> AnyView {
+    let Some(channels) = data.guide_channels.as_deref() else {
+        return view! {
+            <fieldset class=style::setting data-testid="teletext-guide-choices" data-state="unavailable">
+                <legend>{tr(TextKey::TeletextGuideSourceTitle)}</legend>
+                <p class=style::help>{tr(TextKey::TeletextGuideChannelsUnavailable)}</p>
+            </fieldset>
+        }
+        .into_any();
+    };
+    let selected = effective_guide_selection(data);
+    let boxes = channels
+        .iter()
+        .map(|channel| {
+            let id = format!("teletext-guide-choice-{}", channel.id);
+            view! {
+                <label class=style::check>
+                    <input id=id type="checkbox" name="guide_selection_id" value=channel.id.to_string()
+                        checked=selected.contains(&channel.id)/>
+                    {format!("{} · {}", channel.number, channel.name)}
+                </label>
+            }
+        })
+        .collect_view();
+    view! {
+        <fieldset class=style::setting data-testid="teletext-guide-choices" data-state="available">
+            <legend>{tr(TextKey::TeletextGuideSourceTitle)}</legend>
+            {hidden("guide_selection_present", "1".to_owned())}
+            <p class=style::help>{tr(TextKey::TeletextGuideSourceHelp)}</p>
+            <div class=style::checks>{boxes}</div>
+        </fieldset>
     }
     .into_any()
 }
@@ -281,24 +782,8 @@ fn binding_controls(
         })
         .collect_view();
     let choice_id = format!("teletext-choice-{}", addon.addon_id);
-    let status = addon.binding.as_ref().map_or(TextKey::Off, |binding| {
-        if binding.enabled {
-            TextKey::Enabled
-        } else {
-            TextKey::Off
-        }
-    });
-    let off = addon.binding.as_ref().map(|binding| view! {
-        <form method="post" action="/admin-api/teletext/binding/off" data-testid="teletext-disable-form">
-            {hidden("channel_id", channel_id.to_string())}
-            {hidden("addon_id", addon.addon_id.clone())}
-            {hidden("expected_binding_revision", binding.revision.to_string())}
-            <button type="submit" class=btn_class(ButtonVariant::Text)>{tr(TextKey::TeletextBindingOff)}</button>
-        </form>
-    });
     view! {
         <div class=style::binding>
-            <p data-testid="teletext-base-state">{tr(status)}</p>
             <form method="post" action="/admin-api/teletext/binding/save"
                 class=style::binding_form data-testid="teletext-binding-form">
                 {hidden("channel_id", channel_id.to_string())}
@@ -306,16 +791,17 @@ fn binding_controls(
                 {hidden("expected_binding_revision", revision)}
                 {hidden("expected_installation", installation.unwrap_or_default().to_owned())}
                 <label for=choice_id.clone()>{tr(TextKey::TeletextBindingProfile)}</label>
-                <select id=choice_id name="profile_choice" required disabled=!writable>
-                    <option value="" selected=selected.is_none()>{tr(TextKey::TeletextBindingNone)}</option>
-                    {missing.then(|| view! { <option value="" selected disabled>{tr(TextKey::ProfileNotFound)}</option> })}
-                    {options}
-                </select>
-                <button type="submit" class=btn_class(ButtonVariant::Primary) disabled=!writable>
-                    {tr(TextKey::TeletextBindingSave)}
-                </button>
+                <div class=style::inline>
+                    <select id=choice_id name="profile_choice" required disabled=!writable>
+                        <option value="" selected=selected.is_none()>{tr(TextKey::TeletextBindingNone)}</option>
+                        {missing.then(|| view! { <option value="" selected disabled>{tr(TextKey::ProfileNotFound)}</option> })}
+                        {options}
+                    </select>
+                    <button type="submit" class=btn_class(ButtonVariant::Secondary) disabled=!writable>
+                        {tr(TextKey::TeletextBindingSave)}
+                    </button>
+                </div>
             </form>
-            {off}
         </div>
     }
     .into_any()
@@ -328,14 +814,18 @@ fn profile_editor(
     installation: Option<&str>,
     writable: bool,
     open: bool,
+    extra: Option<AnyView>,
 ) -> AnyView {
     let id = profile.map_or_else(String::new, |profile| profile.id.to_string());
     let revision = profile.map_or_else(String::new, |profile| profile.revision.to_string());
     let name = profile.map_or_else(String::new, |profile| profile.name.clone());
-    let title = profile.map_or_else(
-        || tr(TextKey::TeletextProfileCreate).to_owned(),
-        |profile| profile.name.clone(),
-    );
+    let title = match profile {
+        None => tr(TextKey::TeletextProfileCreate).to_owned(),
+        Some(profile) if extra.is_some() => {
+            format!("{} · {}", tr(TextKey::TeletextSourceSettings), profile.name)
+        }
+        Some(profile) => profile.name.clone(),
+    };
     let needs_repair = profile.is_some_and(|profile| unsupported_profile_settings(addon, profile));
     let available = writable && !needs_repair && !profile.is_some_and(|profile| profile.deleted);
     let name_id = format!("teletext-name-{}-{id}", addon.addon_id);
@@ -375,7 +865,8 @@ fn profile_editor(
                     <label for=name_id.clone()>{tr(TextKey::TeletextProfileName)}</label>
                     <input id=name_id name="name" value=name required maxlength="256"/>
                     <p class=style::help>{tr(TextKey::TeletextProfileInheritHelp)}</p>
-                    {settings}
+                    <div class=style::settings_grid>{settings}</div>
+                    {extra}
                     <button type="submit" class=btn_class(ButtonVariant::Primary)>
                         {if profile.is_some() { tr(TextKey::TeletextProfileSave) } else { tr(TextKey::TeletextProfileCreate) }}
                     </button>
@@ -410,10 +901,10 @@ fn setting_fields(
         <fieldset class=style::setting data-testid="teletext-profile-setting" data-setting-key=definition.key.clone()>
             <legend>{manifest_label(&definition.label)}</legend>
             {hidden(&format!("{prefix}.key"), definition.key.clone())}
-            <label for=mode_id.clone()>{tr(TextKey::Type)}</label>
+            <label for=mode_id.clone()>{tr(TextKey::TeletextSettingSource)}</label>
             <select id=mode_id name=format!("{prefix}.mode")>
-                <option value="inherit" selected=stored.is_none()>{tr(TextKey::Inherit)}</option>
-                <option value=override_mode selected=stored.is_some()>{tr(TextKey::TeletextProfileOverride)}</option>
+                <option value="inherit" selected=stored.is_none()>{tr(TextKey::TeletextSettingDefault)}</option>
+                <option value=override_mode selected=stored.is_some()>{tr(TextKey::TeletextSettingCustom)}</option>
             </select>
             <p class=style::help hidden=!redacted>{tr(TextKey::TeletextProfileRedacted)}</p>
             {controls}
@@ -627,12 +1118,15 @@ mod tests {
             effective_authoring: None,
             effective_authoring_error: None,
             guide_channels: Some(Vec::new()),
+            guide_selection: None,
             current_guide_available: Some(false),
             addons: Vec::new(),
+            readiness: None,
+            custom_pages: None,
         };
         let html = owner.with(|| {
             channel_page(
-                data,
+                &data,
                 "secondary-default-invalid",
                 "",
                 None,
@@ -646,20 +1140,52 @@ mod tests {
         assert!(html.contains(tr(TextKey::TeletextSecondaryDefaultInvalid)));
     }
 
+    fn channel(addons: Vec<TeletextAddonData>) -> ChannelTeletextData {
+        ChannelTeletextData {
+            channel_id: 44,
+            channel_number: "1".into(),
+            channel_name: "Synthetic".into(),
+            catalog_available: true,
+            authoring_selection: None,
+            authoring_error: None,
+            effective_authoring: None,
+            effective_authoring_error: None,
+            guide_channels: Some(vec![
+                crate::admin::server_fns::teletext::TeletextGuideChannelData {
+                    id: 44,
+                    number: "1".into(),
+                    name: "Synthetic".into(),
+                },
+                crate::admin::server_fns::teletext::TeletextGuideChannelData {
+                    id: 45,
+                    number: "2".into(),
+                    name: "Other".into(),
+                },
+            ]),
+            guide_selection: Some(vec![45, 99]),
+            current_guide_available: Some(false),
+            addons,
+            readiness: None,
+            custom_pages: None,
+        }
+    }
+
     #[test]
     fn native_selection_holds_profile_revision_and_broken_off_needs_no_installation() {
         let mut data = addon();
         data.profiles.push(profile("LABEL", "night"));
         let owner = Owner::new();
-        let html = owner.with(|| addon_section(44, &data).to_html());
+        let html = owner.with(|| addon_section(&channel(Vec::new()), &data).to_html());
         assert!(html.contains("value=\"12:3\" selected"));
         assert!(html.contains("name=\"expected_binding_revision\" value=\"7\""));
         assert!(html.contains("Synthetic &lt;pages&gt;"));
         data.installed = false;
         data.installation = None;
         data.profiles.clear();
-        let html = owner.with(|| addon_section(44, &data).to_html());
+        let html = owner.with(|| addon_section(&channel(Vec::new()), &data).to_html());
         assert!(html.contains(tr(TextKey::ProfileNotFound)));
+        assert!(html.contains(tr(TextKey::TeletextSourceUnavailableHelp)));
+        assert!(!html.contains("teletext-profile-form"));
         let off = html
             .split("action=\"/admin-api/teletext/binding/off\"")
             .nth(1)
@@ -693,7 +1219,7 @@ mod tests {
         ] {
             let profile = profile("LABEL", value);
             let html = owner.with(|| {
-                profile_editor(44, &data, Some(&profile), Some("{}"), true, true).to_html()
+                profile_editor(44, &data, Some(&profile), Some("{}"), true, true, None).to_html()
             });
             assert!(html.contains("value=\"literal\" selected"));
             assert!(html.contains("name=\"setting.0.value\""));
@@ -738,7 +1264,7 @@ mod tests {
             profile.settings[0].redacted = redacted;
             profile.settings[0].mode = mode.to_owned();
             let html = owner.with(|| {
-                profile_editor(44, &data, Some(&profile), Some("{}"), true, true).to_html()
+                profile_editor(44, &data, Some(&profile), Some("{}"), true, true, None).to_html()
             });
             let fieldset = html
                 .split("<fieldset")
@@ -753,5 +1279,96 @@ mod tests {
                 assert!(!html.contains("synthetic-private-secret"));
             }
         }
+    }
+
+    #[test]
+    fn source_islands_follow_add_on_and_channel_state() {
+        let owner = Owner::new();
+        // Enabled selection: the bound settings open with guide choices, and
+        // the page set lists the add-on's effective page range.
+        let mut on = addon();
+        on.profiles.push(profile("LABEL", "night"));
+        on.settings.push(TeletextSettingData {
+            definition: AddonSettingDefinition {
+                key: "PAGE_START".to_owned(),
+                label: [("en-US".to_owned(), "First".to_owned())].into(),
+                kind: AddonSettingKind::Integer,
+                required: false,
+                default: Some("200".to_owned()),
+                options: Vec::new(),
+                suggested_reference: None,
+            },
+            inherited: None,
+        });
+        let data = channel(vec![on.clone()]);
+        let html = owner.with(|| addon_section(&data, &on).to_html());
+        assert!(html.contains(tr(TextKey::TeletextSourceOn)));
+        assert!(html.contains("name=\"guide_selection_present\" value=\"1\""));
+        // Saved choices that no longer exist are dropped; existing ones stay.
+        assert!(html.contains("value=\"45\" checked"));
+        assert!(!html.contains("value=\"99\""));
+        assert!(html.contains("teletext-disable-form"));
+        assert!(!html.contains("teletext-enable-form"));
+        let set = owner.with(|| page_set_island(&data).to_html());
+        assert!(set.contains("teletext-page-set-row"));
+        assert!(set.contains(">200<"));
+        // No selection yet: one enable action with the channel-named set.
+        let mut off = addon();
+        off.binding = None;
+        let html = owner.with(|| addon_section(&channel(vec![off.clone()]), &off).to_html());
+        assert!(html.contains(tr(TextKey::TeletextSourceOff)));
+        assert!(html.contains("action=\"/admin-api/teletext/source/enable\""));
+        assert!(html.contains("name=\"name\" value=\"1 · Synthetic\""));
+        assert!(!html.contains("teletext-disable-form"));
+        let set = owner.with(|| page_set_island(&channel(vec![off.clone()])).to_html());
+        assert!(set.contains(tr(TextKey::TeletextPageSetEmpty)));
+        // A disabled add-on without a selection gets no island at all.
+        off.availability = "disabled-installation".to_owned();
+        assert!(!source_visible(&off));
+    }
+
+    #[test]
+    fn status_line_names_the_first_blocking_reason() {
+        use crate::admin::server_fns::teletext::TeletextReadinessData;
+        let owner = Owner::new();
+        let mut readiness = TeletextReadinessData {
+            authoring_policy: "profile".into(),
+            output_policy: "profile".into(),
+            capacity_profile: None,
+            profiles: Vec::new(),
+            route: "legacy".into(),
+            script: None,
+            published_generation: None,
+            publication_pending: false,
+            delivering_outputs: 0,
+            active_outputs: 0,
+            last_failure: None,
+            last_failure_at: None,
+        };
+        let state = |readiness: &TeletextReadinessData, addons: &[TeletextAddonData]| {
+            let html = owner.with(|| status_line(readiness, addons, false).to_html());
+            html.split("data-state=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap()
+                .to_owned()
+        };
+        assert_eq!(state(&readiness, &[]), "no-source");
+        let on = [addon()];
+        assert_eq!(state(&readiness, &on), "unpublished");
+        readiness.route = "hls".into();
+        assert_eq!(state(&readiness, &on), "route");
+        readiness.route = "hybrid-builtin".into();
+        readiness.published_generation = Some(3);
+        assert_eq!(state(&readiness, &on), "published");
+        readiness.publication_pending = true;
+        assert_eq!(state(&readiness, &on), "pending");
+        readiness.publication_pending = false;
+        readiness.delivering_outputs = 1;
+        assert_eq!(state(&readiness, &on), "live");
+        readiness.last_failure = Some("deadline".into());
+        assert_eq!(state(&readiness, &on), "failed");
     }
 }

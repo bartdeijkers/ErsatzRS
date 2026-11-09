@@ -17,6 +17,7 @@ pub mod state;
 pub mod tasks;
 pub mod teletext;
 pub mod teletext_authoring;
+pub(crate) mod teletext_capacity;
 pub mod teletext_channel_documents;
 pub mod teletext_design_exports;
 pub mod teletext_designs;

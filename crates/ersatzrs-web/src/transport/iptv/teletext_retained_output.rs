@@ -4,6 +4,7 @@ use std::{io::ErrorKind, mem::size_of, sync::atomic::AtomicU8, time::Duration};
 
 use ersatzrs_ffmpeg::teletext::{
     TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
+    TeletextPlainContinuation,
 };
 use futures_util::FutureExt as _;
 use tokio::{
@@ -443,6 +444,83 @@ pub(super) async fn forward_retained_ts_with_startup(
         state.seed(prefix)?;
     }
     let mut incoming = vec![0_u8; READ_BYTES].into_boxed_slice();
+    let result = forward_state(
+        source,
+        writer,
+        &mut state,
+        (startup, terminal),
+        cancel,
+        &mut incoming,
+    )
+    .await;
+    match result {
+        // Once output is committed, a teletext failure must not end ordinary
+        // playback: forward the rest of the source without the authored stream.
+        Err(RetainedTeletextError::Gate(error)) if state.emitted > 0 => {
+            let Some(plain) = state.gate.take_plain_continuation() else {
+                return Err(error.into());
+            };
+            tracing::warn!(%error, "retained teletext output failed; continuing audio and video without teletext");
+            continue_plain(source, writer, plain, cancel, &mut incoming).await
+        }
+        result => result,
+    }
+}
+
+/// Forward the remaining source after a teletext failure, without pacing.
+async fn continue_plain(
+    source: &mut (impl AsyncRead + Unpin),
+    writer: &mut (impl AsyncWrite + Unpin),
+    mut plain: TeletextPlainContinuation,
+    cancel: &Notify,
+    incoming: &mut [u8],
+) -> Result<(), RetainedTeletextError> {
+    let mut output = plain.push(&[])?;
+    loop {
+        if !output.is_empty() {
+            tokio::select! {
+                biased;
+                () = cancel.notified() => return Err(ReserveError::Cancelled.into()),
+                result = async {
+                    writer.write_all(&output).await?;
+                    writer.flush().await
+                } => result.map_err(|error| RetainedTeletextError::Write(error.kind()))?,
+            }
+        }
+        let length = tokio::select! {
+            biased;
+            () = cancel.notified() => return Err(ReserveError::Cancelled.into()),
+            result = source.read(incoming) => {
+                result.map_err(|error| RetainedTeletextError::Read(error.kind()))?
+            }
+        };
+        if length == 0 {
+            break;
+        }
+        output = plain.push(&incoming[..length])?;
+    }
+    let tail = plain.finish()?;
+    if !tail.is_empty() {
+        tokio::select! {
+            biased;
+            () = cancel.notified() => return Err(ReserveError::Cancelled.into()),
+            result = async {
+                writer.write_all(&tail).await?;
+                writer.flush().await
+            } => result.map_err(|error| RetainedTeletextError::Write(error.kind()))?,
+        }
+    }
+    Ok(())
+}
+
+async fn forward_state(
+    source: &mut (impl AsyncRead + Unpin),
+    writer: &mut (impl AsyncWrite + Unpin),
+    state: &mut ForwardState,
+    (startup, terminal): (Instant, &AtomicU8),
+    cancel: &Notify,
+    incoming: &mut [u8],
+) -> Result<(), RetainedTeletextError> {
     loop {
         if cancel.notified().now_or_never().is_some() {
             return Err(ReserveError::Cancelled.into());
@@ -461,7 +539,7 @@ pub(super) async fn forward_retained_ts_with_startup(
             .as_ref()
             .is_some_and(|pending| pending.written == pending.schedule.packet_count())
         {
-            flush_window(writer, &mut state, cancel).await?;
+            flush_window(writer, state, cancel).await?;
             continue;
         }
         let due = state
@@ -477,7 +555,7 @@ pub(super) async fn forward_retained_ts_with_startup(
             () = wait_until(deadline) => return Err(if state.started {
                 TeletextOutputError::Deadline.into()
             } else { ReserveError::Deadline.into() }),
-            () = wait_until(due) => write_packet(writer, &mut state, cancel).await?,
+            () = wait_until(due) => write_packet(writer, state, cancel).await?,
             result = source.read(&mut incoming[..free]), if !state.eof && free > 0 => {
                 let length = result.map_err(|error| RetainedTeletextError::Read(error.kind()))?;
                 if deadline.is_some_and(|deadline| Instant::now() >= deadline) {

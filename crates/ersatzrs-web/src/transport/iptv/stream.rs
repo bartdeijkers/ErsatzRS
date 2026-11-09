@@ -263,7 +263,10 @@ async fn serve_transport_stream_with_binding(
 
     match mode {
         TransportStreamMode::RedirectToHls => {
-            let access_token = AccessToken::new(query.access_token.clone());
+            let access_token = AccessToken::for_request(
+                query.access_token.clone(),
+                state.iptv_access_token_verifier.is_enabled(),
+            );
             let target = format!(
                 "/iptv/channel/{channel_number}.m3u8{}",
                 access_token.query()
@@ -2086,7 +2089,22 @@ async fn serve_channel_stream_admitted_inner(
     let subtitle_input = if interval_source.is_some() {
         retained_subtitle_input
     } else {
-        rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await
+        match rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await {
+            Ok(input) => input,
+            Err(error) => {
+                cancel_retained_startup(
+                    prepared_playback
+                        .take()
+                        .map(PreparedSourcePlayback::into_prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
+                return (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response();
+            }
+        }
     };
     fence_cancelled_startup!(&[], None);
     let watermark_inputs = match async {
@@ -3088,7 +3106,10 @@ async fn serve_segmenter_wrapper_stream(
             Err(response) => return response,
         };
     let aac_latm_audio = playback_profile.profile.audio_format == FFmpegProfileAudioFormat::AacLatm;
-    let access_token = AccessToken::new(query.access_token.clone());
+    let access_token = AccessToken::for_request(
+        query.access_token.clone(),
+        state.iptv_access_token_verifier.is_enabled(),
+    );
     let hls_url = build_segmenter_wrapper_hls_url(
         *streaming_addr,
         &channel.number,

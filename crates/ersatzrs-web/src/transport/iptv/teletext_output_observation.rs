@@ -106,6 +106,11 @@ impl PumpObservation {
         self.owner.record(self.state.clone());
     }
 
+    /// Keep the terminal failure for the channel after this output ends.
+    pub(super) fn failed(&self, kind: ersatzrs_domain::TeletextOutputFailureKind) {
+        self.owner.failed(kind);
+    }
+
     pub(super) fn reject(&mut self, sequence: u64) {
         if self.state.requested.sequence == sequence {
             self.state.phase = Phase::Rejected;

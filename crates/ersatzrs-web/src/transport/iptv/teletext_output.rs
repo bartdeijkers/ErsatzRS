@@ -4,7 +4,7 @@ use std::{future::Future, io::ErrorKind, time::Duration};
 
 use ersatzrs_ffmpeg::teletext::{
     EncodedTeletextPageSet, TeletextBufferError, TeletextOutputConfig, TeletextOutputError,
-    TeletextOutputGate, TeletextOutputSchedule,
+    TeletextOutputGate, TeletextOutputSchedule, TeletextPlainContinuation,
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -243,6 +243,113 @@ async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         intervals: 1,
         control: control.map(PumpControl::new),
     };
+    let mut gate = None;
+    let result = forward_epoch(
+        source,
+        sink,
+        &mut gate,
+        EpochOptions {
+            config,
+            content,
+            first_byte_timeout,
+            seed,
+        },
+        &mut progress,
+    )
+    .await;
+    if let (Err(error), Some(control)) = (&result, &progress.control) {
+        control.failed(error);
+    }
+    match result {
+        // Once output is committed, a teletext failure must not end ordinary
+        // playback: forward the rest of the source without the authored stream.
+        Err(TeletextPumpError::Gate(error)) if progress.emitted > 0 => {
+            let Some(plain) = gate
+                .as_mut()
+                .and_then(TeletextOutputGate::take_plain_continuation)
+            else {
+                return Err(error.into());
+            };
+            tracing::warn!(%error, "teletext output failed; continuing audio and video without teletext");
+            let continued = continue_plain(source, sink, plain).await?;
+            progress
+                .emitted
+                .checked_mul(188)
+                .and_then(|bytes| bytes.checked_add(continued))
+                .ok_or_else(|| TeletextOutputError::Arithmetic.into())
+        }
+        result => result,
+    }
+}
+
+/// Forward the remaining source after a teletext failure, without pacing.
+/// Ordinary playback has no pacing either; the producer sets the rate.
+async fn continue_plain<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    mut plain: TeletextPlainContinuation,
+) -> Result<u64, TeletextPumpError> {
+    let mut written = 0_u64;
+    let mut scratch = vec![0_u8; READ_BYTES];
+    let mut output = plain.push(&[])?;
+    loop {
+        if !output.is_empty() {
+            sink.write_all(&output)
+                .await
+                .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+            sink.flush()
+                .await
+                .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+            written = written
+                .checked_add(
+                    u64::try_from(output.len()).map_err(|_| TeletextPumpError::Configuration)?,
+                )
+                .ok_or(TeletextOutputError::Arithmetic)?;
+        }
+        let read = source
+            .read(&mut scratch)
+            .await
+            .map_err(|error| TeletextPumpError::Read(error.kind()))?;
+        if read == 0 {
+            break;
+        }
+        output = plain.push(&scratch[..read])?;
+    }
+    let tail = plain.finish()?;
+    if !tail.is_empty() {
+        sink.write_all(&tail)
+            .await
+            .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+        sink.flush()
+            .await
+            .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+        written = written
+            .checked_add(u64::try_from(tail.len()).map_err(|_| TeletextPumpError::Configuration)?)
+            .ok_or(TeletextOutputError::Arithmetic)?;
+    }
+    Ok(written)
+}
+
+struct EpochOptions {
+    config: TeletextOutputConfig,
+    content: TeletextOutputContent,
+    first_byte_timeout: Duration,
+    seed: Option<TeletextStartupPrefix>,
+}
+
+async fn forward_epoch<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    gate: &mut Option<TeletextOutputGate>,
+    options: EpochOptions,
+    progress: &mut ForwardProgress,
+) -> Result<u64, TeletextPumpError> {
+    let EpochOptions {
+        config,
+        content,
+        first_byte_timeout,
+        seed,
+    } = options;
     let epoch = seed
         .as_ref()
         .map_or_else(Instant::now, TeletextStartupPrefix::epoch);
@@ -251,13 +358,13 @@ async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     }
     let first_deadline = absolute(epoch, first_byte_timeout)?;
     absolute(epoch, config.max_hold)?;
-    let mut gate = content.new_gate(config, false)?;
-    let mut started = seed_gate(&mut gate, seed, first_byte_timeout, epoch)?;
+    let gate = gate.insert(content.new_gate(config, false)?);
+    let mut started = seed_gate(gate, seed, first_byte_timeout, epoch)?;
     let mut prefetch = SourcePrefetch::new(source, config)?;
     loop {
         gate.check_deadline(epoch.elapsed())?;
         if progress
-            .forward_ready(sink, &mut gate, config, epoch, &mut prefetch)
+            .forward_ready(sink, gate, config, epoch, &mut prefetch)
             .await?
         {
             continue;
@@ -303,7 +410,7 @@ async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
                 return Err(TeletextPumpError::EmptyOutput);
             }
             progress
-                .forward_final(sink, &mut gate, config, epoch, &mut prefetch)
+                .forward_final(sink, gate, config, epoch, &mut prefetch)
                 .await?;
             gate.finish(epoch.elapsed())?;
             return progress

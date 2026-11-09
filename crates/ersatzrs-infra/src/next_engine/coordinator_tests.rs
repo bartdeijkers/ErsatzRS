@@ -6,6 +6,9 @@ use ersatzrs_core::{
 };
 use tokio::sync::oneshot;
 
+#[path = "indexed_coordinator_tests.rs"]
+mod indexed;
+
 async fn fixture() -> (DbPool, EntityLocker, Channel, DateTime<Utc>) {
     let (pool, locker, mut channel, start) = schedule::tests::fixture().await;
     channel.streaming_engine = StreamingEngine::Next;

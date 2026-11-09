@@ -689,6 +689,8 @@ pub struct NvidiaEncoderCapability {
     /// Whether the hardware encoder accepted B-frame reference mode in a safe
     /// encode probe.
     pub supports_b_frames: bool,
+    /// Maximum consecutive B frames, when known from the native encoder API.
+    pub max_b_frames: Option<u32>,
 }
 
 impl NvidiaEncoderCapability {
@@ -706,6 +708,7 @@ impl NvidiaEncoderCapability {
             presets: BTreeSet::new(),
             tunes: BTreeSet::new(),
             supports_b_frames: false,
+            max_b_frames: None,
         }
     }
 
@@ -1541,6 +1544,19 @@ async fn enrich_device_profiles(
     config: &FfmpegRuntimeCheckConfig,
     report: &mut FfmpegCapabilityReport,
 ) {
+    let nvidia = if report.has_hwaccel("cuda") || has_encoder_suffix(&report.encoders, "_nvenc") {
+        ersatzrs_hwprobe::probe_nvidia()
+    } else {
+        ersatzrs_hwprobe::NvidiaProbe::default()
+    };
+    enrich_device_profiles_with_nvidia(config, report, nvidia).await;
+}
+
+async fn enrich_device_profiles_with_nvidia(
+    config: &FfmpegRuntimeCheckConfig,
+    report: &mut FfmpegCapabilityReport,
+    nvidia: ersatzrs_hwprobe::NvidiaProbe,
+) {
     if report.has_hwaccel("vaapi") || has_encoder_suffix(&report.encoders, "_vaapi") {
         report.vaapi_profiles = probe_all_vainfo_profiles(&config.hardware_probe_devices).await;
     }
@@ -1550,7 +1566,6 @@ async fn enrich_device_profiles(
     }
 
     if report.has_hwaccel("cuda") || has_encoder_suffix(&report.encoders, "_nvenc") {
-        let nvidia = ersatzrs_hwprobe::probe_nvidia();
         let nvidia_attempted = nvidia.attempted;
         report
             .selected_nvidia_device
@@ -1567,12 +1582,15 @@ async fn enrich_device_profiles(
             report.nvidia_encoders = nvidia
                 .encoders
                 .into_iter()
+                // Driver support does not add encoders to the selected FFmpeg build.
+                .filter(|encoder| report.has_encoder(&encoder.encoder))
                 .map(|encoder| {
-                    let capability = NvidiaEncoderCapability::new(
+                    let mut capability = NvidiaEncoderCapability::new(
                         encoder.encoder,
                         encoder.pixel_formats,
                         encoder.profiles,
                     );
+                    capability.max_b_frames = encoder.max_b_frames;
                     if encoder.supports_b_frames {
                         capability.with_b_frames()
                     } else {
@@ -3000,6 +3018,48 @@ h264_nvenc AVOptions:
             HardwareAccelerationKind::None
         );
     }
+
+    #[tokio::test]
+    async fn native_nvidia_encoders_are_limited_to_the_ffmpeg_build() {
+        for advertised in [Vec::new(), vec!["h264_nvenc".to_owned()]] {
+            let mut report = FfmpegCapabilityReport {
+                hwaccels: BTreeSet::from(["cuda".to_owned()]),
+                encoders: advertised.iter().cloned().collect(),
+                ..Default::default()
+            };
+            let native = ersatzrs_hwprobe::NvidiaProbe {
+                attempted: true,
+                encoders_attempted: true,
+                device_details: Some("synthetic device".to_owned()),
+                encoders: ["h264_nvenc", "hevc_nvenc"]
+                    .into_iter()
+                    .map(|name| {
+                        ersatzrs_hwprobe::NvidiaEncoderProbe::new(
+                            name,
+                            BTreeSet::new(),
+                            BTreeSet::new(),
+                            false,
+                        )
+                    })
+                    .collect(),
+                ..Default::default()
+            };
+            super::enrich_device_profiles_with_nvidia(
+                &FfmpegRuntimeCheckConfig::with_paths("unused", "unused"),
+                &mut report,
+                native,
+            )
+            .await;
+            assert_eq!(
+                report
+                    .nvidia_encoders
+                    .iter()
+                    .map(|encoder| encoder.encoder.clone())
+                    .collect::<Vec<_>>(),
+                advertised
+            );
+        }
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -3169,7 +3229,7 @@ mod unix_tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn native_nvidia_decoder_probe_populates_decoder_rows() {
+    async fn ffmpeg_nvidia_decoder_probe_populates_decoder_rows() {
         let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("nvidia-decoder-probe");
         let ffmpeg = write_nvidia_decoder_probe_ffmpeg_script(&dir);
@@ -3178,9 +3238,18 @@ mod unix_tests {
             "/unused/ffprobe",
         );
 
-        let report = collect_ffmpeg_capabilities(&config)
+        let mut report = collect_ffmpeg_capabilities(&config)
             .await
             .expect("fake ffmpeg should produce capabilities");
+
+        // This fixture proves CLI fallback, independently of the host's real
+        // driver. Native probing is qualified separately on actual hardware.
+        super::enrich_device_profiles_with_nvidia(
+            &config,
+            &mut report,
+            ersatzrs_hwprobe::NvidiaProbe::default(),
+        )
+        .await;
 
         assert!(report.nvidia_gpu_list.is_none());
         assert_eq!(report.nvidia_decoders.len(), 4);
@@ -3193,6 +3262,47 @@ mod unix_tests {
             .iter()
             .any(|decoder| decoder.supports("hevc", 10)));
         fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[tokio::test]
+    async fn native_nvidia_numeric_b_frame_limits_survive_report_enrichment() {
+        let mut report = super::FfmpegCapabilityReport::default();
+        report.hwaccels.insert("cuda".into());
+        report.encoders = ["h264_nvenc".to_owned(), "hevc_nvenc".to_owned()]
+            .into_iter()
+            .collect();
+        let encoders = [("h264_nvenc", 7), ("hevc_nvenc", 5)]
+            .into_iter()
+            .map(|(name, limit)| {
+                let mut row = ersatzrs_hwprobe::NvidiaEncoderProbe::new(
+                    name,
+                    std::collections::BTreeSet::new(),
+                    std::collections::BTreeSet::new(),
+                    true,
+                );
+                row.max_b_frames = Some(limit);
+                row
+            })
+            .collect();
+        let native = ersatzrs_hwprobe::NvidiaProbe {
+            attempted: true,
+            encoders_attempted: true,
+            device_details: Some("synthetic device details".into()),
+            encoders,
+            ..Default::default()
+        };
+        let config = FfmpegRuntimeCheckConfig::with_paths("unused", "unused");
+        super::enrich_device_profiles_with_nvidia(&config, &mut report, native).await;
+        assert_eq!(report.nvidia_encoders.len(), 2);
+        for (name, limit) in [("h264_nvenc", 7), ("hevc_nvenc", 5)] {
+            let encoder = report
+                .nvidia_encoders
+                .iter()
+                .find(|entry| entry.encoder == name)
+                .unwrap();
+            assert_eq!(encoder.max_b_frames, Some(limit));
+            assert!(encoder.supports_b_frames);
+        }
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -343,6 +343,7 @@ class PatchedSnapshotTests(unittest.TestCase):
 
     def archive(self, rid, defect=None):
         version, _, patches = module.distribution_for(rid)
+        source = module.source_for(rid)
         binary = "ersatztv-channel.exe" if rid == "win-x64" else "ersatztv-channel"
         files = {binary: b"fixture binary", "LICENSE": b"fixture license"}
         if rid == "linux-arm64":
@@ -351,13 +352,13 @@ class PatchedSnapshotTests(unittest.TestCase):
             files.update({name: b"fixture companion" for name in module.WINDOWS_COMPANIONS})
         origin = {
             "kind": "patched-source-build", "repository": module.REPOSITORY,
-            "source_revision": module.PINNED_REVISION, "rid": rid, "target": module.TARGETS[rid],
-            "source_archive_sha256": module.SOURCE_ARCHIVE_SHA256,
-            "cargo_lock_sha256": module.PREPARED_LOCK_SHA256,
+            "source_revision": source["upstream_revision"], "rid": rid, "target": module.TARGETS[rid],
+            "source_archive_sha256": source["source_archive_sha256"],
+            "cargo_lock_sha256": source["prepared_lock_sha256"],
             "distribution_version": version,
             "patches": patches,
             "payload_sha256": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
-            "rustc": f"rustc {module.MANIFEST.get('rust_toolchain', '1.97.1')} (fixture)",
+            "rustc": f"rustc {source['rust_toolchain']} (fixture)",
         }
         if defect in ("patches", "source_revision", "cargo_lock_sha256", "rid", "target", "distribution_version"):
             origin[defect] = "unreviewed"
@@ -541,6 +542,28 @@ class PatchedSnapshotTests(unittest.TestCase):
                 retained["distribution_tag"] = invalid
                 with self.assertRaisesRegex(ValueError, "distribution identity"):
                     module.package_url(rid)
+
+    def test_retained_source_rejects_new_global_source_and_compiler(self):
+        rid = "linux-x64"
+        package = module.MANIFEST["runtime_packages"][rid]
+        package.update(distribution_version="0.2.3-retained", distribution_tag="next-retained",
+                       patches=[{"file": "retained.patch", "sha256": "d" * 64}],
+                       source_identity={"upstream_revision": "a" * 40,
+                                        "source_archive_sha256": "b" * 64,
+                                        "prepared_lock_sha256": "c" * 64,
+                                        "rust_toolchain": "1.97.1"})
+        data = self.archive(rid)
+        module.stage_patched_snapshot(rid, self.root / "retained", fetch=lambda url, limit: data)
+        for key, wrong in (("upstream_revision", module.PINNED_REVISION),
+                           ("source_archive_sha256", module.SOURCE_ARCHIVE_SHA256),
+                           ("prepared_lock_sha256", module.PREPARED_LOCK_SHA256),
+                           ("rust_toolchain", "1.99.0")):
+            original = package["source_identity"][key]
+            package["source_identity"][key] = wrong
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "provenance"):
+                module.stage_patched_snapshot(rid, self.root / "rejected", fetch=lambda url, limit: data)
+            self.assertFalse((self.root / "rejected").exists())
+            package["source_identity"][key] = original
 
     def test_authenticated_download_resolves_retained_release_asset(self):
         rid = "osx-x64"

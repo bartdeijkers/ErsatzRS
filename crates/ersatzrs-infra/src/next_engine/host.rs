@@ -46,6 +46,8 @@ pub struct NextHost {
     pub(super) locker: EntityLocker,
     root: PathBuf,
     config_overlays: Option<PathBuf>,
+    indexed: Option<IndexedPublication>,
+    legacy_configuration: bool,
     // Failed descendant cleanup cannot release capacity or reuse its output.
     // Existing capacity admission bounds this host-lifetime quarantine.
     cleanup_quarantine: Mutex<Vec<QuarantinedCleanup>>,
@@ -53,6 +55,11 @@ pub struct NextHost {
     pub(super) dynamic_contexts: Mutex<HashMap<uuid::Uuid, DynamicContext>>,
     pub(super) source_storage: crate::provider_source_storage::ProviderSourceStore,
     pub(super) burn_cache: super::burn_cache::BurnCache,
+}
+
+struct IndexedPublication {
+    clock: ersatzrs_core::programme::ProgrammeClock,
+    reader: super::indexed_runtime::IndexedReaderPermit,
 }
 
 // Removed contexts no longer admit callbacks, but keep their exact resource
@@ -136,10 +143,36 @@ impl NextHost {
             burn_cache: super::burn_cache::BurnCache::new(root.join("burn-subtitles")),
             root,
             config_overlays: None,
+            indexed: None,
+            legacy_configuration: false,
             cleanup_quarantine: Mutex::new(Vec::new()),
             dynamic_contexts: Mutex::new(HashMap::new()),
             publishers: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Preserve the supported complete-file/schema1.2 contract for older readers.
+    #[must_use]
+    pub fn new_legacy(pool: DbPool, locker: EntityLocker, root: PathBuf) -> Self {
+        let mut host = Self::new(pool, locker, root);
+        host.legacy_configuration = true;
+        host
+    }
+
+    /// Create one indexed publisher owner per channel after qualifying its reader.
+    /// The supplied civil clock matches scheduling; finite troubleshooting
+    /// manifests continue to use their independent complete-file configuration.
+    #[must_use]
+    pub fn new_indexed(
+        pool: DbPool,
+        locker: EntityLocker,
+        root: PathBuf,
+        clock: ersatzrs_core::programme::ProgrammeClock,
+        reader: super::indexed_runtime::IndexedReaderPermit,
+    ) -> Self {
+        let mut host = Self::new(pool, locker, root);
+        host.indexed = Some(IndexedPublication { clock, reader });
+        host
     }
 
     /// Use operator-managed overlays after the generated profile configuration.
@@ -213,7 +246,10 @@ impl NextHost {
             .get_with_profile(request.channel_id)
             .await
             .map_err(|_| ProcessError::Preparation("channel read"))?;
-        let playout_folder = self.root.join(request.channel_id.to_string());
+        let mut playout_folder = self.root.join(request.channel_id.to_string());
+        if self.indexed.is_some() {
+            playout_folder.push("indexed");
+        }
         let mut configuration = config::channel_config(
             &profile,
             channel.next_engine_text_subtitle_mode,
@@ -222,6 +258,27 @@ impl NextHost {
             &request.ffprobe,
         )
         .map_err(|_| ProcessError::Preparation("profile conversion"))?;
+        if self.indexed.is_some() {
+            configuration.version = Some("https://ersatztv.org/channel/version/0.1.4".into());
+            configuration.playout.layout = Some(super::publication::indexed::INDEX_VERSION.into());
+        } else if !self.legacy_configuration {
+            configuration.version = Some("https://ersatztv.org/channel/version/0.1.3".into());
+        }
+        if let Some(fallback) = configuration
+            .fallback
+            .as_mut()
+            .filter(|_| !self.legacy_configuration)
+        {
+            fallback.background_image = Some(
+                super::fallback::background_image()
+                    .await
+                    .to_str()
+                    .ok_or(ProcessError::Preparation(
+                        "fallback background path encoding",
+                    ))?
+                    .to_owned(),
+            );
+        }
         configuration.normalization.video.frame_rate =
             config::channel_frame_rate(&self.pool, &channel, &profile)
                 .await
@@ -278,6 +335,10 @@ impl NextHost {
                 request.preview,
             );
             let startup = async {
+                publisher
+                    .authorize_reader(&request.executable)
+                    .await
+                    .map_err(|_| ProcessError::Preparation("indexed reader contract"))?;
                 let config = host.configuration(&request).await?;
                 loop {
                     let limit = load_active_transcode_limit(&host.pool)
@@ -311,6 +372,12 @@ impl NextHost {
                 )
                 .await
                 .map_err(|_| ProcessError::Preparation("playout publication"))?;
+                // Capacity waits and publication can outlive an executable update.
+                // Recheck immediately before spawning, not just before reservation.
+                publisher
+                    .authorize_reader(&request.executable)
+                    .await
+                    .map_err(|_| ProcessError::Preparation("indexed reader contract"))?;
                 NextProcess::start_with_session(
                     &request.executable,
                     &request.number,
@@ -477,7 +544,7 @@ impl NextHost {
     }
 
     async fn refresh(
-        &self,
+        self: &Arc<Self>,
         publisher: &ChannelPublisher,
         channel_id: i64,
         replacements: &[PathReplacement],
@@ -496,18 +563,32 @@ impl NextHost {
             .ok_or(RefreshError::Read)?;
             let publication_gaps = Arc::new(Mutex::new(Vec::new()));
             let projected_gaps = publication_gaps.clone();
+            let host = self.clone();
+            let runtime = tokio::runtime::Handle::current();
             let outcome = publisher
-                .refresh_before(start, finish, deadline, |channel, media| async move {
-                    let ProjectedSchedule { items, gaps } =
-                        Box::pin(self.project_schedule(channel, media, replacements, start))
-                            .await?;
-                    *projected_gaps.lock().await = gaps;
-                    Ok(items)
-                })
+                .refresh_before_committed(
+                    start,
+                    finish,
+                    deadline,
+                    |channel, media| async move {
+                        let ProjectedSchedule { items, gaps } =
+                            Box::pin(self.project_schedule(channel, media, replacements, start))
+                                .await?;
+                        *projected_gaps.lock().await = gaps;
+                        Ok(items)
+                    },
+                    move || {
+                        runtime.block_on(async {
+                            host.register_published_gaps(
+                                channel_id,
+                                &publication_gaps.lock().await,
+                            )
+                            .await;
+                        });
+                    },
+                )
                 .await?;
             if matches!(outcome, RefreshOutcome::Published { .. }) {
-                self.register_published_gaps(channel_id, &publication_gaps.lock().await)
-                    .await;
                 return Ok(());
             }
             // Rebuild notification can precede release of its scheduler guard.
@@ -531,6 +612,10 @@ pub fn channel_binary() -> std::io::Result<PathBuf> {
 #[cfg(test)]
 #[path = "host_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "publication_commit_tests.rs"]
+mod publication_commit_tests;
 
 #[cfg(test)]
 #[path = "reports_tests.rs"]

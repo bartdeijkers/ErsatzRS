@@ -1003,7 +1003,10 @@ pub async fn serve_channel_m3u8(
         }
     };
 
-    let access_token = AccessToken::new(query.access_token.clone());
+    let access_token = AccessToken::for_request(
+        query.access_token.clone(),
+        state.iptv_access_token_verifier.is_enabled(),
+    );
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
         return serve_next_channel_m3u8(
             state,
@@ -1290,7 +1293,10 @@ pub async fn get_session_playlist(
             return (StatusCode::SERVICE_UNAVAILABLE, "HLS startup is not ready").into_response();
         }
         let admission_status = handle.admission_status();
-        let access_token = AccessToken::new(query.access_token);
+        let access_token = AccessToken::for_request(
+            query.access_token,
+            state.iptv_access_token_verifier.is_enabled(),
+        );
         return match handle.trim_playlist().await {
             Some(playlist) => {
                 hls_response(propagate_playlist_access_token(&playlist, &access_token))
@@ -1328,7 +1334,10 @@ pub async fn get_preview_master_playlist(
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) | Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
-    let access_token = AccessToken::new(query.access_token);
+    let access_token = AccessToken::for_request(
+        query.access_token,
+        state.iptv_access_token_verifier.is_enabled(),
+    );
     let mut spec = match startup_read(deadline, async {
         streaming_specs::load_spec(&state.pool, channel.id)
             .await
@@ -1449,7 +1458,10 @@ pub async fn get_preview_session_playlist(
             return (StatusCode::SERVICE_UNAVAILABLE, "HLS startup is not ready").into_response();
         }
         let admission_status = handle.admission_status();
-        let access_token = AccessToken::new(query.access_token);
+        let access_token = AccessToken::for_request(
+            query.access_token,
+            state.iptv_access_token_verifier.is_enabled(),
+        );
         return match handle.trim_playlist().await {
             Some(playlist) => {
                 hls_response(propagate_playlist_access_token(&playlist, &access_token))
@@ -2828,6 +2840,37 @@ mod tests {
         }
     }
 
+    async fn assert_disabled_jwt_omits_query_tokens(state: &AppState) {
+        let mut disabled = state.clone();
+        disabled.iptv_access_token_verifier =
+            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None);
+        for value in ["synthetic-token", "token&mode=ts", "token%20with-space"] {
+            let query = HlsQuery {
+                access_token: Some(value.into()),
+                mode: Some("ts".into()),
+                subtitles: Some(true),
+            };
+            let master = serve_channel_m3u8(&disabled, "1", &HeaderMap::new(), &query).await;
+            assert_eq!(master.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(master.into_body(), 64 * 1024)
+                .await
+                .unwrap();
+            let text = std::str::from_utf8(&body).unwrap();
+            assert!(text.contains("/iptv/session/1/hls.m3u8"));
+            assert!(text.contains("TYPE=SUBTITLES"));
+            assert!(!text.contains("access_token="));
+            let variant =
+                get_session_playlist(State(disabled.clone()), Path("1".into()), Query(query)).await;
+            assert_eq!(variant.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(variant.into_body(), 64 * 1024)
+                .await
+                .unwrap();
+            let text = std::str::from_utf8(&body).unwrap();
+            assert!(text.contains("next-segment.ts"));
+            assert!(!text.contains("access_token="));
+        }
+    }
+
     #[tokio::test]
     async fn next_engine_routes_preserve_hybrid_hls_tokens_and_reject_native_playback() {
         use ersatzrs_core::repositories::FfmpegProfileRepository;
@@ -2887,6 +2930,7 @@ mod tests {
         assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
         assert!(text.contains("/iptv/session/1/live_sub.m3u8?access_token=synthetic-token"));
         assert!(text.contains("SUBTITLES=\"subs\""));
+        assert_disabled_jwt_omits_query_tokens(&state).await;
         assert_requested_next_master_rendition(&state, &query).await;
         let variant =
             get_session_playlist(State(state.clone()), Path("1".into()), Query(query)).await;

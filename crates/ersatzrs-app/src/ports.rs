@@ -47,6 +47,9 @@ impl ChannelRuntimeError {
 pub trait TeletextOutputObserver: Send + Sync {
     /// Replace this owner's bounded snapshot without extending its lifetime.
     fn record(&self, observation: ersatzrs_domain::TeletextOutputObservation);
+
+    /// Keep this output's terminal failure for its channel after it ends.
+    fn failed(&self, _kind: ersatzrs_domain::TeletextOutputFailureKind) {}
 }
 
 /// Runtime-neutral channel session and subtitle side effects.
@@ -98,6 +101,26 @@ pub trait ChannelRuntime: Send + Sync {
         &self,
         profile_id: EntityId,
     ) -> Result<(), ChannelRuntimeError>;
+
+    /// Snapshot dependent Next channels before a mutation can remove references.
+    async fn playout_projection_dependents(
+        &self,
+        _change: ersatzrs_domain::PlayoutProjectionChange,
+    ) -> Result<Vec<String>, ChannelRuntimeError> {
+        Err(ChannelRuntimeError::unavailable(
+            "playout dependency resolution is unavailable",
+        ))
+    }
+
+    /// Enqueue existing bounded session updates after the mutation commits.
+    async fn refresh_playout_projections(
+        &self,
+        _channels: Vec<String>,
+    ) -> Result<(), ChannelRuntimeError> {
+        Err(ChannelRuntimeError::unavailable(
+            "playout projection refresh is unavailable",
+        ))
+    }
 }
 
 /// Failure returned by process-local settings effects.
@@ -1060,6 +1083,7 @@ pub struct ApplicationPorts {
     addons: Arc<dyn AddonRuntime>,
     teletext_profiles: Arc<dyn TeletextProfileRepository>,
     teletext_designs: Option<Arc<dyn TeletextDesignRepository>>,
+    teletext_elements: Option<Arc<dyn ersatzrs_core::repositories::TeletextElementRepository>>,
     teletext_publications: Option<Arc<dyn TeletextPublicationRepository>>,
     teletext_generations: Option<Arc<dyn TeletextGenerationRepository>>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
@@ -1146,6 +1170,7 @@ impl ApplicationPorts {
             addons,
             teletext_profiles,
             teletext_designs: None,
+            teletext_elements: None,
             teletext_publications: None,
             teletext_generations: None,
             media_source_runtime,
@@ -1349,6 +1374,24 @@ impl ApplicationPorts {
     #[must_use]
     pub fn teletext_designs(&self) -> Option<&(dyn TeletextDesignRepository + 'static)> {
         self.teletext_designs.as_deref()
+    }
+
+    /// Attach the teletext element library storage.
+    #[must_use]
+    pub fn with_teletext_elements(
+        mut self,
+        repository: Arc<dyn ersatzrs_core::repositories::TeletextElementRepository>,
+    ) -> Self {
+        self.teletext_elements = Some(repository);
+        self
+    }
+
+    /// Teletext element library; absent storage reports unavailable.
+    #[must_use]
+    pub fn teletext_elements(
+        &self,
+    ) -> Option<&(dyn ersatzrs_core::repositories::TeletextElementRepository + 'static)> {
+        self.teletext_elements.as_deref()
     }
 
     /// Remote media-source validation and synchronization effects.

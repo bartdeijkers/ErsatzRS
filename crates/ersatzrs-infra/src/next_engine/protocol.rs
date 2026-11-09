@@ -25,11 +25,17 @@ pub struct Fallback {
     /// Minimum fallback duration after failed resolution; Next defaults to 60s.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_seconds: Option<u32>,
+    /// Custom or bundled offline background, independent of the error overlay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_image: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlayoutFolder {
     pub folder: String,
+    /// Explicit private reader layout; absent retains ordinary folder loading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub virtual_start: Option<DateTime<Utc>>,
 }

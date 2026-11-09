@@ -17,6 +17,7 @@ mod base_display;
 mod buffer;
 mod carousel;
 mod charset;
+pub use charset::teletext_level1_preview_glyph;
 mod clock;
 mod colour_context;
 mod compile_context;
@@ -142,7 +143,7 @@ pub use object_pages::{
 };
 pub use output::{
     TeletextOutputAcknowledgement, TeletextOutputConfig, TeletextOutputError, TeletextOutputGate,
-    TeletextOutputSchedule,
+    TeletextOutputSchedule, TeletextPlainContinuation,
 };
 pub use packets::{
     encode_teletext_page, encode_teletext_page_set, EncodedTeletextPage, EncodedTeletextPageSet,

@@ -28,7 +28,7 @@ pedantic = "warn"
 version = "1.2.0"
 edition = "2021"
 rust-version = "1.97.1"
-authors = ["Bart Deijkers <bartdeijkers@gmail.com>"]
+authors = ["Bart Deijkers"]
 license = "Zlib"
 repository = "https://github.com/bartdeijkers/ErsatzRS"
 

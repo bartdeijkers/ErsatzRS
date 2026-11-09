@@ -204,8 +204,20 @@ pub fn build_app(app_state: AppState) -> Router {
                 )),
             )
             .route(
+                "/admin-api/teletext/source/enable",
+                post(api::teletext::enable_source).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
                 "/admin-api/teletext/binding/save",
                 post(api::teletext::save_binding).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
+                "/admin-api/teletext/capacity/apply",
+                post(api::teletext::apply_capacity).layer(DefaultBodyLimit::max(
                     api::teletext::MAX_TELETEXT_FORM_BYTES,
                 )),
             )
@@ -677,6 +689,42 @@ pub fn build_app(app_state: AppState) -> Router {
             .route(
                 "/api/troubleshoot/playback/sample/{media_item_id}",
                 get(api::troubleshooting::playback_sample),
+            )
+            .route(
+                "/admin-api/teletext-elements/upload",
+                post(api::teletext_elements::upload).layer(DefaultBodyLimit::max(
+                    api::teletext_elements::max_upload_bytes(),
+                )),
+            )
+            .route(
+                "/admin-api/teletext-elements/{id}/replace",
+                post(api::teletext_elements::replace).layer(DefaultBodyLimit::max(
+                    api::teletext_elements::max_upload_bytes(),
+                )),
+            )
+            .route(
+                "/admin-api/teletext-elements/{id}/details",
+                post(api::teletext_elements::save_details),
+            )
+            .route(
+                "/admin-api/teletext-elements/{id}/fields",
+                post(api::teletext_elements::save_fields),
+            )
+            .route(
+                "/admin-api/teletext-elements/{id}/delete",
+                post(api::teletext_elements::delete),
+            )
+            .route(
+                "/admin-api/teletext-elements/{id}/download",
+                get(api::teletext_elements::download),
+            )
+            .route(
+                "/admin-api/channels/{id}/teletext-elements/save",
+                post(api::teletext_elements::save_channel_link),
+            )
+            .route(
+                "/admin-api/channels/{id}/teletext-elements/{link_id}/remove",
+                post(api::teletext_elements::remove_channel_link),
             )
             .route(
                 "/admin-api/watermarks/save",

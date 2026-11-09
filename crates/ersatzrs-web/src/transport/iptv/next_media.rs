@@ -258,6 +258,9 @@ fn dynamic_headers(
     chrono::DateTime<chrono::Utc>,
     chrono::DateTime<chrono::Utc>,
 )> {
+    if headers.get_all("x-etv-until").iter().count() != 1 {
+        return None;
+    }
     let number = headers.get("x-etv-channel")?.to_str().ok()?;
     let instance = uuid::Uuid::parse_str(headers.get(SESSION_HEADER)?.to_str().ok()?).ok()?;
     let now = chrono::DateTime::parse_from_rfc3339(headers.get("x-etv-now")?.to_str().ok()?)
@@ -460,6 +463,11 @@ mod tests {
         assert_eq!(actual_instance, instance);
         assert_eq!(channel, "preview-1");
         assert_eq!((finish - start).num_seconds(), 60);
+        headers.append("x-etv-until", "2026-09-23T12:02:00Z".parse().unwrap());
+        assert!(
+            dynamic_headers(&headers).is_none(),
+            "ambiguous bounds must be refused"
+        );
         headers.insert("x-etv-until", "2026-09-23T12:00:00Z".parse().unwrap());
         assert!(dynamic_headers(&headers).is_none());
         headers.insert("x-etv-now", "invalid".parse().unwrap());

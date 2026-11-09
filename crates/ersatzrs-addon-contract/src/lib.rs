@@ -1692,6 +1692,9 @@ impl AddonManifest {
             return invalid("manifest_version", "unsupported schema version");
         }
         validate_addon_id(&self.id)?;
+        if self.id == RESERVED_HOST_PRODUCER_ID {
+            return invalid("id", "is reserved for a built-in ErsatzRS producer");
+        }
         validate_package_version(&self.version)?;
         require_english(&self.name, "name")?;
         require_english(&self.summary, "summary")?;
@@ -2882,6 +2885,9 @@ impl CatalogAddon {
     /// Returns an error when catalog metadata violates the v1 contract.
     pub fn validate(&self) -> Result<(), ContractError> {
         validate_addon_id(&self.id)?;
+        if self.id == RESERVED_HOST_PRODUCER_ID {
+            return invalid("id", "is reserved for a built-in ErsatzRS producer");
+        }
         validate_package_version(&self.version)?;
         require_english(&self.name, "name")?;
         require_english(&self.summary, "summary")?;
@@ -4200,6 +4206,10 @@ fn validate_availability_reason(value: Option<&str>) -> Result<(), ContractError
     Ok(())
 }
 
+/// Producer id of the host-owned teletext custom pages source (ADR 0120);
+/// no installable package may claim it.
+pub const RESERVED_HOST_PRODUCER_ID: &str = "ersatzrs.host.custom-pages";
+
 /// Validate a reverse-DNS add-on identifier.
 ///
 /// # Errors
@@ -4499,6 +4509,15 @@ mod tests {
             choices: Vec::new(),
             requires_preparation: false,
         }
+    }
+
+    #[test]
+    fn manifest_cannot_claim_the_reserved_host_producer_id() {
+        let mut manifest = valid_manifest();
+        manifest.validate().unwrap();
+        manifest.id = RESERVED_HOST_PRODUCER_ID.to_owned();
+        assert!(validate_addon_id(&manifest.id).is_ok());
+        assert!(manifest.validate().is_err());
     }
 
     #[test]

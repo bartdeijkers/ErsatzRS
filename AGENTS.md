@@ -75,6 +75,22 @@ These rules are mandatory for implementation and acceptance work:
   acceptance requirements in their canonical records without silently waiving
   or narrowing them.
 
+### Cleanup after task completion
+
+- After completing a task, remove its temporary local branches, worktrees and
+  other temporary working files outside the `main` branch. Cleanup is part of
+  task completion and does not require a separate request.
+- Before deleting anything, verify that the task's deliverables and required
+  evidence are safely retained in the agreed destination. Remove a local branch
+  or worktree only after its changes have been integrated into `main` or otherwise
+  durably preserved as agreed with the maintainer.
+- Limit cleanup to temporary resources belonging to the completed task. Preserve
+  `main`, unrelated or active work, uncommitted changes and unique commits that
+  have not been safely retained. Do not force deletion to bypass these checks.
+- If cleanup cannot safely finish, report the exact remaining resources and the
+  condition needed to remove them. This rule does not authorize committing,
+  pushing, merging or deleting remote branches.
+
 ## Supported Platforms
 
 ErsatzRS retains code compatibility for the same six targets as ErsatzTV.

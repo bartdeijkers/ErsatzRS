@@ -1,8 +1,8 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 9B — TV-guide add-on and integrated acceptance'
-current_focus = "Complete — revised Phase 9 acceptance and three stable releases"
+current_phase = 'Phase 9 — Teletext support (Complete)'
+current_focus = "UCU-13–15 complete through v26.12.0; Native and Next retained"
 
 summary = '''
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
@@ -70,6 +70,35 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+UCU-13, UCU-14 and UCU-15 are Complete in order through fixed v26.12.0.
+All285 rows are processed; row271 remains approved Deferred/unverified Windows
+advisory work. The accepted pin is owned by docs/automation/parity-baseline.md.
+Native and Next remain supported/selectable. Milestone ucu-15 owns the exact
+compiled source1000fd07, four-target package/playback proof, full composed
+CI42447535972/42460252936 and eligible PR CI42464500817. PR125 is merged as
+10ffff4e. The documentation-only closeout records acceptance without changing
+compiled inputs. Source/evidence retention is tmp/evidence/ucu13-15-v26.12.0/.
+The published runtime pair is FFmpeg2.0.10/Next0.2.5; existing application
+release archives retain their original pinned dependencies and evidence.
+No required functional work remains inside this fixed catch-up. Retain approved
+unverified native ARM/macOS/hardware debt and the advisory's authoritative-detail
+prerequisite. Temporary runtime patches stay until equivalent unpatched behavior
+passes their unchanged regression controls. Do not chase later upstream commits,
+start Phase10, publish another application/Docker release or replace installations.
+Clean only safely retained, inactive task-owned resources; preserve unrelated
+processes, worktrees, caches, root history and remote branches.
+
+Independent engineering goal: plans/domain-scoped-pr-ci.md. Milestone dci owns the
+finite six-package completion list. DCI-01 through DCI-05 are complete within
+implementation acceptance at source 88033b9e (PR #121). Independent selection
+review, broad PR CI 42198516239 and full CI 42216929774 pass; the full run includes
+all required general/base Chromium and Firefox jobs. DCI-06 awaits the fixed
+next ten consecutive code PRs reaching terminal outcomes after rollout. The
+15-30 minute overall mean remains unproven; no additional optimization package
+is opened while waiting for the sample.
+The historical Phase9 handoff below remains delivery history, not this goal's
+next action. Phase10 and recorded platform/enhanced deferrals are unchanged.
+
 Current package: none. Revised9A and production9B are accepted; the three
 stable releases are delivered. P9B-01/P9B-02 and qualification.json.release_delivery
 own the finite closure and canonical source/CI/artifact/runtime/failure evidence.
@@ -81,10 +110,10 @@ Documentation-only checkpoints do not relabel source/binaries or prove new fullC
 Original Docker cancellation remains Deferred, notgreen; all four required archive
 producers have successful executions. No failed-Docker rerun/image acceptance.
 
-Nextnext-0.2.3-54c6cb9-ersatzrs.7/source95206a81 is stable/Latest in place: same tag,
+At Phase9 delivery, Nextnext-0.2.3-54c6cb9-ersatzrs.7/source95206a81 was stable/Latest: same tag,
 21assets and four qualified public archive/payload GETs. Addonsv0.11.12/source47f2ab4
 is stable/Latest; ZIPa7390fb9 contains TV-guide0.1.2 and yt-dlp0.11.12. Use existing
-stableFFmpeg2.0.9. No Next/FFmpeg rebuild, older-binary relabel, installation
+stableFFmpeg2.0.9 at that time. No Next/FFmpeg rebuild, older-binary relabel, installation
 replacement or8409/firewall change occurred.
 
 All owned handles/observers are terminal; hosts/listeners/Jobs/emulation namespaces
@@ -4326,7 +4355,7 @@ independent9A acceptance.
 '''
 
 [[blocking_decision]]
-note = 'Revised9A is Complete under its accepted owner receipts; the former Kodi/raw-header/managed-runtime prerequisites are historical, not current blockers. The finite P9B-02 list owns production guide closure and the separate new concat-runtime platform/adoption obligation. Preserve experimental Level2.5/QTM upstream/native ARM/macOS deferrals; no DVBViewer or premature physical-device trial.'
+note = 'Phase 9 is Complete: revised 9A and production 9B are accepted and the three stable releases are delivered. Preserve the recorded Deferred scopes (experimental Level2.5, enhanced client/editor, optional QTM upstream wait, native ARM, macOS, current-release Docker image); they do not reopen Phase 9 without a concrete evidenced regression or a new maintainer task.'
 
 [[blocking_decision]]
 note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'

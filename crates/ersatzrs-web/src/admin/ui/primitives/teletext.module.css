@@ -1,0 +1,73 @@
+/* Shared teletext admin primitives; see docs/reference/teletext-admin-ux.md. */
+.island {
+    margin-block: 1rem;
+    padding: clamp(0.75rem, 3vw, 1.25rem);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+.island_header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+}
+.island_header h2 { margin: 0; font-size: 1.2rem; }
+.help { margin-block: 0.25rem 1rem; line-height: 1.5; opacity: 0.8; }
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: currentColor; opacity: 0.6; }
+.badge[data-tone="success"] .dot { background: var(--color-success); opacity: 1; }
+.badge[data-tone="warning"] .dot { background: var(--color-warning); opacity: 1; }
+.badge[data-tone="error"] .dot { background: var(--color-error); opacity: 1; }
+.badge[data-tone="error"] { border-color: var(--color-error); }
+
+.steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin: 0.5rem 0 1rem;
+    padding: 0;
+    list-style: none;
+}
+.steps li { display: inline-flex; align-items: center; gap: 0.5rem; opacity: 0.65; }
+.steps li[data-state="done"], .steps li[data-state="current"] { opacity: 1; }
+.steps li[data-state="current"] { font-weight: 600; }
+.step_number {
+    display: inline-grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    font-size: 0.85rem;
+}
+.steps li[data-state="done"] .step_number { border-color: var(--color-success); color: var(--color-success); }
+.steps li[data-state="current"] .step_number { border-color: var(--color-secondary); color: var(--color-secondary); }
+
+.preview { margin: 0; max-width: 40rem; }
+.screen {
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: grid;
+}
+.screen > img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.caption { margin-block: 0.5rem; font-weight: 500; }
+.subpages { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; }
+.subpages a { color: var(--color-secondary); min-height: 2.75rem; display: inline-flex; align-items: center; }
+.subpages a[aria-current="page"] { font-weight: 700; text-decoration: none; }

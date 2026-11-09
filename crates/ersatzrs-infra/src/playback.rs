@@ -355,6 +355,25 @@ pub async fn load_source_video_stream_by_index(
     media_version_id: i64,
     stream_index: Option<i32>,
 ) -> Result<Option<SourceVideoStream>> {
+    load_source_video_stream_with_codec(pool, media_version_id, stream_index, None).await
+}
+
+/// Next retains recorded stream identity when only its codec name is absent.
+/// Native callers keep the stricter policy of the ordinary loader above.
+pub(crate) async fn load_next_source_video_stream_by_index(
+    pool: &DbPool,
+    media_version_id: i64,
+    stream_index: Option<i32>,
+) -> Result<Option<SourceVideoStream>> {
+    load_source_video_stream_with_codec(pool, media_version_id, stream_index, Some("unknown")).await
+}
+
+async fn load_source_video_stream_with_codec(
+    pool: &DbPool,
+    media_version_id: i64,
+    stream_index: Option<i32>,
+    missing_codec: Option<&str>,
+) -> Result<Option<SourceVideoStream>> {
     let row = sqlx::query(SOURCE_VIDEO_STREAM_QUERY)
         .bind(media_version_id)
         .bind(stream_index)
@@ -374,7 +393,9 @@ pub async fn load_source_video_stream_by_index(
         return Ok(None);
     };
 
-    let Some(codec) = decode_playback_column::<Option<String>>(&row, "Codec")? else {
+    let Some(codec) = decode_playback_column::<Option<String>>(&row, "Codec")?
+        .or_else(|| missing_codec.map(str::to_owned))
+    else {
         if let Some(stream_index) = stream_index {
             return Err(RepositoryError::Decode {
                 kind: "pinned source video stream",
@@ -406,6 +427,7 @@ pub async fn load_source_video_stream_by_index(
 
     let mut stream =
         SourceVideoStream::new(SourceVideoCodec::from_ffmpeg_name(&codec)).with_index(index);
+    stream.pixel_format_name.clone_from(&pixel_format);
     stream.pixel_format = pixel_format
         .as_deref()
         .and_then(PixelFormat::from_ffmpeg_name);
@@ -542,6 +564,7 @@ pub fn source_video_stream_from_probe(
     let mut stream =
         SourceVideoStream::new(SourceVideoCodec::from_ffmpeg_name(codec)).with_index(index);
     stream.profile.clone_from(&video.profile);
+    stream.pixel_format_name.clone_from(&video.pixel_format);
     stream.pixel_format = video
         .pixel_format
         .as_deref()
@@ -3423,6 +3446,7 @@ pub fn watermark_overlay_for_stream(
         opacity_expression: None,
         enable: None,
         eof_action_pass: false,
+        shortest: false,
         z_index: watermark.z_index,
     };
 
@@ -4069,7 +4093,7 @@ pub(crate) fn subtitle_is_http(path: &str) -> bool {
         .is_ok_and(|uri| matches!(uri.scheme(), "http" | "https") && uri.host_str().is_some())
 }
 
-fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<String> {
+pub(crate) fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<String> {
     let path = subtitle.path.as_deref()?.trim();
     if path.is_empty() {
         return None;
@@ -4266,6 +4290,10 @@ fn derive_color_params(
 #[cfg(test)]
 #[path = "playback_transient_probe_tests.rs"]
 mod transient_probe_tests;
+
+#[cfg(test)]
+#[path = "playback_pixel_format_tests.rs"]
+mod pixel_format_tests;
 
 #[cfg(test)]
 mod tests {
@@ -4765,7 +4793,7 @@ mod tests {
         );
     }
 
-    fn fresh_playback_probe() -> FfprobeMediaVersion {
+    pub(super) fn fresh_playback_probe() -> FfprobeMediaVersion {
         crate::ffprobe::parse_ffprobe_json(
             Path::new("synthetic-media"),
             br#"{
@@ -4902,7 +4930,7 @@ mod tests {
     }
     use chrono::TimeZone;
 
-    async fn source_stream_test_pool() -> DbPool {
+    pub(super) async fn source_stream_test_pool() -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")

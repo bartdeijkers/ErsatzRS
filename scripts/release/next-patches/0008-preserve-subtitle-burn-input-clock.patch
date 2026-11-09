@@ -1,13 +1,14 @@
+Preserve subtitle burn source clock. FFmpeg pipeline context rebased for upstream025 selected embedded subtitle index; existing regression expectations unchanged, with the new required fixture field set to zero.
+
 diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video_filter.rs
 --- a/crates/ffpipeline/src/video_filter.rs
 +++ b/crates/ffpipeline/src/video_filter.rs
-@@ -626,10 +626,12 @@
-         };
+@@ -655,10 +655,11 @@
+         }
  
          if self.seek > Duration::ZERO {
 +            // Borrow source-clock coordinates only while rendering captions.
-+            // Preserve the incoming post-seek AV offset instead of resetting
-+            // video to its first decoded frame and extending the source outpoint.
++            // Restore the same tick offset after rendering, preserving AV timing.
 +            let shift = format!("round({}/TB)", self.seek.as_secs_f64());
              Some(format!(
 -                "setpts=PTS+{}/TB,subtitles={},setpts=PTS-STARTPTS",
@@ -17,11 +18,10 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
              ))
          } else {
              Some(format!("subtitles={}", filter_args))
-@@ -994,6 +996,95 @@
+@@ -1072,6 +1073,99 @@
      use time::{Date, Month, Time, UtcOffset};
  
      use super::*;
-+
 +    #[test]
 +    fn text_subtitle_seek_borrows_and_restores_the_same_rounded_tick_offset() {
 +        for (seek, expected) in [
@@ -40,6 +40,7 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
 +            ),
 +        ] {
 +            let filter = SubtitlesFilter {
++                subtitle_index: 0,
 +                path: "captions.srt".to_owned(),
 +                seek,
 +                fonts_folder: None,
@@ -74,6 +75,7 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
 +        ] {
 +            for seek in [Duration::ZERO, Duration::from_millis(2_143)] {
 +                let filter = SubtitlesFilter {
++                    subtitle_index: 0,
 +                    path: path.to_owned(),
 +                    seek,
 +                    fonts_folder: fonts_folder.map(str::to_owned),
@@ -101,6 +103,7 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
 +    fn absent_text_subtitle_keeps_the_existing_no_filter_boundary() {
 +        for seek in [Duration::ZERO, Duration::from_millis(2_143)] {
 +            let filter = SubtitlesFilter {
++                subtitle_index: 0,
 +                path: String::new(),
 +                seek,
 +                fonts_folder: Some("fonts".to_owned()),
@@ -110,6 +113,8 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
 +            assert!(filter.evaluate(&state, &FfmpegInfo::default()).is_none());
 +        }
 +    }
++
++
  
-     fn scale_filter(flags: Option<&str>) -> VideoFilter {
-         ScaleFilter {
+     #[test]
+     fn subtitles_filter_selects_stream_after_the_first() {

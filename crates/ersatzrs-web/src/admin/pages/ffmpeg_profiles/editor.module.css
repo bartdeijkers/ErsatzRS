@@ -151,6 +151,14 @@
     font-size: 0.875rem;
 }
 
+.form-error {
+    margin: 1rem;
+    padding: 0.75rem 1rem;
+    border-left: 0.25rem solid var(--color-danger);
+    color: var(--color-text-primary);
+    overflow-wrap: anywhere;
+}
+
 .copy-hint {
     padding: 0.25rem 0 0.5rem;
     color: var(--color-muted);

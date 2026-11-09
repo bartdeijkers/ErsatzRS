@@ -63,7 +63,9 @@ pub(super) async fn prepare(
             context.streaming_mode,
         )
     });
-    let input = rebase_burned_text_subtitle_input(input, start_seconds).await;
+    let input = rebase_burned_text_subtitle_input(input, start_seconds)
+        .await
+        .map_err(|error| RepositoryError::unavailable("subtitle preparation", error.to_string()))?;
     Ok(OrdinaryCaption { input, metadata })
 }
 

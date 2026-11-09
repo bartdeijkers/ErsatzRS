@@ -37,6 +37,9 @@ pub struct ChannelPublisher {
     channel_id: i64,
     folder: PathBuf,
     gate: Arc<Mutex<()>>,
+    layout: publication::PlayoutLayout,
+    indexed_ready: Arc<AtomicBool>,
+    indexed_reader: Option<super::indexed_runtime::IndexedReaderPermit>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,7 +47,7 @@ pub enum RefreshOutcome {
     Published {
         items: usize,
     },
-    /// A scheduler build owns a source lock; keep the old file and retry later.
+    /// A source build or indexed reader is busy; retain publication and retry.
     Busy,
 }
 
@@ -83,7 +86,41 @@ impl ChannelPublisher {
             channel_id,
             folder: root.join(channel_id.to_string()),
             gate: Arc::default(),
+            layout: publication::PlayoutLayout::Complete,
+            indexed_ready: Arc::new(AtomicBool::new(true)),
+            indexed_reader: None,
         }
+    }
+
+    /// Construct an explicitly indexed publisher after qualifying ADR 0131's
+    /// reader capability. Ordinary sessions retain [`Self::new`]'s format.
+    /// The first committed refresh regenerates derived state from accepted SQL
+    /// before private preparation or session admission. Use one owner per
+    /// channel and clone it; never mix layouts for an owner.
+    #[must_use]
+    pub fn new_indexed(
+        pool: DbPool,
+        locker: EntityLocker,
+        root: &Path,
+        channel_id: i64,
+        clock: ersatzrs_core::programme::ProgrammeClock,
+        reader: super::indexed_runtime::IndexedReaderPermit,
+    ) -> Self {
+        let mut publisher = Self::new(pool, locker, root, channel_id);
+        publisher.layout = publication::PlayoutLayout::Indexed(Arc::new(clock));
+        publisher.indexed_ready = Arc::new(AtomicBool::new(false));
+        publisher.indexed_reader = Some(reader);
+        publisher
+    }
+
+    pub(super) async fn authorize_reader(
+        &self,
+        binary: &Path,
+    ) -> Result<(), super::indexed_runtime::IndexedRuntimeError> {
+        if let Some(reader) = &self.indexed_reader {
+            reader.authorize(binary).await?;
+        }
+        Ok(())
     }
 
     /// Read current channel settings and schedule only after acquiring admission.
@@ -110,12 +147,17 @@ impl ChannelPublisher {
         F: FnOnce(Channel, Vec<schedule::ScheduledMedia>) -> Fut,
         Fut: Future<Output = ersatzrs_core::repositories::Result<Vec<protocol::PlayoutItem>>>,
     {
-        self.refresh_with(start, finish, project, |folder, playout, active| {
-            publication::publish_playout_checked(
+        let layout = self.layout.clone();
+        let ready = self.indexed_ready.clone();
+        self.refresh_with(start, finish, project, move |folder, playout, active| {
+            publication::publish_layout(
                 folder,
                 playout,
+                &layout,
+                &ready,
                 || active.load(Ordering::Acquire),
                 None,
+                || {},
             )
         })
         .await
@@ -138,18 +180,46 @@ impl ChannelPublisher {
         F: FnOnce(Channel, Vec<schedule::ScheduledMedia>) -> Fut,
         Fut: Future<Output = ersatzrs_core::repositories::Result<Vec<protocol::PlayoutItem>>>,
     {
+        self.refresh_before_committed(start, finish, deadline, project, || {})
+            .await
+    }
+
+    /// Keep visible-file effects inside the owned blocking publication, before
+    /// recovery cleanup and admission release. The hook also runs for a no-op
+    /// index, admitting a new reader to the already-visible accepted schedule.
+    pub(super) async fn refresh_before_committed<F, Fut>(
+        &self,
+        start: DateTime<Utc>,
+        finish: DateTime<Utc>,
+        deadline: std::time::Instant,
+        project: F,
+        committed: impl FnOnce() + Send + 'static,
+    ) -> Result<RefreshOutcome, RefreshError>
+    where
+        F: FnOnce(Channel, Vec<schedule::ScheduledMedia>) -> Fut,
+        Fut: Future<Output = ersatzrs_core::repositories::Result<Vec<protocol::PlayoutItem>>>,
+    {
         if std::time::Instant::now() >= deadline {
             return Err(publication::PublicationError::Expired.into());
         }
+        let layout = self.layout.clone();
+        let ready = self.indexed_ready.clone();
         self.refresh_with(start, finish, project, move |folder, playout, active| {
-            publication::publish_playout_checked(
+            publication::publish_layout(
                 folder,
                 playout,
+                &layout,
+                &ready,
                 || active.load(Ordering::Acquire),
                 Some(deadline),
+                committed,
             )
         })
         .await
+    }
+
+    pub(super) async fn callback_admission(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.gate.clone().lock_owned().await
     }
 
     async fn refresh_with<F, Fut, Write>(
@@ -196,7 +266,7 @@ impl ChannelPublisher {
         let count = items.len();
         let folder = self.folder.clone();
         let active = attempt.0.clone();
-        tokio::task::spawn_blocking(move || {
+        let result = tokio::task::spawn_blocking(move || {
             // Keep ownership in this non-cancellable worker, not its awaiter.
             let _admission = admission;
             let _schedule = locked;
@@ -210,7 +280,11 @@ impl ChannelPublisher {
             )
         })
         .await
-        .map_err(|_| RefreshError::Worker)??;
+        .map_err(|_| RefreshError::Worker)?;
+        if matches!(result, Err(publication::PublicationError::ReadersBusy)) {
+            return Ok(RefreshOutcome::Busy);
+        }
+        result?;
         Ok(RefreshOutcome::Published { items: count })
     }
 }

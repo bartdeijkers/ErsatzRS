@@ -379,3 +379,48 @@ fn encode_hebrew_g0(character: char) -> Option<Character> {
         enhancement: None,
     })
 }
+
+/// Preview glyph for a 7-bit Level 1 text code under a Table 32 page
+/// designation. Latin national subsets use the Table 36 positions above;
+/// non-Latin or unknown designations fall back to the English subset. This is
+/// an editorial browser preview, not receiver or engine admission.
+#[must_use]
+pub fn teletext_level1_preview_glyph(designation: u8, code: u8) -> char {
+    let code = code & 0x7f;
+    if code < 0x20 {
+        return ' ';
+    }
+    let subset = TeletextPageCharsetDesignation::new(designation)
+        .ok()
+        .and_then(unicode_national_subset)
+        .unwrap_or(0);
+    if let Some(index) = NATIONAL_CODES.iter().position(|&value| value == code) {
+        if let Some(glyph) = NATIONAL
+            .get(usize::from(subset))
+            .and_then(|table| table.chars().nth(index))
+            .filter(|glyph| *glyph != '\0')
+        {
+            return glyph;
+        }
+    }
+    if code == 0x7f {
+        return '■';
+    }
+    char::from(code)
+}
+
+#[cfg(test)]
+mod preview_glyph_tests {
+    use super::teletext_level1_preview_glyph;
+
+    #[test]
+    fn national_positions_follow_the_page_designation() {
+        assert_eq!(teletext_level1_preview_glyph(0x00, b'#'), '£');
+        assert_eq!(teletext_level1_preview_glyph(0x01, 0x7b), 'ä');
+        assert_eq!(teletext_level1_preview_glyph(0x04, 0x40), 'à');
+        assert_eq!(teletext_level1_preview_glyph(0x00, b'A'), 'A');
+        assert_eq!(teletext_level1_preview_glyph(0x00, 0x7f), '■');
+        assert_eq!(teletext_level1_preview_glyph(0x37, b'%'), '%');
+        assert_eq!(teletext_level1_preview_glyph(0x00, 0x05), ' ');
+    }
+}

@@ -5257,6 +5257,59 @@ mod generated_playlist_refresh_tests {
     }
 
     #[tokio::test]
+    async fn generated_playlist_removes_stale_and_final_members_with_refresh() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        insert_playlist_item(&pool, PLAYLIST_ID, 2)
+            .await
+            .expect("seed stale member absent from the current list");
+        sqlx::query(r#"UPDATE "PlaylistItem" SET "Index" = 1 WHERE "MediaItemId" = 2"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+        let report = synchronizer
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("remove stale generated member");
+        let members: Vec<EntityId> = sqlx::query_scalar(
+            r#"SELECT "MediaItemId" FROM "PlaylistItem" WHERE "PlaylistId" = ? ORDER BY "Index""#,
+        )
+        .bind(PLAYLIST_ID)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(members, [1]);
+        assert_eq!(
+            report.playout_refreshes,
+            [ScanPlayoutRefresh {
+                playout_id: RELATED_PLAYOUT_ID,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved,
+            }]
+        );
+        assert_eq!(intent_playout_ids(&pool).await, [RELATED_PLAYOUT_ID]);
+
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Published" = 0 WHERE "Id" = 20"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let empty = synchronizer
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("remove the final unpublished member");
+        let count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+                .bind(PLAYLIST_ID)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(empty.playout_refreshes, report.playout_refreshes);
+        assert_eq!(linked_playlist_id(&pool).await, Some(PLAYLIST_ID));
+    }
+
+    #[tokio::test]
     async fn unchanged_generated_playlist_keeps_rows_and_creates_no_intent() {
         let pool = pool().await;
         seed_generated_list(&pool).await;

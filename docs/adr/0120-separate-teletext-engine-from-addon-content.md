@@ -13,6 +13,11 @@ Level2.5 remains available as experimental; its remaining acceptance/client work
 is Deferred until a new maintainer task and does not block9A or subsequent9B.
 This preserves the engine/content split; no experimental2.5 acceptance is claimed.
 
+Maintainer amendment (2026-11-07): besides add-ons, ErsatzRS itself delivers
+operator-made custom pages from the teletext element library as a host-owned
+page source. See "Host-delivered custom pages" below. This adds a source; it
+does not move TV-guide content into the host or change the two-stage order.
+
 ## Implementation
 
 Partial. The revised generic9A boundary is independently accepted at checkpoint
@@ -82,6 +87,72 @@ synthetic acceptance includes these controls before the same single production
 TV-guide add-on supplies actual themes and content. This supplements ownership
 and acceptance without changing the two-stage order or NOS reference scope.
 
+### Host-delivered custom pages (amendment 2026-11-07)
+
+Operators upload page designs (TTI, T42, EP1, HTT, for example from
+QTeletextMaker) to the teletext element library and link them to a channel
+with a page number. These pages are the operator's own content, so no add-on is
+needed to deliver them. ErsatzRS acts as their producer under these rules:
+
+- **Source.** One host-owned source per channel with the reserved producer id
+  `ersatzrs.host.custom-pages`. It is not an installable add-on, runs no child
+  process and has no manifest or settings. Each enabled channel link
+  contributes one page: the link's page number, or the element's own number
+  when the link has none. Rows 1–24 and all subpages come from the element;
+  row 0 (the header) stays the channel's. The subpage cycle time is the
+  element's. Only Level 1/1.5 content is broadcast; imported enhancement
+  packets are not, until enhanced import is accepted under ADR 0123.
+- **Same lifecycle as add-on pages.** Custom pages pass the same validation,
+  Check (draft preparation), preview, explicit publication, capacity policy and
+  transport as add-on output. Saving a link or an element never publishes. A
+  page set that exceeds the capacity policy is refused, never truncated.
+- **Fields.** Field markers (`%NAME%%%`; braces are national characters) are
+  filled by the host from fixed text, channel name/number, date, time and the
+  read-only programme projection of ADR 0112 (now/next title and start). Values
+  pass the Level 1 safe-text mapping and are always clipped or padded to the
+  field width, so the layout never shifts. Missing guide data renders as spaces,
+  never as an older title. A field without a binding blocks Check, so marker
+  text never reaches a receiver.
+- **Refresh.** Now/next fields refresh at each programme transition, date
+  fields at local midnight and time fields at most once per minute, and only
+  when such a field is bound. Fixed text and channel fields change only when
+  the element, link or channel changes. Refreshes should replace only the
+  affected page rather than the whole page set.
+- **Conflicts.** Page numbers are unique per channel among custom pages. A custom
+  page inside the declared page range of an enabled add-on on the same channel,
+  or on a page the add-on actually produced, blocks Check and publication with
+  a per-page reason. Neither side silently takes precedence.
+- **Failures.** At Check, an unreadable element or a field that cannot be filled
+  blocks Check with the page named; the operator can switch that link off. After
+  publication, a failed refresh blanks the affected dynamic fields of that page
+  only and reports it per page; add-on pages, other custom pages and audio/video
+  continue. The last published generation stays live until a new one is
+  explicitly published.
+- **Revisions.** Publication records each element's revision. Editing or
+  replacing an element takes effect at the next publication. Removing a link or
+  deleting an element removes the page at the next publication; deleting an
+  element in use requires confirmation in the admin.
+
+The add-on contract, add-on ranges and the TV-guide add-on are unchanged.
+Lua and channel profiles do not control custom pages in this amendment.
+
+Implementation (partial, 2026-11-07): the host producer takes part in Check,
+stored revisions, preview, publication and encoding. While at least one link
+is on, the channel selection carries one constant-identity member for
+`ersatzrs.host.custom-pages` (installable manifests cannot claim the id), so element
+and link edits do not disturb live output; switching the first page on or the
+last page off changes the selection like an add-on binding does. Its response
+carries exact seven-bit rows that the engine applies as physical base rows on
+empty Base pages. The engine's no-hidden-row rule applies unchanged: a page
+with text under a double-height line, or double height on row 23 or 24, is a
+per-page Check issue rather than having those bytes dropped. Refresh after publication, custom pages during published
+Scripted intervals, the element's subpage cycle time and the acceptance
+evidence remain open in the `teletext-support` parity record.
+Acceptance needs unit and native publication evidence, one independently decoded
+stream that carries a custom page with refreshed fields next to the TV-guide
+pages, and the Playwright flows for upload, field binding, channel linking and
+the conflict refusal.
+
 ## Consequences
 
 - Generic engine acceptance is separately observable before content work starts.
@@ -92,6 +163,9 @@ and acceptance without changing the two-stage order or NOS reference scope.
   outcome without breaking unrelated playback. P9A-01 decides stale-page and
   last-good publication policy before implementation.
 - No runtime architecture or user capability is claimed by this planning change.
+- Host-delivered custom pages add a second source next to add-ons. Page-set
+  views must show each page's source, and Check must explain conflicts between
+  sources instead of resolving them.
 
 ## Alternatives Considered
 
@@ -101,6 +175,9 @@ and acceptance without changing the two-stage order or NOS reference scope.
 - Deliver only source subtitle decoding: does not meet the authored-page goal.
 - Wait for automatic official repository distribution: creates a dependency
   cycle because that work is already gated behind Phase 9 and Phase 10.
+- Deliver custom pages through a separate "static pages" add-on: adds a package,
+  install step and child process for content the operator already uploaded to
+  ErsatzRS, and would need host data access the add-on contract does not grant.
 
 ## References
 
@@ -110,3 +187,4 @@ and acceptance without changing the two-stage order or NOS reference scope.
 - [ADR 0112: Programme-aware graphics context](0112-programme-aware-graphics-context.md)
 - [ADR 0118: Official repository distribution](0118-bundle-and-refresh-official-addon-repository.md)
 - [Current add-on contract](../reference/addons.md)
+- [Teletext admin UX conventions](../reference/teletext-admin-ux.md)

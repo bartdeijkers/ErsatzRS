@@ -30,6 +30,8 @@ function addon(page: Page, fixture: TeletextChannelFixture): Locator {
 }
 
 async function ensureFormOpen(form: Locator): Promise<void> {
+  const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
+  if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
   const details = form.locator('..');
   if (await details.getAttribute('open') === null) {
     await details.locator(':scope > summary').click();

@@ -123,6 +123,39 @@ separate hosted shards. Cargo tools are prepared in the build job; execution
 jobs use its verified nextest/helper executables. The full test selection remains
 intact. Hosted execution remains an explicit fallback rather than the default.
 
+**Automatic hosted fallback.** When the repository secret
+`CI_RUNNER_STATUS_TOKEN` is set, a run that was not dispatched with an explicit
+`runner` checks the runner status in Preflight. If no self-hosted runner with
+the `self-hosted` and `Linux` labels is online, every later job of that
+run uses GitHub-hosted runners instead of waiting in the queue; the run summary
+shows a notice. The decision is taken once, when the run starts: a run already
+waiting for a self-hosted runner does not move, and a runner that goes offline
+mid-run does not move the remaining jobs. Listing runners needs repository
+**Administration: read**, which `GITHUB_TOKEN` cannot be granted, so the secret
+holds a fine-grained personal access token limited to this repository with only
+that permission. Without the secret, or when the status call fails (for
+example an expired or revoked token), CI keeps using the self-hosted pool: the
+step never fails the run, and its job summary says that the fallback is
+unavailable. Preflight warns two weeks before the token expires. Choose the
+longest expiry that the token settings allow, and renew it when warned. Pull requests from forks never receive the secret
+and therefore always stay on the self-hosted pool. Hosted runs are slower
+(four vCPUs, cold Cargo cache) but are free for this public repository. Their build
+first removes unused preinstalled toolchains, adds swap and disables incremental
+compilation, because a full workspace test build does not fit a standard hosted
+runner otherwise. Hosted Next engine runs install `libvpl2` and
+`fonts-noto-cjk`, which the self-hosted runners carry.
+
+**Capacity proofs.** A few cases prove a fixed real-time budget rather than
+behavior and are CPU-bound: the Next 4K TrueHD late-PGS readiness budget of 30
+seconds (about 35 seconds on four vCPUs) and the Playwright `channel-watch` case
+that decodes three full-frame JPEG XL carriers in a native 1080p graph.
+[`scripts/ci-capacity-proofs.py`](scripts/ci-capacity-proofs.py) lists them.
+The Next and Playwright jobs run them only on a runner with more than four CPUs.
+On a smaller runner they leave them out, add a notice, and list them in the job
+summary as skipped. Their budgets are never relaxed. The self-hosted runners
+and the nightly full run on `main` keep proving them; a change merged from a
+hosted run is covered by the next nightly run on the self-hosted runners.
+
 For a dependency-audit correction, use the existing workflow's focused mode:
 
 ```bash
@@ -165,10 +198,12 @@ the GitHub Actions job environment and never touches `.cargo/config.toml`.
 **Build CI artifacts** produces the application test/runtime inputs once for
 all selected execution jobs on the selected Linux runner pool:
 
-- A Rust artifact contains the complete workspace nextest archive, the pinned
-  nextest executable, the ordinary smoke server and the CI helper executables.
+- A Rust artifact is produced only for selected Rust/Next/teletext consumers.
+  It contains their nextest archive, the pinned nextest executable and CI
+  helpers. Only Next runtime smoke consumers require the ordinary smoke server.
 - A web artifact contains one matched Leptos SSR server, WASM/JS, the complete
-  site assets and the CI helper executables. All six Playwright jobs use it.
+  site assets and CI helpers. It is produced only when browsers are selected;
+  every selected Playwright job consumes that same matched product.
 
 The producer retains the native/test and Leptos build graphs as distinct build
 products. Hosted native linker flags never reach the WASM build. General Rust,
@@ -183,6 +218,12 @@ toolchain/build flags and per-file hashes, sizes and executable status. Consumer
 verify the checkout, expected product, complete inventory and contents before
 execution. Wrong, missing, corrupt or incompatible artifacts fail; they do not
 trigger a replacement build. The tar envelope preserves executable permissions.
+Schema 2 declares `rust-tests`/`matched-web` and, when present, `smoke-server`
+capabilities. Each consumer requires its capability before executable paths
+are exported. Schema 1 remains readable with its original complete inventory;
+it cannot be used to omit the smoke server. Ordinary browser scan fixtures use
+the in-process scanner in the web host. Explicit external scanner acceptance
+retains its separately supplied exact executable and opt-in prerequisites.
 Artifact names include the producer run/attempt; consumers use its job outputs,
 so a failed-job rerun can retain the original successful build while a newly
 executed producer publishes a distinct artifact.
@@ -237,7 +278,7 @@ available. Ordinary CI requires exact source identity. The explicitly selected
 focused-recovery exception below permits only an unchanged runtime/test/config
 tree with a small allowlist of CI orchestration and progress-document changes.
 
-### Reuse verified artifacts for focused recovery
+### Reuse verified artifacts for CI recovery
 
 On the self-hosted machine, `reuse_artifacts` accepts a JSON object keyed by
 `rust` and/or `web`. Each reference must supply the original 40-character
@@ -249,7 +290,7 @@ source. Use the existing `teletext_only=1.5-rust` or `browser_only` selection to
 recover the affected jobs without another artifact compilation.
 
 The artifact provider only checks out source and verifies the pinned local
-archives. It runs no Cargo commands, tool installation, target reset, artifact
+archives. It runs no Cargo compilation, tool installation, target reset, artifact
 publication or cache pruning. Missing/corrupt archives fail closed; no rebuild
 or alternative download starts. Consumers recheck archive hashes, the complete
 file inventory and permissions, host/libc, toolchain, flags and original source
@@ -266,9 +307,59 @@ component and build evidence; a warm cache or an old server with newer frontend
 files alone does not establish a reusable matched build. Keep the referenced
 immutable local cache group until all consumers finish.
 
-Reuse is restricted to one explicit focused mode, self-hosted execution and no
-target reset. Normal full CI and its exact-SHA rules remain unchanged; these
-scoped results never imply a fresh full-CI result for the execution commit.
+Reuse requires self-hosted execution and no target reset. A focused recovery
+keeps its existing scope and does not produce the required `CI ok` aggregate.
+Full verification requires both Rust and matched-web references. The provider
+also queries Cargo metadata offline and lists the archive with its verified
+nextest executable, without running tests or compiling. Workspace membership
+and nextest's all-features metadata catalog must match the current checkout.
+Every library, binary and integration test target eligible under the current
+default features must exist in the archive; the ordinary smoke server is
+required too. A selected-package archive cannot satisfy this full-workspace
+admission check. Missing coverage fails without rebuilding.
+
+Full recovery executes every normal gate, including current runtime checks and
+the required aggregate, against those verified products. CI-only runtime setup
+corrections must be exercised by the new execution; earlier results with another
+runtime do not become current proof. The original producer identity remains in
+the manifest. A later push whose exact tree already passed full verification
+uses that tested-tree marker to avoid a duplicate compilation and test run.
+
+For a completed full artifact-reuse run, `resume_run` may name its run ID to
+retry its failed checks without repeating successful unchanged checks. Supply
+the same `reuse_artifacts` references. Preflight verifies the original run and
+complete job inventory through GitHub, binds both archive hashes and producer
+identities to its successful provider log, and compares clean exact source,
+artifact-consumer code, global flags and each check's execution definition.
+Changed native runtime, dependency, Rust-test, selector or embedded release-note
+inputs cannot reuse results. A changed job definition requires that check to run
+again. The explicitly qualified `ffmpeg-profiles.spec.ts` and
+`local-library-scan-lifecycle.spec.ts` are evaluated from the current checkout
+and are not compiled into Rust/server/WASM artifacts. Changing either
+invalidates both general browser results, while unchanged Level1.5 browser
+and native checks may retain their source-bound proof. Shared browser fixtures
+and other application tests remain outside this exception.
+When both original general-browser logs prove complete execution, recovery may
+rerun only changed and failed spec files, using the existing browser filter.
+Unchanged successful cases retain their original proof. Missing logs, incomplete
+counts, unrelated projects or setup/global failures keep the full browser scope;
+the exact log hashes and counts remain in the composed proof.
+Only failed browser suite/project entries are selected when their execution is
+unchanged. Format, dependency audit, commit lint, contract tests and complete
+artifact verification still run; `CI ok` requires every remaining check and
+records the imported successful-job IDs in the fully tested tree marker.
+This is composed recovery evidence, not a newly executed complete test suite.
+
+GitHub does not accept `workflow_dispatch` job checks as required pull-request
+checks ([GitHub's rule](https://docs.github.com/en/enterprise-cloud%40latest/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)).
+A ready PR can bridge a completed full proof from its head's direct
+parent through the ordinary PR preflight. It requires the same repository,
+successful full-tree marker, unchanged compiled/runtime/browser inputs, global
+settings and every consumer/aggregate job definition. Only CI qualification
+and the existing status-document exceptions may differ. Preflight runs the
+qualification regressions before reporting the eligible PR check; missing or
+incompatible proof retains the ordinary PR lane. This does not waive a gate or
+turn a focused run into full acceptance.
 
 The smoke runner accepts an explicitly selected server without rebuilding:
 
@@ -302,7 +393,9 @@ A Linux job is not acceptance for the other supported platforms.
 ### Teletext CI checks
 
 Default required CI runs the **Teletext 1.5** Rust job and four serial browser
-jobs: **general** and **1.5**, each in Chromium and Firefox. **Teletext 2.5**
+jobs: **general** and **1.5**, each in Chromium and Firefox. Pull requests run
+only the Chromium jobs of the domains they touch; the nightly run covers both
+browsers (see [CI lanes](#ci-lanes)). **Teletext 2.5**
 Rust and both **2.5** browser jobs are optional experimental checks, selected
 only by explicit `teletext_only=2.5` or `teletext_only=all` dispatch. Push/PR and
 normal dispatch do not schedule them. Tests/selectors remain intact, with
@@ -383,7 +476,9 @@ list shows `success` for `Format`, `Clippy`, `Build CI artifacts`, the `Test` jo
 configuration, `Teletext 1.5`, all four required `Playwright E2E` combinations
 (general and Level 1.5 in Chromium and Firefox), `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
-because skipped jobs do not fail a run. A failed, cancelled, queued, or
+because skipped jobs do not fail a run. A `pr` or `skip`
+[lane](#ci-lanes) run holds only part of this list; use a nightly or manually
+dispatched full run on the candidate SHA as release evidence. A failed, cancelled, queued, or
 in-progress run is not release evidence. Any commit or amend after the
 successful run creates a new candidate SHA and requires new CI evidence before
 tagging.
@@ -399,15 +494,89 @@ depends on every gate job, so the protection rule never has to list job or
 matrix names. It runs even after a failure or cancellation and fails unless
 `Preflight` succeeded and every other gate job either passed or was skipped
 by `Preflight` (an already proven SHA, or a pull request that changes only
-docs, plans, agent config, Markdown or PNG files). Commit lint may be skipped
-only on `push`. Focused manual recovery modes do not run `CI ok` because they
+known documentation or agent-config paths) or left out by the run's
+[lane](#ci-lanes). Embedded `CHANGELOG.md`, served images and other runtime
+assets are code inputs. Commit lint may be skipped on `push` and `schedule`.
+On a draft pull
+request `CI ok` always fails, so a draft never carries a passing required
+check into the full run that starts when it is marked ready. Focused manual recovery modes do not run `CI ok` because they
 never establish full CI.
 
 The `pull_request` trigger deliberately has no `paths-ignore`: a workflow that
 never starts never reports `CI ok`, which would leave docs-only pull requests
 unmergeable. Docs-only detection lives in `Preflight` instead. When adding a
-gate job, add it to `ci_ok.needs`; `scripts/ci-build-artifacts_test.py`
+gate job, add it to `ci_ok.needs` and Preflight's required-job output;
+`scripts/ci-build-artifacts_test.py`
 enforces this.
+
+### CI lanes
+
+`Preflight` picks one lane per run so a change is tested once, and only as far
+as it can break something:
+
+| Lane | When | Runs |
+|---|---|---|
+| `skip` | push of an already proven SHA or tree, a docs-only pull request, a ready pull request whose domains select nothing, or a nightly run on an already fully tested tree | nothing (`CI ok` passes) |
+| `light` | draft pull request | Format, Clippy, Build, Test, Cargo deny, Commit lint, docs (`CI ok` fails on purpose) |
+| `pr` | ready pull request | the touched domains (below), Playwright in Chromium only |
+| `full` | any other push, the nightly run (01:00 UTC), every manual dispatch | everything, both browsers |
+
+Playwright jobs start after the matched build and a successful `Test` job when
+Rust tests are selected. A presentation-only PR deliberately omits `Test`;
+mixed PRs cannot proceed after an unexpected skip or failure. Format, Clippy,
+dependency audit, commit lint and documentation checks retain their existing
+ownership. A green `pr` run uploads a small
+`ci-tree-<tree>` artifact naming the tree of the merge commit it tested, and the
+push to `main` with that tree is skipped. A green `full` run uploads
+`ci-full-<tree>`, and the nightly run is skipped while `main`'s tree has one.
+The nightly run is the safety net for everything a `pr` run left out,
+including Firefox.
+
+**Domain selection.** [`scripts/ci-domains.py`](scripts/ci-domains.py) maps the
+pull request's changed paths to work:
+
+- Rust tests: the touched crates and every crate that depends on them
+  (nextest `rdeps(...)`). The build archives only those crates' test
+  binaries (plus `ersatzrs-infra`/`ersatzrs-web` when the Teletext or Next job
+  runs). Pure admin CSS, served scripts/assets, browser specs/helpers and the
+  audited media presentation wrappers omit this archive and the Rust test job.
+  Wrappers lose that exemption when their source shape gains native behavior.
+  Mixed Rust modules and server functions keep native coverage. A selected
+  general Rust filter that matches zero tests fails.
+- Teletext browser tests: whole authoring, editor and runtime specs, including
+  explicit cross-family and shared dependencies. Crate membership alone does
+  not select them. Shared hydration selects every affected browser family;
+  source Health also retains the provider assertions in `teletext-decoder-health`.
+  Native teletext inputs retain the required Level 1.5 Rust job. Experimental
+  Level 2.5 remains an explicit optional dispatch.
+- `Next engine`: runtime/transport and shared pipeline inputs. The audited
+  native audio-filter helpers do not select Next merely through FFmpeg crate
+  membership; unknown reach still selects broad coverage.
+- General Playwright specs: the specs of the touched admin page areas, crates or
+  explicitly owned service modules, changed specs themselves and direct or
+  transitive consumers of a changed helper, plus a hydration smoke set. Unknown
+  helper reach selects all required browsers. Whole specs preserve serial groups.
+- Build, toolchain and CI inputs, `ersatzrs-core`, `ersatzrs-domain`,
+  migrations, shared Playwright infrastructure and any unmapped path select
+  everything. New production inputs, deletions and unknown paths also retain
+  this conservative fallback until ownership is reviewed.
+
+Preflight checks the complete paginated diff against the PR's event revision
+before selecting jobs, including old paths of renames and added-file metadata.
+Incomplete or stale metadata fails. Its summary shows domain reasons, filters
+and product demand. `CI ok` checks an explicit required-job set against those
+consumers; absent or inconsistent selection and unintended skips fail.
+When a mapping proves too narrow, add
+the missing path or spec to `scripts/ci-domains.py`; `scripts/ci-domains_test.py`
+checks that every mapping names existing specs and crates.
+
+Browser suites never run at the same time on the runner machine, also across
+workflow runs: each Playwright job holds a host-wide lock
+([`scripts/e2e/host-lock.py`](scripts/e2e/host-lock.py), a bind on
+`127.0.0.1:18399`) and a second job waits for it.
+
+Open work-in-progress pull requests as drafts: follow-up pushes then cost the
+fast lane only, and **Ready for review** starts the `pr` lane.
 
 ### Preflight-skipped runs are a pointer, not evidence
 

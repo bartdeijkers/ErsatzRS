@@ -159,6 +159,20 @@ If software playback works but hardware playback fails, switch the channel to a
 software FFmpeg profile, restart the stream, and inspect health results for the
 hardware probe.
 
+## Resolve a subtitle encoding failure
+
+If Health reports **Subtitle encoding**, or playback reports invalid UTF-8:
+
+1. Use **Support** -> **Troubleshooting** to identify the affected programme.
+2. Determine the subtitle's original encoding. Preserve its original bytes.
+3. Convert a copy to UTF-8, or add a `.charset` companion containing the correct
+   encoding label beside the local subtitle.
+4. Run Health again and restart the affected stream. The cache follows changed
+   source bytes and resolved encoding automatically.
+
+The [subtitle text reference](../reference/subtitle-text.md) defines declaration
+syntax, precedence, supported sources and preflight limits.
+
 ## Resolve portrait video that plays sideways
 
 A copied MPEG-TS stream cannot carry the source container's display rotation.

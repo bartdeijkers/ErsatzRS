@@ -927,6 +927,70 @@ async fn assert_next_session(
     assert!(handle.trim_playlist().await.is_none());
 }
 
+#[tokio::test]
+#[ignore = "requires qualified indexed Next and FFmpeg9; simultaneous normal/browser preview"]
+async fn real_next_indexed_normal_and_browser_preview_preserve_tracks_and_owned_shutdown() {
+    let root = tempfile::tempdir().unwrap();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let clip = root.path().join("fixture.mkv");
+    generate_clip(&ffmpeg, &clip).await;
+    std::fs::write(
+        root.path().join("fixture.nl.srt"),
+        "1\n00:00:00,000 --> 00:01:00,000\nNext subtitle proof\n",
+    )
+    .unwrap();
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Ac3,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..Default::default()
+    };
+    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value"='2' WHERE "Key"=?"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let permit = crate::next_engine::indexed_runtime::IndexedReaderPermit::qualify(&binary, None)
+        .await
+        .unwrap();
+    let host = std::sync::Arc::new(host::NextHost::new_indexed(
+        pool.clone(),
+        locker,
+        root.path().join("playout"),
+        ersatzrs_core::programme::ProgrammeClock::named("UTC").unwrap(),
+        permit,
+    ));
+    assert_preview_sessions(
+        &host,
+        host::NextStart {
+            channel_id: 1,
+            preview: false,
+            number: "1".into(),
+            executable: binary,
+            output: root.path().join("output"),
+            ffmpeg,
+            ffprobe: runtime_path("ERSATZRS_NEXT_TEST_FFPROBE"),
+            replacements: Vec::new(),
+            idle_timeout: None,
+            deadline: Instant::now() + Duration::from_secs(30),
+        },
+    )
+    .await;
+    assert_eq!(
+        crate::playback::load_channel_playback_profile(&pool, 1)
+            .await
+            .unwrap()
+            .unwrap()
+            .profile
+            .audio_format,
+        FFmpegProfileAudioFormat::Ac3
+    );
+    pool.close().await;
+}
+
 async fn assert_preview_sessions(host: &std::sync::Arc<host::NextHost>, request: host::NextStart) {
     use crate::hls::InMemoryHlsSessionRegistry;
     use crate::transcode_capacity::active_transcode_snapshot;

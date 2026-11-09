@@ -233,6 +233,20 @@ impl TeletextPacketBuffer {
         Ok(())
     }
 
+    /// Move out every retained complete packet and the partial tail.
+    ///
+    /// None after a retention failure or closure, whose bytes are discarded.
+    pub(super) fn take_retained(&mut self) -> Option<(Vec<[u8; PACKET_BYTES]>, Vec<u8>)> {
+        if self.failure.is_some() || self.closed {
+            return None;
+        }
+        self.arrivals.clear();
+        let partial = self.partial[..self.partial_len].to_vec();
+        self.partial.fill(0);
+        self.partial_len = 0;
+        Some((std::mem::take(&mut self.packets), partial))
+    }
+
     fn fail<T>(&mut self, error: TeletextBufferError) -> Result<T, TeletextBufferError> {
         self.failure = Some(error);
         self.packets.clear();

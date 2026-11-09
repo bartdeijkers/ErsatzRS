@@ -24,6 +24,7 @@ use super::{
     TeletextSavedV1Region, TeletextValidatedDocumentSource, Transmission, MAX_BINDINGS,
 };
 use crate::teletext_channel_documents::TeletextChannelRequestTemplates;
+use crate::teletext_profile_documents::DocumentProducer;
 
 /// Borrow an entire checked effective candidate, including non-producing Off members.
 /// Native confirmation remains separate from structural capture.
@@ -363,7 +364,7 @@ fn encode_documents(
     let documents = borrow_source_documents(input.sources, budget)?;
     let contracts = producer_contracts(input.selection, input.producer_bindings)?;
     let parsed = parse_source_documents(
-        contracts.iter().copied(),
+        contracts.iter().copied().map(DocumentProducer::addon),
         input.generation,
         &documents,
         budget.validation,
@@ -491,7 +492,7 @@ pub fn decode_teletext_effective_design_documents(
         })
         .collect::<Vec<_>>();
     let parsed = parse_source_documents(
-        contracts.into_iter(),
+        contracts.into_iter().map(DocumentProducer::addon),
         &envelope.generation,
         &borrowed,
         budget.validation,

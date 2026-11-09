@@ -39,9 +39,9 @@ use checks::{
     RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
     ScanRefreshStateHealthCheck, ScriptedPlayoutStateHealthCheck, SearchProjectionHealthCheck,
     SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck,
-    TeletextDecoderHealthCheck, TeletextWorkHealthCheck, TsduckAvailabilityHealthCheck,
-    UnavailableHealthCheck, VaapiDeviceHealthCheck, VaapiDriverHealthCheck,
-    ZeroDurationHealthCheck,
+    SubtitleEncodingHealthCheck, TeletextDecoderHealthCheck, TeletextWorkHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -65,7 +65,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 51] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 52] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -92,6 +92,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 51] = [
     "Artwork Cardinality",
     "Artwork Orphans",
     "Subtitle Cleanup",
+    "Subtitle Encoding",
     "Zero Duration",
     "Remote Streams",
     "Remote Stream add-on readiness",
@@ -292,6 +293,7 @@ fn registered_health_checks(
         Box::new(ArtworkCardinalityHealthCheck::new(pool.clone())),
         Box::new(ArtworkOrphansHealthCheck::new(pool.clone())),
         Box::new(SubtitleCleanupHealthCheck::new(pool.clone())),
+        Box::new(SubtitleEncodingHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamAddonReadinessHealthCheck::new(pool.clone())),
@@ -1579,8 +1581,8 @@ mod tests {
         // `std::path::Path::parent` only splits on `/` on Unix, which is
         // what produced the empty folders in the /system/health message.
         assert_eq!(
-            parent_folder(r"D:\Downloads\TV\3 Body Problem (2024)\Season 1\ep.mkv").as_deref(),
-            Some(r"D:\Downloads\TV\3 Body Problem (2024)\Season 1")
+            parent_folder(r"D:\Media\TV\Example Show (2024)\Season 1\ep.mkv").as_deref(),
+            Some(r"D:\Media\TV\Example Show (2024)\Season 1")
         );
         // Trailing separators must not produce an empty parent.
         assert_eq!(

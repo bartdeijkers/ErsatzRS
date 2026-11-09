@@ -6,7 +6,12 @@ Accepted (2026-08-03)
 
 ## Implementation
 
-Implemented (2026-08-03) — source normalization plus in-process cue rewrite
+Implemented (PR #129, 2026-11-08) — the original cue-aware rewrite and the
+ADR 0132 legacy encoding/cache correction are complete. Milestone
+`subtitle-encoding` records local proof, exact-head CI and maintainer merge;
+production installation and release acceptance are excluded.
+
+Original component (2026-08-03) — source normalization plus in-process cue rewrite
 for SRT/WebVTT/ASS, a narrow ffmpeg compatibility fallback, versioned
 subtitle-seek cache directory, and focused Rust regression coverage
 (straddling-cue cases per format, including a fixture directly modeling the
@@ -46,6 +51,11 @@ uses the identical mechanism: `StreamSeekFilterOption`
 there is no upstream fix to port.
 
 ## Decision
+
+ADR 0132 extends this decision: encoding failures now refuse preparation;
+FFmpeg syntax compatibility only receives normalized UTF-8, including at
+position zero. Its content-bound cache replaces the historical path-only key.
+The original decision below records the delivered cue-rewrite component.
 
 Replace the ffmpeg copy-based rebase with an in-process, cue-aware rewrite in
 `crates/ersatzrs-infra/src/subtitles.rs`:

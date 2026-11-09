@@ -560,6 +560,7 @@ fn graphics_subtitle_overlay(element: &GraphicsElement) -> WatermarkOverlay {
         opacity_expression: None,
         enable: graphics_enable_expression(element),
         eof_action_pass: false,
+        shortest: false,
         z_index: element.z_index,
     }
 }
@@ -585,6 +586,7 @@ fn graphics_native_overlay(
         opacity_expression: element.opacity_expression.clone(),
         enable,
         eof_action_pass,
+        shortest: false,
         z_index: element.z_index,
     }
 }

@@ -1124,3 +1124,74 @@ async fn full_prefetch_capacity_does_not_hide_a_blocked_sink_deadline() {
     assert_eq!(source.inner.position, capacity * 188);
     assert!(sink.writes.lock().unwrap().bytes.is_empty());
 }
+
+pub(crate) fn starve_after_first_interval(packets: &mut [[u8; 188]]) {
+    let first = usize::try_from(3 + 5_000_000 / (50 * 188 * 8)).unwrap();
+    for packet in &mut packets[first..] {
+        if packet[1] & 0x1f == 0x1f && packet[2] == 0xff {
+            // A payload packet on the PCR PID, as during a long video burst.
+            packet[..4].copy_from_slice(&[0x47, 1, 44, 0x10]);
+            packet[4..].fill(0x55);
+        }
+    }
+    // The producer repeats its PMT, as FFmpeg does.
+    let table = packets[1];
+    for (repetition, position) in (1000..packets.len()).step_by(1000).enumerate() {
+        packets[position] = table;
+        packets[position][3] = 0x10 | (u8::try_from(repetition + 1).unwrap() & 15);
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_teletext_failure_after_commitment_keeps_audio_and_video_flowing() {
+    // After one ordinary interval the multiplex stays full for longer than a
+    // page start may wait. The authored service fails, but the source must
+    // keep flowing exactly, now without teletext.
+    let mut original = fixture(270);
+    starve_after_first_interval(&mut original);
+    let mut source = Source::new(flatten(&original), usize::MAX, Tail::Eof);
+    let mut sink = Sink::new(SinkMode::Ready);
+    let count = pump(&mut source, &mut sink).await.unwrap();
+    let writes = sink.writes.lock().unwrap();
+    assert_eq!(count, u64::try_from(original.len() * 188).unwrap());
+    assert_eq!(writes.bytes.len(), original.len() * 188);
+    let output: Vec<&[u8]> = writes.bytes.chunks_exact(188).collect();
+    for (before, after) in original.iter().zip(&output) {
+        let pid = u16::from(before[1] & 0x1f) << 8 | u16::from(before[2]);
+        if pid != 0x1fff && pid != 3337 {
+            assert_eq!(before.as_slice(), *after);
+        }
+    }
+    let pid = |packet: &[u8]| u16::from(packet[1] & 0x1f) << 8 | u16::from(packet[2]);
+    let last_teletext = output
+        .iter()
+        .rposition(|packet| pid(packet) == 512)
+        .unwrap();
+    let pmts: Vec<_> = output
+        .iter()
+        .enumerate()
+        .filter(|(_, packet)| pid(packet) == 3337)
+        .collect();
+    // The teletext stream was announced and then withdrawn with a newer version.
+    let version = |packet: &[u8]| (packet[10] >> 1) & 0x1f;
+    // Announced (with teletext) first, then withdrawn with the next version,
+    // with one continuous output CC sequence on the PMT PID.
+    let cc = |packet: &[u8]| packet[3] & 15;
+    let announced = version(pmts[0].1);
+    let first_withdrawn = pmts
+        .iter()
+        .position(|(_, packet)| version(packet) == announced + 1)
+        .unwrap();
+    assert!(pmts[first_withdrawn].0 > last_teletext);
+    for (index, (_, packet)) in pmts.iter().enumerate() {
+        let expected = if index < first_withdrawn {
+            announced
+        } else {
+            announced + 1
+        };
+        assert_eq!(version(packet), expected);
+        if index > 0 {
+            assert_eq!(cc(packet), (cc(pmts[index - 1].1) + 1) & 15);
+        }
+    }
+}

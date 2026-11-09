@@ -2,8 +2,12 @@ feature    = 'Support pages (Health / Logs / Troubleshooting)'
 etv_source = '`ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`, `ErsatzTV/Pages/Troubleshooting/`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`'
 status     = 'In progress'
-adr        = ['0013', '0076', '0089', '0095', '0107']
+adr        = ['0013', '0076', '0089', '0095', '0107', '0132']
 summary    = '''
+ADR 0132 adds bounded read-only preflight of upcoming local native subtitle
+encodings, with all-culture Health messages and existing refresh/SSR behavior.
+Milestone subtitle-encoding owns its finite verification and incident evidence.
+
 Upstream catch-up row 1 (1e5c0b12, PR #2842) was Covered when upstream removed
 release notes. Row 65 (3e1918c9, PR #2942) restores a release-notes card on
 both `/` and `/system/health`. The card renders sanitized Markdown from the

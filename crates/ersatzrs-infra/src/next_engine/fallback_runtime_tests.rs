@@ -2,7 +2,7 @@
 use super::*;
 use ersatzrs_core::repositories::{PlayoutRepository as _, RemoteMediaSourceKind};
 
-async fn sample(ffmpeg: &Path, segment: &Path) -> (usize, f64, u16) {
+async fn sample(ffmpeg: &Path, segment: &Path) -> (usize, usize, f64, u16) {
     let mut video = Command::new(ffmpeg);
     video
         .args(["-v", "error", "-nostdin", "-i"])
@@ -28,6 +28,10 @@ async fn sample(ffmpeg: &Path, segment: &Path) -> (usize, f64, u16) {
         .chunks_exact(3)
         .filter(|pixel| pixel.iter().all(|value| *value > 180))
         .count();
+    let yellow = pixels
+        .chunks_exact(3)
+        .filter(|pixel| pixel[0] > 180 && pixel[1] > 180 && pixel[2] < 100)
+        .count();
     let mut audio = Command::new(ffmpeg);
     audio
         .args(["-v", "error", "-nostdin", "-i"])
@@ -52,7 +56,7 @@ async fn sample(ffmpeg: &Path, segment: &Path) -> (usize, f64, u16) {
         .map(|sample| sample.unsigned_abs())
         .max()
         .unwrap();
-    (white, hz, peak)
+    (white, yellow, hz, peak)
 }
 
 #[tokio::test]
@@ -214,6 +218,7 @@ enum FallbackSource {
     Leading,
     Credits,
     PinnedOff,
+    Background,
     Provider(RemoteMediaSourceKind),
     Direct,
     DirectLive,
@@ -238,6 +243,7 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
             | FallbackSource::Provider(_)
             | FallbackSource::Credits
             | FallbackSource::PinnedOff
+            | FallbackSource::Background
             | FallbackSource::Direct
             | FallbackSource::DirectLive
     ) {
@@ -435,6 +441,12 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
         .execute(&pool)
         .await
         .unwrap();
+    if source == FallbackSource::Background {
+        sqlx::query(r#"UPDATE "Channel" SET "FallbackFillerId"=NULL WHERE "Id"=1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
     let host = std::sync::Arc::new(host::NextHost::new(
         pool.clone(),
         locker,
@@ -504,13 +516,15 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
                             if !segment.exists() {
                                 continue;
                             }
-                            let (mut white, hz, peak) = sample(&ffmpeg, &segment).await;
+                            let (mut white, yellow, hz, peak) = sample(&ffmpeg, &segment).await;
                             if source == FallbackSource::Credits {
                                 white = credits_runtime_tests::top_white_pixels(&ffmpeg, &segment)
                                     .await;
                             }
                             checked.insert(name.to_owned());
-                            let is_fallback = if source == FallbackSource::PinnedOff {
+                            let is_fallback = if source == FallbackSource::Background {
+                                yellow >= 320 * 48 * 9 / 10 && hz < 1.0 && peak <= 1 && white == 0
+                            } else if source == FallbackSource::PinnedOff {
                                 hz < 1.0 && peak <= 1 && white == 0
                             } else {
                                 (820.0..940.0).contains(&hz)
@@ -666,4 +680,33 @@ async fn assert_fallback_vtt(path: &Path, credits: bool) -> bool {
     assert!(!body.contains("UNSELECTED ENGLISH"));
     assert!(body.contains("X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:"));
     true
+}
+
+#[tokio::test]
+#[ignore = "requires qualified Next/FFmpeg, loopback and a fresh explicit ERSATZRS_APP_DATA_DIR"]
+async fn real_next_background_gap_is_silent_and_returns_to_scheduled_programme() {
+    let app_data = runtime_path(crate::file_system_layout::APP_DATA_DIR_ENV_VAR);
+    let resources = crate::file_system_layout::resources_cache_folder();
+    assert!(app_data.is_absolute() && !app_data.exists());
+    assert!(resources.starts_with(&app_data));
+    tokio::fs::create_dir_all(&resources).await.unwrap();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let mut image = Command::new(&ffmpeg);
+    image
+        .args([
+            "-v",
+            "error",
+            "-nostdin",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=yellow:s=320x180",
+            "-frames:v",
+            "1",
+            "-update",
+            "1",
+        ])
+        .arg(resources.join("background.png"));
+    tool(image).await;
+    fallback_case(FallbackSource::Background, false).await;
 }

@@ -1,6 +1,6 @@
 //! Fresh retained-prefix metadata for one-shot Next inputs; never use stored pins.
 
-use std::collections::HashSet;
+use std::{collections::HashSet, path::Path};
 
 use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
 use ersatzrs_domain::{MediaStream, MediaStreamKind, Resolution};
@@ -63,7 +63,8 @@ pub(super) fn generated_video(
 }
 
 /// Describe a persisted local or media-server version without opening the
-/// source. Incomplete stream metadata leaves Next's ordinary probe in control.
+/// source. Unnamed codecs use `unknown`; invalid geometry/index metadata leaves
+/// Next's ordinary probe in control.
 /// One-shot producers use fresh metadata through `producer` instead.
 #[allow(clippy::too_many_lines)] // Keep one version and its ordered stream projection together.
 pub(crate) async fn persisted(
@@ -104,11 +105,9 @@ pub(crate) async fn persisted(
         format_name: version
             .try_get::<Option<String>, _>("Path")
             .repository()?
-            .filter(|path| {
-                path.rsplit_once('.')
-                    .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("avi"))
-            })
-            .map(|_| "avi".into()),
+            .as_deref()
+            .and_then(container_format_hint)
+            .map(str::to_owned),
         duration_ms,
     };
     let rows = sqlx::query(
@@ -136,9 +135,11 @@ pub(crate) async fn persisted(
             return Ok(None);
         };
         let codec: Option<String> = row.try_get("Codec").repository()?;
-        let Some(codec) = codec.filter(|value| !value.trim().is_empty()) else {
-            return Ok(None);
-        };
+        // UCU-15 row279: an unnamed codec is not a missing stream. Keep the
+        // container and all indexes; Next's own probe uses this same sentinel.
+        let codec = codec
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "unknown".into());
         match kind {
             1 => {
                 let attached: i64 = row.try_get("AttachedPic").repository()?;
@@ -236,6 +237,25 @@ pub(crate) async fn persisted(
         return Ok(None);
     }
     Ok(Some(hint))
+}
+
+// Upstream PlayoutItemConverter.FormatNameHint (UCU-14 row263). Next assumes
+// MPEG-TS if this is absent; preserve null for containers we cannot identify.
+fn container_format_hint(path: &str) -> Option<&'static str> {
+    match Path::new(path)
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "avi" => Some("avi"),
+        "mkv" | "mk3d" | "webm" => Some("matroska,webm"),
+        "mp4" | "m4v" | "mov" => Some("mov,mp4,m4a,3gp,3g2,mj2"),
+        "wmv" | "asf" => Some("asf"),
+        "ts" | "m2ts" | "mts" => Some("mpegts"),
+        "mpg" | "mpeg" | "vob" => Some("mpeg"),
+        _ => None,
+    }
 }
 
 /// Describe the fresh rawvideo/PCM stream produced by retained-interval playback.
@@ -415,3 +435,7 @@ fn video(
 #[cfg(test)]
 #[path = "probe_hint_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "codec_hint_tests.rs"]
+mod codec_hint_tests;

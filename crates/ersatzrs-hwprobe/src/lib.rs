@@ -50,6 +50,8 @@ pub struct NvidiaEncoderProbe {
     pub profiles: BTreeSet<String>,
     /// Whether the hardware encoder supports B-frame reference mode.
     pub supports_b_frames: bool,
+    /// Maximum consecutive B frames reported by the native encoder API.
+    pub max_b_frames: Option<u32>,
 }
 
 impl NvidiaEncoderProbe {
@@ -66,6 +68,7 @@ impl NvidiaEncoderProbe {
             pixel_formats,
             profiles,
             supports_b_frames,
+            max_b_frames: None,
         }
     }
 }
@@ -182,6 +185,7 @@ mod nvidia {
     const NV_ENC_CAPS_PARAM_VER: c_uint = NVENCAPI_STRUCT_VERSION_ONE;
     const NV_ENCODE_API_FUNCTION_LIST_VER: c_uint = NVENCAPI_VERSION | (2 << 16) | (0x7 << 28);
     const NV_ENC_CAPS_SUPPORT_10BIT_ENCODE: c_uint = 39;
+    const NV_ENC_CAPS_NUM_MAX_BFRAMES: c_uint = 0;
     const NV_ENC_CAPS_SUPPORT_BFRAME_REF_MODE: c_uint = 43;
 
     #[derive(Debug, Clone, Copy)]
@@ -727,6 +731,7 @@ mod nvidia {
                 && left.pixel_formats == right.pixel_formats
                 && left.profiles == right.profiles
                 && left.supports_b_frames == right.supports_b_frames
+                && left.max_b_frames == right.max_b_frames
         });
         decoders.sort_by(|left, right| {
             left.codec
@@ -920,12 +925,16 @@ mod nvidia {
                     .map(str::to_owned)
                     .collect();
 
-                encoders.push(NvidiaEncoderProbe::new(
+                let mut capability = NvidiaEncoderProbe::new(
                     spec.encoder,
                     pixel_formats,
                     profiles,
                     supports_b_frames,
-                ));
+                );
+                capability.max_b_frames = self
+                    .capability_value(encoder, spec.guid, NV_ENC_CAPS_NUM_MAX_BFRAMES)
+                    .and_then(|value| u32::try_from(value).ok());
+                encoders.push(capability);
             }
 
             unsafe {
@@ -991,6 +1000,16 @@ mod nvidia {
         }
 
         fn capability(&self, encoder: NvEncoder, codec: Guid, capability: c_uint) -> c_int {
+            self.capability_value(encoder, codec, capability)
+                .unwrap_or(0)
+        }
+
+        fn capability_value(
+            &self,
+            encoder: NvEncoder,
+            codec: Guid,
+            capability: c_uint,
+        ) -> Option<c_int> {
             let mut params = NvEncCapsParam::new(capability);
             let mut value = 0;
             unsafe {
@@ -1001,9 +1020,9 @@ mod nvidia {
                     &raw mut value,
                 ) == NV_ENC_SUCCESS
                 {
-                    value
+                    Some(value)
                 } else {
-                    0
+                    None
                 }
             }
         }
@@ -1122,7 +1141,8 @@ mod nvidia {
         }
 
         fn symbol<T: Copy>(&self, name: &str) -> Option<T> {
-            let address = self.symbol_address(name)?;
+            // Call sites use C-style names; CString adds their terminator.
+            let address = self.symbol_address(name.strip_suffix('\0').unwrap_or(name))?;
             debug_assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<*mut c_void>());
             Some(unsafe { std::mem::transmute_copy::<*mut c_void, T>(&address) })
         }
@@ -1441,6 +1461,25 @@ mod videotoolbox {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[ignore = "requires an installed NVIDIA driver and an available native encoder"]
+    fn native_nvenc_numeric_limits_are_reported() {
+        let probe = super::probe_nvidia();
+        assert!(probe.encoders_attempted);
+        for name in ["h264_nvenc", "hevc_nvenc"] {
+            let encoder = probe
+                .encoders
+                .iter()
+                .find(|entry| entry.encoder == name)
+                .unwrap();
+            assert!(
+                encoder.max_b_frames.is_some(),
+                "{name}: numeric capability query failed"
+            );
+            println!("{name} max_b_frames={}", encoder.max_b_frames.unwrap());
+        }
+    }
+
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn videotoolbox_probe_is_unattempted_off_macos() {
