@@ -12,8 +12,8 @@ use crate::admin::server_fns::channels::{
     stop_channel_session, ChannelListRow, ChannelWatchAvailability, ChannelWatchData,
 };
 use crate::admin::ui::primitives::{
-    page_header::{PageAction, PageActionKind, PageHeader},
     dialog::{DeleteDialog, Modal},
+    page_header::{PageAction, PageActionKind, PageHeader},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };

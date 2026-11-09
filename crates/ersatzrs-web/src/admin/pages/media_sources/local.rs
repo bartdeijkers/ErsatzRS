@@ -11,8 +11,8 @@ use crate::admin::server_fns::media_sources::{
     ManagedAddonMediaSourceRow,
 };
 use crate::admin::ui::primitives::{
-    page_header::{PageAction, PageHeader},
     dialog::DeleteDialog,
+    page_header::{PageAction, PageHeader},
     resource_state::{admin_loading_resource_view, admin_result_view},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},

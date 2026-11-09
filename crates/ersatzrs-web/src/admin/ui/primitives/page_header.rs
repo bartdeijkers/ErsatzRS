@@ -61,7 +61,10 @@ pub fn PageAction(
     marker: Option<&'static str>,
 ) -> impl IntoView {
     let (class, icon) = match kind {
-        PageActionKind::Add => (format!("{} {}", style::action, style::primary), Some(IconName::Add)),
+        PageActionKind::Add => (
+            format!("{} {}", style::action, style::primary),
+            Some(IconName::Add),
+        ),
         PageActionKind::Secondary => (format!("{} {}", style::action, style::secondary), None),
     };
     view! {
