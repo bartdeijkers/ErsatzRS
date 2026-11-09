@@ -7,10 +7,28 @@ use crate::admin::ui::primitives::pagination::PaginationControls;
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/table.module.css");
 
+/// Where a column's value goes when the table collapses into cards on a
+/// narrow container. On wide screens it only affects alignment.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ColumnRole {
+    /// A labelled field: the card shows it as "label  value" with a fixed
+    /// label column, so values line up from card to card.
+    #[default]
+    Field,
+    /// A short identifier (such as a channel number) shown before the title;
+    /// right-aligned with tabular digits.
+    Lead,
+    /// The row's name.
+    Title,
+    /// An image (logo, thumbnail) shown at the end of the card heading.
+    Media,
+}
+
 /// A column definition for `PagedTable`.
 pub struct Column<T: 'static> {
     pub header: &'static str,
     pub sort_key: Option<&'static str>,
+    pub role: ColumnRole,
     pub render: Box<dyn Fn(&T) -> AnyView + Send + Sync>,
 }
 
@@ -22,6 +40,7 @@ impl<T: 'static> Column<T> {
         Self {
             header,
             sort_key: None,
+            role: ColumnRole::Field,
             render: Box::new(render),
         }
     }
@@ -35,8 +54,46 @@ impl<T: 'static> Column<T> {
         Self {
             header,
             sort_key: Some(sort_key),
+            role: ColumnRole::Field,
             render: Box::new(render),
         }
+    }
+
+    /// Mark this column as the row's short identifier.
+    #[must_use]
+    pub fn lead(mut self) -> Self {
+        self.role = ColumnRole::Lead;
+        self
+    }
+
+    /// Mark this column as the row's title.
+    #[must_use]
+    pub fn title(mut self) -> Self {
+        self.role = ColumnRole::Title;
+        self
+    }
+
+    /// Mark this column as the row's image.
+    #[must_use]
+    pub fn media(mut self) -> Self {
+        self.role = ColumnRole::Media;
+        self
+    }
+}
+
+const fn header_class(role: ColumnRole) -> &'static str {
+    match role {
+        ColumnRole::Lead => style::th_lead,
+        _ => style::th,
+    }
+}
+
+const fn cell_class(role: ColumnRole) -> &'static str {
+    match role {
+        ColumnRole::Field => style::td,
+        ColumnRole::Lead => style::td_lead,
+        ColumnRole::Title => style::td_title,
+        ColumnRole::Media => style::td_media,
     }
 }
 
@@ -131,11 +188,12 @@ where
                         <tr>
                             {columns.iter().map(|col| {
                                 let header = col.header;
+                                let th_class = header_class(col.role);
                                 if let Some(sort_key) = col.sort_key {
                                     view! {
                                         <th
                                             scope="col"
-                                            class=style::th
+                                            class=th_class
                                             aria-sort=move || {
                                                 let sort = params.get().sort;
                                                 if sort.column == Some(sort_key) {
@@ -169,11 +227,13 @@ where
                                     }.into_any()
                                 } else {
                                     view! {
-                                        <th scope="col" class=style::th>{header}</th>
+                                        <th scope="col" class=th_class>{header}</th>
                                     }.into_any()
                                 }
                             }).collect_view()}
-                            {row_actions.as_ref().map(|_| view! { <th class=style::th_actions/> })}
+                            {row_actions.as_ref().map(|_| view! {
+                                <th scope="col" class=style::th_actions>{tr(TextKey::Actions)}</th>
+                            })}
                         </tr>
                     </thead>
                     <tbody>
@@ -197,7 +257,7 @@ where
                                 Some(items) => items.iter().map(|row| {
                                     let cells = columns.iter().map(|col| {
                                         view! {
-                                            <td class=style::td>
+                                            <td class=cell_class(col.role) data-label=col.header>
                                                 {(col.render)(row)}
                                             </td>
                                         }

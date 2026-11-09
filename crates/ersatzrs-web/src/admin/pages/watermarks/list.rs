@@ -9,6 +9,7 @@ use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     form::TextField,
     page_header::{PageAction, PageHeader},
+    row_actions::{RowActionButton, RowActionLink, RowActions, RowIcon},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -105,7 +106,8 @@ fn WatermarksListIsland() -> impl IntoView {
         Column::new(tr(TextKey::Name), |r: &WatermarkListRow| {
             let n = r.name.clone();
             view! { <span>{n}</span> }.into_any()
-        }),
+        })
+        .title(),
         Column::new(tr(TextKey::Image), |r: &WatermarkListRow| {
             if let Some(path) = r.image_path.clone() {
                 view! {
@@ -121,7 +123,8 @@ fn WatermarksListIsland() -> impl IntoView {
             } else {
                 view! { <span/> }.into_any()
             }
-        }),
+        })
+        .media(),
         Column::new(tr(TextKey::Mode), |r: &WatermarkListRow| {
             let m = watermark_mode_label(r.mode_id);
             view! { <span class=style::cell_muted>{m}</span> }.into_any()
@@ -137,33 +140,30 @@ fn WatermarksListIsland() -> impl IntoView {
         let r_for_delete = r.clone();
         let r_for_copy = r.clone();
         view! {
-            <div class=style::row_actions>
-                <a
+            <RowActions>
+                <RowActionLink
+                    icon=RowIcon::Edit
                     href=format!("/watermarks/{id}")
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
-                    title=tr(TextKey::EditWatermark).to_string()
-                    aria-label=tr(TextKey::EditWatermark).to_string()
-                ></a>
-                <button
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_copy)
-                    title=tr(TextKey::CopyWatermark).to_string()
-                    aria-label=tr(TextKey::CopyWatermark).to_string()
-                    on:click=move |_| {
+                    label=tr(TextKey::EditWatermark)
+                />
+                <RowActionButton
+                    icon=RowIcon::Copy
+                    label=tr(TextKey::CopyWatermark)
+                    on_click=Callback::new(move |()| {
                         copy_source.set(Some(r_for_copy.clone()));
                         copy_name.set(format!("{} {}", tr(TextKey::CopyOf), r_for_copy.name));
                         copy_open.set(true);
-                    }
-                ></button>
-                <button
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
-                    title=tr(TextKey::DeleteWatermark).to_string()
-                    aria-label=tr(TextKey::DeleteWatermark).to_string()
-                    on:click=move |_| {
+                    })
+                />
+                <RowActionButton
+                    icon=RowIcon::Delete
+                    label=tr(TextKey::DeleteWatermark)
+                    on_click=Callback::new(move |()| {
                         delete_target.set(Some(r_for_delete.clone()));
                         delete_open.set(true);
-                    }
-                ></button>
-            </div>
+                    })
+                />
+            </RowActions>
         }
         .into_any()
     });

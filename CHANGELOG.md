@@ -135,6 +135,14 @@ release section when tagging a release.
   with a new version, and every other packet is forwarded unchanged. The
   failure is still shown in the channel's teletext readiness and in Health.
   Previously such a failure ended the whole stream.
+- Admin tables (Channels, FFmpeg Profiles, Local Libraries, Watermarks) share
+  one set of row actions: round icon buttons of one size with translated
+  tooltips, a green play button and a red trash can for delete. Each action
+  keeps a fixed slot, so the same icon lines up in every row, and the new
+  "Actions" column starts right after the data. Rows are more compact and
+  numbers are right-aligned. Tables no longer force a 78rem minimum width; on
+  narrow screens every row becomes a card with aligned label/value pairs and
+  44 px action buttons.
 - CI now ends with a single `CI ok` job that passes only when every gate job
   passed, so `main` can require one status check. Docs-only pull requests
   start CI and report `CI ok` quickly instead of never reporting a status.

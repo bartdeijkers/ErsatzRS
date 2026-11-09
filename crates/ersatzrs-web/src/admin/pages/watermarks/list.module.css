@@ -12,37 +12,6 @@
     padding: 2rem 1.5rem 0;
 }
 
-.row-actions {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.5rem;
-}
-
-.row-btn-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 999px;
-    color: var(--color-action-default);
-    text-decoration: none;
-    transition: background-color 150ms, color 150ms;
-}
-
-.row-btn-icon:hover { background-color: var(--color-table-hover); }
-
-.row-btn-edit::before { content: "✎"; }
-.row-btn-copy::before { content: "⧉"; }
-.row-btn-delete::before { content: "×"; }
-.row-btn-edit::before,
-.row-btn-copy::before,
-.row-btn-delete::before {
-    font-size: 1.25rem;
-    line-height: 1;
-}
-
 .cell-muted {
     color: var(--color-muted);
 }
