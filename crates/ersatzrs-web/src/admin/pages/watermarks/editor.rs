@@ -21,6 +21,7 @@ use crate::admin::ui::primitives::resource_state::{
 };
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
+use crate::admin::ui::primitives::button::CancelLink;
 stylance::import_crate_style!(style, "src/admin/pages/watermarks/editor.module.css");
 
 #[cfg(target_arch = "wasm32")]
@@ -366,6 +367,7 @@ fn WatermarkEditorForm(initial_data: WatermarkEditorData) -> impl IntoView {
                 >
                     {btn_label}
                 </button>
+                <CancelLink href="/watermarks"/>
                 <div class=style::navigation_group aria-label=tr(TextKey::WatermarkNavigation)>
                     <button
                         type="button"

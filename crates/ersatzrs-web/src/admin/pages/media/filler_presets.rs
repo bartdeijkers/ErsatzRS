@@ -16,6 +16,7 @@ use crate::admin::ui::primitives::{
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
+use crate::admin::ui::primitives::button::CancelLink;
 stylance::import_crate_style!(style, "src/admin/pages/media/filler_presets.module.css");
 
 const FILLER_KIND_PRE_ROLL: i32 = 1;
@@ -521,6 +522,7 @@ fn FillerPresetEditorForm(
                                     <span aria-hidden="true">"+"</span>
                                     {save_label}
                                 </button>
+                                <CancelLink href="/media/filler/presets"/>
                             </div>
                             <div class=style::editor>
                                 <h1 class=style::page_title>{page_title}</h1>

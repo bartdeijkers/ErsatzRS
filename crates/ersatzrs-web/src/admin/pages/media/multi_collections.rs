@@ -23,6 +23,7 @@ use crate::admin::ui::primitives::{
 // collections.module.css is shared with collections.rs and
 // smart_collections.rs; classes unused in this file's per-invocation
 // generated constants are used there.
+use crate::admin::ui::primitives::button::CancelLink;
 stylance::import_crate_style!(
     #[allow(dead_code)]
     style,
@@ -480,6 +481,7 @@ fn MultiCollectionEditorIsland(
                     <span style=icon_style(save_icon, "1.125rem") aria-hidden="true"></span>
                     {save_label}
                 </button>
+                <CancelLink href="/media/multi-collections"/>
             </div>
 
             <div class=style::editor>

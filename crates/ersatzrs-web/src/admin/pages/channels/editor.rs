@@ -342,8 +342,9 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         )}
                     </div>
                     <div class=style::field>
-                        <label class=style::label>{tr(TextKey::StreamingMode)}</label>
+                        <label for=field_id("streaming_mode") class=style::label>{tr(TextKey::StreamingMode)}</label>
                         <select
+                            id=field_id("streaming_mode")
                             name="streaming_mode"
                             class=format!("{} {}", style::input, style::select)
                         >
@@ -515,7 +516,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                     {text_field(tr(TextKey::ExternalLogoUrl), "external_logo_url", external_logo_url, "")}
 
                     <div class=style::field>
-                        <label class=style::label>{tr(TextKey::ChannelLogoPreview)}</label>
+                        <span class=style::label>{tr(TextKey::ChannelLogoPreview)}</span>
                         <img
                             class=style::logo_preview
                             src=move || logo_preview.get()
@@ -581,6 +582,12 @@ fn language_options(options: &[ChannelSelectOption]) -> Vec<(String, String)> {
     result
 }
 
+/// Stable element id for a channel editor control, so its visible label is
+/// programmatically associated with it (`<label for>`).
+fn field_id(name: &str) -> String {
+    format!("channel-field-{name}")
+}
+
 fn text_field(
     label: &'static str,
     name: &'static str,
@@ -589,8 +596,9 @@ fn text_field(
 ) -> impl IntoView {
     view! {
         <div class=style::field>
-            <label class=style::label inner_html=label></label>
+            <label for=field_id(name) class=style::label inner_html=label></label>
             <input
+                id=field_id(name)
                 name=name
                 type="text"
                 class=style::input
@@ -613,9 +621,10 @@ fn number_field(
     let disabled = disabled.unwrap_or_else(|| Signal::derive(|| false));
     view! {
         <div class=style::field>
-            <label class=style::label inner_html=label></label>
+            <label for=field_id(name) class=style::label inner_html=label></label>
             <div class=style::number_row>
                 <input
+                    id=field_id(name)
                     name=name
                     type="number"
                     class=style::input
@@ -661,6 +670,8 @@ fn select_i32_field(
     let select_class = format!("{} {}", style::input, style::select);
     let disabled = disabled.unwrap_or_else(|| Signal::derive(|| false));
     let disabled_initial = disabled.get_untracked();
+    // Keeps its pre-existing bare `id`; browser proofs pin selectors such as
+    // `label[for="source_teletext_delivery"]`.
     view! {
         <div class=style::field>
             <label for=name class=style::label inner_html=label></label>
@@ -721,7 +732,7 @@ fn select_i64_field(
     let disabled_initial = disabled.get_untracked();
     view! {
         <div class=style::field>
-            <label class=style::label inner_html=label></label>
+            <label for=field_id(name) class=style::label inner_html=label></label>
             {(disabled_initial && preserve_disabled_value).then(|| {
                 view! {
                     <input
@@ -732,6 +743,7 @@ fn select_i64_field(
                 }
             })}
             <select
+                id=field_id(name)
                 name=name
                 class=select_class
                 disabled=move || disabled.get()
@@ -778,7 +790,7 @@ fn select_string_field(
     let disabled_initial = disabled.get_untracked();
     view! {
         <div class=style::field>
-            <label class=style::label inner_html=label></label>
+            <label for=field_id(name) class=style::label inner_html=label></label>
             {disabled_initial.then(|| {
                 view! {
                     <input
@@ -789,6 +801,7 @@ fn select_string_field(
                 }
             })}
             <select
+                id=field_id(name)
                 name=name
                 class=select_class
                 disabled=move || disabled.get()

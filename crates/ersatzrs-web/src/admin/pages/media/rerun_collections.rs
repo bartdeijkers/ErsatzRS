@@ -19,6 +19,7 @@ use crate::admin::ui::primitives::{
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
+use crate::admin::ui::primitives::button::CancelLink;
 stylance::import_crate_style!(style, "src/admin/pages/media/rerun_collections.module.css");
 
 const COLLECTION_TYPE_COLLECTION: i32 = 0;
@@ -417,6 +418,7 @@ fn RerunCollectionEditorForm(
                         <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
                         <span>{if form_id.get_untracked() == 0 { tr(TextKey::AddRerunCollection) } else { tr(TextKey::SaveRerunCollection) }}</span>
                     </button>
+                    <CancelLink href="/media/rerun-collections"/>
                 </div>
                 <section class=style::editor>
                     <h1 class=style::page_title>{tr(TextKey::RerunCollection)}</h1>
