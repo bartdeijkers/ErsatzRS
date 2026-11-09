@@ -58,6 +58,10 @@ release section when tagging a release.
 
 ### Changed
 
+- The EPG/tv guide grid is easier to read: programme titles, times and the
+  time ruler use at least 13-14 px text, rows are taller, the grid fills the
+  available window height, and on large and 4K displays the guide uses the
+  full page width and scales its text up. The zoom control works as before.
 - Update MiniJinja to 3.x and refresh the semver-compatible Cargo lockfile
   (Leptos 0.8.23 with its now syn-3-compatible server-function macros, zip
   9.4, ammonia 4.2.4 kept). Bundled XMLTV guide templates, dynamic text and

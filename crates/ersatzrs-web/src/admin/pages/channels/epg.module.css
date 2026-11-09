@@ -5,6 +5,13 @@
     margin: 0 auto;
 }
 
+/* Let the tv guide use the full width of large and 4K displays. */
+@media (min-width: 2200px) {
+    .page {
+        width: 100%;
+    }
+}
+
 .header {
     display: flex;
     align-items: flex-end;
