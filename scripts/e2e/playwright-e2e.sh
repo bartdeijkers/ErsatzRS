@@ -210,7 +210,6 @@ fi
 for required_asset in \
   "bundle.css" \
   "channel-preview.js" \
-  "pagination-auto-apply.js" \
   "vendor/hls/hls.mjs" \
   "vendor/hls/LICENSE"; do
   if [[ ! -f "$SITE_ROOT/$required_asset" ]]; then
