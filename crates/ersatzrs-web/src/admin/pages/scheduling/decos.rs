@@ -21,6 +21,7 @@ use crate::admin::server_fns::decos::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
+    page_header::PageHeader,
     resource_state::{admin_loading_resource_view, admin_result_view},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -206,8 +207,7 @@ fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h1 class=style::page_title>{tr(TextKey::DecoGroups)}</h1>
-                    <div class=style::divider></div>
+                    <PageHeader title=tr(TextKey::DecoGroups)/>
                     <form method="post" action="/admin-api/decos/groups/create" class=style::form_grid>
                         <label class=style::label for="deco-group-name">{tr(TextKey::DecoGroupName)}</label>
                         <input
@@ -959,8 +959,7 @@ fn DecoTemplatesIsland(
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h1 class=style::page_title>{tr(TextKey::DecoTemplateGroups)}</h1>
-                    <div class=style::divider></div>
+                    <PageHeader title=tr(TextKey::DecoTemplateGroups)/>
                     <form method="post" action="/admin-api/deco-templates/groups/create" class=style::form_grid>
                         <label class=style::label for="deco-template-group-name">{tr(TextKey::DecoTemplateGroupName)}</label>
                         <input

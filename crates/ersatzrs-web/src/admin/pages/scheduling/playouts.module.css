@@ -5,19 +5,7 @@
     margin: -1.875rem;
 }
 
-/* ---- action bar (right-aligned: Add Playout menu + Reset All) ---- */
-.action-bar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    min-height: 4rem;
-    padding: 0 1.5rem;
-    background-color: var(--color-surface);
-    box-shadow: 0 1px 0 var(--color-table-line);
-    z-index: 2;
-}
-
+/* ---- page-header actions: Add Playout menu + Reset All ---- */
 .add-menu {
     position: relative;
 }
@@ -93,14 +81,6 @@
     max-width: 120rem;
     margin: 0 auto;
     padding: 2rem 1.5rem 2rem;
-}
-
-.page-title {
-    font-size: 1.5rem;
-    line-height: 1.334;
-    font-weight: 400;
-    color: var(--color-text-primary);
-    margin: 0 0 0.5rem;
 }
 
 .divider {
@@ -474,7 +454,6 @@
 /* ---- responsive (hide secondary columns under md, like ErsatzTV) ---- */
 @media (max-width: 767px) {
     .page { margin: -1.5rem; }
-    .action-bar { padding: 0 1rem; }
     .content { padding: 1.5rem 1rem; }
     .col-md { display: none; }
 }

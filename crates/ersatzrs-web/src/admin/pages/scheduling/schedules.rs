@@ -27,6 +27,7 @@ use crate::admin::server_fns::schedules::{
 };
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::page_header::{PageAction, PageHeader};
 use crate::admin::ui::primitives::pagination::PaginationControls;
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
@@ -173,15 +174,10 @@ fn SchedulesIsland(
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
-                <a href="/schedules/add" class=style::btn_primary>
-                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::AddSchedule)}</span>
-                </a>
-            </div>
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::Schedules)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::Schedules)>
+                    <PageAction href="/schedules/add" label=tr(TextKey::AddSchedule)/>
+                </PageHeader>
                 <p class=style::error style:display=move || if initial_error.is_empty() { "none" } else { "" }>
                     {tr(TextKey::ScheduleActionFailed)}
                 </p>
