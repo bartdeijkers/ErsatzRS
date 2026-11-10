@@ -277,7 +277,7 @@ pub async fn load_ui_settings() -> Result<UiSettingsPageData, ServerFnError> {
             let notation = crate::admin::datetime::load_date_time_preferences(
                 state.application.ports().admin_settings(),
             )
-            .await;
+            .await?;
             UiSettingsForm {
                 is_dark_mode: settings.is_dark_mode,
                 language: normalize_ui_language(&settings.language),

@@ -454,7 +454,7 @@ pub async fn list_playouts(
     let state = expect_context::<AppState>();
     let settings = state.application.ports().admin_settings();
     let language = crate::admin::server_fns::settings::load_ui_language_for_api(settings).await?;
-    let notation = crate::admin::datetime::load_date_time_preferences(settings).await;
+    let notation = crate::admin::datetime::load_date_time_preferences(settings).await?;
     state
         .application
         .list_playouts(&query, page, page_size)
@@ -563,7 +563,7 @@ pub async fn list_playout_detail_items(
     let notation = crate::admin::datetime::load_date_time_preferences(
         state.application.ports().admin_settings(),
     )
-    .await;
+    .await?;
     // Detail start/finish arrive as server-local `YYYY-MM-DD HH:MM:SS` text.
     let localize = move |value: String| -> String {
         use chrono::TimeZone;

@@ -170,29 +170,30 @@ where
     }
 }
 
-/// Load the stored notation preferences.
+/// Load the stored notation preferences. A settings read failure is reported
+/// to the caller instead of silently falling back to the language default.
 #[cfg(feature = "ssr")]
 pub async fn load_date_time_preferences(
     repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
-) -> DateTimePreferences {
+) -> Result<DateTimePreferences, leptos::prelude::ServerFnError> {
     let date = ersatzrs_app::queries::get_string_setting(
         ersatzrs_domain::CONFIG_KEY_PAGES_DATE_FORMAT,
         "auto",
         repository,
     )
     .await
-    .unwrap_or_default();
+    .map_err(leptos::prelude::ServerFnError::new)?;
     let clock = ersatzrs_app::queries::get_string_setting(
         ersatzrs_domain::CONFIG_KEY_PAGES_TIME_FORMAT,
         "auto",
         repository,
     )
     .await
-    .unwrap_or_default();
-    DateTimePreferences {
+    .map_err(leptos::prelude::ServerFnError::new)?;
+    Ok(DateTimePreferences {
         date: DateOrder::from_config(&date),
         clock: ClockFormat::from_config(&clock),
-    }
+    })
 }
 
 #[cfg(test)]

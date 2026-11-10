@@ -146,7 +146,7 @@ pub async fn load_recent_log_entries(
 
     let settings = state.application.ports().admin_settings();
     let language = crate::admin::server_fns::settings::load_ui_language_for_api(settings).await?;
-    let notation = crate::admin::datetime::load_date_time_preferences(settings).await;
+    let notation = crate::admin::datetime::load_date_time_preferences(settings).await?;
     let entries = entries
         .into_iter()
         .map(|entry| AdminLogEntry {
