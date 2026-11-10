@@ -2,6 +2,7 @@ use leptos::prelude::*;
 
 use super::editor::{escape_html, style};
 use crate::admin::server_fns::graphics_elements::GraphicsElementForm;
+use crate::admin::ui::primitives::help_disclosure::HelpDisclosure;
 use crate::admin::{
     i18n::{tr, TextKey},
     server_fns::{
@@ -96,9 +97,12 @@ pub(super) fn saved_preview_html(
         };
         match result {
             Ok(preview) => {
-                let _ = write!(html, "<pre class=\"{}\" role=\"status\" data-graphics-preview-text>{}</pre><details><summary>{}</summary><pre class=\"{}\" data-graphics-preview-context>{}\n{}</pre></details>",
-                style::preview_output, escape_html(&preview.text), escape_html(tr(TextKey::ProgrammeGuide)), style::preview_output,
-                escape_html(&preview.local_time), escape_html(&preview.programme_context));
+                html.push_str(&view! {
+                    <pre class=style::preview_output role="status" data-graphics-preview-text>{preview.text}</pre>
+                    <HelpDisclosure title=tr(TextKey::ProgrammeGuide)>
+                        <pre class=style::preview_output data-graphics-preview-context>{format!("{}\n{}", preview.local_time, preview.programme_context)}</pre>
+                    </HelpDisclosure>
+                }.to_html());
             }
             Err(error) => {
                 let _ = write!(
@@ -227,9 +231,9 @@ pub(super) fn GraphicsContextPreview(
                 data-graphics-preview-error>{move || error.get()}</p>
             <pre class=style::preview_output role="status" aria-busy=move || action.pending().get().to_string()
                 data-graphics-preview-text>{move || result.get()}</pre>
-            <details><summary>{tr(TextKey::ProgrammeGuide)}</summary>
+            <HelpDisclosure title=tr(TextKey::ProgrammeGuide)>
                 <pre class=style::preview_output data-graphics-preview-context>{move || context.get()}</pre>
-            </details>
+            </HelpDisclosure>
         </section>
     }
 }

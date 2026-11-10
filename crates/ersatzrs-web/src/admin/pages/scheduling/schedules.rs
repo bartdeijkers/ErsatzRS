@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_lines)]
 
+use crate::admin::ui::primitives::pagination::page_size_limit;
 use std::fmt::Write as _;
 
 use leptos::prelude::*;
@@ -85,9 +86,9 @@ fn SchedulesIsland(
     initial_total: u64,
 ) -> impl IntoView {
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(initial_page_size.max(1));
+    let page_size = RwSignal::new(initial_page_size);
     let detail_page = RwSignal::new(0u32);
-    let detail_page_size = RwSignal::new(initial_detail_page_size.max(1));
+    let detail_page_size = RwSignal::new(initial_detail_page_size);
     let query = RwSignal::new(String::new());
     let selected = RwSignal::new(None::<ScheduleListRow>);
     let delete_open = RwSignal::new(false);
@@ -197,8 +198,8 @@ fn SchedulesIsland(
 
                 {move || {
                             let (rows, total) = current_data.get();
-                            let size = page_size.get().max(1);
-                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                            let size = page_size_limit(page_size.get());
+                            let total_pages = u32::try_from(total.div_ceil(size))
                                 .unwrap_or(u32::MAX)
                                 .max(1);
 
@@ -293,7 +294,7 @@ fn SchedulesIsland(
                                             page.update(|value| *value = (*value + 1).min(total_pages.saturating_sub(1)));
                                         })
                                         on_page_size_change=Callback::new(move |value: u32| {
-                                            page_size.set(value.max(1));
+                                            page_size.set(value);
                                             page.set(0);
                                         })
                                     />
@@ -308,12 +309,12 @@ fn SchedulesIsland(
                     {move || {
                                 let items = current_detail_items.get();
                                 let total = u64::try_from(items.len()).unwrap_or(u64::MAX);
-                                let size = detail_page_size.get().max(1);
-                                let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                                let size = page_size_limit(detail_page_size.get());
+                                let total_pages = u32::try_from(total.div_ceil(size))
                                     .unwrap_or(u32::MAX)
                                     .max(1);
                                 let current_page = detail_page.get().min(total_pages.saturating_sub(1));
-                                let skip_count = usize::try_from(u64::from(current_page) * u64::from(size))
+                                let skip_count = usize::try_from(u64::from(current_page) * size)
                                     .unwrap_or(usize::MAX);
                                 let take_count = usize::try_from(size).unwrap_or(usize::MAX);
                                 let page_items = items
@@ -361,7 +362,6 @@ fn SchedulesIsland(
                                                 detail_page.update(|value| *value = (*value + 1).min(total_pages.saturating_sub(1)));
                                             })
                                             on_page_size_change=Callback::new(move |value: u32| {
-                                                let value = value.max(1);
                                                 detail_page_size.set(value);
                                                 detail_page.set(0);
                                                 detail_page_size_action.dispatch(value);

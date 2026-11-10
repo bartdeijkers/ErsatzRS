@@ -397,6 +397,8 @@ impl LanguageStrings for EnglishStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ShowExplanation => "Show explanation",
+        TextKey::HideExplanation => "Hide explanation",
         TextKey::Center => "Center",
         TextKey::FilePath => "File path",
         TextKey::Format => "Format",

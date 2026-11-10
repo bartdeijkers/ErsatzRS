@@ -393,6 +393,8 @@ impl LanguageStrings for FrenchStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ShowExplanation => "Afficher les explications",
+        TextKey::HideExplanation => "Masquer les explications",
         TextKey::Center => "Centre",
         TextKey::FilePath => "Chemin du fichier",
         TextKey::Format => "Format",

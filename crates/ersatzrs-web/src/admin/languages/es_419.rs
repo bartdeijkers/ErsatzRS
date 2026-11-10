@@ -401,6 +401,8 @@ impl LanguageStrings for LatinAmericanSpanishStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ShowExplanation => "Mostrar explicación",
+        TextKey::HideExplanation => "Ocultar explicación",
         TextKey::Center => "Centro",
         TextKey::FilePath => "Ruta del archivo",
         TextKey::Format => "Formato",

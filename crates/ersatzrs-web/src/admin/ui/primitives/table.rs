@@ -1,4 +1,5 @@
 #![allow(clippy::too_many_lines)]
+use crate::admin::ui::primitives::pagination::page_size_limit;
 use leptos::prelude::*;
 
 use crate::admin::i18n::{tr, TextKey};
@@ -173,7 +174,7 @@ where
     let go_next = Callback::new(move |()| {
         params.update(|p| {
             let total_items = total.get().unwrap_or(0);
-            let max = total_items.saturating_sub(1) / u64::from(p.page_size);
+            let max = total_items.saturating_sub(1) / page_size_limit(p.page_size);
             if u64::from(p.page) < max {
                 p.page += 1;
             }
@@ -295,7 +296,7 @@ where
                     on_next=go_next
                     on_page_size_change=Callback::new(move |value: u32| {
                         params.update(|current| {
-                            current.page_size = value.max(1);
+                            current.page_size = value;
                             current.page = 0;
                         });
                     })

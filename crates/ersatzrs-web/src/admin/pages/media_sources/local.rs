@@ -93,6 +93,19 @@ fn LocalLibrariesIsland() -> impl IntoView {
         Signal::derive(move || Some(merge_local_sources(libraries.get()?, addon_sources.get()?)));
     let total = Signal::derive(move || rows.get().map(|r| r.len() as u64));
     let params = RwSignal::new(PageParams::new(50));
+    let page_rows = Signal::derive(move || {
+        let rows = rows.get()?;
+        let params = params.get();
+        if params.page_size == 0 {
+            Some(rows)
+        } else {
+            let size = usize::try_from(params.page_size).unwrap_or(usize::MAX);
+            let offset = usize::try_from(params.page)
+                .unwrap_or(usize::MAX)
+                .saturating_mul(size);
+            Some(rows.into_iter().skip(offset).take(size).collect())
+        }
+    });
 
     let delete_action = Action::new(|id: &i64| delete_local_library(*id));
     let delete_target: RwSignal<Option<LocalLibraryRow>> = RwSignal::new(None);
@@ -188,7 +201,7 @@ fn LocalLibrariesIsland() -> impl IntoView {
             </PageHeader>
 
             <PagedTable
-                rows=rows
+                rows=page_rows
                 total=total
                 params=params
                 columns=columns

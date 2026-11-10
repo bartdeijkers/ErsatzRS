@@ -1136,6 +1136,8 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ShowExplanation => "Pokaż wyjaśnienie",
+        TextKey::HideExplanation => "Ukryj wyjaśnienie",
         TextKey::Center => "Środek",
         TextKey::FilePath => "Ścieżka pliku",
         TextKey::Format => "Format",

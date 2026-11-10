@@ -1,3 +1,4 @@
+use crate::admin::ui::primitives::pagination::page_size_limit;
 use leptos::prelude::*;
 
 use crate::admin::i18n::{log_level_label, tr, TextKey};
@@ -19,7 +20,7 @@ pub fn LogsPage() -> impl IntoView {
     let initial = Resource::new_blocking(
         || (),
         |()| async move {
-            let page_size = get_logs_page_size().await?.max(1);
+            let page_size = get_logs_page_size().await?;
             let snapshot = load_recent_log_entries(
                 String::new(),
                 0,
@@ -55,7 +56,7 @@ pub fn LogsPage() -> impl IntoView {
 fn LogsIsland(initial_page_size: u32, initial_snapshot: AdminLogSnapshot) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(initial_page_size.max(1));
+    let page_size = RwSignal::new(initial_page_size);
     let sort_field = RwSignal::new(AdminLogSortField::Timestamp);
     let sort_descending = RwSignal::new(None::<bool>);
     let current_snapshot = RwSignal::new(initial_snapshot);
@@ -66,7 +67,6 @@ fn LogsIsland(initial_page_size: u32, initial_snapshot: AdminLogSnapshot) -> imp
     });
     Effect::new(move |_| {
         if let Some(saved) = saved_page_size.get() {
-            let saved = saved.max(1);
             if page_size.get_untracked() != saved {
                 page_size.set(saved);
             }
@@ -243,7 +243,7 @@ fn render_snapshot(
                     on_next=Callback::new(move |()| {
                         let last_page = total_count
                             .saturating_sub(1)
-                            .checked_div(u64::from(page_size.get().max(1)))
+                            .checked_div(page_size_limit(page_size.get()))
                             .unwrap_or(0);
                         page.update(|value| {
                             *value = value
@@ -252,7 +252,7 @@ fn render_snapshot(
                         });
                     })
                     on_page_size_change=Callback::new(move |value: u32| {
-                        page_size.set(value.max(1));
+                        page_size.set(value);
                         page.set(0);
                     })
                 />

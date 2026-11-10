@@ -398,13 +398,18 @@ async fn list_media_cards_from_application_filtered(
             .then_with(|| left.media_item_id.cmp(&right.media_item_id))
     });
     let total = u64::try_from(documents.len()).unwrap_or(u64::MAX);
+    let (page, page_size) = if page_size == 0 {
+        (0, usize::MAX)
+    } else {
+        (page, usize::try_from(page_size).unwrap_or(usize::MAX))
+    };
     let skip = usize::try_from(page)
         .unwrap_or(usize::MAX)
-        .saturating_mul(usize::try_from(page_size).unwrap_or(usize::MAX));
+        .saturating_mul(page_size);
     let cards = documents
         .into_iter()
         .skip(skip)
-        .take(usize::try_from(page_size).unwrap_or(usize::MAX))
+        .take(page_size)
         .map(|document| {
             let id = document.media_item_id;
             let title = document.title.unwrap_or_default();

@@ -223,6 +223,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Page-size selectors consistently offer **All** after the numeric choices.
+  Selecting it shows every matching item on one page, including media browsers,
+  tables, schedules and logs; saved page-size preferences preserve the choice.
+- Collapsible tips and supporting explanations in teletext uploads, add-on
+  permissions and graphics previews now share a visible arrow, explicit
+  show/hide labels and a full-width keyboard-accessible toggle.
 - Normalize legacy native text subtitles to UTF-8 before playback, preserving
   accents and seek timing instead of stopping the stream. Source-level charset
   declarations resolve uncertain encodings, cache entries follow source changes,
