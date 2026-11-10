@@ -426,7 +426,7 @@ another local Leptos build cannot replace the candidate's hydration assets.
 
 Because that single worker is a correctness requirement rather than a tuning
 choice, CI runs the wrapper separately per selected suite and browser. Ready
-PRs run relevant whole specs in Chromium. Nightly/full release-candidate CI
+PRs run relevant whole specs in Chromium. Weekly/full release-candidate CI
 retains general and Level 1.5 suites in Chromium and Firefox; Level 2.5 remains
 an explicit optional dispatch. See [CI domain selection](BUILD.md#ci-lanes)
 for ownership, conservative fallback and product requirements.
