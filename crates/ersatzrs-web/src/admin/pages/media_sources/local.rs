@@ -14,6 +14,7 @@ use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     page_header::{PageAction, PageHeader},
     resource_state::{admin_loading_resource_view, admin_result_view},
+    row_actions::{RowActionButton, RowActionLink, RowActions, RowIcon},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -59,12 +60,16 @@ fn merge_local_sources(
 /// the add-on — not the operator — manages the registration.
 fn addon_row_actions(href: String, label: &'static str) -> AnyView {
     view! {
-        <div class=style::row_actions>
-            <a href=href class=style::row_btn>{label}</a>
-            <button class=style::row_btn_del disabled=true title=tr(TextKey::ManagedByAddon)>
-                {tr(TextKey::Delete)}
-            </button>
-        </div>
+        <RowActions>
+            <RowActionLink icon=RowIcon::Edit href=href label=label/>
+            <RowActionButton
+                icon=RowIcon::Delete
+                label=tr(TextKey::Delete)
+                title=tr(TextKey::ManagedByAddon)
+                disabled=true
+                on_click=Callback::new(|()| {})
+            />
+        </RowActions>
     }
     .into_any()
 }
@@ -124,7 +129,8 @@ fn LocalLibrariesIsland() -> impl IntoView {
                 }
                 .into_any()
             }
-        }),
+        })
+        .title(),
         Column::new(tr(TextKey::MediaKind), |r: &LocalSourceRow| {
             let label = match r {
                 LocalSourceRow::Library(row) => media_kind_label(i64::from(row.media_kind)),
@@ -155,18 +161,21 @@ fn LocalLibrariesIsland() -> impl IntoView {
             let id = row.id;
             let r_clone = row.clone();
             view! {
-                <div class=style::row_actions>
-                    <a href=format!("/media/sources/local/{id}/edit") class=style::row_btn>{tr(TextKey::Edit)}</a>
-                    <button
-                        class=style::row_btn_del
-                        on:click=move |_| {
+                <RowActions>
+                    <RowActionLink
+                        icon=RowIcon::Edit
+                        href=format!("/media/sources/local/{id}/edit")
+                        label=tr(TextKey::Edit)
+                    />
+                    <RowActionButton
+                        icon=RowIcon::Delete
+                        label=tr(TextKey::Delete)
+                        on_click=Callback::new(move |()| {
                             delete_target.set(Some(r_clone.clone()));
                             delete_open.set(true);
-                        }
-                    >
-                        {tr(TextKey::Delete)}
-                    </button>
-                </div>
+                        })
+                    />
+                </RowActions>
             }
             .into_any()
         }

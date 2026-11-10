@@ -73,58 +73,6 @@
     outline-offset: 4px;
 }
 
-.row-actions {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.5rem;
-}
-
-.row-btn-icon,
-.row-btn-preview {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 999px;
-    color: var(--color-action-default);
-    transition: background-color 150ms, color 150ms;
-}
-
-.row-btn-icon:hover,
-.row-btn-preview:hover {
-    background-color: var(--color-table-hover);
-}
-
-.row-btn-preview {
-    color: #ff6f83;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-}
-
-.row-btn-preview::before { content: "▶"; }
-.row-btn-stop::before { content: "■"; font-size: 1rem; }
-.row-btn-edit::before { content: "✎"; }
-.row-btn-search::before { content: "⌕"; }
-.row-btn-delete::before { content: "×"; }
-.row-btn-preview::before,
-.row-btn-edit::before,
-.row-btn-search::before,
-.row-btn-delete::before {
-    font-size: 1.25rem;
-    line-height: 1;
-}
-
-/* Stop transcode session button. Always present in the DOM (stable hydration
-   shape) and it always reserves its slot, matching ErsatzTV's 48px placeholder
-   so the row geometry does not shift; `visibility` is toggled reactively from
-   the live-session poll. */
-.row-btn-stop {
-    visibility: hidden;
-}
-
 .logo-img {
     display: block;
     max-width: 9rem;

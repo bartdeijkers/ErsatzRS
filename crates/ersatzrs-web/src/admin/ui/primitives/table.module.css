@@ -3,6 +3,9 @@
     flex-direction: column;
     gap: 0;
     background-color: var(--color-surface);
+    /* Row actions and the card layout respond to the table's own width, not
+       the viewport: the side drawer changes how much room the table has. */
+    container-type: inline-size;
 }
 
 .scroll {
@@ -13,7 +16,6 @@
 
 .table {
     width: 100%;
-    min-width: 78rem;
     font-size: 0.875rem;
     text-align: left;
     border-collapse: collapse;
@@ -27,7 +29,9 @@
     font-size: 0.75rem;
 }
 
-.th {
+.th,
+.th-lead,
+.th-actions {
     height: 3.5rem;
     padding: 0 1rem;
     font-weight: 700;
@@ -35,9 +39,13 @@
     white-space: nowrap;
 }
 
+.th-lead { text-align: right; }
+
+/* The actions column takes the remaining width, so the action slots start
+   right after the data instead of drifting to the far edge. */
 .th-actions {
-    width: 18.75rem;
-    padding: 0 1rem;
+    width: 100%;
+    padding-left: 2rem;
 }
 
 .sort-button {
@@ -63,22 +71,35 @@
     outline-offset: 2px;
 }
 
-.td {
-    height: 5.875rem;
+.td,
+.td-lead,
+.td-title,
+.td-media,
+.td-actions {
+    height: 3.5rem;
     padding: 0 1rem;
     border-top: 1px solid var(--color-table-line);
     vertical-align: middle;
     color: var(--color-text-primary);
+    white-space: nowrap;
+}
+
+.td-lead {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.td-title {
+    min-width: 10rem;
+    white-space: normal;
 }
 
 .td-actions {
-    height: 5.875rem;
-    padding: 0 1rem;
-    border-top: 1px solid var(--color-table-line);
-    vertical-align: middle;
-    text-align: right;
-    white-space: nowrap;
+    width: 100%;
+    padding-left: 2rem;
 }
+
+
 
 .tr {
     transition: background-color 150ms;
@@ -94,4 +115,85 @@
 .pagination-footer {
     padding: 0 1rem;
     border-top: 1px solid var(--color-table-line);
+}
+
+/* Narrow container: every row becomes a card. Heading line = lead, title and
+   media; below it each field as "label  value" with a fixed label column so
+   values start on the same line in every card; then the action slots. */
+@container (max-width: 48rem) {
+    .table,
+    .table tbody {
+        display: block;
+    }
+
+    .thead { display: none; }
+
+    .tr {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        row-gap: 0.5rem;
+        padding: 1rem;
+        border-top: 1px solid var(--color-table-line);
+    }
+
+    .tr:first-child { border-top: 0; }
+
+    .td,
+    .td-lead,
+    .td-title,
+    .td-media,
+    .td-actions {
+        display: block;
+        width: auto;
+        min-width: 0;
+        height: auto;
+        padding: 0;
+        border: 0;
+        white-space: normal;
+    }
+
+    .td {
+        grid-column: 2 / -1;
+        display: grid;
+        grid-template-columns: 7.5rem minmax(0, 1fr);
+        gap: 0.75rem;
+        font-size: 0.875rem;
+        overflow-wrap: anywhere;
+    }
+
+    .td::before {
+        content: attr(data-label);
+        color: var(--color-muted);
+    }
+
+    .td-lead {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: center;
+        padding-right: 0.75rem;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .td-title {
+        grid-column: 2;
+        grid-row: 1;
+        align-self: center;
+        font-size: 1rem;
+        overflow-wrap: anywhere;
+    }
+
+    .td-media {
+        grid-column: 3;
+        grid-row: 1;
+        align-self: center;
+        padding-left: 0.75rem;
+    }
+
+    .td-actions {
+        grid-column: 2 / -1;
+        padding-top: 0.5rem;
+    }
+
+    .td-empty { grid-column: 1 / -1; }
 }

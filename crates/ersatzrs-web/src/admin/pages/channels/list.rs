@@ -14,6 +14,7 @@ use crate::admin::server_fns::channels::{
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     page_header::{PageAction, PageActionKind, PageHeader},
+    row_actions::{RowActionButton, RowActionLink, RowActions, RowIcon},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -143,7 +144,8 @@ fn ChannelsListIsland() -> impl IntoView {
                 </span>
             }
             .into_any()
-        }),
+        })
+        .lead(),
         Column::new(tr(TextKey::Logo), |ch: &ChannelListRow| {
             let url = ch.logo_url.clone();
             let name = ch.name.clone();
@@ -155,11 +157,13 @@ fn ChannelsListIsland() -> impl IntoView {
                 />
             }
             .into_any()
-        }),
+        })
+        .media(),
         Column::new(tr(TextKey::Name), |ch: &ChannelListRow| {
             let n = ch.name.clone();
             view! { <span>{n}</span> }.into_any()
-        }),
+        })
+        .title(),
         Column::new(tr(TextKey::Language), |ch: &ChannelListRow| {
             let language = channel_language_label(&ch.preferred_audio_language_code);
             view! { <span>{language}</span> }.into_any()
@@ -190,13 +194,11 @@ fn ChannelsListIsland() -> impl IntoView {
             String::new()
         };
         view! {
-            <div class=style::row_actions>
-                <button
-                    type="button"
-                    class=style::row_btn_preview
-                    title=tr(TextKey::PreviewChannel)
-                    aria-label=tr(TextKey::PreviewChannel)
-                    on:click=move |_| {
+            <RowActions>
+                <RowActionButton
+                    icon=RowIcon::Watch
+                    label=tr(TextKey::PreviewChannel)
+                    on_click=Callback::new(move |()| {
                         let generation =
                             preview_request_generation.get_untracked().wrapping_add(1);
                         preview_request_generation.set(generation);
@@ -216,42 +218,39 @@ fn ChannelsListIsland() -> impl IntoView {
                                 }
                             }
                         });
-                    }
-                ></button>
-                <button
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_stop)
-                    style:visibility=move || if is_active() { "visible" } else { "hidden" }
-                    title=tr(TextKey::StopTranscodeSession)
-                    aria-label=tr(TextKey::StopTranscodeSession)
-                    on:click=move |_| {
+                    })
+                />
+                // Always rendered (stable hydration shape); it keeps its slot
+                // while hidden, matching ErsatzTV's placeholder, and follows
+                // the live-session poll.
+                <RowActionButton
+                    icon=RowIcon::Stop
+                    label=tr(TextKey::StopTranscodeSession)
+                    visible=Signal::derive(is_active)
+                    on_click=Callback::new(move |()| {
                         stop_action.dispatch(stop_number.clone());
-                    }
-                ></button>
-                <a
+                    })
+                />
+                <RowActionLink
+                    icon=RowIcon::Edit
                     href=format!("/channels/{id}")
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
-                    title=tr(TextKey::EditChannel)
-                    aria-label=tr(TextKey::EditChannel)
-                ></a>
-                <a
+                    label=tr(TextKey::EditChannel)
+                />
+                <RowActionLink
+                    icon=RowIcon::Troubleshoot
                     href=troubleshoot_href
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_search)
-                    style:visibility=if can_troubleshoot { "visible" } else { "hidden" }
-                    title=tr(TextKey::TroubleshootChannel)
-                    aria-label=tr(TextKey::TroubleshootChannel)
-                    aria-hidden=if can_troubleshoot { "false" } else { "true" }
-                    tabindex=if can_troubleshoot { "0" } else { "-1" }
-                ></a>
-                <button
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
-                    title=tr(TextKey::DeleteChannel)
-                    aria-label=tr(TextKey::DeleteChannel)
-                    on:click=move |_| {
+                    label=tr(TextKey::TroubleshootChannel)
+                    hidden=!can_troubleshoot
+                />
+                <RowActionButton
+                    icon=RowIcon::Delete
+                    label=tr(TextKey::DeleteChannel)
+                    on_click=Callback::new(move |()| {
                         delete_target.set(Some(ch_clone.clone()));
                         delete_open.set(true);
-                    }
-                ></button>
-            </div>
+                    })
+                />
+            </RowActions>
         }
         .into_any()
     });

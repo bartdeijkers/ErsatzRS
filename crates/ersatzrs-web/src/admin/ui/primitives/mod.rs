@@ -10,6 +10,7 @@ pub mod letter_bar;
 pub mod page_header;
 pub mod pagination;
 pub mod resource_state;
+pub mod row_actions;
 pub mod settings_navigation;
 pub mod system_navigation;
 pub mod table;

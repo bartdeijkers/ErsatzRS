@@ -4,31 +4,6 @@
     gap: 1rem;
 }
 
-.row-actions {
-    display: flex;
-    gap: 0.25rem;
-}
-
-.row-btn-edit {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
-    border-radius: var(--radius);
-    background-color: var(--color-surface);
-    color: var(--color-gray-300);
-    text-decoration: none;
-    transition: background-color 150ms;
-}
-.row-btn-edit:hover { background-color: var(--color-primary-20); }
-
-.row-btn-delete {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
-    border-radius: var(--radius);
-    color: var(--color-error);
-    transition: background-color 150ms;
-}
-.row-btn-delete:hover { background-color: var(--color-error-20); }
-
 .cell-muted {
     color: var(--color-muted);
 }

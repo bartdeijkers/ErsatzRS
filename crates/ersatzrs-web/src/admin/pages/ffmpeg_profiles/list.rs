@@ -10,6 +10,7 @@ use crate::admin::server_fns::ffmpeg_profiles::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     page_header::{PageAction, PageHeader},
+    row_actions::{RowActionButton, RowActionLink, RowActions, RowIcon},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -70,7 +71,8 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
         Column::new(tr(TextKey::Name), |p: &FfmpegProfileListRow| {
             let n = p.name.clone();
             view! { <span>{n}</span> }.into_any()
-        }),
+        })
+        .title(),
         Column::new(tr(TextKey::Resolution), |p: &FfmpegProfileListRow| {
             let r = p.resolution.clone();
             view! { <span class=style::cell_muted>{r}</span> }.into_any()
@@ -90,18 +92,21 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
         let id = p.id;
         let p_clone = p.clone();
         view! {
-            <div class=style::row_actions>
-                <a href=format!("/ffmpeg/{id}") class=style::row_btn_edit>{text(language, TextKey::Edit)}</a>
-                <button
-                    class=style::row_btn_delete
-                    on:click=move |_| {
+            <RowActions>
+                <RowActionLink
+                    icon=RowIcon::Edit
+                    href=format!("/ffmpeg/{id}")
+                    label=text(language, TextKey::Edit)
+                />
+                <RowActionButton
+                    icon=RowIcon::Delete
+                    label=text(language, TextKey::Delete)
+                    on_click=Callback::new(move |()| {
                         delete_target.set(Some(p_clone.clone()));
                         delete_open.set(true);
-                    }
-                >
-                    {text(language, TextKey::Delete)}
-                </button>
-            </div>
+                    })
+                />
+            </RowActions>
         }
         .into_any()
     });
