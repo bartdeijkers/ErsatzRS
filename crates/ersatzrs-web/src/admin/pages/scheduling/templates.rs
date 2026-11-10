@@ -15,6 +15,7 @@ use crate::admin::server_fns::templates::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
+    page_header::PageHeader,
     resource_state::{admin_loading_resource_view, admin_result_view},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -208,8 +209,7 @@ fn TemplatesIsland(
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h1 class=style::page_title>{tr(TextKey::TemplateGroups)}</h1>
-                    <div class=style::divider></div>
+                    <PageHeader title=tr(TextKey::TemplateGroups)/>
                     <form method="post" action="/admin-api/templates/groups/create" class=style::form_grid>
                         <label class=style::label for="template-group-name">{tr(TextKey::TemplateGroupName)}</label>
                         <input

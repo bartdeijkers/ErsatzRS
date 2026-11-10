@@ -8,6 +8,7 @@ use crate::admin::server_fns::blocks::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
+    page_header::PageHeader,
     resource_state::{admin_loading_resource_view, admin_result_view},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -197,7 +198,7 @@ fn BlocksIsland(
 
     view! {
         <div class=style::page>
-            <h1 class=style::page_title>{tr(TextKey::BlockGroups)}</h1>
+            <PageHeader title=tr(TextKey::BlockGroups)/>
 
             // ── Add block group ─────────────────────────────────────────
             <section class=style::section>

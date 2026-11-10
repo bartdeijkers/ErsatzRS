@@ -175,7 +175,8 @@ release section when tagging a release.
   no items.
 - Admin overview pages for channels, FFmpeg profiles, local libraries,
   libraries, watermarks, graphics elements, manual, smart, multi and rerun
-  collections, filler presets, trash and remote stream playlists share one
+  collections, filler presets, trash, remote stream playlists, block,
+  template, deco and deco template groups, schedules and playouts share one
   page heading: the same title style, with the primary "Add" action (plus
   icon) or the page's own actions on the right of the title instead of in a
   separate bar. Headings and action labels wrap on narrow screens instead of

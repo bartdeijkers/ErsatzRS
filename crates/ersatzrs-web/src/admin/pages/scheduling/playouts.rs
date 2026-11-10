@@ -23,6 +23,7 @@ use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::form::{CheckBox, TextField};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::page_header::PageHeader;
 use crate::admin::ui::primitives::pagination::PaginationControls;
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
@@ -375,58 +376,54 @@ fn PlayoutsIsland(
                 <p>{tr(TextKey::ErrorOccurred)}</p>
                 <p>{move || rebuild_error.get()}</p>
             </div>
-            // ---- action bar ----
-            <div class=style::action_bar>
-                <div class=style::add_menu>
-                    <button
-                        class=style::btn_add
-                        on:click=move |_| add_menu_open.update(|o| *o = !*o)
-                    >
-                        <span style=icon_style(IconName::Add, "1.05rem") aria-hidden="true"/>
-                        {tr(TextKey::AddPlayout)}
-                        <span style=icon_style(IconName::ChevronDown, "1.05rem") aria-hidden="true"/>
-                    </button>
-                    <div
-                        class=style::add_menu_items
-                        style:display=move || if add_menu_open.get() { "" } else { "none" }
-                    >
-                        <a class=style::menu_item href="/playouts/add">
-                            {tr(TextKey::ClassicScheduleMenu)}
-                        </a>
-                        <a class=style::menu_item href="/playouts/add/Block">
-                            {tr(TextKey::BlockScheduleMenu)}
-                        </a>
-                        <a class=style::menu_item href="/playouts/add/Sequential">
-                            {tr(TextKey::SequentialScheduleMenu)}
-                        </a>
-                        <a class=style::menu_item href="/playouts/add/Scripted">
-                            {tr(TextKey::ScriptedScheduleMenu)}
-                        </a>
-                        <a class=style::menu_item href="/playouts/add/ExternalJson">
-                            <span
-                                class=style::menu_warn
-                                style=icon_style(IconName::Warning, "1rem")
-                                aria-hidden="true"
-                            />
-                            {tr(TextKey::JsonDizqueTvScheduleMenu)}
-                        </a>
-                    </div>
-                </div>
-                <button
-                    class=style::btn_reset_all
-                    on:click=move |_| {
-                        selected_id.set(None);
-                        reset_all_action.dispatch(());
-                    }
-                >
-                    <span style=icon_style(IconName::Refresh, "1.05rem") aria-hidden="true"/>
-                    {tr(TextKey::ResetAllPlayouts)}
-                </button>
-            </div>
-
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::Playouts)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::Playouts)>
+                    <div class=style::add_menu>
+                        <button
+                            class=style::btn_add
+                            on:click=move |_| add_menu_open.update(|o| *o = !*o)
+                        >
+                            <span style=icon_style(IconName::Add, "1.05rem") aria-hidden="true"/>
+                            {tr(TextKey::AddPlayout)}
+                            <span style=icon_style(IconName::ChevronDown, "1.05rem") aria-hidden="true"/>
+                        </button>
+                        <div
+                            class=style::add_menu_items
+                            style:display=move || if add_menu_open.get() { "" } else { "none" }
+                        >
+                            <a class=style::menu_item href="/playouts/add">
+                                {tr(TextKey::ClassicScheduleMenu)}
+                            </a>
+                            <a class=style::menu_item href="/playouts/add/Block">
+                                {tr(TextKey::BlockScheduleMenu)}
+                            </a>
+                            <a class=style::menu_item href="/playouts/add/Sequential">
+                                {tr(TextKey::SequentialScheduleMenu)}
+                            </a>
+                            <a class=style::menu_item href="/playouts/add/Scripted">
+                                {tr(TextKey::ScriptedScheduleMenu)}
+                            </a>
+                            <a class=style::menu_item href="/playouts/add/ExternalJson">
+                                <span
+                                    class=style::menu_warn
+                                    style=icon_style(IconName::Warning, "1rem")
+                                    aria-hidden="true"
+                                />
+                                {tr(TextKey::JsonDizqueTvScheduleMenu)}
+                            </a>
+                        </div>
+                    </div>
+                    <button
+                        class=style::btn_reset_all
+                        on:click=move |_| {
+                            selected_id.set(None);
+                            reset_all_action.dispatch(());
+                        }
+                    >
+                        <span style=icon_style(IconName::Refresh, "1.05rem") aria-hidden="true"/>
+                        {tr(TextKey::ResetAllPlayouts)}
+                    </button>
+                </PageHeader>
 
                 <section data-playout-failures style:display=move || if current_list_rows.with(|rows| rows.iter().any(playout_failed)) { "" } else { "none" }>
                     <h2 class=style::detail_title>{tr(TextKey::PublicationActivity)}</h2>
