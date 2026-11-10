@@ -157,6 +157,17 @@ release section when tagging a release.
   compiles only the test binaries a pull request selects. Browser suites of
   different workflow runs no longer run at the same time on the shared runner
   machine, which also stops their fixed ports from colliding.
+- Pull request CI now picks Playwright specs per admin page instead of per
+  area. A spec belongs to the pages whose routes it names, so a change to one
+  page, its CSS, a page helper, a shared primitive or a translation runs the
+  browser tests of the pages that actually use it. The base teletext browser
+  suite no longer runs for every channel, schedule, settings or system page
+  change, only when a changed page is one a teletext spec drives. A new admin
+  page or primitive is classified by its location instead of selecting
+  everything. The application shell and anything with unknown reach still run
+  every required browser spec. The full run on `main` (both browsers, every
+  spec) moves from nightly to weekly, in the night from Sunday to Monday, and
+  is the safety net for a spec that reaches a page only by clicking.
 - CI moves a run to GitHub-hosted runners when no self-hosted runner is online
   at its start, once the optional `CI_RUNNER_STATUS_TOKEN` secret is set.
   On such a four-CPU runner the CPU-bound capacity proofs (a 4K Next stream and

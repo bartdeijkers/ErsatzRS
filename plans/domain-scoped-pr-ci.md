@@ -1,7 +1,10 @@
 # Domain-scoped pull request CI
 
 > **Status:** Implementation rolled out through PR #121 and fully verified on
-> 2026-11-06. Milestone `dci` tracks the remaining performance acceptance.
+> 2026-11-06. The ten-PR cohort was measured on 2026-11-10 and missed the
+> performance target (section 11). By maintainer decision of 2026-11-10 the
+> follow-up in section 12 selects browser specs per admin page and moves the
+> full run to weekly; milestone `dci-browser-evidence` owns it.
 > **Outcome:** Make ordinary code PRs merge-ready in approximately 15–30 minutes
 > by selecting the builds and tests their changes actually require.
 > **Authorization:** The original task wrote this plan only. The subsequent
@@ -503,3 +506,90 @@ The eight enhanced-only filenames remain owned by `ENHANCED_SPECS` in
 Unknown imports, new shared modules and ambiguous schema/service reach remain
 fallbacks. This inventory does not justify removing tests merely because their
 names do not contain the changed feature's keyword.
+
+## 11. Cohort result (DCI-06, measured 2026-11-10)
+
+The fixed cohort is the ten consecutive code PRs after the rollout at
+2026-11-06T12:19:29Z: #124, #125, #126, #128, #129, #131, #132, #133, #134 and
+#135. All ten merged green. Documentation-only PRs #122, #123, #127 and #130
+are recorded separately and excluded. Times are read from the GitHub Actions
+run and job records of each PR's final head, from creation of the first
+ready-PR workflow to the successful `CI ok`, as section 8 defines.
+
+| PR | Total (min) | Final attempt only (min) | Attempts | Note |
+|---|---:|---:|---:|---|
+| #124 | 107.7 | 7.7 | 2 | `Teletext 1.5` Rust job failed once |
+| #125 | 0.5 | 0.5 | 1 | exact tree already proven; nothing ran |
+| #126 | 225.3 | 225.3 | 1 | |
+| #128 | 228.4 | 130.5 | 3 | runner lost during build; one cancelled attempt |
+| #129 | 347.6 | 8.0 | 2 | `Teletext 1.5` Rust job failed once |
+| #131 | 320.8 | 43.5 | 3 | both browser jobs ended within 20 s, twice |
+| #132 | 161.2 | 161.2 | 1 | GitHub-hosted runners |
+| #133 | 188.4 | 188.4 | 1 | |
+| #134 | 87.9 | 87.9 | 1 | |
+| #135 | 187.6 | 50.8 | 3 | one cancelled attempt; base browser job ended within 30 s once; attempts 2–3 hosted |
+
+Arithmetic mean 185.5 minutes, median 188.0, maximum 347.6; one of ten within
+30 minutes, and that one (#125) ran no job. The totals of #129 and #131 include
+several idle hours between a failed attempt and its manual re-run; without
+idle time between attempts the mean is still roughly 135 minutes. No browser
+job failed after running its suite; the short browser failures ended before
+that and their logs were not inspected. Domain groups cannot be separated
+meaningfully: nine of the ten selections were "everything" (foundation crates,
+new files, shared admin UI or build inputs), and the tenth (#131, channel CSS)
+still ran nine base teletext browser specs.
+
+**Outcome: the 15–30 minute goal is not met.** The verified selection and
+build components DCI-01 through DCI-05 stay closed.
+
+**Measured limiting factor:** the two serial Playwright suites. On the
+self-hosted runners the general Chromium suite took 27–52 minutes and the base
+teletext Chromium suite 45–88 minutes; the second waited 27–60 minutes for the
+first on the single runner machine. `teletext-restart-flow` alone takes about
+18 minutes. Because shared admin UI, new files and five whole page areas
+selected the complete base teletext suite, almost every admin change paid for
+both suites in full.
+
+## 12. Page-level browser selection (maintainer task, 2026-11-10)
+
+The maintainer chose to change what a PR tests rather than how fast it runs:
+Playwright stays in the PR gate, but only the specs that concern the changed
+pages run; the full suite runs weekly, in the night from Sunday to Monday.
+This narrows the section 4 rule that a page change selects the specs of its
+whole area, and is a deliberate, recorded reduction of pre-merge browser
+coverage.
+
+Contract (implemented in `scripts/ci-browser-evidence.py`, consumed by
+`scripts/ci-domains.py`; operational description in BUILD.md "CI lanes"):
+
+- Spec ownership is static evidence: the admin routes a spec or its imported
+  helpers name, resolved through `admin/routes.rs` to page modules.
+- A changed page file selects the specs naming its routes. General and base
+  teletext specs follow the same rule; the area-wide teletext runtime coupling
+  for channel, scheduling, FFmpeg profile, settings and system pages is removed
+  for browser specs and kept for the `Teletext 1.5` Rust job.
+- Page helpers, CSS modules and shared primitives select the pages using their
+  public items. Translation changes select the pages showing the changed keys.
+  Re-export and route-table changes select the items on their changed lines.
+- New admin interface modules are classified by location.
+- The channel teletext page keeps its authoring/editor/runtime families.
+- Backend selection (server functions, repositories, crates, transport) and
+  every "everything" input are unchanged.
+- Unknown reach, the application shell, a module without a visible user, a
+  missing route table or a missing base revision select every required spec.
+- Specs without any route evidence keep their reviewed area.
+
+Known limitation: a spec that reaches a page only by clicking, without naming
+its URL, is not selected for that page. The weekly full run owns this risk;
+naming the URL in the spec (for example `toHaveURL` after the click) closes
+it for that spec. Recording visited routes during the full run would replace
+the static evidence and needs its own proposal.
+
+Replay of the selection on the merge results of #124–#137 (per-spec durations
+from the Chromium jobs of run 42696991923): #131 drops from about 42 to 4
+Playwright minutes, #135 and #137 from about 72 to 7, #134 from about 72 to
+66 (its button and form primitives are used by the teletext page). #124–#129,
+#132, #133 and #136 still select everything because they change foundation
+crates, backend modules, new non-interface files, the application shell or
+build inputs. The follow-up therefore makes page-scoped admin changes fast; it
+does not make broad changes fast, and no cohort mean is claimed for it.

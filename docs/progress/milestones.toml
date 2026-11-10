@@ -226,9 +226,67 @@ External prerequisite: DCI-06 awaits the fixed next ten consecutive code PRs
 reaching terminal outcomes after rollout at 2026-11-06T12:19:29Z. PR #121 is the
 rollout itself, not a sample entry. Keep documentation-only PRs separate and
 retain failures, cancellations, retries and queueing as defined in plan section 8.
-Current package: DCI-06; record that cohort and evaluate the overall mean.
-The 15-30 minute performance outcome remains unproven. No additional optimization
-package is opened while waiting for naturally occurring PRs.
+DCI-06 measured on 2026-11-10 from GitHub Actions run and job records; the
+performance goal is NOT met. Cohort: PRs 124, 125, 126, 128, 129, 131, 132, 133,
+134 and 135, all merged green; documentation-only PRs 122, 123, 127 and 130 are
+excluded. First ready-PR workflow to successful CI ok on the final head: mean
+185.5 minutes, median 188.0, maximum 347.6; one of ten within 30 minutes, and
+that one (PR 125) reused an existing proof and ran no job. Five PRs needed two
+or three attempts: two Teletext 1.5 Rust failures, one lost runner, two
+cancellations, and browser jobs that ended within 30 seconds of starting (PR 131
+twice, PR 135 once; their logs were not inspected). No browser job failed after
+running its suite. Nine of ten selections were everything. PR 132 and
+attempts 2-3 of PR 135 ran on GitHub-hosted runners. Per-PR figures are in plan
+section 11. Measured limiting factor: the two serial Playwright suites (general
+27-52 minutes, base teletext 45-88 minutes, the second waiting 27-60 minutes for
+the first). Components DCI-01 through DCI-05 stay closed. No further
+optimization package is added to this milestone; closing it with the goal
+unmet is a maintainer decision. The maintainer-requested follow-up is milestone
+dci-browser-evidence.
+'''
+
+[[milestone]]
+id         = 'dci-browser-evidence'
+phase      = 'Engineering — domain-scoped PR CI'
+title      = 'Run only the Playwright specs of the changed admin pages in PR CI'
+status     = 'In progress'
+feature    = 'developer-surface-hardening'
+plan       = 'plans/domain-scoped-pr-ci.md'
+depends_on = ['dci']
+acceptance = '''
+Maintainer task of 2026-11-10 after the missed DCI-06 goal: keep Playwright in
+the PR gate but select it per changed admin page, and run the full suite weekly
+in the night from Sunday to Monday. Plan section 12 owns the contract.
+BSE-01: page ownership from static route evidence; a changed page, page helper,
+CSS module, shared primitive, translation, re-export or route line selects the
+specs of the pages it reaches, general and base teletext alike; new admin
+interface modules are classified by location.
+BSE-02: unknown reach, the application shell and missing evidence keep every
+required spec; backend, transport and everything inputs are unchanged; the
+Teletext 1.5 Rust job keeps its existing triggers.
+BSE-03: full run on main moves from nightly to weekly (Monday 01:00 UTC).
+BSE-04: regression tests for the evidence and the selection, a replay on the
+merge results of the measured PRs, and the candidate's own CI.
+Excluded: test or build speed, parallel browsers, runner capacity, recorded
+navigation coverage, and any claim about the 15-30 minute mean.
+'''
+evidence = '''
+2026-11-10: BSE-01/02/03 implemented on branch claude/project-thread-za69yl.
+scripts/ci-browser-evidence_test.py passes 10 cases and scripts/ci-domains_test.py
+37 cases; the teletext selection, capacity, artifact/workflow and Playwright
+wrapper suites pass unchanged (12/5/96/4). Two audited cases changed on purpose:
+the Libraries page no longer selects local-library-deletion, which drives only
+the Local Libraries page.
+Replay on the merge results of PRs 124-137, with per-spec durations from the
+Chromium jobs of run 42696991923: PR 131 about 42 to 4 Playwright minutes, PRs
+135 and 137 about 72 to 7, PR 134 about 72 to 66; PRs 124-129, 132, 133 and 136
+still select everything (foundation crates, backend modules, new non-interface
+files, application shell or build inputs).
+Known limitation, recorded in BUILD.md and plan section 12: a spec reaching a
+page only by clicking, without naming its URL, is not selected for that page
+until the weekly full run.
+Open: the candidate's own PR CI, and the first real page-scoped PR after merge
+as a scoped observation. No cohort mean is claimed.
 '''
 
 [[milestone]]

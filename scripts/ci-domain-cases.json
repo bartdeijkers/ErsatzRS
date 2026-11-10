@@ -3,14 +3,14 @@
     "name": "library CSS is presentation only",
     "paths": ["crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css"],
     "rust": false, "teletext": false, "next": false,
-    "include": ["local-library-deletion", "local-library-scan-lifecycle"],
+    "include": ["libraries-deep-scan", "local-library-scan-lifecycle"],
     "exclude": ["teletext-restart-flow", "scheduling-route-family"]
   },
   {
     "name": "library page has native behavior and tests",
     "paths": ["crates/ersatzrs-web/src/admin/pages/libraries/mod.rs"],
     "rust": true, "teletext": false, "next": false,
-    "include": ["local-library-deletion"], "exclude": ["teletext-editor-flow"]
+    "include": ["local-library-scan-lifecycle"], "exclude": ["teletext-editor-flow"]
   },
   {
     "name": "media component wrapper is presentation only",
