@@ -267,6 +267,13 @@ Teletext 1.5 Rust job keeps its existing triggers.
 BSE-03: full run on main moves from nightly to weekly (Monday 01:00 UTC).
 BSE-04: regression tests for the evidence and the selection, a replay on the
 merge results of the measured PRs, and the candidate's own CI.
+BSE-05 (maintainer amendment of 2026-11-10, plan section 13; replaces the
+shell and server-function parts of BSE-02): a server-function module without a
+reviewed area selects the pages that call it instead of everything; the
+application shell selects the general specs naming its elements plus the
+hydration smoke set, and no base teletext browser spec. Reviewed areas,
+teletext server functions, repositories, services, crates and the foundation
+crates are unchanged.
 Excluded: test or build speed, parallel browsers, runner capacity, recorded
 navigation coverage, and any claim about the 15-30 minute mean.
 '''
@@ -287,6 +294,14 @@ page only by clicking, without naming its URL, is not selected for that page
 until the weekly full run.
 Open: the candidate's own PR CI, and the first real page-scoped PR after merge
 as a scoped observation. No cohort mean is claimed.
+2026-11-10: BSE-05 implemented. scripts/ci-browser-evidence_test.py passes 13
+cases and scripts/ci-domains_test.py 39; the other four suites pass unchanged.
+One audited case changed on purpose: app.rs no longer selects the base teletext
+browser suite or every general spec. Sample selections: a shell file about 11
+Playwright minutes, server_fns/logs.rs about 2, settings.rs about 34, each
+previously about 72 plus all Rust tests and the Next engine job. Replay on the
+merge results of PRs 124-137: no total changes; PRs 132 and 136 lose one of two
+reasons for selecting everything. Open for BSE-05: its PR CI.
 '''
 
 [[milestone]]

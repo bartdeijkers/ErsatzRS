@@ -7,7 +7,9 @@ when their domain is touched, and the Playwright specs of the touched admin
 pages plus a small hydration smoke set. Page ownership is read from the
 sources (scripts/ci-browser-evidence.py): a spec belongs to the page modules
 whose routes it names, and a shared module to the pages that use its public
-items. Anything unknown or build-defining selects everything. The full suite
+items. A server-function module without a reviewed area selects the pages
+that call it, and the application shell the specs that name its elements.
+Anything unknown or build-defining selects everything. The full suite
 still runs on `main` (weekly) and on manual dispatch, so a missed mapping is
 caught there.
 
@@ -273,10 +275,27 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                 # its name alone does not describe all of its dependencies.
                 out["teletext_specs"].add("teletext-decoder-health")
 
+    def shell():
+        """The application shell: the specs naming the elements only it renders.
+
+        The hydration smoke set joins every browser selection, so it proves
+        that each page still renders inside the changed shell.
+        """
+        out["domains"].add("admin-shell")
+        found = evidence.shell_specs() & set(general) if evidence.available() else set()
+        if not found:
+            all_browsers()
+            out["reasons"].append("no spec names an application shell element; all required browsers")
+            return
+        out["general_specs"].update(found)
+
     def page(module, native):
         """Select the specs that drive one page module."""
         local = module.removeprefix(WEB_SRC + "admin/pages/")
         name = local.split("/")[0].split(".")[0]
+        if _evidence.shell(module):
+            shell()
+            return
         if not module.startswith(WEB_SRC + "admin/pages/"):
             # The home page lives in the application shell.
             all_browsers()
@@ -305,6 +324,8 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
             # the changed page.
             out["teletext_rust"] = True
 
+    followed = set()
+
     def reached(found, server, known, native):
         """Apply a consumer trace; unknown reach keeps every browser spec."""
         if not known:
@@ -320,9 +341,11 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                 teletext(TELETEXT_SPECS, native)
             elif name in SERVER_AREAS:
                 area(SERVER_AREAS[name])
-            else:
-                all_browsers()
-                out["domains"].add("shared-ui")
+            elif module not in followed:
+                # No reviewed area: the pages calling this module own it.
+                followed.add(module)
+                out["domains"].add("server-functions")
+                reached(*evidence.reach((module,)), native=native)
 
     def pages(changed, presentation):
         """Changed page sources: themselves plus every page using their items."""
@@ -480,11 +503,22 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                     area(SERVER_AREAS[module])
                     if module in ("channels", "schedules", "playouts", "ffmpeg_profiles"):
                         playback()
-                else:
+                elif module == "mod" or not evidence.available():
                     everything(f"{path}: shared/unmapped server function")
+                else:
+                    found, server, known = evidence.reach((path,))
+                    if not known:
+                        everything(f"{path}: server function without a visible caller")
+                    else:
+                        followed.add(path)
+                        out["domains"].add("server-functions")
+                        reached(found, server, True, native=True)
             elif path == _evidence.I18N or path.startswith(_evidence.LANGUAGES):
                 translations(path)
                 out["teletext_rust"] = True
+            elif _evidence.shell(path):
+                shell()
+                out["teletext_rust"] |= not presentation
             elif local.startswith("admin/"):
                 shared(path)
                 # Full base Rust contracts stay available for shared Rust UI.

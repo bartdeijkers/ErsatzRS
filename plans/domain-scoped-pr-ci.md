@@ -593,3 +593,50 @@ Playwright minutes, #135 and #137 from about 72 to 7, #134 from about 72 to
 crates, backend modules, new non-interface files, the application shell or
 build inputs. The follow-up therefore makes page-scoped admin changes fast; it
 does not make broad changes fast, and no cohort mean is claimed for it.
+
+## 13. Server functions and the application shell (maintainer task, 2026-11-10)
+
+After section 12 the maintainer asked whether the backend, the foundation
+crates and the admin shell can be selected more narrowly, and accepted the
+recommendation to narrow server functions and the shell first, to treat
+repositories and services as a possible later step, and to leave the
+foundation crates (`ersatzrs-domain`, `ersatzrs-core`) selecting everything.
+This amends the section 12 lines on backend selection and the shell.
+
+Contract:
+
+- A changed server-function module without a reviewed area in `SERVER_AREAS`
+  is followed to the admin modules that call its public items; the pages
+  reached select their specs as in section 12, with the web crate's Rust tests
+  and the page's existing `Teletext 1.5` Rust trigger. It no longer selects
+  every crate, the Next engine job and every browser spec. Such a module that
+  merely uses a changed page helper is followed the same way.
+- Modules with a reviewed area keep that area and their playback coupling.
+  Teletext server functions keep all teletext families. `server_fns/mod.rs`, a
+  new server-function module and one without a visible caller select
+  everything.
+- The application shell selects the general specs naming an element id or
+  `data-*` attribute that only shell sources render, plus the hydration smoke
+  set. It selects no base teletext browser spec. A shell without such an
+  element, or without a spec naming one, selects every required spec.
+- A shared primitive or server function the shell uses selects the shell
+  specs for that user instead of having unknown reach.
+- A module is a user only where the path segment before the shared module
+  name fits (`views::settings` is not `server_fns::settings`); a bare or
+  grouped use stays a possible user.
+
+Accepted risk: a shell change is no longer proven by every page's own specs
+before merge, only by the smoke set loading every route and by the specs that
+drive shell elements; a server-function change is not proven by specs of pages
+that reach it without calling it. The weekly full run owns both.
+
+Sample selections (per-spec durations as in section 12; before: about 72
+Playwright minutes, all Rust tests and the Next engine job): a shell file about
+11 minutes; `server_fns/logs.rs` about 2; `blocks.rs`, `decos.rs`, `filler.rs`
+and `templates.rs` about 1; `troubleshooting.rs` about 5; `settings.rs` about
+34 (the shell and several server modules call its helpers, and the settings
+page is driven by `teletext-restart-flow`). Replay on the merge results of
+#124–#137: no PR changes its total. #132 and #136 lose one of their two
+reasons for selecting everything (the shell, an unreviewed server function);
+a new public script, `deny.toml`, a foundation crate and `api/settings.rs`
+still select everything there. No cohort mean is claimed.

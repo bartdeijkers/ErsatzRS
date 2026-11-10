@@ -164,10 +164,20 @@ release section when tagging a release.
   suite no longer runs for every channel, schedule, settings or system page
   change, only when a changed page is one a teletext spec drives. A new admin
   page or primitive is classified by its location instead of selecting
-  everything. The application shell and anything with unknown reach still run
-  every required browser spec. The full run on `main` (both browsers, every
-  spec) moves from nightly to weekly, in the night from Sunday to Monday, and
-  is the safety net for a spec that reaches a page only by clicking.
+  everything. Anything with unknown reach still runs every required browser
+  spec. The full run on `main` (both browsers, every spec) moves from nightly
+  to weekly, in the night from Sunday to Monday, and is the safety net for a
+  spec that reaches a page only by clicking.
+- Pull request CI no longer runs everything for the admin application shell or
+  for server functions without a reviewed area. A shell change (navigation,
+  layout, global style, hydration startup) runs the general specs that name a
+  shell element plus the hydration smoke set that loads every route, and no
+  longer the base teletext browser suite. A change to such a server-function
+  module (for example settings, logs, blocks or troubleshooting) runs the
+  browser specs of the pages that call it and the web crate's Rust tests,
+  instead of every suite, every crate and the Next engine job. This is a
+  deliberate reduction of pre-merge coverage; the weekly full run remains the
+  safety net.
 - CI moves a run to GitHub-hosted runners when no self-hosted runner is online
   at its start, once the optional `CI_RUNNER_STATUS_TOKEN` secret is set.
   On such a four-CPU runner the CPU-bound capacity proofs (a 4K Next stream and

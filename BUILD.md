@@ -566,10 +566,19 @@ pull request's changed paths to work:
   change selects the pages that show the changed `TextKey`s; a changed
   re-export or route line selects the items it names. The channel teletext
   page and its submodules keep their authoring, editor and runtime families.
-  The application shell (`app.rs`, `layout/`, `style/`, hydration), a module
-  without a visible user and a missing route table or base revision keep every
-  required browser spec. Backend changes (server functions, repositories,
-  crates) keep their area-wide selection. The evidence is static: a spec that
+  The application shell (`app.rs`, `layout/`, `style/`, hydration) selects the
+  general specs that name an element id or `data-*` attribute only the shell
+  renders, plus the hydration smoke set, which loads every route inside the
+  shell; it no longer selects the base teletext browser suite. A shared
+  primitive the shell uses selects those shell specs next to the pages using
+  it. A server-function module without a reviewed area selects the pages that
+  call it (and the shell specs when the shell calls it) instead of everything;
+  modules with a reviewed area, teletext server functions and
+  `server_fns/mod.rs` are unchanged. A module name several modules share
+  counts only where the path before it fits. A module without a visible user,
+  a shell that exposes no named element and a missing route table or base
+  revision keep every required browser spec. Repositories and crates keep
+  their area-wide selection. The evidence is static: a spec that
   reaches a page only by clicking, without naming its URL, is not selected for
   that page, and the weekly full run owns that residual risk.
 - Build, toolchain and CI inputs, `ersatzrs-core`, `ersatzrs-domain`,

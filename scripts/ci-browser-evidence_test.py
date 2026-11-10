@@ -110,22 +110,71 @@ class BrowserEvidence(unittest.TestCase):
         self.assertFalse(known)
         self.assertIn("no visible user", self.facts.unknown)
 
-    def test_primitives_reach_pages_and_the_shell_is_unknown(self):
+    def test_primitives_reach_pages_and_the_shell(self):
         self.assertEqual(self.facts.reach((ADMIN + "ui/primitives/chip.rs",)),
                          ({PAGES + "things/list.rs"}, set(), True))
+        # The shell is a leaf: its own specs prove a primitive it renders.
         for path in (ADMIN + "ui/primitives/banner.rs", ADMIN + "ui/primitives/banner.module.css",
-                     ADMIN + "ui/primitives/orphan.module.css", ADMIN + "layout/mod.rs",
-                     ADMIN + "app.rs", ADMIN + "routes.rs", ADMIN + "missing.rs"):
+                     ADMIN + "layout/mod.rs"):
+            with self.subTest(path=path):
+                self.assertEqual(self.facts.reach((path,)), ({ADMIN + "layout/mod.rs"}, set(), True))
+        self.assertTrue(evidence.shell(ADMIN + "hydration.js"))
+        self.assertFalse(evidence.shell(ADMIN + "routes.rs"))
+        for path in (ADMIN + "ui/primitives/orphan.module.css", ADMIN + "routes.rs", ADMIN + "missing.rs"):
             with self.subTest(path=path):
                 self.assertFalse(self.facts.reach((path,))[2])
                 self.assertTrue(self.facts.unknown)
 
-    def test_server_functions_are_reported_not_followed(self):
+    def test_shell_specs_name_elements_only_the_shell_renders(self):
+        with tree({**SOURCES,
+                   ADMIN + "layout/mod.rs": 'pub fn Shell() { <aside id="drawer" data-drawer data-state=state/> }\n',
+                   PAGES + "other.rs": "pub fn OtherPage() { <div data-state=state data-drawer-open/> }\n",
+                   "tests/e2e/helpers/open.ts": "export const open = (page) => page.locator('#drawer');\n",
+                   "tests/e2e/detail.spec.ts": "test('x', async ({ page }) => page.locator('[data-state]'));\n",
+                   "tests/e2e/host.spec.ts": "test('x', async ({ page }) => page.locator('[data-drawer-open]'));\n",
+                   }) as folder:
+            facts = evidence.Evidence(folder)
+            self.assertEqual(facts.shell_hooks(), {"drawer", "data-drawer"})
+            # Named through an imported helper; a longer attribute is another hook.
+            self.assertEqual(facts.shell_specs(), {"things"})
+        self.assertEqual(self.facts.shell_specs(), set())
+
+    def test_used_server_functions_are_reported_not_followed(self):
         with tree({**SOURCES, ADMIN + "format.rs": "pub fn stamp() {}\n",
                    ADMIN + "server_fns/things.rs": "use crate::admin::format::stamp;\npub fn load() { stamp() }\n"}) as folder:
             facts = evidence.Evidence(folder)
             self.assertEqual(facts.reach((ADMIN + "format.rs",)),
                              (set(), {ADMIN + "server_fns/things.rs"}, True))
+
+    def test_changed_server_functions_reach_their_callers(self):
+        things = ADMIN + "server_fns/things.rs"
+        with tree({**SOURCES,
+                   PAGES + "things/list.rs": "use crate::admin::server_fns::things::load;\npub fn ThingsListPage() { load() }\n",
+                   ADMIN + "layout/mod.rs": "pub fn Shell() { crate::admin::server_fns::things::load() }\n",
+                   ADMIN + "server_fns/other.rs": "pub fn count() { super::things::load() }\n",
+                   # Shares the stem, but names the page module, not the server one.
+                   PAGES + "other.rs": "pub fn OtherPage() { crate::admin::pages::things::load() }\n",
+                   }) as folder:
+            facts = evidence.Evidence(folder)
+            self.assertEqual(facts.reach((things,)),
+                             ({PAGES + "things/list.rs", ADMIN + "layout/mod.rs"},
+                              {things, ADMIN + "server_fns/other.rs"}, True))
+        # Without a caller the reach is unknown.
+        self.assertFalse(self.facts.reach((things,))[2])
+        self.assertIn("no visible user", self.facts.unknown)
+
+    def test_a_shared_module_stem_needs_its_parent(self):
+        with tree({**SOURCES,
+                   PAGES + "things/editor/fields.rs": "pub fn title() {}\n",
+                   PAGES + "things/editor.rs": "pub mod fields;\npub fn ThingEditorPage() { self::fields::title() }\n",
+                   ADMIN + "server_fns/fields.rs": "pub fn title() {}\n",
+                   PAGES + "other.rs": "pub fn OtherPage() { crate::admin::server_fns::fields::title() }\n",
+                   }) as folder:
+            facts = evidence.Evidence(folder)
+            self.assertEqual(facts.reach((PAGES + "things/editor/fields.rs",)),
+                             ({PAGES + "things/editor.rs"}, set(), True))
+            self.assertEqual(facts.reach((ADMIN + "server_fns/fields.rs",)),
+                             ({PAGES + "other.rs"}, {ADMIN + "server_fns/fields.rs"}, True))
 
     def test_declaration_only_modules_are_transparent(self):
         self.assertTrue(self.facts.declaration_only(ADMIN + "ui/primitives/mod.rs"))

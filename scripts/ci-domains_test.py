@@ -194,14 +194,61 @@ class DomainSelection(unittest.TestCase):
             self.assertIn(smoke, result["general_specs"])
         self.assertFalse(result["next"] or result["teletext_browser"])
 
-    def test_application_shell_selects_every_general_spec(self):
+    def test_application_shell_selects_the_specs_naming_its_elements(self):
         for path in ("crates/ersatzrs-web/src/admin/layout/nav.rs",
                      "crates/ersatzrs-web/src/admin/app.rs",
-                     "crates/ersatzrs-web/src/admin/app.module.css"):
+                     "crates/ersatzrs-web/src/admin/hydration.js",
+                     "crates/ersatzrs-web/src/admin/style/globals.module.css"):
             with self.subTest(path=path):
                 result = select(path)
-                self.assertEqual(result["general_specs"], "all")
-                self.assertTrue(result["teletext_browser"])
+                self.assertFalse(result["everything"])
+                self.assertEqual(result["domains"], ["admin-shell"])
+                # The navigation drawer and its badges are named by these specs.
+                for spec in ("support-pages", "next-version") + domains.SMOKE_SPECS:
+                    self.assertIn(spec, result["general_specs"])
+                self.assertNotIn("scheduling-route-family", result["general_specs"])
+                self.assertFalse(result["teletext_browser"] or result["next"])
+                self.assertEqual(result["teletext_rust"], path.endswith((".rs", ".js")))
+        # The route table's own style has no traceable owner.
+        result = select("crates/ersatzrs-web/src/admin/app.module.css")
+        self.assertEqual(result["general_specs"], "all")
+        self.assertTrue(result["teletext_browser"])
+        # A new shell file still needs an ownership review.
+        path = "crates/ersatzrs-web/src/admin/layout/nav.rs"
+        self.assertTrue(domains.select([path], added_paths=[path])["everything"])
+
+    def test_shell_without_named_elements_keeps_every_browser_spec(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = "crates/ersatzrs-web/src/admin/app.rs"
+            target = Path(folder) / path
+            target.parent.mkdir(parents=True)
+            target.write_text("pub fn App() {}\n")
+            result = domains.select([path], members={"ersatzrs-web"}, specs=SPECS, root=Path(folder))
+            self.assertEqual(result["general_specs"], "all")
+            self.assertTrue(result["teletext_browser"])
+
+    def test_unreviewed_server_functions_select_their_calling_pages(self):
+        logs = select("crates/ersatzrs-web/src/admin/server_fns/logs.rs")
+        self.assertFalse(logs["everything"] or logs["next"] or logs["teletext_browser"])
+        self.assertEqual(logs["rust_packages"], ["ersatzrs-web"])
+        self.assertTrue(logs["teletext_rust"])
+        self.assertIn("logs-workbench", logs["general_specs"])
+        self.assertNotIn("scheduling-route-family", logs["general_specs"])
+        # The shell reads settings, so its specs join the settings page specs;
+        # server modules that call a settings helper keep their reviewed areas.
+        settings = select("crates/ersatzrs-web/src/admin/server_fns/settings.rs")
+        self.assertFalse(settings["everything"])
+        self.assertTrue({"admin-shell", "settings", "scheduling"} <= set(settings["domains"]))
+        for spec in ("settings-i18n", "hdhr-jwt", "next-version", "playouts-feedback"):
+            self.assertIn(spec, settings["general_specs"])
+        self.assertNotIn("watermark-preview", settings["general_specs"])
+        # Reviewed areas, the module table and new modules are unchanged.
+        channels = select("crates/ersatzrs-web/src/admin/server_fns/channels.rs")
+        self.assertTrue(channels["next"])
+        self.assertNotIn("server-functions", channels["domains"])
+        self.assertTrue(select("crates/ersatzrs-web/src/admin/server_fns/mod.rs")["everything"])
+        path = "crates/ersatzrs-web/src/admin/server_fns/logs.rs"
+        self.assertTrue(domains.select([path], added_paths=[path])["everything"])
 
     def test_page_file_selects_the_specs_that_name_its_routes(self):
         # Sibling pages of one area no longer run each other's specs.

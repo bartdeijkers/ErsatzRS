@@ -64,10 +64,17 @@
     "include": ["teletext-editor-flow", "teletext-restart-flow"], "exclude": []
   },
   {
-    "name": "shared hydration reaches teletext",
+    "name": "application shell selects the specs naming its elements",
     "paths": ["crates/ersatzrs-web/src/admin/app.rs"],
-    "rust": true, "teletext": true, "next": false,
-    "include": ["teletext-editor-flow", "local-library-deletion"], "exclude": []
+    "rust": true, "teletext": false, "next": false,
+    "include": ["island-hydration", "hydration-startup", "support-pages", "next-version"],
+    "exclude": ["teletext-editor-flow", "local-library-deletion"]
+  },
+  {
+    "name": "server function without a reviewed area selects its calling pages",
+    "paths": ["crates/ersatzrs-web/src/admin/server_fns/logs.rs"],
+    "rust": true, "teletext": false, "next": false,
+    "include": ["logs-workbench", "island-hydration"], "exclude": ["scheduling-route-family", "channel-watch"]
   },
   {
     "name": "known native FFmpeg filter does not imply Next",

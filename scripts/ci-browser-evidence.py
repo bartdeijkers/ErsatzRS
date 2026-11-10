@@ -8,7 +8,10 @@ Three facts are read from the checked-out sources, never from a hand table:
 * the routes each spec (and the helpers it imports) names in `goto`, `href`
   and URL assertions: spec -> page modules;
 * which admin modules mention the public items of a changed shared module:
-  shared module -> page modules.
+  shared module -> page modules; a server-function module is traced to its
+  callers the same way;
+* the element ids and `data-*` attributes only the application shell renders,
+  and the specs that name them: shell -> specs.
 
 The evidence is static. A spec that reaches a page only by clicking, without
 ever naming its URL, is invisible here; the weekly full run on `main` owns
@@ -29,9 +32,15 @@ TELETEXT_PAGES = PAGES + "channels/teletext"
 I18N = ADMIN + "i18n.rs"
 LANGUAGES = ADMIN + "languages/"
 SERVER_FNS = ADMIN + "server_fns/"
-# The application shell wraps every page: a consumer here has unknown reach.
-SHELL = (ADMIN + "app.rs", ADMIN + "hydration.rs")
+# The application shell wraps every page. It is proven by the hydration smoke
+# set and by the specs naming the hooks only the shell renders.
+SHELL = (ADMIN + "app.rs", ADMIN + "hydration.rs", ADMIN + "hydration.js")
 SHELL_DIRS = (ADMIN + "layout/", ADMIN + "style/")
+_HOOK = re.compile(r"""\bid="([\w-]+)"|(?<![\w-])(data-[a-z][a-z-]*)""")
+
+
+def shell(path):
+    return path in SHELL or path.startswith(SHELL_DIRS)
 
 # Top-level items only: methods and fields are reached through their type.
 _EXPORT = re.compile(
@@ -54,6 +63,7 @@ class Evidence:
         self.unknown = None
         self._routes = None
         self._spec_pages = None
+        self._spec_text = None
 
     def available(self):
         """False when the route table cannot be read: callers then run all."""
@@ -79,11 +89,32 @@ class Evidence:
         return self._words
 
     def paths(self):
-        """Module names each admin source uses as a path segment (`name::`)."""
+        """Module names each admin source uses as a path segment (`name::`),
+        each with the segments written directly before it ("" when bare)."""
         if self._paths is None:
-            self._paths = {name: set(re.findall(r"\b(\w+)\s*::", text))
-                           for name, text in self.sources().items()}
+            self._paths = {}
+            for name, text in self.sources().items():
+                found, previous = {}, None
+                for match in re.finditer(r"\b(\w+)\s*::\s*", text):
+                    joined = previous is not None and previous.end() == match.start()
+                    found.setdefault(match[1], set()).add(previous[1] if joined else "")
+                    previous = match
+                self._paths[name] = found
         return self._paths
+
+    def names_module(self, user, origin):
+        """Whether `user` writes a path that can mean the module `origin`.
+
+        Several modules share a stem such as `settings`; the segment before
+        it then decides. A bare or grouped use stays a possible user.
+        """
+        module = origin.removesuffix("/mod.rs").removesuffix(".rs")
+        stem, parent = posixpath.basename(module), posixpath.dirname(module)
+        before = self.paths()[user].get(stem)
+        if not before:
+            return False
+        near = user.startswith(parent + "/") or user == parent + ".rs"
+        return bool(before & {"", posixpath.basename(parent)}) or near and bool(before & {"super", "self"})
 
     def definitions(self):
         """Public item name -> the admin modules defining it."""
@@ -176,24 +207,16 @@ class Evidence:
         return best[1] if best else None
 
     # -- spec evidence -----------------------------------------------------
-    def spec_pages(self):
-        """spec name -> page modules whose routes the spec or its helpers name."""
-        if self._spec_pages is not None:
-            return self._spec_pages
-        first = sorted({pattern[0] for pattern, _, _ in self.routes() if pattern and pattern[0]})
-        literal = re.compile(r"""['"`/^](/(?:%s)\b[^'"`\s),]*)""" % "|".join(map(re.escape, first)))
+    def spec_text(self):
+        """spec name -> the sources of the spec and of every helper it imports."""
+        if self._spec_text is not None:
+            return self._spec_text
         e2e = self.root / "tests/e2e"
         cache = {}
 
         def facts(path):
             if path not in cache:
                 text = path.read_text().replace("\\/", "/")
-                urls = set()
-                if re.search(r"""goto\(\s*['"`]/(?:[?#][^'"`]*)?['"`]""", text):
-                    urls.add("/")
-                for match in literal.finditer(text):
-                    url = re.sub(r"\$\{[^}]*\}", ":x", match[1])
-                    urls.add(re.sub(r"[$\\(\[*+].*$", "", url))
                 imports = []
                 for module in re.findall(r"(?:\bfrom\s*|\bimport\s*\(?\s*)['\"](\.[^'\"]+)['\"]", text):
                     stem = posixpath.normpath(posixpath.join(path.parent.as_posix(), module))
@@ -201,23 +224,57 @@ class Evidence:
                         if Path(candidate).is_file():
                             imports.append(Path(candidate))
                             break
-                cache[path] = (urls, imports)
+                cache[path] = (text, imports)
             return cache[path]
 
         result = {}
         for spec in sorted(e2e.glob("*.spec.ts")):
-            seen, pending, pages = set(), [spec], set()
+            seen, pending, texts = set(), [spec], []
             while pending:
                 current = pending.pop()
                 if current in seen:
                     continue
                 seen.add(current)
-                urls, imports = facts(current)
+                text, imports = facts(current)
                 pending += imports
-                pages |= {module for module in map(self.resolve, urls) if module}
-            result[spec.name.removesuffix(".spec.ts")] = pages
+                texts.append(text)
+            result[spec.name.removesuffix(".spec.ts")] = texts
+        self._spec_text = result
+        return result
+
+    def spec_pages(self):
+        """spec name -> page modules whose routes the spec or its helpers name."""
+        if self._spec_pages is not None:
+            return self._spec_pages
+        first = sorted({pattern[0] for pattern, _, _ in self.routes() if pattern and pattern[0]})
+        literal = re.compile(r"""['"`/^](/(?:%s)\b[^'"`\s),]*)""" % "|".join(map(re.escape, first)))
+        result = {}
+        for spec, texts in self.spec_text().items():
+            urls = set()
+            for text in texts:
+                if re.search(r"""goto\(\s*['"`]/(?:[?#][^'"`]*)?['"`]""", text):
+                    urls.add("/")
+                for match in literal.finditer(text):
+                    url = re.sub(r"\$\{[^}]*\}", ":x", match[1])
+                    urls.add(re.sub(r"[$\\(\[*+].*$", "", url))
+            result[spec] = {module for module in map(self.resolve, urls) if module}
         self._spec_pages = result
         return result
+
+    def shell_hooks(self):
+        """Element ids and `data-*` attributes that only the shell renders."""
+        def hooks(texts):
+            return {a or b for text in texts for a, b in _HOOK.findall(text)}
+        inside = hooks(text for name, text in self.sources().items() if shell(name))
+        return inside - hooks(text for name, text in self.sources().items() if not shell(name))
+
+    def shell_specs(self):
+        """Specs that name a shell hook; empty when the shell exposes none."""
+        hooks = self.shell_hooks()
+        if not hooks:
+            return set()
+        wanted = re.compile(r"(?<![\w-])(?:" + "|".join(sorted(map(re.escape, hooks))) + r")(?![\w-])")
+        return {spec for spec, texts in self.spec_text().items() if any(map(wanted.search, texts))}
 
     def page_specs(self, module):
         return {spec for spec, pages in self.spec_pages().items() if module in pages}
@@ -251,9 +308,13 @@ class Evidence:
     def reach(self, paths=(), names=()):
         """Follow public item names to the modules that mention them.
 
-        Returns (page route modules, server-function modules, known): `known`
-        is False when the application shell, an unreadable file or a changed
-        module without any visible user is involved, so the caller runs all.
+        Returns (page route modules, server-function modules, known). The
+        pages may hold application shell modules (see `shell()`), which the
+        caller proves with the shell specs. A changed server-function module
+        is followed to its callers; one that merely uses a changed item is
+        recorded for the caller to classify. `known` is False when an
+        unreadable file or a changed module without any visible user is
+        involved, so the caller runs all.
         """
         sources = self.sources()
         routes = self.route_modules()
@@ -278,12 +339,16 @@ class Evidence:
                     changed |= owners or set()
                     pending += [("path", owner) for owner in owners or ()]
                     continue
-                if origin in SHELL + (ROUTES,) or origin.startswith(SHELL_DIRS) or origin not in sources:
-                    known, self.unknown = False, f"{origin} is part of the application shell"
+                if shell(origin):
+                    pages.add(origin)
+                    continue
+                if origin == ROUTES or origin not in sources:
+                    known, self.unknown = False, f"{origin} has unknown reach"
                     continue
                 if origin.startswith(SERVER_FNS):
                     server.add(origin)
-                    continue
+                    if origin not in changed:
+                        continue
                 if origin.startswith(TELETEXT_PAGES):
                     # The channel teletext page and its submodules are owned by
                     # the teletext spec families, not by route evidence.
@@ -306,9 +371,8 @@ class Evidence:
             # A name several modules define always needs that qualification.
             interface = origin is not None and origin.startswith(ADMIN + "ui/")
             distinct = {name for name in exported if len(self.definitions().get(name, ())) <= 1}
-            stem = subtree = None
+            subtree = None
             if origin:
-                stem = Path(origin).parent.name if origin.endswith("/mod.rs") else Path(origin).stem
                 subtree = (origin.removesuffix("mod.rs") if origin.endswith("/mod.rs")
                            else origin.removesuffix(".rs") + "/")
             users = 0
@@ -323,7 +387,7 @@ class Evidence:
                     continue
                 if exported.isdisjoint(words):
                     continue
-                if origin is None or stem in self.paths()[name] or (
+                if origin is None or self.names_module(name, origin) or (
                         interface and not distinct.isdisjoint(words)):
                     pending.append(("path", name))
                     users += 1
