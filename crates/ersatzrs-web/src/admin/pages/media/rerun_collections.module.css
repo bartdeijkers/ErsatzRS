@@ -5,7 +5,6 @@
     overflow: visible;
 }
 
-.action-bar,
 .editor-action-bar {
     display: flex;
     align-items: center;
@@ -33,12 +32,6 @@
     line-height: 1.35;
 }
 
-.divider {
-    height: 1px;
-    margin-bottom: 1.5rem;
-    background-color: var(--color-border);
-    opacity: 0.75;
-}
 
 .btn-add {
     display: inline-flex;
@@ -256,7 +249,6 @@ tbody tr:hover {
 }
 
 @media (max-width: 760px) {
-    .action-bar,
     .editor-action-bar {
         width: calc(100% + 2rem);
         margin: -1rem -1rem 1.5rem;

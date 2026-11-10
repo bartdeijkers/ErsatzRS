@@ -11,6 +11,7 @@ use crate::admin::server_fns::media_browser::{
     MultiCollectionEditorOptions, MultiCollectionForm, MultiCollectionItemForm,
     MultiCollectionListRow, MultiCollectionSelectOption,
 };
+use crate::admin::ui::primitives::page_header::{PageAction, PageHeader};
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     form::TextField,
@@ -119,8 +120,10 @@ fn MultiCollectionsIsland(
 
     view! {
         <div class=style::page>
+            <PageHeader title=tr(TextKey::MultiCollections)>
+                <PageAction href="/media/multi-collections/add" label=tr(TextKey::AddMultiCollection)/>
+            </PageHeader>
             <div class=style::toolbar>
-                <h1 class=style::page_title>{tr(TextKey::MultiCollections)}</h1>
                 <input
                     class=style::search
                     type="search"
@@ -131,9 +134,6 @@ fn MultiCollectionsIsland(
                         page.set(0);
                     }
                 />
-                <a href="/media/multi-collections/add" class=style::btn_add>
-                    {tr(TextKey::AddMultiCollection)}
-                </a>
             </div>
 
             {move || {

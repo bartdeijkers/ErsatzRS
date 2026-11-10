@@ -18,6 +18,7 @@ use crate::admin::server_fns::media_browser::{
 };
 use crate::admin::ui::primitives::card::MediaCard;
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
+use crate::admin::ui::primitives::page_header::PageHeader;
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
@@ -154,14 +155,7 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::toolbar>
-                <div>
-                    <h1 class=style::page_title>{tr(TextKey::Trash)}</h1>
-                    <p class=style::subtitle>
-                        {tr(TextKey::TrashSubtitle)}
-                    </p>
-                </div>
-                <div class=style::toolbar_actions>
+            <PageHeader title=tr(TextKey::Trash) subtitle=tr(TextKey::TrashSubtitle)>
                     <button
                         class=style::btn_secondary
                         disabled=move || selected_count.get() == 0
@@ -175,8 +169,7 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
                     >
                         {tr(TextKey::EmptyTrash)}
                     </button>
-                </div>
-            </div>
+            </PageHeader>
 
             {move || {
                 let sections = build_sections(current_data.get());

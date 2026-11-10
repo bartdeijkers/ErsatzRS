@@ -62,13 +62,16 @@ test.describe('collections parity', () => {
     const name = uniqueName('Visual Collection');
     await createCollection(page, name);
 
-    const actionBar = page
-      .getByRole('link', { name: /add collection/i })
-      .locator('xpath=ancestor::div[contains(@class, "action")][1]');
-    await expect(actionBar).toBeVisible();
-    const actionBox = await actionBar.boundingBox();
-    expect(actionBox?.height).toBeGreaterThanOrEqual(60);
-    expect(actionBox?.height).toBeLessThanOrEqual(80);
+    // The list uses the shared page heading: one title with the primary
+    // "Add" action on its right instead of a separate action bar.
+    const header = page.locator('[data-page-header]').filter({
+      has: page.getByRole('heading', { name: 'Manual Collections' }),
+    });
+    await expect(header).toBeVisible();
+    const add = header.getByRole('link', { name: /add collection/i });
+    await expect(add).toBeVisible();
+    const addBox = await add.boundingBox();
+    expect(addBox?.height).toBeGreaterThanOrEqual(36);
 
     const content = page
       .locator('section[class*="content"]:not([data-admin-resource])')

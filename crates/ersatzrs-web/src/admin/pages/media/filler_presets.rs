@@ -8,6 +8,7 @@ use crate::admin::server_fns::filler::{
     FillerPresetEditorOptions, FillerPresetForm, FillerPresetListRow, FillerPresetPlaylistOption,
     FillerPresetSelectOption,
 };
+use crate::admin::ui::primitives::page_header::{PageAction, PageHeader};
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
@@ -130,15 +131,10 @@ fn FillerPresetsList(
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
-                <a href="/media/filler/presets/add" class=style::btn_add>
-                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::AddFillerPreset)}</span>
-                </a>
-            </div>
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::FillerPresets)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::FillerPresets)>
+                    <PageAction href="/media/filler/presets/add" label=tr(TextKey::AddFillerPreset)/>
+                </PageHeader>
                 <p class=style::empty style:display=move || if initial_error.is_empty() { "none" } else { "" }>
                     {tr(TextKey::FillerPresetActionFailed)}
                 </p>

@@ -11,6 +11,7 @@ use crate::admin::server_fns::remote_stream_playlists::{
     troubleshoot_remote_stream_playlist, PlaylistTroubleshootingResult, RemoteStreamPlaylistEditor,
     RemoteStreamPlaylistRow,
 };
+use crate::admin::ui::primitives::page_header::PageHeader;
 use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
@@ -124,14 +125,10 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
 
     view! {
         <div class=style::page data-testid="remote-stream-playlists-page">
-            <div class=style::toolbar>
-                <div>
-                    <a href="/media/remote/streams" class=style::back_link>
-                        {format!("← {}", tr(TextKey::RemoteStreams))}
-                    </a>
-                    <h1 class=style::page_title>{tr(TextKey::RemoteStreamPlaylists)}</h1>
-                </div>
-                <div class=style::toolbar_actions>
+            <PageHeader
+                title=tr(TextKey::RemoteStreamPlaylists)
+                back=("/media/remote/streams".to_owned(), tr(TextKey::RemoteStreams))
+            >
                     <button
                         type="button"
                         class=style::btn_secondary
@@ -152,8 +149,7 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
                     >
                         {format!("+ {}", tr(TextKey::Add))}
                     </button>
-                </div>
-            </div>
+            </PageHeader>
 
             <div
                 class=style::editor_form
