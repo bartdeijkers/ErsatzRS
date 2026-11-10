@@ -153,8 +153,8 @@ that decodes three full-frame JPEG XL carriers in a native 1080p graph.
 The Next and Playwright jobs run them only on a runner with more than four CPUs.
 On a smaller runner they leave them out, add a notice, and list them in the job
 summary as skipped. Their budgets are never relaxed. The self-hosted runners
-and the nightly full run on `main` keep proving them; a change merged from a
-hosted run is covered by the next nightly run on the self-hosted runners.
+and the weekly full run on `main` keep proving them; a change merged from a
+hosted run is covered by the next weekly run on the self-hosted runners.
 
 For a dependency-audit correction, use the existing workflow's focused mode:
 
@@ -394,7 +394,7 @@ A Linux job is not acceptance for the other supported platforms.
 
 Default required CI runs the **Teletext 1.5** Rust job and four serial browser
 jobs: **general** and **1.5**, each in Chromium and Firefox. Pull requests run
-only the Chromium jobs of the domains they touch; the nightly run covers both
+only the Chromium jobs of the domains they touch; the weekly run covers both
 browsers (see [CI lanes](#ci-lanes)). **Teletext 2.5**
 Rust and both **2.5** browser jobs are optional experimental checks, selected
 only by explicit `teletext_only=2.5` or `teletext_only=all` dispatch. Push/PR and
@@ -477,7 +477,7 @@ configuration, `Teletext 1.5`, all four required `Playwright E2E` combinations
 (general and Level 1.5 in Chromium and Firefox), `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
 because skipped jobs do not fail a run. A `pr` or `skip`
-[lane](#ci-lanes) run holds only part of this list; use a nightly or manually
+[lane](#ci-lanes) run holds only part of this list; use a weekly or manually
 dispatched full run on the candidate SHA as release evidence. A failed, cancelled, queued, or
 in-progress run is not release evidence. Any commit or amend after the
 successful run creates a new candidate SHA and requires new CI evidence before
@@ -516,10 +516,10 @@ as it can break something:
 
 | Lane | When | Runs |
 |---|---|---|
-| `skip` | push of an already proven SHA or tree, a docs-only pull request, a ready pull request whose domains select nothing, or a nightly run on an already fully tested tree | nothing (`CI ok` passes) |
+| `skip` | push of an already proven SHA or tree, a docs-only pull request, a ready pull request whose domains select nothing, or a weekly run on an already fully tested tree | nothing (`CI ok` passes) |
 | `light` | draft pull request | Format, Clippy, Build, Test, Cargo deny, Commit lint, docs (`CI ok` fails on purpose) |
 | `pr` | ready pull request | the touched domains (below), Playwright in Chromium only |
-| `full` | any other push, the nightly run (01:00 UTC), every manual dispatch | everything, both browsers |
+| `full` | any other push, the weekly run (Monday 01:00 UTC, the night from Sunday to Monday), every manual dispatch | everything, both browsers |
 
 Playwright jobs start after the matched build and a successful `Test` job when
 Rust tests are selected. A presentation-only PR deliberately omits `Test`;
@@ -528,9 +528,9 @@ dependency audit, commit lint and documentation checks retain their existing
 ownership. A green `pr` run uploads a small
 `ci-tree-<tree>` artifact naming the tree of the merge commit it tested, and the
 push to `main` with that tree is skipped. A green `full` run uploads
-`ci-full-<tree>`, and the nightly run is skipped while `main`'s tree has one.
-The nightly run is the safety net for everything a `pr` run left out,
-including Firefox.
+`ci-full-<tree>`, and the weekly run is skipped while `main`'s tree has one.
+The weekly run is the safety net for everything a `pr` run left out,
+including Firefox and any browser spec the page evidence below did not select.
 
 **Domain selection.** [`scripts/ci-domains.py`](scripts/ci-domains.py) maps the
 pull request's changed paths to work:
@@ -552,14 +552,42 @@ pull request's changed paths to work:
 - `Next engine`: runtime/transport and shared pipeline inputs. The audited
   native audio-filter helpers do not select Next merely through FFmpeg crate
   membership; unknown reach still selects broad coverage.
-- General Playwright specs: the specs of the touched admin page areas, crates or
+- General Playwright specs: the specs of the touched admin pages, crates or
   explicitly owned service modules, changed specs themselves and direct or
   transitive consumers of a changed helper, plus a hydration smoke set. Unknown
   helper reach selects all required browsers. Whole specs preserve serial groups.
+- Admin page ownership is read from the sources by
+  [`scripts/ci-browser-evidence.py`](scripts/ci-browser-evidence.py), not from
+  a hand table. A spec belongs to the page modules whose routes it (or a helper
+  it imports) names in `goto`, `href` or URL assertions, resolved through
+  `admin/routes.rs`. A changed page file selects those specs, general and base
+  teletext alike, instead of its whole area; a page helper, CSS module or
+  shared primitive selects the pages that use its public items; a translation
+  change selects the pages that show the changed `TextKey`s; a changed
+  re-export or route line selects the items it names. The channel teletext
+  page and its submodules keep their authoring, editor and runtime families.
+  The application shell (`app.rs`, `layout/`, `style/`, hydration) selects the
+  general specs that name an element id or `data-*` attribute only the shell
+  renders, plus the hydration smoke set, which loads every route inside the
+  shell; it no longer selects the base teletext browser suite. A shared
+  primitive the shell uses selects those shell specs next to the pages using
+  it. A server-function module without a reviewed area selects the pages that
+  call it (and the shell specs when the shell calls it) instead of everything;
+  modules with a reviewed area, teletext server functions and
+  `server_fns/mod.rs` are unchanged. A module name several modules share
+  counts only where the path before it fits. A module without a visible user,
+  a shell that exposes no named element and a missing route table or base
+  revision keep every required browser spec. Repositories and crates keep
+  their area-wide selection. The evidence is static: a spec that
+  reaches a page only by clicking, without naming its URL, is not selected for
+  that page, and the weekly full run owns that residual risk.
 - Build, toolchain and CI inputs, `ersatzrs-core`, `ersatzrs-domain`,
   migrations, shared Playwright infrastructure and any unmapped path select
   everything. New production inputs, deletions and unknown paths also retain
-  this conservative fallback until ownership is reviewed.
+  this conservative fallback until ownership is reviewed. A new admin
+  interface module (page, page helper, primitive or its CSS) is the exception:
+  it is reachable only through a declaration, route or caller in the same
+  change, so it is classified by its location like a modified file.
 
 Preflight checks the complete paginated diff against the PR's event revision
 before selecting jobs, including old paths of renames and added-file metadata.
@@ -568,7 +596,10 @@ and product demand. `CI ok` checks an explicit required-job set against those
 consumers; absent or inconsistent selection and unintended skips fail.
 When a mapping proves too narrow, add
 the missing path or spec to `scripts/ci-domains.py`; `scripts/ci-domains_test.py`
-checks that every mapping names existing specs and crates.
+checks that every mapping names existing specs and crates, and that every
+required spec has route evidence or a reviewed area. When a spec drives a page
+without naming its URL, name the URL in the spec (for example with a
+`toHaveURL` assertion after the click) so the evidence sees it.
 
 Browser suites never run at the same time on the runner machine, also across
 workflow runs: each Playwright job holds a host-wide lock

@@ -4,9 +4,14 @@
 The pull request lane runs only what a change can break: the Rust tests of the
 touched crates and every crate that depends on them, the Teletext and Next jobs
 when their domain is touched, and the Playwright specs of the touched admin
-areas plus a small hydration smoke set. Anything shared, unknown or
-build-defining selects everything. The full suite still runs on `main`
-(nightly) and on manual dispatch, so a missed mapping is caught there.
+pages plus a small hydration smoke set. Page ownership is read from the
+sources (scripts/ci-browser-evidence.py): a spec belongs to the page modules
+whose routes it names, and a shared module to the pages that use its public
+items. A server-function module without a reviewed area selects the pages
+that call it, and the application shell the specs that name its elements.
+Anything unknown or build-defining selects everything. The full suite
+still runs on `main` (weekly) and on manual dispatch, so a missed mapping is
+caught there.
 
 Usage: ci-domains.py select <changed-files.txt>   (one repo-relative path per line)
 Prints one JSON object; see `select()` for its keys.
@@ -18,6 +23,7 @@ import importlib.util
 import json
 import posixpath
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,6 +32,10 @@ _suite_spec = importlib.util.spec_from_file_location(
     "ci_teletext_selection", ROOT / "scripts/ci-teletext-selection.py")
 _suites = importlib.util.module_from_spec(_suite_spec)
 _suite_spec.loader.exec_module(_suites)
+_evidence_spec = importlib.util.spec_from_file_location(
+    "ci_browser_evidence", ROOT / "scripts/ci-browser-evidence.py")
+_evidence = importlib.util.module_from_spec(_evidence_spec)
+_evidence_spec.loader.exec_module(_evidence)
 
 # Paths that define the build, the toolchain, CI itself or shared test
 # infrastructure: any change here selects everything.
@@ -44,8 +54,10 @@ EVERYTHING = (
 # hydrates and that every advertised admin route answers.
 SMOKE_SPECS = ("admin-route-contract", "hydration-startup", "island-hydration")
 
-# Admin page areas (crates/ersatzrs-web/src/admin/pages/<area>) and other crates
-# mapped to the Playwright specs that exercise them (fnmatch on the spec name).
+# Admin areas mapped to the Playwright specs that exercise them (fnmatch on the
+# spec name). Backend changes (server functions, repositories, crates) select a
+# whole area. A changed page file instead selects the specs that name its
+# routes; this table then only supplies the specs without any route evidence.
 AREA_SPECS = {
     "addons": ("addon-*", "addons"),
     "channels": ("channel-*", "channels-*", "block-preview"),
@@ -213,12 +225,16 @@ def expand(patterns, specs):
     return {s for s in specs if matches(s, patterns)}
 
 
-def select(paths, members=None, specs=None, importers=importers, root=ROOT, added_paths=()):
+def select(paths, members=None, specs=None, importers=importers, root=ROOT, added_paths=(),
+           base_text=None):
     """Return the work for a change.
 
     All selected domains carry a reason. Full/unknown selections retain the
     complete required base suite; enhanced checks remain explicit dispatches.
+    `base_text(path)` returns a file's content before the change (or None);
+    without it, translation and re-export changes keep their broad selection.
     """
+    evidence = _evidence.Evidence(root)
     members = workspace_members() if members is None else members
     specs = spec_names() if specs is None else specs
     general = [s for s in specs if re.search(_suites.browser_filter("general"), s + ".spec.ts")]
@@ -259,6 +275,142 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                 # its name alone does not describe all of its dependencies.
                 out["teletext_specs"].add("teletext-decoder-health")
 
+    def shell():
+        """The application shell: the specs naming the elements only it renders.
+
+        The hydration smoke set joins every browser selection, so it proves
+        that each page still renders inside the changed shell.
+        """
+        out["domains"].add("admin-shell")
+        found = evidence.shell_specs() & set(general) if evidence.available() else set()
+        if not found:
+            all_browsers()
+            out["reasons"].append("no spec names an application shell element; all required browsers")
+            return
+        out["general_specs"].update(found)
+
+    def page(module, native):
+        """Select the specs that drive one page module."""
+        local = module.removeprefix(WEB_SRC + "admin/pages/")
+        name = local.split("/")[0].split(".")[0]
+        if _evidence.shell(module):
+            shell()
+            return
+        if not module.startswith(WEB_SRC + "admin/pages/"):
+            # The home page lives in the application shell.
+            all_browsers()
+            return
+        if local.startswith("channels/teletext"):
+            if local.startswith("channels/teletext_drafts"):
+                teletext(("authoring", "editor"), native)
+            elif local.startswith("channels/teletext_current_guide"):
+                teletext(("authoring", "runtime"), native)
+            else:
+                teletext(TELETEXT_SPECS, native)
+            return
+        out["domains"].add(name)
+        found = evidence.page_specs(module)
+        # Specs that name no route at all keep their reviewed area ownership.
+        unrouted = {s for s in expand(AREA_SPECS.get(name, ()), specs) if not evidence.spec_pages().get(s)}
+        if not found and name not in AREA_SPECS:
+            # No spec and no reviewed owner: the reach of this page is unknown.
+            all_browsers()
+            return
+        out["general_specs"].update((found | unrouted) & set(general))
+        out["teletext_specs"].update(found & set(base))
+        if native and name in ("channels", "scheduling", "ffmpeg_profiles", "settings", "system"):
+            # Channel, schedule and settings behavior feeds teletext delivery;
+            # its Rust contracts stay selected even when no base spec drives
+            # the changed page.
+            out["teletext_rust"] = True
+
+    followed = set()
+
+    def reached(found, server, known, native):
+        """Apply a consumer trace; unknown reach keeps every browser spec."""
+        if not known:
+            all_browsers()
+            out["domains"].add("shared-ui")
+            out["reasons"].append(f"unknown reach ({evidence.unknown}); all required browsers")
+            return
+        for module in sorted(found):
+            page(module, native)
+        for module in sorted(server):
+            name = module.removeprefix(_evidence.SERVER_FNS).split("/")[0].split(".")[0]
+            if name.startswith("teletext"):
+                teletext(TELETEXT_SPECS, native)
+            elif name in SERVER_AREAS:
+                area(SERVER_AREAS[name])
+            elif module not in followed:
+                # No reviewed area: the pages calling this module own it.
+                followed.add(module)
+                out["domains"].add("server-functions")
+                reached(*evidence.reach((module,)), native=native)
+
+    def pages(changed, presentation):
+        """Changed page sources: themselves plus every page using their items."""
+        if not evidence.available():
+            all_browsers()
+            out["domains"].add("shared-ui")
+            return
+        for path in changed:
+            if path.startswith(_evidence.TELETEXT_PAGES):
+                page(path, not presentation)
+            else:
+                reached(*evidence.reach((path,)), native=not presentation)
+
+    def shared(path):
+        """A shared interface module selects the pages that use it."""
+        if not evidence.available():
+            all_browsers()
+            out["domains"].add("shared-ui")
+            return
+        before = base_text(path) if base_text else None
+        if path == _evidence.ROUTES or evidence.declaration_only(path):
+            # Only the mounted or re-exported items on the changed lines matter.
+            current = (root / path).read_text()
+            if before is None:
+                all_browsers()
+                out["domains"].add("shared-ui")
+                return
+            if path == _evidence.ROUTES:
+                components = {component: module for _, component, module in evidence.routes()}
+                names = _evidence.changed_names(before, current, set(components))
+                if not names and before != current:
+                    all_browsers()
+                for name in sorted(names):
+                    page(components[name], False)
+            else:
+                reached(*evidence.reach(names=_evidence.changed_names(before, current)), native=False)
+            out["domains"].add("shared-ui")
+            return
+        reached(*evidence.reach((path,)), native=False)
+        out["domains"].add("shared-ui")
+
+    def translations(path):
+        """Changed text keys select the pages that show them."""
+        before = base_text(path) if base_text else None
+        out["domains"].add("translations")
+        browsers(("settings-i18n",))
+        if before is None or not evidence.available():
+            all_browsers()
+            return
+        current = (root / path).read_text()
+        keys, functions, known = _evidence.text_changes(before, current)
+        if not known:
+            all_browsers()
+            return
+        names = set(functions)
+        if keys:
+            names |= _evidence.key_helpers(evidence.sources()[_evidence.I18N], keys)
+        users = set()
+        if keys:
+            wanted = re.compile(r"\bTextKey::(?:" + "|".join(sorted(keys)) + r")\b")
+            users = {name for name, text in evidence.sources().items()
+                     if name != _evidence.I18N and not name.startswith(_evidence.LANGUAGES)
+                     and wanted.search(text)}
+        reached(*evidence.reach(users, names), native=False)
+
     def playback(native=True, next_engine=True):
         browsers(PLAYBACK_SPECS)
         teletext(("runtime",), native)
@@ -282,7 +434,12 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
         if path.startswith(".github/"):
             out["reasons"].append(f"{path}: independent repository automation")
             continue
-        if path in added_paths and not path.startswith("tests/e2e/"):
+        # A new admin interface module is reached only through a declaration,
+        # route or caller that is itself part of this change, so it is
+        # classified by its location like a modified file.
+        owned_addition = path.startswith(WEB_SRC + "admin/") and not path.startswith(
+            (WEB_SRC + "admin/server_fns/",) + _evidence.SHELL_DIRS) and path not in _evidence.SHELL
+        if path in added_paths and not path.startswith("tests/e2e/") and not owned_addition:
             everything(f"{path}: new production input requires ownership review")
             continue
         if not (root / path).is_file():
@@ -337,25 +494,7 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
         local = path.removeprefix(f"crates/{crate}/src/")
         if crate == "ersatzrs-web":
             if local.startswith("admin/pages/"):
-                page = local.removeprefix("admin/pages/")
-                if page.startswith("channels/teletext"):
-                    if page.startswith("channels/teletext_drafts"):
-                        teletext(("authoring", "editor"), not presentation)
-                    elif page.startswith("channels/teletext_current_guide"):
-                        teletext(("authoring", "runtime"), not presentation)
-                    else:
-                        teletext(TELETEXT_SPECS, not presentation)
-                else:
-                    name = page.split("/")[0].split(".")[0]
-                    if name in AREA_SPECS:
-                        area((name,))
-                        if name in ("channels", "scheduling", "ffmpeg_profiles", "settings", "system"):
-                            # Shared channel/settings changes affect teletext
-                            # delivery even when no teletext filename is edited.
-                            teletext(("runtime",), not presentation)
-                    else:
-                        all_browsers()
-                        out["domains"].add("shared-ui")
+                pages((path,), presentation)
             elif local.startswith("admin/server_fns/"):
                 module = local.removeprefix("admin/server_fns/").split("/")[0].split(".")[0]
                 if module.startswith("teletext"):
@@ -364,11 +503,24 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                     area(SERVER_AREAS[module])
                     if module in ("channels", "schedules", "playouts", "ffmpeg_profiles"):
                         playback()
-                else:
+                elif module == "mod" or not evidence.available():
                     everything(f"{path}: shared/unmapped server function")
+                else:
+                    found, server, known = evidence.reach((path,))
+                    if not known:
+                        everything(f"{path}: server function without a visible caller")
+                    else:
+                        followed.add(path)
+                        out["domains"].add("server-functions")
+                        reached(found, server, True, native=True)
+            elif path == _evidence.I18N or path.startswith(_evidence.LANGUAGES):
+                translations(path)
+                out["teletext_rust"] = True
+            elif _evidence.shell(path):
+                shell()
+                out["teletext_rust"] |= not presentation
             elif local.startswith("admin/"):
-                all_browsers()
-                out["domains"].add("shared-ui")
+                shared(path)
                 # Full base Rust contracts stay available for shared Rust UI.
                 out["teletext_rust"] |= not presentation
             elif local.startswith("transport/"):
@@ -491,12 +643,25 @@ def spec_filter(specs):
     return r"(^|/)(" + "|".join(specs) + r")\.spec\.ts$"
 
 
+def revision_text(revision):
+    """Read a file as it was at `revision`; None when it did not exist."""
+    def read(path):
+        done = subprocess.run(["git", "-C", str(ROOT), "show", f"{revision}:{path}"],
+                              capture_output=True, text=True, check=False)
+        return done.stdout if done.returncode == 0 else None
+    if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{revision}^{{commit}}"],
+                      capture_output=True, check=False).returncode != 0:
+        raise ValueError(f"base revision {revision!r} is not available")
+    return read
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("command", choices=("select", "closure", "archive-targets"))
     parser.add_argument("files", type=Path, help="changed paths (select) or cargo metadata JSON (closure)")
     parser.add_argument("packages", nargs="*", help="closure: the packages to close over")
     parser.add_argument("--added-files", type=Path, help="new paths from the complete PR diff")
+    parser.add_argument("--base-rev", help="revision holding the files as they were before the change")
     args = parser.parse_args()
     if args.command in ("closure", "archive-targets"):
         query = reverse_closure if args.command == "closure" else archive_target_flags
@@ -505,7 +670,8 @@ def main():
     paths = [line.strip() for line in args.files.read_text().splitlines() if line.strip()]
     members = workspace_members()
     added = args.added_files.read_text().splitlines() if args.added_files else []
-    result = select(paths, members, added_paths=added)
+    result = select(paths, members, added_paths=added,
+                    base_text=revision_text(args.base_rev) if args.base_rev else None)
     result["nextest_filter"] = nextest_filter(result["rust_packages"], members)
     result["archive_packages"] = archive_packages(result)
     result["products"] = build_products(result)

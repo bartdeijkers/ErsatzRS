@@ -92,10 +92,12 @@ Independent engineering goal: plans/domain-scoped-pr-ci.md. Milestone dci owns t
 finite six-package completion list. DCI-01 through DCI-05 are complete within
 implementation acceptance at source 88033b9e (PR #121). Independent selection
 review, broad PR CI 42198516239 and full CI 42216929774 pass; the full run includes
-all required general/base Chromium and Firefox jobs. DCI-06 awaits the fixed
-next ten consecutive code PRs reaching terminal outcomes after rollout. The
-15-30 minute overall mean remains unproven; no additional optimization package
-is opened while waiting for the sample.
+all required general/base Chromium and Firefox jobs. DCI-06 was measured on
+2026-11-10: the ten-PR cohort averaged 185.5 minutes, so the 15-30 minute goal
+is not met; the limiting factor is the two serial Playwright suites. By
+maintainer task of 2026-11-10, milestone dci-browser-evidence selects browser
+specs per changed admin page and moves the full run to weekly; its PR CI and
+the first real page-scoped PR remain open.
 The historical Phase9 handoff below remains delivery history, not this goal's
 next action. Phase10 and recorded platform/enhanced deferrals are unchanged.
 

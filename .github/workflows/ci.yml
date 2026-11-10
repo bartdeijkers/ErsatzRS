@@ -45,12 +45,12 @@ on:
       - 'SUPPORT.md'
       - 'TEST.md'
       - 'prompt.md'
-  # Nightly full suite on main (both browsers, every domain). Pull requests run
-  # only the domains they touch and a merge whose tree its PR already tested is
-  # skipped, so this run is the safety net. Preflight skips it when main's tree
-  # already passed a full run.
+  # Weekly full suite on main (both browsers, every domain), in the night from
+  # Sunday to Monday. Pull requests run only the domains they touch and a merge
+  # whose tree its PR already tested is skipped, so this run is the safety net.
+  # Preflight skips it when main's tree already passed a full run.
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 1 * * 1'
   workflow_dispatch:
     inputs:
       runner:
@@ -194,9 +194,9 @@ jobs:
   #             (scripts/ci-domains.py), browsers in Chromium only. A green run
   #             records the tested merge tree as a `ci-tree-<tree>` artifact,
   #             and a push to main with that tree is skipped.
-  #   full    - every other push, the nightly run and every manual dispatch:
+  #   full    - every other push, the weekly run and every manual dispatch:
   #             everything. A green run records `ci-full-<tree>`, and the
-  #             nightly run is skipped when main's tree already has one.
+  #             weekly run is skipped when main's tree already has one.
   #   A ready pull request whose domains select nothing runs as `skip`.
   preflight:
     name: Preflight
@@ -246,7 +246,7 @@ jobs:
               core.setOutput('lane', name);
               core.setOutput('skip', name === 'skip' ? 'true' : 'false');
             };
-            // The full lane records its tree so the nightly run can skip it.
+            // The full lane records its tree so the weekly run can skip it.
             const full = async () => {
               lane('full');
               core.setOutput('tree', await treeOf(context.sha));
@@ -357,7 +357,7 @@ jobs:
               const run = await provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch']);
               if (run) {
                 lane('skip');
-                core.notice(`Tree ${tree} already passed a full run (${run.html_url}); skipping the nightly run.`);
+                core.notice(`Tree ${tree} already passed a full run (${run.html_url}); skipping the weekly run.`);
               } else {
                 await full();
               }
@@ -399,14 +399,14 @@ jobs:
               return;
             }
             // A merged pull request lands as a new SHA, but often with the
-            // exact tree its PR lane already tested. The nightly full run
+            // exact tree its PR lane already tested. The weekly full run
             // covers the domains and Firefox jobs that lane left out.
             const tree = await treeOf(context.sha);
             const run = await provenBy('ci-tree', tree, ['pull_request']);
             if (run) {
               lane('skip');
               core.notice(
-                `Tree ${tree} already passed the PR lane (${run.html_url}); skipping this run. The nightly run covers the rest.`,
+                `Tree ${tree} already passed the PR lane (${run.html_url}); skipping this run. The weekly run covers the rest.`,
               );
               return;
             }
@@ -490,8 +490,15 @@ jobs:
         name: Select touched domains
         if: ${{ steps.duplicate.outputs.lane == 'pr' && steps.pr_proof.outputs.skip != 'true' }}
         run: |
+          # The checkout is the merge result; its first parent is the base the
+          # pull request changes. Translation and re-export changes are read
+          # against it, and stay broad when it is not available.
+          base=()
+          if git rev-parse --verify --quiet 'HEAD^2^{commit}' >/dev/null; then
+            base=(--base-rev "$(git rev-parse 'HEAD^1')")
+          fi
           python3 scripts/ci-domains.py select "$RUNNER_TEMP/changed-files.txt" \
-            --added-files "$RUNNER_TEMP/added-files.txt" > "$RUNNER_TEMP/selection.json"
+            --added-files "$RUNNER_TEMP/added-files.txt" "${base[@]}" > "$RUNNER_TEMP/selection.json"
           python3 - "$RUNNER_TEMP/selection.json" >> "$GITHUB_OUTPUT" <<'PY'
           import json, sys
           s = json.load(open(sys.argv[1]))
@@ -1232,7 +1239,7 @@ jobs:
     # one job.
     #
     # Pull requests (lane `pr`) run Chromium only, and only the suites and
-    # specs of the domains they touch; Firefox and the rest run nightly on main
+    # specs of the domains they touch; Firefox and the rest run weekly on main
     # (lane `full`) and on manual dispatch.
     #
     # Selected suite/project combinations run serially within this workflow. Both self-hosted
@@ -1436,6 +1443,7 @@ jobs:
         run: |
           python3 scripts/ci-teletext-selection_test.py
           python3 scripts/ci-domains_test.py
+          python3 scripts/ci-browser-evidence_test.py
           python3 scripts/e2e/host-lock_test.py
           python3 scripts/ci-capacity-proofs_test.py
           python3 scripts/ci-build-artifacts_test.py
@@ -1576,7 +1584,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: printf '%s\n%s\n' "$TREE" "$RUN_URL" > ci-tree.txt
       # Read by Preflight on the push to main: the merged tree passed the PR
-      # lane, so that push is skipped and the nightly run covers the rest.
+      # lane, so that push is skipped and the weekly run covers the rest.
       - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.tree != '' }}
         with:
@@ -1590,7 +1598,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RESUMED_CHECKS: ${{ needs.preflight.outputs.resumed_checks }}
         run: printf '%s\n%s\n%s\n' "$TREE" "$RUN_URL" "$RESUMED_CHECKS" > ci-full.txt
-      # Read by Preflight on the nightly run: skip it when main's tree already
+      # Read by Preflight on the weekly run: skip it when main's tree already
       # passed a full run.
       - uses: actions/upload-artifact@v7
         if: ${{ needs.preflight.outputs.lane == 'full' && needs.preflight.outputs.tree != '' }}

@@ -79,7 +79,12 @@ class DomainSelection(unittest.TestCase):
 
     def test_added_deleted_and_invalid_paths_fail_broad_or_closed(self):
         path = "crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css"
-        self.assertTrue(domains.select([path], added_paths=[path])["everything"])
+        for new in ("crates/ersatzrs-infra/src/repositories/library.rs",
+                    "crates/ersatzrs-web/src/admin/server_fns/libraries.rs",
+                    "crates/ersatzrs-web/src/admin/layout/nav.rs",
+                    "crates/ersatzrs-web/public/channel-preview.js"):
+            with self.subTest(new=new):
+                self.assertTrue(domains.select([new], added_paths=[new])["everything"])
         self.assertTrue(domains.select(["crates/ersatzrs-web/src/removed.rs", path])["everything"])
         for paths in ([], [""], ["../outside.rs"], ["/outside.rs"], ["crates\\outside.rs"]):
             with self.subTest(paths=paths), self.assertRaises(ValueError):
@@ -106,7 +111,7 @@ class DomainSelection(unittest.TestCase):
 
     def test_new_file_metadata_reaches_command_line_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = "crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css"
+            path = "crates/ersatzrs-infra/src/repositories/library.rs"
             changed, added = Path(tmp, "changed"), Path(tmp, "added")
             changed.write_text(path + "\n")
             added.write_text(path + "\n")
@@ -114,7 +119,7 @@ class DomainSelection(unittest.TestCase):
             normal = json.loads(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
             new = json.loads(subprocess.run(command + ["--added-files", str(added)],
                                             check=True, text=True, capture_output=True).stdout)
-            self.assertEqual(normal["rust_packages"], [])
+            self.assertFalse(normal["everything"])
             self.assertTrue(new["everything"])
 
     def test_presentation_wrapper_invalidates_on_added_native_behavior(self):
@@ -183,16 +188,183 @@ class DomainSelection(unittest.TestCase):
     def test_admin_page_selects_its_area_specs_and_the_smoke_set(self):
         result = select("crates/ersatzrs-web/src/admin/pages/libraries/mod.rs")
         self.assertEqual(result["rust_packages"], ["ersatzrs-web"])
-        self.assertIn("local-library-deletion", result["general_specs"])
+        self.assertIn("local-library-scan-lifecycle", result["general_specs"])
         self.assertNotIn("scheduling-route-family", result["general_specs"])
         for smoke in domains.SMOKE_SPECS:
             self.assertIn(smoke, result["general_specs"])
         self.assertFalse(result["next"] or result["teletext_browser"])
 
-    def test_shared_admin_code_selects_every_general_spec(self):
-        result = select("crates/ersatzrs-web/src/admin/ui/primitives/button.rs")
+    def test_application_shell_selects_the_specs_naming_its_elements(self):
+        for path in ("crates/ersatzrs-web/src/admin/layout/nav.rs",
+                     "crates/ersatzrs-web/src/admin/app.rs",
+                     "crates/ersatzrs-web/src/admin/hydration.js",
+                     "crates/ersatzrs-web/src/admin/style/globals.module.css"):
+            with self.subTest(path=path):
+                result = select(path)
+                self.assertFalse(result["everything"])
+                self.assertEqual(result["domains"], ["admin-shell"])
+                # The navigation drawer and its badges are named by these specs.
+                for spec in ("support-pages", "next-version") + domains.SMOKE_SPECS:
+                    self.assertIn(spec, result["general_specs"])
+                self.assertNotIn("scheduling-route-family", result["general_specs"])
+                self.assertFalse(result["teletext_browser"] or result["next"])
+                self.assertEqual(result["teletext_rust"], path.endswith((".rs", ".js")))
+        # The route table's own style has no traceable owner.
+        result = select("crates/ersatzrs-web/src/admin/app.module.css")
         self.assertEqual(result["general_specs"], "all")
         self.assertTrue(result["teletext_browser"])
+        # A new shell file still needs an ownership review.
+        path = "crates/ersatzrs-web/src/admin/layout/nav.rs"
+        self.assertTrue(domains.select([path], added_paths=[path])["everything"])
+
+    def test_shell_without_named_elements_keeps_every_browser_spec(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = "crates/ersatzrs-web/src/admin/app.rs"
+            target = Path(folder) / path
+            target.parent.mkdir(parents=True)
+            target.write_text("pub fn App() {}\n")
+            result = domains.select([path], members={"ersatzrs-web"}, specs=SPECS, root=Path(folder))
+            self.assertEqual(result["general_specs"], "all")
+            self.assertTrue(result["teletext_browser"])
+
+    def test_unreviewed_server_functions_select_their_calling_pages(self):
+        logs = select("crates/ersatzrs-web/src/admin/server_fns/logs.rs")
+        self.assertFalse(logs["everything"] or logs["next"] or logs["teletext_browser"])
+        self.assertEqual(logs["rust_packages"], ["ersatzrs-web"])
+        self.assertTrue(logs["teletext_rust"])
+        self.assertIn("logs-workbench", logs["general_specs"])
+        self.assertNotIn("scheduling-route-family", logs["general_specs"])
+        # The shell reads settings, so its specs join the settings page specs;
+        # server modules that call a settings helper keep their reviewed areas.
+        settings = select("crates/ersatzrs-web/src/admin/server_fns/settings.rs")
+        self.assertFalse(settings["everything"])
+        self.assertTrue({"admin-shell", "settings", "scheduling"} <= set(settings["domains"]))
+        for spec in ("settings-i18n", "hdhr-jwt", "next-version", "playouts-feedback"):
+            self.assertIn(spec, settings["general_specs"])
+        self.assertNotIn("watermark-preview", settings["general_specs"])
+        # Reviewed areas, the module table and new modules are unchanged.
+        channels = select("crates/ersatzrs-web/src/admin/server_fns/channels.rs")
+        self.assertTrue(channels["next"])
+        self.assertNotIn("server-functions", channels["domains"])
+        self.assertTrue(select("crates/ersatzrs-web/src/admin/server_fns/mod.rs")["everything"])
+        path = "crates/ersatzrs-web/src/admin/server_fns/logs.rs"
+        self.assertTrue(domains.select([path], added_paths=[path])["everything"])
+
+    def test_page_file_selects_the_specs_that_name_its_routes(self):
+        # Sibling pages of one area no longer run each other's specs.
+        epg = select("crates/ersatzrs-web/src/admin/pages/channels/epg.module.css")
+        self.assertIn("channel-watch", epg["general_specs"])
+        self.assertNotIn("channels-edit-numbers", epg["general_specs"])
+        self.assertEqual(epg["teletext_specs"], [])
+        self.assertEqual(epg["rust_packages"], [])
+        # The channel editor is driven by base teletext specs; they stay.
+        editor = select("crates/ersatzrs-web/src/admin/pages/channels/editor.rs")
+        self.assertIn("channels-source-teletext-delivery", editor["teletext_specs"])
+        self.assertNotIn("teletext-restart-flow", editor["teletext_specs"])
+        self.assertTrue(editor["teletext_rust"])
+        # Route evidence crosses the directory layout.
+        workspace = select("crates/ersatzrs-web/src/admin/pages/media/addon_lists/workspace.rs")
+        self.assertIn("addon-list-workspace", workspace["general_specs"])
+        self.assertNotIn("collections", workspace["general_specs"])
+        addons = select("crates/ersatzrs-web/src/admin/pages/addons.rs")
+        self.assertIn("addons", addons["general_specs"])
+        self.assertNotIn("addon-list-workspace", addons["general_specs"])
+        for result in (epg, editor, workspace, addons):
+            self.assertFalse(result["everything"])
+            for smoke in domains.SMOKE_SPECS:
+                self.assertIn(smoke, result["general_specs"])
+
+    def test_page_helper_selects_the_pages_that_use_it(self):
+        result = select("crates/ersatzrs-web/src/admin/pages/media/multi_select_browser.rs")
+        self.assertIn("media-browser-actions", result["general_specs"])
+        self.assertNotEqual(result["general_specs"], "all")
+        self.assertNotIn("scheduling-route-family", result["general_specs"])
+
+    def test_shared_primitive_selects_the_pages_that_use_it(self):
+        narrow = select("crates/ersatzrs-web/src/admin/ui/primitives/row_actions.rs")
+        self.assertNotEqual(narrow["general_specs"], "all")
+        self.assertIn("admin-row-actions", narrow["general_specs"])
+        self.assertNotIn("addon-list-workspace", narrow["general_specs"])
+        self.assertNotIn("teletext-restart-flow", narrow["teletext_specs"])
+        self.assertTrue(narrow["teletext_rust"])
+        styled = select("crates/ersatzrs-web/src/admin/ui/primitives/row_actions.module.css")
+        for key in ("general_specs", "teletext_specs"):
+            self.assertEqual(narrow[key], styled[key])
+        self.assertEqual(styled["rust_packages"], [])
+        # A primitive of the channel teletext page keeps every teletext family.
+        wide = select("crates/ersatzrs-web/src/admin/ui/primitives/button.rs")
+        self.assertIn("teletext-editor-flow", wide["teletext_specs"])
+        self.assertIn("teletext-restart-flow", wide["teletext_specs"])
+        self.assertIn("ffmpeg-profiles", wide["general_specs"])
+
+    def test_new_admin_interface_module_is_classified_by_location(self):
+        page = "crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css"
+        self.assertEqual(domains.select([page], added_paths=[page]), domains.select([page]))
+        primitive = "crates/ersatzrs-web/src/admin/ui/primitives/row_actions.rs"
+        self.assertEqual(domains.select([primitive], added_paths=[primitive]), domains.select([primitive]))
+
+    def test_translations_select_the_pages_showing_the_changed_keys(self):
+        i18n = "crates/ersatzrs-web/src/admin/i18n.rs"
+        dutch = "crates/ersatzrs-web/src/admin/languages/nl.rs"
+        # Without the earlier revision the reach is unknown.
+        self.assertEqual(domains.select([dutch])["general_specs"], "all")
+        current = {path: (ROOT / path).read_text() for path in (i18n, dutch)}
+        key = "SaveWatermark"
+        self.assertIn(f"TextKey::{key} =>", current[dutch])
+        before = dict(current)
+        before[dutch] = re.sub(rf"(TextKey::{key} =>\s*\{{?\s*\")", r"\1Oude ", current[dutch], count=1)
+        self.assertNotEqual(before[dutch], current[dutch])
+        result = domains.select([dutch], base_text=before.get)
+        self.assertNotEqual(result["general_specs"], "all")
+        self.assertIn("settings-i18n", result["general_specs"])
+        self.assertIn("watermark-preview", result["general_specs"])
+        self.assertNotIn("ffmpeg-profiles", result["general_specs"])
+        self.assertTrue(result["teletext_rust"])
+        # A change outside the key tables and helper functions stays broad.
+        before[dutch] = current[dutch].replace("pub struct DutchStrings;", "pub struct DutchStrings {}")
+        self.assertEqual(domains.select([dutch], base_text=before.get)["general_specs"], "all")
+        # An unchanged file selects only the translation smoke.
+        same = domains.select([i18n], base_text=current.get)
+        self.assertNotEqual(same["general_specs"], "all")
+
+    def test_reexport_and_route_changes_follow_the_changed_names(self):
+        module = "crates/ersatzrs-web/src/admin/ui/primitives/mod.rs"
+        current = (ROOT / module).read_text()
+        self.assertEqual(domains.select([module])["general_specs"], "all")
+        declared = current.replace("pub mod row_actions;\n", "", 1)
+        self.assertNotEqual(declared, current)
+        result = domains.select([module], base_text={module: declared}.get)
+        self.assertNotEqual(result["general_specs"], "all")
+        self.assertFalse(result["teletext_browser"])
+        routes = "crates/ersatzrs-web/src/admin/routes.rs"
+        current = (ROOT / routes).read_text()
+        earlier = current.replace("view=WatermarksListPage", "view=WatermarkEditorPage", 1)
+        self.assertNotEqual(earlier, current)
+        result = domains.select([routes], base_text={routes: earlier}.get)
+        self.assertNotEqual(result["general_specs"], "all")
+        self.assertIn("watermark-preview", result["general_specs"])
+        self.assertEqual(domains.select([routes])["general_specs"], "all")
+
+    def test_missing_route_table_keeps_every_browser_spec(self):
+        path = "crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css"
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / path
+            target.parent.mkdir(parents=True)
+            target.write_text("")
+            result = domains.select([path], MEMBERS, SPECS, root=Path(tmp))
+            self.assertEqual(result["general_specs"], "all")
+            self.assertTrue(result["teletext_browser"])
+
+    def test_every_required_spec_has_route_evidence_or_a_reviewed_area(self):
+        evidence = domains._evidence.Evidence(ROOT)
+        general = {s for s in SPECS if re.search(domains._suites.browser_filter("general"), s + ".spec.ts")}
+        base = {s for s in SPECS if re.search(domains._suites.browser_filter("1.5"), s + ".spec.ts")}
+        reviewed = set().union(*(domains.expand(patterns, SPECS) for patterns in domains.AREA_SPECS.values()))
+        unowned = {s for s in general | base if not evidence.spec_pages()[s] and s not in reviewed}
+        # Host-level specs that drive no admin page run with every full selection.
+        self.assertEqual(unowned, {"isolated-host-startup"})
+        for module in evidence.route_modules():
+            self.assertTrue((ROOT / module).is_file(), module)
 
     def test_teletext_and_next_paths_select_their_jobs(self):
         teletext = select("crates/ersatzrs-infra/src/addon_teletext_command.rs")

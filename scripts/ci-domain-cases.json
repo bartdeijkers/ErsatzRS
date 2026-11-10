@@ -3,14 +3,14 @@
     "name": "library CSS is presentation only",
     "paths": ["crates/ersatzrs-web/src/admin/pages/libraries/libraries.module.css"],
     "rust": false, "teletext": false, "next": false,
-    "include": ["local-library-deletion", "local-library-scan-lifecycle"],
+    "include": ["libraries-deep-scan", "local-library-scan-lifecycle"],
     "exclude": ["teletext-restart-flow", "scheduling-route-family"]
   },
   {
     "name": "library page has native behavior and tests",
     "paths": ["crates/ersatzrs-web/src/admin/pages/libraries/mod.rs"],
     "rust": true, "teletext": false, "next": false,
-    "include": ["local-library-deletion"], "exclude": ["teletext-editor-flow"]
+    "include": ["local-library-scan-lifecycle"], "exclude": ["teletext-editor-flow"]
   },
   {
     "name": "media component wrapper is presentation only",
@@ -64,10 +64,17 @@
     "include": ["teletext-editor-flow", "teletext-restart-flow"], "exclude": []
   },
   {
-    "name": "shared hydration reaches teletext",
+    "name": "application shell selects the specs naming its elements",
     "paths": ["crates/ersatzrs-web/src/admin/app.rs"],
-    "rust": true, "teletext": true, "next": false,
-    "include": ["teletext-editor-flow", "local-library-deletion"], "exclude": []
+    "rust": true, "teletext": false, "next": false,
+    "include": ["island-hydration", "hydration-startup", "support-pages", "next-version"],
+    "exclude": ["teletext-editor-flow", "local-library-deletion"]
+  },
+  {
+    "name": "server function without a reviewed area selects its calling pages",
+    "paths": ["crates/ersatzrs-web/src/admin/server_fns/logs.rs"],
+    "rust": true, "teletext": false, "next": false,
+    "include": ["logs-workbench", "island-hydration"], "exclude": ["scheduling-route-family", "channel-watch"]
   },
   {
     "name": "known native FFmpeg filter does not imply Next",

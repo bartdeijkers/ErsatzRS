@@ -5,7 +5,7 @@ A standard GitHub-hosted runner has four vCPUs. The cases below prove a fixed
 real-time budget (not functional behavior) and cannot meet it there, so CI runs
 them only where the runner has more than four CPUs and reports them as skipped
 elsewhere. Their budgets are never relaxed; the self-hosted runners and the
-nightly full run on main keep proving them.
+weekly full run on main keep proving them.
 
 Usage:
   ci-capacity-proofs.py capable            exit 0 when this runner can run them
@@ -54,7 +54,7 @@ def report(kind, cpus=None):
     cpus = available_cpus() if cpus is None else cpus
     lines = [f"### Capacity proofs skipped ({cpus} CPUs, more than {MIN_CPUS - 1} required)", ""]
     lines += [f"- `{case}`" for case in cases]
-    lines += ["", "Their real-time budgets are not relaxed: a self-hosted run or the nightly full run proves them."]
+    lines += ["", "Their real-time budgets are not relaxed: a self-hosted run or the weekly full run proves them."]
     return "\n".join(lines) + "\n"
 
 
