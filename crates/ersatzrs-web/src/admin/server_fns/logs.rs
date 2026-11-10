@@ -144,13 +144,17 @@ pub async fn load_recent_log_entries(
         sort_descending,
     );
 
+    let settings = state.application.ports().admin_settings();
+    let language = crate::admin::server_fns::settings::load_ui_language_for_api(settings).await?;
+    let notation = crate::admin::datetime::load_date_time_preferences(settings).await?;
     let entries = entries
         .into_iter()
         .map(|entry| AdminLogEntry {
-            timestamp: entry
-                .timestamp
-                .format("%-m/%-d/%Y %-I:%M:%S %p")
-                .to_string(),
+            timestamp: crate::admin::datetime::format_date_time(
+                &entry.timestamp,
+                language,
+                notation,
+            ),
             level: entry.level.to_owned(),
             message: entry.message,
         })

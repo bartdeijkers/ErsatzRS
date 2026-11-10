@@ -166,6 +166,22 @@ VALUES (${gapId}, ${classicPlayoutId}, '2099-01-01 01:00:00', '2099-01-01 01:05:
   };
 }
 
+// Admin timestamps use the UI language's notation (en-us: M/D/YYYY h:mm:ss AM/PM)
+// in the server's time zone with its UTC offset. The E2E server runs on the
+// same machine as Playwright, so Node's local zone is the server's zone.
+function serverLocalEnUs(utcIso: string): string {
+  const value = new Date(utcIso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const hours = value.getHours();
+  const offset = -value.getTimezoneOffset();
+  const magnitude = Math.abs(offset);
+  const label = offset === 0
+    ? 'UTC'
+    : `UTC${offset < 0 ? '-' : '+'}${Math.floor(magnitude / 60)}${magnitude % 60 ? `:${pad(magnitude % 60)}` : ''}`;
+  return `${value.getMonth() + 1}/${value.getDate()}/${value.getFullYear()} `
+    + `${hours % 12 || 12}:${pad(value.getMinutes())}:${pad(value.getSeconds())} ${hours < 12 ? 'AM' : 'PM'} ${label}`;
+}
+
 async function forceEnglish(page: Page): Promise<void> {
   await page.request.post('/admin-api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
@@ -727,7 +743,7 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
       const fallback = await noJs.newPage();
       await fallback.goto('/playouts');
       const status = fallback.locator(`[data-playout-adaptation="${id}"]`);
-      await expect(status.locator('[data-playout-last-success]')).toHaveText('2026-10-02 12:34:56 UTC');
+      await expect(status.locator('[data-playout-last-success]')).toHaveText(serverLocalEnUs('2026-10-02T12:34:56Z'));
       await expect(status.locator('[data-playout-source-revision]')).toHaveText('3');
       await expect(fallback.locator('[data-playout-failures]')).toContainText('Source comparison failed; a retry is pending.');
     } finally { await noJs.close(); }
@@ -754,7 +770,7 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
     await expect(status.locator('[data-playout-source-revision]')).toHaveText('4', { timeout: 40_000 });
     await expect(status.locator('[data-playout-refresh-pending]')).toBeVisible();
     await expect(page.locator('[data-playout-failures]')).toBeHidden();
-    await expect(status.locator('[data-playout-last-success]')).toHaveText('2026-10-02 12:34:56 UTC');
+    await expect(status.locator('[data-playout-last-success]')).toHaveText(serverLocalEnUs('2026-10-02T12:34:56Z'));
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       const navigation = page.getByRole('button', { name: 'Toggle navigation' });

@@ -181,6 +181,13 @@ release section when tagging a release.
   useful and, where possible, the next step) instead of a bare "No items" row
   or a "0–0" counter. Shared tables and the multi and rerun collection
   overviews hide their pagination while there is nothing to page through.
+- Admin dates and times use one localized notation: by default the usual
+  format of the selected UI language (for example `08-11-2026 23:05:09` in
+  Dutch, `11/8/2026 11:05:09 PM` in US English), always in the server's time
+  zone with the UTC offset shown. Interface settings gain Date format and Time
+  format choices to override the order and the 12/24-hour clock. The log
+  viewer and playouts (last build, item start and finish) use it; previously
+  logs showed US dates and playouts ISO/UTC times.
 
 ### Fixed
 
