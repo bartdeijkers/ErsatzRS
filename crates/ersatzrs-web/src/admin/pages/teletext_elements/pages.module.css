@@ -38,7 +38,7 @@
 .actions { text-align: right; }
 .edit_link { color: var(--color-secondary); text-decoration: none; font-weight: 500; }
 
-.form { display: grid; gap: 0.9rem; }
+.form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; }
 .form > label { display: grid; gap: 0.35rem; justify-items: start; }
 .form input[name="name"] { width: 100%; box-sizing: border-box; }
 .form input[type="text"], .form input[type="number"], .fields_table select, .fields_table input, .preview_form select {
@@ -47,6 +47,7 @@
 }
 .form_actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .drop { display: grid; gap: 0.5rem; padding: 1.5rem; border: 2px dashed var(--color-border); border-radius: var(--radius); }
+.drop input[type="file"] { min-width: 0; max-width: 100%; }
 .details { margin-top: 0.5rem; }
 .details summary { cursor: pointer; color: var(--color-text-secondary); min-height: 2.75rem; display: flex; align-items: center; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; font-size: 0.875rem; }

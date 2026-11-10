@@ -24,6 +24,7 @@ part of the contract until source and focused evidence close them.
 | [Pagination](pagination.md) | Implemented | Broad across `/media/*` | Range reporting, page size, and previous/next navigation |
 | [Resource state](resource-state.md) | Implemented | Broad | Stable loading, ready, empty, and failed resource markup |
 | [Section disclosure](disclosure.md) | Candidate | Add-on list task pages | Optional task groups and supporting details using native details/summary |
+| [Help disclosure](help-disclosure.md) | Implemented | Teletext uploads, add-on permissions and graphics previews | Explicitly labelled tips and supporting explanations using native details/summary |
 | [Navigation drawer](navigation-drawer.md) | Implemented | Global shell | Responsive primary admin navigation with keyboard-safe disclosure |
 | [Settings route tabs](settings-route-tabs.md) | Implemented | Broad across Settings | Settings subpage navigation without expanding the global drawer |
 | [System route tabs](system-route-tabs.md) | Implemented | Every `/system/*` page | Support subpage navigation without expanding the global drawer |

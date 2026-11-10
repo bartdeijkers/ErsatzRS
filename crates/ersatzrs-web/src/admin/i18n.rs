@@ -72,6 +72,8 @@ fn normalize_language_input(value: &str) -> String {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum TextKey {
+    ShowExplanation,
+    HideExplanation,
     Center,
     FilePath,
     Format,
@@ -2784,6 +2786,8 @@ pub enum TextKey {
 }
 
 pub const ALL_TEXT_KEYS: &[TextKey] = &[
+    TextKey::ShowExplanation,
+    TextKey::HideExplanation,
     TextKey::Center,
     TextKey::FilePath,
     TextKey::Format,

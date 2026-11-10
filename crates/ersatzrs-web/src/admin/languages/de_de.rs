@@ -403,6 +403,8 @@ impl LanguageStrings for GermanStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ShowExplanation => "Erklärung anzeigen",
+        TextKey::HideExplanation => "Erklärung ausblenden",
         TextKey::Center => "Mitte",
         TextKey::FilePath => "Dateipfad",
         TextKey::Format => "Format",

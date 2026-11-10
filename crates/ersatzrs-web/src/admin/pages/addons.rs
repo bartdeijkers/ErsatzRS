@@ -22,6 +22,7 @@ use crate::admin::server_fns::addons::{
     AddonSettingRow, AddonToolMaintenanceRow, AvailableAddonRow, InstalledAddonRow,
 };
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
+use crate::admin::ui::primitives::help_disclosure::HelpDisclosure;
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
 use crate::admin::ui::primitives::settings_navigation::{
     SettingsPageLayout, SettingsPageLayoutForPath,
@@ -1599,10 +1600,11 @@ fn localized_for_code(values: &BTreeMap<String, String>, locale: &str) -> String
 }
 
 fn permissions_view(capabilities: &[String], permissions: &AddonPermissions) -> AnyView {
+    let capabilities = format!("{}: {}", tr(TextKey::Capabilities), capabilities.join(", "));
     view! {
         <div class=style::permissions data-testid="addon-permissions">
             <h3>{tr(TextKey::Permissions)}</h3>
-            <details><summary>{tr(TextKey::TechnicalDetails)}</summary><p>{format!("{}: {}", tr(TextKey::Capabilities), capabilities.join(", "))}</p></details>
+            <HelpDisclosure title=tr(TextKey::TechnicalDetails)><p>{capabilities}</p></HelpDisclosure>
             <p>{format!("{}: {}", tr(TextKey::AddonPermissionNetworkHelp), value_or_no(&permissions.network_hosts))}</p>
             <p>{format!("{}: {}", tr(TextKey::AddonPermissionMediaHelp), yes_no(permissions.media_read))}</p>
             <p>{format!("{}: {}", tr(TextKey::AddonPermissionFfmpegHelp), yes_no(permissions.managed_ffmpeg))}</p>

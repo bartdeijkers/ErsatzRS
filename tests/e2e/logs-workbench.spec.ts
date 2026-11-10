@@ -34,5 +34,11 @@ test('logs workbench hydrates and exposes standardized search, sorting, and pagi
 
   await expect(workbench.locator('[data-pagination]')).toBeVisible();
   await expect(workbench.locator('[data-pagination-page-size]')).toBeVisible();
+  await workbench.locator('[data-pagination-page-size]').selectOption('0');
+  await expect(workbench.locator('[data-pagination]')).toContainText('1 of 1');
+  await page.reload();
+  await expect(workbench.locator('[data-pagination-page-size]')).toHaveValue('0');
+  await workbench.locator('[data-pagination-page-size]').selectOption('10');
+  await expect(workbench.locator('[data-pagination-page-size]')).toHaveValue('10');
   expect(pageErrors).toEqual([]);
 });

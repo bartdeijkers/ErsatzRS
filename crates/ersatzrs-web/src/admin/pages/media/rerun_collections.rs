@@ -1,6 +1,7 @@
 //! Rerun collection list and editor. Ports `Pages/RerunCollections.razor`
 //! and `Pages/RerunCollectionEditor.razor`.
 
+use crate::admin::ui::primitives::pagination::page_size_limit;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
@@ -233,15 +234,15 @@ fn RerunCollectionsList(
                                 page_size=Signal::derive(move || page_size.get())
                                 page_size_options=Some(vec![10, 25, 50, 100])
                                 on_page_size_change=Callback::new(move |value: u32| {
-                                    page_size.set(value.max(1));
+                                    page_size.set(value);
                                     page.set(0);
                                 })
                                 on_previous=Callback::new(move |()| {
                                     page.update(|value| *value = value.saturating_sub(1));
                                 })
                                 on_next=Callback::new(move |()| {
-                                    let size = page_size.get().max(1);
-                                    let max_page = u32::try_from(total.div_ceil(u64::from(size)))
+                                    let size = page_size_limit(page_size.get());
+                                    let max_page = u32::try_from(total.div_ceil(size))
                                         .unwrap_or(u32::MAX)
                                         .saturating_sub(1);
                                     page.update(|value| *value = value.saturating_add(1).min(max_page));

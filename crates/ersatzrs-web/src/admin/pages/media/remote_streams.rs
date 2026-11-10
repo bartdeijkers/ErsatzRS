@@ -44,7 +44,7 @@ mod card_style {
 }
 
 const DEFAULT_PAGE_SIZE: u32 = 100;
-const PAGE_SIZE_OPTIONS: [u32; 4] = [10, 25, 50, 100];
+const PAGE_SIZE_OPTIONS: [u32; 5] = [10, 25, 50, 100, 0];
 const BASE_PATH: &str = "/media/remote/streams";
 
 #[component]
@@ -61,6 +61,7 @@ pub fn RemoteStreamsPage() -> impl IntoView {
             .unwrap_or(1)
             .saturating_sub(1)
     });
+    let page = if page_size == 0 { 0 } else { page };
     let initial_query = query.clone();
     let initial = Resource::new_blocking(
         move || (initial_query.clone(), page, page_size),

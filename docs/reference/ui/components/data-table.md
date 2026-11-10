@@ -33,7 +33,8 @@ reactive `PageParams`, column definitions, and optional row actions.
   keyboard-operable and do not expose `aria-sort`.
 - Previous and next controls have localized `title` text but no explicit visible
   labels or `aria-label`.
-- The page size is reported but cannot be changed through this component.
+- The shared page-size selector offers numeric sizes and All; choosing a size
+  resets the page. All is represented by zero and consumers fetch every row.
 - Loading and empty states are covered locally; an error state belongs to the
   surrounding resource boundary.
 - The horizontal-scroll model preserves columns but has not been established as

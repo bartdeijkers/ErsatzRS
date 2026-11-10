@@ -123,6 +123,12 @@ test.describe('localized graphics-elements selector and editor', () => {
     await expect(page.locator('[data-graphics-element-renderer-select]')).toHaveValue('drawvg');
     await expect(page.getByText('Drawvg uses built-in bitmap glyphs')).toBeVisible();
     await expect(page.locator('[data-drawtext-refresh-period]')).toBeEnabled();
+    const explanation = page.locator('[data-graphics-context-preview] [data-help-disclosure]');
+    await explanation.locator('summary').getByText('Show explanation', { exact: true }).click();
+    await expect(explanation).toHaveAttribute('open', '');
+    await expect(explanation.locator('summary').getByText('Hide explanation', { exact: true })).toBeVisible();
+    await explanation.locator('summary').click();
+    await expect(explanation).not.toHaveAttribute('open');
 
     const addedName = `DTX ${testInfo.project.name} added`;
     sqlite(`DELETE FROM "GraphicsElement" WHERE "Name" = '${addedName}';`);

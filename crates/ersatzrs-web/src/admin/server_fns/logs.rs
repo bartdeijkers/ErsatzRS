@@ -35,10 +35,7 @@ pub async fn get_logs_page_size() -> Result<u32, ServerFnError> {
         .get_i32_setting(LOGS_PAGE_SIZE_KEY, 10)
         .await
         .map_err(ServerFnError::new)?;
-    Ok(u32::try_from(saved)
-        .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(10))
+    Ok(u32::try_from(saved).ok().unwrap_or(10))
 }
 
 #[server(prefix = "/admin-api")]
@@ -113,7 +110,6 @@ pub async fn load_recent_log_entries(
         })
     }
 
-    let page_size = page_size.max(1);
     let state = expect_context::<AppState>();
     crate::admin::server_fns::settings::save_config_value(
         state.application.ports().admin_settings(),
@@ -217,8 +213,16 @@ fn sort_filter_page_entries(
     }
 
     let total_count = entries.len();
-    let start = usize::try_from(page.saturating_mul(page_size)).unwrap_or(usize::MAX);
-    let page_size = usize::try_from(page_size).unwrap_or(usize::MAX);
+    let start = if page_size == 0 {
+        0
+    } else {
+        usize::try_from(u64::from(page) * u64::from(page_size)).unwrap_or(usize::MAX)
+    };
+    let page_size = if page_size == 0 {
+        usize::MAX
+    } else {
+        usize::try_from(page_size).unwrap_or(usize::MAX)
+    };
     let page = entries.into_iter().skip(start).take(page_size).collect();
     (total_count, page)
 }
@@ -311,5 +315,28 @@ mod tests {
 
         assert_eq!(total, 1);
         assert_eq!(page[0].message, "Missing file");
+    }
+
+    #[test]
+    fn logs_all_rows_ignore_the_old_page_and_preserve_filter_and_sort() {
+        let (total, page) = sort_filter_page_entries(
+            vec![
+                entry(1, "Information", "match old"),
+                entry(2, "Warning", "unrelated"),
+                entry(3, "Error", "match new"),
+            ],
+            "match",
+            9,
+            0,
+            AdminLogSortField::Timestamp,
+            Some(false),
+        );
+        assert_eq!(total, 2);
+        assert_eq!(
+            page.into_iter()
+                .map(|entry| entry.message)
+                .collect::<Vec<_>>(),
+            ["match old", "match new"]
+        );
     }
 }

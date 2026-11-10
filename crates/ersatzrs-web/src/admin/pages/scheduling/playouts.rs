@@ -6,6 +6,7 @@
 //! build-failure highlighting, and a paged playout-detail table with a
 //! Show Filler toggle and per-item Troubleshoot dialog.
 #![allow(clippy::too_many_lines)]
+use crate::admin::ui::primitives::pagination::page_size_limit;
 use leptos::prelude::*;
 
 use crate::admin::i18n::{
@@ -1072,7 +1073,7 @@ fn PlayoutPager(
     let go_prev = Callback::new(move |()| page.update(|p| *p = p.saturating_sub(1)));
     let go_next = Callback::new(move |()| {
         let total_items = total.get_untracked().unwrap_or(0);
-        let max = total_items.saturating_sub(1) / u64::from(page_size.get_untracked().max(1));
+        let max = total_items.saturating_sub(1) / page_size_limit(page_size.get_untracked());
         page.update(|p| {
             if u64::from(*p) < max {
                 *p += 1;
@@ -1080,7 +1081,7 @@ fn PlayoutPager(
         });
     });
     let change_size = Callback::new(move |value: u32| {
-        page_size.set(value.max(1));
+        page_size.set(value);
         page.set(0);
     });
 

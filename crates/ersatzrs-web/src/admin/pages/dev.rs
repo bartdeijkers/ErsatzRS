@@ -53,6 +53,9 @@ pub fn ComponentsPage() -> impl IntoView {
         move |p| {
             let data = rows_data.clone();
             async move {
+                if p.page_size == 0 {
+                    return data;
+                }
                 let start = (p.page * p.page_size) as usize;
                 let end = (start + p.page_size as usize).min(data.len());
                 data.get(start..end).unwrap_or(&[]).to_vec()

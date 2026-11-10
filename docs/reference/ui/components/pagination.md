@@ -28,11 +28,36 @@ Both variants share range calculation, localized labels, markup, and CSS.
   stable outer navigation markup.
 - Page-size choices are always present and separate from the range/status
   region; the current size is added when it is not in the default choices.
+  All is always the last choice, including for route-specific option lists.
+  Its value is zero; preserve that value in client state, URLs and saved
+  preferences. It selects every matching row, resets the page to the start,
+  reports one page and disables both navigation controls. The existing `All`
+  translation supplies its label in every supported culture.
 - Media-card selection and bulk actions remain outside the pagination landmark.
 - The layout wraps by content pressure and left-aligns at narrow widths without
   requiring horizontal page scrolling.
 
 ## Adoption and evidence
+
+`tests/e2e/pagination-all.spec.ts` exercises shared tables and collection,
+schedule and playout lists through their existing islands and server functions.
+Their application queries translate the zero sentinel to the existing complete
+repository read convention without changing filters or sorting.
+`media-browser-actions.spec.ts` and `remote-streams.spec.ts` cover URL-owned
+media pagination, including the native GET-form fallback. `logs-workbench.spec.ts`
+covers the saved log-view preference. These boundaries reuse the existing
+`PaginationControls`, `PaginationLinks`, `PagedTable` and `MediaCardPager`;
+no new island or endpoint is introduced.
+
+The representative rendering paths are `ChannelsListPage` /
+`ChannelsListIsland` and `FfmpegProfilesListPage` /
+`FfmpegProfilesListIsland` through `PagedTable`; `CollectionsPage` /
+`CollectionsIsland`, `SchedulesPage` / `SchedulesIsland` and `PlayoutsPage` /
+`PlayoutsIsland` use the controls directly. URL-owned media pages keep their
+`MultiSelectBrowserPage` / `MultiSelectIsland` and Remote Stream wrappers,
+GET forms and existing media-list server functions. Logs retain `LogsPage` /
+`LogsIsland` and `load_recent_log_entries`. Rows, totals, queries and sort state
+stay owned by those consumers.
 
 The shared primitive owns pagination for `PagedTable`, `MediaCardPager`, the
 URL-driven multi-select and Remote Stream browsers, manual/smart/multi/rerun

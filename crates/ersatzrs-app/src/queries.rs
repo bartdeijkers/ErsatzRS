@@ -233,6 +233,16 @@ pub struct WatermarkNavigationRead {
     pub name: String,
 }
 
+// Repository page limits use the existing u32::MAX convention for all rows.
+// The UI and persisted settings retain zero so the All selection survives reload.
+fn admin_page(page: u32, page_size: u32) -> (u32, u32) {
+    if page_size == 0 {
+        (0, u32::MAX)
+    } else {
+        (page, page_size)
+    }
+}
+
 /// Watermark editor form plus its immediate neighbors.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WatermarkEditorRead {
@@ -246,6 +256,7 @@ pub async fn list_ffmpeg_profiles(
     page_size: u32,
     repository: &dyn FfmpegProfileRepository,
 ) -> Result<Vec<FfmpegProfileListRead>> {
+    let (page, page_size) = admin_page(page, page_size);
     let resolutions = repository
         .list_resolutions()
         .await?
@@ -488,7 +499,7 @@ fn filter_mode_value(value: ersatzrs_domain::FilterMode) -> i32 {
 const FILLER_PRESETS_PAGE_SIZE_KEY: &str = "pages.filler_presets.page_size";
 
 pub async fn get_filler_presets_page_size(settings: &dyn AdminSettingsRepository) -> Result<u32> {
-    positive_page_size(FILLER_PRESETS_PAGE_SIZE_KEY, settings).await
+    saved_page_size(FILLER_PRESETS_PAGE_SIZE_KEY, settings).await
 }
 
 pub async fn list_filler_presets(
@@ -498,8 +509,9 @@ pub async fn list_filler_presets(
     settings: &dyn AdminSettingsRepository,
 ) -> Result<(Vec<FillerPresetListRead>, u64)> {
     settings
-        .set_string(FILLER_PRESETS_PAGE_SIZE_KEY, &page_size.max(1).to_string())
+        .set_string(FILLER_PRESETS_PAGE_SIZE_KEY, &page_size.to_string())
         .await?;
+    let (page, page_size) = admin_page(page, page_size);
     let presets = repository.list().await?;
     let total = u64::try_from(presets.len()).map_err(|_| ApplicationError::InvalidData {
         kind: "filler presets",
@@ -566,6 +578,7 @@ pub async fn list_watermarks(
     page_size: u32,
     repository: &dyn WatermarkRepository,
 ) -> Result<Vec<WatermarkListRead>> {
+    let (page, page_size) = admin_page(page, page_size);
     let offset = usize::try_from(page.saturating_sub(1))
         .unwrap_or(usize::MAX)
         .saturating_mul(usize::try_from(page_size).unwrap_or(usize::MAX));
@@ -1152,8 +1165,9 @@ pub async fn list_collections(
     query: ListCollections,
     repository: &dyn CollectionRepository,
 ) -> Result<(Vec<CollectionAdminRow>, u64)> {
+    let (page, page_size) = admin_page(query.page, query.page_size);
     repository
-        .list_admin(&query.search, query.page, query.page_size)
+        .list_admin(&query.search, page, page_size)
         .await
         .map_err(Into::into)
 }
@@ -1182,8 +1196,9 @@ pub async fn list_smart_collections(
     query: ListCollections,
     repository: &dyn CollectionRepository,
 ) -> Result<(Vec<SmartCollectionAdminRow>, u64)> {
+    let (page, page_size) = admin_page(query.page, query.page_size);
     repository
-        .list_smart_admin(&query.search, query.page, query.page_size)
+        .list_smart_admin(&query.search, page, page_size)
         .await
         .map_err(Into::into)
 }
@@ -1226,10 +1241,7 @@ pub async fn get_multi_collections_page_size(
     settings: &dyn AdminSettingsRepository,
 ) -> Result<u32> {
     let value = get_i32_setting(MULTI_COLLECTIONS_PAGE_SIZE_KEY, 10, settings).await?;
-    Ok(u32::try_from(value)
-        .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(10))
+    Ok(u32::try_from(value).ok().unwrap_or(10))
 }
 
 pub async fn list_multi_collections(
@@ -1243,8 +1255,9 @@ pub async fn list_multi_collections(
             &query.page_size.to_string(),
         )
         .await?;
+    let (page, page_size) = admin_page(query.page, query.page_size);
     repository
-        .list_multi_admin(&query.search, query.page, query.page_size)
+        .list_multi_admin(&query.search, page, page_size)
         .await
         .map_err(Into::into)
 }
@@ -1277,10 +1290,7 @@ pub async fn get_rerun_collections_page_size(
     settings: &dyn AdminSettingsRepository,
 ) -> Result<u32> {
     let value = get_i32_setting(RERUN_COLLECTIONS_PAGE_SIZE_KEY, 10, settings).await?;
-    Ok(u32::try_from(value)
-        .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(10))
+    Ok(u32::try_from(value).ok().unwrap_or(10))
 }
 
 pub async fn list_rerun_collections(
@@ -1294,8 +1304,9 @@ pub async fn list_rerun_collections(
             &query.page_size.to_string(),
         )
         .await?;
+    let (page, page_size) = admin_page(query.page, query.page_size);
     repository
-        .list_rerun_admin(&query.search, query.page, query.page_size)
+        .list_rerun_admin(&query.search, page, page_size)
         .await
         .map_err(Into::into)
 }
@@ -1409,8 +1420,8 @@ pub async fn get_schedules_page_sizes(
     settings: &dyn AdminSettingsRepository,
 ) -> Result<(u32, u32)> {
     Ok((
-        positive_page_size(SCHEDULES_PAGE_SIZE_KEY, settings).await?,
-        positive_page_size(SCHEDULES_DETAIL_PAGE_SIZE_KEY, settings).await?,
+        saved_page_size(SCHEDULES_PAGE_SIZE_KEY, settings).await?,
+        saved_page_size(SCHEDULES_DETAIL_PAGE_SIZE_KEY, settings).await?,
     ))
 }
 
@@ -1419,10 +1430,7 @@ pub async fn save_schedules_detail_page_size(
     settings: &dyn AdminSettingsRepository,
 ) -> Result<()> {
     settings
-        .set_string(
-            SCHEDULES_DETAIL_PAGE_SIZE_KEY,
-            &page_size.max(1).to_string(),
-        )
+        .set_string(SCHEDULES_DETAIL_PAGE_SIZE_KEY, &page_size.to_string())
         .await
         .map_err(Into::into)
 }
@@ -1433,10 +1441,11 @@ pub async fn list_schedules(
     settings: &dyn AdminSettingsRepository,
 ) -> Result<(Vec<ScheduleAdminRow>, u64)> {
     settings
-        .set_string(SCHEDULES_PAGE_SIZE_KEY, &query.page_size.max(1).to_string())
+        .set_string(SCHEDULES_PAGE_SIZE_KEY, &query.page_size.to_string())
         .await?;
+    let (page, page_size) = admin_page(query.page, query.page_size);
     repository
-        .list_admin(&query.search, query.page, query.page_size.max(1))
+        .list_admin(&query.search, page, page_size)
         .await
         .map_err(Into::into)
 }
@@ -1479,12 +1488,9 @@ pub async fn get_schedule_item_options(
         .map_err(Into::into)
 }
 
-async fn positive_page_size(key: &str, settings: &dyn AdminSettingsRepository) -> Result<u32> {
+async fn saved_page_size(key: &str, settings: &dyn AdminSettingsRepository) -> Result<u32> {
     let value = get_i32_setting(key, 10, settings).await?;
-    Ok(u32::try_from(value)
-        .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(10))
+    Ok(u32::try_from(value).ok().unwrap_or(10))
 }
 
 /// Load the complete persisted `FFmpeg` settings editor read model.
@@ -2216,8 +2222,9 @@ pub async fn list_channels(
     query: ListChannels,
     repository: &dyn ChannelRepository,
 ) -> Result<Vec<ChannelAdminListRow>> {
+    let (page, page_size) = admin_page(query.page, query.page_size);
     repository
-        .list_admin_rows(query.show_disabled, query.page, query.page_size.max(1))
+        .list_admin_rows(query.show_disabled, page, page_size)
         .await
         .map_err(Into::into)
 }
@@ -2749,8 +2756,14 @@ pub async fn list_playouts(
     page_size: u32,
     repository: &dyn PlayoutRepository,
 ) -> Result<Vec<PlayoutListAdminRow>> {
-    let limit = i64::from(page_size.max(1));
-    let offset = i64::from(page).saturating_mul(limit);
+    let (offset, limit) = if page_size == 0 {
+        (0, -1)
+    } else {
+        (
+            i64::from(page).saturating_mul(i64::from(page_size)),
+            i64::from(page_size),
+        )
+    };
     repository
         .list_admin(query, offset, limit)
         .await
@@ -2899,8 +2912,14 @@ pub async fn list_playout_detail_items(
             message: "must be greater than zero".to_owned(),
         });
     }
-    let limit = i64::from(page_size.max(1));
-    let offset = i64::from(page).saturating_mul(limit);
+    let (offset, limit) = if page_size == 0 {
+        (0, -1)
+    } else {
+        (
+            i64::from(page).saturating_mul(i64::from(page_size)),
+            i64::from(page_size),
+        )
+    };
     repository
         .list_detail_admin(playout_id, show_filler, Utc::now(), offset, limit)
         .await?
