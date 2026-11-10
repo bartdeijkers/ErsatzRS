@@ -223,6 +223,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Removed duplicate bottom pagination from media browsers; navigation and page-size selection remain above the grid.
+
 - Page-size selectors consistently offer **All** after the numeric choices.
   Selecting it shows every matching item on one page, including media browsers,
   tables, schedules and logs; saved page-size preferences preserve the choice.
