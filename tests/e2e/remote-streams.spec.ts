@@ -364,7 +364,7 @@ async function selectNewCollection(
 test.describe('remote streams browser parity', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed remote streams');
 
-  test('list route keeps the ErsatzTV action-bar and card-grid geometry', async ({ page }, testInfo) => {
+  test('list route keeps the ErsatzTV action-bar and card-grid geometry', async ({ page, browser, baseURL }, testInfo) => {
     const seed = seedRemoteStreams(testInfo);
     await page.setViewportSize({ width: 2048, height: 1024 });
     await gotoRemoteStreams(page, seed);
@@ -391,6 +391,20 @@ test.describe('remote streams browser parity', () => {
     expect(contentBox?.width).toBeLessThanOrEqual(1540);
 
     await page.screenshot({ path: screenshotPath(testInfo, 'remote-streams-list-desktop'), fullPage: true });
+    const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+    try {
+      const native = await context.newPage();
+      await native.goto(`/media/remote/streams?query=${encodeURIComponent(`library_id:${seed.libraryId}`)}`);
+      await native.getByRole('combobox', { name: 'Rows per page' }).selectOption('0');
+      await native.getByRole('button', { name: 'Apply', exact: true }).click();
+      await expect(native).toHaveURL(/page_size=0/);
+      await native.waitForLoadState('load');
+      await expect(native.getByRole('combobox', { name: 'Rows per page' })).toHaveValue('0');
+      await expect(native.locator('p[class*="caption-title"]:visible').filter({ hasText: 'Nurburgring broadcast' })).toBeVisible();
+      await expect(native.locator('[data-pagination]').first()).toContainText('Page 1 of 1');
+    } finally {
+      await context.close();
+    }
   });
 
   test('add-on-list search opens the SSR Remote Stream detail with native actions', async ({ page, browser, baseURL }, testInfo) => {

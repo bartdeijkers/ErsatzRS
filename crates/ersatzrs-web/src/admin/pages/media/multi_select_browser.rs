@@ -61,7 +61,7 @@ mod card_style {
 }
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
-const PAGE_SIZE_OPTIONS: [u32; 4] = [10, 25, 50, 100];
+const PAGE_SIZE_OPTIONS: [u32; 5] = [10, 25, 50, 100, 0];
 /// Card grids with at least this many cards repeat the pager below the grid.
 const LONG_LIST_PAGER_THRESHOLD: usize = 12;
 
@@ -241,7 +241,7 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
             .unwrap_or(1)
             .saturating_sub(1);
         let page_size = requested_page_size(p.get("page_size"), DEFAULT_PAGE_SIZE);
-        (q, pg, page_size)
+        (q, if page_size == 0 { 0 } else { pg }, page_size)
     });
 
     let toolbar_query = initial_query.clone();
@@ -1337,6 +1337,7 @@ mod tests {
     #[test]
     fn page_size_accepts_only_control_options() {
         assert_eq!(requested_page_size(Some("25".to_owned()), 50), 25);
+        assert_eq!(requested_page_size(Some("0".to_owned()), 50), 0);
         assert_eq!(requested_page_size(Some("999".to_owned()), 50), 50);
     }
 }

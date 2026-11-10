@@ -401,6 +401,8 @@ impl LanguageStrings for ItalianStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ShowExplanation => "Mostra spiegazione",
+        TextKey::HideExplanation => "Nascondi spiegazione",
         TextKey::Center => "Centro",
         TextKey::FilePath => "Percorso del file",
         TextKey::Format => "Formato",

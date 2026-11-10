@@ -1,3 +1,4 @@
+use crate::admin::ui::primitives::pagination::page_size_limit;
 use leptos::ev::MouseEvent;
 use leptos::prelude::*;
 
@@ -274,7 +275,7 @@ pub fn MediaCardPager(
     let go_next = Callback::new(move |()| {
         page.update(|p| {
             let max_page =
-                total.get().unwrap_or(0).saturating_sub(1) / u64::from(page_size.get().max(1));
+                total.get().unwrap_or(0).saturating_sub(1) / page_size_limit(page_size.get());
             if u64::from(*p) < max_page {
                 *p += 1;
             }
@@ -325,7 +326,7 @@ pub fn MediaCardPager(
                     on_previous=go_prev
                     on_next=go_next
                     on_page_size_change=Callback::new(move |value: u32| {
-                        page_size.set(value.max(1));
+                        page_size.set(value);
                         page.set(0);
                     })
                 />

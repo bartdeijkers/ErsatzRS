@@ -428,6 +428,12 @@ test.describe('media browser action parity', () => {
     await expect(page).toHaveURL(/page_size=25/);
     await waitForHydration(page);
     await expect(page.getByText(seed.songTitle)).toBeVisible();
+    await page.getByRole('combobox', { name: 'Rows per page' }).selectOption('0');
+    await expect(page).toHaveURL(/page_size=0/);
+    await waitForHydration(page);
+    await expect(page.getByRole('combobox', { name: 'Rows per page' })).toHaveValue('0');
+    await expect(page.getByText(seed.songTitle)).toBeVisible();
+    await expect(page.locator('[data-pagination]').first()).toContainText('1 of 1');
     await expectSelectAllRightAligned(page);
     await page.getByRole('button', { name: /item actions/i }).first().click();
     await expect(page.getByRole('menuitem', { name: /^add to collection$/i })).toBeVisible();

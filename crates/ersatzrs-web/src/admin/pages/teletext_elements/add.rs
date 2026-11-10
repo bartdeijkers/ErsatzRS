@@ -6,6 +6,7 @@ use leptos_router::hooks::use_query_map;
 use super::editor::error_text;
 use super::list::style;
 use crate::admin::i18n::{tr, TextKey};
+use crate::admin::ui::primitives::help_disclosure::HelpDisclosure;
 use crate::admin::ui::primitives::teletext::{island, TeletextIsland};
 
 /// File types offered by the browser's file picker.
@@ -31,11 +32,10 @@ pub fn TeletextElementAddPage() -> impl IntoView {
                 <input type="file" name="file" accept=ACCEPT required/>
                 <span class=style::muted>{tr(TextKey::TeletextElementFileFormatsHelp)}</span>
             </label>
-            <details class=style::details>
-                <summary>{tr(TextKey::TeletextElementFieldMarkerTipTitle)}</summary>
+            <HelpDisclosure title=tr(TextKey::TeletextElementFieldMarkerTipTitle)>
                 <p>{tr(TextKey::TeletextElementFieldMarkerTip)}</p>
                 <p><code>"%NOW%%%%%%%%%%%%%%%%%%%"</code></p>
-            </details>
+            </HelpDisclosure>
             <div class=style::form_actions>
                 <button type="submit" class=style::primary>{tr(TextKey::UploadTeletextPage)}</button>
             </div>

@@ -5,7 +5,16 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/pagination.module.css");
 
-const DEFAULT_PAGE_SIZE_OPTIONS: [u32; 4] = [10, 25, 50, 100];
+const DEFAULT_PAGE_SIZE_OPTIONS: [u32; 5] = [10, 25, 50, 100, 0];
+
+/// Effective size for client-side slicing and page counts; zero selects all rows.
+pub const fn page_size_limit(page_size: u32) -> u64 {
+    if page_size == 0 {
+        u64::MAX
+    } else {
+        page_size as u64
+    }
+}
 
 /// Hidden query state preserved by the SSR-safe page-size form.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,10 +25,11 @@ pub struct PaginationFormField {
 
 fn resolved_page_size_options(options: Option<Vec<u32>>, current: u32) -> Vec<u32> {
     let mut options = options.unwrap_or_else(|| DEFAULT_PAGE_SIZE_OPTIONS.to_vec());
+    options.push(0);
     if !options.contains(&current) {
         options.push(current);
     }
-    options.sort_unstable();
+    options.sort_unstable_by_key(|size| (*size == 0, *size));
     options.dedup();
     options
 }
@@ -74,7 +84,7 @@ fn pagination_metrics(page: u32, total: u64, page_size: u32) -> PaginationMetric
 /// Localized pagination controls for client-owned offset state.
 ///
 /// Page-size selection is part of the control contract. Consumers may supply
-/// route-specific choices; otherwise the shared 10/25/50/100 set is used.
+/// route-specific choices; All is always offered after the numeric choices.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 #[component]
 pub fn PaginationControls(
@@ -280,7 +290,19 @@ mod tests {
     fn default_page_size_choices_include_a_nonstandard_current_value() {
         assert_eq!(
             resolved_page_size_options(None, 5),
-            vec![5, 10, 25, 50, 100]
+            vec![5, 10, 25, 50, 100, 0]
+        );
+    }
+
+    #[test]
+    fn custom_choices_keep_all_last_without_duplicates() {
+        assert_eq!(
+            resolved_page_size_options(Some(vec![25, 0, 10, 25]), 0),
+            vec![10, 25, 0]
+        );
+        assert_eq!(
+            resolved_page_size_options(Some(vec![10, 25]), 25),
+            vec![10, 25, 0]
         );
     }
 

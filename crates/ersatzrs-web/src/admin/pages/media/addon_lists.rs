@@ -1,6 +1,7 @@
 //! Provider-neutral add-on media-list manager. ADR 0067 owns the deliberate
 //! boundary that keeps provider-specific discovery and parsing in add-ons.
 
+use crate::admin::ui::primitives::pagination::page_size_limit;
 use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
@@ -1970,8 +1971,8 @@ fn AddonMediaListsIsland(
                                         page.update(|value| *value = value.saturating_sub(1));
                                     })
                                     on_next=Callback::new(move |()| {
-                                        let size = page_size.get().max(1);
-                                        let max_page = u32::try_from(total.div_ceil(u64::from(size)))
+                                        let size = page_size_limit(page_size.get());
+                                        let max_page = u32::try_from(total.div_ceil(size))
                                             .unwrap_or(u32::MAX)
                                             .saturating_sub(1);
                                         page.update(|value| *value = value.saturating_add(1).min(max_page));

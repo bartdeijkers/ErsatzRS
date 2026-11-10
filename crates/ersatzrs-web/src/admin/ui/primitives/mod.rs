@@ -5,6 +5,7 @@ pub mod dialog;
 pub mod empty_state;
 pub mod facet_bar;
 pub mod form;
+pub mod help_disclosure;
 pub mod icon;
 pub mod letter_bar;
 pub mod page_header;

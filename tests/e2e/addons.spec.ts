@@ -361,6 +361,12 @@ test('renders declarative panels and persists normal and secret-reference settin
   await expect(page).toHaveURL(new RegExp(`/settings/addons/${FIXTURE_ADDON_ID}$`));
   await expect(page.getByTestId('addon-detail-page')).toContainText('Fixture add-on');
   await expect(page.getByText('Rendered by the ErsatzRS host.')).toBeVisible();
+  const explanation = page.locator('#overview [data-testid="addon-permissions"] [data-help-disclosure]');
+  await explanation.locator('summary').getByText('Show explanation', { exact: true }).click();
+  await expect(explanation).toContainText('Capabilities:');
+  await expect(explanation.locator('summary').getByText('Hide explanation', { exact: true })).toBeVisible();
+  await explanation.locator('summary').click();
+  await expect(explanation).not.toHaveAttribute('open');
 
   const labelSetting = page
     .getByTestId('addon-setting-row')
