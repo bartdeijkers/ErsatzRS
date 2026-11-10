@@ -2,6 +2,7 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{tr, TextKey};
+use crate::admin::ui::primitives::empty_state::EmptyState;
 use crate::admin::ui::primitives::pagination::PaginationControls;
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/table.module.css");
@@ -185,8 +186,11 @@ where
                                 }.into_any(),
                                 Some(items) if items.is_empty() => view! {
                                     <tr>
-                                        <td colspan="99" class=style::td_empty>
-                                            {tr(TextKey::NoItems)}
+                                        <td colspan="99">
+                                            <EmptyState
+                                                title=tr(TextKey::EmptyListTitle)
+                                                help=tr(TextKey::EmptyListHelp)
+                                            />
                                         </td>
                                     </tr>
                                 }.into_any(),
@@ -217,7 +221,12 @@ where
                     </tbody>
                 </table>
             </div>
-            <div class=style::pagination_footer>
+            // An empty list has nothing to page through; the empty state
+            // explains the list instead of a "0–0" counter.
+            <div
+                class=style::pagination_footer
+                style:display=move || if total.get() == Some(0) { "none" } else { "" }
+            >
                 <PaginationControls
                     page=Signal::derive(move || params.get().page)
                     total=total

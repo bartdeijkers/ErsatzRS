@@ -177,6 +177,10 @@ release section when tagging a release.
   height. Collection, multi-collection, rerun collection, playlist, filler
   preset and watermark editors gain a Cancel link next to Save, matching the
   channel and FFmpeg profile editors.
+- Empty admin lists show one shared empty state (what is missing, why it is
+  useful and, where possible, the next step) instead of a bare "No items" row
+  or a "0–0" counter. Shared tables and the multi and rerun collection
+  overviews hide their pagination while there is nothing to page through.
 
 ### Fixed
 
