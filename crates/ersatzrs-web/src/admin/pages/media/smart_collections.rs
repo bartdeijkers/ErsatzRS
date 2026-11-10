@@ -20,6 +20,7 @@ use crate::admin::server_fns::search::{
     compose_search_query, list_saved_searches, project_search_query, save_saved_search,
     search_results, SavedSearchForm, SearchResults,
 };
+use crate::admin::ui::primitives::page_header::PageHeader;
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     form::TextField,
@@ -145,8 +146,7 @@ fn SmartCollectionsIsland(
     view! {
         <div class=style::page>
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::SmartCollections)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::SmartCollections)/>
 
                 {move || {
                     let (rows, total) = current_data.get();

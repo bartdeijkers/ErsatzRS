@@ -10,6 +10,7 @@ use crate::admin::server_fns::media_browser::{
     list_collections, remove_item_from_collection, save_collection, CollectionForm,
     CollectionListRow, CollectionMember,
 };
+use crate::admin::ui::primitives::page_header::{PageAction, PageHeader};
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     form::TextField,
@@ -106,16 +107,10 @@ fn CollectionsIsland(initial_rows: Vec<CollectionListRow>, initial_total: u64) -
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
-                <a href="/media/collections/add" class=style::btn_add>
-                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::AddCollection)}</span>
-                </a>
-            </div>
-
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::ManualCollections)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::ManualCollections)>
+                    <PageAction href="/media/collections/add" label=tr(TextKey::AddCollection)/>
+                </PageHeader>
 
                 {move || {
                     let (rows, total) = current_data.get();

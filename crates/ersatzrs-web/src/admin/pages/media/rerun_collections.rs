@@ -11,6 +11,7 @@ use crate::admin::server_fns::media_browser::{
     RerunCollectionEditorOptions, RerunCollectionForm, RerunCollectionListRow,
     RerunCollectionSelectOption,
 };
+use crate::admin::ui::primitives::page_header::{PageAction, PageHeader};
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
@@ -140,15 +141,10 @@ fn RerunCollectionsList(
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
-                <a href="/media/rerun-collections/add" class=style::btn_add>
-                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::AddRerunCollection)}</span>
-                </a>
-            </div>
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::RerunCollections)}</h1>
-                <div class=style::divider/>
+                <PageHeader title=tr(TextKey::RerunCollections)>
+                    <PageAction href="/media/rerun-collections/add" label=tr(TextKey::AddRerunCollection)/>
+                </PageHeader>
                 <p class=style::error style:display=move || if initial_error.is_empty() { "none" } else { "" }>
                     {tr(TextKey::RerunCollectionActionFailed)}
                 </p>
