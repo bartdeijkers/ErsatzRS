@@ -62,8 +62,6 @@ mod card_style {
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const PAGE_SIZE_OPTIONS: [u32; 5] = [10, 25, 50, 100, 0];
-/// Card grids with at least this many cards repeat the pager below the grid.
-const LONG_LIST_PAGER_THRESHOLD: usize = 12;
 
 /// Encodes per-kind configuration that the page wrapper supplies. The fields
 /// are all scalars so they can be passed across the SSR → island boundary
@@ -462,7 +460,6 @@ fn GridWithSelection(
 
     let page_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
     let page_ids_for_select_all = page_ids.clone();
-    let bottom_query = query.clone();
 
     let collection_open = RwSignal::new(false);
     let playlist_open = RwSignal::new(false);
@@ -574,7 +571,6 @@ fn GridWithSelection(
 
         {
             let rows_empty = rows.is_empty();
-            let rows_len = rows.len();
             view! {
                 <p
                     class=style::empty
@@ -602,21 +598,6 @@ fn GridWithSelection(
                         }
                     />
                 </div>
-                {(rows_len >= LONG_LIST_PAGER_THRESHOLD).then(|| view! {
-                    <div class=card_style::pager_shell data-pagination-bottom>
-                        <div class=card_style::pager_actions/>
-                        <div class=card_style::pager_navigation>
-                            <PagerCenter
-                                base_path=config.base_path
-                                query=bottom_query.clone()
-                                page=page
-                                page_size=page_size
-                                total=total
-                                show_page_size=false
-                            />
-                        </div>
-                    </div>
-                })}
             }
         }
 
@@ -1249,7 +1230,6 @@ fn PagerCenter(
     page: u32,
     page_size: u32,
     total: u64,
-    #[prop(default = true)] show_page_size: bool,
 ) -> impl IntoView {
     let build_link = |q: &str, p: u32| {
         let mut url = String::from(base_path);
@@ -1290,7 +1270,6 @@ fn PagerCenter(
             page_size_action=base_path.to_owned()
             page_size_fields=page_size_fields
             page_size_options=Some(PAGE_SIZE_OPTIONS.to_vec())
-            show_page_size=show_page_size
         />
     }
 }

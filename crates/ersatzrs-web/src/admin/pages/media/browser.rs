@@ -194,8 +194,6 @@ where
                         }))
                 }}
             </Suspense>
-
-            <MediaCardPager total=total page=page page_size=page_size/>
         </div>
     }
 }

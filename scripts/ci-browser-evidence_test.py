@@ -176,6 +176,37 @@ class BrowserEvidence(unittest.TestCase):
             self.assertEqual(facts.reach((ADMIN + "server_fns/fields.rs",)),
                              ({PAGES + "other.rs"}, {ADMIN + "server_fns/fields.rs"}, True))
 
+    def test_changed_items_name_the_public_items_a_change_touches(self):
+        before = ("use a::b;\n\nfn helper() -> u32 {\n    1\n}\n\n/// Lists.\npub async fn list() -> u32 {\n"
+                  "    helper()\n}\n\npub fn other() {}\n\nimpl Thing {\n    fn x(&self) {}\n}\n\n"
+                  "#[cfg(test)]\nmod tests {\n    fn t() {}\n}\n")
+        # A private helper is replaced by the public items calling it.
+        self.assertEqual(evidence.changed_items(before, before.replace("    1\n", "    2\n")), {"list"})
+        self.assertEqual(evidence.changed_items(before, before.replace("/// Lists.", "/// All rows.")), {"list"})
+        self.assertEqual(evidence.changed_items(before, before.replace("fn x(&self) {}", "fn x(&self) { y() }")),
+                         {"Thing"})
+        # Imports and test modules have no consumers of their own.
+        self.assertEqual(evidence.changed_items(before, before.replace("use a::b;", "use a::{b, c};")), set())
+        self.assertEqual(evidence.changed_items(before, before.replace("fn t() {}", "fn t() { u() }")), set())
+        self.assertIsNone(evidence.changed_items(before, before + "mod extra;\n"))
+
+    def test_workspace_users_follow_module_paths_and_the_crate_root(self):
+        app = "crates/ersatzrs-app/src/"
+        with tree({app + "queries.rs": "pub fn list_things() {}\npub fn count_things() {}\n",
+                   app + "lib.rs": "pub mod queries;\nimpl App {\n    pub fn list_all_things(&self) { queries::list_things() }\n}\n",
+                   app + "commands.rs": "fn list_things() {}\n",
+                   app + "operations.rs": "fn go() { queries::count_things() }\n",
+                   app + "queries_tests.rs": "fn t() { queries::list_things() }\n",
+                   ADMIN + "server_fns/things.rs": "fn load(app: &App) { app.list_all_things() }\n",
+                   ADMIN + "pages/other.rs": "fn x() { ersatzrs_app::queries::list_things() }\n",
+                   "crates/ersatzrs-web/src/host/router.rs": "get(api::things::list_things)\n",
+                   "crates/ersatzrs-web/src/api/things.rs": "pub async fn list_things() {}\n",
+                   }) as folder:
+            self.assertEqual(evidence.workspace_users(folder, app + "queries.rs", {"list_things"}),
+                             {ADMIN + "server_fns/things.rs", ADMIN + "pages/other.rs"})
+            self.assertEqual(evidence.workspace_users(folder, app + "queries.rs", {"count_things"}),
+                             {app + "operations.rs"})
+
     def test_declaration_only_modules_are_transparent(self):
         self.assertTrue(self.facts.declaration_only(ADMIN + "ui/primitives/mod.rs"))
         self.assertFalse(self.facts.declaration_only(ADMIN + "ui/primitives/chip.rs"))

@@ -184,6 +184,11 @@ release section when tagging a release.
   instead of every suite, every crate and the Next engine job. This is a
   deliberate reduction of pre-merge coverage; the weekly full run remains the
   safety net.
+- Pull request CI follows a changed `ersatzrs-app` or `ersatzrs-infra` module
+  without a reviewed area to the admin pages that use the changed functions,
+  instead of running everything, when no other crate uses them. A machine
+  API handler using them is covered by the web crate's Rust tests. An admin page that no browser spec drives (such as the teletext
+  elements pages) runs only the hydration smoke set instead of every spec.
 - CI moves a run to GitHub-hosted runners when no self-hosted runner is online
   at its start, once the optional `CI_RUNNER_STATUS_TOKEN` secret is set.
   On such a four-CPU runner the CPU-bound capacity proofs (a 4K Next stream and
@@ -249,6 +254,8 @@ release section when tagging a release.
   limit, retain the next rejected item when the budget runs out, and advance
   to the following schedule item after tail or fallback content. Partial builds
   keep the open duration block and guide position for continuation.
+
+- Removed duplicate bottom pagination from media browsers; navigation and page-size selection remain above the grid.
 
 - Page-size selectors consistently offer **All** after the numeric choices.
   Selecting it shows every matching item on one page, including media browsers,
