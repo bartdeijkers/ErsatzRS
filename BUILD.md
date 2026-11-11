@@ -577,7 +577,12 @@ pull request's changed paths to work:
   `server_fns/mod.rs` are unchanged. A module name several modules share
   counts only where the path before it fits. A module without a visible user,
   a shell that exposes no named element and a missing route table or base
-  revision keep every required browser spec. Repositories and crates keep
+  revision keep every required browser spec. A page that no spec names and
+  no area claims selects only the hydration smoke set. A changed service or
+  query module in `ersatzrs-app` or `ersatzrs-infra` without a reviewed area
+  selects the pages of its admin users when every user of the changed public
+  items (including crate-root wrapper methods) is admin code; any other user,
+  such as an API handler, keeps everything. Repositories and other crates keep
   their area-wide selection. The evidence is static: a spec that
   reaches a page only by clicking, without naming its URL, is not selected for
   that page, and the weekly full run owns that residual risk.

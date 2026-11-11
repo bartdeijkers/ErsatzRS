@@ -313,8 +313,10 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
         # Specs that name no route at all keep their reviewed area ownership.
         unrouted = {s for s in expand(AREA_SPECS.get(name, ()), specs) if not evidence.spec_pages().get(s)}
         if not found and name not in AREA_SPECS:
-            # No spec and no reviewed owner: the reach of this page is unknown.
-            all_browsers()
+            # No spec names this page and none has a reviewed claim on it, so
+            # no spec drives it: the hydration smoke set proves it renders.
+            out["general_specs"].update(set(SMOKE_SPECS) & set(general))
+            out["reasons"].append(f"{module}: no spec drives this page; hydration smoke set only")
             return
         out["general_specs"].update((found | unrouted) & set(general))
         out["teletext_specs"].update(found & set(base))
@@ -410,6 +412,42 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                      if name != _evidence.I18N and not name.startswith(_evidence.LANGUAGES)
                      and wanted.search(text)}
         reached(*evidence.reach(users, names), native=False)
+
+    def backend(path):
+        """A backend module reached only through admin code selects its pages.
+
+        Returns False when the change or its users cannot be traced, so the
+        caller keeps its broad selection.
+        """
+        before = base_text(path) if base_text else None
+        if before is None or not evidence.available():
+            return False
+        names = _evidence.changed_items(before, (root / path).read_text())
+        if names is None:
+            return False
+        out["domains"].add("backend")
+        if not names:
+            out["reasons"].append(f"{path}: only imports or tests changed")
+            return True
+        users = _evidence.workspace_users(root, path, names)
+        outside = sorted(user for user in users if not user.startswith(_evidence.ADMIN))
+        if outside or not users:
+            out["reasons"].append(f"{path}: changed items also used by "
+                                  + (", ".join(outside[:4]) if outside else "no admin module"))
+            return False
+        # A page that calls a changed item is a leaf; any other admin user
+        # is followed to the pages that use it.
+        found, server, known = set(), set(), True
+        for user in sorted(users):
+            if user in evidence.route_modules():
+                found.add(user)
+                continue
+            pages, servers, traced = evidence.reach((user,))
+            found |= pages
+            server |= servers
+            known &= traced
+        reached(found, server, known, native=True)
+        return True
 
     def playback(native=True, next_engine=True):
         browsers(PLAYBACK_SPECS)
@@ -548,7 +586,7 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                     area(REPOSITORY_AREAS[module])
                 else:
                     everything(f"{path}: unmapped repository/shared state")
-            else:
+            elif not backend(path):
                 everything(f"{path}: unmapped service/shared state")
         elif crate in CRATE_SPECS:
             if crate == "xtask" and Path(path).name in ("main.rs", "smoke.rs", "smoke_next.rs"):

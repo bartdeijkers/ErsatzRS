@@ -250,6 +250,30 @@ class DomainSelection(unittest.TestCase):
         path = "crates/ersatzrs-web/src/admin/server_fns/logs.rs"
         self.assertTrue(domains.select([path], added_paths=[path])["everything"])
 
+    def test_page_without_any_spec_selects_only_the_smoke_set(self):
+        result = select("crates/ersatzrs-web/src/admin/pages/teletext_elements/list.rs")
+        self.assertFalse(result["everything"] or result["teletext_browser"] or result["next"])
+        self.assertEqual(result["general_specs"], sorted(domains.SMOKE_SPECS))
+
+    def test_backend_items_used_only_by_admin_code_select_their_pages(self):
+        path = "crates/ersatzrs-app/src/queries.rs"
+        current = (ROOT / path).read_text()
+        anchor = "pub async fn list_watermarks("
+        changed = current.replace(anchor, "/// Lists one page of watermarks.\n" + anchor, 1)
+        self.assertNotEqual(changed, current)
+        result = domains.select([path], MEMBERS, SPECS, base_text=lambda name: changed)
+        self.assertFalse(result["everything"] or result["next"], result["reasons"])
+        self.assertIn("ersatzrs-app", result["rust_packages"])
+        self.assertIn("watermark-preview", result["general_specs"])
+        self.assertNotIn("scheduling-route-family", result["general_specs"])
+        self.assertEqual(result["teletext_specs"], [])
+        # A query the machine API also uses, or no base revision, stays broad.
+        anchor = "pub async fn list_smart_collections("
+        if anchor in current:
+            shared = current.replace(anchor, "/// Smart collections.\n" + anchor, 1)
+            self.assertTrue(domains.select([path], MEMBERS, SPECS, base_text=lambda name: shared)["everything"])
+        self.assertTrue(domains.select([path], MEMBERS, SPECS)["everything"])
+
     def test_page_file_selects_the_specs_that_name_its_routes(self):
         # Sibling pages of one area no longer run each other's specs.
         epg = select("crates/ersatzrs-web/src/admin/pages/channels/epg.module.css")
