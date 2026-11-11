@@ -116,6 +116,16 @@ function restartSafety(fixture: TeletextChannelFixture): { snapshot: unknown; wo
   row!.Value = JSON.stringify({ ...checkpoint, epoch: '<worker-lifetime>' });
   return { snapshot, workerEpoch: checkpoint.epoch };
 }
+// The new host answers /healthz before its private preparation worker has
+// taken the processed-media lock and recorded its new lifetime. Wait for that
+// record after a restart instead of racing the worker's startup.
+async function awaitNewWorkerEpoch(fixture: TeletextChannelFixture, previous: string): Promise<void> {
+  await expect.poll(() => {
+    const snapshot = fixture.safetySnapshot() as { configuration: { Key: string; Value: string }[] };
+    const row = snapshot.configuration.find(item => item.Key === 'addon.preparation.worker');
+    return row === undefined ? undefined : (JSON.parse(row.Value) as { epoch?: string }).epoch;
+  }, { timeout: 30_000 }).not.toBe(previous);
+}
 async function capture(baseURL: string, channel: number, output: string, authored = true): Promise<void> {
   const result = await captureTeletextChannelTs(`${baseURL}/iptv/hls-direct/${channel}.ts`, output,
     { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
@@ -226,6 +236,7 @@ for (const standalone of [false, true]) for (const [language, module, js, dark] 
       expect((await pages[0].request.get('/healthz')).ok()).toBe(true);
       testInfo.annotations.push({ type: 'host-restart', description: JSON.stringify(restarted) });
       expect(publicationRows(fixture)).toEqual(retained);
+      await awaitNewWorkerEpoch(fixture, safe.workerEpoch);
       const restartedSafe = restartSafety(fixture);
       expect(restartedSafe.snapshot).toEqual(safe.snapshot);
       expect(restartedSafe.workerEpoch).not.toBe(safe.workerEpoch);
@@ -391,6 +402,7 @@ test('standalone Level 1.5 Lua scopes survive real host restarts and expire to a
     expect(result.stop.closed).toBe(true); expect(result.stop.forced).toBe(false);
     expect(result.stop.exitCode).toBe(0); expect(result.stop.signalCode).toBeNull();
     expect(result.after.pid).not.toBe(result.before.pid);
+    await awaitNewWorkerEpoch(fixture, before.safety.workerEpoch);
     const after = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
     expect(after.safety.workerEpoch).not.toBe(before.safety.workerEpoch);
     expect({ ...after, safety: after.safety.snapshot }).toEqual({ ...before, safety: before.safety.snapshot });
@@ -502,6 +514,7 @@ test('standalone Level 1.5 future On survives host replacement and expires to ba
     const result = await isolatedWebHost.restart();
     expect(result.stop).toMatchObject({ closed: true, forced: false, exitCode: 0, signalCode: null });
     expect(result.after.pid).not.toBe(result.before.pid);
+    await awaitNewWorkerEpoch(fixture, before.safety.workerEpoch);
     const after = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
     expect(after.safety.workerEpoch).not.toBe(before.safety.workerEpoch);
     expect({ ...after, safety: after.safety.snapshot }).toEqual({ ...before, safety: before.safety.snapshot });
@@ -749,6 +762,7 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
     expect(result.stop).toMatchObject({ closed: true, forced: false, exitCode: 0, signalCode: null });
     await expect.poll(() => [...owned.values()].filter(sameProcessAlive), { timeout: 5000 }).toEqual([]);
     await capacity(0);
+    await awaitNewWorkerEpoch(fixture, retained.safety.workerEpoch);
     const recovered = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
     expect(recovered.safety.workerEpoch).not.toBe(retained.safety.workerEpoch);
     expect({ ...recovered, safety: recovered.safety.snapshot }).toEqual({ ...retained, safety: retained.safety.snapshot });

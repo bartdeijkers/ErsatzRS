@@ -180,17 +180,19 @@ pub(crate) fn decode_source(
     } else if let Ok(text) = std::str::from_utf8(bytes) {
         (text.to_owned(), encoding_rs::UTF_8)
     } else {
-        // Short or tied guesses are not evidence for a legacy encoding. The
-        // detector is probabilistic; an explicit label is always available.
+        // Short guesses are not evidence for a legacy encoding. The detector
+        // is probabilistic; an explicit label is always available. Strict
+        // decoding and the control-character check below reject guesses that
+        // do not produce text. (chardetng 0.1's `guess_assess` flag compared
+        // against a zero floor and was always true here; 1.0 removed it.)
         if bytes.iter().filter(|byte| !byte.is_ascii()).count() < 4 {
             return Err(SubtitlePreparationError::Encoding);
         }
-        let mut detector = chardetng::EncodingDetector::new();
+        // ISO-2022-JP is only reachable through an explicit declaration, and
+        // valid UTF-8 was already handled above.
+        let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Deny);
         detector.feed(bytes, true);
-        let (encoding, assessed) = detector.guess_assess(None, false);
-        if !assessed {
-            return Err(SubtitlePreparationError::Encoding);
-        }
+        let encoding = detector.guess(None, chardetng::Utf8Detection::Deny);
         (
             decode_strict(bytes, encoding).ok_or(SubtitlePreparationError::Encoding)?,
             encoding,
@@ -283,6 +285,22 @@ mod tests {
                 encoding_rs::SHIFT_JIS,
                 "これは字幕の文字コードを確認するための日本語の文章です。",
             ),
+            (
+                encoding_rs::WINDOWS_1250,
+                "Zażółć gęślą jaźń, proszę pana. Příliš žluťoučký kůň.",
+            ),
+            (
+                encoding_rs::WINDOWS_1253,
+                "Αυτό είναι ελληνικό κείμενο υποτίτλων.",
+            ),
+            (encoding_rs::WINDOWS_1255, "זהו טקסט כתוביות בעברית לבדיקה."),
+            (
+                encoding_rs::WINDOWS_1256,
+                "هذا نص ترجمة باللغة العربية للاختبار.",
+            ),
+            (encoding_rs::EUC_KR, "이것은 한국어 자막 텍스트입니다."),
+            (encoding_rs::GBK, "这是用于测试的中文字幕文本。"),
+            (encoding_rs::BIG5, "這是用於測試的中文字幕文本。"),
         ] {
             let text = format!("1\n00:00:42,000 --> 00:00:46,000\n{}\n", line.repeat(8));
             let (bytes, _, errors) = encoding.encode(&text);
@@ -290,6 +308,25 @@ mod tests {
             let decoded = decode_source(&bytes, None).unwrap();
             assert_eq!(decoded.text, text, "{}", encoding.name());
         }
+    }
+
+    #[test]
+    fn legacy_detection_accepts_sparse_latin_text_and_refuses_undeclared_iso_2022() {
+        // Only no-break spaces are non-ASCII: still ordinary French text.
+        let text = "1\n00:00:00,000 --> 00:00:02,000\nQuoi\u{a0}? Non\u{a0}! Pourquoi\u{a0}? Parce que\u{a0}: voila.\n";
+        let (bytes, _, errors) = encoding_rs::WINDOWS_1252.encode(text);
+        assert!(!errors);
+        let decoded = decode_source(&bytes, None).unwrap();
+        assert_eq!(decoded.text, text);
+        // ISO-2022-JP is ASCII-compatible escapes; never guessed.
+        let (bytes, _, errors) = encoding_rs::ISO_2022_JP
+            .encode("1\n00:00:00,000 --> 00:00:01,000\nこれは日本語です。\n");
+        assert!(!errors);
+        assert!(decode_source(&bytes, None).is_err());
+        assert!(decode_source(&bytes, Some("iso-2022-jp"))
+            .unwrap()
+            .text
+            .contains("これは日本語です。"));
     }
 
     #[test]
