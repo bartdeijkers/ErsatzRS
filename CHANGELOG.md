@@ -68,6 +68,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Subtitle character-set detection now uses chardetng 1.0. Unlabelled
+  legacy subtitles are detected as before; ISO-2022-JP is still only used when
+  a subtitle declares it.
+
 - The EPG/tv guide grid is easier to read: programme titles, times and the
   time ruler use at least 13-14 px text, rows are taller, the grid fills the
   available window height, and on large and 4K displays the guide uses the
