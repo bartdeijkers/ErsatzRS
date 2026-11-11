@@ -654,6 +654,9 @@ it, so running them all proves nothing more about it. Replay: no PR of
 #124-#141 changes its total. #141 stays everything because its changed smart
 collection query is also used by the machine collections API; without that
 file it would select about 51 Playwright minutes instead of 72 and no Next
-engine, through the teletext elements rule. Open question for the maintainer:
-whether an API handler using a changed query may rely on the web crate's Rust
-tests instead of selecting everything.
+engine, through the teletext elements rule. Maintainer decision of 2026-11-11: a
+non-teletext API handler using a changed item relies on the web crate's Rust
+tests, because no browser spec calls the machine API; the other users still
+decide. Replay: #141 then selects about 23 general and 29 teletext Playwright
+minutes (52 instead of 72), two Rust crates and no Next engine; no other PR of
+#124-#141 changes its total.

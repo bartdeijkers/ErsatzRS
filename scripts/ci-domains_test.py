@@ -267,11 +267,14 @@ class DomainSelection(unittest.TestCase):
         self.assertIn("watermark-preview", result["general_specs"])
         self.assertNotIn("scheduling-route-family", result["general_specs"])
         self.assertEqual(result["teletext_specs"], [])
-        # A query the machine API also uses, or no base revision, stays broad.
+        # A query the machine API also uses relies on the web Rust tests;
+        # without a base revision the change stays broad.
         anchor = "pub async fn list_smart_collections("
         if anchor in current:
             shared = current.replace(anchor, "/// Smart collections.\n" + anchor, 1)
-            self.assertTrue(domains.select([path], MEMBERS, SPECS, base_text=lambda name: shared)["everything"])
+            api = domains.select([path], MEMBERS, SPECS, base_text=lambda name: shared)
+            self.assertFalse(api["everything"] or api["next"], api["reasons"])
+            self.assertIn("ersatzrs-web", api["rust_packages"])
         self.assertTrue(domains.select([path], MEMBERS, SPECS)["everything"])
 
     def test_page_file_selects_the_specs_that_name_its_routes(self):

@@ -430,6 +430,15 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
             out["reasons"].append(f"{path}: only imports or tests changed")
             return True
         users = _evidence.workspace_users(root, path, names)
+        # An API handler using a changed item is proven by the web crate's
+        # Rust tests (maintainer decision); no browser spec calls the API.
+        api = {user for user in users if user.startswith(WEB_SRC + "api/") and not TELETEXT_PATH.search(user)}
+        if api:
+            out["rust_packages"].add("ersatzrs-web")
+            out["reasons"].append(f"{path}: API users {', '.join(sorted(api)[:4])} proven by web Rust tests")
+            users -= api
+            if not users:
+                return True
         outside = sorted(user for user in users if not user.startswith(_evidence.ADMIN))
         if outside or not users:
             out["reasons"].append(f"{path}: changed items also used by "

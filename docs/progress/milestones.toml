@@ -276,8 +276,9 @@ teletext server functions, repositories, services, crates and the foundation
 crates are unchanged.
 BSE-06 (maintainer report of 2026-11-10, plan section 13 addendum): a changed
 app or infra module without a reviewed area whose changed items are used only
-by admin code selects those pages; a page no spec drives selects only the
-hydration smoke set.
+by admin code selects those pages; a non-teletext API handler among the users
+adds the web crate's Rust tests instead (maintainer decision 2026-11-11); a
+page no spec drives selects only the hydration smoke set.
 Excluded: test or build speed, parallel browsers, runner capacity, recorded
 navigation coverage, and any claim about the 15-30 minute mean.
 '''
@@ -310,6 +311,9 @@ reasons for selecting everything. Open for BSE-05: its PR CI.
 Replay on PRs 124-141: no total changes. PR 141 stays everything because the
 machine collections API also uses its changed query; without that file it
 would select about 51 instead of 72 Playwright minutes and no Next engine.
+2026-11-11: API rule added after the maintainer decision; selection suite 41
+cases pass. Replay: PR 141 now selects about 52 instead of 72 Playwright
+minutes (60 general, 5 teletext specs), two Rust crates and no Next engine.
 '''
 
 [[milestone]]

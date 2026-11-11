@@ -182,8 +182,8 @@ release section when tagging a release.
   safety net.
 - Pull request CI follows a changed `ersatzrs-app` or `ersatzrs-infra` module
   without a reviewed area to the admin pages that use the changed functions,
-  instead of running everything, when no API handler or other crate uses
-  them. An admin page that no browser spec drives (such as the teletext
+  instead of running everything, when no other crate uses them. A machine
+  API handler using them is covered by the web crate's Rust tests. An admin page that no browser spec drives (such as the teletext
   elements pages) runs only the hydration smoke set instead of every spec.
 - CI moves a run to GitHub-hosted runners when no self-hosted runner is online
   at its start, once the optional `CI_RUNNER_STATUS_TOKEN` secret is set.
