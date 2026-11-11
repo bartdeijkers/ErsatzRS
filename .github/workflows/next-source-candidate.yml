@@ -45,7 +45,7 @@ jobs:
       NEXT_REVIEW_MANIFEST: ${{ inputs.review_manifest || 'scripts/release/next-patches/manifest.json' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Select the reviewed compiler
@@ -113,7 +113,7 @@ jobs:
           python3 scripts/release/package-next-source.py --payload next-payload \
             --source-provenance .next-source/ersatzrs-source.json --rid "$NEXT_RID" \
             --output packages --rustc "$(rustc "+$NEXT_RUST_TOOLCHAIN" --version)" --manifest "$NEXT_REVIEW_MANIFEST"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: next-source-candidate-${{ matrix.rid }}
           path: |

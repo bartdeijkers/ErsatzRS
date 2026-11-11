@@ -10,7 +10,7 @@ async-trait = "0.1"
 base64 = "0.23"
 blurhash = { version = "=0.2.3", default-features = false }
 bytes = "1"
-chardetng = "0.1.17"
+chardetng = "1.0.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 directories = "6"
 dunce = "1"
@@ -59,7 +59,7 @@ rustix = { version = "=1.1.6", features = ["process"] }
 win32job = "=2.0.3"
 
 [dev-dependencies]
-httpmock = "0.8"
+httpmock = "0.9"
 insta = { version = "1", features = ["json", "redactions"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
