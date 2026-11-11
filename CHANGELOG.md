@@ -68,6 +68,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Development and draft CI runs full Clippy and basic policy checks without
+  producing test or web artifacts. Ready PRs retain affected behavioral tests;
+  main runs small checks, and a separate weekly/manual workflow owns full
+  verification. Reviewed foundation ownership reduces unrelated browser work
+  while preserving native consumers, playback and required release gates.
+
 - Subtitle character-set detection now uses chardetng 1.0. Unlabelled
   legacy subtitles are detected as before; ISO-2022-JP is still only used when
   a subtitle declares it.

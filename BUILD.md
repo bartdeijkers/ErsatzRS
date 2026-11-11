@@ -102,15 +102,16 @@ When running broad cargo commands directly, check first with
 
 ## CI runner selection
 
-Pull requests and pushes to `main` use the repository's self-hosted Linux
-runner by default. To run any branch manually on GitHub-hosted Ubuntu after
+Clippy, dependency auditing and behavioral verification use the repository's
+self-hosted Linux pool by default; the small lane's format, policy/documentation
+and commit-message jobs run independently on hosted Ubuntu. To run any branch manually on GitHub-hosted Ubuntu after
 this workflow is present on `main`, dispatch it with:
 
 ```bash
 gh workflow run ci.yml --ref <branch> -f runner=github-hosted
 ```
 
-The Actions UI exposes the same choice under **CI → Run workflow**. Select the
+The Actions UI exposes the same choice under **PR checks → Run workflow**. Select the
 target branch and choose `github-hosted`. Manually dispatched CI uses a
 runner-pool-specific branch concurrency group, so hosted fallback can proceed
 independently from automatic self-hosted CI. Routine pull-request labels do not
@@ -489,48 +490,69 @@ Level 1.5 result and do not block the current release gate.
 
 ### Required `CI ok` check for `main`
 
-`main` is protected by one required status check, `CI ok`. The `ci_ok` job
-depends on every gate job, so the protection rule never has to list job or
-matrix names. It runs even after a failure or cancellation and fails unless
-`Preflight` succeeded and every other gate job either passed or was skipped
-by `Preflight` (an already proven SHA, or a pull request that changes only
-known documentation or agent-config paths) or left out by the run's
-[lane](#ci-lanes). Embedded `CHANGELOG.md`, served images and other runtime
-assets are code inputs. Commit lint may be skipped on `push` and `schedule`.
-On a draft pull
-request `CI ok` always fails, so a draft never carries a passing required
-check into the full run that starts when it is marked ready. Focused manual recovery modes do not run `CI ok` because they
-never establish full CI.
+`CI ok` remains the required PR merge check. It aggregates the selected jobs,
+runs after failures/cancellations and rejects unintended skips. A draft runs the
+small checks but deliberately fails `CI ok`; ready-for-review starts behavioral
+verification. Documentation-only ready PRs run the small checks and may pass.
+Embedded `CHANGELOG.md` and served runtime assets retain behavioral coverage.
+Focused recovery dispatches never establish the required aggregate.
 
-The `pull_request` trigger deliberately has no `paths-ignore`: a workflow that
-never starts never reports `CI ok`, which would leave docs-only pull requests
-unmergeable. Docs-only detection lives in `Preflight` instead. When adding a
-gate job, add it to `ci_ok.needs` and Preflight's required-job output;
-`scripts/ci-build-artifacts_test.py`
-enforces this.
+The PR trigger has no path filter, so every PR reports its required check.
+Selection is repository-owned, validated against the complete PR diff and
+combined across all changed paths. Neither labels nor an agent's assertion can
+waive tests. Add new gate jobs to `ci_ok.needs` and the selector's required set.
 
 ### CI lanes
 
-`Preflight` picks one lane per run so a change is tested once, and only as far
-as it can break something:
-
-| Lane | When | Runs |
+| Workflow / lane | Trigger | Required work |
 |---|---|---|
-| `skip` | push of an already proven SHA or tree, a docs-only pull request, a ready pull request whose domains select nothing, or a weekly run on an already fully tested tree | nothing (`CI ok` passes) |
-| `light` | draft pull request | Format, Clippy, Build, Test, Cargo deny, Commit lint, docs (`CI ok` fails on purpose) |
-| `pr` | ready pull request | the touched domains (below), Playwright in Chromium only |
-| `full` | any other push, the weekly run (Monday 01:00 UTC, the night from Sunday to Monday), every manual dispatch | everything, both browsers |
+| **CI**, `light` | development push without a matching open PR | Format, full workspace/all-target Clippy, Cargo deny, Commit lint, documentation/CI policy checks |
+| **PR checks**, `light` | draft, documentation-only ready PR, or ready PR with no behavioral consumers | the same small checks; no test archives, server/WASM artifacts or runtime suites |
+| **PR checks**, `pr` | ready code PR | small checks plus affected Rust/reverse-dependent tests, required integration domains and selected Chromium specs |
+| **PR checks**, `light` | every push to main | small checks and an explicit report of prior exact-tree PR/full proof; no automatic full fallback |
+| **Full verification**, `full` | Monday 01:00 UTC or explicit dispatch | every required general/base domain and Chromium/Firefox |
+| `skip` | a qualified complete proof already covers the requested execution | reuse the existing proof; this is not fresh execution |
 
-Playwright jobs start after the matched build and a successful `Test` job when
-Rust tests are selected. A presentation-only PR deliberately omits `Test`;
-mixed PRs cannot proceed after an unexpected skip or failure. Format, Clippy,
-dependency audit, commit lint and documentation checks retain their existing
-ownership. A green `pr` run uploads a small
-`ci-tree-<tree>` artifact naming the tree of the merge commit it tested, and the
-push to `main` with that tree is skipped. A green `full` run uploads
-`ci-full-<tree>`, and the weekly run is skipped while `main`'s tree has one.
-The weekly run is the safety net for everything a `pr` run left out,
-including Firefox and any browser spec the page evidence below did not select.
+The small push entry is `.github/workflows/ci-fast.yml`; it delegates to the
+shared engine in `ci.yml`. A matching open PR owns its checks, including drafts,
+so the push entry does not repeat them. Opening a PR concurrently with a push
+may still overlap small checks; no deduplication result counts as PR proof.
+`converted_to_draft` cancels the superseded ready run and restores the small lane.
+
+The independent `.github/workflows/full-verification.yml` entry delegates to
+the same engine. Existing `ci.yml` manual full/focused recovery inputs remain
+available. Quick, PR, weekly, full-manual and focused-recovery concurrency groups
+are separate; repeated updates replace superseded work within their group.
+Format, documentation/policy checks and commit lint in the small lane use hosted
+Ubuntu so they do not wait behind self-hosted runtime tests. Clippy and deny
+retain the warm self-hosted pool and existing offline-runner fallback.
+
+A successful PR records its tested merge tree. Main reports whether its tree has
+completed successful PR/full proof, but runs only small checks either way.
+Missing proof means unverified integration, including direct pushes; run full
+qualification before release. A small green main run is never full acceptance.
+Playwright still requires the matched SSR/WASM build and successful selected
+Rust tests. Product artifacts are built only for selected consumers. Release
+qualification retains the exact-candidate requirements above; use the existing
+`ci.yml` full dispatch for its source-bound recovery/proof tooling.
+
+**Behavioral relevance.** A PR must test changed behavior, direct consumers and
+the integration boundary where the credible failure becomes observable. Keep
+browser proof for DOM/hydration/interactions and runtime proof for process,
+streaming, subtitle/audio and timing boundaries. A shorter test can replace an
+existing one only when it proves the same affected failure path. Test duration
+alone cannot justify omission. Count compilation and queueing in latency.
+
+Reviewed ownership limits unknown impact within a known domain; unknown global
+impact keeps the full required fallback. Shared dependency reach retains native
+reverse-dependent tests, but does not automatically require every browser flow.
+The first reviewed foundation exceptions are teletext source modules in core
+and domain (all base families plus playback), and the core watermark repository
+port (watermark management plus playback/Next). Root exports, other foundation
+files, additions and deletions remain broad. Regression tests enforce mixed-diff
+unions, consumers and fallback. The weekly suite detects unexpected coupling;
+known affected behavior must still pass before merge. The 15–30 minute ordinary
+PR target remains a measurement goal, never a timeout that removes required tests.
 
 **Domain selection.** [`scripts/ci-domains.py`](scripts/ci-domains.py) maps the
 pull request's changed paths to work:
@@ -590,7 +612,8 @@ pull request's changed paths to work:
   that page, and the weekly full run owns that residual risk.
 - Build, toolchain and CI inputs, `ersatzrs-core`, `ersatzrs-domain`,
   migrations, shared Playwright infrastructure and any unmapped path select
-  everything. New production inputs, deletions and unknown paths also retain
+  everything, except the reviewed foundation ownership described above. New
+  production inputs, deletions and unknown paths also retain
   this conservative fallback until ownership is reviewed. A new admin
   interface module (page, page helper, primitive or its CSS) is the exception:
   it is reachable only through a declaration, route or caller in the same
@@ -616,21 +639,16 @@ workflow runs: each Playwright job holds a host-wide lock
 Open work-in-progress pull requests as drafts: follow-up pushes then cost the
 fast lane only, and **Ready for review** starts the `pr` lane.
 
-### Preflight-skipped runs are a pointer, not evidence
+### Small and skipped runs are not full evidence
 
-The `Preflight` job skips the gate when a pushed SHA already has a successful
-CI run, so a direct fast-forward merge to `main` does not retest an identical
-tree. Such a run still reports `conclusion: success` and is usually the newest
-run for that SHA, so a recipe that takes the latest successful run can record
-skipped jobs as newly passed tests.
-
-When the automatic push run was skipped this way, record both runs: the push
-run as provenance and the original full-gate run as the evidence. The push
-run's `Preflight` job logs a notice listing every earlier successful run for
-this exact SHA, which can include other skipped runs. Follow those links to
-one that executed every required job above (often a `workflow_dispatch` run on
-the feature branch) and verify it there. The exact-candidate full-gate
-requirement is unchanged; only the run you cite moves.
+A green main run executes small checks and may point to earlier exact-tree PR
+or full proof. Record both its provenance and the original behavioral evidence;
+never count skipped jobs as fresh passes. For release qualification, find a
+completed full run for the exact candidate SHA and inspect every required job
+listed above. The existing source-bound PR-proof and failed-job recovery tools
+accept full runs dispatched directly through `ci.yml`; the weekly reusable
+workflow is independently visible full-suite evidence, not a direct recovery
+producer for those tools.
 
 ## Windows development
 

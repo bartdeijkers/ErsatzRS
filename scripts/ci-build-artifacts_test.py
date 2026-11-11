@@ -1115,7 +1115,7 @@ class FocusedAuditSelection(unittest.TestCase):
                          {"docs/moved.md", "crates/old.rs", "crates/new.rs"})
         self.assertEqual(data["written"]["added-files.txt"], "crates/new.rs")
         result = self.preflight_diff([{"filename": "plans/INDEX.md", "status": "modified"}])
-        self.assertEqual(json.loads(result.stdout)["output"]["lane"], "skip")
+        self.assertEqual(json.loads(result.stdout)["output"]["lane"], "light")
 
     def test_incomplete_malformed_or_changed_diff_cannot_skip_checks(self):
         normal = [{"filename": "plans/INDEX.md", "status": "modified"}]
@@ -1231,7 +1231,7 @@ class FocusedAuditSelection(unittest.TestCase):
         everything = set(self.jobs)
         self.assertEqual(self.scheduled(lane="pr"), everything)
         self.assertEqual(self.scheduled(lane="light"),
-                         everything - {"next_engine", "teletext", "hydration"})
+                         everything - {"build", "test", "next_engine", "teletext", "hydration"})
         # A pull request that touches no Teletext, Next or browser domain.
         narrow = dict(run_next="false", run_teletext="false", run_browser="false")
         self.assertEqual(self.scheduled(lane="pr", selection=narrow),
@@ -1298,7 +1298,7 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertTrue(self.evaluate(condition, inputs, needs))
 
     def ci_ok_exit(self, lane, results, event="pull_request", skip="false", deselected="[]", outputs=None,
-                   resume=""):
+                   resume="", draft="true"):
         code = re.search(r"python3 - <<'PY'\n(.*?)^          PY$", self.jobs["ci_ok"], re.S | re.M)[1]
         code = "\n".join(line[10:] for line in code.splitlines())
         needs = {job: {"result": results.get(job, "success"), "outputs": {}}
@@ -1315,7 +1315,7 @@ class FocusedAuditSelection(unittest.TestCase):
         needs["preflight"]["outputs"].update(outputs or {})
         result = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True,
                                 env=dict(os.environ, NEEDS=json.dumps(needs), EVENT_NAME=event,
-                                         RESUME_RUN_ID=resume, GITHUB_SHA='b' * 40))
+                                         RESUME_RUN_ID=resume, DRAFT_PR=draft, GITHUB_SHA='b' * 40))
         return result.returncode
 
     def test_resumption_schedules_only_failed_consumers_and_keeps_current_guards(self):
@@ -1403,7 +1403,7 @@ class FocusedAuditSelection(unittest.TestCase):
                                             deselected='["next_engine"]'), 0)
         self.assertNotEqual(self.ci_ok_exit("full", {"next_engine": "skipped"},
                                             event="push", deselected='["next_engine"]'), 0)
-        self.assertEqual(self.ci_ok_exit("full", {"commitlint": "skipped"}, event="push"), 0)
+        self.assertNotEqual(self.ci_ok_exit("full", {"commitlint": "skipped"}, event="push"), 0)
         self.assertEqual(self.ci_ok_exit("full", {"commitlint": "skipped"}, event="schedule"), 0)
         # A draft never reports a passing required check, even when green.
         self.assertNotEqual(self.ci_ok_exit("light", light), 0)
@@ -1433,6 +1433,45 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertIn("provenBy('ci-tree', tree, ['pull_request'])", self.workflow)
         self.assertIn("provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch'])", self.workflow)
 
+    def test_push_deduplication_requires_an_open_pr_at_the_pushed_source(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/ci-fast.yml").read_text()
+        code = workflow.split("          script: |\n", 1)[1].split("  checks:", 1)[0]
+        code = "\n".join(line[12:] for line in code.splitlines())
+        harness = r"""
+        const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        let output;
+        const core = {setOutput:(key,value)=>{output=value;}};
+        const context = {repo:{owner:'fixture',repo:'repo'},ref:'refs/heads/topic',sha:'pushed'};
+        const github = {rest:{pulls:{list:'pulls'}},paginate:async(method,args)=>{
+          if (args.state !== 'open' || args.head !== 'fixture:topic' || args.per_page !== 100)
+            throw Error('Incomplete PR selection');
+          return input.pulls;
+        }};
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        new AsyncFunction('github','context','core',input.code)(github,context,core)
+          .then(()=>console.log(JSON.stringify(output)))
+          .catch(error=>{console.error(error.message);process.exitCode=1});
+        """
+        current = {"head": {"sha": "pushed", "repo": {"full_name": "fixture/repo"}}}
+        for pulls, expected in (([], True), ([current], False),
+                                ([{**current, "draft": True}], False),
+                                ([{"head": {"sha": "old", "repo": {"full_name": "fixture/repo"}}}], True),
+                                ([{"head": {"sha": "pushed", "repo": {"full_name": "foreign/repo"}}}], True)):
+            with self.subTest(pulls=pulls):
+                result = subprocess.run(["node", "-e", harness],
+                    input=json.dumps({"code": code, "pulls": pulls}), text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout), expected)
+
+    def test_small_checks_cannot_be_mistaken_for_pr_behavioral_proof(self):
+        omitted = {job: "skipped" for job in ("build", "test", "next_engine", "teletext", "hydration")}
+        self.assertEqual(self.ci_ok_exit("light", omitted, event="push", draft="false"), 0)
+        self.assertEqual(self.ci_ok_exit("light", omitted, draft="false"), 0)
+        self.assertNotEqual(self.ci_ok_exit("light", omitted), 0)
+        for job in ("fmt", "clippy", "docs", "deny", "commitlint"):
+            self.assertNotEqual(self.ci_ok_exit("light", {**omitted, job: "failure"}, draft="false"), 0)
+            self.assertNotEqual(self.ci_ok_exit("light", {**omitted, job: "skipped"}, draft="false"), 0)
+
     def test_main_push_reuses_only_a_successful_exact_full_tree(self):
         code = re.search(r"      - id: duplicate\n.*?          script: \|\n(.*?)^      - uses:",
                          self.jobs["preflight"], re.S | re.M)[1]
@@ -1444,7 +1483,7 @@ class FocusedAuditSelection(unittest.TestCase):
           actions: {listWorkflowRuns:'runs', listArtifactsForRepo:'artifacts',
             getWorkflowRun:async () => ({data:{path:'.github/workflows/ci.yml',
               event:'workflow_dispatch', head_repository:{full_name:'fixture/fixture'},
-              conclusion:'success', html_url:'fixture', ...input.run}})}},
+              status:'completed', conclusion:'success', html_url:'fixture', ...input.run}})}},
           paginate:async (method, args) => method === 'artifacts' && args.name === 'ci-full-current-tree'
             && input.match !== false ? [{expired:false,workflow_run:{id:1},...input.artifact}] : []};
         const core = {setOutput:(key,value)=>output[key]=value,info:()=>{},notice:()=>{}};
@@ -1455,19 +1494,22 @@ class FocusedAuditSelection(unittest.TestCase):
           .then(()=>console.log(JSON.stringify(output)))
           .catch(error=>{console.error(error.message);process.exitCode=1});
         """
-        cases = [({}, "skip"), ({"match": False}, "full"),
-                 ({"artifact": {"expired": True}}, "full"),
-                 ({"run": {"conclusion": "failure"}}, "full"),
-                 ({"run": {"event": "pull_request"}}, "full"),
-                 ({"run": {"path": "other.yml"}}, "full"),
-                 ({"run": {"head_repository": {"full_name": "foreign/repo"}}}, "full")]
+        cases = [({}, "light"), ({"match": False}, "light"),
+                 ({"artifact": {"expired": True}}, "light"),
+                 ({"run": {"conclusion": "failure"}}, "light"),
+                 ({"run": {"status": "in_progress", "conclusion": None}}, "light"),
+                 ({"run": {"event": "pull_request"}}, "light"),
+                 ({"run": {"path": "other.yml"}}, "light"),
+                 ({"run": {"head_repository": {"full_name": "foreign/repo"}}}, "light")]
         for case, lane in cases:
             with self.subTest(case=case):
                 result = subprocess.run(["node", "-e", harness],
                                         input=json.dumps({"code": code, **case}),
                                         text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(json.loads(result.stdout)["lane"], lane)
+                outputs = json.loads(result.stdout)
+                self.assertEqual(outputs["lane"], lane)
+                self.assertEqual(outputs["integration_proven"], "true" if not case else "false")
 
     def test_test_job_narrows_to_the_selected_crates(self):
         body = self.jobs["test"]
@@ -1477,8 +1519,8 @@ class FocusedAuditSelection(unittest.TestCase):
 
     def test_audit_run_cannot_cancel_or_prove_a_full_run(self):
         self.assertIn("inputs.audit_only && '-audit-only'", self.workflow)
-        self.assertIn("&& run.display_title !== 'CI (Audit only)'", self.workflow)
-        self.assertIn("&& run.display_title !== 'CI (Next subtitle-NUL recovery)'", self.workflow)
+        self.assertIn("Only a completed", self.workflow)
+        self.assertIn("run.status !== 'completed'", self.workflow)
 
     def test_mixed_audit_modes_are_explicitly_rejected(self):
         step = self.workflow.split("- name: Reject mixed audit mode\n", 1)[1]
