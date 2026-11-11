@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Security
 
+- rustix is updated to 1.1.6 (RUSTSEC-2026-0486): 1.1.5 could mark unwritten
+  bytes as initialized when its xattr functions got a zero-length buffer.
 - `cargo deny` temporarily ignores RUSTSEC-2026-0459 (bundled SQLite before
   3.54.0, via `libsqlite3-sys` 0.37): the fixed `libsqlite3-sys` 0.39 cannot be
   used until sqlx allows it. The issue needs an attacker who can already write
