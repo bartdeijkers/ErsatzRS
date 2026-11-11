@@ -640,3 +640,23 @@ page is driven by `teletext-restart-flow`). Replay on the merge results of
 reasons for selecting everything (the shell, an unreviewed server function);
 a new public script, `deny.toml`, a foundation crate and `api/settings.rs`
 still select everything there. No cohort mean is claimed.
+
+Addendum (maintainer report of 2026-11-10 that PRs #141/#142 still ran
+everything; BSE-06): a changed `ersatzrs-app` or `ersatzrs-infra` module
+without a reviewed area is traced item by item. The changed top-level items
+(a private helper is replaced by the public items using it; import lines and
+test modules have none) are searched across the workspace, following the
+crate root's wrapper methods. If every user is admin code, the calling pages
+select their specs; any other user, an untraceable change or a missing base
+revision keeps everything. A page that no spec names and no area claims
+selects only the hydration smoke set instead of every spec: no spec drives
+it, so running them all proves nothing more about it. Replay: no PR of
+#124-#141 changes its total. #141 stays everything because its changed smart
+collection query is also used by the machine collections API; without that
+file it would select about 51 Playwright minutes instead of 72 and no Next
+engine, through the teletext elements rule. Maintainer decision of 2026-11-11: a
+non-teletext API handler using a changed item relies on the web crate's Rust
+tests, because no browser spec calls the machine API; the other users still
+decide. Replay: #141 then selects about 23 general and 29 teletext Playwright
+minutes (52 instead of 72), two Rust crates and no Next engine; no other PR of
+#124-#141 changes its total.

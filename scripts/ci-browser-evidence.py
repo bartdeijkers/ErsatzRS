@@ -465,6 +465,135 @@ def text_changes(before, after):
     return keys, functions, known
 
 
+_TOP_ITEM = re.compile(
+    r"^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+|const\s+|unsafe\s+)*"
+    r"(fn|struct|enum|trait|type|const|static|impl|mod|use|macro_rules!)\b(?:<[^>]*>)?\s*([A-Za-z_]\w*)?")
+
+
+def _items(lines):
+    """[(start, end, kind, name, public)] for the top-level items of a file.
+
+    Comments, attributes and blank lines before an item belong to it.
+    """
+    starts = []
+    for index, line in enumerate(lines):
+        match = _TOP_ITEM.match(line)
+        if match:
+            name = match[2]
+            if match[1] == "impl":
+                # `impl Trait for Type` and `impl Type`: the type owns it.
+                target = re.search(r"\bfor\s+([A-Za-z_]\w*)", line)
+                name = target[1] if target else name
+            # An impl block is reached through its type, which may be public.
+            starts.append((index, match[1], name, line.startswith("pub") or match[1] == "impl"))
+    items = []
+    for number, (start, kind, name, public) in enumerate(starts):
+        end = starts[number + 1][0] if number + 1 < len(starts) else len(lines)
+        # Leading comments and attributes of the next item are not this one's.
+        while end > start + 1 and re.match(r"\s*$|//|#\[", lines[end - 1]):
+            end -= 1
+        items.append((start, end, kind, name, public))
+    return items
+
+
+def changed_items(before, after):
+    """Public top-level item names whose code a change touches, or None.
+
+    A changed private item is replaced by the public items of the same file
+    that use it. None means a changed line belongs to no item, a module
+    declaration or a macro, so the reach of the change is unknown. Import
+    lines and `#[cfg(test)]` modules have no consumers of their own.
+    """
+    changes = changed_lines(before, after)
+    names = set()
+    for added, lines, index in changes:
+        items = _items(lines)
+        owner = next((item for item in items if item[0] <= index < item[1]), None)
+        if owner is None:
+            following = next((item for item in items if item[0] > index), None)
+            if lines[index].strip() == "" or following is None:
+                continue
+            owner = following
+        start, _, kind, name, public = owner
+        if kind == "use":
+            continue
+        if kind == "mod" and name == "tests":
+            continue
+        if kind in ("mod", "macro_rules!") or name is None:
+            return None
+        names.add((name, public))
+    text = after.splitlines()
+    items = _items(text)
+    public = {name for name, is_public in names if is_public}
+    private = {name for name, is_public in names if not is_public}
+    seen = set()
+    while private - seen:
+        name = (private - seen).pop()
+        seen.add(name)
+        wanted = re.compile(r"\b%s\b" % re.escape(name))
+        for start, end, kind, item, is_public in items:
+            if item == name or kind in ("use",) or kind == "mod" and item == "tests":
+                continue
+            if any(wanted.search(line) for line in text[start:end]):
+                (public if is_public else private).add(item)
+    return {name for name in public if name}
+
+
+def facade_names(text, module, names):
+    """Methods of a crate root that wrap `module::name` for one of `names`."""
+    lines = text.splitlines()
+    wanted = re.compile(r"\b%s\s*::\s*(?:%s)\b" % (re.escape(module), "|".join(map(re.escape, names))))
+    found, current = set(), None
+    for line in lines:
+        method = re.match(r"\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)", line)
+        if method:
+            current = method[1]
+        if current and wanted.search(line):
+            found.add(current)
+    return found
+
+
+def workspace_users(root, path, names):
+    """Rust sources outside `path` that use one of `names` from its module.
+
+    The crate root's wrapper methods are followed by their own names. In the
+    defining crate a source counts when it names the module; elsewhere any
+    use of a name except its own definition counts, because a method call
+    need not name the crate. Test sources are left out: the crate's Rust
+    tests already run for the change.
+    """
+    root = Path(root)
+    crate = path.split("/")[1]
+    module = Path(path).stem if Path(path).name != "mod.rs" else Path(path).parent.name
+    lib = "crates/%s/src/lib.rs" % crate
+    names = set(names)
+    if (root / lib).is_file() and lib != path:
+        names |= facade_names((root / lib).read_text(), module, names)
+    alternatives = "|".join(sorted(map(re.escape, names)))
+    # A path through another module names that module's item, not this one.
+    own = {module, crate.replace("-", "_"), "crate", "super", "self", "Self"}
+    words = re.compile(r"(?:\b(\w+)\s*::\s*)?\b(?:%s)\b" % alternatives)
+    definition = re.compile(r"\b(?:fn|struct|enum|trait|type)\s+(?:%s)\b" % alternatives)
+
+    def uses(text):
+        return any(match[1] is None or match[1] in own for match in words.finditer(text))
+
+    users = set()
+    for candidate in sorted((root / "crates").glob("*/**/*.rs")):
+        name = candidate.relative_to(root).as_posix()
+        if name in (path, lib) or "/tests/" in name or name.endswith(("_tests.rs", "/tests.rs")):
+            continue
+        text = candidate.read_text()
+        if not uses(text):
+            continue
+        if name.split("/")[1] == crate:
+            if re.search(r"\b%s\s*::" % re.escape(module), text):
+                users.add(name)
+        elif uses(definition.sub("", text)):
+            users.add(name)
+    return users
+
+
 def key_helpers(text, keys):
     """Functions of a translation module that read one of `keys` themselves."""
     helpers = set()
