@@ -68,6 +68,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Dependencies are updated (jiff, pest, httpmock, jsonschema and CI actions).
+  `cargo deny` now also allows the permissive `Apache-2.0 WITH LLVM-exception`
+  licence, used by a build dependency of pest.
+
 - Subtitle character-set detection now uses chardetng 1.0. Unlabelled
   legacy subtitles are detected as before; ISO-2022-JP is still only used when
   a subtitle declares it.

@@ -24,6 +24,9 @@ ignore = [
 version = 2
 allow = [
   "Apache-2.0",
+  # ar_archive_writer, a build dependency of psm via pest's stack guard.
+  # Apache-2.0 with the LLVM exception only waives attribution for binaries.
+  "Apache-2.0 WITH LLVM-exception",
   "BSL-1.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
