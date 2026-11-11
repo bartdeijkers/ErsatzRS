@@ -11,8 +11,9 @@ mod temporal;
 mod tests;
 mod value;
 
+use crate::scheduling::SchedulingFillerPreset;
 use chrono::Duration;
-use ersatzrs_domain::MediaChapter;
+use ersatzrs_domain::{EntityId, MediaChapter};
 use pest::Parser;
 use pest_derive::Parser;
 use value::Value;
@@ -39,9 +40,9 @@ struct Parameters<'a> {
 }
 
 impl Parameters<'_> {
-    fn get(&self, name: &str) -> Value {
+    fn get(&self, name: &str) -> Result<Value> {
         let point = self.chapter.end_time.as_seconds_f64();
-        match name {
+        Ok(match name {
             "last_mid_filler" => Value::Real(point - self.last_filler),
             "total_points" => Value::integer(i64::try_from(self.total_points).unwrap_or(i64::MAX)),
             "total_duration" => Value::Real(self.duration),
@@ -51,10 +52,48 @@ impl Parameters<'_> {
             "point" => Value::Real(point),
             "num" => Value::integer(i64::try_from(self.number).unwrap_or(i64::MAX)),
             "title" => Value::Text(self.chapter.title.clone()),
-            // Upstream assigns e.Result even for unrecognised names. Its
-            // ParameterArgs setter marks that null value as a handled result.
-            _ => Value::Null,
-        }
+            // Upstream row289 rejects unknown callbacks. Do not disclose the
+            // saved parameter text in diagnostics (ADR 0098).
+            _ => return Err(ExpressionError),
+        })
+    }
+}
+
+/// ErsatzTV row289's no-points result retains the original content span for
+/// padding. The strict evaluator still rejects unsupported or excessive input.
+pub(super) fn filter_chapters_or_fallback(
+    preset: &SchedulingFillerPreset,
+    schedule_item_id: EntityId,
+    chapters: &[MediaChapter],
+    content_duration: Duration,
+    warnings: &mut Vec<String>,
+) -> Vec<MediaChapter> {
+    if let Ok(filtered) = filter_chapters(
+        preset.expression.as_deref().unwrap_or_default(),
+        chapters,
+        content_duration,
+    ) {
+        return filtered;
+    }
+    let warning = format!(
+        "invalid chapter filler expression for Classic filler preset {} ({}) on schedule item {}; using full-content fallback without internal chapter points",
+        preset.id, preset.name, schedule_item_id
+    );
+    if !warnings.contains(&warning) {
+        warnings.push(warning);
+    }
+    // Evaluation errors require multiple chapters; empty/single inputs
+    // bypass evaluation. Keep this total even if that policy changes.
+    match (
+        chapters.iter().map(|chapter| chapter.start_time).min(),
+        chapters.iter().map(|chapter| chapter.end_time).max(),
+    ) {
+        (Some(start_time), Some(end_time)) => vec![MediaChapter {
+            start_time,
+            end_time,
+            ..MediaChapter::default()
+        }],
+        _ => Vec::new(),
     }
 }
 

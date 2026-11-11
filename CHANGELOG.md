@@ -68,6 +68,10 @@ release section when tagging a release.
 
 ### Changed
 
+- YAML scheduling parity now records the remaining chapter-aware mid-roll gap:
+  the current `true` case runs its sequence after the unsplit programme; saved
+  chapter-point expressions are not yet implemented.
+
 - The EPG/tv guide grid is easier to read: programme titles, times and the
   time ruler use at least 13-14 px text, rows are taller, the grid fills the
   available window height, and on large and 4K displays the guide uses the
@@ -224,6 +228,27 @@ release section when tagging a release.
   logs showed US dates and playouts ISO/UTC times.
 
 ### Fixed
+
+- Invalid Classic chapter filler expressions now keep the whole programme
+  without internal breaks and retain its clock-aligned padding. Unknown
+  variables are errors; a diagnostic names the filler preset and schedule item
+  without exposing the saved expression or chapter titles.
+- Classic Random Count fillers now use an advancing sequence from the playout
+  seed, preserved by continuation and complete checkpoints. Rejected blocks
+  restore the draw state with the filler cursor; missing legacy state is
+  detected before unsafe continuation.
+
+- Classic **Fill With Groups** now alternates real shows, artists, song album
+  artists, movies and other videos, with independent source anchors across
+  Continue and Refresh. Movies and other videos keep separate keys; images
+  and remote streams fall back to their original collection when no groups
+  exist. Custom-order continuation resets an out-of-range cursor after a
+  collection shrinks, and empty collections remain safe.
+
+- Classic duration schedules now honor the saved **Discard To Fill Attempts**
+  limit, retain the next rejected item when the budget runs out, and advance
+  to the following schedule item after tail or fallback content. Partial builds
+  keep the open duration block and guide position for continuation.
 
 - Page-size selectors consistently offer **All** after the numeric choices.
   Selecting it shows every matching item on one page, including media browsers,

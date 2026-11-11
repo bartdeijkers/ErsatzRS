@@ -6,7 +6,11 @@ Accepted
 
 ## Implementation
 
-Implemented — the Classic scheduling engine is ported (feature `classic-scheduling`).
+Partial — delivered Classic scheduling remains available. UCU-16 reproduced
+previously missing duration-discard and actual fill-group selection behavior.
+The local corrections and their persistence proof are recorded in milestone
+`ucu-16`; filler-expression updates and window/platform/final acceptance remain
+open. The accepted scheduling and continuity decisions are unchanged.
 
 ## Context
 
@@ -136,3 +140,21 @@ global primary keys.
 - [Parity matrix](../reference/parity-matrix.md)
 - `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`
 - `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutBuilder.cs`
+
+
+### 2026-11-11 addendum: seeded Random Count continuation
+
+UCU-16 row289 replaces a constant per-preset count with actual successive draws
+from the existing deterministic Rust LCG seeded by the playout. As with the
+accepted Random adaptation above, this preserves deterministic semantics rather
+than reproducing .NET generator bytes. The optional `random_count_state` field
+in the existing version2 anchor context is included in complete checkpoints,
+restored by Continue/Refresh, retained through inactive schedule intervals and
+reseeded by explicit Reset. Rejected plain/chapter blocks restore both filler
+positions and the draw state. Non-Random-Count contexts retain their old shape.
+
+Classic Continue/Refresh readiness and Health require this state only when an
+active preset uses Random Count. Missing old state is refused observably before
+published rows are replaced; a verified checkpoint or explicit Reset establishes
+a complete sequence. No schema migration or automatic Reset is introduced.
+Milestone ucu-16 owns current implementation and acceptance evidence.

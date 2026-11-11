@@ -23,12 +23,156 @@ owned by docs/automation/parity-baseline.md; no later moving tip is adopted.
 | UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Complete; advisory debt remains unverified |
 | UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Complete; Native retained |
 
-There are **285 observed, 285 processed and 0 pending rows**. Each row has
+Within the approved fixed window there are **285 observed, 285 processed and
+0 pending rows**. Each row has
 its own disposition; row271 remains explicitly Deferred rather than fixed or
 inapplicable. The owning milestones contain acceptance and evidence, including
 all required Linux/Windows and ARM build/package/emulation scopes. Earlier
 source notes remain historical; they do not reopen completed windows or erase
 approved unverified debt. No later moving-main commit is part of this goal.
+
+### Active UCU-16 window (2026-11-11)
+
+The maintainer task activates the four registered rows286–289, with fixed
+terminal `c41969b3bba66f14bf1d0be9e041b52218f65871`. Milestone `ucu-16`
+owns acceptance, the finite completion list and current evidence. Earlier
+post-baseline observations below retain their original source-only scope.
+The accepted pin remains v26.12.0 pending ordered acceptance.
+
+#### Row286 retained-engine source map
+
+All25 changed paths at `91f85128014b855657fe3ac513731606bdb5e1ba` were reviewed.
+Its parent already sets `LegacyStreamingEngine.Enabled` to false; replacing that
+constant branch does not introduce an engine-neutral runtime change.
+
+- Channel create/update/editor/migration: unconditional Next assignment removes
+  the disabled hotfix branch. Preserve explicit Native selections and modes in
+  Rust under ADR0095 instead of copying this destructive migration.
+- Playlist query and IPTV/internal controllers: removed alternatives are native
+  concat/direct paths. Next cached `ts-legacy`/`hls-direct` aliases already use
+  wrapper/segmenter behavior before this commit. Rust retains native paths and
+  its engine-aware Next dispatch. `InternalController`'s offset bound changes
+  only a constant's spelling; its numeric conditions are identical.
+- Core concat record, process query/handler/service/interface and output formatter
+  plus Startup registration: native-only removals, deliberately retained.
+- FFmpeg editor/capability interfaces/platform settings: keep Native thread count,
+  profile/preset/B-frames, pad/display/device/QSV frames and color options.
+  `GetQsvOutput`/`GetVaapiOutput` becoming static changes no probe command. The
+  removed VAAPI-display cache only fed the removed legacy-only selector; Rust
+  persists an editable display string and retains its own capability probes.
+- Channels warning removal, Razor delegate simplification, troubleshooting warning
+  and nullable test annotations follow the Next-only cleanup, with no shared
+  validation or serialization change.
+- Rust: `repositories/channel.rs`, IPTV `playlist.rs`/`stream.rs`/`mod.rs`,
+  `ffmpeg_profiles/editor.rs`, FFmpeg capabilities and ADR0095. No Rust/UI change
+  is required. Six selected SQL channel/default/engine/subtitle/troubleshooting
+  regressions pass. Milestone `ucu-16` owns evidence; proposed disposition is
+  N/A under the retained-engine decision, pending ordered window acceptance.
+
+#### Row288 source map and work package
+
+- Sources at `a143968eb55998ebc0151f2c4be7d0525afaa35f`:
+  `Scheduling/PlayoutBuilder.cs`, `CustomOrderCollectionEnumerator.cs`,
+  `MediaCollectionRepository.GroupIntoFakeCollections` and their new regressions.
+- Existing localized Fill With Groups control and persistence stay unchanged.
+- Infra resolves bounded group descriptors from the selected source membership:
+  shows, music-video artists, first song album artists, movies and other videos;
+  images/remote streams produce no groups. Each logical media ID belongs once
+  within its group; duplicate metadata rows must not multiply its membership.
+- Reuse `SchedulingPlaylistItem`/`SchedulingCollectionKey` descriptors, existing
+  enumerators, full-key anchors and complete checkpoint restoration. Synthetic
+  schedule items keep the original policy/settings but use distinct full keys.
+- Core must select the active group, advance it only after its block completes,
+  and include every group in actual persistence and Health/Refresh audits.
+- No-group fallback schedules the original collection without fill-group state.
+  Old incomplete grouped checkpoints must refuse unsafe Refresh visibly.
+- Custom-order out-of-range restoration starts at the beginning, empty inputs
+  remain finite, and all current persistence/override identity safeguards remain.
+- Stopping condition: upstream two-key-group sequence and independent resume,
+  mixed movie/other-video/song-artist groups, ungroupable fallback, duplicate
+  sources, supported orders and actual SQL restart/Continue/Refresh proof.
+  No new architecture or deliberate deviation is proposed.
+
+#### Row289 source map and work package
+
+- Exact source `c41969b3bba66f14bf1d0be9e041b52218f65871`: Classic
+  `FillerExpression`, `PlayoutModeSchedulerBase` and One/Multiple/Duration/Flood
+  callers; YAML handlers only thread the logger into the shared evaluator.
+- Repeated-use regressions prove that chapter filtering preserves source times.
+- The maintainer approved option2 on2026-11-11: ADR0098 now accepts unknown
+  callback errors and full-content/no-points fallback on invalid expressions.
+  Keep its deterministic culture, literal, resource and redaction boundaries.
+  Local caller/SQL proof is complete, including preserved padding, discarded
+  partial matches and actionable preset/schedule diagnostics. Final/platform/
+  playback acceptance remains open in milestone ucu-16.
+- The initial Random Count implementation computed one constant count per
+  preset/playout seed. The local component now advances a seeded draw sequence
+  through the existing Classic continuation context and complete checkpoints.
+  Regressions prove varying repeatable counts, persisted Continue/Refresh,
+  filler/PRNG rollback on rejected blocks and refusal of missing legacy state.
+  SQL and Health proof is complete within this component's local scope.
+- Targets: Classic expression callbacks/callers, existing RNG/anchor state,
+  SQL filler metadata for actionable diagnostics, Classic Health state checks.
+- Existing YAML mid-roll runs only the literal `true` case after content; it does
+  not evaluate chapter expressions. This is a pre-existing parity gap, not proof
+  of shared-evaluator coverage. Record its exact scope visibly; do not treat the
+  new C# logger argument alone as a new YAML feature implementation.
+- Stopping condition: repeatable immutable chapter fixtures, seeded count draws
+  that vary and survive persisted Continue/Refresh, rejected-block rollback,
+  approved invalid-expression behavior with preserved content/padding and redacted
+  diagnostics, plus focused SQL/Health and affected lint proof. Final acceptance
+  remains in milestone ucu-16.
+
+#### Row287 source map and work package
+
+- UI/view model/validation: existing localized schedule duration controls and
+  nonnegative discard-attempt validation; no new control or validation policy.
+- Source: `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerDuration.cs`
+  and `ErsatzTV.Core.Tests/Scheduling/PlayoutModeSchedulerDurationTests.cs` at
+  `e51ac60c02eb93285480abf64cefe1d10acd4cc5`.
+- Persistence: `ProgramScheduleDurationItem.DiscardToFillAttempts`; admin DTO
+  already saves it, scheduling domain/SQL projection omits it.
+- Targets: domain `ProgramScheduleItem`, infra `program_schedule.rs` projection
+  and core `classic/mod.rs::schedule_duration`.
+- Side effects: content cursor, guide boundary, filler cursors, duration finish,
+  next schedule item and per-source checkpoint continuity. No transport changes.
+- Intentional deviations: none added; preserve accepted Native/Next decisions.
+- Stopping condition: source fixture and bounded-budget/tail/fallback controls
+  pass through the production scheduler and SQL projection, with generated
+  continuation/restart checks. Milestone acceptance stays open until final gates.
+
+### Post-baseline observations (2026-11-10)
+
+Live upstream `main` is `a143968eb55998ebc0151f2c4be7d0525afaa35f`.
+The ledger now contains **288 observed rows:285 processed and3 pending**.
+UCU-16 contains rows286–288 after the accepted v26.12.0 boundary. These are
+observations and source triage, not accepted dispositions or a baseline bump.
+All286 previously registered SHA/subject pairs remain an exact ordered prefix;
+rows287–288 were checked against the live GitHub comparison and local exact
+commit objects. The shared upstream checkout was not moved or updated.
+
+- Row286 remains pending: upstream removes Native/legacy surfaces that
+  ErsatzRS deliberately retains. Review the shared channel/playlist/default
+  behavior before assigning a final disposition; retaining Native alone is
+  not proof that the complete diff is inapplicable.
+- Row287 fixes duration-block completion after discard attempts are exhausted.
+  ErsatzRS persists `discard_to_fill_attempts`, but Classic `schedule_duration`
+  does not read it. The fix cannot be marked Covered from the upstream change
+  alone; reproduce the bounded skip budget and following schedule-item behavior.
+- Row288 fixes custom-order shrink/empty handling and grouped source identity,
+  empty-group fallback and independent anchors. Shared Rust `MediaEnumerator`
+  uses finite, empty-safe modulo indexing, so the upstream constructor hang is
+  not a direct match; reset/resume equivalence remains unproven. Classic keeps
+  fill-group state and matches full anchor keys, but a state-index regression
+  does not prove separate group selection or mixed/ungroupable collection behavior.
+
+The finite source-review/follow-up list is owned by
+`ucu16-post-baseline-observations` in the upstream parity record; demonstrated
+Classic option handling gaps are recorded in the Classic parity record.
+Next bounded trial: row287's40/40/40/15-minute collection in a60-minute duration
+block with one discard attempt, followed by a second schedule item. Record item
+identities, cursor and block completion before deciding the smallest correction.
+No Rust change, runtime acceptance or new milestone acceptance is claimed.
 
 ### Accepted scope and delivery constraints
 
@@ -1450,10 +1594,11 @@ Canonical acceptance, finite completion list and evidence: `ucu-12` in
   — prep for release v26.12.0; supersedes the earlier `06c008b4` observation.
 - Fixed accepted UCU-12 target (verified 2026-10-24): `f640c252276d008a5e1697fbfbb65a65fc352a5a`
   — docs: prep for release v26.11.4.
-- Ledger: **285 observed commits**, **254 accepted**, **31 pending in UCU-13–15**.
-- Accepted release baseline: **254 commits**, **0 pending in the fixed window**
-  through v26.11.4. UCU-10/UCU-11 retain their original completed boundaries;
-  UCU-13 rows255–259, UCU-14 rows260–271 and UCU-15 rows272–285 remain pending.
+- Ledger: **289 observed commits**, **285 accepted**, **4 pending in UCU-16**.
+- Accepted release baseline: **285 commits**, **0 pending in the fixed window**
+  through v26.12.0. UCU-10/UCU-11/UCU-12 retain their original completed boundaries;
+  UCU-13 rows255–259, UCU-14 rows260–271 and UCU-15 rows272–285 are complete.
+  UCU-16 rows286–288 are observations outside the approved fixed target.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
@@ -6770,3 +6915,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 283 | `03c206ee` | build: update ffmpeg and next (#3134) | Adapt (ADR 0130) | Qualified consolidated runtime pair | `3bcf60f1; 21419be2` | ucu-15; reconcile terminal runtime deltas in first-party FFmpeg2.0.10/FFmpeg9 and Next025. Source, patch retirement, payload/provenance and actual published download checks pass; no mutable Docker-tag evidence is used. |
 | 284 | `de40b158` | build: next v0.2.5 (#3135) | Adapt (ADR 0130) | Fixed released Next0.2.5 source | `3bcf60f1; 21419be2` | ucu-15; qualified source is c5cb065f9f35dbbcb7c05845f0f92c70f576a480.455 reader/worker,13 schema and660 serial software cases plus four actual platform runtime packages pass; maintained private corrections retain their removal criteria. |
 | 285 | `53b3b42a` | prep for release v26.12.0 | N/A | Upstream release bookkeeping | `21419be2` | ucu-15; exact terminal53b3b42a moves release notes/compare links only. v26.12.0 is the frozen catch-up boundary, not permission to publish an ErsatzRS application release. |
+| 286 | `91f85128` | refactor: clean up legacy engine references (#3136) |  |  |  | ucu-16; local source/SQL component complete. Proposed N/A under ADR0095 retained-engine decision: all25 changed paths reviewed, including shared channel/default/playlist/platform behavior. Parent LegacyStreamingEngine.Enabled is already false; no additional engine-neutral fix is hidden in the cleanup. Six selected channel/default/engine/subtitle/troubleshooting regressions pass. Preserve Native routes, controls, profiles and choices. Milestone ucu-16 owns proof and pending window acceptance. |
+| 287 | `e51ac60c` | fix: classic schedule discard to fill (#3137) |  |  |  | ucu-16; local implementation/persistence component complete, proposed Port. Saved discard budget reaches the scheduler; bounded skips, successful-fit reset, rejected cursor, tails/fallback, next-item transition, filler rollback and partial guide continuity are proven. The exact40/40/40/15-minute fixture and production SQL restart/Continue/Refresh cases pass. Milestone ucu-16 owns current source/test identities and mandatory final/window evidence; no accepted baseline advancement. |
+| 288 | `a143968e` | fix: classic schedule bug fixes (#3138) |  |  |  | ucu-16; local grouped-source/custom-order implementation/persistence component complete, proposed Port pending final window evidence in milestone ucu-16. Actual shows/music-video artists/song album artists/movies/other videos use distinct complete keys and independent persisted anchors. Images/finite streams fall back without phantom groups; custom-order shrink resets to the beginning and empty resume is finite. Duplicate-source policies, partial blocks, shuffled cycles, inactive rotation, SQL Continue/Refresh and unsafe-checkpoint refusal are covered. |
+| 289 | `c41969b3` | fix: classic filler expression and random count (#3139) |  |  |  | ucu-16; local row289 components complete. Repeated filtering preserves source chapter values. A demonstrated constant-count defect was corrected with advancing persisted RNG state, rejected-block rollback, SQL restart/Continue/Refresh and actual Health proof. The maintainer approved ADR0098 option2 on2026-11-11: unknown-parameter errors and invalid-expression full-content/no-points fallback with retained padding and redacted preset diagnostics. Combined136 focused regressions, four separate culture runs and strict affected lint pass. Milestone ucu-16 owns source/test identities and mandatory final/platform/window acceptance. |

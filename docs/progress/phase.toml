@@ -2,15 +2,19 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "UCU-13–15 complete through v26.12.0; Native and Next retained"
+current_focus = "UCU-16 rows286–289: Classic scheduling corrections; Native and Next retained"
 
 summary = '''
+UCU-16 rows286–289 are now active under milestone ucu-16. Its required Classic
+scheduling corrections and mandatory evidence are independent of the completed
+Phase9 and earlier catch-up scopes summarized below.
+
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
 engine, production TV-guide add-on, four required package/runtime scopes and
 three stable releases with exact-source CI and actual published downloads.
 Level2.5 remains experimental; retained enhanced-only, optionalQTM, macOS,
 nativeARM and current-release Docker scopes are Deferred, not accepted. No
-current independently executable required work remains.
+current independently executable required Phase9 work remains.
 
 Earlier completed programme context is retained below:
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -70,6 +74,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Active maintainer task2026-11-11: UCU-16 rows286–289 through fixed c41969b3.
+Milestone ucu-16 owns the finite functionality, mandatory evidence and external
+prerequisite list. Rows286/287/288 and row289's immutable-chapter/seeded-count
+local components are complete, including approved ADR0098 option2 fallback.
+Checkpoint commit/push and existing CI are authorized after the now-merged
+rustix PR144; complete required final/platform/playback evidence. Preserve Native and
+the accepted v26.12.0 baseline until ordered acceptance; no later-tip chase.
+
+Completed prior catch-up context:
 UCU-13, UCU-14 and UCU-15 are Complete in order through fixed v26.12.0.
 All285 rows are processed; row271 remains approved Deferred/unverified Windows
 advisory work. The accepted pin is owned by docs/automation/parity-baseline.md.

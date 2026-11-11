@@ -1,3 +1,6 @@
+#[path = "scheduling/classic_groups.rs"]
+mod classic_groups;
+
 use crate::repositories::SqlxResultExt as _;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -622,6 +625,9 @@ impl SqliteSchedulingContentRepository {
                 self.items_for_program_schedule_item(item).await?,
             );
         }
+        let classic_fill_groups = self
+            .classic_fill_groups(&schedule_items, &media_by_key)
+            .await?;
         let playlist_items_by_key = self
             .classic_playlist_items(&schedule_items, &media_by_key)
             .await?;
@@ -649,6 +655,7 @@ impl SqliteSchedulingContentRepository {
                 classic_schedule_id: Some(schedule.id),
                 classic_schedule_name: Some(schedule.name),
                 classic_schedule_items: schedule_items,
+                classic_fill_groups,
                 classic_shuffle_schedule_items: schedule.shuffle_schedule_items,
                 classic_random_start_point: schedule.random_start_point,
                 classic_fixed_start_time_behavior: schedule.fixed_start_time_behavior,
@@ -1275,6 +1282,7 @@ impl SqliteSchedulingContentRepository {
         };
 
         Ok(Some(SchedulingFillerPreset {
+            name: row.try_get("Name").repository()?,
             expression: row.try_get("Expression").repository()?,
             id: filler_id,
             filler_kind: decode_enum_column("schedule item filler kind", &row, "FillerKind")?,

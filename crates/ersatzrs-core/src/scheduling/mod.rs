@@ -425,6 +425,8 @@ pub struct SchedulingReferenceData {
     pub classic_schedule_id: Option<EntityId>,
     pub classic_schedule_name: Option<String>,
     pub classic_schedule_items: Vec<ProgramScheduleItem>,
+    /// Ordered Classic Fill With Groups descriptors, owned by the original schedule item.
+    pub classic_fill_groups: BTreeMap<EntityId, Vec<SchedulingPlaylistItem>>,
     pub classic_shuffle_schedule_items: bool,
     pub classic_random_start_point: bool,
     pub classic_fixed_start_time_behavior: FixedStartTimeBehavior,
@@ -455,6 +457,8 @@ pub struct SchedulingFallbackPreset {
 /// Schedule-item filler preset resolved from an imported `FillerPreset` row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchedulingFillerPreset {
+    /// Saved preset name for actionable, expression-redacted diagnostics.
+    pub name: String,
     pub expression: Option<String>,
     pub id: EntityId,
     pub filler_kind: FillerKind,

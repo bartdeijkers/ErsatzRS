@@ -131,6 +131,7 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
         program_schedule_id: 1,
         playout_mode: PlayoutMode::Duration,
         duration: Some(Duration::minutes(45)),
+        discard_to_fill_attempts: 3,
         tail_mode: TailMode::Filler,
         sort_order: 8,
         ..ProgramScheduleItem::default()
@@ -141,6 +142,7 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
     assert_eq!(loaded_duration.playout_mode, PlayoutMode::Duration);
     assert_eq!(loaded_duration.duration, Some(Duration::minutes(45)));
     assert_eq!(loaded_duration.tail_mode, TailMode::Filler);
+    assert_eq!(loaded_duration.discard_to_fill_attempts, 3);
 
     let items = repos.program_schedule.list_items(1).await.unwrap();
     assert_eq!(

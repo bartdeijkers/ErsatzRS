@@ -2,6 +2,12 @@
 mod block_continuation;
 #[path = "scheduling_repository/candidate_overlay_preparation.rs"]
 mod candidate_overlay_preparation;
+#[path = "scheduling_repository/classic_duration.rs"]
+mod classic_duration;
+#[path = "scheduling_repository/classic_groups.rs"]
+mod classic_groups;
+#[path = "scheduling_repository/classic_random_count.rs"]
+mod classic_random_count;
 mod common;
 #[path = "scheduling_repository/host_preparation.rs"]
 mod host_preparation;

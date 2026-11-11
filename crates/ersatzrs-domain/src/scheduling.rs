@@ -91,6 +91,9 @@ pub struct ProgramScheduleItem {
     pub rerun_collection_id: Option<EntityId>,
     pub playlist_id: Option<EntityId>,
     pub search_query: Option<String>,
+    /// Runtime-only identity for a Classic grouped source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fake_collection_key: Option<String>,
     pub pre_roll_filler_id: Option<EntityId>,
     pub mid_roll_filler_id: Option<EntityId>,
     pub post_roll_filler_id: Option<EntityId>,
@@ -106,6 +109,9 @@ pub struct ProgramScheduleItem {
     pub fixed_start_time_behavior: Option<FixedStartTimeBehavior>,
     pub guide_mode: GuideMode,
     pub tail_mode: TailMode,
+    /// Consecutive overlong candidates that a duration block may skip to find a fit.
+    #[serde(default)]
+    pub discard_to_fill_attempts: i32,
     pub fill_with_group_mode: FillWithGroupMode,
     pub marathon_group_by: MarathonGroupBy,
     #[serde(default)]

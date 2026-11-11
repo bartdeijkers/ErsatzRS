@@ -1251,7 +1251,7 @@ pub(crate) async fn classic_runtime_state_is_complete(
         return Ok(false);
     }
 
-    if !reference_data.playlist_items_by_key.is_empty() {
+    {
         let context = sqlx::query_scalar::<_, Option<String>>(
             r#"SELECT "Context" FROM "PlayoutAnchor" WHERE "PlayoutId" = ?"#,
         )

@@ -5,17 +5,18 @@ status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125', '0128', '0129', '0130', '0131']
 summary    = """
 UCU-00–15 are Complete through fixed v26.12.0:285 rows processed,0 pending.
+Active UCU-16 rows286–289 are being qualified through fixed c41969b3;
+milestone ucu-16 owns current component and final evidence. Source dispositions
+and the baseline stay pending ordered acceptance.
 UCU-13/14/15 close in order with source dispositions, four required platform
 scopes and current source-bound final gates. Native remains supported alongside
 Next; stored choices, controls, routes, international tracks, teletext and
-private callback ownership survive. Milestone ucu-15 owns the integrated proof
-and PR125/10ffff4e delivery, including the compiled1000fd07 identities, full CI
-recovery42460252936 and eligible PR check42464500817. Original negatives and
-scoped evidence reuse remain explicit. Evidence/source retention:
-tmp/evidence/ucu13-15-v26.12.0/; historical task paths resolve beneath raw/.
+private callback ownership survive. Milestone ucu-15 owns source identities, integrated proof, CI recovery,
+PR125/10ffff4e delivery, original negatives and scoped evidence reuse.
+Milestone ucu-15 also owns retained evidence paths.
 
 The feature remains In progress for retained debt and upstream patch-retirement
-obligations, not pending in-scope rows. Row271 is Deferred under
+obligations and the new UCU-16 window. Row271 is Deferred under
 ucu14-windows-advisory-applicability, not fixed, covered or inapplicable.
 Resume when authoritative advisory/fix details appear. Native ARM, macOS and
 approved unavailable hardware remain unverified; QEMU is emulation. Temporary
@@ -506,3 +507,10 @@ description = 'Meet row278 unchanged-day write economy while preserving atomic c
 discovered = '2026-11-06'
 evidence = 'Resolved2026-11-08: the qualified twelve-patch Next025 reader and startup-owned indexed publisher are published/adopted and pass source/config/lease/reclamation/rollback recovery, unchanged-day and actual active-edit playback. Linux and native Windows preserve complete generations, selected Dutch audio/captions, ordinary/preview isolation and bounded shutdown; current four-target packages and both ARM emulation checks pass. Full recovery42460252936 and eligible PR CI42464500817 are green; PR125/10ffff4e delivers the implementation. Milestone ucu-15 and retained raw/ucu14/next025/indexed-integration proof own exact inputs, raw captures and negatives. Native ARM/macOS/approved hardware remains unverified. Historical component checkpoints: Source review of fbb3685b NextPlayoutFolderPlanner and fixed Next92e93d72 PlayoutLoader establishes the representation conflict: whole-file equality cannot preserve unchanged day-file writes when another day changes. ADR0095 explicitly owns the single broad-window file. ADR0131 was accepted2026-11-06 for local implementation/tests; its ordinary writer passes44 distinct focused cases, affected strict lint/review and real complete-format refresh1/1; filesystem/coordinator startup recovery additionally passes55 focused cases, strict lint and current-format playback1/1. Owned host visible-commit callback integration additionally passes56 distinct focused cases, strict affected lint and real complete-format decoded refresh1/1; cleanup failure/cancellation, exact normal/preview gap admission, revocation, the unchanged30-second budget and standalone Native-channel preview are covered locally. Fixed Next reader source passes52 distinct affected cases and strict lint, with explicit mode, schema/capability advertisement, shared lease, two-chunk concurrency and bounded validation/lookahead. Its exact-base patch is retained. Local application permit/admission/registered-Health guard passes37 distinct focused cases, strict lint and actual Complete-format decoded refresh1/1. Qualified successor, actual indexed configuration/overlays, platform/indexed-playback/adoption remain unproven; its required successor runtime builds also are authorized by accepted ADR0130. ucu-15 owns unchanged acceptance and the complete implementation/proof list. No runtime pin, release or accepted baseline changed.'
 resolved = true
+
+[[debt]]
+id = 'ucu16-post-baseline-observations'
+description = 'Execute the registered post-v26.12.0 rows286–289 under milestone ucu-16: retained Native/shared behavior, bounded duration discard, independently resumable grouped sources and safe deterministic filler expressions. Accepted baseline stays unchanged until ordered acceptance.'
+discovered = '2026-11-10'
+evidence = 'Live GitHub comparison91f85128...main identifies exactly two new commits: e51ac60c02eb93285480abf64cefe1d10acd4cc5 (2026-11-09) and a143968eb55998ebc0151f2c4be7d0525afaa35f (2026-11-10). All286 existing ledger SHA/subject pairs match the exact ordered prefix of288 upstream commits. Exact source diffs and Rust paths were read; no runtime tests or acceptance claimed. Row286 is still provisional. Row287 is not Covered: Classic schedule_duration does not read discard_to_fill_attempts. Row288 has partial source guards (finite empty-safe indexing and full anchor identity), but separate-group selection and persisted resume behavior remain unproven. The Classic parity record owns the option-handling gaps; plans/upstream-catch-up.md records source maps and the next bounded row287 reproducer. UCU-13–15 stay Complete and the approved baseline remains v26.12.0. No source checkout, runtime pin, milestone acceptance or platform debt is changed.'
+resolved = false
