@@ -78,9 +78,18 @@ Active maintainer task2026-11-11: UCU-16 rows286–289 through fixed c41969b3.
 Milestone ucu-16 owns the finite functionality, mandatory evidence and external
 prerequisite list. Rows286/287/288 and row289's immutable-chapter/seeded-count
 local components are complete, including approved ADR0098 option2 fallback.
-Checkpoint commit/push and existing CI are authorized after the now-merged
-rustix PR144; complete required final/platform/playback evidence. Preserve Native and
-the accepted v26.12.0 baseline until ordered acceptance; no later-tip chase.
+Checkpoint cfbce4ce is committed/pushed on merged rustix PR144/base80dbecec;
+full exact-source CI43034378697 has passed Rust/lint/audit/Next/Level1.5 jobs,
+with the broad browser aggregate not yet final. Linux x64 and native Windows package,
+matched assets, affected headed browsers and Native/Next runtime proof pass;
+all124 Classic/11 SQL cases also pass natively on Windows and under ARM64 QEMU
+(the core result composes123 initial passes plus one exact fixture recovery).
+ARM64 and ARMv7 build/package/emulation proof is complete, including124 core and
+11 SQL cases per target. Their original negatives and scoped recovery are
+retained. Finish the required full CI browser aggregate before
+ordered acceptance. Milestone ucu-16 retains original failures and scoped proof.
+Preserve Native and the accepted v26.12.0 baseline until that acceptance;
+no later-tip chase, main merge, publication or installation is authorized.
 
 Completed prior catch-up context:
 UCU-13, UCU-14 and UCU-15 are Complete in order through fixed v26.12.0.

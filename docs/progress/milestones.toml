@@ -40291,13 +40291,173 @@ advancing the baseline. Required platform, playback and final-source proof
 remain mandatory. No UCU-16 main merge, release/publication or live installation
 is authorized by this checkpoint permission.
 
+2026-11-11 authorized checkpoint and Linux runtime/browser proof.
+Checkpoint cfbce4cee338089f08b002039afdf9068947f6d5 is committed and pushed to
+fix/classic-scheduling-ucu16 on approved rustix base80dbecec. Full existing
+self-hosted CI43034378697 was dispatched for that exact SHA. Build artifacts,
+workspace Clippy, formatting, commit lint, documentation checks and cargo deny
+have passed; test/runtime/browser consumers and the aggregate are not yet final.
+No UCU-16 main merge or publication was performed.
+
+Matched cargo-leptos build passes on checkpoint cfbce4ce. Its frozen Linux
+server SHA256 is3980f56baa3c9803ec74e74a16d9ffd2d66436476882bf0ecb16e448652012a2;
+the debug frontend and server use the same component-erasure/hash settings.
+The structural bundle gate, Native smoke and real decoded Next smoke pass with
+the unchanged pinned FFmpeg2.0.10/Next0.2.5 runtimes. All20 affected headed
+Chromium/Firefox checks pass, including Classic rebuild dialogs, published-row
+preservation, preferences, localized failures, deferred horizon save and no-JS.
+No hydration/page exception occurred in the scenarios' explicit error checks.
+
+The first Native TSDuck trial failed1/72 checks: the hybrid MPEG-TS session
+returned503 and produced an empty12-second capture. Other pipelines passed;
+this original failure is retained and its cause is not asserted. A diagnostic
+trial with additional logging passes all93 Native checks without source changes;
+the independent Next trial passes86 checks, including audio cadence across item
+boundaries. This proves those passing trials, not absence of intermittent startup
+failures. Logs, capture hashes and original negatives are retained under
+tmp/evidence/ucu16/final-source/transport-retained/; final-source/ also owns build,
+bundle, smoke, browser and candidate-identity records bound to cfbce4ce.
+
+Native Windows offline build first lacked a locked cached crate; online recovery
+then exposed Windows OS267 on the task's Linux target symlink. The symlink was
+replaced by a real directory at the SAME configured target path, preserving the
+original shared cache. No Cargo target override or lockfile change was made.
+The corrected Windows build and qualified offline ARM64 cross-build are running;
+ARMv7 build, platform packages, focused native/emulated tests and Windows runtime
+acceptance remain open. Pinned Next staging independently verifies all four RIDs.
+Docker emulation capability passes for both ARM images; native ARM remains
+explicitly deferred and unverified. These are environment/component results,
+not four-platform or UCU-16 acceptance.
+
+2026-11-11 package/native-UI proof at checkpoint cfbce4ce.
+The exact-source full CI Test, Next-engine and Level1.5 jobs now pass, in addition
+to the producer/lint/audit jobs recorded above. The four full Chromium/Firefox
+general/Level1.5 jobs and final aggregate remain pending; no new dispatch occurred.
+
+Native Windows builds all four required executables and the acceptance helper.
+Its independent structural bundle gate passes. Private development-profile ZIP
+445547aaf2676ab8ed636a0ccc88835f0ea37fc88f02fd9faea3c17c0d5594c8 contains75
+verified files and no FFmpeg. Independent extraction proves that ErsatzRS.exe
+launches the packaged server663edb1d0c629b9f6ea53b22a0a056a371bb4a1e5e8b7f0e481c4a414f4ab9d9,
+the packaged healthcheck succeeds, Next is Bundled/pin-verified and served JS/WASM
+bytes match. A fresh headed native Edge profile proves ready hydration, real
+playout-menu open/close at1440/390 widths, the Classic form and11 successful
+admin-API responses including real server functions, with zero monitored
+page/console errors. The390-wide screenshot also shows an existing left-clipped
+menu; these functional results do not establish visual/responsive acceptance of
+that unchanged page/CSS. No UCU-16 UI source changed. Windows
+localhost/private-WSL browser access trials failed; no firewall/network settings
+were changed. Native Edge uses the existing local browser/DevTools capability.
+Evidence: final-source/windows-package-launch.json, windows-package-ui/ and
+windows/windows-package-launch-result.json under tmp/evidence/ucu16/.
+
+The Linux x64 companion build passes. Private development-profile archive
+15bb1874bf3197d10e827fd0bbaf09b4fe4a46fd1664922ba63578311f6e72d4 independently
+extracts with every inventory digest matching; its native startup, packaged
+healthcheck, bundled/pin-verified Next and served matched assets pass. This
+complements the earlier exact-server decoded/playback/browser proof; no release
+or installation follows. ARM64 application binaries build; its focused test
+producer and the ARMv7 build are running. Native Windows test execution first
+failed because nextest was absent. The exact CI-pinned0.9.140 official Windows
+archive ec39698dfe5bcfffb7d5da037f226bc1670584ba247123f4e684a0f224fe828d is now
+verified and retained task-locally. Focused native core/SQL tests and actual
+Windows Native/Next decoded smoke are running. No project dependency, lockfile,
+global tool installation or configured target path changed.
+
+2026-11-11 native Windows required platform component COMPLETE at cfbce4ce.
+All124 Classic core and11 real SQLite cases pass natively after supplying the
+missing verified task-local nextest runner; no source/lockfile change occurred.
+The SQL run174ce770-bce5-4486-bef1-43c48038f164 covers duration/group/RNG
+restart/Continue/Refresh, actual Health, safe refusal and all seven invalid
+expression fallback classes. Native/Next smoke passes on the same Windows
+server: private callbacks stay404, actual MPEG-TS/HLS endpoints work, Next
+decodes Dutch879/880Hz audio and selected subtitles53white pixels, cached
+reconnect/preview preserve configuration, and idle worker output is removed.
+The candidate launcher/UI/bundle/package proof above remains valid. Only owned
+candidate processes were checked after cleanup: none remain. Windows evidence,
+test-binary digests and original missing-tool/target-path failures are retained
+in tmp/evidence/ucu16/windows/. This closes that platform component, not UCU-16.
+
+The ARM64 package independently extracts and passes QEMU startup, packaged
+healthcheck, bundled/pin-verified Next and exact served JS/WASM bytes. Archive
+3530978799e07ef798c313f0f5d85841048641155ad855ca55c94363a0b8635a and its
+full inventory are retained. The first emulated core run passed123/124; its one
+failure is a missing snapshot/workspace fixture in the container, not a reported
+output difference. Adding only read-only committed expectations and the runtime
+Insta workspace root makes that exact failed test pass (bae43a25); snapshot
+updates are forbidden, source/expected data remain unchanged. Original output
+and runner are retained. The separate ARM64 SQL emulation and ARMv7 package/
+emulation proof remain in progress. Native ARM remains deferred/unverified.
+
+2026-11-11 ARM64 required software/platform component COMPLETE at cfbce4ce.
+All124 Classic cases pass as the exact123 original passes plus the one recovered
+snapshot case; an explicit test-id set comparison proves124 unique passing cases
+with no source/expected-snapshot change. All11 SQLite cases also pass under QEMU,
+including the16-scenario grouped restart/Refresh case (126seconds, reported slow
+under the unchanged60-second reporting threshold, not terminated or retried).
+The ARM64 application build, independent package and startup/bundle/Next proof
+above remain valid. Evidence: final-source/arm64/test-evidence.json binds all
+test IDs, three binary digests, original failures, recovery and SQL run IDs.
+This closes ARM64 build/package/emulation only; native hardware remains
+explicitly deferred/unverified. ARMv7 and the full CI browser aggregate remain.
+
+2026-11-11 ARMv7 producer configuration correction, no product-source change.
+The initial application command incorrectly reused the typecheck/test linker
+setup rather than the retained qualified full-application setup. GNU ld remained
+CPU-active in the final web link. Only that task-owned container was stopped
+(exit137, original build.log/build.json retained). Restoring the existing scoped
+web-final-link wrapper makes the same application build finish in8.96seconds;
+the retained Rust1.97.1 LLD handles only that final link, with unchanged cross-GCC,
+sysroot, source, flags and configured target directory. The explicit link trace
+and wrapper hashes bind the correction to the previous qualified UCU-15 setup.
+All three application binaries are actual ARM ELF32/hard-float artifacts. The
+focused test producer now runs; package/QEMU proof and final CI remain open.
+Evidence: tmp/evidence/ucu16/final-source/armv7/linker-correction.json,
+build-qualified-command.json, build-qualified.log, qualified-link-trace.log and
+app-build.json. No new linker/toolchain installation or repository change.
+
+2026-11-11 ARMv7 required software/platform component COMPLETE at cfbce4ce.
+The corrected qualified producer passes. Its private archive
+7e8cecb9375b52a70e9ba3c3af81d959afdc42b4ec9b03c84d63e15b782403d6
+independently extracts with every file hash matching; QEMU startup, packaged
+healthcheck, bundled/pin-verified Next and matched served assets pass. All124
+Classic core cases and11 SQLite cases pass under ARMv7 QEMU. The grouped SQL
+matrix takes77seconds and is reported slow under the unchanged threshold.
+The SQL evidence collector then exits1 on a file_digest argument typo AFTER the
+actual test process returned; original trace and complete nextest output remain.
+Reconstruction checks all11 unique PASS records and the final11-passed summary,
+and retains exact binary/metadata identities. No test rerun, source change or
+snapshot acceptance was used. Do not claim that metadata-wrapper invocation
+returned0; actual per-case proof and wrapper status remain distinct.
+Evidence: final-source/armv7/test-evidence.json, emulation-sql.json,
+emulation-sql-inputs.json, package-runtime.json and package-emulation/ under
+tmp/evidence/ucu16/. This closes ARMv7 build/package/emulation only; native ARM
+is still explicitly deferred/unverified. All four required platform components
+are complete within their recorded scopes. The full CI browser aggregate is
+the remaining mandatory final proof; ledger dispositions/baseline remain pending.
+
+The live CI annotation audit retains four failure annotations on otherwise
+successful Format/Build/Clippy/Deny checks. All four logs identify the same
+nonfatal composite Rustup-default helper rejecting --force-non-host; each has
+outcome=failure/conclusion=success and confirms the required rustc1.97.1.
+The actual gate steps and check runs succeed at cfbce4ce, with one run attempt.
+Original masked logs, check identities and annotation context are retained in
+ci/nonfatal-setup-annotation-evidence.json under tmp/evidence/ucu16/. No CI,
+global Rustup or toolchain repair was introduced for this unrelated setup issue.
+
+The consolidated tmp/evidence/ucu16/qualification.json maps the unchanged five
+completion items to exact-source package/test/runtime proof. Current archive
+digests were rechecked against all four retained archives. It remains explicitly
+not ready for acceptance until the live full CI browser jobs and aggregate pass;
+ledger dispositions and the accepted pin have not been advanced.
+
 Completion state: items1/2/3/4 local components complete; item5 mandatory
 combined final/platform/playback/acceptance evidence remains open. The next
 bounded package is that required final evidence; local component closure does
 not accept the window or advance the baseline. Current base80dbecec includes
 merged PR144's rustix1.1.6 fix; the task diff does not duplicate that dependency
-patch. Next bounded action: the authorized engineering checkpoint commit/push
-and existing full self-hosted CI, followed by remaining source-bound platform,
-headed-browser and Native/Next playback proof under item5. All four ledger
+patch. Next bounded action: finish the running exact-source CI and platform
+build/package/native-Windows/ARM-emulation proof under item5. Investigate any
+concrete failure before accepting its affected obligation. All four ledger
 acceptances remain pending their window gates. Baseline remains v26.12.0.
 """
