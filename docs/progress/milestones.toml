@@ -40463,13 +40463,84 @@ digests were rechecked against all four retained archives. It remains explicitly
 not ready for acceptance until the live full CI browser jobs and aggregate pass;
 ledger dispositions and the accepted pin have not been advanced.
 
-Completion state: items1/2/3/4 local components complete; item5 mandatory
-combined final/platform/playback/acceptance evidence remains open. The next
-bounded package is that required final evidence; local component closure does
-not accept the window or advance the baseline. Current base80dbecec includes
-merged PR144's rustix1.1.6 fix; the task diff does not duplicate that dependency
-patch. Next bounded action: finish the running exact-source CI and platform
-build/package/native-Windows/ARM-emulation proof under item5. Investigate any
-concrete failure before accepting its affected obligation. All four ledger
+2026-11-11 demonstrated final-integration input change, same UCU-16 scope.
+Remote main advanced to531c9249 (PR142 pagination, PR143/146 CI-selection and
+browser-fixture updates). These change two compiled web modules and CI/browser
+inputs, so cfbce4ce's whole-candidate proof cannot qualify the future merge.
+Documentation checkpoint35751de2 retains that candidate's verified components.
+Integration8e9720f1 merges current main without changing any UCU core/domain/
+infra/app/FFmpeg/scheduler or Cargo input. Both changelog entries and every
+session row are retained (base2096, ours2107, theirs2098, merged2109).
+The imported web/CI/test files match531c9249 exactly;41 domain-selector and15
+browser-evidence Python tests pass. Main and unrelated work remain untouched.
+
+The authorized integration checkpoint is pushed. Full existing self-hosted
+CI43056494938 runs at8e9720f1 and supersedes43034378697 by the existing concurrency
+policy. The old run is Cancelled, not accepted full CI; its successful Rust,
+Next, Level1.5 and general Chromium controls remain retained with that source.
+Source-specific matched server/site packages and actual runtime integration are
+being requalified for8e9720f1. The unchanged124 core/11 SQL component proof per
+native Windows/ARM-emulation scope remains valid and is not erased or relabelled.
+Evidence: tmp/evidence/ucu16/integration-531c/preflight.json, source.json and ci/.
+The original qualification.json retains cfbce4ce identities; the successor's
+records have their own source identity. No new upstream rows, acceptance waiver,
+CI implementation, dependency replacement or publication scope is introduced.
+
+2026-11-11 integrated candidate8e9720f1 local requalification COMPLETE.
+All four required private development-profile packages are rebuilt on this
+source. Independent archive inventories, startup, packaged healthcheck, bundled
+pin-verified Next and matching served JS/WASM pass on native Linux/Windows and
+ARM64/ARMv7 QEMU. Current archive SHA256 identities:
+linux-x64 c026d4515d6b88c7908f2035e64f0183bd1ea10dbc082c87f97b5a3f8e2178b3;
+win-x64 f80766bcf0040127dfbf454669e2c962e73788a1c48692f14c917b8201cc8782;
+linux-arm64 9db094a28d87b4cc87b33f6aa6a93fe65d3df7f6411fd46fb07b6167325e6797;
+linux-arm 6a7a238b63c95779830afb089404688a8f0116362f8eee9fd32a682e34ea2cd4.
+Native Windows launcher, real headed Edge controls and Native/Next decoded
+audio/subtitle playback pass. The owned-process check finds no remaining test
+processes; six task logs are retained without production data/browser profiles.
+Native Linux matched-bundle and both smoke gates pass. Current Native93 and
+Next86 TSDuck checks pass; captures remain with the qualification. All32 headed
+Chromium/Firefox cases across Classic playout/deferred-save and imported media/
+All-pagination flows pass. Exact source equality revalidates reuse of the prior
+124 Classic/11 SQL component proof per native Windows/ARM-emulation scope.
+Canonical receipts, current artifact identities and unchanged-component joins:
+tmp/evidence/ucu16/integration-531c/qualification.json. Original failures and
+scope limitations remain retained; native ARM is not claimed or accepted.
+
+2026-11-12 complete candidate proof at8e9720f1. Full CI43056494938 is Success
+on attempt2 with all15 required jobs green. Twelve original successful jobs
+retain their execution timestamps; only the two failed Chromium jobs and CI ok
+were rerun. General Chromium originally passed its suite but failed diagnostic
+artifact upload with404; Level1.5 Chromium lost runner communication during its
+suite. Their original metadata/annotations and available first-attempt logs are
+retained. Original job-log endpoints now return404 and the first-attempt ZIP
+omits the superseded Chromium logs; no missing log is represented as a pass.
+The original observer ended on API502, not workflow completion. The subsequent
+authoritative successful run and downloaded full-tree marker13973204648 bind
+source8e9720f1/tree9d9f3a30 to every gate. Canonical CI join:
+tmp/evidence/ucu16/integration-531c/ci/full-ci-qualification.json.
+This closes that candidate's mandatory final CI proof and the capacity blocker.
+
+Completion state: items1/2/3/4 and item5's candidate-local/platform/playback/full
+CI proof are complete at8e9720f1. Ordered acceptance/delivery remain open.
+Its integrated base includes approved rustix1.1.6 and main531c9249; the UCU diff
+does not duplicate that dependency patch or remove those main changes.
+Main has since advanced to fixedfc6158c8 with dependency/subtitle updates,
+including jiff/Pest and the chardetng1.0 adaptation. Preserve this completed
+candidate checkpoint, then integrate that fixed base and verify affected
+dependency, scheduler, subtitle and artifact/runtime boundaries. Old compiled
+artifacts do not qualify changed dependency inputs. No later upstream row or
+new dependency implementation is added by consuming these merged main changes.
+Next bounded action: authorized progress checkpoint, then the fixed-main
+integration proof required for reviewable source delivery and ordered closeout.
+
+Historical2026-11-11 external prerequisite at handoff: remaining CI jobs queued, both
+eligible Linux runners online but occupied by other work. Repeated live job and
+runner checks confirm the capacity dependency; no UCU-16 job failure or stopped
+run is inferred. No independent local obligation remains before this outcome.
+Its closure condition was: existing CI43056494938 obtains runner capacity and reaches
+an authoritative terminal result; resume from that same run and fix any actual
+failure before the checkpoint/PR. Keep the live observer and candidate intact.
+Investigate any concrete failure before accepting its affected obligation. All four ledger
 acceptances remain pending their window gates. Baseline remains v26.12.0.
 """

@@ -78,16 +78,30 @@ Active maintainer task2026-11-11: UCU-16 rows286–289 through fixed c41969b3.
 Milestone ucu-16 owns the finite functionality, mandatory evidence and external
 prerequisite list. Rows286/287/288 and row289's immutable-chapter/seeded-count
 local components are complete, including approved ADR0098 option2 fallback.
-Checkpoint cfbce4ce is committed/pushed on merged rustix PR144/base80dbecec;
-full exact-source CI43034378697 has passed Rust/lint/audit/Next/Level1.5 jobs,
-with the broad browser aggregate not yet final. Linux x64 and native Windows package,
-matched assets, affected headed browsers and Native/Next runtime proof pass;
-all124 Classic/11 SQL cases also pass natively on Windows and under ARM64 QEMU
-(the core result composes123 initial passes plus one exact fixture recovery).
-ARM64 and ARMv7 build/package/emulation proof is complete, including124 core and
-11 SQL cases per target. Their original negatives and scoped recovery are
-retained. Finish the required full CI browser aggregate before
-ordered acceptance. Milestone ucu-16 retains original failures and scoped proof.
+Checkpoint cfbce4ce retains completed four-platform component proof, including
+124 Classic/11 SQL cases per native Windows/ARM-emulation scope, matched assets,
+headed browsers and Native/Next playback. Its negatives and scoped recovery remain.
+Live main then advanced to531c9249 with accepted pagination, CI-selection and
+browser-fixture changes. Integration checkpoint8e9720f1 preserves those changes,
+both changelogs and all2109 session entries. The UCU core/domain/infra/app/FFmpeg/
+scheduler and Cargo inputs are identical to cfbce4ce; their component proof is
+reused without relabelling old whole-candidate artifacts. Source-bound server/site
+packages and runtime integration at8e9720f1 are now complete in the required
+native Linux/Windows and ARM-emulation scopes. All four independent packages,
+32 headed Chromium/Firefox cases, native Edge, Native/Next decoded smoke and
+93/86 TSDuck controls pass. Canonical joined receipts and current artifact hashes:
+tmp/evidence/ucu16/integration-531c/qualification.json. Full existing self-hosted
+CI43056494938 supersedes old-source43034378697, which was cancelled by the
+unchanged concurrency policy. On2026-11-12 attempt2 completes all15 required
+jobs at8e9720f1;12 original successes are reused and two Chromium infrastructure
+failures plus the aggregate are recovered. Exact annotations, available logs and
+the successful full-tree marker are retained; the capacity blocker is closed.
+Preserve this qualified candidate in the authorized progress checkpoint.
+Main is now fixedfc6158c8 with merged dependency/subtitle changes (including
+jiff/Pest and chardetng1.0). Integrate that base and verify its affected scheduler,
+subtitle and artifact/runtime inputs before final PR acceptance. Reuse completed
+source-scoped components explicitly; no relabelled old dependency/artifact proof.
+Milestone ucu-16 owns the unchanged finite list and ordered delivery closeout.
 Preserve Native and the accepted v26.12.0 baseline until that acceptance;
 no later-tip chase, main merge, publication or installation is authorized.
 
