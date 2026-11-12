@@ -72,6 +72,14 @@ release section when tagging a release.
   the current `true` case runs its sequence after the unsplit programme; saved
   chapter-point expressions are not yet implemented.
 
+- Dependencies are updated (jiff, pest, httpmock, jsonschema and CI actions).
+  `cargo deny` now also allows the permissive `Apache-2.0 WITH LLVM-exception`
+  licence, used by a build dependency of pest.
+
+- Subtitle character-set detection now uses chardetng 1.0. Unlabelled
+  legacy subtitles are detected as before; ISO-2022-JP is still only used when
+  a subtitle declares it.
+
 - The EPG/tv guide grid is easier to read: programme titles, times and the
   time ruler use at least 13-14 px text, rows are taller, the grid fills the
   available window height, and on large and 4K displays the guide uses the
