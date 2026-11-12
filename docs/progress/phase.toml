@@ -73,9 +73,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 next_steps = '''
 Active maintainer task: milestone ci-workflow-separation, CIS-01–04. Local
 implementation and regression verification are complete within the recorded
-scope. Commit/push is now authorized. Next: publish ci/workflow-separation,
-then actual draft/ready/superseded/main
-and full-workflow acceptance with required CI ok and latency observations.
+scope. The CI branch was published as7a8f408f and its small push run passed.
+Resume2026-11-12: Classic run43056494938 attempt2 is green on8e9720f1;
+its bounded infrastructure repair is complete. The separate CIS-01 browser
+queue repair and local verification are complete within their scope. Next:
+verify cross-run queueing on current revisions and remaining
+CIS-04 draft/ready/superseded/main/full acceptance and latency observations.
 Historical UCU and DCI paragraphs below do not supersede this finite list.
 
 UCU-13, UCU-14 and UCU-15 are Complete in order through fixed v26.12.0.

@@ -1189,9 +1189,18 @@ jobs:
     # CPU and memory; an otherwise
     # unexplained Chromium hydration timeout occurred while both overlapped.
     # `max-parallel: 1` removes that contention; `fail-fast: false` still runs
-    # the remaining combinations when one fails. It only serializes within one workflow run: a
-    # second concurrent run can still overlap. Each project keeps its own port
-    # so either runner can take either job.
+    # the remaining combinations when one fails. Matrix serialization covers
+    # one workflow run; the job-level queue covers self-hosted jobs across runs
+    # before runner allocation. Each project keeps its own port so either
+    # runner can take either job. Retain the TCP lock for older workflow
+    # revisions and manual browser invocations outside this queue.
+    # Queue across workflow runs before assigning a self-hosted runner. The
+    # default single pending slot would cancel required suites on a third run.
+    # Hosted jobs have separate machines and need no host-wide serialization.
+    concurrency:
+      group: ersatzrs-browser-${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && format('hosted-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.port) || 'self-hosted' }}
+      queue: max
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       max-parallel: 1

@@ -68,6 +68,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Self-hosted browser suites queue at GitHub before taking a runner, keeping
+  runner capacity available for small CI checks. Pending suites are retained
+  up to GitHub's queue limit; browser isolation and hosted-run independence
+  remain intact.
+
 - Development and draft CI runs full Clippy and basic policy checks without
   producing test or web artifacts. Ready PRs retain affected behavioral tests;
   main runs small checks, and a separate weekly/manual workflow owns full

@@ -631,10 +631,34 @@ required spec has route evidence or a reviewed area. When a spec drives a page
 without naming its URL, name the URL in the spec (for example with a
 `toHaveURL` assertion after the click) so the evidence sees it.
 
-Browser suites never run at the same time on the runner machine, also across
-workflow runs: each Playwright job holds a host-wide lock
-([`scripts/e2e/host-lock.py`](scripts/e2e/host-lock.py), a bind on
-`127.0.0.1:18399`) and a second job waits for it.
+Self-hosted browser jobs share one job-level concurrency group across PR,
+full and recovery runs. GitHub queues them before assigning a runner, leaving
+the other runner available for Clippy, audit and other work. `queue: max` retains
+up to 100 pending jobs instead of replacing the previous pending job; running
+jobs are not cancelled by this group. Overflow cancels the extra job and fails
+required acceptance, rather than granting a pass. See
+[GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+Explicit hosted jobs and automatic hosted fallback use run/attempt/matrix-specific
+groups because their machines are independent. Matrix execution stays serial
+within a run. Keep the host-wide TCP lock
+([`scripts/e2e/host-lock.py`](scripts/e2e/host-lock.py), `127.0.0.1:18399`) as a
+safety net for older workflow revisions and manual invocations. Those callers
+can still make a new job wait inside a runner until all callers use the queue.
+The scheduler group is repository-wide, not a reservation of one particular
+physical runner; adding another browser host requires reviewing this grouping.
+
+Actionlint 1.7.12 does not recognize the documented `concurrency.queue` field
+([upstream issue 657](https://github.com/rhysd/actionlint/issues/657)). With that
+version, lint using only the exact known-schema diagnostic exclusion below;
+`scripts/e2e/host-lock_test.py` independently checks `queue: max`, noncancellation
+and the evaluated self-hosted/hosted group identities. All other syntax,
+expression and shell diagnostics remain fatal. Remove the exclusion when the
+installed linter supports the field.
+
+```bash
+actionlint -ignore '^unexpected key "queue" for "concurrency" section\.' .github/workflows/ci.yml .github/workflows/ci-fast.yml .github/workflows/full-verification.yml
+```
+
 
 Open work-in-progress pull requests as drafts: follow-up pushes then cost the
 fast lane only, and **Ready for review** starts the `pr` lane.
