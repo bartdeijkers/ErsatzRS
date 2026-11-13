@@ -22,7 +22,9 @@ use ersatzrs_domain::{
 };
 
 use crate::ApplicationServices;
-use fields::{apply_field_values, bindings_for_markers, find_field_markers, FieldValues};
+use fields::{
+    apply_field_values, bindings_for_markers, find_field_markers, FieldSnapshot, FieldValues,
+};
 use import::{import_teletext_element_file, ElementImportError, ElementImportWarning};
 use model::ElementPage;
 
@@ -423,6 +425,20 @@ impl ApplicationServices {
         channel_id: EntityId,
         now: DateTime<Utc>,
     ) -> Result<Option<FieldValues>, TeletextElementError> {
+        Ok(self
+            .teletext_element_field_snapshot(channel_id, now)
+            .await?
+            .map(|snapshot| snapshot.values))
+    }
+
+    /// Capture values and the next programme/gap boundary from the same read.
+    /// # Errors
+    /// Storage failures; a missing channel yields no snapshot.
+    pub async fn teletext_element_field_snapshot(
+        &self,
+        channel_id: EntityId,
+        now: DateTime<Utc>,
+    ) -> Result<Option<FieldSnapshot>, TeletextElementError> {
         let state = self
             .ports()
             .channels()
@@ -437,7 +453,7 @@ impl ApplicationServices {
         let Some(state) = state else {
             return Ok(None);
         };
-        let local = now.with_timezone(&Local);
+        let next_programme_transition = fields::next_programme_transition(&state.programmes, now);
         let mut programmes: Vec<_> = state
             .programmes
             .iter()
@@ -463,15 +479,17 @@ impl ApplicationServices {
         let title = |programme: Option<&&ersatzrs_core::repositories::ChannelWatchProgramme>| {
             programme.map_or_else(String::new, |programme| programme.title.clone())
         };
-        Ok(Some(FieldValues {
-            channel_name: state.name,
-            channel_number: state.number,
-            date: local.format("%d-%m-%Y").to_string(),
-            time: local.format("%H:%M").to_string(),
-            now_title: title(now_programme),
-            now_start: start(now_programme),
-            next_title: title(next_programme),
-            next_start: start(next_programme),
+        Ok(Some(FieldSnapshot {
+            values: FieldValues {
+                channel_name: state.name,
+                channel_number: state.number,
+                now_title: title(now_programme),
+                now_start: start(now_programme),
+                next_title: title(next_programme),
+                next_start: start(next_programme),
+                ..FieldValues::clock(now)
+            },
+            next_programme_transition,
         }))
     }
 

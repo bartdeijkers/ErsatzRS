@@ -150,7 +150,14 @@ also retain validated dynamic-field locations and sources with the exact page
 rows and element revision. Older stored results without that recipe remain
 frozen; refresh must never infer bindings from a later element or link.
 The application can fill or blank only those saved dynamic cell ranges and
-identify affected pages; live refresh ownership is still being integrated.
+identify affected pages. A read-only field snapshot includes the next actual
+programme/gap boundary; clock-only values need no programme query. The native
+engine also has a distinct ACK-bound display-refresh path: unchanged displays
+use repeat headers when service metadata, magazine data and resource banks are
+identical. Changed dependencies and ordinary publications retain full
+acquisition. Display indices are mapped past the carousel's resource prefix;
+resource lifecycle, exact ACK and programme-clock checks remain unchanged.
+Live refresh ownership and per-page reporting are still being integrated.
 Refresh after publication, custom pages during published
 Scripted intervals, the element's subpage cycle time and the acceptance
 evidence remain open in the `teletext-support` parity record.

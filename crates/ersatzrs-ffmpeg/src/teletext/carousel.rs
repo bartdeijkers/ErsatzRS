@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use ersatzrs_domain::{TeletextResourceHeaderMetadata, TeletextResourceKind};
 
@@ -95,6 +98,8 @@ pub struct TeletextCarousel {
     resource_start_ticks: u64,
     resource_resume: Option<usize>,
     resource_history: super::service_update::ResourceUpdateHistory,
+    // A checked display refresh must not erase unrelated receiver pages.
+    repeat_display_headers: BTreeSet<usize>,
 }
 
 #[derive(Debug)]
@@ -111,6 +116,7 @@ enum CarouselContent {
 /// Its fields are private; this carries no delivery or generation authority.
 pub(super) struct PreparedCarouselReplacement {
     content: CarouselContent,
+    repeat_display_headers: BTreeSet<usize>,
 }
 
 impl CarouselContent {
@@ -304,6 +310,7 @@ impl TeletextCarousel {
             resource_start_ticks: 0,
             resource_resume: None,
             resource_history: super::service_update::ResourceUpdateHistory::default(),
+            repeat_display_headers: BTreeSet::new(),
         }
     }
 
@@ -340,6 +347,7 @@ impl TeletextCarousel {
             resource_start_ticks: 0,
             resource_resume: None,
             resource_history: super::service_update::ResourceUpdateHistory::default(),
+            repeat_display_headers: BTreeSet::new(),
         })
     }
 
@@ -408,7 +416,52 @@ impl TeletextCarousel {
         let selected = self.select_resource_headers(&service)?;
         Ok(PreparedCarouselReplacement {
             content: CarouselContent::authored_prevalidated(service, selected),
+            repeat_display_headers: BTreeSet::new(),
         })
+    }
+
+    /// Keep unchanged display caches only when their service-wide dependencies
+    /// are byte-identical. Full publications retain their existing acquisition.
+    pub(super) fn prepare_authored_display_refresh_at_boundary(
+        &self,
+        service: &Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<PreparedCarouselReplacement, TeletextTransportError> {
+        let mut prepared =
+            self.prepare_authored_shared_replacement_at_boundary(Arc::clone(service))?;
+        if let CarouselContent::Authored {
+            service: previous, ..
+        } = &self.content
+        {
+            let count = service.declared().semantic().base().pages.len();
+            if !self.first_cycle
+                && count == previous.declared().semantic().base().pages.len()
+                && service.pages().len() == previous.pages().len()
+                && service.magazine_units() == previous.magazine_units()
+                && super::TeletextServiceDescriptor::from_authored_service(service)
+                    == super::TeletextServiceDescriptor::from_authored_service(previous)
+                && service.pages()[count..]
+                    .iter()
+                    .zip(&previous.pages()[count..])
+                    .all(|(new, old)| new.data_units() == old.data_units())
+            {
+                let repeated_physical: BTreeSet<_> = service.pages()[..count]
+                    .iter()
+                    .zip(&previous.pages()[..count])
+                    .enumerate()
+                    .filter_map(|(index, (new, old))| {
+                        (new.data_units() == old.data_units()).then_some(index)
+                    })
+                    .collect();
+                // The carousel emits resources before displays; its cursor is
+                // not the service's physical display-first index.
+                let offset = prepared.content.resource_count();
+                prepared.repeat_display_headers = repeated_physical
+                    .into_iter()
+                    .map(|physical| physical + offset)
+                    .collect();
+            }
+        }
+        Ok(prepared)
     }
 
     /// Commit already checked content after the installer's fallible preflight.
@@ -416,6 +469,7 @@ impl TeletextCarousel {
     /// or replace its cursor, content or history between preparation and commit.
     pub(super) fn commit_prepared_replacement(&mut self, prepared: PreparedCarouselReplacement) {
         self.replace_content(prepared.content);
+        self.repeat_display_headers = prepared.repeat_display_headers;
     }
 
     /// Nonmutating preflight for a synchronous installer. This is not delivery
@@ -525,6 +579,7 @@ impl TeletextCarousel {
     }
 
     fn replace_content(&mut self, content: CarouselContent) {
+        self.repeat_display_headers.clear();
         self.magazine_pending = !content.magazines().is_empty();
         let previous = std::mem::replace(&mut self.content, content);
         if !self.first_cycle {
@@ -703,6 +758,7 @@ impl TeletextCarousel {
                 )
             }
             BatchPlan::Header { page, repeat } => {
+                let repeat = repeat || self.repeat_display_headers.contains(&page);
                 if let Some(header) = self.content.selected_header(page, repeat) {
                     return (TeletextCarouselBatchKind::Header, vec![header]);
                 }

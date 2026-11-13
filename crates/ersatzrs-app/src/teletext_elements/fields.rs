@@ -5,6 +5,8 @@
 //! run is the field width. `%` is identical in every Latin G0 national
 //! option, unlike `{`, `}` or `#`, so markers survive any character set.
 
+use chrono::{DateTime, Local, Utc};
+use ersatzrs_core::repositories::ChannelWatchProgramme;
 use ersatzrs_domain::{TeletextElementBinding, TeletextElementBindingSource};
 
 use super::model::ElementPage;
@@ -107,7 +109,37 @@ pub struct FieldValues {
     pub next_start: String,
 }
 
+/// Read-only projection and its next actual programme boundary. This is data
+/// for bounded refresh scheduling, never publication or playout authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldSnapshot {
+    pub values: FieldValues,
+    pub next_programme_transition: Option<DateTime<Utc>>,
+}
+
+pub(super) fn next_programme_transition(
+    programmes: &[ChannelWatchProgramme],
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    programmes
+        .iter()
+        .flat_map(|programme| [programme.start, programme.finish])
+        .filter(|boundary| *boundary > now)
+        .min()
+}
+
 impl FieldValues {
+    /// Clock-only pages need no channel/programme repository read.
+    #[must_use]
+    pub fn clock(now: DateTime<Utc>) -> Self {
+        let local = now.with_timezone(&Local);
+        Self {
+            date: local.format("%d-%m-%Y").to_string(),
+            time: local.format("%H:%M").to_string(),
+            ..Self::default()
+        }
+    }
+
     /// The text for one source, or `None` to keep the page as designed.
     #[must_use]
     pub fn text_for<'a>(&'a self, binding: &'a TeletextElementBinding) -> Option<&'a str> {
@@ -223,6 +255,46 @@ pub fn level1_safe_text(text: &str) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::teletext_elements::model::ElementSubpage;
+
+    fn programme(start: i64, finish: i64, is_gap: bool) -> ChannelWatchProgramme {
+        ChannelWatchProgramme {
+            id: 1,
+            title: "Programme".to_owned(),
+            start: DateTime::from_timestamp(start, 0).unwrap(),
+            finish: DateTime::from_timestamp(finish, 0).unwrap(),
+            filler_kind: 0,
+            is_gap,
+        }
+    }
+
+    #[test]
+    fn refresh_boundary_is_the_next_actual_start_or_finish_including_gaps() {
+        let rows = [
+            programme(30, 60, false),
+            programme(10, 30, true),
+            programme(-10, 10, false),
+        ];
+        for (now, expected) in [(0, Some(10)), (10, Some(30)), (30, Some(60)), (60, None)] {
+            assert_eq!(
+                next_programme_transition(&rows, DateTime::from_timestamp(now, 0).unwrap()),
+                expected.map(|time| DateTime::from_timestamp(time, 0).unwrap()),
+            );
+        }
+    }
+
+    #[test]
+    fn empty_or_past_projection_cannot_schedule_an_immediate_refresh_loop() {
+        let now = DateTime::from_timestamp(10, 0).unwrap();
+        assert_eq!(next_programme_transition(&[], now), None);
+        assert_eq!(
+            next_programme_transition(&[programme(-10, 10, false), programme(10, 10, true)], now),
+            None
+        );
+        assert_eq!(
+            next_programme_transition(&[programme(30, 60, false)], now),
+            DateTime::from_timestamp(30, 0)
+        );
+    }
 
     fn page_with(row: usize, text: &[u8]) -> ElementPage {
         let mut subpage = ElementSubpage::default();
