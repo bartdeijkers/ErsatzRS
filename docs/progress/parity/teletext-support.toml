@@ -347,6 +347,17 @@ override and permitted loopback/headed execution. No runtime-acquisition
 acceptance is inferred from that override. Canonical receipt, artifact hashes,
 Playwright JSON and original logs: tmp/evidence/teletext-recovery-browser/.
 Parts6/7 and all existing transport/native Windows requirements remain open.
+Follow-up at946fc6fc: complete affected spec passes20/20 headed cases,
+0skipped/flaky/unexpected,738.9s, across Chromium/Firefox, both themes,
+JavaScript modes and all9 cultures. CI43416109292/job131857015281 initially
+failed an older profile safety snapshot when its locale POST introduced
+pages.date_format/time_format=auto. The fixture now primes absent UI defaults,
+preserves existing preferences during locale saves and restores their exact
+original values/presence. The full safety assertion remains unchanged.
+Original four recovery cases retain their completed scope; this broader pass
+verifies the fixture correction and the serial followers. Receipts, original
+CI identity, full report/screenshots and logs: tmp/evidence/teletext-recovery-browser/ui-formats/.
+Required current-head PR CI is a separate gate.
 '''
 resolved    = false
 
