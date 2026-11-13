@@ -74,7 +74,7 @@ repair or release acceptance is claimed.
 id         = 'dci'
 phase      = 'Engineering — domain-scoped PR CI'
 title      = 'Make PR checks cover affected domains within a measured 15–30 minute average'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'developer-surface-hardening'
 plan       = 'plans/domain-scoped-pr-ci.md'
 depends_on = []
@@ -243,6 +243,13 @@ the first). Components DCI-01 through DCI-05 stay closed. No further
 optimization package is added to this milestone; closing it with the goal
 unmet is a maintainer decision. The maintainer-requested follow-up is milestone
 dci-browser-evidence.
+Closure (maintainer decision 2026-11-13): dci is Complete with the DCI-06
+performance goal NOT met. Components DCI-01 through DCI-05 stay closed as
+verified; the fixed cohort result (mean 185.5 minutes, one of ten within 30)
+and the measured limiting factor (two serial Playwright suites) in plan
+section 11 are the final record. No speed acceptance is claimed. The 15-30
+minute goal is carried by the follow-up milestones dci-browser-evidence and
+ci-workflow-separation, not by this one.
 '''
 
 [[milestone]]
@@ -40939,4 +40946,24 @@ and full workflow execution; verify required CI ok and record timings. This is
 an external execution prerequisite, not a local test failure. No passing GitHub
 acceptance, cohort latency, branch protection mutation or release is claimed.
 The 15-30 minute cohort goal and historical DCI/BSE open evidence remain open.
+2026-11-13 CIS-04 GitHub observations after PR #148 merged (cec488de,
+2026-11-13T01:42Z), read from GitHub Actions run and job records:
+- Draft PR: #155 ran only the fast lane (Preflight, Format, Clippy, Cargo deny,
+  Commit lint, Documentation links); CI ok failed on purpose with "Draft pull
+  request: the fast lane passed. Mark it ready for review to run the full PR
+  lane." (run 43422689390). Observed.
+- Ready PRs, first ready-PR workflow to successful CI ok on the final head:
+  #152 18.5 minutes and #153 15.4 minutes (documentation-scoped: build plus one
+  general Chromium spec); #154 55.4 minutes including two spec failures fixed by
+  later heads (final head 10.6 minutes, general and 1.5 Chromium); code PR #149
+  119.4 minutes (broad selection: Next engine, Teletext 1.5, Test, general and
+  1.5 Chromium). Self-hosted runners. These are observations, not a cohort.
+- Superseding pushes cancelled older PR-check and fast-lane runs on #149, #152,
+  #153, #154 and #155. Observed.
+- Merged main: pushes 0686b390, 095538f2, ffdc0f7e (and cec488de) ran only the
+  small checks, 3.5-5 minutes each, all green, no full-suite fallback. Observed.
+- Full workflow execution: Full verification has no run yet (total_count 0).
+Remaining mandatory evidence for CIS-04: the first Full verification run, by
+maintainer decision the scheduled run of Monday 2026-11-16 01:00 UTC (no manual
+dispatch); record its outcome, required jobs and timing, then close CIS-04.
 '''
