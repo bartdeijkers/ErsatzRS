@@ -5,7 +5,10 @@ This file provides guidance to AI coding agents when working in this repository.
 
 ## Project
 
-ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](https://github.com/ErsatzTV/legacy) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting modern FFmpeg features that ErsatzTV does not yet use.
+ErsatzRS reimplements [ErsatzTV](https://github.com/ErsatzTV/legacy) in Rust:
+personal Plex/Jellyfin/Emby/Local libraries become linear TV channels over
+IPTV (M3U/HLS) and HDHomeRun. Aim for full feature parity, single-binary
+deployment and modern FFmpeg capabilities.
 
 ErsatzRS is internationally oriented. Subtitle and alternate-audio track
 handling, selection, metadata, health reporting, and admin management are
@@ -212,14 +215,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 # check or test. Do not run Playwright unless the changed code affects
 # browser-visible behavior.
 #
-# If your target-dir override points at a slow mount (this project
-# once used a 9p scratch disk at /mnt/f, where Rust's many-small-files I/O is
-# ~20-100x slower than ext4), each recompile is especially expensive; the
-# default ./target on ordinary local disk applies unless you've added your
-# own override. Cargo keys its cache on (features x targets x profile x
-# check-vs-build), so flipping --features / --all-features / --all-targets /
-# the wasm target between runs re-runs rustc over the whole tree. Keep the loop
-# in ONE configuration:
+# Slow mounts amplify Rust's small-file I/O cost. Respect the configured
+# target-dir. Cargo caches by features, target, profile and check/build mode;
+# keep the inner loop in ONE configuration:
 #   ./run.sh check -p <crate>        # fast type-check, no codegen/link
 #   ./run.sh test -p <crate>         # required focused/local test runner
 #   cargo xtask affected-checks      # recommend focused checks from the diff
@@ -232,11 +230,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 #   ./run.sh dev                     # build scanner companion, then Leptos watch
 # The full gate consists of clippy,
 # `./run.sh test-closeout`, `cargo leptos build`, and `cargo xtask parity-check`.
-# sccache (cache on ext4) makes the unavoidable config switches cheap, but it is
-# the maintainer's local shell optimization and is enabled per-shell/run.sh, not
-# machine-wide — agents need not (and under a sandboxed uid cannot) enable it, so
-# do not set RUSTC_WRAPPER yourself. See BUILD.md "Inner-loop strategy". For
-# admin UI work, start with route/module filters such as:
+# sccache is a maintainer per-shell/run.sh optimization: do not set
+# RUSTC_WRAPPER yourself. See BUILD.md "Inner-loop strategy".
+# For admin UI work, start with route/module filters:
 #   ./run.sh test -p ersatzrs-web <route_or_module_filter>
 #   cargo clippy -p ersatzrs-web --all-targets -- -D warnings
 #   cargo xtask hydration-lint -p ersatzrs-web
@@ -253,13 +249,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 # For deeper playback-correctness confirmation, run the TSDuck end-to-end
 # playback gate (a required manual gate, NOT part of CI; pairs with `smoke`):
 #   scripts/e2e/tsduck-playback-gate.sh gate
-# It boots ersatzrs-web on a throwaway DB, seeds the calibration clips
-# (scripts/calibration/, auto-generated on first run and gitignored) as a cyclic
-# playout, then captures and TSDuck-validates the served streams — continuity-
-# counter/PCR/PTS integrity, PSI structure, audio/video PIDs — across the
-# MPEG-TS (legacy/hybrid) and HLS (segmenter/direct) pipelines, and exits
-# non-zero on any failure. `baseline` validates the static clips and `url
-# <stream>` validates an already-running channel. See scripts/e2e/README.md.
+# Uses a temporary DB and cyclic calibration clips to validate served MPEG-TS
+# (legacy/hybrid) and HLS (segmenter/direct): continuity counters, PCR/PTS,
+# PSI and audio/video PIDs. Any failure is fatal. `baseline` validates static
+# clips; `url <stream>` checks an existing channel. See scripts/e2e/README.md.
 
 # Run the full mediaserver (web UI + IPTV/HDHomeRun endpoints) on SQLite.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
@@ -302,15 +295,10 @@ cargo deny check
 # all pending `.snap.new` snapshots non-interactively.
 cargo insta review
 
-# Keep target/ pruned to avoid slow cold rebuilds. ROUTINE maintenance is
-# cargo-sweep, which prunes only stale artifacts and preserves the warm cache:
-#   cargo install cargo-sweep && cargo sweep --time 30
-# Run `cargo clean` once `target/` grows beyond 60 GiB; an oversized target/
-# (100+ GB) is what makes cold builds feel like "10+ min";
-# a healthy target/ rebuilds cold in ~2.5 min. Swapping the linker does NOT
-# help (mold trialed, no gain — see BUILD.md). Between 60 GiB cleanups, use
-# `cargo sweep` for routine stale-artifact pruning. `./run.sh dev|build|serve`
-# and `cargo xtask parity-check` check target/ size before expensive work.
+# Routine cleanup: cargo-sweep prunes stale artifacts, retaining warm cache.
+# Install with `cargo install cargo-sweep` if needed; run `cargo clean` above
+# 60 GiB. `./run.sh dev|build|serve` and `cargo xtask parity-check` check size
+# before expensive work. See BUILD.md for build-cost diagnostics.
 cargo sweep --time 30   # routine; `cargo clean` when target/ exceeds 60 GiB
 ```
 
