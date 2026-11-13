@@ -337,6 +337,10 @@ discovered  = '2026-11-03'
 evidence    = 'Branch claude/project-thread-tdo1gf (uncommitted at time of writing). ersatzrs-ffmpeg teletext nextest: 1074/1074 pass, including the new burst, sustained-shortage, deferred-terminator and B.6 carousel regressions. The original strict behavior is reproduced by the replaced test interval_null_capacity_failure_never_exposes_partial_rewriting (one full 20 ms interval was fatal). ersatzrs-web teletext_admin integration tests cover capacity apply/confirm/replace/invalid repair and route classification. No real FFmpeg/TSDuck/client evidence yet.'
 resolved    = false
 
+# Part6 transport proof is active: preserve the paired-output baseline pass and
+# original automatic-refresh preview-disclosure failure; no acceptance yet.
+# Keep representative bursts, pages200/201, clocks, tracks and isolation required.
+
 [[debt]]
 id          = 'teletext-custom-pages-broadcast'
 adr         = '0120'
