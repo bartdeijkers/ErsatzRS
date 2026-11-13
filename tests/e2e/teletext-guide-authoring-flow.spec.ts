@@ -2631,13 +2631,15 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     const current = () => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
       .get(fixture.channels[0]) as { SeedId: number; RuntimeId: number | null; Revision: number; Revoked: number };
     const before = current();
+    writeFileSync(info.outputPath('burst-caption-seed-receipt.json'), JSON.stringify({ first, rows, media, inventory, maps, before, originals, accepted }, null, 2));
     // Fixed RGBA glyph/control hashes from the qualified page888 source decoded
-    // by libzvbi. Full DVB-subtitle canvas hashes also constrain all padding;
-    // no crop, rescaling or OCR tolerance can hide extra or missing pixels.
+    // by libzvbi. Full 1280x720 DVB hashes are independently qualified through
+    // an FFmpeg-only AV/caption mux. No oracle crop, rescale or OCR tolerance
+    // can hide extra or missing pixels.
     const sourceHashes = { clear: '830edf21ee6bc8ed9dd01f0982075cb1',
       a: '5518fb92c7291a2b6361428648ea83f4', b: '9251724c00efb989a709aadaa678e5b7' };
-    const cueHashes = { clear: '560a6eb7189cef2e710e7ceab48d97dc',
-      a: '5ebec4dababdb3be042375b19d190cb8', b: '210da77755dcf30f9ef0487a0ab30903' };
+    const cueHashes = { clear: '7b3ba1b1b5fedb562f08fe3428e99dc2',
+      a: 'e4935f1ddeaa71da89c6519b573d70e7', b: 'efc315343b410d63c3c4334356dea670' };
     const captionFrames = (path: string, index: number, name: string, source = false) => {
       const args = ['-v', 'error', '-nostdin', ...(source ? ['-fix_teletext_pts', '0', '-txt_page:2', '888',
         '-txt_format:2', 'bitmap', '-txt_default_region:2', '-1'] : []), '-i', path,
@@ -2645,9 +2647,9 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
         '-an', '-fps_mode', 'passthrough', '-f', 'framemd5', '-'];
       const raw = execFileSync(process.env.FFMPEG_PATH!, args, { timeout: 30_000, maxBuffer: 256 * 1024 }).toString();
       writeFileSync(info.outputPath(`${name}.captions.framemd5`), raw);
-      expect(raw).toContain(source ? '#dimensions 0: 492x250' : '#dimensions 0: 720x576');
+      expect(raw).toContain(source ? '#dimensions 0: 492x250' : '#dimensions 0: 1280x720');
       const frames = raw.split('\n').filter(line => line && !line.startsWith('#')).map(line => {
-        const fields = line.split(',').map(field => field.trim()); expect(Number(fields[4])).toBe(source ? 492 * 250 * 4 : 720 * 576 * 4);
+        const fields = line.split(',').map(field => field.trim()); expect(Number(fields[4])).toBe(source ? 492 * 250 * 4 : 1280 * 720 * 4);
         expect(Object.values(source ? sourceHashes : cueHashes)).toContain(fields[5]); return { pts: Number(fields[2]), hash: fields[5] };
       });
       expect(frames.length).toBeGreaterThan(0); return frames;
@@ -2655,14 +2657,47 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     const sourceFrames = captionFrames(burstSource!, 2, 'qualified-source', true);
     expect([...new Set(sourceFrames.map(frame => frame.hash))]).toEqual([sourceHashes.clear, sourceHashes.a, sourceHashes.b]);
     const cueReceipts: Record<string, { pts: number; hash: string }[]> = {};
+    const subtitleEvents: Record<string, { pts: number; num_rects: number }[]> = {};
+    const videoEnds: Record<string, number> = {};
+    const completeAvPrefix = (path: string, name: string, streams: { codec_type: string; id: string }[]) => {
+      const video = Number(streams.find(stream => stream.codec_type === 'video')!.id);
+      const audio = Number(streams.find(stream => stream.codec_type === 'audio')!.id);
+      const trace = execFileSync('tsp', ['-I', 'file', path, '-P', 'pes', '--pid', String(video), '--pid', String(audio),
+        '--trace-packets', '--packet-index', '-O', 'drop'], { timeout: 30_000, maxBuffer: 256 * 1024 }).toString();
+      writeFileSync(info.outputPath(`${name}.av-pes.txt`), trace);
+      // TSDuck's default does not flush the final unbounded video PES as if it
+      // were complete. Only its positively completed PES endpoints qualify.
+      const ends = new Map([[video, new Set<number>()], [audio, new Set<number>()]]);
+      for (const match of trace.matchAll(/PID 0x([0-9a-f]+), TS packets ([\d,]+)-([\d,]+),/gi)) {
+        ends.get(parseInt(match[1], 16))!.add(Number(match[3].replaceAll(',', '')));
+      }
+      const raw = readFileSync(path); let lastAudio = -1; let boundary = 0;
+      for (let ordinal = 0; ordinal < raw.length / 188; ordinal++) {
+        const offset = ordinal * 188; if (raw[offset] !== 0x47) throw new Error('Captured transport packet framing changed.');
+        const pid = ((raw[offset + 1] & 31) << 8) | raw[offset + 2];
+        if (!(raw[offset + 3] & 0x10)) continue;
+        if (pid === audio) lastAudio = ordinal;
+        if (pid === video && ends.get(video)!.has(ordinal) && ends.get(audio)!.has(lastAudio)) boundary = (ordinal + 1) * 188;
+      }
+      expect(boundary).toBeGreaterThan(raw.length * 0.9);
+      const complete = info.outputPath(`${name}.complete-av.ts`); writeFileSync(complete, raw.subarray(0, boundary));
+      writeFileSync(info.outputPath(`${name}.complete-av.json`), JSON.stringify({ raw_bytes: raw.length,
+        complete_av_prefix_bytes: boundary, omitted_terminal_bytes: raw.length - boundary, video, audio,
+        scope: 'Raw capture and strict transport gate remain unchanged; this prefix ends at positively completed AV PES packets.' }, null, 2));
+      return complete;
+    };
     const captures: { name: string; path: string; opened: string; closed: string }[] = [];
-    const capture = async (channel: number, name: string, legacy = false) => {
+    const captureRaw = async (channel: number, name: string, legacy = false) => {
       const path = info.outputPath(`${name}.ts`); const opened = new Date().toISOString();
       const route = legacy ? `/iptv/channel/${channel}.ts?mode=ts-legacy` : `/iptv/hls-direct/${channel}.ts`;
       const result = await captureTeletextChannelTs(`${isolatedWebHost.baseURL}${route}`, path,
         { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
       expect(result.ended).toBe('byte-limit');
       captures.push({ name, path, opened, closed: new Date().toISOString() });
+      return path;
+    };
+    const rawGateFailures: { name: string; status: number | null }[] = [];
+    const validateCapture = (path: string, name: string) => {
       assertContinuousAuthoredPmt(path, info.outputPath(`${name}.pmt.json`), info.outputPath(`${name}.pmt.txt`));
       const streams = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-show_streams', '-of', 'json', path],
         { timeout: 30_000, maxBuffer: 1024 * 1024 }).toString()).streams;
@@ -2671,42 +2706,66 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
       expect(streams.find((s: { codec_name: string }) => s.codec_name === 'dvb_subtitle').tags.language).toBe('eng');
       const captionIndex = streams.find((s: { codec_name: string }) => s.codec_name === 'dvb_subtitle').index;
       cueReceipts[name] = captionFrames(path, captionIndex, name);
-      const decoded = spawnSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-i', path, '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
+      // Probe actual transmitted subtitle events with demux timestamp repair
+      // disabled. The sub2video renderer's EOF/timeout blank is not a clear PES.
+      const events = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-fix_teletext_pts', '0',
+        '-select_streams', String(captionIndex), '-show_frames', '-show_entries', 'frame=pts,num_rects', '-of', 'json', path],
+        { timeout: 30_000, maxBuffer: 256 * 1024 }).toString()).frames;
+      subtitleEvents[name] = events;
+      const complete = completeAvPrefix(path, name, streams);
+      const packets = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-select_streams', 'v:0',
+        '-show_packets', '-show_entries', 'packet=pts_time', '-of', 'json', complete],
+        { timeout: 30_000, maxBuffer: 256 * 1024 }).toString()).packets;
+      videoEnds[name] = Math.max(...packets.map((packet: { pts_time: string }) => Math.round(Number(packet.pts_time) * 1_000_000)));
+      writeFileSync(info.outputPath(`${name}.subtitle-events.json`), JSON.stringify({ events, videoEnd: videoEnds[name] }, null, 2));
+      const decoded = spawnSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-i', complete, '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
         { timeout: 30_000, maxBuffer: 65_536 });
+      writeFileSync(info.outputPath(`${name}.decode.stderr`), decoded.stderr ?? '');
       expect(decoded.status).toBe(0); expect(decoded.stderr.length).toBe(0);
       writeFileSync(info.outputPath(`${name}.streams.json`), JSON.stringify(streams, null, 2));
-      const gate = execFileSync('bash', ['-c', 'source scripts/e2e/tsduck-checks.sh; STRICT_PCR_JITTER=1; analyze_ts "$1" "$2" "$3"; check_pcr_jitter "$1" "$2"; check_continuity_plugin "$1" "$2"; checks_summary',
+      const gate = spawnSync('bash', ['-c', 'source scripts/e2e/tsduck-checks.sh; STRICT_PCR_JITTER=1; analyze_ts "$1" "$2" "$3"; check_pcr_jitter "$1" "$2"; check_continuity_plugin "$1" "$2"; checks_summary',
         'gate', path, name, info.outputPath(`${name}.analyze.json`)], { timeout: 30_000, maxBuffer: 256 * 1024 });
-      writeFileSync(info.outputPath(`${name}.gate.log`), gate);
+      writeFileSync(info.outputPath(`${name}.gate.log`), Buffer.concat([gate.stdout ?? Buffer.alloc(0), gate.stderr ?? Buffer.alloc(0)]));
+      if (gate.status !== 0) rawGateFailures.push({ name, status: gate.status });
       return path;
     };
-    const cold = await Promise.all(fixture.channels.map((channel, index) => capture(channel, `burst-cold-${index}`)));
+    // Launch all windows against the real programme clock before synchronous
+    // decoding/TSDuck work. Each response retains its original 8MiB/30s limits.
+    const timed = async (seconds: number, name: string, legacy = false) => {
+      await expect.poll(() => Date.now() - utc(first.Start) >= seconds * 1000,
+        { timeout: 70_000, intervals: [100] }).toBe(true);
+      return captureRaw(fixture.channels[0], name, legacy);
+    };
+    const paths = await Promise.all([
+      ...fixture.channels.map((channel, index) => captureRaw(channel, `burst-cold-${index}`)),
+      timed(24, 'burst-caption-b'), timed(38, 'burst-caption-clear'), timed(54, 'burst-programme-boundary', true),
+    ]);
+    const names = ['burst-cold-0', 'burst-cold-1', 'burst-caption-b', 'burst-caption-clear', 'burst-programme-boundary'];
+    for (const [index, path] of paths.entries()) validateCapture(path, names[index]);
+    const cold = paths.slice(0, 2); const boundary = paths[4];
     for (const name of ['burst-cold-0', 'burst-cold-1']) expect(cueReceipts[name].some(frame => frame.hash === cueHashes.a)).toBe(true);
     const guideText = (path: string, pageNumber: number) => execFileSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-fix_teletext_pts', '0',
       '-txt_page', String(pageNumber), '-txt_format', 'text', '-txt_duration', '1000', '-i', path,
       '-map', '0:i:512', '-c:s', 'srt', '-f', 'srt', '-'], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }).toString();
     expect(guideText(cold[0], 200)).toContain('DAY GUIDE'); expect(guideText(cold[0], 201)).toContain('Now:');
     expect(guideText(cold[1], 410)).toContain('NIGHT GUIDE'); expect(guideText(cold[1], 200)).toBe('');
-    // Each observation retains the established limits. Real source time selects
-    // the B/clear and programme-boundary windows; no persisted clock is edited.
-    for (const [seconds, name] of [[24, 'burst-caption-b'], [38, 'burst-caption-clear']] as const) {
-      await expect.poll(() => Date.now() - utc(first.Start) >= seconds * 1000, { timeout: 45_000, intervals: [100] }).toBe(true);
-      await capture(fixture.channels[0], name);
-    }
     expect(cueReceipts['burst-caption-b'].some(frame => frame.hash === cueHashes.b)).toBe(true);
     const cleared = cueReceipts['burst-caption-clear'];
     expect(cleared.some(frame => frame.hash === cueHashes.b)).toBe(true);
     expect(cleared[cleared.length - 1].hash).toBe(cueHashes.clear);
-    await expect.poll(() => utc(first.Finish) - Date.now() <= 6000, { timeout: 45_000, intervals: [100] }).toBe(true);
-    const boundary = await capture(fixture.channels[0], 'burst-programme-boundary', true);
+    const beforeClear = subtitleEvents['burst-caption-clear'].find(frame => frame.num_rects > 0)!;
+    expect(beforeClear).toBeDefined();
+    expect(subtitleEvents['burst-caption-clear'].some(frame => frame.num_rects === 0
+      && frame.pts > beforeClear.pts && frame.pts <= videoEnds['burst-caption-clear'])).toBe(true);
     const rollover = cueReceipts['burst-programme-boundary'];
     expect(rollover[0].hash).toBe(cueHashes.clear);
     expect(rollover.some(frame => frame.hash === cueHashes.a)).toBe(true);
     expect(rollover.some(frame => frame.hash === cueHashes.b)).toBe(false);
-    const last = captures[captures.length - 1];
+    const last = captures.find(capture => capture.name === 'burst-programme-boundary')!;
     expect(utc(last.opened)).toBeLessThan(utc(first.Finish)); expect(utc(last.closed)).toBeGreaterThan(utc(first.Finish));
     expect(guideText(boundary, 200)).toContain('DAY GUIDE'); expect(guideText(boundary, 201)).toContain('Now:');
     expect(current().SeedId).toBe(before.SeedId); expect(current().RuntimeId).not.toBeNull(); expect(current().Revoked).toBe(0);
+    expect(current().Revision).toBeGreaterThan(before.Revision);
     for (const [index, channel] of fixture.channels.entries()) {
       expect(sha256(originalBytes(fixture, channel))).toBe(originals[index]); expect(acceptedGuide(fixture, channel)).toEqual(accepted[index]);
       expect(fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel)).toEqual(rows[index]);
@@ -2714,7 +2773,8 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     expect(installation(isolatedWebHost.databasePath)).toEqual(selected); compareInstalledFiles(selected);
     expect(fixture.calls()).toEqual([]); expect(errors).toEqual([]);
     writeFileSync(info.outputPath('burst-caption-host-receipt.json'), JSON.stringify({ source_sha256: sha256(readFileSync(burstSource!)),
-      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, sourceFrames, cueReceipts, before, after: current(),
+      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, sourceFrames, cueReceipts, subtitleEvents, videoEnds, rawGateFailures, before, after: current(),
       scope: 'actual Local rescan, ordinary profile, published producer, cold/clear/boundary transport and fixed page888 RGBA cue/clear oracle' }, null, 2));
+    expect(rawGateFailures).toEqual([]);
   } finally { await context.close(); fixture.close(); }
 });

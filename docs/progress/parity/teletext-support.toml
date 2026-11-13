@@ -426,6 +426,41 @@ source edit, generated argv change or acceptance waiver is used. Other clocks
 remain refused. Original negatives stay retained. The remaining part6 action is
 a matched rebuild and the complete joined cold/B/clear/programme-boundary,
 transport/refresh/isolation proof, then the required output gate and final review.
+The468ddee3 matched server508484e2 closes four joined burst components within
+scope: both cold responses plus correctly scheduled B and clear windows retain
+their original8388560-byte/30s capture bounds and pass80 unchanged strict TSDuck
+checks. Independent libzvbi decoding proves day200/201 throughout, night410/400,
+and absence of day200/201 in the night response. Full1280x720 RGBA states match
+an independently qualified FFmpeg-only AV/caption mux: cold A, following B and
+an actual transmitted zero-rectangle clear. Renderer EOF blanks alone are not
+clear evidence. The original subtitle-only720x576 canvas hypothesis is retained
+as a negative; the video-canvas oracle is qualified independently of app output.
+
+A byte-capped TS capture can end inside its last unbounded H264 PES. Raw files
+and original decoder errors remain unchanged. TSDuck's positive completed-PES
+reports (without flushing its final unbounded PES) identify an unmodified AV
+prefix above90percent of each capture; all four decode with empty stderr. The
+strict transport checks still use every original raw packet. Independent coded-
+packet matching proves all313/330/295/305 complete video AUs and623/623/608/624
+selected nld AAC packets match the source under one exact common PTS/DTS shift
+per capture. The clear's source-referenced presentation error is288.7us, within
+the unchanged8ms threshold. An earlier diagnostically delayed B/clear window's
+raw sparse-caption PCR-offset proxy failure remains retained; its clear matches
+source video within355us. No checker or threshold was changed or waived.
+
+The full joined case remains RED: the54-second ts-legacy programme-boundary
+response fails at3673144bytes, not its byte cap or timeout. The isolated host
+reports teletext output exceeded its delivery deadline at14:11:19.584736Z,
+2.986s after the programme's real14:11:16.5985154Z finish. Earlier complete
+components remain closed; the failed partial response is not acceptance.
+Next trace owned legacy concat-item startup, media pacing/probing and packet
+holding across this handover, and correct its producer behavior under the same
+deadlines. Do not raise the policy, substitute a simpler source or hide the body
+failure. Then finish boundary/automatic-refresh proof and final required gates.
+The test launches all real-time windows before synchronous diagnostics, preserving
+source schedules and every capture bound. Raw traces/captures,80-check logs,
+source/AV/pixel receipts and the independent presentation prototype are retained
+under tmp/evidence/teletext-recovery-transport/ (joined-timed-windows and complete-source).
 Parts7 and8 retain their separate owners; this branch does not claim their completion.
 '''
 resolved    = false
