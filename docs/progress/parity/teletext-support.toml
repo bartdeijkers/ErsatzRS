@@ -334,12 +334,37 @@ Finite completion list:
 (7) OPEN (evidence, external prerequisite: Bart-PC available): native Windows verification in the device thread. Replace the 78 Mbit/s channel-1 workaround only after (6) and this step pass.
 (8) OPEN (evidence): Playwright no-JS and hydrated flow for the readiness/capacity form. Coordinate with the Playwright CI thread.'''
 discovered  = '2026-11-03'
-evidence    = 'Branch claude/project-thread-tdo1gf (uncommitted at time of writing). ersatzrs-ffmpeg teletext nextest: 1074/1074 pass, including the new burst, sustained-shortage, deferred-terminator and B.6 carousel regressions. The original strict behavior is reproduced by the replaced test interval_null_capacity_failure_never_exposes_partial_rewriting (one full 20 ms interval was fatal). ersatzrs-web teletext_admin integration tests cover capacity apply/confirm/replace/invalid repair and route classification. No real FFmpeg/TSDuck/client evidence yet.'
-resolved    = false
+evidence    = '''Branch claude/project-thread-tdo1gf (uncommitted at time of writing). ersatzrs-ffmpeg teletext nextest: 1074/1074 pass, including the new burst, sustained-shortage, deferred-terminator and B.6 carousel regressions. The original strict behavior is reproduced by the replaced test interval_null_capacity_failure_never_exposes_partial_rewriting (one full 20 ms interval was fatal). ersatzrs-web teletext_admin integration tests cover capacity apply/confirm/replace/invalid repair and route classification. No real FFmpeg/TSDuck/client evidence yet.
 
-# Part6 transport proof is active: preserve the paired-output baseline pass and
-# original automatic-refresh preview-disclosure failure; no acceptance yet.
-# Keep representative bursts, pages200/201, clocks, tracks and isolation required.
+2026-11-13 part6 components (whole part6 remains open): actual published
+v0.11.12 ZIPa7390fb9, unchanged ffdc0f7e compiled crate inputs and the existing
+production-guide tests pass paired cold output, automatic source refresh and a
+natural programme-clock rollover. The first automatic trial stopped before
+capture at a hidden current-preview model; test checkpoint9b37c453 opens the
+existing advanced summary through the UI, and the failed/unrun pair then passes.
+The original paired pass is reused. All four retained captures pass80 existing
+TSDuck structural/PTS/DTS/PCR/strict-jitter/continuity checks. Independent
+libzvbi text decoding verifies day200/201, actual night410/400, old-to-new guide
+and Alpha-to-Bravo order; positive night pages accompany absent day200/201 in
+the paired isolation response. These static-source proofs do not establish
+representative bursts or source-caption preservation.
+
+The actual Local scanner binary builds successfully. A separate derived source
+retains all2814 coded packets per audio track and all12 coded caption packets
+from the qualified b6ffa783 synthetic source, with4Mbit/s nominal H264 and a
+4.9536Mbit/s mux. Measured null-free intervals reach0.552s (initial0.428s).
+Original MPEG2/noise and default-interleave generator negatives remain; explicit
+strict interleaving removes the DTS/PCR failure. Source qualification is NOT
+complete: the raw gate passes19/20 and retains two PTS cadence flags on sparse
+teletext PID258; TT timestamps are remuxed rather than sharing the constant
+audio offset. Do not suppress those flags or change source sparsity to obtain
+a green result. Next: independently qualify sparse caption timing, then run the
+actual Local-rescan/published-addon burst-and-caption trial with all unchanged
+part6 obligations. Canonical raw logs, captures,80-check report, decoded pages,
+source hashes/packet comparisons and scanner receipt: tmp/evidence/teletext-recovery-transport/.
+Parts7 and8 retain their separate owners; this branch does not claim their completion.
+'''
+resolved    = false
 
 [[debt]]
 id          = 'teletext-custom-pages-broadcast'
