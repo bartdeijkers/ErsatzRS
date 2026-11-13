@@ -221,3 +221,49 @@ fn bitmap_carriage_group_budget_matches_the_existing_source_and_concat_limit() {
     let (value, source) = bounded(4097);
     assert!(parse(&serde_json::to_vec(&value).unwrap(), source, 0).is_err());
 }
+
+#[test]
+fn native_clock_rescaling_matches_fractional_millisecond_source_endpoints_exactly() {
+    let mut value = output();
+    for (index, pts, duration) in [
+        (0, 600, 24540),
+        (2, 25140, 24540),
+        (4, 25140, 14960),
+        (6, 40100, 14960),
+    ] {
+        value["packets_and_frames"][index]["pts"] = json!(pts);
+        value["packets_and_frames"][index]["dts"] = json!(pts);
+        value["packets_and_frames"][index]["duration"] = json!(duration);
+        value["packets_and_frames"][index + 1]["pts"] = json!(pts * 1000);
+    }
+    let source = SourceTeletextBitmapEvents {
+        count: 2,
+        first_pts_microseconds: Some(2_100_622),
+        last_pts_microseconds: Some(26_640_822),
+    };
+    let bytes = serde_json::to_vec(&value).unwrap();
+    assert!(parse(&bytes, source, 1_500_678).is_ok());
+    // Exact output coordinates remain mandatory: no plus/minus-one-ms window.
+    for delta in [-1000, 1000] {
+        let mut wrong = source;
+        wrong.first_pts_microseconds = wrong.first_pts_microseconds.map(|pts| pts + delta);
+        assert!(parse(&bytes, wrong, 1_500_678).is_err());
+    }
+    for invalid in [
+        None,
+        Some(2_100_623),
+        Some(1_500_667),
+        Some(i64::MIN),
+        Some(i64::MAX),
+    ] {
+        assert!(parse(
+            &bytes,
+            SourceTeletextBitmapEvents {
+                first_pts_microseconds: invalid,
+                ..source
+            },
+            1_500_678
+        )
+        .is_err());
+    }
+}

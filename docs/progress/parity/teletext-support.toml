@@ -2,7 +2,7 @@ feature    = 'Teletext support'
 etv_source = 'No teletext-specific policy was located in the 2026-10-10 `$ERSATZTV_SRC` audit at 46118d43313b7828780fbfcfb46e980390ea8b0d; p9a-01 records existing subtitle behavior as the baseline and authored pages as an ErsatzRS extension under ADRs 0120/0121'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging, `crates/ersatzrs-addon-contract`, one new tvguide teletext add-on in the separate ErsatzRS-Addons repository'
 status     = 'In progress'
-adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127']
+adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127', '0133']
 summary = '''
 Current agreed Phase9 delivery Complete2026-11-03: P9A-04/P9B-01/P9B-02 accept
 required Level1/1.5, lossless generic authoring/TTI/metadata, profiles/themes/zones/
@@ -412,6 +412,20 @@ The rebuilt matched host17dfebde passes the ordinary playback smoke gate for
 legacy/hybrid TS and HLS. Fixed source/DVB RGBA glyph/clear hashes are integrated
 into the joined trial, but that trial still stops before those assertions.
 Logs and matched-source inventory: tmp/evidence/teletext-recovery-transport/complete-source/.
+The next clock component closes its named native proof: the unchanged37MB
+complete_burst_source_prepares_real_bitmap_carriage regression now passes with
+both bitmaps and the explicit clear tail. Twelve focused carriage/isolator tests
+pass, including half-millisecond rounding, invalid90kHz observations, wrong exact
+output coordinates, missing events/clear, negative times, overflow and sentinels.
+ADR0133 (Proposed decision; implementation complete within this component) records
+the audited FFmpegn9.0 source and debug trace. The check reconstructs an exact
+90kHz source tick, applies the actual native integer-domain origin shift, then
+reproduces decoder-microsecond and Matroska-millisecond nearest-away rescaling.
+It compares the exact output coordinate; no tolerance interval, timestamp option,
+source edit, generated argv change or acceptance waiver is used. Other clocks
+remain refused. Original negatives stay retained. The remaining part6 action is
+a matched rebuild and the complete joined cold/B/clear/programme-boundary,
+transport/refresh/isolation proof, then the required output gate and final review.
 Parts7 and8 retain their separate owners; this branch does not claim their completion.
 '''
 resolved    = false
