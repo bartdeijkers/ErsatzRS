@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Security
 
+- Update the release-notes HTML sanitizer to Ammonia 4.2.5 to address
+  RUSTSEC-2026-0533 (mutation XSS with embedded SVG and MathML).
 - rustix is updated to 1.1.6 (RUSTSEC-2026-0486): 1.1.5 could mark unwritten
   bytes as initialized when its xattr functions got a zero-length buffer.
 - `cargo deny` temporarily ignores RUSTSEC-2026-0459 (bundled SQLite before
