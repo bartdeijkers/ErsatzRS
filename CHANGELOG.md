@@ -70,6 +70,8 @@ release section when tagging a release.
 
 ### Changed
 
+- Teletext capacity-recovery browser proof now covers Chromium and Firefox with
+  and without JavaScript, including consent, custom-policy protection and repair.
 - Parity tracking now records the shipped yt-dlp authenticated-availability fix,
   verified against the published add-on package and its restriction safeguards.
 - The parity-debt queue distinguishes actionable fixes, external prerequisites and

@@ -124,9 +124,28 @@ async function missingProfile(page: Page, fixture: TeletextChannelFixture): Prom
   expect(fixture.binding(fixture.channels[0])).toEqual(before);
 }
 
+// Locale saves include date/time preferences. Establish their UI defaults
+// before the safety snapshot, retain existing choices, and restore exact
+// original presence through the fixture's normal settings cleanup.
+function prepareUiFormats(fixture: TeletextChannelFixture): void {
+  for (const key of ['pages.date_format', 'pages.time_format']) {
+    const original = fixture.setting(key);
+    fixture.originalUi.set(key, original);
+    if (original === undefined) fixture.database.prepare('INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, 'auto');
+  }
+}
+
+function uiFormats(fixture: TeletextChannelFixture): Record<string, string> {
+  return {
+    date_format: fixture.setting('pages.date_format') ?? 'auto',
+    time_format: fixture.setting('pages.time_format') ?? 'auto',
+  };
+}
+
 async function restoreUi(page: Page, fixture: TeletextChannelFixture): Promise<void> {
   await page.request.post('/admin-api/settings/ui/save', {
     form: {
+      ...uiFormats(fixture),
       language: fixture.originalUi.get('pages.language') ?? 'en-us',
       is_dark_mode: String(/^(1|true)$/i.test(fixture.originalUi.get('pages.is_dark_mode') ?? 'True')),
     }, maxRedirects: 0,
@@ -162,6 +181,7 @@ for (const javaScriptEnabled of [true, false]) {
       test.setTimeout(240_000);
       testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
       const fixture = new TeletextChannelFixture(databasePath!);
+      prepareUiFormats(fixture);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });
       const page = await context.newPage();
       const stale = await context.newPage();
@@ -175,7 +195,7 @@ for (const javaScriptEnabled of [true, false]) {
       try {
         const safe = fixture.safetySnapshot();
         await page.request.post('/admin-api/settings/ui/save', {
-          form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
+          form: { ...uiFormats(fixture), language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
         });
         await visit(page, fixture.channels[0], javaScriptEnabled);
         const day = await createProfile(page, fixture, 'Day <synthetic> & profile', 'day', javaScriptEnabled);
@@ -184,7 +204,7 @@ for (const javaScriptEnabled of [true, false]) {
         for (const [language, module] of cultures) {
           const text = translations(module);
           await page.request.post('/admin-api/settings/ui/save', {
-            form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
+            form: { ...uiFormats(fixture), language, is_dark_mode: String(dark) }, maxRedirects: 0,
           });
           await visit(page, fixture.channels[0], javaScriptEnabled);
           await expect(page.getByRole('heading', { name: text('TeletextChannelTitle'), exact: true })).toBeVisible();
@@ -294,6 +314,7 @@ for (const javaScriptEnabled of [true, false]) {
       test.setTimeout(120_000);
       testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
       const fixture = new TeletextChannelFixture(databasePath!);
+      prepareUiFormats(fixture);
       const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 1280, height: 900 } });
       const page = await context.newPage();
       const errors: string[] = [];
@@ -302,7 +323,7 @@ for (const javaScriptEnabled of [true, false]) {
       try {
         const safe = fixture.safetySnapshot();
         await page.request.post('/admin-api/settings/ui/save', {
-          form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
+          form: { ...uiFormats(fixture), language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
         });
         await visit(page, fixture.channels[0], javaScriptEnabled);
         const day = await createProfile(page, fixture, 'Day synthetic visual profile', 'day', javaScriptEnabled);
@@ -310,7 +331,7 @@ for (const javaScriptEnabled of [true, false]) {
         for (const [language, module] of cultures.filter(([culture]) => culture === 'en-us' || culture === 'nl')) {
           const text = translations(module);
           await page.request.post('/admin-api/settings/ui/save', {
-            form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
+            form: { ...uiFormats(fixture), language, is_dark_mode: String(dark) }, maxRedirects: 0,
           });
           for (const [index, profile, theme] of [[0, day, 'day'], [1, night, 'night']] as const) {
             await visit(page, fixture.channels[index], javaScriptEnabled);
@@ -352,4 +373,113 @@ for (const javaScriptEnabled of [true, false]) {
       }
     });
   }
+}
+
+// Debt teletext-admin-recovery-flow part8: browser proof of the existing native
+// recovery form. Global policy mutations are confined to the wrapper's DB and
+// restored by TeletextChannelFixture.close(), including after failed assertions.
+for (const javaScriptEnabled of [true, false]) {
+  test(`teletext capacity recovery (JavaScript ${javaScriptEnabled})`, async ({ browser, baseURL }, info) => {
+    test.skip(!databasePath, 'Requires the runner disposable E2E_DB_PATH.');
+    test.skip(process.platform === 'win32', 'Existing fixture uses a POSIX producer; native Windows remains separate debt.');
+    test.setTimeout(90_000);
+    const fixture = new TeletextChannelFixture(databasePath!);
+    prepareUiFormats(fixture);
+    const context = await browser.newContext({ baseURL, javaScriptEnabled });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error' && /hydration|failed_to_cast_marker_node|rust_panic/i.test(message.text())) errors.push(message.text());
+    });
+    const keys = ['teletext.authoring.policy', 'teletext.output.policy'];
+    const policies = () => keys.map(key => fixture.setting(key));
+    const unrelated = () => {
+      const snapshot = fixture.safetySnapshot() as { configuration: { Key: string }[] };
+      return { ...snapshot, configuration: snapshot.configuration.filter(row => !keys.includes(row.Key)) };
+    };
+    const setPolicy = (key: string, value?: string) => {
+      if (value === undefined) fixture.database.prepare('DELETE FROM "ConfigElement" WHERE "Key"=?').run(key);
+      else fixture.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, value);
+    };
+    const openChecklist = async () => {
+      const details = page.getByTestId('teletext-broadcast-check');
+      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
+    };
+    const visitRecovery = async (channel: number) => {
+      await visit(page, channel, javaScriptEnabled);
+      await openChecklist();
+    };
+    const form = page.getByTestId('teletext-capacity-form');
+    const capacity = page.getByTestId('teletext-capacity');
+    const step = page.getByTestId('teletext-readiness-step').filter({ has: capacity });
+    const apply = async (suffix: string) => {
+      await form.locator('[name="profile"]').selectOption('tvguide-16');
+      await form.locator('[name="confirm_scope"]').check();
+      await Promise.all([
+        page.waitForURL(url => url.search === suffix),
+        form.locator('button[type="submit"]').click(),
+      ]);
+      await page.waitForLoadState('domcontentloaded');
+      if (javaScriptEnabled) await waitForHydration(page);
+      await openChecklist();
+    };
+    try {
+      const safe = unrelated();
+      keys.forEach(key => setPolicy(key));
+      await visitRecovery(fixture.channels[0]);
+      await expect(capacity).toHaveAttribute('data-authoring', 'absent');
+      await expect(capacity).toHaveAttribute('data-output', 'absent');
+      await expect(step).toHaveAttribute('data-state', 'missing');
+      await expect(form.locator('[name="confirm_scope"]')).not.toBeChecked();
+      // The browser's required control must prevent accidental global writes.
+      await form.locator('button[type="submit"]').click();
+      expect(policies()).toEqual([undefined, undefined]);
+      expect(await form.locator('[name="confirm_scope"]').evaluate(node => (node as HTMLInputElement).validity.valueMissing)).toBe(true);
+      const rejected = await page.request.post('/admin-api/teletext/capacity/apply', {
+        form: { channel_id: String(fixture.channels[0]), profile: 'tvguide-16' }, maxRedirects: 0,
+      });
+      expect(rejected.status()).toBe(303);
+      expect(rejected.headers().location).toContain('error=scope-unconfirmed');
+      expect(policies()).toEqual([undefined, undefined]);
+      await apply('?saved=capacity');
+      await expect(step).toHaveAttribute('data-state', 'done');
+      await expect(capacity.locator('[data-capacity-profile="tvguide-16"]')).toBeVisible();
+      const accepted = policies();
+      expect(accepted.every(value => value !== undefined)).toBe(true);
+      // Global scope is observable on a second channel, without publishing or
+      // claiming carriage; the UI must keep those separate readiness facts.
+      await visitRecovery(fixture.channels[1]);
+      await expect(capacity).toHaveAttribute('data-output', 'profile');
+      for (const name of ['published', 'broadcast']) {
+        await expect(page.locator(`[data-testid="teletext-readiness-step"][data-step="${name}"]`)).toHaveAttribute('data-state', 'missing');
+      }
+      const tuned = JSON.stringify({ ...JSON.parse(accepted[1]!), recovery_timeout_ms: 4000 });
+      setPolicy(keys[1], tuned);
+      await visitRecovery(fixture.channels[0]);
+      await expect(capacity).toHaveAttribute('data-output', 'custom');
+      await expect(form.locator('[name="replace"]')).not.toBeChecked();
+      await apply('?error=policy-exists');
+      expect(policies()).toEqual([accepted[0], tuned]);
+      await form.locator('[name="replace"]').check();
+      await apply('?saved=capacity');
+      expect(policies()).toEqual(accepted);
+      // Malformed persisted policy can be repaired by the same visible form.
+      setPolicy(keys[1], '{"version":4}');
+      await visitRecovery(fixture.channels[0]);
+      await expect(capacity).toHaveAttribute('data-output', 'invalid');
+      await expect(form.locator('[name="replace"]')).toHaveCount(0);
+      await apply('?saved=capacity');
+      expect(policies()).toEqual(accepted);
+      await expect(step).toHaveAttribute('data-state', 'done');
+      await page.getByTestId('teletext-readiness').screenshot({ path: info.outputPath('capacity-recovered.png') });
+      expect(unrelated()).toEqual(safe);
+      expect(fixture.calls()).toEqual([]);
+      expect(fixture.unchangedPackage()).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      try { await restoreUi(page, fixture); }
+      finally { await context.close(); fixture.close(); }
+    }
+  });
 }
