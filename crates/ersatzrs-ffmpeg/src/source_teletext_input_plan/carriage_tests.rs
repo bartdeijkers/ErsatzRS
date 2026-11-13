@@ -147,6 +147,48 @@ fn bitmap_carriage_copy_uses_normal_mux_selected_audio_and_distinct_actual_av_se
 }
 
 #[test]
+fn bitmap_carriage_outer_pacing_preserves_the_sealed_seek_and_selected_audio() {
+    // ADR 0121: only the owned legacy caller lends its wrapper's pacer. The
+    // ordinary caller retains readrate; neither path can borrow another seal.
+    let mut snapshots = Vec::new();
+    for wrapper_paces in [false, true] {
+        let (mut request, caption) = fixture();
+        request.desired.realtime_mode = crate::RealtimeMode::On;
+        if wrapper_paces {
+            request.inputs[0] = request.inputs[0].clone().without_readrate();
+        }
+        let (command, plan) = build(request, &caption);
+        let plan = plan.unwrap();
+        assert!(plan.matches_command(&command));
+        assert!(plan.is_bitmap_carriage());
+        assert_eq!(plan.caption_input(), &caption);
+        assert_eq!(plan.video_stream(), Some((0, 0)));
+        assert_eq!(plan.audio_stream(), Some((0, 3)));
+        assert_eq!(
+            plan.first_input_timing()
+                .effective_input_seek_microseconds(),
+            Some(17_520_000)
+        );
+        assert_eq!(plan.timing().effective_input_seek_microseconds(), None);
+        assert_eq!(
+            command.arguments.iter().any(|arg| arg == "-readrate"),
+            !wrapper_paces
+        );
+        let mut changed = command.clone();
+        changed.arguments.extend(["-readrate".into(), "2".into()]);
+        assert!(!plan.matches_command(&changed));
+        snapshots.push(format!(
+            "wrapper_paces={wrapper_paces}:\n{}",
+            command.arguments.join("\n")
+        ));
+    }
+    insta::assert_snapshot!(
+        "bitmap_carriage_owned_wrapper_pacing",
+        snapshots.join("\n\n")
+    );
+}
+
+#[test]
 fn bitmap_carriage_requires_the_exact_expected_input_and_the_owned_bitmap_shape() {
     let (request, caption) = fixture();
     let mut wrong_path = caption.clone();

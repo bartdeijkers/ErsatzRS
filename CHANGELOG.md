@@ -265,7 +265,10 @@ release section when tagging a release.
 - Source teletext captions can be prepared from complete files larger than the
   discovery window, with DVB conversion checked against FFmpeg's native clock
   rescaling. Preparation uses the existing storage quota and startup deadline;
-  partial or changed sources remain unavailable for caption selection.
+  partial or changed sources remain unavailable for caption selection. Complete
+  reads use bounded I/O batches. Owned legacy caption producers share the final
+  wrapper's pacing and continue from a successfully completed programme, after
+  checking that its saved schedule identity and times are still current.
 
 - Invalid Classic chapter filler expressions now keep the whole programme
   without internal breaks and retain its clock-aligned padding. Unknown

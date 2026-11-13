@@ -1029,7 +1029,17 @@ async fn serve_channel_stream_admitted_inner(
     let retained_teletext = interval_admission
         .as_ref()
         .and_then(|admission| admission.teletext.clone());
-    let now = Utc::now();
+    let now = if legacy_item.is_some() {
+        Box::pin(legacy_source_playback_time(
+            state,
+            channel.id,
+            legacy_item.as_ref(),
+            startup_deadline,
+        ))
+        .await
+    } else {
+        Utc::now()
+    };
     let active = tokio::time::timeout_at(
         startup_deadline,
         external::load(state, channel.id, now, startup_deadline),
@@ -1065,6 +1075,15 @@ async fn serve_channel_stream_admitted_inner(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+
+    if legacy_item.is_some() {
+        tracing::debug!(
+            channel_id = channel.id,
+            playout_item_id = active.playout_item_id,
+            playback_at = %now,
+            "owned legacy item selected"
+        );
+    }
 
     if legacy_cancellation
         .as_ref()
@@ -2446,18 +2465,35 @@ async fn serve_channel_stream_admitted_inner(
         None
     };
     // The owned legacy wrapper paces its final output. Keep this exact-page
-    // Burn producer bounded by that consumer's backpressure instead of applying
-    // a second readrate clock to its source-page decoder. Independent prepared
-    // carriage captions retain ordinary AV pacing on the primary media input.
+    // caption producer bounded by that consumer's backpressure instead of
+    // applying a second readrate clock. This includes prepared DVB carriage:
+    // a second clock can delay the next concat item beyond the output deadline.
     let wrapper_paces_source_caption = output.role() == TeletextOutputRole::InternalItem
         && legacy_item.is_some()
         && output_format == OutputFormat::MpegTs
         && effective_streaming_mode == StreamingMode::TransportStream
         && !retained_stream
-        && source_caption_owner.as_ref().is_some_and(|source| {
-            source.delivery() == ersatzrs_domain::SourceTeletextCaptionDelivery::Burn
-                && subtitle_input.as_ref() == Some(&source.input())
-        });
+        && source_caption_owner
+            .as_ref()
+            .is_some_and(|source| subtitle_input.as_ref() == Some(&source.input()));
+    if wrapper_paces_source_caption {
+        if let (Some(item), Some(start), Some(finish), Some(duration)) = (
+            legacy_item.as_mut(),
+            parse_sqlite_utc_timestamp(&active.playout_start),
+            parse_sqlite_utc_timestamp(&active.playout_finish),
+            remaining_duration,
+        ) {
+            if let Some(cursor) = super::legacy_wrapper_admission::LegacyWrapperPlaybackCursor::new(
+                active.playout_item_id,
+                now,
+                start,
+                finish,
+                duration,
+            ) {
+                item.bind_playout(cursor);
+            }
+        }
+    }
     let primary_input = if wrapper_paces_source_caption {
         media_input.clone().without_readrate()
     } else {
@@ -4440,6 +4476,36 @@ impl ActivePlayoutItem {
     }
 }
 
+async fn legacy_source_playback_time(
+    state: &AppState,
+    channel_id: i64,
+    item: Option<&LegacyWrapperItemGuard>,
+    deadline: tokio::time::Instant,
+) -> DateTime<Utc> {
+    if let Some(cursor) = item.and_then(LegacyWrapperItemGuard::predecessor) {
+        let previous = tokio::time::timeout_at(
+            deadline,
+            external::load(state, channel_id, cursor.selected_at, deadline),
+        )
+        .await;
+        if let Ok(Ok(Some(previous))) = previous {
+            if legacy_cursor_matches(cursor, &previous) {
+                return cursor.finish;
+            }
+        }
+    }
+    Utc::now()
+}
+
+fn legacy_cursor_matches(
+    cursor: &super::legacy_wrapper_admission::LegacyWrapperPlaybackCursor,
+    active: &ActivePlayoutItem,
+) -> bool {
+    active.playout_item_id == cursor.item_id
+        && parse_sqlite_utc_timestamp(&active.playout_start) == Some(cursor.start)
+        && parse_sqlite_utc_timestamp(&active.playout_finish) == Some(cursor.finish)
+}
+
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn load_active_media_path(
     pool: &DbPool,
@@ -5719,9 +5785,12 @@ impl LegacyStreamLifetime {
         }
     }
 
-    fn complete(self, success: bool) {
-        if let Self::Item(item) = self {
+    fn complete(self, success: bool, qualified_source: bool) {
+        if let Self::Item(mut item) = self {
             if success {
+                if !qualified_source {
+                    item.clear_playout();
+                }
                 item.complete();
             }
         }
@@ -6213,7 +6282,12 @@ async fn spawn_stream_body_with_lifetime(
         // Release the actual encoder and exclusive item permit before it.
         drop(capacity_guard);
         if let Some(lifetime) = lifetime {
-            lifetime.complete(matches!(outcome, DirectStreamOutcome::Completed));
+            lifetime.complete(
+                matches!(outcome, DirectStreamOutcome::Completed),
+                retry
+                    .as_ref()
+                    .is_some_and(|retry| retry.source_caption.is_some()),
+            );
         }
         let close_output = terminal.is_some() || output_completion.is_some();
         if let Some((terminal, completed)) = terminal {
@@ -8985,6 +9059,37 @@ mod tests {
             subtitle_stream_index: None,
             remote_stream: None,
         }
+    }
+
+    #[test]
+    fn legacy_playback_cursor_requires_the_fresh_predecessor_identity_and_bounds() {
+        use super::super::legacy_wrapper_admission::LegacyWrapperPlaybackCursor;
+        let mut active = active_playout_item(
+            "2026-11-13 12:00:00",
+            "2026-11-13 12:01:00",
+            Duration::ZERO,
+            Duration::from_mins(1),
+        );
+        let start = parse_sqlite_utc_timestamp(&active.playout_start).unwrap();
+        let finish = parse_sqlite_utc_timestamp(&active.playout_finish).unwrap();
+        let cursor = LegacyWrapperPlaybackCursor::new(
+            active.playout_item_id,
+            start + chrono::Duration::seconds(54),
+            start,
+            finish,
+            Duration::from_secs(6),
+        )
+        .unwrap();
+        assert!(legacy_cursor_matches(&cursor, &active));
+        // A replacement/reset cannot borrow a previously completed row's clock.
+        active.playout_item_id += 1;
+        assert!(!legacy_cursor_matches(&cursor, &active));
+        active.playout_item_id -= 1;
+        active.playout_start = "2026-11-13 12:00:01".into();
+        assert!(!legacy_cursor_matches(&cursor, &active));
+        active.playout_start = "2026-11-13 12:00:00".into();
+        active.playout_finish = "2026-11-13 12:01:01".into();
+        assert!(!legacy_cursor_matches(&cursor, &active));
     }
 
     #[test]

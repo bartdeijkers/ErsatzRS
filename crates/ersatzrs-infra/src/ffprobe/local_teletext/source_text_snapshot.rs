@@ -107,13 +107,14 @@ fn capture<T>(
     let mut writer = file
         .as_mut()
         .map(|file| std::io::BufWriter::with_capacity(64 * 1024, file.as_file_mut()));
+    let mut reader =
+        super::source_packet::SourcePacketReader::new(guard.guard.original.as_file(), len, format);
     for ordinal in 0..len / stride {
         stop.check_source_guard()?;
         if ordinal > 0 && ordinal.is_multiple_of(MAX_SOURCE_OBSERVATION_PACKETS as u64) {
             psi.begin_continuation_window().map_err(|_| invalid())?;
         }
-        let frame =
-            super::source_packet::read(guard.guard.original.as_file(), ordinal, format, stop)?;
+        let frame = reader.read_next(stop)?;
         let raw = &frame.packet;
         psi.push(raw).map_err(|_| invalid())?;
         let pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);

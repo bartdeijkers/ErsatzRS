@@ -2,7 +2,7 @@ feature    = 'Teletext support'
 etv_source = 'No teletext-specific policy was located in the 2026-10-10 `$ERSATZTV_SRC` audit at 46118d43313b7828780fbfcfb46e980390ea8b0d; p9a-01 records existing subtitle behavior as the baseline and authored pages as an ErsatzRS extension under ADRs 0120/0121'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging, `crates/ersatzrs-addon-contract`, one new tvguide teletext add-on in the separate ErsatzRS-Addons repository'
 status     = 'In progress'
-adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127', '0133']
+adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127', '0133', '0134']
 summary = '''
 Current agreed Phase9 delivery Complete2026-11-03: P9A-04/P9B-01/P9B-02 accept
 required Level1/1.5, lossless generic authoring/TTI/metadata, profiles/themes/zones/
@@ -11,11 +11,15 @@ appv1.2.0/sourceCAC, Nextrs7/source95206a81 and Addonsv0.11.12/source47f2ab4 hav
 exact-source CI and actual download proofs at P9B-02/release_delivery. No current
 required work remains; Docker currentrelease delivery is explicitly Deferred.
 
-The broader feature stays In progress only because five retained enhanced-only/
-optional-QTM debts remain unresolved and Deferred. They are not current Phase9
+At that delivery, five retained enhanced-only/optional-QTM debts remained
+unresolved and Deferred. They are not current Phase9
 work or accepted enhanced capability. Required1.5 and production9B components are
 Complete; macOS and nativeARM assumptions retain their separate owners. A new
 applicable maintainer task/capability is required to resume deferred work.
+
+The 2026-11-13 parity-debt task separately owns the operational recovery proof
+below. Its open transport and native Windows items do not reopen accepted
+Phase9 engine/release components or resume enhanced-only/editor work.
 
 Enhanced-only service/resources remain experimental.
 Standalone Level1/1.5 is accepted at p9a-level15; enhanced-only
@@ -321,7 +325,7 @@ resolved    = true
 
 [[debt]]
 id          = 'teletext-admin-recovery-flow'
-adr         = '0121'
+adr         = '0134'
 description = '''Operational defect found on 2026-11-03 while making channel 1 work. The admin reported missing teletext.authoring.policy/teletext.output.policy but offered no control to fix it. The relation between output mode, external MPEG-TS script, publication and actual carriage was unclear. Authored output then ended streams with "teletext needs N null packets but the window has 0" unless a profile used an extreme bitrate (about 78 Mbit/s).
 Finite completion list:
 (1) DONE: bounded burst deferral in the output gate (EN 300 706 B.9/B.6, PTS on actual interval, explicit SustainedCapacity). Unit evidence only.
@@ -453,10 +457,67 @@ response fails at3673144bytes, not its byte cap or timeout. The isolated host
 reports teletext output exceeded its delivery deadline at14:11:19.584736Z,
 2.986s after the programme's real14:11:16.5985154Z finish. Earlier complete
 components remain closed; the failed partial response is not acceptance.
-Next trace owned legacy concat-item startup, media pacing/probing and packet
-holding across this handover, and correct its producer behavior under the same
-deadlines. Do not raise the policy, substitute a simpler source or hide the body
-failure. Then finish boundary/automatic-refresh proof and final required gates.
+Subsequent bounded trials locate source selection near 1.4 s and consumer
+initialization near 0.9 s. Full-source positioned reads now use a fixed 64 KiB
+buffer, retaining every physical frame, hash, PSI/PES, source, deadline and
+cancellation check. 105 source regressions pass, including exact TS/M2TS refills,
+late malformed/partial input, cached-read cancellation and worker cleanup.
+The unchanged real 37 MB native carriage regression passes in 1.058 s; strict infra
+all-target Clippy passes without new lint exceptions. The original failed test
+harness swallowed its expected cancellation error; its corrected test propagates
+and asserts Cancelled. Both results remain retained.
+
+The buffered matched trial observes selection 0.859 s plus initialization 0.539 s,
+but remains RED. Combining buffering with the previously tested owned-wrapper
+pacing reaches another completed initialization and then fails at 4,099,716 bytes.
+The trace and wall-time lookup identify a request before the prior programme's
+finish that can select its tiny remaining tail again. Preparing that obsolete
+tail consumes the next item's readiness budget. ADR0134 records the proposed
+private continuation clock: only a fully qualified, successfully completed and
+reaped source interval can authorize its finish, with exact fresh predecessor
+identity/bounds validation and fallback/cancellation clearing. All17 focused
+continuation/ownership tests pass, including stale row bounds, wrapper isolation,
+shortened intervals and failed/closed producer refusal. Main integration retains
+merged security/auth/browser proof. Strict web all-target Clippy passes after an
+equivalent test-only Duration unit correction; formatting and progress check pass.
+The matched server3337a0e5 and unchanged scanner/source complete two actual
+joined captures. The cursor selects row10 at row9's exact finish before wall-time
+expiry, rather than preparing row9's tail again. Both next-source preparations
+complete, no delivery-deadline failure occurs, and all five captures reach their
+original8388560-byte cap. Boundary pixels show clear followed by expected A.
+This completes the scoped producer-readiness component, not whole part6.
+
+The unchanged joined case remains RED: boundary PMT versions1/2/3 show authored
+withdrawal and reannouncement. The existing content-free provenance trace proves
+original guide-authority expiry and acknowledged withdrawal, followed by fresh
+recovery. ADR0124 explicitly requires fail-closed expiry withdrawal before an
+await; do not remove that fence merely to satisfy the continuity assertion.
+The four other captures again pass80 unchanged strict checks. Independent strict
+boundary analysis retains a sparse DVB subtitle cadence flag and fails its PTS/PCR
+qualification (19/21 checks pass,2fail). All AV/PCR/DTS/CC checks pass. The offline
+100ms-versus1ms interleave trial also fails the unchanged check; no argv change
+or threshold waiver is made from that hypothesis. FFmpeg n9.0 mpegts.c1305-1348
+confirms its default fix_teletext_pts also rewrites DVB subtitle timestamps;
+raw-versus-demux observations are retained for the next producer-clock trial.
+
+Ordinary playback smoke passes on the exact matched candidate: legacy/hybrid TS
+and segmenter/direct HLS. The unchanged manual four-route gate is92/93: legacy
+concat delivers17.08s media in20s wall time (85percent, required95); all other
+checks and routes pass. A controlled run with retained UCU16 sourcecfbce4ce,
+binary3980f56b, byte-identical calibration clips and the same FFmpeg9/Next override
+also passes92/93 and fails the same legacy ratio at87percent. Its concat command,
+legacy admission and transport/FFmpeg source files match current main exactly.
+This establishes a baseline delivery blocker, not a new caption-cursor regression;
+it does not waive the current required gate. Keep both complete raw gate results.
+The initial manual invocation redundantly regenerated missing worktree clips;
+it was interrupted, and the final trials reuse hash-verified existing fixtures.
+
+Next resolve the expiry/PMT assertion against the existing authorization contract,
+correct the subtitle handover clock under unchanged strict checks, and resolve the
+baseline legacy delivery gate. Then finish joined boundary/automatic-refresh proof,
+review and exact-head ready-PR CI. The current checkpoint remains draft. Keep the
+tvguide-16 two-second holding and 100 ms lateness policy, source and capture limits
+unchanged. Original isolated and combined failures remain evidence.
 The test launches all real-time windows before synchronous diagnostics, preserving
 source schedules and every capture bound. Raw traces/captures,80-check logs,
 source/AV/pixel receipts and the independent presentation prototype are retained

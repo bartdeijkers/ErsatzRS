@@ -273,12 +273,14 @@ fn observe<T>(
     let mut retained_packets = 0_u32;
     let mut first_current_psi_packet = None;
     let mut av = origin.map(AvOriginCollector::new).transpose()?;
+    let mut reader =
+        source_packet::SourcePacketReader::new(guard.guard.original.as_file(), len, format);
     for ordinal in 0..len / stride {
         stop.check_source_guard()?;
         if ordinal > 0 && ordinal.is_multiple_of(MAX_SOURCE_OBSERVATION_PACKETS as u64) {
             psi.begin_continuation_window().map_err(|_| invalid())?;
         }
-        let frame = source_packet::read(guard.guard.original.as_file(), ordinal, format, stop)?;
+        let frame = reader.read_next(stop)?;
         let raw = &frame.packet;
         psi.push(raw).map_err(|_| invalid())?;
         let report = clock.push(raw).map_err(|_| invalid())?;
