@@ -277,6 +277,7 @@ fn classic_explicit_reset_restarts_fill_groups_after_the_preserved_programme() {
     ] {
         let mut original = request(PlayoutMode::One, PlaybackOrder::Chronological, false);
         original.reference_data.classic_schedule_items[0].fill_with_group_mode = fill_mode;
+        fill_groups::test_group(&mut original.reference_data, 1);
         let full = ClassicSchedulingEngine.schedule(original.clone()).unwrap();
         let mut reset = published_request(&original, &full);
         reset.start += Duration::minutes(6);

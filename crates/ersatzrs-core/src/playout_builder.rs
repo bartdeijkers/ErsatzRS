@@ -944,6 +944,7 @@ mod tests {
                     classic_filler_presets: [(
                         8,
                         SchedulingFillerPreset {
+                            name: "Synthetic filler".into(),
                             expression: None,
                             id: 8,
                             filler_kind: FillerKind::PostRoll,

@@ -1582,11 +1582,76 @@ async fn classic_filler_refresh_allows_new_and_removed_presets() {
     }
 }
 
+async fn assert_classic_expression_fallback(
+    pool: &SqlitePool,
+    expression: &str,
+    marker: &str,
+    start: DateTime<Utc>,
+) -> PersistedClassicRows {
+    let before = persisted_classic_rows(pool, RELATED_PLAYOUT_ID).await;
+    let repositories = make_repositories(pool.clone());
+    let reference_data = repositories
+        .scheduling
+        .classic_reference_data(RELATED_PLAYOUT_ID, start, Duration::zero())
+        .await
+        .expect("hydrate persisted expression");
+    assert_eq!(
+        reference_data.classic_filler_presets[&79]
+            .expression
+            .as_deref(),
+        Some(expression)
+    );
+    let playout = repositories
+        .playout
+        .get_with_anchor(RELATED_PLAYOUT_ID)
+        .await
+        .expect("load existing scheduled playout");
+    let result = PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout: playout.clone(),
+            start,
+            finish: start + Duration::hours(1),
+            mode: PlayoutBuildMode::Refresh,
+            reference_data,
+        })
+        .expect("invalid or excessive expression must use whole-content fallback");
+    let primary: Vec<_> = result
+        .added_items
+        .iter()
+        .filter(|item| item.media_item_id == RELATED_MEDIA_ID)
+        .collect();
+    assert!(!primary.is_empty());
+    assert!(primary
+        .iter()
+        .all(|item| item.in_point == Duration::zero() && item.out_point == Duration::minutes(10)));
+    assert!(result
+        .added_items
+        .iter()
+        .all(|item| item.filler_kind != ersatzrs_domain::FillerKind::MidRoll));
+    assert_eq!(result.warnings.len(), 1);
+    let diagnostic = &result.warnings[0];
+    assert!(diagnostic.contains("79 (Expression midroll)"));
+    assert!(diagnostic.contains("schedule item 401"));
+    assert!(!diagnostic.contains(marker));
+    assert!(!diagnostic.contains("Synthetic hidden chapter title"));
+    assert!(!diagnostic.contains(expression));
+    assert!(
+        before == persisted_classic_rows(pool, RELATED_PLAYOUT_ID).await,
+        "building a fallback must not mutate SQL before atomic publication"
+    );
+    repositories
+        .playout
+        .apply_build_result(&result, &playout, Duration::zero())
+        .await
+        .expect("publish complete fallback with checkpoints");
+    persisted_classic_rows(pool, RELATED_PLAYOUT_ID).await
+}
+
 #[tokio::test]
-async fn classic_filler_expression_rejection_preserves_persisted_playout_and_redacts_input() {
-    let directory = tempfile::tempdir().expect("expression rejection database");
+async fn classic_filler_expression_fallback_persists_whole_content_and_redacts_input() {
+    let directory = tempfile::tempdir().expect("expression fallback database");
     let path = directory.path().join("expression.sqlite");
-    let pool = open_database(&path, true).await;
+    let mut pool = open_database(&path, true).await;
     seed_acceptance_fixture(&pool).await;
     seed_continuity_filler_chapters(&pool).await;
     pool.execute(
@@ -1618,10 +1683,11 @@ async fn classic_filler_expression_rejection_preserves_persisted_playout_and_red
         }),
         "baseline must genuinely split the primary programme"
     );
-    let before = persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await;
     let marker = "synthetic-private-expression-marker";
     let expressions = [
         format!("'{marker}' = ("),
+        format!("num = 2 or [{marker}]"),
+        format!("MissingFunction('{marker}')"),
         format!(r"false and ('\uD800' = '{marker}')"),
         format!("false and (#2026-02-30# = #2026-02-28# or '{marker}' = '')"),
         format!("'{marker}' = '{marker}'{}", " ".repeat(65_537)),
@@ -1637,43 +1703,27 @@ async fn classic_filler_expression_rejection_preserves_persisted_playout_and_red
             .execute(&pool)
             .await
             .expect("persist rejected expression");
-        let repositories = make_repositories(pool.clone());
-        let reference_data = repositories
-            .scheduling
-            .classic_reference_data(RELATED_PLAYOUT_ID, start, Duration::zero())
-            .await
-            .expect("hydrate persisted expression");
+        let persisted = assert_classic_expression_fallback(&pool, &expression, marker, start).await;
+        pool.close().await;
+        pool = open_database(&path, false).await;
+        assert!(persisted == persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await);
+        let chapters: Vec<(String, String, String)> = sqlx::query_as(
+            r#"SELECT "StartTime", "EndTime", "Title" FROM "MediaChapter"
+               WHERE "MediaVersionId" = 1010 ORDER BY "ChapterId""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("reload unchanged source chapters");
         assert_eq!(
-            reference_data.classic_filler_presets[&79]
-                .expression
-                .as_deref(),
-            Some(expression.as_str())
-        );
-        let playout = repositories
-            .playout
-            .get_with_anchor(RELATED_PLAYOUT_ID)
-            .await
-            .expect("load existing scheduled playout");
-        let error = PlayoutBuilder::default()
-            .build(SchedulingRequest {
-                playout,
-                start,
-                finish: start + Duration::hours(1),
-                mode: PlayoutBuildMode::Refresh,
-                reference_data,
-            })
-            .expect_err("invalid or excessive expression must fail before replacement");
-        assert!(matches!(
-            error,
-            ersatzrs_core::scheduling::SchedulingError::InvalidClassicFillerExpression(401)
-        ));
-        let diagnostic = format!("{error} {error:?}");
-        assert!(!diagnostic.contains(marker));
-        assert!(!diagnostic.contains("Synthetic hidden chapter title"));
-        assert!(!diagnostic.contains(&expression));
-        assert!(
-            before == persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await,
-            "expression rejection must retain all existing items, anchors and checkpoints"
+            chapters,
+            vec![
+                (
+                    "00:00:00".into(),
+                    "00:05:00".into(),
+                    "Synthetic hidden chapter title".into()
+                ),
+                ("00:05:00".into(), "00:10:00".into(), "Second half".into()),
+            ]
         );
     }
     pool.close().await;

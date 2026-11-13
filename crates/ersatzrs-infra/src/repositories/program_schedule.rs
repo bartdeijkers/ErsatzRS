@@ -1308,6 +1308,7 @@ const ITEM_SELECT_SQL: &str = r#"SELECT psi.*,
        psdi."Id" AS "DurationItemId",
        psdi."PlayoutDuration",
        psdi."TailMode",
+       psdi."DiscardToFillAttempts",
        psmi."Id" AS "MultipleItemId",
        psmi."Count",
        psmi."MultipleMode",
@@ -1590,12 +1591,13 @@ async fn sync_program_schedule_item_subtype(
         PlayoutMode::Duration => {
             sqlx::query(
                 r#"INSERT INTO "ProgramScheduleDurationItem" (
-                    "Id", "PlayoutDuration", "TailMode"
-                 ) VALUES (?, ?, ?)"#,
+                    "Id", "PlayoutDuration", "TailMode", "DiscardToFillAttempts"
+                 ) VALUES (?, ?, ?, ?)"#,
             )
             .bind(item.id)
             .bind(encode_duration(item.duration.unwrap_or_default()))
             .bind(encode_enum(item.tail_mode))
+            .bind(item.discard_to_fill_attempts)
             .execute(&mut **tx)
             .await
             .repository()?;
@@ -1723,6 +1725,7 @@ async fn map_program_schedule_item(
         rerun_collection_id: row.try_get("RerunCollectionId").repository()?,
         playlist_id: row.try_get("PlaylistId").repository()?,
         search_query: row.try_get("SearchQuery").repository()?,
+        fake_collection_key: None,
         pre_roll_filler_id: row.try_get("PreRollFillerId").repository()?,
         mid_roll_filler_id: row.try_get("MidRollFillerId").repository()?,
         post_roll_filler_id: row.try_get("PostRollFillerId").repository()?,
@@ -1748,6 +1751,7 @@ async fn map_program_schedule_item(
         guide_mode: decode_enum_column("program schedule item guide_mode", row, "GuideMode")?,
         tail_mode: decode_optional_enum_column("program schedule item tail_mode", row, "TailMode")?
             .unwrap_or_default(),
+        discard_to_fill_attempts: row.try_get::<Option<i32>, _>("DiscardToFillAttempts").repository()?.unwrap_or_default(),
         fill_with_group_mode: decode_enum_column(
             "program schedule item fill_with_group_mode",
             row,

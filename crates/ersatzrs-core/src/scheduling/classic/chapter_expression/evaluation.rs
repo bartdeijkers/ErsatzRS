@@ -23,7 +23,7 @@ pub(super) fn evaluate(pair: Pair<'_, Rule>, parameters: &Parameters<'_>) -> Res
             } else {
                 text
             };
-            Ok(parameters.get(name))
+            parameters.get(name)
         }
         Rule::root => evaluate(pair.into_inner().next().ok_or(ExpressionError)?, parameters),
         Rule::collection => {

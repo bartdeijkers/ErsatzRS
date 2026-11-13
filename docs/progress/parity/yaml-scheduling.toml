@@ -1,9 +1,12 @@
 feature    = 'YAML scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/YamlScheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0010', '0020', '0125']
 summary    = '''
+Source audit2026-11-11: chapter-aware mid-roll and its saved point expressions
+remain incomplete; see debt yaml-chapter-midroll-expressions. Completed nested
+sequence, count-expression, continuation and UCU-window scopes below are retained.
 UCU-10 row230 corrects nested filler repeat counts and inherited custom titles
 through existing bounded expansion once per build. All87 affected YAML tests,
 actual SQLite restart/preservation and strict core/infra lint pass. Global cycle
@@ -55,3 +58,11 @@ description = 'Native Windows reference loading treats a rooted schedule-file pa
 discovered = '2026-10-14'
 resolved = true
 evidence = 'UCU-10 owns104 passing native Windows YAML checks with exit0 and101 passing focused Linux YAML checks after portable path-root detection. The existing actual schedule-file/import/reset/named-list graphics regression passes on both platforms, along with nested filler and SQLite continuity. Strict affected core lint passes; application models, inline definitions and existing import behavior are preserved.'
+
+
+[[debt]]
+id = 'yaml-chapter-midroll-expressions'
+description = 'YAML mid-roll only recognizes the literal true expression and appends that sequence after the unsplit programme. Port actual chapter splitting and point expressions before claiming complete YAML mid-roll parity.'
+discovered = '2026-11-11'
+resolved = false
+evidence = 'Source review during UCU-16 row289: upstream c41969b3 YamlPlayoutContentHandler.AddItemAndMidRoll calls shared FillerExpression.FilterChapters with actual source chapters and now threads its logger. Rust yaml/instructions/content.rs::schedule_one calls add_media_item for the complete programme, then runs mid_roll_sequence only when expression.trim().eq_ignore_ascii_case("true"); it does not consume chapter boundaries or evaluate point expressions. The chapter metadata projection/evaluator is currently Classic-specific. This pre-existing missing functionality is outside the new C# logger-argument wiring; it must not be marked Covered by the Classic expression tests. YAML feature status is corrected to In progress without reopening completed nested-filler/count-expression/ambient-state components or accepted UCU windows. No YAML runtime reproduction or implementation acceptance is claimed. Closure: actual chapter/sequence output plus saved-expression diagnostics, source offsets/languages and persisted Continue/Refresh proof through the production builder and repository.'

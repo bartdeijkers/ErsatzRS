@@ -40014,6 +40014,761 @@ acceptance, production installation or unavailable-hardware claim follows.
 
 
 [[milestone]]
+id         = 'ucu-16'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Honor Classic duration, grouped content and filler settings while retaining Native'
+status     = 'In progress'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-15']
+acceptance = """
+Maintainer task2026-11-11: execute the registered UCU-16 window, rows286–289,
+fixed at c41969b3bba66f14bf1d0be9e041b52218f65871. Do not chase later commits.
+Finite completion list:
+1. Audit row286's complete diff, including shared channel defaults, playlist
+   generation and platform settings. Retain Native, Next, stored choices,
+   profiles and routes under the existing accepted two-engine decisions.
+2. Carry persisted Discard To Fill Attempts into the Classic scheduler and
+   prove bounded skips, budget exhaustion, tail/fallback and following-item
+   transitions using row287's40/40/40/15-minute60-minute-block fixture.
+3. Prove custom-order shrink/empty resume and implement actual grouped content
+   selection with distinct source identity, ungroupable fallback and independent
+   persisted group anchors for mixed content, Continue and Refresh (row288).
+4. Prove immutable chapter expression selection and deterministic Random Count;
+   reject unknown expression parameters and preserve content/padding on invalid
+   filler expressions with useful preset diagnostics (row289).
+5. Record all four source dispositions after their mandatory proof, and complete
+   applicable persistence/restart, continuity, Health, playback/platform and
+   final gates. Advance the accepted baseline only after ordered acceptance.
+Reuse still-valid evidence. Required focused tests, local final gates, affected
+headed Chromium/Firefox and actual Native/Next decoded playback plus smoke/TSDuck
+where affected remain required. Required platforms are Linux x64, native Windows
+x64 and ARM64/ARMv7 build/package/emulation; native ARM, macOS and unavailable
+hardware retain approved unverified/deferred scopes. No paid/macOS work. Preserve
+international audio/subtitles, teletext, callbacks, accurate Health and completed
+Phase9/UCU work. No live database mutation, dependency replacement, publication,
+installation, release or unrelated CI implementation. New commit/push/merge and
+CI dispatch retain their separate authorization boundaries. Exact source and
+artifact identities, matched SSR/WASM and original failures must be retained.
+"""
+evidence = """
+2026-11-11 start: resolved main rebase64bb05f7 retains all original session
+entries and upstream UI delivery. Isolated branch work/ucu16-resolved starts at
+that base. Rows286–289 are registered but have no accepted dispositions; the
+baseline remains v26.12.0. Initial source review identifies that the admin DTO
+persists DiscardToFillAttempts but the scheduling domain/read/write projection
+omits it. No window disposition or final gate was closed at registration.
+
+2026-11-11 row287 local implementation/persistence component COMPLETE. Item2's
+local stopping condition is met: persisted DiscardToFillAttempts is read/written
+through the scheduling domain, consecutive skips honor the saved budget and
+reset after a successful fit, the exhausting candidate remains unconsumed, and
+tail/fallback precede the next schedule item. A collection whose minimum duration
+exceeds the whole block advances without an endless loop. Filler-overflow rejects
+without consuming content or filler. Partial builds retain their duration finish
+and guide position; offline gaps without fallback do not extend programme guides.
+No schema, renderer, runtime dependency, route or readiness contract changed.
+Existing Classic state/Refresh audits accept the actual generated SQL checkpoints.
+
+Verification at base64bb05f7 plus the current task diff:
+- Eight duration regressions and all110 Classic cases pass (nextest8bf6ba5a).
+  Exact upstream40/40/40/15 fixture, one/two-attempt budgets, successful-fit reset,
+  disabled/no-fit budgets, whole-block rejection, None/Offline/Filler tails,
+  fallback clipping/continuity, titled/untitled Continue and filler rollback.
+- Production PlayoutBuilder + SQLite apply_build_result + close/reopen + Continue
+  and Refresh across midnight passes for both budgets (four scenarios in one
+  regression, nextest8752fbe2). Full future rows and anchors match uninterrupted
+  output, retained language preferences survive, runtime/Refresh audits pass.
+- All six program-schedule repository cases pass (nextestf1acd0e4), including
+  the nonzero duration budget domain round trip. Strict domain/core/infra
+  all-target Clippy, workspace formatting, progress and diff validation pass.
+- Original negatives retained in this history: first five-case trial64c9b012
+  had four failures; continuation e039ad6a exposed an extra guide-group increment.
+  SQL fixture corrections: invalid CollectionType::MediaItem compile failure,
+  then87663c3c exposed a mistaken raw-order assertion; scheduler playback order
+  remains chronological and its actual output is independently asserted.
+Source SHA256: domain scheduling2788460ff5d349f0d94de672524f5f49d7448f5f122e628c690e19d08d9a619d;
+core classic5554f67071cbf6dcac037ae0f32c93decf6acfb293ccbd26aa83bd6ed7973adb;
+infra program_schedule154bc08c2d84b20b470ae0f354e97df99c1b085ce5098be6377cbfaa81e6d530.
+
+2026-11-11 row286 source-review component COMPLETE (item1). All25 paths at
+91f85128014b855657fe3ac513731606bdb5e1ba were reviewed, including every shared
+channel/default/playlist/platform change. Parent LegacyStreamingEngine.Enabled
+is already false. No new engine-neutral behavioral fix is hidden in the cleanup:
+Next-only assignment/migration/alias handling replaces the constant-disabled
+native branch; offset bounds, QSV/VAAPI probe commands and shared validation are
+unchanged. Keep Native routes, explicit stored choices and profile fields under
+ADR0095. The removed display cache serves only the removed legacy selector;
+Rust retains an editable persisted display string and existing capability probes.
+Source map is in plans/upstream-catch-up.md. Proposed disposition is N/A under
+the existing retained-engine decision; no Rust/UI edit or new deviation.
+Six selected channel/default/create/update/engine/subtitle/troubleshooting SQL
+regressions pass (nextesta51c4c82). Playlist, route, channel repository and
+capability sources are unchanged from accepted1000fd07; changed transport/profile
+files were read at the current base. This is source/SQL proof, not new decoded
+playback or browser acceptance.
+
+2026-11-11 row288 functional trial in progress (item3, not yet closed).
+Actual grouped sources now use distinct full keys, independent enumerators,
+block-completion group advancement, seeded shuffled cycles, no-group fallback
+and complete per-group checkpoint/audit coverage. SQL membership separates
+shows/music-video artists/song first album artists/movies/other videos and keeps
+one member per logical media ID despite duplicate/alternate SongMetadata.
+Custom-order shrink from a generated out-of-range cursor resumes at the start;
+empty inputs remain finite. Old incomplete grouped checkpoints refuse Refresh.
+All113 Classic cases passed before the final custom-order and supported-order
+additions (nextestc6506ce3); those five focused group/custom-order tests then
+passed30 composed order/group-mode/One-Multiple-Duration continuation scenarios
+(nextest42435887). Five SQL cases pass (nextestc7a14c44), including16 four-order,
+ordered/shuffled-group restart Continue/Refresh scenarios, explicit mixed-key
+playback, image/finite-stream fallback, duplicated schedule-source languages and
+anchors, and production maintenance refusal without replacing SQL state.
+Initial three group regressions1f3bd9d7 all failed as expected. Broad trial
+72a2b4cc retained a real ungrouped-Marathon normalization regression, corrected
+by constructing runtime sources from normalized schedule items. The other three
+failures were old counter-only fixtures; they now contain real groups and assert
+independent anchors. SQL fixture87903a0c assumed an image duration; an explicit
+600-second display duration makes fallback3424e9be pass. Query-plan test initially
+needs the repository's audited static-SQL wrapper; no user data enters the query.
+Next: finish the query-plan case, combined Classic regressions and strict affected
+lint before closing item3 locally. Row289 and all final acceptance gates remain.
+
+2026-11-11 row288 local implementation/persistence component COMPLETE (item3).
+All116 Classic regressions pass (nextest43bcea64). The expanded matrix717655f8
+passes54 scenarios: nine content orders x two fill-group modes x three playout
+modes, comparing generated partial/Continue output with uninterrupted output.
+The earlier matrix had30 scenarios; the initial60 count was corrected.
+Seven combined SQL cases pass (nextestf3fc9959): six grouped-source regressions
+cover22 functional scenarios (16 mixed-order/mode restarts, two ungroupable
+restarts, mixed metadata membership, duplicate sources, missing-checkpoint
+refusal and show/music-video-artist keys), plus the retained row287 duration
+restart regression. The separate query-plan case5b2fa730 confirms selected-ID
+primary-key access and indexed SongMetadata lookup, without a MediaItem scan.
+An additional continuity regression6889e3cd exposed dropped inactive group
+rotation; it now passes in the combined run. Inactive group state is retained
+alongside inactive source anchors and audited against the active schedule;
+explicit Reset still clears old rotation. Strict domain/core/infra all-target
+Clippy passes after that correction; the final expanded core matrix also passes
+strict core all-target Clippy. Formatting, progress and diff checks pass.
+The current Health/Refresh/Continue audits require every actual group source;
+legacy partial grouped checkpoints are visibly refused before destructive SQL.
+No new decoder, runtime dependency, migration, UI control or deviation is added.
+Row288 source SHA256: core classic a1e9b25d818d8c27d462bd94abd612f0a89ad7711e73d7bab98512c3e4555f53;
+core fill_groups b2a532bce322a44893050a3f73bf1bc6a078bb3ee2865f4b743552bd00ceb973;
+infra classic_groups 5dce82b49023540b377c30ef9943446b4af02df9cc22e7683069be1412639c3e.
+
+2026-11-11 row289 independent chapter/Random Count component in verification.
+Full c41969b3 diff reviewed, including all four Classic callers and YAML's new
+logger argument. Repeated filtering already preserves source chapter values.
+Random Count was not fully Covered: a red regression72672ace observed the same
+85 fillers for every programme. The scheduler now advances the existing seeded
+Rust LCG and stores optional random_count_state in the existing v2 anchor and
+complete checkpoints. Non-Random-Count state retains its shape. Plain/chapter
+rejection restores the draw and filler positions; zero/i32::MAX bounds do not
+overflow; missing old required state refuses Continue/Refresh before SQL clear.
+Five focused RNG cases616b130b pass. Two SQL casesf76ffc7a pass with real builder,
+apply_build_result, database close/reopen and Continue/Refresh across midnight,
+matching full rows and anchors with language preferences. A third actual Health
+casee4d624dd passes: complete state is Pass, removing only the required RNG state
+changes Classic Playout State to Fail. Strict domain/core/infra all-target lint
+passes. Initial compile-negative used dated before its definition; corrected to
+use the complete context's source count without changing the refusal condition.
+The independent RNG/chapter component is now COMPLETE within local proof:
+all122 Classic regressions pass (nextest1246d73e) and all ten combined affected
+SQL cases pass (nextesta24e390d), preserving rows287/288 alongside the RNG changes.
+The repeated immutable-chapter regression is included. Strict affected lint,
+formatting, progress and diff checks pass. No expression-policy change or full
+row289/window acceptance follows from this component closure.
+RNG component source SHA256: core classic a67a82ce94406efbb974171600c0642cccc17c668502f36e5a397eb95fd7f320;
+mid_roll 81d8482139fc191941cdae892cba0caef519989539c879ed045045000484e0c9;
+RNG regression b4b5c2034c85a93a09d4d29e9655fd473b0018127adad9b7ea4e3081ac4d68ae;
+SQL RNG regression 2a7a16407a62914defe11923f8bd3de8b0a169373a57f0ff3c477353320ea3bf.
+
+Original external decision for item4: accepted ADR0098 explicitly required unknown
+parameter null results and redacted whole-build failure for malformed/unsupported/
+over-limit expressions. Row289 instead throws on unknown parameters and uses a
+no-points chapter fallback preserving content and pad duration. A maintainer
+choice was required via the in-thread question. On2026-11-11 the maintainer
+explicitly chose option2, upstream fallback. The decision blocker is CLOSED;
+ADR0098 records that amendment. Unknown evaluated callbacks now return redacted
+errors; Classic callers replace invalid selection with one whole-span unlabelled
+chapter, retain content/padding and report preset name/id plus schedule item id.
+Expression-policy component implementation is in focused verification.
+The Classic evaluator's culture/literal/resource and privacy limits remain.
+The new C# YAML logger argument does not establish Rust chapter-expression
+coverage: existing YAML only recognizes literal true after unsplit content.
+That pre-existing feature gap is now visible in yaml-scheduling debt
+yaml-chapter-midroll-expressions; completed nested
+filler/count/continuation and prior UCU component scopes remain retained.
+
+2026-11-11 approved expression-policy component COMPLETE within local proof.
+Strict callback evaluation rejects unknown names, preserving lazy unused branches.
+Both Classic selection and pre/post Pad placement now use a shared bounded
+full-content fallback. Its single unlabelled interval retains min start/max end,
+discards partial matches and preserves original chapters. Count inserts no
+internal filler; Pad retains the complete programme and clock-aligned padding.
+The production warning path names the saved preset/name/id and schedule item,
+redacts expression/parameter/chapter text and deduplicates repeated diagnostics.
+No schema, route, hydration or dependency change was required.
+
+Final focused verification (nextestb587ccbd-79c3-4f85-b692-de35b7a391cb):
+all136 selected cases pass, including124 core
+Classic regressions, the indexed SQL-plan case, ten row287/288/RNG SQL cases and
+the updated expression SQL regression. The last one covers seven error classes,
+actual Refresh/build/apply/close/reopen, complete source intervals, no mid-roll,
+retained source chapters, no mutation before publication and redacted diagnostics.
+All22 expression cases pass in each of C/en_US.UTF-8/nl_NL.UTF-8/tr_TR.UTF-8
+separate processes. Strict affected all-target Clippy and formatting pass.
+Original negatives retained: nextest84120059 found the historical notitle callback
+oracle case; all eight unknown-callback expectations now explicitly assert errors
+without changing the pinned NCalc fixture data. Two lint negatives identified
+single-match/branch style and a134-line SQL test; corrected without lint allows.
+The SQL assertions are split into a focused helper, retaining the same proof.
+Evidence logs: tmp/evidence/ucu16/focused-final.log and expression-cultures/.
+
+Expression component source SHA256:
+crates/ersatzrs-core/src/scheduling/classic/chapter_expression/mod.rs: 6c885a1d59b8db5e8bc37a66944f6a28a8789fe963d7025fb698499740ed4a15
+crates/ersatzrs-core/src/scheduling/classic/chapter_expression/evaluation.rs: 206abe41ac3bbb9da524af345038f757602fedbf6153d8840589d450a4b1ed40
+crates/ersatzrs-core/src/scheduling/classic/mod.rs: 93525fe0b8835c8b14f665d33136ab53e49633bfade75530b55d36f72b8ca5ed
+crates/ersatzrs-infra/src/repositories/scheduling.rs: 7e9d17faa56ea9d979f836b3492abddff4f0f54f82d2d71df402e99070d6b549
+crates/ersatzrs-infra/tests/scan_refresh_continuity.rs: c7dad0317ed7247e81ee54c8f24a0cb6361bb639b09a9701220e350b574b3ab0
+
+2026-11-11 combined Rust/structural final-check components COMPLETE for the
+current base64bb05f7 plus retained task source diff, with rustix1.1.5 still pinned.
+Strict workspace all-target Clippy passes. The complete nextest selection
+0d335e91 executes8536 cases:8392 initially pass,144 initially fail under the
+sandbox/contended environment. Original output is retained. Confirmed failures
+include denied local sockets and read-only default application folders; one
+Elapsed timeout is retained without assigning an unproven cause. Recovery
+507e1959-aed6-42ed-a187-54c29c61f69d uses loopback permissions, isolated app data/state
+folders and four test threads. All144 pass with no source change. An exact
+binary/test-id set comparison proves8392+144=8536 unique passing cases; the
+original545 ignored/excluded cases remain excluded. This is composed evidence,
+not a claim that the original failing wrapper invocation returned success.
+The separate canonical doctest component passes across11 crates (zero runnable
+examples). Structural parity-check passes progress, formatting, architecture and
+hydration lint, explicitly reusing the complete unit and workspace lint evidence
+rather than repeating their unchanged checks. Evidence: unit-evidence.json,
+original-failures.json, failed-recovery.log, doctests.log and parity-structural.log
+under tmp/evidence/ucu16/final-gates/. Source diff/untracked source archive and
+all4101 file hashes are retained in source-snapshot/;123 current test-binary
+hashes were retained before the required cache cleanup. No active compiler or
+target executable remained; cargo clean removed84.3GiB of generated artifacts,
+and the same configured target directory was recreated (no override).
+
+At the pre-integration checkpoint, the authorized dependency audit concretely
+FAILS only on the rustix1.1.5 RUSTSEC-2026-0486 advisory; bans/licenses/sources pass. Its initial
+sandbox-cache-lock failure and corrected audit output are retained. PR144 at
+18eb4e32 owns the separate1.1.6 pin/lock fix and is still open/unmerged. Its
+CI42994054992 is live; the Cargo deny job has passed, with Level1.5 Chromium
+still running at observation. Do not duplicate its patch or call this candidate
+patched/accepted. Final artifacts and exact-source gates must use the approved
+integrated dependency result; changed dependency inputs invalidate affected
+final artifact/reuse claims under BUILD.md.
+
+Platform preparation: native Windows Rust1.97.1 and its unchanged configured
+target directory are verified. Docker Desktop was initially stopped; starting
+the installed application restores Linux Docker29.8.2 and the exact retained
+ARM64/ARMv7 cross-build images98eaeb67/e8e761e1. That environment prerequisite is
+CLOSED; this is not cross-build/emulation or native ARM acceptance. Candidate
+Windows commands are prepared but not executed. Frontend-only Leptos build passes with compiler erasure enabled; JS/WASM
+hashes are retained in frontend-artifacts.json. SSR, matched bundle, headed
+browsers, actual Native/Next decoded
+playback, smoke/TSDuck and four-platform candidate proof remain open. Native ARM,
+macOS and hardware deferrals remain unchanged. At that pre-integration
+observation no commit/push/merge, CI dispatch, publication, installation or live
+database mutation had been authorized or performed.
+
+2026-11-11 approved dependency integration and checkpoint authorization.
+PR144 is merged as80dbecec013bd9bbb45127ff2dd68020a0f55a40 after complete
+successful CI42994054992. The isolated task branch now uses that exact approved
+base. Its already-merged three-file patch was applied and the branch base moved
+with a soft reset; no new commit was created. The original64bb05f7 history
+remains retained by main, every UCU-16 source file stayed unchanged and the
+session log was unchanged by this base update. The task diff includes no
+replacement Cargo.lock or rustix manifest edit: the separate fix belongs to
+its merged base. The retained base-update.json binds both base identities.
+
+On the integrated rustix1.1.6 basis, cargo deny check now PASSES advisories,
+bans, licenses and sources. All124 Classic core cases pass (nextest025dce73-7e4c-4e47-b95c-00a45ff425d6)
+and all11 focused SQL cases pass (nextest487bda4c-88a6-4741-baf7-b61bb18ea8db),
+including the actual Health and invalid-expression fallback/publication paths.
+Strict domain/core/infra all-target Clippy also passes on the integrated basis.
+The earlier8536-case composed unit/structural results retain their explicit
+pre-integration scope; they are not relabelled as new-pin exact-source CI.
+The maintainer explicitly authorized checkpoint commit, push and existing CI
+after the rustix merge; that prerequisite is now met. Prepare the engineering
+checkpoint and full existing self-hosted CI without accepting the milestone or
+advancing the baseline. Required platform, playback and final-source proof
+remain mandatory. No UCU-16 main merge, release/publication or live installation
+is authorized by this checkpoint permission.
+
+2026-11-11 authorized checkpoint and Linux runtime/browser proof.
+Checkpoint cfbce4cee338089f08b002039afdf9068947f6d5 is committed and pushed to
+fix/classic-scheduling-ucu16 on approved rustix base80dbecec. Full existing
+self-hosted CI43034378697 was dispatched for that exact SHA. Build artifacts,
+workspace Clippy, formatting, commit lint, documentation checks and cargo deny
+have passed; test/runtime/browser consumers and the aggregate are not yet final.
+No UCU-16 main merge or publication was performed.
+
+Matched cargo-leptos build passes on checkpoint cfbce4ce. Its frozen Linux
+server SHA256 is3980f56baa3c9803ec74e74a16d9ffd2d66436476882bf0ecb16e448652012a2;
+the debug frontend and server use the same component-erasure/hash settings.
+The structural bundle gate, Native smoke and real decoded Next smoke pass with
+the unchanged pinned FFmpeg2.0.10/Next0.2.5 runtimes. All20 affected headed
+Chromium/Firefox checks pass, including Classic rebuild dialogs, published-row
+preservation, preferences, localized failures, deferred horizon save and no-JS.
+No hydration/page exception occurred in the scenarios' explicit error checks.
+
+The first Native TSDuck trial failed1/72 checks: the hybrid MPEG-TS session
+returned503 and produced an empty12-second capture. Other pipelines passed;
+this original failure is retained and its cause is not asserted. A diagnostic
+trial with additional logging passes all93 Native checks without source changes;
+the independent Next trial passes86 checks, including audio cadence across item
+boundaries. This proves those passing trials, not absence of intermittent startup
+failures. Logs, capture hashes and original negatives are retained under
+tmp/evidence/ucu16/final-source/transport-retained/; final-source/ also owns build,
+bundle, smoke, browser and candidate-identity records bound to cfbce4ce.
+
+Native Windows offline build first lacked a locked cached crate; online recovery
+then exposed Windows OS267 on the task's Linux target symlink. The symlink was
+replaced by a real directory at the SAME configured target path, preserving the
+original shared cache. No Cargo target override or lockfile change was made.
+The corrected Windows build and qualified offline ARM64 cross-build are running;
+ARMv7 build, platform packages, focused native/emulated tests and Windows runtime
+acceptance remain open. Pinned Next staging independently verifies all four RIDs.
+Docker emulation capability passes for both ARM images; native ARM remains
+explicitly deferred and unverified. These are environment/component results,
+not four-platform or UCU-16 acceptance.
+
+2026-11-11 package/native-UI proof at checkpoint cfbce4ce.
+The exact-source full CI Test, Next-engine and Level1.5 jobs now pass, in addition
+to the producer/lint/audit jobs recorded above. The four full Chromium/Firefox
+general/Level1.5 jobs and final aggregate remain pending; no new dispatch occurred.
+
+Native Windows builds all four required executables and the acceptance helper.
+Its independent structural bundle gate passes. Private development-profile ZIP
+445547aaf2676ab8ed636a0ccc88835f0ea37fc88f02fd9faea3c17c0d5594c8 contains75
+verified files and no FFmpeg. Independent extraction proves that ErsatzRS.exe
+launches the packaged server663edb1d0c629b9f6ea53b22a0a056a371bb4a1e5e8b7f0e481c4a414f4ab9d9,
+the packaged healthcheck succeeds, Next is Bundled/pin-verified and served JS/WASM
+bytes match. A fresh headed native Edge profile proves ready hydration, real
+playout-menu open/close at1440/390 widths, the Classic form and11 successful
+admin-API responses including real server functions, with zero monitored
+page/console errors. The390-wide screenshot also shows an existing left-clipped
+menu; these functional results do not establish visual/responsive acceptance of
+that unchanged page/CSS. No UCU-16 UI source changed. Windows
+localhost/private-WSL browser access trials failed; no firewall/network settings
+were changed. Native Edge uses the existing local browser/DevTools capability.
+Evidence: final-source/windows-package-launch.json, windows-package-ui/ and
+windows/windows-package-launch-result.json under tmp/evidence/ucu16/.
+
+The Linux x64 companion build passes. Private development-profile archive
+15bb1874bf3197d10e827fd0bbaf09b4fe4a46fd1664922ba63578311f6e72d4 independently
+extracts with every inventory digest matching; its native startup, packaged
+healthcheck, bundled/pin-verified Next and served matched assets pass. This
+complements the earlier exact-server decoded/playback/browser proof; no release
+or installation follows. ARM64 application binaries build; its focused test
+producer and the ARMv7 build are running. Native Windows test execution first
+failed because nextest was absent. The exact CI-pinned0.9.140 official Windows
+archive ec39698dfe5bcfffb7d5da037f226bc1670584ba247123f4e684a0f224fe828d is now
+verified and retained task-locally. Focused native core/SQL tests and actual
+Windows Native/Next decoded smoke are running. No project dependency, lockfile,
+global tool installation or configured target path changed.
+
+2026-11-11 native Windows required platform component COMPLETE at cfbce4ce.
+All124 Classic core and11 real SQLite cases pass natively after supplying the
+missing verified task-local nextest runner; no source/lockfile change occurred.
+The SQL run174ce770-bce5-4486-bef1-43c48038f164 covers duration/group/RNG
+restart/Continue/Refresh, actual Health, safe refusal and all seven invalid
+expression fallback classes. Native/Next smoke passes on the same Windows
+server: private callbacks stay404, actual MPEG-TS/HLS endpoints work, Next
+decodes Dutch879/880Hz audio and selected subtitles53white pixels, cached
+reconnect/preview preserve configuration, and idle worker output is removed.
+The candidate launcher/UI/bundle/package proof above remains valid. Only owned
+candidate processes were checked after cleanup: none remain. Windows evidence,
+test-binary digests and original missing-tool/target-path failures are retained
+in tmp/evidence/ucu16/windows/. This closes that platform component, not UCU-16.
+
+The ARM64 package independently extracts and passes QEMU startup, packaged
+healthcheck, bundled/pin-verified Next and exact served JS/WASM bytes. Archive
+3530978799e07ef798c313f0f5d85841048641155ad855ca55c94363a0b8635a and its
+full inventory are retained. The first emulated core run passed123/124; its one
+failure is a missing snapshot/workspace fixture in the container, not a reported
+output difference. Adding only read-only committed expectations and the runtime
+Insta workspace root makes that exact failed test pass (bae43a25); snapshot
+updates are forbidden, source/expected data remain unchanged. Original output
+and runner are retained. The separate ARM64 SQL emulation and ARMv7 package/
+emulation proof remain in progress. Native ARM remains deferred/unverified.
+
+2026-11-11 ARM64 required software/platform component COMPLETE at cfbce4ce.
+All124 Classic cases pass as the exact123 original passes plus the one recovered
+snapshot case; an explicit test-id set comparison proves124 unique passing cases
+with no source/expected-snapshot change. All11 SQLite cases also pass under QEMU,
+including the16-scenario grouped restart/Refresh case (126seconds, reported slow
+under the unchanged60-second reporting threshold, not terminated or retried).
+The ARM64 application build, independent package and startup/bundle/Next proof
+above remain valid. Evidence: final-source/arm64/test-evidence.json binds all
+test IDs, three binary digests, original failures, recovery and SQL run IDs.
+This closes ARM64 build/package/emulation only; native hardware remains
+explicitly deferred/unverified. ARMv7 and the full CI browser aggregate remain.
+
+2026-11-11 ARMv7 producer configuration correction, no product-source change.
+The initial application command incorrectly reused the typecheck/test linker
+setup rather than the retained qualified full-application setup. GNU ld remained
+CPU-active in the final web link. Only that task-owned container was stopped
+(exit137, original build.log/build.json retained). Restoring the existing scoped
+web-final-link wrapper makes the same application build finish in8.96seconds;
+the retained Rust1.97.1 LLD handles only that final link, with unchanged cross-GCC,
+sysroot, source, flags and configured target directory. The explicit link trace
+and wrapper hashes bind the correction to the previous qualified UCU-15 setup.
+All three application binaries are actual ARM ELF32/hard-float artifacts. The
+focused test producer now runs; package/QEMU proof and final CI remain open.
+Evidence: tmp/evidence/ucu16/final-source/armv7/linker-correction.json,
+build-qualified-command.json, build-qualified.log, qualified-link-trace.log and
+app-build.json. No new linker/toolchain installation or repository change.
+
+2026-11-11 ARMv7 required software/platform component COMPLETE at cfbce4ce.
+The corrected qualified producer passes. Its private archive
+7e8cecb9375b52a70e9ba3c3af81d959afdc42b4ec9b03c84d63e15b782403d6
+independently extracts with every file hash matching; QEMU startup, packaged
+healthcheck, bundled/pin-verified Next and matched served assets pass. All124
+Classic core cases and11 SQLite cases pass under ARMv7 QEMU. The grouped SQL
+matrix takes77seconds and is reported slow under the unchanged threshold.
+The SQL evidence collector then exits1 on a file_digest argument typo AFTER the
+actual test process returned; original trace and complete nextest output remain.
+Reconstruction checks all11 unique PASS records and the final11-passed summary,
+and retains exact binary/metadata identities. No test rerun, source change or
+snapshot acceptance was used. Do not claim that metadata-wrapper invocation
+returned0; actual per-case proof and wrapper status remain distinct.
+Evidence: final-source/armv7/test-evidence.json, emulation-sql.json,
+emulation-sql-inputs.json, package-runtime.json and package-emulation/ under
+tmp/evidence/ucu16/. This closes ARMv7 build/package/emulation only; native ARM
+is still explicitly deferred/unverified. All four required platform components
+are complete within their recorded scopes. The full CI browser aggregate is
+the remaining mandatory final proof; ledger dispositions/baseline remain pending.
+
+The live CI annotation audit retains four failure annotations on otherwise
+successful Format/Build/Clippy/Deny checks. All four logs identify the same
+nonfatal composite Rustup-default helper rejecting --force-non-host; each has
+outcome=failure/conclusion=success and confirms the required rustc1.97.1.
+The actual gate steps and check runs succeed at cfbce4ce, with one run attempt.
+Original masked logs, check identities and annotation context are retained in
+ci/nonfatal-setup-annotation-evidence.json under tmp/evidence/ucu16/. No CI,
+global Rustup or toolchain repair was introduced for this unrelated setup issue.
+
+The consolidated tmp/evidence/ucu16/qualification.json maps the unchanged five
+completion items to exact-source package/test/runtime proof. Current archive
+digests were rechecked against all four retained archives. It remains explicitly
+not ready for acceptance until the live full CI browser jobs and aggregate pass;
+ledger dispositions and the accepted pin have not been advanced.
+
+2026-11-11 demonstrated final-integration input change, same UCU-16 scope.
+Remote main advanced to531c9249 (PR142 pagination, PR143/146 CI-selection and
+browser-fixture updates). These change two compiled web modules and CI/browser
+inputs, so cfbce4ce's whole-candidate proof cannot qualify the future merge.
+Documentation checkpoint35751de2 retains that candidate's verified components.
+Integration8e9720f1 merges current main without changing any UCU core/domain/
+infra/app/FFmpeg/scheduler or Cargo input. Both changelog entries and every
+session row are retained (base2096, ours2107, theirs2098, merged2109).
+The imported web/CI/test files match531c9249 exactly;41 domain-selector and15
+browser-evidence Python tests pass. Main and unrelated work remain untouched.
+
+The authorized integration checkpoint is pushed. Full existing self-hosted
+CI43056494938 runs at8e9720f1 and supersedes43034378697 by the existing concurrency
+policy. The old run is Cancelled, not accepted full CI; its successful Rust,
+Next, Level1.5 and general Chromium controls remain retained with that source.
+Source-specific matched server/site packages and actual runtime integration are
+being requalified for8e9720f1. The unchanged124 core/11 SQL component proof per
+native Windows/ARM-emulation scope remains valid and is not erased or relabelled.
+Evidence: tmp/evidence/ucu16/integration-531c/preflight.json, source.json and ci/.
+The original qualification.json retains cfbce4ce identities; the successor's
+records have their own source identity. No new upstream rows, acceptance waiver,
+CI implementation, dependency replacement or publication scope is introduced.
+
+2026-11-11 integrated candidate8e9720f1 local requalification COMPLETE.
+All four required private development-profile packages are rebuilt on this
+source. Independent archive inventories, startup, packaged healthcheck, bundled
+pin-verified Next and matching served JS/WASM pass on native Linux/Windows and
+ARM64/ARMv7 QEMU. Current archive SHA256 identities:
+linux-x64 c026d4515d6b88c7908f2035e64f0183bd1ea10dbc082c87f97b5a3f8e2178b3;
+win-x64 f80766bcf0040127dfbf454669e2c962e73788a1c48692f14c917b8201cc8782;
+linux-arm64 9db094a28d87b4cc87b33f6aa6a93fe65d3df7f6411fd46fb07b6167325e6797;
+linux-arm 6a7a238b63c95779830afb089404688a8f0116362f8eee9fd32a682e34ea2cd4.
+Native Windows launcher, real headed Edge controls and Native/Next decoded
+audio/subtitle playback pass. The owned-process check finds no remaining test
+processes; six task logs are retained without production data/browser profiles.
+Native Linux matched-bundle and both smoke gates pass. Current Native93 and
+Next86 TSDuck checks pass; captures remain with the qualification. All32 headed
+Chromium/Firefox cases across Classic playout/deferred-save and imported media/
+All-pagination flows pass. Exact source equality revalidates reuse of the prior
+124 Classic/11 SQL component proof per native Windows/ARM-emulation scope.
+Canonical receipts, current artifact identities and unchanged-component joins:
+tmp/evidence/ucu16/integration-531c/qualification.json. Original failures and
+scope limitations remain retained; native ARM is not claimed or accepted.
+
+2026-11-12 complete candidate proof at8e9720f1. Full CI43056494938 is Success
+on attempt2 with all15 required jobs green. Twelve original successful jobs
+retain their execution timestamps; only the two failed Chromium jobs and CI ok
+were rerun. General Chromium originally passed its suite but failed diagnostic
+artifact upload with404; Level1.5 Chromium lost runner communication during its
+suite. Their original metadata/annotations and available first-attempt logs are
+retained. Original job-log endpoints now return404 and the first-attempt ZIP
+omits the superseded Chromium logs; no missing log is represented as a pass.
+The original observer ended on API502, not workflow completion. The subsequent
+authoritative successful run and downloaded full-tree marker13973204648 bind
+source8e9720f1/tree9d9f3a30 to every gate. Canonical CI join:
+tmp/evidence/ucu16/integration-531c/ci/full-ci-qualification.json.
+This closes that candidate's mandatory final CI proof and the capacity blocker.
+
+Completion state: items1/2/3/4 and item5's candidate-local/platform/playback/full
+CI proof are complete at8e9720f1. Ordered acceptance/delivery remain open.
+Its integrated base includes approved rustix1.1.6 and main531c9249; the UCU diff
+does not duplicate that dependency patch or remove those main changes.
+Main has since advanced to fixedfc6158c8 with dependency/subtitle updates,
+including jiff/Pest and the chardetng1.0 adaptation. Preserve this completed
+candidate checkpoint, then integrate that fixed base and verify affected
+dependency, scheduler, subtitle and artifact/runtime boundaries. Old compiled
+artifacts do not qualify changed dependency inputs. No later upstream row or
+new dependency implementation is added by consuming these merged main changes.
+Next bounded action: authorized progress checkpoint, then the fixed-main
+integration proof required for reviewable source delivery and ordered closeout.
+
+2026-11-12 qualified checkpoint59168718 is committed/pushed; its direct parent
+is the fully qualified8e9720f1. Fixed-main integration237008bd is also committed/
+pushed, with no UCU implementation change. All eight imported non-overlapping
+dependency/subtitle/workflow inputs equal mainfc6158c8 exactly; the sole changelog
+conflict retains both UCU YAML-debt and main dependency/subtitle entries.
+Cargo.lock changes21 removed/18 added dependency versions. Fresh dependency-
+bound tests and application artifacts are required; this does not erase the
+completed original-source proof or advance the fixed upstream terminal.
+Preflight/source identities: tmp/evidence/ucu16/integration-fc6158c8/.
+Full existing self-hosted CI43287157728 runs at237008bd with normal full defaults;
+no focused mode, cache reset or artifact-reuse input is used. Local formatting
+and strict workspace/all-target Clippy pass on237008bd with Cargo.lock unchanged.
+Native Windows124 Classic and11 SQLite cases also pass on the new graph.
+The canonical local nextest/doctest closeout, native application build and
+retained ARM64 producer remain active. Native ARM remains unverified, and ordered source
+disposition/baseline/delivery remain pending the integrated candidate gates.
+Next bounded action is to finish this fixed-source integration proof, then the
+eligible progress checkpoint and reviewable source PR. No unrelated dependency
+repair, additional upstream row or CI engineering work is introduced.
+
+2026-11-12 source237008bd required build/focused-test components COMPLETE:
+native Windows builds all four applications and the fresh xtask helper;124
+Classic,11 SQLite and7 subtitle cases pass. Actual test-binary metadata/hashes
+and frozen applications are retained in windows/test-evidence.json under
+tmp/evidence/ucu16/integration-fc6158c8/. ARM64 builds all three applications;
+the same124/11/7 cases pass under QEMU with original read-only expectations.
+Its test-inputs.json, test-evidence.json and frozen ELF64/AArch64 applications
+retain exact identities. The112-second grouped SQL case is reported slow under
+the unchanged threshold. Native ARM remains unverified. Neither component claims
+new-source package/UI/decoded playback acceptance before those remaining trials.
+
+CI43287157728 attempt1 fails in its artifact producer: the self-hosted runner
+loses communication and rustc is killed with SIGKILL during archive preparation.
+Other executed lint/audit/format/doc/commit checks pass; downstream skipped jobs
+are not accepted. Original job131424101625 metadata, log and annotations remain
+in ci/; failed-build-recovery-plan.json selects only this producer and dependent
+jobs on the same source after the owned heavy compilers finish. No global
+runner, workflow, dependency or acceptance-policy repair is introduced.
+
+The initial local closeout runner was misconfigured: task-wide FFmpeg/Next
+overrides bypassed six managed-acquisition fixtures, and the package-only
+component-erasure flag was incorrectly applied to the canonical unit graph.
+Two raw HTML assertions also fail in that graph. The owned nextest process was
+explicitly interrupted to correct this configuration: original8293/8537 result
+has8281 passes,8 assertion failures,4 SIGINT failures and244 unrun cases.
+This is not full unit acceptance. Original100 exit, log, source and correction
+reason are preserved as test-closeout-initial.* and
+local-closeout-configuration-correction.json. The canonical closeout now runs
+without injected runtime overrides or the erasure flag, with build jobs2 and
+unchanged test threads4. No product/test source or expected result changed.
+Keep canonical unit settings separate from matched debug package erasure.
+
+The corrected canonical graph finishes compilation and starts all8537 tests.
+All six formerly bypassed managed-runtime fixtures pass with clean settings;
+managed-runtime-fixture-recovery.json binds that recovery to unchanged source/
+expectations. Full closeout remains pending its final result and doctests.
+Both original raw HTML assertion cases also pass in the canonical graph.
+unit-runner-configuration-recovery.json joins all eight recovered assertions
+without product/test/expectation changes. Interrupted and unrun cases from the
+initial invalid graph remain unaccepted until the canonical full run finishes.
+Only after heavy owned compilation ends, CI43287157728 attempt2 is requested
+through failed producer131424101625 and its dependent jobs. The same237008bd
+source and workflow remain; preceding successful checks are retained. Exact
+request and source guard: ci/producer-rerun.json. This is not a full-CI success
+claim before the downstream gates and aggregate actually complete.
+
+2026-11-12 source237008bd canonical local closeout COMPLETE. The actual
+./run.sh test-closeout exits0: all8537 tests pass,545 existing ignored cases are
+skipped, and all11 Cargo-doctest steps succeed with0 runnable doctests.
+The140.9-second finite100-page workload is reported slow under the unchanged
+threshold. Cargo.lock, product/test source and expectations remain unchanged.
+local-closeout-qualification.json and closeout-test-inputs.json retain command,
+results and exact identities for123 canonical test binaries. The initial invalid
+run remains negative history; none of its interrupted/unrun cases is counted
+as a pass in place of the completed canonical run.
+
+The configured real worktree target then reaches66.03GiB allocated. With every
+owned compiler/test process terminal and new Windows/ARM64 applications plus
+test identities preserved outside it, cargo clean exits0 and removes that
+target. The separate CI target, registries, source, worktrees and prior evidence
+are preserved. Exact inventory/guard/result: target-cleanup-preflight.json and
+target-cleanup.json under tmp/evidence/ucu16/integration-fc6158c8/.
+
+CI43287157728 attempt2's producer now succeeds with preceding checks retained;
+Rust/Next/Level1.5 and browser/aggregate acceptance remain pending. The owned
+matched Leptos/Linux package/runtime/browser sequence starts only after that
+producer's heavy compilation completes, using build jobs2. Its private size
+guard was corrected to accept a target directory absent after cargo clean,
+before any compiler/runtime started; no product/workflow/expected data changed.
+Next bounded step: complete this Linux package proof and the retained ARMv7
+build/package/emulation obligation, plus the unchanged full CI and ordered
+delivery/disposition/baseline closeout. No milestone acceptance is claimed yet.
+
+2026-11-12 source237008bd Linux and Windows integration components COMPLETE.
+The matched Linux server/site build and companions, structural web parity gate,
+independent package extraction/startup, Native/Next decoded smoke,93/86 TSDuck
+controls and32 headed Chromium/Firefox cases all pass. The web parity invocation
+explicitly reuses this source's full canonical unit/doctest and strict workspace
+Clippy components; it does not omit those obligations. Native Windows passes
+the matched bundle gate, independent packaged launcher/child and bundled Next
+identity, headed Edge at1440/390, and decoded Native/Next playback with bounded
+cleanup. Exact drivers/receipts and archive inventories are retained under
+tmp/evidence/ucu16/integration-fc6158c8/qualification.json. Linux archive260c955c
+and Windows archive58c7c068 are private development-profile acceptance candidates,
+not published releases. ARM64 build and124/11/7 QEMU tests remain completed;
+its independent current-source package/startup and ARMv7 scope remain separate.
+
+CI43287157728 attempt2 passes its producer, ordinary Rust and Next engine jobs.
+Level1.5 passes2437 workspace tests and16 of17 real Next runtime cases. Its
+remote-provider caption case fails at Emby-convert with no source request or
+dynamic callback observed; empty grant observations do not prove grant revocation.
+The original job logs, all available proof receipts and diagnostic archive are
+retained in ci/teletext15-failure-analysis.json. Cause is not established.
+After owned heavy compilation and timed playback/browser drivers finish, the
+exact successful CI producer's Rust archive is fetched by its published digest,
+source/host/capability/file inventory verified, and only that unchanged ignored
+case is executed. All six original provider/mode variants pass with unchanged
+deadlines, clip and grant/audio/caption/cleanup assertions. No source correction,
+test weakening or full CI acceptance is inferred. ci/runtime-diagnostic/trial.json
+and provider-variant-results.json own this scoped result. A missing empty nextest
+extraction directory initially prevented any test from starting; that setup-only
+negative is retained separately. Wait for the original remaining browser jobs,
+then recover only the failed Level1.5 job and dependent aggregate. ARMv7 and
+ordered delivery/disposition/baseline closeout retain their original requirements.
+
+The current ARM64 independent archive/startup component then completes: archive
+cb395961 has its complete extraction inventory checked, ELF AArch64 binaries,
+HTTP200 readiness, packaged healthcheck, matching served JS/WASM and bundled
+verified Next with FFmpeg9. Receipt: final-source/arm64/package-startup/
+qualification.json under the same evidence root. This is QEMU software proof,
+not native hardware acceptance. Remaining platform work is only the current
+ARMv7 build,124 Classic/11 SQLite/7 subtitle tests and independent package/startup.
+
+The current ARMv7 application build then completes in23m08s with the qualified
+scoped final-link wrapper and one compiler job. All three ELF32 ARM hard-float
+application identities are retained in final-source/armv7/app-build-component.json.
+The same producer continues test-binary preparation;124/11/7 QEMU execution
+and independent package/startup remain unaccepted until their actual results.
+
+2026-11-12 source237008bd ARMv7 qualification COMPLETE. The full producer and
+all three QEMU groups exit0:124 Classic,11 SQLite and7 subtitle cases pass.
+The97.7-second mixed-group restart case is reported slow under the unchanged
+threshold. The retained hard-float application hashes match the initial build.
+Archive34b178cf passes complete extraction inventory, ELF32/ARM hard-float,
+HTTP200 readiness, packaged healthcheck, matching served JS/WASM and bundled
+verified Next with FFmpeg9. Exact receipts: final-source/armv7/test-evidence.json,
+frozen-binaries.json and package-startup/qualification.json under the same root.
+Both ARM scopes remain QEMU software proof, with native hardware unverified.
+
+All required local platform/package/runtime and final-check components for237008bd
+are now complete. qualification.json joins the four private archive identities,
+canonical8537-test/doctest and lint proof, matched web assets, headed browsers
+and actual Native/Next playback. Actual Linux and native Windows smoke captures
+and Linux TSDuck inputs/reports are copied into the owning evidence root and
+verified against unchanged originals, before eventual worktree/temp cleanup.
+runtime-evidence-retention.json under final-source/ and windows/ owns those joins.
+No original is removed during this retention step.
+
+CI43287157728 now passes both general Chromium/Firefox and Level1.5 Chromium.
+Only Level1.5 Firefox remains; the earlier Level1.5 runtime failure still needs
+its source-bound recovery. All owned compilers and local timed playback work are
+terminal. Wait for that same run to complete, then retry only the failed
+Level1.5 job and dependent aggregate, preserving all previous successes and
+the original failure/unchanged six-variant diagnostic. Do not start a new full
+run or change source, deadlines, expected data or workflows. The maintainers
+reconfirm rows286–289 only;290/291 come afterward. Ordered dispositions,
+accepted-baseline advancement, eligible PR delivery and separately authorized
+main merge remain open. No milestone acceptance or later-row processing is claimed.
+
+At2026-11-12T23:22:56Z the sole remaining Firefox job131494775870 is queued
+without a runner assignment. Both compatible existing Linux/X64 self-hosted
+runners21/24 are online and report busy. Exact bounded API observations are
+retained in ci/last-browser-capacity-observation.json, last-browser-job.json and
+last-browser-runners.json. This is a current capacity prerequisite, not a test
+failure or a reason to restart the workflow. All independent required local
+work is complete; the source PR and four-file ordered-closeout draft are ready
+for final source-bound results. Closure: an existing compatible runner becomes
+available, the same Firefox job executes, then only failed Level1.5/aggregate
+recovery completes. Do not cancel other work, provision runners, weaken gates,
+or replace this finite completion list with unrelated activity while waiting.
+
+By2026-11-12T23:27:06Z the same Firefox job is in progress, closing the
+runner-capacity wait. ci/last-browser-started.json retains its source/run/job
+identity and actual start time. Required Firefox success and the existing
+failed Level1.5/aggregate recovery remain open; no pass is inferred from startup.
+
+2026-11-13T00:25:44Z CI attempt2 is terminal: all four required general/base
+Chromium/Firefox jobs and every other prior component pass. Only the previously
+diagnosed Level1.5 runtime job and its aggregate fail. The exact terminal receipt
+is preserved as ci/attempt-2-terminal.json before requesting only failed
+job131490940183 and its dependents through the GitHub job-rerun API. The request
+succeeds and the same source237008bd enters attempt3. ci/teletext15-rerun.json
+and attempt-3-run.json retain source, guards and actual request/result. No source,
+assertion, deadline, workflow or expected-data change is made. All four browser
+successes remain valid; full CI acceptance awaits runtime/aggregate recovery.
+
+2026-11-13 source237008bd technical qualification COMPLETE. CI43287157728
+attempt3 succeeds with all15 mandatory jobs. Thirteen prior successes are
+retained; only Level1.5 runtime and aggregate are recovered. Actual recovery
+logs prove2437 workspace and17 real Next passes, including the original
+provider case in12.282s and all six provider/mode proof receipts. Emby now has
+one upstream read/full read/acquisition/dynamic item, successful delivery,
+presentation-grant preservation and source-edit revocation, with zero callback
+failures and bounded work/storage cleanup. Source, assertions and deadlines
+are unchanged; the original failure's cause remains unproven, not a code fix.
+
+ci/full-ci-qualification.json owns exact successful run/job identities, scoped
+composition, original negatives and available log inventory. The directly
+requested textual job download was refused by the CLI's escape-sequence
+output protection; the complete positive job log is recovered from the already
+downloaded CRC-verified successful-run archive without rendering raw escapes
+or rerunning tests. The full-tree artifact13998182250 is downloaded, CRC/digest
+verified and its content matches source treeb575e384029314fb47381f81b4a236b41ef32249
+and the successful run URL. All four private package/runtime and local final
+components remain complete, with native ARM explicitly unverified QEMU proof.
+
+The fixed-main technical proof is ready for the authorized progress-only
+checkpoint and eligible source PR. Keep source237008bd as that checkpoint's
+direct parent; only the three existing progress files change. Four individually
+reviewed dispositions and the terminal baseline are prepared but remain
+unapplied until the eligible source PR gate; milestone acceptance and separately
+authorized main delivery stay open. Rows290/291 remain for afterward.
+
+Historical2026-11-11 external prerequisite at handoff: remaining CI jobs queued, both
+eligible Linux runners online but occupied by other work. Repeated live job and
+runner checks confirm the capacity dependency; no UCU-16 job failure or stopped
+run is inferred. No independent local obligation remains before this outcome.
+Its closure condition was: existing CI43056494938 obtains runner capacity and reaches
+an authoritative terminal result; resume from that same run and fix any actual
+failure before the checkpoint/PR. Keep the live observer and candidate intact.
+Investigate any concrete failure before accepting its affected obligation. All four ledger
+acceptances remain pending their window gates. Baseline remains v26.12.0.
+"""
+
+[[milestone]]
 id = 'ci-workflow-separation'
 phase = 'Engineering — usable CI feedback'
 title = 'Separate development checks, affected PR proof and full qualification'

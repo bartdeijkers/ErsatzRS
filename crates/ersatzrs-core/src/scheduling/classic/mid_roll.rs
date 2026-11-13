@@ -19,6 +19,7 @@ impl ClassicContext {
         scheduler: &'static str,
     ) -> Option<Vec<PlayoutItem>> {
         let before = self.filler_media.clone();
+        let before_random_count = self.random_count_state;
         if self.pad_filler_count(schedule) > 1 {
             self.result.warnings.push(format!(
                 "classic schedule item {} skipped multiple pad fillers",
@@ -101,6 +102,7 @@ impl ClassicContext {
         }
         if guide_finish.is_some_and(|finish| current > finish) {
             self.filler_media = before;
+            self.random_count_state = before_random_count;
             return None;
         }
         Some(pre)

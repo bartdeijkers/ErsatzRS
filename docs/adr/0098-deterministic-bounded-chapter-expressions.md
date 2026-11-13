@@ -4,6 +4,11 @@
 
 Accepted 2026-09-23
 
+Amended 2026-11-11 for UCU-16 row289: the maintainer chose full-content fallback
+on invalid filler expressions, with actionable redacted diagnostics. Unknown
+callback parameters now fail evaluation. This supersedes the original unknown-null
+and whole-build-refusal outcome; culture, grammar and resource limits are retained.
+
 Updated 2026-09-25 for upstream row 57: the retained NCalc behavior is checked
 against NCalcSync 6.2.0. IEEE-754 NaN comparisons and the sign of zero from
 `IEEERemainder` follow that release; the deterministic culture and resource
@@ -27,7 +32,9 @@ padding correction; implementation and platform/runtime acceptance remain distin
 Partial — the Classic chapter evaluator implements the accepted profile with
 pinned ICU4X 2.2.0 compiled collation data, invariant numeric conversions,
 validated Gregorian/elapsed-time
-literals, eager literal validation and redacted atomic build errors. The parser
+literals and eager literal validation. UCU-16 replaces expression build refusal
+with a redacted full-content fallback; its verification is recorded separately
+in milestone ucu-16. The parser
 retains the NCalc 6.2 grammar, iterative binary evaluation, all nine callbacks,
 65,536-byte text limit and 32-level nesting limit.
 
@@ -163,10 +170,12 @@ to implement those APIs generally.
 Preserve all nine callback names and meanings: `last_mid_filler`, `total_points`,
 `total_duration`, `total_progress`, `remaining_duration`, `matched_points`,
 `point`, `num`, and `title`. Preserve their original seconds/source-offset basis,
-case-sensitive parameter names, unknown-parameter null results, and the rule that
+case-sensitive parameter names and the rule that
 only a boolean true selects a point. Preserve stateful match counting, elapsed
 time since the last selected point, merged chapter intervals and the trailing
 content interval. The no-match padding behavior remains owned by ADR 0097.
+An evaluated unknown parameter is an error; lazy branches still do not evaluate
+unused callbacks.
 
 Limit evaluated expression text to 65,536 UTF-8 bytes and syntactic parenthesis
 nesting to 32, counting groups, lists and function calls but excluding quoted
@@ -175,10 +184,31 @@ empty-chapter and single-chapter bypasses, which perform no evaluation. Keep
 binary-chain parsing/evaluation iterative and avoid unbounded factorial loops.
 These bounds intentionally differ from accepting arbitrary valid NCalc input.
 
-A malformed, unsupported or over-limit expression fails the entire playout
-build with a redacted error. Do not turn it into a false predicate, silently
-remove filler, substitute a different expression or persist a partial replacement.
-Do not include saved expression text or chapter titles in errors or logs.
+A malformed, unsupported or over-limit expression returns one unlabelled chapter
+spanning the original minimum start and maximum end. Discard any partial point
+selection. This disables internal breaks for that preset while preserving the
+complete programme and the content duration used for padding. The Classic build
+continues and publishes a complete replacement through the normal atomic path.
+Report the filler preset name/id and schedule-item id in a diagnostic. Do not
+include saved expression text, unknown parameter text or chapter titles.
+
+## Accepted UCU-16 row289 amendment
+
+The maintainer approved option2 (upstream fallback) on 2026-11-11.
+Upstream c41969b3 now rejects unknown callback parameters and returns one
+unlabelled chapter spanning the original start/end on invalid evaluation.
+This disables internal breaks while retaining complete content duration for
+clock-aligned padding. The Classic caller would publish that full-content
+fallback with an actionable preset/schedule diagnostic, rather than discard the
+programme or replace a whole schedule with a partial result.
+
+The amendment keeps the deterministic culture/literal rules, lazy callback
+evaluation, parser byte/nesting limits and redaction of expression text/chapter
+titles. It changes the caller's failure outcome after a bounded parser error;
+it does not relax parsing or allow unsupported input to execute. Unknown callback
+names return an error instead of null. Repeated filtering must preserve input
+chapter times and metadata. The original unknown-null/whole-build-refusal policy
+is superseded. Milestone ucu-16 owns required source/runtime proof.
 
 ## Consequences
 
@@ -190,8 +220,10 @@ visible parity debt until the complete accepted implementation is verified.
 Acceptance requires differential tests for retained NCalc behavior, explicit
 expected-result tests for every accepted difference, identical results under the
 four culture environments above, and build/execution evidence across all six
-supported platforms. Confirm redacted atomic failure and unchanged prior playout
-state for malformed, unsupported and over-limit expressions. Publish the actual
+supported platforms, subject to current explicit platform deferrals. Confirm
+redacted whole-content fallback, retained padding, unchanged source chapters and
+atomic publication for malformed, unsupported and over-limit expressions.
+Publish the actual
 supported profile in the expression reference after implementation. UCU-02's
 placement, persistence and playback gates remain required; this ADR does not
 close row 22 or the milestone.

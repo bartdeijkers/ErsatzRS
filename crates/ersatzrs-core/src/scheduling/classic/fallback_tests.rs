@@ -437,7 +437,7 @@ fn unsplit_midroll_pad_follows_regular_postroll() {
 #[test]
 fn chapter_expression_selects_breaks_and_preserves_unsplit_content_without_matches() {
     for mode in [FillerMode::Count, FillerMode::Pad] {
-        for expression in ["num = 2", "false"] {
+        for expression in ["num = 2", "false", "(", "num = 1 or missing"] {
             let (mut ctx, mut item) = context();
             item.mid_roll_filler_id = Some(95);
             let mut mid = filler_preset(95, FillerKind::MidRoll, mode, Some(1), None);
@@ -478,7 +478,13 @@ fn chapter_expression_selects_breaks_and_preserves_unsplit_content_without_match
                 .iter()
                 .filter(|row| row.media_item_id == 100)
                 .collect::<Vec<_>>();
-            if expression == "false" {
+            if expression == "num = 2" {
+                assert_eq!(primary.len(), 2);
+                assert_eq!(primary[0].out_point, Duration::minutes(20));
+                assert_eq!(primary[1].in_point, Duration::minutes(20));
+                assert_eq!(primary[1].out_point, Duration::minutes(45));
+                assert_eq!(rows[1].media_item_id, 8);
+            } else {
                 assert_eq!(primary.len(), 1);
                 assert_eq!(
                     (primary[0].in_point, primary[0].out_point),
@@ -486,25 +492,30 @@ fn chapter_expression_selects_breaks_and_preserves_unsplit_content_without_match
                 );
                 assert_eq!(rows[0].media_item_id, 100);
                 assert_eq!(rows.len(), if mode == FillerMode::Count { 1 } else { 4 });
-            } else {
-                assert_eq!(primary.len(), 2);
-                assert_eq!(primary[0].out_point, Duration::minutes(20));
-                assert_eq!(primary[1].in_point, Duration::minutes(20));
-                assert_eq!(primary[1].out_point, Duration::minutes(45));
-                assert_eq!(rows[1].media_item_id, 8);
             }
             assert!(rows.windows(2).all(|pair| pair[0].finish == pair[1].start));
+            if expression != "num = 2" {
+                assert_eq!(
+                    rows.last().unwrap().finish,
+                    start + Duration::minutes(if mode == FillerMode::Pad { 60 } else { 45 })
+                );
+            }
+            assert_eq!(
+                ctx.result.warnings.is_empty(),
+                expression != "(" && expression != "num = 1 or missing"
+            );
         }
     }
 }
 
 #[test]
-fn invalid_chapter_expression_refuses_build_instead_of_returning_partial_replacement() {
+fn invalid_chapter_expression_builds_whole_programmes_with_redacted_preset_warning() {
     let (ctx, mut item) = context();
     item.mid_roll_filler_id = Some(95);
     let mut request = ctx.request;
     let mut mid = filler_preset(95, FillerKind::MidRoll, FillerMode::Count, Some(1), None);
     mid.expression = Some("private chapter title (".into());
+    mid.media_items = vec![SchedulingMediaItem::new(7, Duration::minutes(1))];
     request
         .reference_data
         .classic_filler_presets
@@ -526,19 +537,31 @@ fn invalid_chapter_expression_refuses_build_instead_of_returning_partial_replace
             .collect(),
     );
     request.mode = PlayoutBuildMode::Reset;
-    let error = ClassicSchedulingEngine.schedule(request).unwrap_err();
-    assert!(matches!(error, SchedulingError::InvalidClassicFillerExpression(id) if id == item.id));
-    assert!(!error.to_string().contains("private chapter title"));
+    let original_chapters = request.reference_data.classic_chapters_by_media_id.clone();
+    let result = ClassicSchedulingEngine.schedule(request.clone()).unwrap();
+    assert_eq!(result.added_items.len(), 3);
+    assert!(result.added_items.iter().all(|row| row.media_item_id == 100
+        && row.in_point == Duration::zero()
+        && row.out_point == Duration::minutes(20)));
+    assert_eq!(result.warnings.len(), 1);
+    let warning = &result.warnings[0];
+    assert!(warning.contains("95 (Synthetic filler 95)"));
+    assert!(warning.contains(&format!("schedule item {}", item.id)));
+    assert!(!warning.contains("private chapter title"));
+    assert_eq!(
+        request.reference_data.classic_chapters_by_media_id,
+        original_chapters
+    );
 }
 
 #[test]
 fn preroll_pad_expression_controls_placement_only_when_midroll_exposes_chapters() {
     for (with_midroll, mid_expression, expression, expected_first) in [
-        (true, None, "false", Some(100)),
-        (true, Some("false"), "false", Some(100)),
-        (true, Some("false"), "(", None),
-        (true, None, "(", None),
-        (false, None, "(", Some(5)),
+        (true, None, "false", 100),
+        (true, Some("false"), "false", 100),
+        (true, Some("false"), "(", 100),
+        (true, None, "(", 100),
+        (false, None, "(", 5),
     ] {
         let (mut ctx, mut item) = context();
         item.pre_roll_filler_id = Some(95);
@@ -580,16 +603,9 @@ fn preroll_pad_expression_controls_placement_only_when_midroll_exposes_chapters(
             None,
             "One",
         );
-        if let Some(first) = expected_first {
-            let rows = rows.unwrap();
-            assert_eq!(rows.first().unwrap().media_item_id, first);
-            assert_eq!(rows.last().unwrap().finish, start + Duration::hours(1));
-        } else {
-            assert!(rows.is_none());
-            assert!(matches!(
-                ctx.error,
-                Some(SchedulingError::InvalidClassicFillerExpression(_))
-            ));
-        }
+        let rows = rows.unwrap();
+        assert_eq!(rows.first().unwrap().media_item_id, expected_first);
+        assert_eq!(rows.last().unwrap().finish, start + Duration::hours(1));
+        assert!(ctx.error.is_none());
     }
 }

@@ -8,12 +8,15 @@ summary    = '''
 The Classic baseline covers engine dispatch, SQL loading, typed items,
 collections, filler, anchors, fill groups, and scheduling-context persistence.
 Regressions cover filler placement and whole-item advancement.
+UCU-16 local discard, grouped-source/resume and immutable-chapter/seeded-count
+and approved ADR0098 fallback components are complete. Milestone ucu-16 owns
+local proof and required final/platform/window acceptance.
 
 Continue-build fix (2026-06-08): persist the post-build anchor and trim only
-before `request.start - 4h`, matching ErsatzTV. This prevents overlapping
-items and deletion of the future timeline on periodic builds.
+before `request.start - 4h`, preserving future items without overlap.
 
-Continue-build seam fix (2026-06-14): the Classic engine now clamps the persisted continue anchor to the finish of the last generated item when an item overshoots a build hard-stop boundary. This preserves ErsatzTV's accepted future overshoot item while preventing the next Continue build from re-adding the same item at the boundary.
+Continue-build seam fix (2026-06-14): clamp continuation to the last emitted
+finish, preserving the accepted overshoot item without repeating it on Continue.
 
 Shuffled collection fix (2026-06-14): Classic shuffled media collections now mirror `ShuffledMediaCollectionEnumerator.MoveNext` by remembering the previous cycle's tail item and advancing the reshuffle seed until the next cycle starts with a different media item. Runtime localization with a direct cyclic calibration playout showed HLS Segmenter and the modern MPEG-TS wrapper can advance a 1->2->3 persisted timeline correctly; a separate fresh-HOME Classic HLS startup replay was tracked and fixed under `hls-variant-playlists-segmenter`.
 
@@ -225,3 +228,10 @@ resolved = true
 adr = '0010'
 evidence = 'The production builder on an isolated native Windows backup refused ReplaceCurrent Refresh at a complete checkpoint because an already-expired midnight overlap crossed that checkpoint. Items, history, checkpoints, seed and anchors remained unchanged. A disposable Reset succeeds but rewinds consumed source order, so it is not the proposed recovery.'
 resolution = 'Skip only Finish values strictly before the effective cutoff before evaluating the cut guard, exactly matching publication deletion and delayed-channel offset rules. Synthetic SQLite tests protect recent rows, positive offsets and cutoff equality. All four synthetic retention regressions pass in focused run aac51426-f699-46f0-988d-5f43b68acd4f. Production copied-database Refresh succeeds for all nine affected Classic playouts: seed and selected checkpoint rotation context remain unchanged, every interval is positive/nonoverlapping, anchors match the tail and unrelated timelines are unchanged. The installed native Windows candidate now passes actual UI Refresh for all nine affected Classic playouts, preserving their seeds and producing positive, nonoverlapping timelines with matching anchors. The separately approved affected Classic Reset changes only its seed. Evidence: test-results/windows-admin-fixes-20261009/native/live-seed-status-proof.json and live-final-data-proof.json. KeepCurrent prefix validation remains unchanged.'
+
+[[debt]]
+id = 'classic-duration-discard-and-fill-group-selection'
+description = 'Complete UCU-16 final acceptance for duration discard and independently resumable grouped content. Both local implementation/persistence components are complete; required final/platform/playback evidence remains open in milestone ucu-16.'
+discovered = '2026-11-10'
+evidence = 'Milestone ucu-16 owns current evidence and the finite completion list. Row287 and row288 local implementation/persistence are complete2026-11-11:116 Classic cases,54 composed order/group/playout-mode continuations, six repository cases, seven combined SQL cases and the indexed metadata query-plan case pass with strict affected lint. Source groups, per-key anchors, no-group fallback, custom shrink, inactive rotation and atomic refusal are proven locally. Window/platform/playback/final acceptance remains open. Historical source-only review at ErsatzRS9a62744a against upstream e51ac60c and a143968e (UCU-16 rows287–288). crates/ersatzrs-infra/src/repositories/program_schedule.rs loads/saves discard_to_fill_attempts; crates/ersatzrs-core/src/scheduling/classic/mod.rs::schedule_duration does not consume it. FillWithGroupMode references initialize/audit/persist/advance state; classic_preserves_and_advances_fill_group_state uses one media item and checks only index/seed, so it is not proof of actual group alternation or independent per-group resume. Shared MediaEnumerator uses finite empty-safe modulo indexing and anchor_matches_key compares fake_collection_key, so the exact upstream constructor loop and omitted-key match must not be attributed to Rust. Runtime reproduction is outstanding. Next: the upstream40/40/40/15-minute,60-minute-block,one-attempt fixture with a following schedule item; then mixed-group and ungroupable-content Continue/Refresh cases. Upstream post-pin bookkeeping is owned by ucu16-post-baseline-observations; accepted UCU windows and baseline are unchanged.'
+resolved = false

@@ -37,8 +37,9 @@ not elapsed channel time after inserted filler.
 | `matched_points` | Number of earlier candidates selected by this expression. |
 | `last_mid_filler` | Seconds since the previous selected point. Before any match, the origin is the earliest chapter start minus 99,999 seconds. |
 
-Unknown parameter names return null. They do not read application state, files,
-network resources or environment variables.
+Evaluated unknown parameter names are errors and use the full-content fallback
+below. Unused lazy branches do not evaluate parameters. Parameters never read
+application state, files, network resources or environment variables.
 
 Examples:
 
@@ -111,10 +112,14 @@ literals; unpaired surrogate escapes are rejected. Literal validation occurs
 before evaluation, including literals in branches that would otherwise be skipped.
 Function calls and boolean/conditional execution still short-circuit.
 
-Malformed, unsupported or over-limit expressions fail the complete playout
-build. Existing persisted planning remains intact; the expression is not silently
-converted to `false`, and no partial replacement is saved. Errors omit the saved
-expression text and chapter titles.
+Malformed, unsupported or over-limit expressions use one unlabelled chapter
+covering the original source span. Partial matches are discarded. The complete
+programme remains scheduled without internal breaks for that preset, and padding
+still includes its full duration. Pre/post-roll Pad expressions use the same
+fallback to place their padding after the programme. The build reports the
+filler preset name/id and schedule-item id, without saved expression text,
+unknown parameter text or chapter titles. A complete result is saved through
+the normal atomic publication path.
 
 When importing rules from ErsatzTV, review rules that rely on local date formats,
 locale-specific string casing or locale-specific numeric strings. Their meaning

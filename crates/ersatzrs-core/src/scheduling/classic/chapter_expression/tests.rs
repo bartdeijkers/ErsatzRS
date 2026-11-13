@@ -79,11 +79,65 @@ fn bypasses_and_non_boolean_results_match_upstream() {
     assert!(filter_chapters("broken !@", &input[..1], Duration::zero())
         .unwrap()
         .is_empty());
-    for expression in ["false", "1", "'true'", "unknown"] {
+    for expression in ["false", "1", "'true'"] {
         assert!(ends(expression).is_empty());
     }
     assert!(filter_chapters("num >", &input, Duration::zero()).is_err());
     assert!(filter_chapters("MissingFunction(1)", &input, Duration::zero()).is_err());
+}
+
+#[test]
+fn unknown_callbacks_fail_only_when_evaluated_and_errors_are_redacted() {
+    for expression in ["unknown", "[num_typo] = 1", "unknown = other_unknown"] {
+        let error = filter_chapters(expression, &chapters(), Duration::minutes(30)).unwrap_err();
+        assert_eq!(error.to_string(), "invalid chapter filler expression");
+    }
+    for expression in [
+        "true or unknown",
+        "false and unknown or true",
+        "if(true, true, unknown)",
+        "true ? true : unknown",
+    ] {
+        assert_eq!(ends(expression), [5, 10, 15, 20, 25, 30]);
+    }
+}
+
+#[test]
+fn fallback_keeps_original_nonzero_span_without_mutating_or_returning_partial_matches() {
+    let input: Vec<_> = chapters()
+        .into_iter()
+        .map(|mut chapter| {
+            chapter.start_time += Duration::seconds(100);
+            chapter.end_time += Duration::seconds(100);
+            chapter
+        })
+        .collect();
+    let original = input.clone();
+    let mut preset = crate::scheduling::classic::tests::filler_preset(
+        95,
+        ersatzrs_domain::FillerKind::MidRoll,
+        ersatzrs_domain::FillerMode::Count,
+        Some(1),
+        None,
+    );
+    preset.expression = Some("num = 1 or private_unknown".into());
+    let mut warnings = Vec::new();
+    for _ in 0..2 {
+        let actual =
+            filter_chapters_or_fallback(&preset, 10, &input, Duration::minutes(30), &mut warnings);
+        assert_eq!(
+            actual,
+            vec![MediaChapter {
+                start_time: Duration::seconds(100),
+                end_time: Duration::seconds(1900),
+                ..MediaChapter::default()
+            }]
+        );
+        assert_eq!(input, original);
+    }
+    assert_eq!(warnings.len(), 1);
+    assert!(!warnings[0].contains("private_unknown"));
+    assert!(!warnings[0].contains(&original[0].title));
 }
 
 pub(super) fn value(expression: &str) -> Result<Value> {
@@ -123,8 +177,8 @@ fn ncalc_operator_precedence_and_short_circuiting() {
         "(1 << 3) = 8",
         "0x10 + 0o10 + 0b10 = 26",
         "[num] = 2 and {point} = 600",
-        "unknown = other_unknown",
-        "unknown + 1 = missing",
+        "true or unknown",
+        "if(true, true, unknown)",
         "2147483647 + 1 = -2147483648",
         "9007199254740993 <> 9007199254740992",
     ] {
@@ -163,9 +217,11 @@ fn ncalc_membership_wildcards_and_builtin_math() {
 /// invariant culture, and callback num=2, point=600.0, title="Here"; other
 /// callback names return null. This is a behavioral oracle, not a snapshot of
 /// this evaluator's own output. ADR 0098 differences have separate profile tests.
+/// Row289 changes the callback contract: the eight historical unknown-name
+/// cases must now fail; the pinned oracle data itself remains unchanged.
 #[test]
 fn differential_ncalc_6_2_fixtures() {
-    #[derive(serde::Deserialize)]
+    #[derive(Debug, serde::Deserialize)]
     struct Fixture {
         expression: String,
         value: Option<String>,
@@ -178,6 +234,21 @@ fn differential_ncalc_6_2_fixtures() {
     let mut differences = Vec::new();
     for fixture in fixtures {
         let actual = value(&fixture.expression);
+        if [
+            "unknown = other_unknown",
+            "unknown + 1 = missing",
+            "unknown = ''",
+            "unknown = ' '",
+            "in(unknown,'')",
+            "unknown in (unknown,1)",
+            "unknown in ()",
+            "notitle = 0",
+        ]
+        .contains(&fixture.expression.as_str())
+        {
+            assert!(actual.is_err(), "unknown callbacks must fail: {fixture:?}");
+            continue;
+        }
         if fixture.error.is_some() {
             if actual.is_ok() {
                 differences.push(format!(
@@ -268,4 +339,15 @@ fn expression_complexity_is_bounded_before_recursive_parsing() {
     assert!(validate_complexity("title = '\\'('").is_ok());
     assert_eq!(value("(34!) = 0"), Ok(Value::Boolean(true)));
     assert_eq!(value("(66!) = 0"), Ok(Value::Boolean(true)));
+}
+
+#[test]
+fn repeated_filtering_preserves_source_chapter_times_and_metadata() {
+    let input = chapters();
+    let original = input.clone();
+    let first = filter_chapters("num = 2 or num = 4", &input, Duration::minutes(30)).unwrap();
+    let second = filter_chapters("num = 2 or num = 4", &input, Duration::minutes(30)).unwrap();
+    assert_eq!(input, original);
+    assert_eq!(first, second);
+    assert_eq!(second[1].start_time, Duration::minutes(10));
 }
