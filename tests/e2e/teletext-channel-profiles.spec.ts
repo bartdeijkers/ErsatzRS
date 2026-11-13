@@ -380,6 +380,14 @@ for (const javaScriptEnabled of [true, false]) {
       if (value === undefined) fixture.database.prepare('DELETE FROM "ConfigElement" WHERE "Key"=?').run(key);
       else fixture.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, value);
     };
+    const openChecklist = async () => {
+      const details = page.getByTestId('teletext-broadcast-check');
+      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
+    };
+    const visitRecovery = async (channel: number) => {
+      await visit(page, channel, javaScriptEnabled);
+      await openChecklist();
+    };
     const form = page.getByTestId('teletext-capacity-form');
     const capacity = page.getByTestId('teletext-capacity');
     const step = page.getByTestId('teletext-readiness-step').filter({ has: capacity });
@@ -390,12 +398,14 @@ for (const javaScriptEnabled of [true, false]) {
         page.waitForURL(url => url.search === suffix),
         form.locator('button[type="submit"]').click(),
       ]);
+      await page.waitForLoadState('domcontentloaded');
       if (javaScriptEnabled) await waitForHydration(page);
+      await openChecklist();
     };
     try {
       const safe = unrelated();
       keys.forEach(key => setPolicy(key));
-      await visit(page, fixture.channels[0], javaScriptEnabled);
+      await visitRecovery(fixture.channels[0]);
       await expect(capacity).toHaveAttribute('data-authoring', 'absent');
       await expect(capacity).toHaveAttribute('data-output', 'absent');
       await expect(step).toHaveAttribute('data-state', 'missing');
@@ -417,14 +427,14 @@ for (const javaScriptEnabled of [true, false]) {
       expect(accepted.every(value => value !== undefined)).toBe(true);
       // Global scope is observable on a second channel, without publishing or
       // claiming carriage; the UI must keep those separate readiness facts.
-      await visit(page, fixture.channels[1], javaScriptEnabled);
+      await visitRecovery(fixture.channels[1]);
       await expect(capacity).toHaveAttribute('data-output', 'profile');
       for (const name of ['published', 'broadcast']) {
         await expect(page.locator(`[data-testid="teletext-readiness-step"][data-step="${name}"]`)).toHaveAttribute('data-state', 'missing');
       }
       const tuned = JSON.stringify({ ...JSON.parse(accepted[1]!), recovery_timeout_ms: 4000 });
       setPolicy(keys[1], tuned);
-      await visit(page, fixture.channels[0], javaScriptEnabled);
+      await visitRecovery(fixture.channels[0]);
       await expect(capacity).toHaveAttribute('data-output', 'custom');
       await expect(form.locator('[name="replace"]')).not.toBeChecked();
       await apply('?error=policy-exists');
@@ -434,7 +444,7 @@ for (const javaScriptEnabled of [true, false]) {
       expect(policies()).toEqual(accepted);
       // Malformed persisted policy can be repaired by the same visible form.
       setPolicy(keys[1], '{"version":4}');
-      await visit(page, fixture.channels[0], javaScriptEnabled);
+      await visitRecovery(fixture.channels[0]);
       await expect(capacity).toHaveAttribute('data-output', 'invalid');
       await expect(form.locator('[name="replace"]')).toHaveCount(0);
       await apply('?saved=capacity');
