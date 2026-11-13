@@ -1013,9 +1013,37 @@ evidence    = 'Windows dogfood: 14 published items whose provider thumbnail (max
 id          = 'addon-ytdlp-needs-auth-despite-cookies'
 description = 'P1 (false UI information, official yt-dlp add-on): age-restricted videos stay Unavailable even with Browser cookies = Firefox, while Test access reports Accessible for the same item.'
 discovered  = '2026-09-18'
-resolved    = false
+resolved    = true
 adr         = '0094'
 evidence    = 'yt-dlp 2026.08.19 without cookies: "Sign in to confirm your age" for fLBn3RJUkQ8, XNY6HlDKLgk and 5jPtkjxU5jg; with --cookies-from-browser firefox extraction succeeds (age_limit=18) but still reports availability=needs_auth. The add-on maps needs_auth to unavailable in both flat discovery and cookie-enabled enrich (media-list-import.ts availability()), so the item cannot become available. Item 638 shows Unavailable while access job 867 completed Accessible. Correction belongs in the official add-ons repository: treat a successful cookie-enabled extraction with playable formats as available. eEKKVSjw6JY is genuinely removed ("Video unavailable").'
+
+resolution = """
+Resolved by existing official add-on correction 7c564702b38518ab88ee02b0be0aad212589f3cb
+(ErsatzRS-addons v0.11.11), retained in v0.11.12/source
+47f2ab4eb233895ec6807fe488d688d8271c5f54. Successful full extraction with the
+needs_auth label becomes available only when at least one non-DRM format has
+an HTTPS URL and an audio/video codec. Flat discovery remains conservative;
+failed extraction, missing/unusable formats and other restricted labels remain
+unavailable. Only stale restriction reasons are removed; browser settings and
+source restrictions are preserved. No host UI or Health logic change is needed:
+the provider now emits the correct existing availability contract.
+
+Verified 2026-11-13 against the actual published v0.11.12 repository ZIP:
+SHA256 a7390fb9f8105a13f2538fd312035803580c34db5f12f601a5993b0c28dc0bc6,
+matching the public release asset digest. Its media-list-import.ts bytes equal
+the tagged source (SHA256 a50c0326f819c2f1ad1dc4f1556d66365ea61344e10bfff1fd492919afa2c7c4).
+The existing test_yt_dlp_item_operations.py regression
+ test_authenticated_enrichment_requires_usable_media_formats passes through
+the extracted published POSIX entrypoint/shared adapter: nine positive/negative
+format/restriction cases plus a failed-extraction control, with Firefox option
+forwarding and truthful outcome/reason fields. The published adapter also passes
+ test_yt_dlp_v6_maps_restrictions_without_echoing_provider_diagnostics from
+ tests/test_repository.py, preserving unauthenticated discovery and redaction.
+Receipt: tmp/evidence/parity-ytdlp-auth/receipt.json in the task evidence store.
+These are synthetic-provider published-byte regressions; no new native Windows
+or personal-account trial or live installation change is claimed. This closes
+the missing provider correction; historical observations above remain intact.
+"""
 
 [[debt]]
 id          = 'addon-ytdlp-missing-maxres-thumbnail'

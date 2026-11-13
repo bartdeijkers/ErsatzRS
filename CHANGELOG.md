@@ -68,6 +68,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Parity tracking now records the shipped yt-dlp authenticated-availability fix,
+  verified against the published add-on package and its restriction safeguards.
+
 - YAML scheduling parity now records the remaining chapter-aware mid-roll gap:
   the current `true` case runs its sequence after the unsplit programme; saved
   chapter-point expressions are not yet implemented.
