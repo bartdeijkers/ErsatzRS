@@ -68,6 +68,17 @@ release section when tagging a release.
 
 ### Changed
 
+- Self-hosted browser suites queue at GitHub before taking a runner, keeping
+  runner capacity available for small CI checks. Pending suites are retained
+  up to GitHub's queue limit; browser isolation and hosted-run independence
+  remain intact.
+
+- Development and draft CI runs full Clippy and basic policy checks without
+  producing test or web artifacts. Ready PRs retain affected behavioral tests;
+  main runs small checks, and a separate weekly/manual workflow owns full
+  verification. Reviewed foundation ownership reduces unrelated browser work
+  while preserving native consumers, playback and required release gates.
+
 - Dependencies are updated (jiff, pest, httpmock, jsonschema and CI actions).
   `cargo deny` now also allows the permissive `Apache-2.0 WITH LLVM-exception`
   licence, used by a build dependency of pest.

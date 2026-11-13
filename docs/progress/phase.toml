@@ -2,15 +2,16 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "UCU-13–15 complete through v26.12.0; Native and Next retained"
+current_focus = "Implement CI workflow separation; milestone ci-workflow-separation owns the finite completion list"
 
 summary = '''
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
 engine, production TV-guide add-on, four required package/runtime scopes and
 three stable releases with exact-source CI and actual published downloads.
 Level2.5 remains experimental; retained enhanced-only, optionalQTM, macOS,
-nativeARM and current-release Docker scopes are Deferred, not accepted. No
-current independently executable required work remains.
+nativeARM and current-release Docker scopes are Deferred, not accepted. The independent
+ci-workflow-separation maintainer task is active; its CIS-01–04 list owns the
+next implementation and verification steps.
 
 Earlier completed programme context is retained below:
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -70,6 +71,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Active maintainer task: milestone ci-workflow-separation, CIS-01–04. Local
+implementation and regression verification are complete within the recorded
+scope. The CI branch was published as7a8f408f and its small push run passed.
+Resume2026-11-12: Classic run43056494938 attempt2 is green on8e9720f1;
+its bounded infrastructure repair is complete. The separate CIS-01 browser
+queue repair and local verification are complete within their scope. Next:
+verify cross-run queueing on current revisions and remaining
+CIS-04 draft/ready/superseded/main/full acceptance and latency observations.
+Historical UCU and DCI paragraphs below do not supersede this finite list.
+
 UCU-13, UCU-14 and UCU-15 are Complete in order through fixed v26.12.0.
 All285 rows are processed; row271 remains approved Deferred/unverified Windows
 advisory work. The accepted pin is owned by docs/automation/parity-baseline.md.
