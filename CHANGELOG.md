@@ -70,6 +70,8 @@ release section when tagging a release.
 
 - Parity tracking now records the shipped yt-dlp authenticated-availability fix,
   verified against the published add-on package and its restriction safeguards.
+- The parity-debt queue distinguishes actionable fixes, external prerequisites and
+  maintainer-deferred work, preserving each item's acceptance requirements.
 
 - YAML scheduling parity now records the remaining chapter-aware mid-roll gap:
   the current `true` case runs its sequence after the unsplit programme; saved
