@@ -108,6 +108,24 @@ class GuideBoundaryTests(unittest.TestCase):
         self.assertEqual(result["path"], "expiry_withdrawal_ack_then_reannouncement")
         self.assertFalse(result["caption_timing_waived"])
 
+    def test_expiring_reauthorization_may_withdraw_before_the_loop_boundary_trace(self):
+        values = fixture()
+        lines = values[1].splitlines(keepends=True)
+        boundary = next(i for i, line in enumerate(lines) if b'event="scope_boundary_expired"' in line)
+        withdrawal = next(i for i, line in enumerate(lines) if b'event="monitor_proposal"' in line and b'action="withdraw"' in line)
+        lines[boundary] = lines[boundary].replace(utc(1_000_000_000).encode(), utc(1_000_020_000).encode())
+        lines[boundary], lines[withdrawal] = lines[withdrawal], lines[boundary]
+        values[1] = b"".join(lines)
+        self.assertEqual(G.qualify(*values)["path"], "expiry_withdrawal_ack_then_reannouncement")
+
+    def test_expiry_diagnostics_cannot_attribute_a_preexpiry_withdrawal(self):
+        values = fixture()
+        values[1] = b"".join(line.replace(utc(1_000_010_000).encode(), utc(999_990_000).encode())
+                              if b'event="monitor_proposal"' in line and b'action="withdraw"' in line else line
+                              for line in values[1].splitlines(keepends=True))
+        with self.assertRaisesRegex(G.H.ProofError, "saved UTC expiry"):
+            G.qualify(*values)
+
     def test_coalesced_expiry_replacement_preserves_continuous_pmt(self):
         self.assertEqual(G.qualify(*fixture(False))["path"], "confirmed_replacement_without_withdrawal")
 

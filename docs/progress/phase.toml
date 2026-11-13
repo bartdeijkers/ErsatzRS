@@ -162,15 +162,13 @@ Bucket A:
   regression and affected integration proof.
 
 Bucket B:
-- teletext-admin-recovery-flow (parity/teletext-support.toml): Independent part6 source/readiness,
-  ordinary delivery, PMT/cue/refresh/isolation and native-effective clock comparisons are complete.
-  The raw boundary subtitle gate remains19/21. Missing prerequisite: maintainer decision on
-  source-coupled native-effective cue timing under the same8ms bound versus the existing constant
-  packet/PCR-lead proxy. No dependent checker, source policy or acceptance change is authorized by
-  silence. Close part6 after that decision, implementation of the chosen qualification/correction,
-  passing applicable strict proof, final review and exact-head ready-PR CI/merge. PR155 stays draft.
-  Part7 separately requires Bart-PC availability and native packaged Windows proof before replacing
-  the78Mbit/s workaround. Part8 is complete through merged PR154. No live installation mutation.
+- teletext-admin-recovery-flow (parity/teletext-support.toml): Part6 local mandatory proof is
+  complete in PR155: the approved native-effective8ms source criterion, fresh five-window joined
+  case and102 strict controls pass; exact-head ready-PR CI/merge remain delivery gates. The sole
+  functional/evidence remainder is part7: missing Bart-PC access and native packaged Windows proof
+  before replacing the channel workaround. Close with that exact package/launcher/admin/scanner/
+  caption/playback repair and native acceptance; no shared/global or live installation mutation is
+  authorized here. The criterion decision is closed, not an outstanding external prerequisite.
 - hardware-graph-probes-cover-only-the-nvidia-graphs (parity/ffmpeg-9-performance-and-support.toml):
   Missing working Intel, AMD, Apple, Rockchip and V4L2M2M devices/drivers for the listed graphs.
   Close with characterized operation probes and real success/failure controls for each backend;

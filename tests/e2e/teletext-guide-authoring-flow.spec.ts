@@ -2771,8 +2771,12 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
       writeFileSync(info.outputPath(`${name}.decode.stderr`), decoded.stderr ?? '');
       expect(decoded.status).toBe(0); expect(decoded.stderr.length).toBe(0);
       writeFileSync(info.outputPath(`${name}.streams.json`), JSON.stringify(streams, null, 2));
-      const gate = spawnSync('bash', ['-c', 'source scripts/e2e/tsduck-checks.sh; STRICT_PCR_JITTER=1; analyze_ts "$1" "$2" "$3"; check_pcr_jitter "$1" "$2"; check_continuity_plugin "$1" "$2"; checks_summary',
-        'gate', path, name, info.outputPath(`${name}.analyze.json`)], { timeout: 30_000, maxBuffer: 256 * 1024 });
+      // Maintainer-approved 2026-11-13: only this fixed-source rollover uses
+      // source-bound native-effective cue timing under the existing8ms limit.
+      // Every raw cadence flag and all other strict gates remain observable.
+      const sourceClock = name === 'burst-programme-boundary' ? [burstSource!, complete] : [];
+      const gate = spawnSync('bash', ['-c', 'source scripts/e2e/tsduck-checks.sh; STRICT_PCR_JITTER=1; analyze_ts "$1" "$2" "$3" "${4:-}" "${5:-}"; check_pcr_jitter "$1" "$2"; check_continuity_plugin "$1" "$2"; checks_summary',
+        'gate', path, name, info.outputPath(`${name}.analyze.json`), ...sourceClock], { timeout: 30_000, maxBuffer: 256 * 1024 });
       writeFileSync(info.outputPath(`${name}.gate.log`), Buffer.concat([gate.stdout ?? Buffer.alloc(0), gate.stderr ?? Buffer.alloc(0)]));
       if (gate.status !== 0) rawGateFailures.push({ name, status: gate.status });
       return path;

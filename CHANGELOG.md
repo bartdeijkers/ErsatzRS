@@ -74,7 +74,9 @@ release section when tagging a release.
   and without JavaScript, including consent, custom-policy protection and repair.
 - Guide-boundary qualification distinguishes acknowledged expiry withdrawal from
   unexpected teletext loss, preserves AV/caption descriptors and independently
-  decodes pages after recovery. Raw subtitle timing checks remain separate.
+  decodes pages after recovery. The fixed-source boundary trial now qualifies
+  subtitle cues against their source timing within 8 ms, retaining raw timing
+  flags and every other strict transport check.
 - Parity tracking now records the shipped yt-dlp authenticated-availability fix,
   verified against the published add-on package and its restriction safeguards.
 - The parity-debt queue distinguishes actionable fixes, external prerequisites and

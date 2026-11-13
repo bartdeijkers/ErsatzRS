@@ -88,8 +88,15 @@ def qualify(raw, log, request, tables, sections, metadata):
         boundary = boundaries[0]
         require(boundary["_utc_ns"] >= expiry and boundary.get("generation_id") == initial["generation_id"], "expiry changes the original UTC or generation")
         withdrawal = one(withdrawals, "expiry lacks its fail-closed withdrawal proposal")
-        require(boundary["_line"] < withdrawal["_line"] < recovered["_line"]
-                and withdrawal["sequence"] < replacement["sequence"], "expiry recovery precedes its withdrawal proposal")
+        # Reauthorization may expire inside the preceding poll and withdraw
+        # before the next loop emits its diagnostic boundary event. Both must
+        # follow saved UTC expiry and precede recovery; their mutual log order
+        # grants no extra authority. Physical withdrawal/ACK checks below stay.
+        require(initial["_line"] < min(boundary["_line"], withdrawal["_line"])
+                and max(boundary["_line"], withdrawal["_line"]) < recovered["_line"]
+                and expiry <= withdrawal["_utc_ns"] <= recovered["_utc_ns"]
+                and boundary["_utc_ns"] <= recovered["_utc_ns"]
+                and withdrawal["sequence"] < replacement["sequence"], "expiry recovery precedes its withdrawal proposal or saved UTC expiry")
     else:
         require(not withdrawals and recovered["_utc_ns"] < expiry, "unexplained guide withdrawal or late renewal")
 

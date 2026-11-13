@@ -102,6 +102,22 @@ the observed AV presentation origin and actual cue to a verified source-clock
 epoch; matching PSI fingerprints or modular PCR differences alone cannot prove
 an unobserved interval has no reset. Do not change native timestamp correction
 or promote caller intent to temporal authority without that evidence.
+
+For the fixed page888 programme-boundary recovery trial, the maintainer approved
+source-coupled native-effective cue timing within the existing 8 ms on
+2026-11-13. This replaces only the constant subtitle packet/PCR-lead proxy in
+that opt-in trial. Match complete coded video and selected audio against the
+unchanged source to identify each presentation epoch, then require every visible
+cue in the covered interval at its native-effective source time within 720
+90 kHz ticks. Empty startup PES may qualify only when both the independently
+observed source state and the captured state are already clear. They cannot
+erase a visible cue or substitute for its explicit clear. Retain raw TSDuck
+cadence flags, exact counts/endpoints, monotonic PTS and the original three-second
+absolute PTS/PCR bound; all AV, PCR/jitter, continuity, glyph/clear, publication,
+refresh and isolation gates remain mandatory. Other captures retain their
+existing qualification. This changes neither source bytes, native timestamp
+repair, mux policy nor capture bounds, and proves no client delivery deadline.
+
 A preparatory constant-memory walk now observes every TS188 packet from zero
 through EOF on the existing held handle under its actual work owner and deadline.
 Explicit PSI continuation resets only the bounded batch counter; table fragments,

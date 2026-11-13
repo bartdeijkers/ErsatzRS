@@ -334,9 +334,9 @@ Finite completion list:
 (3) DONE: readiness checklist on the channel teletext page (add-on, profile, capacity, route, published, broadcast) with route/script explanation and per-channel versus global fixes, localized for all cultures.
 (4) DONE (component): the last terminal authored-output failure is kept per channel in the host-local output registry (stable kind and time) until teletext is delivered again, and shown in channel readiness and as a Health warning with the next step. Unit evidence only.
 (5) DONE (component, maintainer decision 2026-11-05): after a terminal authored-output failure once output is committed, ordinary AV continues instead of ending the response. Retained unexposed source is forwarded byte-for-byte, the authored PES stops and the PMT entry is withdrawn with the next version and continuing CC (direct MPEG-TS and retained reserve pumps). Not continued: client/source I/O failures, exposed windows, failed retention buffers, a changed source PMT and an incomplete table at EOF. Unit and pump-level evidence only; real FFmpeg proof belongs to item 6.
-(6) OPEN (evidence): real FFmpeg plus TSDuck and libzvbi proof with representative video bursts at an ordinary profile bitrate. Cold start, a programme transition and automatic guide refresh; independent decoding of index page 200 and guide page 201 from the delivered stream; PCR/PTS/CC checks; audio/subtitle preservation and other-channel isolation.
+(6) DONE (local mandatory evidence, PR155): real FFmpeg9/TSDuck/libzvbi proof with the unchanged representative burst/caption source at an ordinary profile bitrate. The fresh headed joined case passes two cold responses, late cue, explicit clear, programme transition and automatic guide refresh; recovered pages200/201, selected Dutch AAC, English captions, source-bound glyph/clear timing,102 strict transport controls and other-channel/saved-state isolation pass. The maintainer approved the specific8ms native-effective source criterion on2026-11-13; all other strict gates and raw flags remain. Source-bound ordinary93-check/smoke, native regressions/lint/bundle evidence are retained. Required exact-head ready-PR CI/merge remain delivery gates; no native Windows acceptance is inferred.
 (7) OPEN (evidence, external prerequisite: Bart-PC available): native Windows verification in the device thread. Replace the 78 Mbit/s channel-1 workaround only after (6) and this step pass.
-(8) DONE (browser component, 2026-11-13): four headed Chromium/Firefox cases pass the readiness/capacity flow with and without JavaScript. The actual visible form proves required global-scope consent, server refusal without consent, persisted named policies on both channels, protected custom policies, explicit replacement and invalid-policy repair. Publication/broadcast remain missing and unrelated state/package/producer safety is preserved. Parts6/7 remain open.'''
+(8) DONE (browser component, 2026-11-13): four headed Chromium/Firefox cases pass the readiness/capacity flow with and without JavaScript. The actual visible form proves required global-scope consent, server refusal without consent, persisted named policies on both channels, protected custom policies, explicit replacement and invalid-policy repair. The browser scenarios preserve missing publication/broadcast and unrelated state/package/producer safety. Part7 remains open; part6 local proof is complete.'''
 discovered  = '2026-11-03'
 evidence    = '''Branch claude/project-thread-tdo1gf (uncommitted at time of writing). ersatzrs-ffmpeg teletext nextest: 1074/1074 pass, including the new burst, sustained-shortage, deferred-terminator and B.6 carousel regressions. The original strict behavior is reproduced by the replaced test interval_null_capacity_failure_never_exposes_partial_rewriting (one full 20 ms interval was fatal). ersatzrs-web teletext_admin integration tests cover capacity apply/confirm/replace/invalid repair and route classification. No real FFmpeg/TSDuck/client evidence yet.
 
@@ -514,9 +514,11 @@ it was interrupted, and the final trials reuse hash-verified existing fixtures.
 
 The ordinary legacy delivery gate and the joined PMT/cue/refresh/isolation
 components are complete within their scopes below. The finite remainder is
-strict boundary subtitle-timing qualification, including the pending maintainer
-decision, then final review and exact-head ready-PR CI. The checkpoint stays draft;
-whole part6 is not accepted while its raw strict gate remains red.
+strict boundary subtitle-timing qualification, then final review and exact-head
+ready-PR CI. On2026-11-13 the maintainer explicitly selected source-bound timing
+within the same8ms (choice A), retaining raw flags and all other strict checks.
+The approved qualification and full joined local proof now pass; prior raw strict
+failures remain retained. Exact-head ready-PR CI and merge remain delivery gates.
 
 The next proof obligation now has retained actual producer inputs and exact
 replay argv. The next item's complete coded video has zero source PTS/DTS shift;
@@ -524,10 +526,11 @@ its A/B/clear cue timestamps differ from the independent source anchors by about
 322us. Boundary A likewise differs by322us from its source-coupled presentation
 clock. The existing sparse-caption qualifier instead rejects variable packet/PCR
 lead: even the valid pre-concat native producer fails that proxy. Raw failures
-remain retained. A maintainer decision is pending: permit source-referenced cue
-qualification under the same8ms bound while retaining raw flags and all other
-strict checks, or explicitly retain the constant-lead proxy. No dependent checker
-or acceptance change has been made.
+remain retained. The maintainer approved source-referenced native-effective cue
+qualification under the same8ms bound on2026-11-13 (choice A), with raw flags and
+all other strict checks retained. Only the fixed-source boundary trial may use
+that qualification; general captures keep the existing proxy. Native correction,
+source bytes, mux policy and capture limits remain unchanged.
 
 Independent ordinary legacy diagnosis retains input-arrival/PCR clocks: an
 expiring row is selected twice, then the next handover accumulates another
@@ -544,7 +547,7 @@ EOF. Strict FFmpeg/web Clippy and matched build pass. Candidate b7b6eb20 passes
 playback smoke and all93 unchanged four-route manual checks: legacy media delivery
 is102percent, above95required; actual byte-matched completion reports accompany
 rows1/2/3 with no repeated tail. This closes the ordinary legacy delivery blocker,
-not whole part6. The current joined caption trial likewise reaches all five
+not whole part6. The finite-progress checkpoint's joined caption trial reaches all five
 original8388560-byte caps and selects row10 at row9's exact finish, after a
 byte-matched5.8978s terminal report. No delivery-deadline failure occurs. Its four
 non-boundary windows pass80 strict checks; the boundary still fails the original
@@ -565,12 +568,12 @@ All22 new negative/positive controls and the existing10 expiry controls pass;
 strict web Clippy and matched build pass. Three retained actual4d657fa4 responses
 qualify677/674/678 sink windows across both expiry paths, including absent startup.
 The original stderr-recorder and initially-absent-oracle negatives remain retained.
-The final headed joined case reaches its last unchanged rawGateFailures assertion:
+At the expiry-boundary checkpoint, the headed joined case reaches its last unchanged rawGateFailures assertion:
 all five original byte caps, selected nld audio/eng captions, fixed A/B/clear and
 next-programme clear/A glyphs, explicit zero-rectangle clear, recovered200/201
 suffix decoding, automatic runtime revision1to2, night isolation and saved
-history/package/source safety pass. Only the boundary's sparse-subtitle qualifier
-remains red (19/21; four other windows80/80). No subtitle checker, threshold,
+history/package/source safety pass. At that checkpoint only the boundary's sparse-subtitle qualifier
+remained red (19/21; four other windows80/80). No subtitle checker, threshold,
 source/capture limit or production expiry safeguard changes. This closes the
 PMT/cue/refresh/isolation components, not whole part6 or Windows acceptance.
 Canonical raw positives/negatives, exact candidate/site, source-bound receipts
@@ -589,13 +592,40 @@ changed (ADR0121/0133); the rejected nearest-raw-PES guess remains retained.
 The complete visible-A PES is27.64ms behind interpolated PCR and the idempotent
 bootstrap clear148.20ms behind it. These packet-placement observations remain
 separate from cue presentation agreement and establish no client deadline waiver.
-The raw strict gate remains19/21. The independent source comparison is now
-complete; the missing part6 prerequisite is the maintainer's criterion decision.
-Only after that decision may the dependent qualifier/correction be implemented,
-its applicable strict proof completed and exact-head ready-PR CI/merge performed.
-The debt remains unresolved and PR155 draft. Its remaining parts are classified B
-while that decision and the separate native Windows prerequisite are missing;
-continue independent bucket-A work without changing either requirement. Full
+The original generic strict gate19/21 remains retained. The criterion decision
+is now closed by the maintainer's explicit2026-11-13 choice A. The opt-in
+teletext-source-cue-clock.py independently matches coded video and selected audio
+through both source epochs, checks the actual raw subtitle PES/clock/decoder
+observations and qualifies native-effective visible cues within720ticks (8ms).
+Exact counts/endpoints, monotonic PTS and the original3s absolute clock bound
+remain mandatory; an empty event must independently be clear in both source and
+capture states. Twenty-two offline controls pass, including one-tick-over-limit,
+one-second/native-versus-wire shifts, missing cues, invalid clears, unrelated AV,
+wrong clock counts and malformed/incomplete PES. The retained current boundary
+now passes21/21 with its raw cadence flag visible. The fresh headed Chromium joined case now passes with the same hash-qualified
+4d657fa4 server/site and unchanged source/scanner/package/runtime. All five
+unmodified captures are8388560bytes: four strict gates pass20/20 and the boundary
+passes22/22 (102total), including an explicit single-source-PID qualification
+check even when raw cadence flags are absent. Boundary80cf456e matches306 coded
+video units and621 selected audio packets across two source epochs; its A cue
+error is34ticks (377.8us), and the raw cadence flag remains1. The coalesced,
+initially absent guide path has678 actual sink windows, independent recovered
+pages200/201, glyph/clear and saved-state/isolation assertions. A mutated real
+capture with only its final subtitle PTS shifted by one second is rejected.
+The first fresh run omitted provenance logging; the second exposed a false
+mutual ordering assumption between a preceding-poll withdrawal and the next
+loop's expiry diagnostic. Both original negatives are retained. The corrected
+oracle still requires both events after exact saved UTC expiry and before
+recovery, with unchanged physical PMT/ACK ownership;24 controls pass, including
+withdrawal-before-diagnostic success and preexpiry-attribution rejection. All10
+original expiry controls and the existing shell regressions pass. No production
+Rust, native policy, source, capture or transport-limit change was made in this
+qualification package. Ordinary93-check/smoke and scoped Rust/lint/bundle proof
+remain reused from the canonical candidate inputs above. Part6 local proof is
+complete; final required exact-head ready-PR CI/merge remain delivery gates.
+The debt remains unresolved only for part7's separately blocked native
+Windows/Bart-PC proof and repair; no live installation mutation is authorized.
+Canonical joined evidence: tmp/evidence/teletext-recovery-transport/source-criterion-qualification/. Full
 current-source records and rejected hypotheses are hash-retained at
 tmp/evidence/teletext-recovery-transport/source-clock-checkpoint/qualification.json.
 
@@ -605,7 +635,7 @@ The test launches all real-time windows before synchronous diagnostics, preservi
 source schedules and every capture bound. Raw traces/captures,80-check logs,
 source/AV/pixel receipts and the independent presentation prototype are retained
 under tmp/evidence/teletext-recovery-transport/ (joined-timed-windows and complete-source).
-Parts7 and8 retain their separate owners; this branch does not claim their completion.
+At that checkpoint parts7 and8 retained their separate owners; the browser proof below closes8, and7 remains external.
 2026-11-13 part8 browser proof: tests/e2e/teletext-channel-profiles.spec.ts,
 teletext capacity recovery cases: 4 passed, 0 skipped/flaky/unexpected, 28.5s.
 Actual matched cargo-leptos build from unchanged ffdc0f7e compiled crate inputs;

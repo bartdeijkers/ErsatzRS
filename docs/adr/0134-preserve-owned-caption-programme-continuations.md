@@ -20,8 +20,12 @@ advances at the predecessor finish without a delivery-deadline failure. Its four
 non-boundary windows pass 80 strict checks. Owner-bound expiry/PMT qualification
 now proves lawful withdrawal/reannouncement and confirmed coalescing without
 changing the expiry fence. The joined cue, refresh and page-isolation assertions
-pass; only the unchanged boundary subtitle qualification remains red (19/21).
-Complete joined acceptance remains open. The existing
+pass; that checkpoint retains the original red boundary subtitle qualification
+(19/21). After the maintainer's2026-11-13 source-criterion approval, the fresh
+headed joined case passes all five original captures and102 strict checks,
+including native-effective cue timing within8ms with raw flags retained.
+Local part6 proof is complete; required exact-head ready-PR CI/merge and the
+separate native Windows part7 prerequisite remain. The existing
 `teletext-admin-recovery-flow` debt owns acceptance and its finite remaining list.
 
 ## Context
