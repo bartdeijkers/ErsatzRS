@@ -68,6 +68,9 @@ release section when tagging a release.
 
 ### Changed
 
+- The parity-debt queue distinguishes actionable fixes, external prerequisites and
+  maintainer-deferred work, preserving each item's acceptance requirements.
+
 - YAML scheduling parity now records the remaining chapter-aware mid-roll gap:
   the current `true` case runs its sequence after the unsplit programme; saved
   chapter-point expressions are not yet implemented.
