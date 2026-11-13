@@ -40790,6 +40790,36 @@ This feature-acceptance checkpoint prepares source PR149 and its ordered
 closeout for separately authorized main delivery. The goal's main merge and
 safe task-resource cleanup remain distinct from acceptance. No release,
 publication, live installation or later-row processing is included.
+
+2026-11-13 approved main delivery and current CI integration:
+The maintainer explicitly approves source149 first, then retarget/check/merge
+ordered closeout150. Maincec488de introduces CI workflow separation only; the
+four documentation conflicts are resolved with both milestone records and all
+original sessions preserved. Integration5c1f235e retains Rust/Cargo/runtime
+assets exactly from qualified237008bd. Current source PR CI43380390588 passes
+all13 selected jobs on merge333b61fa/tree d8b4454ca9efb962bdecd147c630326ff7cb53fc,
+including Rust, Next, Level1.5 runtime, both required Chromium suites and CI ok.
+Its selected-tree marker is downloaded and digest/content verified. Current
+matched-web archive14017242414 is retained and all24 file hashes match its
+source-bound manifest; JS/WASM bytes equal qualified237008bd. This is current
+PR-domain proof, not a new full verification or relabelled platform package.
+The original full15-job43287157728 and all local/four-platform scopes retain
+compiled237008bd and their original hashes, negatives and recovery receipts.
+The first integrated PR run failed only the new merge-message scope; the
+corrected source and docs trees are verified unchanged. Original receipts remain.
+
+Source PR149 is now merged as0686b390f3552fd388fc07dbf0bcb987b5a3a419; its tree
+is exactly the tested source tree. This documentation-only PR150 records the
+four accepted dispositions and fixed c41969b3 baseline in one checkpoint.
+All285 earlier ledger rows, independent CI milestone, other parity debt and
+compiled/CI inputs remain unchanged. Original9f28170a and resolved64bb05f7
+histories are retained in a verified Git bundle; all original sessions remain.
+Canonical current receipts: current-pr-ci/corrected-run/qualification.json,
+current-pr-ci/corrected-run/web-artifact-retention.json,
+pre-rebase-history-retention.json and the eventual
+final-delivery.json/cleanup.json under tmp/evidence/ucu16/integration-fc6158c8/.
+No new implementation, release, installation or later-row processing is included.
+
 """
 
 [[milestone]]
