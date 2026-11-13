@@ -19,7 +19,7 @@ use super::{
     TeletextPageSetDraft, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
     TeletextSelectionSnapshot, TeletextSubcode,
 };
-use crate::EntityId;
+use crate::{validate_teletext_element_bindings, EntityId, TeletextElementBinding};
 
 /// Reserved producer id of the host-owned custom pages source.
 pub const TELETEXT_CUSTOM_PAGES_PRODUCER_ID: &str = "ersatzrs.host.custom-pages";
@@ -84,6 +84,11 @@ pub struct TeletextCustomPageWire {
     pub national_option: u8,
     /// Display rows 1..=24, each 40 seven-bit cells as 80 hexadecimal digits.
     pub rows: Vec<TeletextCustomRowWire>,
+    /// Published dynamic-field locations, normalized to this single subpage.
+    /// Older frozen documents have no refresh recipe; never infer it from the
+    /// current mutable element or link.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_fields: Vec<TeletextElementBinding>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,7 +109,10 @@ impl TeletextCustomRowWire {
         Self { row, cells: hex }
     }
 
-    fn decode(&self) -> Option<[u8; 40]> {
+    /// Decode the stored row without changing its control codes. Validation
+    /// still rejects eight-bit cells before native encoding.
+    #[must_use]
+    pub fn decode(&self) -> Option<[u8; 40]> {
         let bytes = self.cells.as_bytes();
         if bytes.len() != 80 {
             return None;
@@ -133,6 +141,8 @@ pub enum TeletextCustomPagesError {
     Duplicate { page: u16, subcode: u16 },
     #[error("custom page {page} has an invalid row {row}")]
     Row { page: u16, row: u8 },
+    #[error("custom page {page} has an invalid dynamic field snapshot")]
+    Fields { page: u16 },
 }
 
 /// A checked host response: empty Base pages plus their exact rows.
@@ -190,6 +200,15 @@ impl TeletextCustomPagesDocument {
                 TeletextNationalOption::new(page.national_option).map_err(|_| invalid)?;
             if page.element_id <= 0 || page.element_revision <= 0 {
                 return Err(invalid);
+            }
+            if validate_teletext_element_bindings(&page.dynamic_fields, 1).is_err()
+                || page.dynamic_fields.iter().any(|field| {
+                    !field.source.is_dynamic()
+                        || !field.static_text.is_empty()
+                        || !page.rows.iter().any(|row| row.row == field.row)
+                })
+            {
+                return Err(TeletextCustomPagesError::Fields { page: page.page });
             }
             if !seen.insert(address) {
                 return Err(TeletextCustomPagesError::Duplicate {
@@ -286,6 +305,7 @@ mod tests {
             subcode,
             national_option: 0,
             rows: vec![TeletextCustomRowWire::new(1, &cells)],
+            dynamic_fields: Vec::new(),
         }
     }
 
@@ -309,6 +329,69 @@ mod tests {
         assert_eq!(overlay.rows()[0].cells()[0], 0x01);
         assert_eq!(&overlay.rows()[0].cells()[1..6], b"Hello");
         assert_eq!(document.origins()[0].element_revision, 3);
+    }
+
+    fn dynamic_field() -> TeletextElementBinding {
+        TeletextElementBinding {
+            field: "NOW".to_owned(),
+            subpage: 0,
+            row: 1,
+            column: 1,
+            length: 10,
+            source: crate::TeletextElementBindingSource::NowTitle,
+            static_text: String::new(),
+        }
+    }
+
+    #[test]
+    fn published_dynamic_fields_survive_serialization_and_legacy_rows_stay_frozen() {
+        let legacy = wire(vec![page(150, 0)]);
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("dynamic_fields"));
+        let restored: TeletextCustomPagesWire = serde_json::from_slice(&bytes).unwrap();
+        assert!(restored.pages[0].dynamic_fields.is_empty());
+        assert!(TeletextCustomPagesDocument::from_wire(restored, "g").is_ok());
+
+        let mut original = legacy;
+        original.pages[0].dynamic_fields.push(dynamic_field());
+        let bytes = serde_json::to_vec(&original).unwrap();
+        let restored: TeletextCustomPagesWire = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(restored, original);
+        assert!(TeletextCustomPagesDocument::from_wire(restored, "g").is_ok());
+    }
+
+    #[test]
+    fn refresh_fields_cannot_escape_the_published_dynamic_cell_ranges() {
+        let valid = dynamic_field();
+        let mut invalid = Vec::new();
+        let mut field = valid.clone();
+        field.row = 0;
+        invalid.push(vec![field]);
+        let mut field = valid.clone();
+        field.row = 2; // No published row at this location.
+        invalid.push(vec![field]);
+        let mut field = valid.clone();
+        field.column = 39;
+        invalid.push(vec![field]);
+        let mut field = valid.clone();
+        field.subpage = 1;
+        invalid.push(vec![field]);
+        let mut field = valid.clone();
+        field.source = crate::TeletextElementBindingSource::ChannelName;
+        invalid.push(vec![field]);
+        let mut field = valid.clone();
+        field.static_text = "unpublished".to_owned();
+        invalid.push(vec![field]);
+        invalid.push(vec![valid.clone(), valid.clone()]);
+        invalid.push(vec![valid; crate::MAX_TELETEXT_ELEMENT_BINDINGS + 1]);
+        for fields in invalid {
+            let mut page = page(150, 0);
+            page.dynamic_fields = fields;
+            assert_eq!(
+                TeletextCustomPagesDocument::from_wire(wire(vec![page]), "g"),
+                Err(TeletextCustomPagesError::Fields { page: 150 })
+            );
+        }
     }
 
     #[test]

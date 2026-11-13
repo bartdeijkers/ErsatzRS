@@ -169,6 +169,83 @@ async fn linked_element_reaches_check_storage_and_encoder_as_exact_rows() {
 }
 
 #[tokio::test]
+async fn stored_dynamic_field_recipe_ignores_later_element_binding_edits() {
+    let fixture = fixture().await;
+    let element = link(&fixture, "%NOW%%%%%%%%%%", None).await;
+    let saved = prepare_static_teletext_design(
+        &fixture.state.application,
+        request(observe(&fixture).await),
+        designs::deadline(),
+    )
+    .await
+    .unwrap();
+    let identity = saved.identity;
+    drop(saved.preview);
+    let stored = fixture
+        .state
+        .application
+        .get_teletext_element(element)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut bindings = stored.bindings.clone();
+    bindings[0].source = ersatzrs_domain::TeletextElementBindingSource::Time;
+    fixture
+        .state
+        .application
+        .save_teletext_element_bindings(element, stored.revision, bindings)
+        .await
+        .unwrap();
+    let historical = reload_original_teletext_design_revision(
+        &fixture.state.application,
+        identity.design_id,
+        identity.revision,
+        designs::budget(),
+        channel_documents::policy(),
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let source: ersatzrs_domain::TeletextCustomPagesWire =
+        serde_json::from_slice(historical.sources()[0].bytes()).unwrap();
+    assert_eq!(source.pages[0].element_revision, stored.revision);
+    assert_eq!(source.pages[0].dynamic_fields, stored.bindings);
+    let updated = fixture
+        .state
+        .application
+        .plan_teletext_custom_pages(CHANNEL, chrono::Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(
+        updated.pages[0].dynamic_fields[0].source,
+        ersatzrs_domain::TeletextElementBindingSource::Time
+    );
+    let refreshed = ersatzrs_app::teletext_elements::refresh::refresh_published_custom_pages(
+        &source,
+        ersatzrs_app::teletext_elements::refresh::CustomPageRefreshTriggers {
+            programme: true,
+            ..Default::default()
+        },
+        Some(&ersatzrs_app::teletext_elements::fields::FieldValues {
+            now_title: "Published recipe".to_owned(),
+            time: "23:45".to_owned(),
+            ..Default::default()
+        }),
+    )
+    .unwrap();
+    let cells = refreshed.document.pages[0]
+        .rows
+        .iter()
+        .find(|row| row.row == 4)
+        .unwrap()
+        .decode()
+        .unwrap();
+    assert!(cells.starts_with(b"\x06Kanaal: \x03Published reci"));
+    assert_eq!(refreshed.changed, [(150, 0)]);
+}
+
+#[tokio::test]
 async fn blocked_pages_stop_check_with_a_reason_per_page() {
     let fixture = fixture().await;
     let application = &fixture.state.application;

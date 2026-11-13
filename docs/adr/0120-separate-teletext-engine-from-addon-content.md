@@ -145,7 +145,13 @@ last page off changes the selection like an add-on binding does. Its response
 carries exact seven-bit rows that the engine applies as physical base rows on
 empty Base pages. The engine's no-hidden-row rule applies unchanged: a page
 with text under a double-height line, or double height on row 23 or 24, is a
-per-page Check issue rather than having those bytes dropped. Refresh after publication, custom pages during published
+per-page Check issue rather than having those bytes dropped. New Check results
+also retain validated dynamic-field locations and sources with the exact page
+rows and element revision. Older stored results without that recipe remain
+frozen; refresh must never infer bindings from a later element or link.
+The application can fill or blank only those saved dynamic cell ranges and
+identify affected pages; live refresh ownership is still being integrated.
+Refresh after publication, custom pages during published
 Scripted intervals, the element's subpage cycle time and the acceptance
 evidence remain open in the `teletext-support` parity record.
 Acceptance needs unit and native publication evidence, one independently decoded

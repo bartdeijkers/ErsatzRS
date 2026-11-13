@@ -103,6 +103,21 @@ pub enum TeletextElementBindingSource {
 }
 
 impl TeletextElementBindingSource {
+    /// Fields refreshed after explicit publication. Fixed and channel text stay
+    /// frozen in the published rows until the next publication.
+    #[must_use]
+    pub const fn is_dynamic(self) -> bool {
+        matches!(
+            self,
+            Self::Date
+                | Self::Time
+                | Self::NowTitle
+                | Self::NowStart
+                | Self::NextTitle
+                | Self::NextStart
+        )
+    }
+
     /// Every selectable source in display order.
     pub const ALL: [Self; 10] = [
         Self::Unset,

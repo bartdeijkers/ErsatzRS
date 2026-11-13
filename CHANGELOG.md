@@ -70,6 +70,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Custom-page drafts preserve their checked dynamic-field bindings with the
+  page revision, so later element edits cannot replace the saved refresh recipe.
+  Automatic refresh after publication remains in progress.
 - Teletext capacity-recovery browser proof now covers Chromium and Firefox with
   and without JavaScript, including consent, custom-policy protection and repair.
 - Parity tracking now records the shipped yt-dlp authenticated-availability fix,

@@ -11,6 +11,7 @@ pub mod fields;
 pub mod import;
 pub mod level1;
 pub mod model;
+pub mod refresh;
 
 use chrono::{DateTime, Local, Utc};
 use ersatzrs_core::repositories::{RepositoryError, TeletextElementRepository};

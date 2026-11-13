@@ -14,7 +14,7 @@ use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract as wire;
 use ersatzrs_domain::{
     is_teletext_custom_pages_producer, teletext_element_page_label, EntityId,
-    TeletextCustomPageWire, TeletextCustomPagesWire, TeletextCustomRowWire,
+    TeletextCustomPageWire, TeletextCustomPagesWire, TeletextCustomRowWire, TeletextElementBinding,
     TeletextElementBindingSource, TeletextProfileValue, TeletextSelectionSnapshot,
     TELETEXT_CUSTOM_PAGES_SCHEMA,
 };
@@ -119,6 +119,23 @@ fn has_unset_field(page: &ElementPage, element: &TeletextElement) -> bool {
         .bindings
         .iter()
         .any(|binding| binding.source == TeletextElementBindingSource::Unset)
+}
+
+/// Freeze only this subpage's refreshable fields, without obsolete fixed text.
+fn dynamic_fields(
+    bindings: &[TeletextElementBinding],
+    subpage: usize,
+) -> Vec<TeletextElementBinding> {
+    bindings
+        .iter()
+        .filter(|field| usize::from(field.subpage) == subpage && field.source.is_dynamic())
+        .cloned()
+        .map(|mut field| {
+            field.subpage = 0;
+            field.static_text.clear();
+            field
+        })
+        .collect()
 }
 
 /// Declared page ranges of the enabled add-ons in a selection.
@@ -238,6 +255,7 @@ impl ApplicationServices {
                     rows: (1..=24_u8)
                         .map(|row| TeletextCustomRowWire::new(row, &subpage.rows[usize::from(row)]))
                         .collect(),
+                    dynamic_fields: dynamic_fields(&element.bindings, index),
                 });
             }
         }
@@ -292,6 +310,34 @@ impl ApplicationServices {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_published_subpage_carries_only_its_own_normalized_dynamic_bindings() {
+        let field = |subpage, source| TeletextElementBinding {
+            field: "field".to_owned(),
+            subpage,
+            row: 1,
+            column: 2,
+            length: 8,
+            source,
+            static_text: "older static value".to_owned(),
+        };
+        let bindings = vec![
+            field(0, TeletextElementBindingSource::NowTitle),
+            field(1, TeletextElementBindingSource::Time),
+            field(1, TeletextElementBindingSource::ChannelName),
+            field(1, TeletextElementBindingSource::Static),
+        ];
+        let saved = dynamic_fields(&bindings, 1);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].source, TeletextElementBindingSource::Time);
+        assert_eq!(saved[0].subpage, 0);
+        assert_eq!((saved[0].row, saved[0].column, saved[0].length), (1, 2, 8));
+        assert!(saved[0].static_text.is_empty());
+        assert_eq!(bindings[1].subpage, 1);
+        assert_eq!(bindings[1].static_text, "older static value");
+        assert!(dynamic_fields(&bindings, 2).is_empty());
+    }
 
     #[test]
     fn subcodes_follow_rotating_page_convention() {
