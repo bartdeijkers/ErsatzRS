@@ -68,6 +68,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Teletext capacity-recovery browser proof now covers Chromium and Firefox with
+  and without JavaScript, including consent, custom-policy protection and repair.
+
 - YAML scheduling parity now records the remaining chapter-aware mid-roll gap:
   the current `true` case runs its sequence after the unsplit programme; saved
   chapter-point expressions are not yet implemented.
