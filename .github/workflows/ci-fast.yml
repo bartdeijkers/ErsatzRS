@@ -1,0 +1,37 @@
+name: CI
+on:
+  push:
+    branches-ignore: [main]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+concurrency:
+  group: ci-push-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.pr.outputs.run }}
+    steps:
+      - id: pr
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // Open PRs have their own checks on synchronize, including drafts.
+            // Require the exact pushed SHA; never suppress checks for stale PR data.
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              ...context.repo, state: 'open',
+              head: `${context.repo.owner}:${context.ref.replace('refs/heads/', '')}`,
+              per_page: 100,
+            });
+            core.setOutput('run', !pulls.some(pr => pr.head.sha === context.sha
+              && pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`));
+  checks:
+    needs: select
+    if: needs.select.outputs.run == 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      quick_only: true
+    secrets: inherit

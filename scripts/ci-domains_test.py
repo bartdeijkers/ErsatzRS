@@ -40,6 +40,29 @@ class DomainSelection(unittest.TestCase):
                 self.assertIn(required, selection["general_specs"])
                 self.assertNotIn("teletext-editor-flow", selection["teletext_specs"])
 
+    def test_reviewed_foundation_ownership_keeps_integration_and_rust_consumers(self):
+        for path in ("crates/ersatzrs-core/src/repositories/watermark.rs",
+                     "crates/ersatzrs-domain/src/teletext/mod.rs"):
+            with self.subTest(path=path):
+                selection = domains.select([path])
+                self.assertFalse(selection["everything"])
+                self.assertTrue(selection["rust_packages"])
+                self.assertTrue(selection["next"])
+                self.assertIn("channel-watch", selection["general_specs"])
+                self.assertNotIn("local-library-deletion", selection["general_specs"])
+                if "teletext" in path:
+                    self.assertTrue(selection["teletext_rust"])
+                    self.assertIn("teletext-editor-flow", selection["teletext_specs"])
+                else:
+                    self.assertIn("watermark-preview", selection["general_specs"])
+                self.assertTrue(domains.select([path], added_paths=[path])["everything"])
+        for path in ("crates/ersatzrs-domain/src/lib.rs", "crates/ersatzrs-core/src/locking.rs",
+                     "crates/ersatzrs-core/src/teletext/deleted.rs",
+                     ".github/workflows/ci-fast.yml", ".github/workflows/full-verification.yml"):
+            self.assertTrue(domains.select([path])["everything"])
+        mixed = domains.select(["crates/ersatzrs-core/src/repositories/watermark.rs", "Cargo.lock"])
+        self.assertTrue(mixed["everything"])
+
     def test_audited_domain_behavior(self):
         cases = json.loads((ROOT / "scripts/ci-domain-cases.json").read_text())
         for case in cases:
@@ -517,7 +540,7 @@ class DomainSelection(unittest.TestCase):
         cases = {
             "crates/ersatzrs-web/src/admin/pages/watermarks/list.rs":
                 dict(lane="pr", run_next="false", run_teletext="false", run_browser="true"),
-            "docs/readme-only.md": dict(lane="skip", run_browser="false"),
+            "docs/readme-only.md": dict(lane="light", run_browser="false"),
             "Cargo.toml": dict(lane="pr", run_next="true", run_teletext="true", run_browser="true"),
         }
         with tempfile.TemporaryDirectory() as tmp:
