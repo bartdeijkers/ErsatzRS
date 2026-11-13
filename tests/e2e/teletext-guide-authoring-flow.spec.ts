@@ -74,6 +74,12 @@ function translation(module: string): (key: string) => string {
 async function ready(page: Page, js: boolean): Promise<void> {
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
   if (js) await waitForHydration(page);
+  // Current-guide preview lives inside the page's native advanced disclosure.
+  // Follow the visible control instead of treating hidden rendered data as proof.
+  if (new URL(page.url()).searchParams.has('guide_preview')) {
+    const advanced = page.getByTestId('teletext-publish-advanced');
+    if (await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
+  }
 }
 
 async function submit(page: Page, form: Locator, button: string, js: boolean): Promise<void> {
