@@ -40791,3 +40791,122 @@ closeout for separately authorized main delivery. The goal's main merge and
 safe task-resource cleanup remain distinct from acceptance. No release,
 publication, live installation or later-row processing is included.
 """
+
+[[milestone]]
+id = 'ci-workflow-separation'
+phase = 'Engineering — usable CI feedback'
+title = 'Separate development checks, affected PR proof and full qualification'
+status = 'In progress'
+feature = 'developer-surface-hardening'
+depends_on = []
+acceptance = '''
+Maintainer approval 2026-11-11: implement the reviewed CI advice and retain this
+finite completion list across context compaction.
+CIS-01: development pushes and drafts run format, full workspace/all-target
+Clippy, Cargo deny, commit lint and documentation checks without test archives,
+server/WASM builds or runtime suites. Avoid duplicate push/PR execution; cancel
+superseded work per branch without cancelling independent full qualification.
+Keep inexpensive checks available independently of the heavy runner queue.
+CIS-02: ready PRs retain required CI ok and affected behavioral verification.
+Selection follows changed behavior, its consumers and integration boundaries;
+retain relevant playback, international subtitle/audio, persisted-state and
+hydration safety. Reviewed ownership may narrow a shared file; dependency
+reach alone does not require every browser/runtime suite. Unknown impact stays
+broad within a proven domain, and global/unknown-domain impact stays full.
+Mappings are repository-owned and regression-tested, never arbitrary PR labels
+or agent assertions. New/deleted inputs remain broad until reviewed. Never drop
+a known affected test to satisfy a time budget. Count compile and queue costs.
+CIS-03: merges run small checks and verify prior exact-tree PR evidence; no
+automatic full-suite fallback after merge. Untested integrations/direct pushes
+must be explicitly identified and require PR verification before release.
+Full required general/base suites and both browsers run weekly and on explicit
+qualification; releases retain exact-candidate full proof and all platform
+obligations. Focused recovery is never full acceptance. Retain artifact identity,
+digest/capability and SSR/WASM consistency checks for consumers that need builds.
+CIS-04: validate trigger/job conditions, required-check failures and skips,
+selection unions/fallbacks, full/recovery compatibility and progress sources.
+Update BUILD, contribution/release guidance and changelog. Local implementation
+completion is distinct from GitHub acceptance. After authorized push, verify a
+draft, ready PR, superseding push, tested merge, and full dispatch/weekrun;
+measure ordinary PR latency against the retained 15-30 minute goal without
+claiming it from skipped runs. Preserve prior DCI/BSE evidence and open goals.
+Excluded: product behavior changes, release/publication, live installations,
+runner provisioning, paid services and weakening release/platform acceptance.
+'''
+evidence = '''
+2026-11-11 local implementation:
+CIS-01 Complete within local scope: ci-fast.yml delegates small development
+checks to the reusable ci.yml engine; exact-source open PRs own their own
+checks. Draft and documentation lanes omit build/test artifacts. Full Clippy
+is retained. Hosted format/docs/commit jobs avoid the heavy runner queue.
+CIS-02 Complete within the reviewed scope: existing page/consumer selection is
+retained; foundation teletext modules select all required base families and
+playback, and the core watermark repository port selects watermark management
+and playback/Next. Native reverse dependents remain selected. Unknown global
+inputs, new/deleted sources and mixed global diffs retain full coverage.
+Broader foundation ownership is not inferred from these two reviewed cases.
+CIS-03 Complete within local scope: main runs small checks and reports completed
+successful exact-tree behavioral proof separately; missing proof never starts
+full CI or counts as integration acceptance. Full-verification.yml owns weekly
+and manual execution; direct ci.yml full/focused recovery stays available.
+Quick/full/PR concurrency groups and optional Level2.5/platform boundaries are
+retained. No runtime or release acceptance requirement was removed.
+CIS-04 local verification Complete: Actionlint (including shell checks), diff
+whitespace and cargo xtask progress check pass. Python regression suites pass
+185 cases: artifact/workflow98, domain40, browser-evidence13, teletext-selection12,
+capacity5, host-lock3, browser-wrapper4, Docker-recovery10. Loopback host-lock
+cases pass outside the socket-restricted sandbox. No product Rust/browser code
+changed; affected-checks selects no Rust compilation. BUILD, CONTRIBUTING and
+Unreleased describe the new distinction and unchanged exact-release gate.
+Commit/push authorized by the maintainer on 2026-11-11. Delivery is isolated on
+ci/workflow-separation above remote main2173ba44; the three pre-existing local
+main documentation commits remain on main. Rebase retains the newer backend
+consumer/machine-API selection work. Rerun on this integrated candidate passes
+artifact/workflow98, domain42 and browser-evidence15 (155 tests), Actionlint,
+whitespace and progress checks; the other34 unchanged script cases retain their
+previous passing results. Rebase conflicts retain the remote changelog/session
+entries and only this package's additions.
+2026-11-12 resumed live audit: all three runners were online/idle and no
+workflow was pending. The first small push CI43108793845 on7a8f408f completed
+successfully: format/docs/commitlint passed on hosted runners; deny took13s,
+Clippy4m33s; test/build/Next/teletext/browser jobs were correctly omitted. Its
+58-minute wall time includes the existing browser-runner queue and does not
+prove the latency goal. Dependency PR145 run43104888979 attempt2 and main
+Firefox recovery43102990875 also succeeded; neither needs another retry.
+Classic full run43056494938 on8e9720f1 ended with two infrastructure failures:
+general Chromium tests passed but CreateArtifact returned404; base Chromium
+lost runner communication. All other jobs, including both Firefox suites,
+passed. Maintainer resume on2026-11-12 started failed-jobs-only attempt2 at
+17:48UTC on the unchanged source. The existing build and successful checks
+were reused; only the two Chromium suites and their downstream aggregate need
+new execution. Completed: attempt2 is success on the unchanged8e9720f1,
+including both Chromium jobs and CI ok. The infrastructure repair is closed;
+do not repeat the passing tests or reattribute this proof to the CI branch.
+Known remaining CIS-01 runner-availability defect: a browser job waiting for
+the host TCP lock consumes a runner slot. Correct before claiming reliable
+small-CI latency under browser load; preserve serial browser isolation and
+avoid concurrency policies that silently discard pending required checks.
+2026-11-12 bounded CIS-01 repair (separate from the completed Classic proof):
+changed behavior: cross-run browser waiters queue before runner assignment,
+leaving capacity for small CI while retaining browser isolation. The shared
+job-level self-hosted group uses GitHub concurrency.queue=max and does not
+cancel running jobs. GitHub supports100 pending jobs; overflow still fails the
+required aggregate. Hosted/fallback machines use run/attempt/port-specific
+groups. Matrix serialization and the TCP lock remain for manual/older callers.
+Local stopping condition: evaluated group identity/isolation, nonreplacing
+queue configuration, host-lock regressions and workflow/progress checks pass.
+Live stopping condition: GitHub accepts the workflow, then simultaneous current
+workflow revisions demonstrate pending browser jobs without occupying the
+second runner. Existing old revisions may still wait inside the TCP lock.
+Local stopping condition Complete: host-lock4 and artifact/workflow98 cases
+pass; progress validation, whitespace and all other Actionlint checks pass. Actionlint1.7.12 has the documented queue-key support
+issue657; exclude only that exact obsolete-schema diagnostic and independently
+validate the queue configuration. All other lint diagnostics remain required.
+BUILD documents the exclusion and queue limit; Unreleased records the change.
+No live scheduler/latency acceptance is claimed from local group evaluation.
+Remaining mandatory evidence (CIS-04 GitHub acceptance): after publication, observe draft, ready PR, superseding push, exact-tree merged main
+and full workflow execution; verify required CI ok and record timings. This is
+an external execution prerequisite, not a local test failure. No passing GitHub
+acceptance, cohort latency, branch protection mutation or release is claimed.
+The 15-30 minute cohort goal and historical DCI/BSE open evidence remain open.
+'''

@@ -141,6 +141,18 @@ usually belongs under `Added`, `fix` under `Fixed`, behavior changes under
 vulnerability work under `Security`. Breaking changes must be called out
 explicitly in the relevant changelog entry.
 
+## CI feedback and qualification
+
+Development pushes and drafts run the small CI checks, including full Clippy,
+without test or web artifacts. Ready PRs add behavioral verification selected
+from changed behavior, consumers and integration boundaries. `CI ok` remains
+required; a draft cannot carry a passing merge check into its ready run.
+Main pushes run small checks and report prior integration proof. A green small
+run is not full/release acceptance. Full verification runs weekly or explicitly;
+release candidates still require the exact-source full gate in
+[BUILD.md](BUILD.md#release-candidate-ci-gate). See
+[CI lanes](BUILD.md#ci-lanes) for ownership, fallback and runner details.
+
 ## Pull Request Checklist
 
 - The change is in English.

@@ -42,7 +42,8 @@ _evidence_spec.loader.exec_module(_evidence)
 EVERYTHING = (
     "Cargo.toml", "Cargo.lock", "rust-toolchain*", ".cargo/*", ".config/*", "deny.toml",
     "package.json", "package-lock.json", "playwright.config.ts", "tsconfig*.json",
-    ".github/workflows/ci.yml", ".github/workflows/release.yml", ".github/actions/*", "scripts/ci-*", "scripts/e2e/*", "scripts/release/*", "scripts/calibration/*",
+    ".github/workflows/ci.yml", ".github/workflows/ci-fast.yml",
+    ".github/workflows/full-verification.yml", ".github/workflows/release.yml", ".github/actions/*", "scripts/ci-*", "scripts/e2e/*", "scripts/release/*", "scripts/calibration/*",
     "run.sh", "run.ps1", "run.cmd", "assets/*", "migrations/*",
     # Foundation crates every other crate builds on.
     "crates/ersatzrs-domain/*", "crates/ersatzrs-core/*",
@@ -131,6 +132,20 @@ REPOSITORY_AREAS = {
     "collection": ("media",), "tag": ("media",),
     "watermark": ("watermarks",), "search": ("search",),
 }
+
+
+# Reviewed foundation ownership, with all Rust reverse dependents retained.
+# Teletext models/logic own base authoring, editor and emitted playback; the
+# watermark repository port owns persisted watermark CRUD and its playback
+# projection. Root exports, other foundation inputs, additions and deletions
+# deliberately retain the global fallback. Extend only with consumer evidence.
+def foundation_owner(path):
+    if path.startswith(("crates/ersatzrs-domain/src/teletext/",
+                        "crates/ersatzrs-core/src/teletext/")):
+        return "teletext"
+    if path == "crates/ersatzrs-core/src/repositories/watermark.rs":
+        return "watermarks"
+    return None
 
 
 def documentation_path(path):
@@ -475,7 +490,8 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
             out["domains"].add("release-notes")
             out["reasons"].append(f"{path}: embedded release notes and /changelog.md response")
             continue
-        if matches(path, EVERYTHING):
+        owner = foundation_owner(path)
+        if matches(path, EVERYTHING) and not owner:
             everything(f"{path} is shared build/CI input")
             continue
         if path.startswith(".github/"):
@@ -578,6 +594,12 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                 teletext(TELETEXT_SPECS, True)
             else:
                 everything(f"{path}: shared/unmapped web runtime")
+        elif owner == "teletext":
+            teletext(TELETEXT_SPECS, True)
+            playback()
+        elif owner == "watermarks":
+            area(("watermarks",))
+            playback()
         elif crate == "ersatzrs-ffmpeg":
             playback(next_engine=local not in NATIVE_FILTER_INPUTS)
             if TELETEXT_PATH.search(local) and not re.search(r"/(?:output|buffer|pmt|packet)", local):

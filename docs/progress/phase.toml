@@ -8,7 +8,7 @@ summary = '''
 UCU-16 rows286–289 are accepted within their unchanged required boundary.
 Milestone ucu-16 owns all four current private package/runtime scopes, source
 CI43287157728 and eligible source PR149 CI43339800944. The source and prepared
-ordered closeout await separately authorized main delivery. Rows290/291 come
+ordered closeout await approved main delivery after current PR checks. Rows290/291 come
 afterward; no new window, release or installation is included. Completed Phase9
 and earlier accepted catch-up scopes remain unchanged.
 
@@ -16,8 +16,9 @@ The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
 engine, production TV-guide add-on, four required package/runtime scopes and
 three stable releases with exact-source CI and actual published downloads.
 Level2.5 remains experimental; retained enhanced-only, optionalQTM, macOS,
-nativeARM and current-release Docker scopes are Deferred, not accepted. No
-current independently executable required Phase9 work remains.
+nativeARM and current-release Docker scopes are Deferred, not accepted. The independent
+ci-workflow-separation maintainer task is active; its CIS-01–04 list owns the
+next implementation and verification steps.
 
 Earlier completed programme context is retained below:
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -77,6 +78,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Current delivery2026-11-13: the maintainer approves merging source PR149,
+then retargeting/rechecking/merging documentation PR150. Maincec488de adds
+CI workflow separation without changing Rust/Cargo/runtime assets. Preserve
+both milestone records and all earlier proof; resolve the four documentation
+conflicts, run the current required PR checks and merge in that order. The
+237008bd packages remain evidence for that compiled source, not new packages.
+Rows290/291, publication, release and installation remain outside this task.
+Earlier permission-boundary statements below are historical.
+
 UCU-16 acceptance is Complete: all four individual rows286–289 are dispositioned,
 and the authoritative baseline update is bundled with their ordered ledger.
 Milestone ucu-16 owns source237008bd, checkpoint5893f525, full15-job
@@ -86,14 +96,11 @@ Native/Next playback proof is complete. ARM execution is QEMU, not native.
 Exact receipts and original failures remain under
 tmp/evidence/ucu16/integration-fc6158c8/qualification.json.
 
-Next bounded action: main delivery of source PR149 and its prepared ordered
-closeout, after the separate merge permission. The source PR is ready and its
-CI accepts the existing full-proof guard; no unchanged Rust/browser rerun is
-needed for this documentation. After safe integration, clean only task-owned
-temporary resources whose deliverables/evidence are retained. Preserve unrelated
-root work/history, unique commits and remote branches. Existing native ARM,
-macOS/hardware, YAML and advisory debt remains explicit. Rows290/291 come later;
-no new implementation, release/publication or installation task is active here.
+Next bounded action: source PR149 CI43379536419 must pass on integration
+source db59760d. Then merge PR149, retarget/check/merge this documentation PR150
+and remove only safely preserved task-owned temporary resources. Preserve
+independent CI milestone, unrelated root work/history, unique commits and remote
+branches. Retained platform, YAML and advisory debts remain explicit.
 
 Qualification history for the same fixed window:
 Active maintainer task2026-11-11: UCU-16 rows286–289 through fixed c41969b3.
@@ -186,6 +193,16 @@ Preserve Native and the accepted v26.12.0 baseline until that acceptance;
 no later-tip chase, main merge, publication or installation is authorized.
 
 Completed prior catch-up context:
+Active maintainer task: milestone ci-workflow-separation, CIS-01–04. Local
+implementation and regression verification are complete within the recorded
+scope. The CI branch was published as7a8f408f and its small push run passed.
+Resume2026-11-12: Classic run43056494938 attempt2 is green on8e9720f1;
+its bounded infrastructure repair is complete. The separate CIS-01 browser
+queue repair and local verification are complete within their scope. Next:
+verify cross-run queueing on current revisions and remaining
+CIS-04 draft/ready/superseded/main/full acceptance and latency observations.
+Historical UCU and DCI paragraphs below do not supersede this finite list.
+
 UCU-13, UCU-14 and UCU-15 are Complete in order through fixed v26.12.0.
 All285 rows are processed; row271 remains approved Deferred/unverified Windows
 advisory work. The accepted pin is owned by docs/automation/parity-baseline.md.

@@ -1,5 +1,5 @@
-name: CI
-run-name: ${{ github.event.pull_request.draft && 'CI (Draft)' || inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && inputs.next_case_set == 'subtitle-nul' && 'CI (Next subtitle-NUL recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
+name: PR checks
+run-name: ${{ (github.event_name == 'push' || inputs.quick_only) && 'CI' || github.event_name == 'schedule' && 'Full verification' || github.event.pull_request.draft && 'CI (Draft)' || inputs.audit_only && 'CI (Audit only)' || inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || (inputs.teletext_only && inputs.teletext_only != 'none') && 'CI (Teletext only)' || inputs.next_engine_only && inputs.next_case_set == 'subtitle-nul' && 'CI (Next subtitle-NUL recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || (github.event_name == 'pull_request' && 'PR checks' || 'CI') }}
 
 on:
   pull_request:
@@ -7,50 +7,22 @@ on:
     # labels, and each label event would start another full CI run.
     # `ready_for_review` starts the full PR lane once a draft is marked ready;
     # draft pull requests run only the fast lane (see Preflight).
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     # No `paths-ignore` here: `main` requires the `CI ok` check, and a
     # workflow that never starts never reports it, which would leave
-    # docs-only PRs unmergeable. Preflight instead detects a PR that touches
-    # only the non-code paths listed under `push` below and skips the gate,
-    # and `CI ok` then reports success for it.
+    # docs-only PRs unmergeable. Preflight selects small checks for known
+    # documentation-only changes; ready PRs still report `CI ok`.
   push:
     branches: [main]
-    # Skip the Rust CI gate for known documentation and agent-config paths.
-    # CHANGELOG.md is embedded in the admin UI; served images and nested
-    # Markdown can be runtime inputs. The daily progress routine
-    # commits doc-only changes directly to main (see
-    # docs/automation/daily-progress-routine.md) and validates them locally
-    # with `cargo xtask progress check`. A push that also changes anything
-    # outside this list (any .rs, Cargo manifest, or .github/ file) still runs
-    # CI in full. Applies to push only; pull_request always runs the gate.
-    paths-ignore:
-      - 'docs/**'
-      - 'plans/**'
-      - '.claude/**'
-      - '.codex/**'
-      - 'AGENTS.md'
-      - 'CLAUDE.md'
-      - 'CODEX.md'
-      - 'ARCHITECTURE.md'
-      - 'BUILD.md'
-      - 'CODE_OF_CONDUCT.md'
-      - 'CONTRIBUTING.md'
-      - 'GOVERNANCE.md'
-      - 'PORTING.md'
-      - 'README.md'
-      - 'RELEASING.md'
-      - 'SECURITY.md'
-      - 'STATUS.md'
-      - 'STYLE.md'
-      - 'SUPPORT.md'
-      - 'TEST.md'
-      - 'prompt.md'
-  # Weekly full suite on main (both browsers, every domain), in the night from
-  # Sunday to Monday. Pull requests run only the domains they touch and a merge
-  # whose tree its PR already tested is skipped, so this run is the safety net.
-  # Preflight skips it when main's tree already passed a full run.
-  schedule:
-    - cron: '0 1 * * 1'
+  # Reused by the small push workflow and the independent full weekrun.
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: ''
+      quick_only:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       runner:
@@ -139,7 +111,7 @@ on:
 # and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ github.event_name == 'schedule' && '-nightly' || '' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && format('-next-engine-only{0}', inputs.next_case_set == 'subtitle-nul' && '-subtitle-nul' || '') || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ (github.event_name == 'push' || inputs.quick_only) && '-quick' || github.event_name == 'schedule' && '-weekly' || github.event_name == 'workflow_dispatch' && '-qualification' || '-pr' }}${{ inputs.audit_only && '-audit-only' || inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}{1}', inputs.browser_only, inputs.browser_case_set && inputs.browser_case_set != 'fixtures' && format('-{0}', inputs.browser_case_set) || '') || (inputs.teletext_only && inputs.teletext_only != 'none') && format('-teletext-{0}', inputs.teletext_only) || inputs.next_engine_only && format('-next-engine-only{0}', inputs.next_case_set == 'subtitle-nul' && '-subtitle-nul' || '') || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -170,34 +142,12 @@ env:
   CI_REUSE_ARTIFACTS: ${{ inputs.reuse_artifacts }}
 
 jobs:
-  # A direct fast-forward merge gives main the exact commit a feature-branch
-  # run already proved green, so the push-triggered run recompiles and retests
-  # a byte-identical tree. Ask the API whether this SHA already has a
-  # successful CI run and skip the gate if it does.
-  #
-  # Push only. A pull_request must be evaluated on its own merge result, and a
-  # manual dispatch is an explicit request to re-run. A PR merge commit is a
-  # new SHA, so this never skips one. A pull_request skips for non-code changes
-  # or a source-bound complete proof qualified in its PR preflight below.
-  #
-  # Pinned to a hosted runner on purpose: the self-hosted pool is one machine
-  # with two runners, and adding a gate job there would charge every run
-  # queue time to save a duplicate that is comparatively rare.
-  #
-  # Preflight also chooses the lane (`outputs.lane`) that the gate jobs and
-  # `CI ok` follow:
-  #   skip    - already proven SHA, or a docs-only pull request.
-  #   light   - draft pull request: Format, Clippy, Build, Test, deny,
-  #             commit lint and docs only. `CI ok` fails on purpose so a draft
-  #             never carries a passing required check into its ready run.
-  #   pr      - ready pull request: the domains it touches
-  #             (scripts/ci-domains.py), browsers in Chromium only. A green run
-  #             records the tested merge tree as a `ci-tree-<tree>` artifact,
-  #             and a push to main with that tree is skipped.
-  #   full    - every other push, the weekly run and every manual dispatch:
-  #             everything. A green run records `ci-full-<tree>`, and the
-  #             weekly run is skipped when main's tree already has one.
-  #   A ready pull request whose domains select nothing runs as `skip`.
+  # light: compile-free checks plus full Clippy/deny; no runtime/test artifacts.
+  # pr: reviewed behavioral domains, Rust reverse dependents and Chromium.
+  # full: explicit qualification and the independent weekly workflow.
+  # skip: a qualified complete proof already covers the requested execution.
+  # Main always runs small checks, reporting exact-tree behavioral provenance
+  # separately. A draft never establishes a passing required merge check.
   preflight:
     name: Preflight
     if: ${{ inputs.audit_only || (!inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none')) }}
@@ -239,6 +189,8 @@ jobs:
           echo "::error::audit_only cannot be combined with another focused CI mode"
           exit 1
       - id: duplicate
+        env:
+          CI_QUICK_ONLY: ${{ inputs.quick_only }}
         uses: actions/github-script@v9
         with:
           script: |
@@ -256,8 +208,12 @@ jobs:
               repo: context.repo.repo,
               commit_sha: sha,
             })).data.tree.sha;
+            if (process.env.CI_QUICK_ONLY === 'true') {
+              lane('light');
+              return;
+            }
             if (context.eventName === 'pull_request') {
-              // Only known documentation ownership can skip the workflow.
+              // Only known documentation ownership can omit behavioral builds.
               // Match ci-domains.py; embedded CHANGELOG and served assets run.
               const nonCode = (path) => /^(docs|plans|\.claude|\.codex)\//.test(path)
                 || (/^[^/]+\.md$/.test(path) && path !== 'CHANGELOG.md');
@@ -299,8 +255,8 @@ jobs:
                   && (!file.previous_filename || nonCode(file.previous_filename)),
               );
               if (docsOnly) {
-                lane('skip');
-                core.notice('This pull request changes only non-code paths; skipping the gate.');
+                lane('light');
+                core.notice('Documentation-only pull request: run the small checks without artifacts.');
               } else if (context.payload.pull_request.draft) {
                 lane('light');
                 core.notice('Draft pull request: fast lane only. Mark it ready for review to run the full PR lane.');
@@ -345,9 +301,9 @@ jobs:
                   repo: context.repo.repo,
                   run_id: artifact.workflow_run.id,
                 })).data;
-                if (run.path !== '.github/workflows/ci.yml' || !events.includes(run.event)
+                if (!['.github/workflows/ci.yml', '.github/workflows/full-verification.yml'].includes(run.path) || !events.includes(run.event)
                   || run.head_repository?.full_name !== repository
-                  || (run.conclusion && run.conclusion !== 'success')) continue;
+                  || run.status !== 'completed' || run.conclusion !== 'success') continue;
                 return run;
               }
               return null;
@@ -368,55 +324,41 @@ jobs:
               core.info(`${context.eventName} runs the selected gate.`);
               return;
             }
-            const runs = await github.paginate(
-              github.rest.actions.listWorkflowRuns,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: 'ci.yml',
-                head_sha: context.sha,
-                per_page: 100,
-              },
-            );
-            // Pull request runs test a merge commit, not their head SHA, and
-            // do not run every job; only push or dispatch runs prove a SHA.
-            const proven = runs.filter(
-              (run) => run.id !== context.runId && run.conclusion === 'success'
-                && run.event !== 'pull_request'
-                && run.display_title !== 'CI (Test only)'
-                && run.display_title !== 'CI (Next engine only)'
-                && run.display_title !== 'CI (Next subtitle-NUL recovery)'
-                && run.display_title !== 'CI (Teletext only)'
-                && run.display_title !== 'CI (Browser recovery)'
-                && run.display_title !== 'CI (Audit only)',
-            );
-            if (proven.length > 0) {
-              lane('skip');
-              const links = proven.map((run) => run.html_url).join(', ');
-              core.notice(
-                `${context.sha} already passed CI (${links}); skipping this duplicate run.`,
-              );
-              return;
-            }
+            // A green small push is not behavioral evidence. Only a completed
+            // selected/full proof marker can establish integration coverage.
             // A merged pull request lands as a new SHA, but often with the
             // exact tree its PR lane already tested. The weekly full run
             // covers the domains and Firefox jobs that lane left out.
             const tree = await treeOf(context.sha);
             const run = await provenBy('ci-tree', tree, ['pull_request']);
             if (run) {
-              lane('skip');
+              core.setOutput('integration_proven', 'true');
+              lane('light');
               core.notice(
-                `Tree ${tree} already passed the PR lane (${run.html_url}); skipping this run. The weekly run covers the rest.`,
+                `Tree ${tree} already passed the PR lane (${run.html_url}); reusing its behavioral proof; running small checks. The weekly run covers the rest.`,
               );
               return;
             }
             const fullRun = await provenBy('ci-full', tree, ['push', 'schedule', 'workflow_dispatch']);
             if (fullRun) {
-              lane('skip');
-              core.notice(`Tree ${tree} already passed full CI (${fullRun.html_url}); skipping this duplicate run.`);
+              core.setOutput('integration_proven', 'true');
+              lane('light');
+              core.notice(`Tree ${tree} already passed full CI (${fullRun.html_url}); reusing its behavioral proof; running small checks.`);
               return;
             }
-            await full();
+            core.setOutput('integration_proven', 'false');
+            lane('light');
+            core.notice('No prior exact-tree proof: small main checks only; full qualification remains required before release.');
+      - uses: actions/github-script@v9
+        name: Report main integration evidence
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        env:
+          PROVEN: ${{ steps.duplicate.outputs.integration_proven }}
+        with:
+          script: |
+            await core.summary.addRaw(process.env.PROVEN === 'true'
+              ? 'Exact-tree PR/full behavioral proof found; running small checks.'
+              : 'No exact-tree behavioral proof found. Small CI is not integration or release acceptance. Run full qualification before release.').write();
       - uses: actions/checkout@v7
         if: ${{ steps.duplicate.outputs.lane == 'pr' || inputs.resume_run }}
         # Source-shape validation needs the actual merge-result source files.
@@ -523,8 +465,8 @@ jobs:
           deselected = [job for job, on in (("test", bool(s["rust_packages"])), ("next_engine", s["next"]), ("teletext", s["teletext_rust"]),
                                             ("hydration", bool(rows))) if not on]
           nothing = not (s["products"]["rust"] or rows)
-          print(f"lane={'skip' if nothing else 'pr'}")
-          print(f"skip={'true' if nothing else 'false'}")
+          print(f"lane={'light' if nothing else 'pr'}")
+          print('skip=false')
           print(f"run_next={str(s['next']).lower()}")
           print(f"run_teletext={str(s['teletext_rust']).lower()}")
           print(f"run_browser={str(bool(rows)).lower()}")
@@ -606,7 +548,7 @@ jobs:
     name: Format
     needs: preflight
     if: needs.preflight.outputs.skip != 'true'
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON((needs.preflight.outputs.lane == 'light' || inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -662,7 +604,7 @@ jobs:
   build:
     name: ${{ inputs.reuse_artifacts && 'Verify reused CI artifacts' || 'Build CI artifacts' }}
     needs: [preflight, fmt]
-    if: ${{ always() && !cancelled() && !inputs.audit_only && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
+    if: ${{ always() && !cancelled() && !inputs.audit_only && needs.preflight.outputs.lane != 'light' && (needs.fmt.result == 'success' || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
     runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     timeout-minutes: 120
     outputs:
@@ -1247,9 +1189,18 @@ jobs:
     # CPU and memory; an otherwise
     # unexplained Chromium hydration timeout occurred while both overlapped.
     # `max-parallel: 1` removes that contention; `fail-fast: false` still runs
-    # the remaining combinations when one fails. It only serializes within one workflow run: a
-    # second concurrent run can still overlap. Each project keeps its own port
-    # so either runner can take either job.
+    # the remaining combinations when one fails. Matrix serialization covers
+    # one workflow run; the job-level queue covers self-hosted jobs across runs
+    # before runner allocation. Each project keeps its own port so either
+    # runner can take either job. Retain the TCP lock for older workflow
+    # revisions and manual browser invocations outside this queue.
+    # Queue across workflow runs before assigning a self-hosted runner. The
+    # default single pending slot would cancel required suites on a third run.
+    # Hosted jobs have separate machines and need no host-wide serialization.
+    concurrency:
+      group: ersatzrs-browser-${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && format('hosted-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.port) || 'self-hosted' }}
+      queue: max
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -1378,8 +1329,8 @@ jobs:
   commitlint:
     name: Commit lint
     needs: [preflight, fmt]
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
-    if: ${{ !inputs.audit_only && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ${{ fromJSON((needs.preflight.outputs.lane == 'light' || inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    if: ${{ !inputs.audit_only && github.event_name != 'schedule' }}
     permissions:
       contents: read
       pull-requests: read
@@ -1393,10 +1344,20 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
         run: |
           if [ "$EVENT_NAME" = "pull_request" ]; then
             echo "base_sha=$PULL_REQUEST_BASE_SHA" >> "$GITHUB_OUTPUT"
             echo "head_sha=$PULL_REQUEST_HEAD_SHA" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            head_sha=$(git rev-parse HEAD)
+            base_sha="$PUSH_BASE_SHA"
+            if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+              git fetch --no-tags origin main
+              base_sha=$(git merge-base origin/main HEAD)
+            fi
+            echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+            echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
           else
             git fetch --no-tags origin main
             head_sha=$(git rev-parse HEAD)
@@ -1410,7 +1371,7 @@ jobs:
       # Only needed on the GitHub-hosted fallback path: self-hosted runs
       # already have a warm ~/.npm cache from the shared, persistent $HOME.
       - uses: actions/cache@v6
-        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
+        if: ${{ (needs.preflight.outputs.lane == 'light' || inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
         with:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -1428,7 +1389,7 @@ jobs:
     name: Documentation links
     needs: preflight
     if: ${{ !inputs.audit_only && needs.preflight.outputs.skip != 'true' }}
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON((needs.preflight.outputs.lane == 'light' || inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Check Markdown files exist
@@ -1476,6 +1437,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EVENT_NAME: ${{ github.event_name }}
+          DRAFT_PR: ${{ github.event.pull_request.draft }}
           RESUME_RUN_ID: ${{ inputs.resume_run }}
         run: |
           python3 - <<'PY'
@@ -1497,10 +1459,10 @@ jobs:
           if (outputs.get("skip") == "true") != (lane == "skip"):
               sys.exit("::error::Preflight skip and lane disagree")
           if lane == "skip":
-              print("Preflight skipped the gate (already proven SHA or docs-only change).")
+              print("Preflight reused qualified complete proof; no fresh behavioral execution.")
               sys.exit(0)
-          # Commit lint runs only for pull requests and manual dispatches.
-          optional = {"commitlint"} if os.environ["EVENT_NAME"] in ("push", "schedule") else set()
+          # The weekly run has no new commit range to lint.
+          optional = {"commitlint"} if os.environ["EVENT_NAME"] == "schedule" else set()
           raw_proof = outputs.get("resumed_checks", "")
           if os.environ.get("RESUME_RUN_ID") or raw_proof:
               proof = json.loads(raw_proof or "null")
@@ -1547,7 +1509,7 @@ jobs:
               print("Verified reused check provenance: " + json.dumps(proof, sort_keys=True))
           # Jobs a lane leaves out on purpose (see Preflight).
           optional |= {
-              "light": {"next_engine", "teletext", "hydration"},
+              "light": {"build", "test", "next_engine", "teletext", "hydration"},
           }.get(lane, set())
           if lane == "pr":
               flags = ("run_test", "run_next", "run_teletext", "run_browser", "build_rust", "build_web", "build_smoke")
@@ -1571,7 +1533,7 @@ jobs:
                      if result != "success" and job not in optional]
           if missing:
               sys.exit(f"::error::Gate jobs were skipped: {', '.join(sorted(missing))}")
-          if lane == "light":
+          if lane == "light" and os.environ.get("DRAFT_PR") == "true":
               # A passing check here would let the head SHA merge while the
               # full run after `ready_for_review` is still in progress.
               sys.exit("::error::Draft pull request: the fast lane passed. Mark it ready for review to run the full PR lane.")
@@ -1584,7 +1546,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: printf '%s\n%s\n' "$TREE" "$RUN_URL" > ci-tree.txt
       # Read by Preflight on the push to main: the merged tree passed the PR
-      # lane, so that push is skipped and the weekly run covers the rest.
+      # lane; main runs small checks and the weekly run covers the rest.
       - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.tree != '' }}
         with:
