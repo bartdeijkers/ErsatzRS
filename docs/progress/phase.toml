@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "UCU-16 complete through row289; independent CI milestone retained"
+current_focus = "Parity-debt classification and ordered narrow fixes; independent CI milestone retained"
 
 summary = '''
 UCU-16 rows286–289 are Complete within their unchanged required boundary.
@@ -79,6 +79,217 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Parity-debt burn-down (maintainer task2026-11-13; setup inventory at origin/main
+ffdc0f7edf429b4b1d4ea8e23275db40aacbfbc7):
+This is the single finite classification list for all49 open debt IDs at that
+revision. Owning parity files retain full requirements and evidence; no debt is
+resolved by classification. A = actionable implementation or evidence review;
+B = external prerequisite; C = parked by existing maintainer decision.
+Mixed items stay A while independent local work remains; their external parts
+are stated explicitly. No accepted milestone, deferral or safety gate changes.
+Finish one narrow PR at a time, starting with the cookie availability defect,
+then recovery/custom pages, artwork, YAML, Classic/UCU evidence, streaming,
+scanner identity, preparation/leases, architecture and tooling. Preserve the
+plan's separate custom-page parts, including part4 omitted from its short order.
+Each slice needs focused verification and exact-head required CI before merging.
+The maintainer authorized ready PR merges on 2026-11-13; release and live
+installation changes still require their own applicable authorization.
+Inventory: A=20, B=15, C=14.
+
+Bucket A:
+- addon-preparation-readmission-context (parity/addon-metadata-management.toml): Implement or verify
+  the full owning description and its stated evidence/closure obligations; resolve only after
+  focused regression and affected integration proof.
+- retained-option-schema-evolution (parity/addon-metadata-management.toml): Implement or verify the
+  full owning description and its stated evidence/closure obligations; resolve only after focused
+  regression and affected integration proof.
+- retained-input-preparation-failure-stage (parity/addon-metadata-management.toml): Implement or
+  verify the full owning description and its stated evidence/closure obligations; resolve only after
+  focused regression and affected integration proof.
+- provider-lease-release-retains-unstarted-operation-delay (parity/addon-metadata-management.toml):
+  Implement or verify the full owning description and its stated evidence/closure obligations;
+  resolve only after focused regression and affected integration proof.
+- addon-ytdlp-needs-auth-despite-cookies (parity/addon-metadata-management.toml): First
+  implementation slice, official add-ons repository: successful cookie-enabled extraction with
+  playable formats must be available while genuine denial/removal stays unavailable. Verify
+  access/import agreement and package provenance.
+- addon-ytdlp-missing-maxres-thumbnail (parity/addon-metadata-management.toml): Official add-ons
+  repository: select an existing thumbnail or bounded smaller fallback; verify unavailable-maxres
+  and valid-artwork cases.
+- historical-caption-exhaustion-without-causal-diagnostics (parity/addon-metadata-management.toml):
+  Implement or verify the full owning description and its stated evidence/closure obligations;
+  resolve only after focused regression and affected integration proof.
+- transitive-proc-macro-error2-future-compatibility (parity/addon-platform.toml): Implement or
+  verify the full owning description and its stated evidence/closure obligations; resolve only after
+  focused regression and affected integration proof.
+- transport-active-playout-query-owns-sql (parity/application-use-case-layer.toml): Implement or
+  verify the full owning description and its stated evidence/closure obligations; resolve only after
+  focused regression and affected integration proof.
+- architecture-lint-omits-transport-adapters (parity/application-use-case-layer.toml): Land after
+  transport-active-playout-query-owns-sql; preserve all listed adversarial forms and a non-growing
+  debt baseline.
+- scheduling-engine-ownership-contract-drift (parity/application-use-case-layer.toml): Implement or
+  verify the full owning description and its stated evidence/closure obligations; resolve only after
+  focused regression and affected integration proof.
+- classic-deterministic-chapter-expression-profile (parity/classic-scheduling.toml): Evidence
+  reconciliation first: compare ADR0098 and accepted UCU09/16 records against every required gate.
+  Resolve only proven scope; move any sole native ARM/macOS remainder to B with the retained
+  platform condition.
+- ucu15-native-source-format-safety (parity/ffmpeg-command-generation.toml): Evidence reconciliation
+  first: compare full ucu-15 acceptance with this older component checkpoint; close only with
+  source-bound integrated platform/application proof, retaining separate hardware/native-platform
+  debt.
+- ffmpeg9-legacy-concat-remote-stream-eof (parity/mpeg-ts-channel-streaming.toml): Implement or
+  verify the full owning description and its stated evidence/closure obligations; resolve only after
+  focused regression and affected integration proof.
+- windows-local-tv-case-alias-identity (parity/scanner.toml): Implement or verify the full owning
+  description and its stated evidence/closure obligations; resolve only after focused regression and
+  affected integration proof.
+- scanner-owns-persistence-implementation (parity/scanner.toml): Preserve storage-neutral scanner
+  ownership with infrastructure persistence, atomicity and retries. ADR0080 makes SQLite the sole
+  backend; historical MySQL wording is stale, not new scope.
+- teletext-admin-recovery-flow (parity/teletext-support.toml): Local mandatory evidence parts6/8
+  remain actionable: real FFmpeg/TSDuck/libzvbi and hydrated/no-JS flows. Part7 additionally needs
+  Bart-PC access and native Windows proof before replacing the channel workaround; never mutate that
+  installation under this setup PR.
+- teletext-custom-pages-broadcast (parity/teletext-support.toml): Functionality then evidence,
+  separate PRs: 3b dynamic refresh; 3c effective Lua/Scripted intervals; subpage timing; FL links;
+  retained part4 engine preview and applicable X26/X28 import; 3d/5 publication, independent decoded
+  stream and no-JS/hydrated flows. Part4 must not be lost from the plan summary or silently deferred
+  with enhanced-only debt.
+- ucu-optional-next-engine-integration (parity/upstream-baseline-catch-up.toml): Evidence
+  reconciliation first: preserve both Native and Next; compare UCU01-09 and later accepted UCU
+  records to every remaining integration requirement. No engine redesign or later-upstream chase;
+  move only proven external remainder to B.
+- yaml-chapter-midroll-expressions (parity/yaml-scheduling.toml): Implement or verify the full
+  owning description and its stated evidence/closure obligations; resolve only after focused
+  regression and affected integration proof.
+
+Bucket B:
+- hardware-graph-probes-cover-only-the-nvidia-graphs (parity/ffmpeg-9-performance-and-support.toml):
+  Missing working Intel, AMD, Apple, Rockchip and V4L2M2M devices/drivers for the listed graphs.
+  Close with characterized operation probes and real success/failure controls for each backend;
+  macOS requires explicit resumption.
+- hardware-hdr-candidates-need-real-gpu-measurement (parity/ffmpeg-9-performance-and-support.toml):
+  Missing real Vulkan, VAAPI and AMD AMF devices for remaining candidates. Close with
+  hdr-graph-bench measurements and quality/output checks on each matching device; adopt only
+  measured wins.
+- row-140-qsv-hardware-padding (parity/ffmpeg-9-performance-and-support.toml): Missing Intel QSV
+  device. Close with exact packaged runtime/Next native padding output, independent decoded geometry
+  and preserved clocks/audio; option registration is insufficient.
+- ucu09-runtime-tail-patch-inventory (parity/ffmpeg-9-performance-and-support.toml): Remaining
+  acceptance requires Intel QSV, AMD AMF and native Linux NVIDIA interop hardware. Close with
+  source-bound runtime patch inventory and native decoder/frame-size/texture/pool/export regressions
+  on the corresponding devices.
+- hdr10-is-uncharacterized-on-non-nvidia-hardware (parity/hdr-dolby-vision-metadata.toml): Missing
+  listed non-NVIDIA backend hardware. Close each backend with characterized HDR10 signalling/output
+  or evidence it cannot signal HDR10; keep software fallback until proven. Mac trials need explicit
+  resumption.
+- dolby-vision-playback-is-not-fixture-proven (parity/hdr-dolby-vision-metadata.toml): Missing
+  matching NVIDIA CUDA/Vulkan device. Close with the public Profile5 fixture through production HLS
+  and MPEG-TS, decoded SDR/HDR10 frames and ffprobe signalling evidence.
+- dolby-vision-stream-copy-matrix-is-unproven (parity/hdr-dolby-vision-metadata.toml): Missing
+  representative Dolby Vision source/output/client fixture capability. Close with the retained
+  source/codec/container/output/client passthrough matrix and independent playback/signalling
+  evidence; preserve refusal until proven.
+- ucu14-windows-advisory-applicability (parity/upstream-baseline-catch-up.toml): Missing
+  authoritative advisory and fixing revision. Resume when upstream supplies them; close after source
+  applicability assessment and affected regression/runtime proof, or evidenced non-applicability.
+- ucu-next-rtsp-patch-retirement (parity/upstream-baseline-catch-up.toml): Await an upstream Next
+  candidate correcting RTSP. Close after unpatched startup/source-clock/EOF/handoff controls pass
+  and patch0001 is removed with regressions retained.
+- ucu-next-image-patch-retirement (parity/upstream-baseline-catch-up.toml): Await an upstream Next
+  candidate correcting image playback. Close after unpatched static/animated WebP and GIF seek,
+  repetition and boundary handoff pass and patch0002 is independently retired.
+- ucu-next-live-remote-subtitles (parity/upstream-baseline-catch-up.toml): Await an upstream Next
+  correction or separately approved adapter. Close with rendered live embedded-text Burn/Convert and
+  one-shot producer proof using source-bound captions; retain explicit refusal until then.
+- ucu-arm-macos-application-acceptance (parity/upstream-baseline-catch-up.toml): Missing native ARM
+  hardware; macOS also requires explicit maintainer resumption. Close with exact-candidate native
+  application Next playback, audio-selector and chapter-expression fixtures on each retained target;
+  QEMU is not native proof.
+- ucu-12-hardware-acceptance (parity/upstream-baseline-catch-up.toml): Missing matching RKMPP/RGA,
+  Intel QSV HDR, AMD VAAPI and authorized macOS VideoToolbox hardware. Close each path with
+  exact-candidate native decoded output and caption/audio preservation on its actual driver/device.
+- ucu-javascript-audio-selector-parity (parity/upstream-baseline-catch-up.toml): Missing native ARM
+  and authorized macOS application environments. Close with native movie.js/episode.js selection and
+  resource-limit/recovery proof on each remaining target under ADR0096; retain existing
+  Linux/Windows evidence.
+- ucu-12-macos-build-deferral (parity/upstream-baseline-catch-up.toml): Requires explicit maintainer
+  resumption and native macOS environments. Close with source-bound FFmpeg/Next builds, packages and
+  software/application acceptance on both Mac architectures; retain original package identities.
+
+Bucket C:
+- channel-package-feed-import (parity/addon-platform.toml): Parked future Phase11: plans/INDEX.md
+  and channel-packages.md require a product/feed ADR first. Resume only after maintainer scope
+  approval and that contract; close with uploaded package/feed resolution, automatic library
+  import/enrichment and operator/runtime acceptance. Existing source resolver does not establish
+  import acceptance.
+- official-repository-bootstrap-and-adoption (parity/official-addon-distribution.toml): Parked under
+  the existing OAD programme after teletext and jukebox acceptance. Resume only through its
+  authorized owning milestone; close with oad-01 bootstrap/adoption acceptance.
+- official-repository-automatic-refresh (parity/official-addon-distribution.toml): Parked under the
+  existing OAD programme after teletext and jukebox acceptance. Resume only through its authorized
+  owning milestone; close with oad-02 automatic refresh acceptance.
+- sources-task-hierarchy-and-file-installation (parity/official-addon-distribution.toml): Parked
+  under the existing OAD programme after teletext and jukebox acceptance. Resume only through its
+  authorized owning milestone; close with oad-03 Sources/file-installation acceptance.
+- official-distribution-integrated-acceptance (parity/official-addon-distribution.toml): Parked
+  under the existing OAD programme after teletext and jukebox acceptance. Resume only through its
+  authorized owning milestone; close with oad-04 integrated distribution acceptance.
+- teletext-editorial-resource-warm-publication-lifecycle (parity/teletext-support.toml): Current
+  owning evidence explicitly limits the remainder to enhanced-only or optional-QTM acceptance.
+  Resume enhanced work only on a new explicit task with suitable open-source client capability; QTM
+  work waits for upstream capability without local editor maintenance. Close with the full retained
+  item-specific engine/interchange/publication and independent client evidence under ADR0123.
+  Preserve accepted Level1/1.5 and generic lossless interchange, experimental2.5 and every
+  safeguard.
+- teletext-default-secondary-materialization-is-unproven (parity/teletext-support.toml): Current
+  owning evidence explicitly limits the remainder to enhanced-only or optional-QTM acceptance.
+  Resume enhanced work only on a new explicit task with suitable open-source client capability; QTM
+  work waits for upstream capability without local editor maintenance. Close with the full retained
+  item-specific engine/interchange/publication and independent client evidence under ADR0123.
+  Preserve accepted Level1/1.5 and generic lossless interchange, experimental2.5 and every
+  safeguard.
+- teletext-generated-unicode-base-priority-is-not-preserved-on-wire (parity/teletext-support.toml):
+  Current owning evidence explicitly limits the remainder to enhanced-only or optional-QTM
+  acceptance. Resume enhanced work only on a new explicit task with suitable open-source client
+  capability; QTM work waits for upstream capability without local editor maintenance. Close with
+  the full retained item-specific engine/interchange/publication and independent client evidence
+  under ADR0123. Preserve accepted Level1/1.5 and generic lossless interchange, experimental2.5 and
+  every safeguard.
+- teletext-level25-and-editor-workflow-is-unimplemented (parity/teletext-support.toml): Current
+  owning evidence explicitly limits the remainder to enhanced-only or optional-QTM acceptance.
+  Resume enhanced work only on a new explicit task with suitable open-source client capability; QTM
+  work waits for upstream capability without local editor maintenance. Close with the full retained
+  item-specific engine/interchange/publication and independent client evidence under ADR0123.
+  Preserve accepted Level1/1.5 and generic lossless interchange, experimental2.5 and every
+  safeguard.
+- teletext-qtm-national-option-fidelity-is-unproven (parity/teletext-support.toml): Current owning
+  evidence explicitly limits the remainder to enhanced-only or optional-QTM acceptance. Resume
+  enhanced work only on a new explicit task with suitable open-source client capability; QTM work
+  waits for upstream capability without local editor maintenance. Close with the full retained
+  item-specific engine/interchange/publication and independent client evidence under ADR0123.
+  Preserve accepted Level1/1.5 and generic lossless interchange, experimental2.5 and every
+  safeguard.
+- jukebox-contract-is-undecided (parity/video-jukebox-addon-api.toml): Parked Phase10; requires an
+  explicit applicable maintainer task. Close only through the owning p10a-01 accepted
+  product/architecture contract. Preserve current SQLite-only architecture; historical MySQL wording
+  does not authorize another backend.
+- jukebox-has-no-durable-request-domain (parity/video-jukebox-addon-api.toml): Parked Phase10;
+  requires an explicit applicable maintainer task. Close only through the owning p10a-02 durable
+  request/idempotency/lifecycle proof. Preserve current SQLite-only architecture; historical MySQL
+  wording does not authorize another backend.
+- jukebox-has-no-application-scheduler-integration (parity/video-jukebox-addon-api.toml): Parked
+  Phase10; requires an explicit applicable maintainer task. Close only through the owning p10a-03
+  safe scheduling/cancel/recovery proof. Preserve current SQLite-only architecture; historical MySQL
+  wording does not authorize another backend.
+- jukebox-has-no-public-addon-ingress-or-runtime-proof (parity/video-jukebox-addon-api.toml): Parked
+  Phase10; requires an explicit applicable maintainer task. Close only through the owning
+  p10b-01/p10b-02 authenticated ingress and restart-safe end-to-end acceptance. Preserve current
+  SQLite-only architecture; historical MySQL wording does not authorize another backend.
+
+Earlier programme context (retained; does not override this queue):
 Current UCU-16 outcome: required functionality, mandatory qualification and
 all four ordered dispositions are Complete through fixed c41969b3. Source
 PR149 is merged as0686b390; its tree equals the exact CI-tested5c1f235e tree.
