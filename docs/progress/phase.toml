@@ -231,6 +231,9 @@ is not met; the limiting factor is the two serial Playwright suites. By
 maintainer task of 2026-11-10, milestone dci-browser-evidence selects browser
 specs per changed admin page and moves the full run to weekly; its PR CI and
 the first real page-scoped PR remain open.
+By maintainer decision of 2026-11-13, dci is Complete with that goal not met.
+Milestone ci-workflow-separation has every CIS-04 GitHub observation except the
+first Full verification run, awaited at its schedule (2026-11-16 01:00 UTC).
 The historical Phase9 handoff below remains delivery history, not this goal's
 next action. Phase10 and recorded platform/enhanced deferrals are unchanged.
 
