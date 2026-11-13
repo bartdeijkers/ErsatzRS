@@ -578,6 +578,27 @@ and composed-oracle scope: tmp/evidence/teletext-recovery-transport/expiry-bound
 Draft CI43498473479 on8957d988 passes every light job; its aggregate is intentionally
 red until ready-for-review behavioral proof runs. This is not ready-PR acceptance.
 
+
+The current read-only clock comparison binds306 complete coded video and621
+selected AAC packets to two exact source presentation epochs. The two existing
+seam DTS clamps remain explicit, not claimed unchanged. With the documented native
+repair policy, the source A event is2100622us; its delivered coordinate differs by
+34ticks (377.8us) after the verified AV shift. Explicit no-repair decoding instead
+reports2641333us. Those wire/native coordinates must not be conflated or silently
+changed (ADR0121/0133); the rejected nearest-raw-PES guess remains retained.
+The complete visible-A PES is27.64ms behind interpolated PCR and the idempotent
+bootstrap clear148.20ms behind it. These packet-placement observations remain
+separate from cue presentation agreement and establish no client deadline waiver.
+The raw strict gate remains19/21. The independent source comparison is now
+complete; the missing part6 prerequisite is the maintainer's criterion decision.
+Only after that decision may the dependent qualifier/correction be implemented,
+its applicable strict proof completed and exact-head ready-PR CI/merge performed.
+The debt remains unresolved and PR155 draft. Its remaining parts are classified B
+while that decision and the separate native Windows prerequisite are missing;
+continue independent bucket-A work without changing either requirement. Full
+current-source records and rejected hypotheses are hash-retained at
+tmp/evidence/teletext-recovery-transport/source-clock-checkpoint/qualification.json.
+
 Keep the tvguide-16 two-second holding and 100 ms lateness policy, source and capture limits
 unchanged. Original isolated and combined failures remain evidence.
 The test launches all real-time windows before synchronous diagnostics, preserving
