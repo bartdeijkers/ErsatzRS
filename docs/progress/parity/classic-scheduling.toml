@@ -8,9 +8,9 @@ summary    = '''
 The Classic baseline covers engine dispatch, SQL loading, typed items,
 collections, filler, anchors, fill groups, and scheduling-context persistence.
 Regressions cover filler placement and whole-item advancement.
-UCU-16 local discard, grouped-source/resume and immutable-chapter/seeded-count
-and approved ADR0098 fallback components are complete. Milestone ucu-16 owns
-local proof and required final/platform/window acceptance.
+UCU-16 is accepted on 2026-11-13: discard, real groups/resume, immutable
+chapters, persisted Random Count and ADR0098 fallback. Milestone ucu-16 owns
+required proof/delivery; separate deterministic-profile debt is unchanged.
 
 Continue-build fix (2026-06-08): persist the post-build anchor and trim only
 before `request.start - 4h`, preserving future items without overlap.
@@ -231,7 +231,8 @@ resolution = 'Skip only Finish values strictly before the effective cutoff befor
 
 [[debt]]
 id = 'classic-duration-discard-and-fill-group-selection'
-description = 'Complete UCU-16 final acceptance for duration discard and independently resumable grouped content. Both local implementation/persistence components are complete; required final/platform/playback evidence remains open in milestone ucu-16.'
+description = 'Accepted UCU-16 duration discard and independently resumable grouped-content behavior; milestone ucu-16 owns required proof and exact source identities.'
 discovered = '2026-11-10'
 evidence = 'Milestone ucu-16 owns current evidence and the finite completion list. Row287 and row288 local implementation/persistence are complete2026-11-11:116 Classic cases,54 composed order/group/playout-mode continuations, six repository cases, seven combined SQL cases and the indexed metadata query-plan case pass with strict affected lint. Source groups, per-key anchors, no-group fallback, custom shrink, inactive rotation and atomic refusal are proven locally. Window/platform/playback/final acceptance remains open. Historical source-only review at ErsatzRS9a62744a against upstream e51ac60c and a143968e (UCU-16 rows287–288). crates/ersatzrs-infra/src/repositories/program_schedule.rs loads/saves discard_to_fill_attempts; crates/ersatzrs-core/src/scheduling/classic/mod.rs::schedule_duration does not consume it. FillWithGroupMode references initialize/audit/persist/advance state; classic_preserves_and_advances_fill_group_state uses one media item and checks only index/seed, so it is not proof of actual group alternation or independent per-group resume. Shared MediaEnumerator uses finite empty-safe modulo indexing and anchor_matches_key compares fake_collection_key, so the exact upstream constructor loop and omitted-key match must not be attributed to Rust. Runtime reproduction is outstanding. Next: the upstream40/40/40/15-minute,60-minute-block,one-attempt fixture with a following schedule item; then mixed-group and ungroupable-content Continue/Refresh cases. Upstream post-pin bookkeeping is owned by ucu16-post-baseline-observations; accepted UCU windows and baseline are unchanged.'
-resolved = false
+resolved = true
+resolution = "Accepted 2026-11-13 with immutable source 237008bd, saved discard and actual grouped-key SQL continuations, four required private package/runtime scopes, canonical 8537 tests and 11 doctest steps, strict lint, 32 headed browser cases and decoded Native/Next smoke plus 93/86 TSDuck controls. Full source-bound CI 43287157728 and eligible source PR149 CI pass. Milestone ucu-16 and tmp/evidence/ucu16/integration-fc6158c8/qualification.json own exact receipts and original failures. Native ARM remains unverified QEMU software proof; macOS/hardware and separate deterministic-profile/YAML debt are not upgraded."

@@ -1,43 +1,47 @@
 # Upstream ErsatzTV catch-up
 
-## Accepted catch-up target (2026-11-08)
+## Accepted catch-up target (2026-11-13)
 
-UCU-13, UCU-14 and UCU-15 are Complete in order. Rows255–285 have accepted
-source dispositions and all required non-deferred local/platform/final proof.
-Full source-bound recovery CI42460252936 and eligible PR CI42464500817 are green;
-PR125 is merged as10ffff4e. Row271 retains its approved Deferred/unverified
-Windows advisory disposition. Milestone ucu-15 owns exact proof and retained
-failures. The accepted baseline is owned by docs/automation/parity-baseline.md.
+UCU-00–16 are Complete within their accepted scopes. UCU-16 closes rows286–289
+through the fixed terminal `c41969b3bba66f14bf1d0be9e041b52218f65871`.
+The accepted baseline is owned only by docs/automation/parity-baseline.md.
+Rows290/291 (`84caf129`/`46a334c4`) were explicitly left for afterward and are
+outside this completed window; do not chase a later upstream tip.
 
-The maintainer extends the fixed goal through released **v26.12.0** at
-[`53b3b42a02533ad8e72af09565b494f2b19e40fc`](https://github.com/ErsatzTV/legacy/commit/53b3b42a02533ad8e72af09565b494f2b19e40fc),
-`prep for release v26.12.0` (2026-11-06 20:59:20 UTC).
-This supersedes the earlier unreleased target at `06c008b4`; do not chase
-commits after this release. Acceptance and delivery approval boundaries remain.
-UCU-00–12 retain their completed scope. Ordered acceptance advances the pin
-owned by docs/automation/parity-baseline.md; no later moving tip is adopted.
+Milestone `ucu-16` owns the finite acceptance list, source 237008bd, all four
+required private package/runtime scopes, canonical local gates and full
+source-bound CI 43287157728. Eligible source PR149 CI is green.
+The source delivery and original failures retain their exact identities in that
+milestone. No application/Docker release or operator installation is changed.
+Native remains supported alongside Next. ARM64/ARMv7 proof is QEMU software
+emulation; native ARM, macOS and unavailable hardware retain their approved
+unverified/deferred scopes. Existing YAML chapter-expression debt stays separate.
+
+UCU-13/14/15 remain Complete in order through the released v26.12.0 boundary.
+Their source disposition, full recovery CI42460252936, eligible PR CI42464500817
+and PR125/10ffff4e delivery are retained in milestone ucu-15. Row271 retains its
+approved Deferred/unverified Windows advisory disposition, not a fix or a claim
+of non-applicability. Earlier accepted UCU windows and Phase9 stay closed.
 
 | Window | Ordered rows | Fixed terminal revision | Current state |
 | --- | --- | --- | --- |
 | UCU-13 | 255–259 | v26.11.5 / `d5482b7f06b06de3f117bfb5010f4e27e37209a2` | Complete |
 | UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Complete; advisory debt remains unverified |
 | UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Complete; Native retained |
+| UCU-16 | 286–289 | `c41969b3bba66f14bf1d0be9e041b52218f65871` | Complete; Native retained |
 
-Within the approved fixed window there are **285 observed, 285 processed and
-0 pending rows**. Each row has
-its own disposition; row271 remains explicitly Deferred rather than fixed or
-inapplicable. The owning milestones contain acceptance and evidence, including
-all required Linux/Windows and ARM build/package/emulation scopes. Earlier
-source notes remain historical; they do not reopen completed windows or erase
-approved unverified debt. No later moving-main commit is part of this goal.
+Within the approved fixed window there are **289 observed, 289 processed and
+0 pending rows**. Every row has its own disposition; approved Deferred rows
+remain explicitly unverified. The source-map notes below retain their original
+component scope and historical pre-acceptance wording. The terminal ledger and
+owning milestones carry final acceptance, required proof and preserved failures.
 
-### Active UCU-16 window (2026-11-11)
+### UCU-16 source maps (initial work on 2026-11-11)
 
-The maintainer task activates the four registered rows286–289, with fixed
-terminal `c41969b3bba66f14bf1d0be9e041b52218f65871`. Milestone `ucu-16`
-owns acceptance, the finite completion list and current evidence. Earlier
-post-baseline observations below retain their original source-only scope.
-The accepted pin remains v26.12.0 pending ordered acceptance.
+All four rows are accepted in order after required local, platform, playback
+and source-bound final proof. Row286 is N/A under ADR0095; rows287/288 are Port;
+row289 is Adapt under the maintainer-approved deterministic ADR0098 policy.
+The following maps explain the audited source and implementation boundaries.
 
 #### Row286 retained-engine source map
 
@@ -6915,7 +6919,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 283 | `03c206ee` | build: update ffmpeg and next (#3134) | Adapt (ADR 0130) | Qualified consolidated runtime pair | `3bcf60f1; 21419be2` | ucu-15; reconcile terminal runtime deltas in first-party FFmpeg2.0.10/FFmpeg9 and Next025. Source, patch retirement, payload/provenance and actual published download checks pass; no mutable Docker-tag evidence is used. |
 | 284 | `de40b158` | build: next v0.2.5 (#3135) | Adapt (ADR 0130) | Fixed released Next0.2.5 source | `3bcf60f1; 21419be2` | ucu-15; qualified source is c5cb065f9f35dbbcb7c05845f0f92c70f576a480.455 reader/worker,13 schema and660 serial software cases plus four actual platform runtime packages pass; maintained private corrections retain their removal criteria. |
 | 285 | `53b3b42a` | prep for release v26.12.0 | N/A | Upstream release bookkeeping | `21419be2` | ucu-15; exact terminal53b3b42a moves release notes/compare links only. v26.12.0 is the frozen catch-up boundary, not permission to publish an ErsatzRS application release. |
-| 286 | `91f85128` | refactor: clean up legacy engine references (#3136) |  |  |  | ucu-16; local source/SQL component complete. Proposed N/A under ADR0095 retained-engine decision: all25 changed paths reviewed, including shared channel/default/playlist/platform behavior. Parent LegacyStreamingEngine.Enabled is already false; no additional engine-neutral fix is hidden in the cleanup. Six selected channel/default/engine/subtitle/troubleshooting regressions pass. Preserve Native routes, controls, profiles and choices. Milestone ucu-16 owns proof and pending window acceptance. |
-| 287 | `e51ac60c` | fix: classic schedule discard to fill (#3137) |  |  |  | ucu-16; local implementation/persistence component complete, proposed Port. Saved discard budget reaches the scheduler; bounded skips, successful-fit reset, rejected cursor, tails/fallback, next-item transition, filler rollback and partial guide continuity are proven. The exact40/40/40/15-minute fixture and production SQL restart/Continue/Refresh cases pass. Milestone ucu-16 owns current source/test identities and mandatory final/window evidence; no accepted baseline advancement. |
-| 288 | `a143968e` | fix: classic schedule bug fixes (#3138) |  |  |  | ucu-16; local grouped-source/custom-order implementation/persistence component complete, proposed Port pending final window evidence in milestone ucu-16. Actual shows/music-video artists/song album artists/movies/other videos use distinct complete keys and independent persisted anchors. Images/finite streams fall back without phantom groups; custom-order shrink resets to the beginning and empty resume is finite. Duplicate-source policies, partial blocks, shuffled cycles, inactive rotation, SQL Continue/Refresh and unsafe-checkpoint refusal are covered. |
-| 289 | `c41969b3` | fix: classic filler expression and random count (#3139) |  |  |  | ucu-16; local row289 components complete. Repeated filtering preserves source chapter values. A demonstrated constant-count defect was corrected with advancing persisted RNG state, rejected-block rollback, SQL restart/Continue/Refresh and actual Health proof. The maintainer approved ADR0098 option2 on2026-11-11: unknown-parameter errors and invalid-expression full-content/no-points fallback with retained padding and redacted preset diagnostics. Combined136 focused regressions, four separate culture runs and strict affected lint pass. Milestone ucu-16 owns source/test identities and mandatory final/platform/window acceptance. |
+| 286 | `91f85128` | refactor: clean up legacy engine references (#3136) | N/A (ADR 0095) | upstream-baseline-catch-up | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. All25 changed paths audited, including shared channel/default/playlist/platform behavior. Parent already disabled the Legacy hotfix branch. Preserve Native and Next routes, profiles and stored choices under ADR0095. Six SQL controls and integrated Native/Next proof pass; milestone ucu-16 owns final acceptance. |
+| 287 | `e51ac60c` | fix: classic schedule discard to fill (#3137) | Port | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Saved discard budgets reach the scheduler. Exact40/40/40/15-minute fixtures, bounded skips/reset/exhaustion, tails/fallback, following-item transition and rejected cursor/filler rollback pass, including production SQLite restart/Continue/Refresh. Required four-platform and final proof is owned by milestone ucu-16. |
+| 288 | `a143968e` | fix: classic schedule bug fixes (#3138) | Port | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Actual show/music-video-artist/song-album-artist/movie/other-video groups use distinct complete keys and independent persisted anchors. Custom shrink/empty resume, ungroupable fallback, duplicate membership, all supported orders, Continue/Refresh and unsafe-checkpoint refusal pass. Milestone ucu-16 owns required final/platform proof. |
+| 289 | `c41969b3` | fix: classic filler expression and random count (#3139) | Adapt (ADR 0098) | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Chapter filtering preserves source values; seeded Random Count advances across persisted restart/Continue/Refresh with rollback and Health guards. Approved option2 rejects unknown parameters and preserves whole content/padding without internal breaks on invalid expressions, with redacted preset diagnostics. Required four-platform/final proof passes; existing YAML chapter-expression debt remains separate. |

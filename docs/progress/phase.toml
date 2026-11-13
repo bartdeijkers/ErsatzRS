@@ -2,12 +2,16 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "UCU-16 rows286–289: authorized main delivery; independent CI milestone retained"
+current_focus = "UCU-16 complete through row289; independent CI milestone retained"
 
 summary = '''
-UCU-16 rows286–289 are now active under milestone ucu-16. Its required Classic
-scheduling corrections and mandatory evidence are independent of the completed
-Phase9 and earlier catch-up scopes summarized below.
+UCU-16 rows286–289 are Complete within their unchanged required boundary.
+Source PR149 is merged as0686b390 after current PR CI43380390588 passes all13
+selected jobs. This documentation-only PR150 closes the ordered ledger and
+fixed c41969b3 baseline together. Milestone ucu-16 retains exact source/platform
+identities, full prior qualification and current integrated-web/PR proof.
+Rows290/291 remain for a later task. Completed Phase9 and earlier catch-up
+scopes are unchanged; the independent CI milestone retains its own scope.
 
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
 engine, production TV-guide add-on, four required package/runtime scopes and
@@ -75,27 +79,27 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current delivery2026-11-13: the maintainer approves merging source PR149,
-then retargeting/rechecking/merging documentation PR150. Maincec488de adds
-CI workflow separation without changing Rust/Cargo/runtime assets. Preserve
-both milestone records and all earlier proof; resolve the four documentation
-conflicts, run the current required PR checks and merge in that order. The
-237008bd packages remain evidence for that compiled source, not new packages.
-Rows290/291, publication, release and installation remain outside this task.
-Earlier permission-boundary statements below are historical.
+Current UCU-16 outcome: required functionality, mandatory qualification and
+all four ordered dispositions are Complete through fixed c41969b3. Source
+PR149 is merged as0686b390; its tree equals the exact CI-tested5c1f235e tree.
+Current PR CI43380390588 passes all13 selected jobs, including both required
+Chromium suites and CI ok. Its selected-tree marker is downloaded and verified.
+The updated matched CI web archive is retained with all24 manifest hashes;
+JS/WASM are byte-identical to qualified237008bd. This is current affected PR
+proof, not a newly claimed full or four-platform release qualification.
+Full CI43287157728/attempt3, canonical8537 local passes and the four private
+platform/package/runtime scopes keep their exact compiled237008bd identities.
+Native ARM remains QEMU software proof, not verified hardware operation.
 
-Current UCU-16 source237008bd is technically qualified: all required local and
-four private platform/package/runtime scopes, plus full CI43287157728 attempt3,
-pass. All15 CI jobs succeed; only the prior failed Level1.5/aggregate are
-recovered, preserving13 successes. Recovery proves2437 workspace and17 real
-Next cases, including all six original provider/mode variants. The full-tree
-marker is downloaded and digest/content verified. Exact joined receipts and
-original negatives: tmp/evidence/ucu16/integration-fc6158c8/qualification.json
-and ci/full-ci-qualification.json. ARM proof is QEMU, not native hardware.
-Next: commit/push the authorized progress-only direct child, complete the
-eligible source PR, then apply the prepared ordered ledger/baseline closeout.
-Main merge retains its separate permission boundary. No new code, broad
-retesting, releases, installations or rows290/291 work is authorized here.
+This documentation-only PR150 atomically records the four dispositions and
+terminal baseline. No functional or qualification item remains in this fixed
+window. Actual main delivery and safe task-resource cleanup receipts are retained
+under tmp/evidence/ucu16/integration-fc6158c8/final-delivery.json and cleanup.json.
+Original/pre-rebase histories and all session rows are retained; the verified
+Git bundle permits safe cleanup of the superseded local branch. Preserve root
+and unrelated work, required evidence, remote branches and all approved deferrals.
+Rows290/291, releases/publication and installations are outside this task.
+Earlier permission-boundary and pending-state statements below are historical.
 
 Qualification history for the same fixed window:
 Active maintainer task2026-11-11: UCU-16 rows286–289 through fixed c41969b3.
@@ -187,7 +191,7 @@ Milestone ucu-16 owns the unchanged finite list and ordered delivery closeout.
 Preserve Native and the accepted v26.12.0 baseline until that acceptance;
 no later-tip chase, main merge, publication or installation is authorized.
 
-Completed prior catch-up context:
+Independent CI programme (retained):
 Active maintainer task: milestone ci-workflow-separation, CIS-01–04. Local
 implementation and regression verification are complete within the recorded
 scope. The CI branch was published as7a8f408f and its small push run passed.
@@ -198,6 +202,7 @@ verify cross-run queueing on current revisions and remaining
 CIS-04 draft/ready/superseded/main/full acceptance and latency observations.
 Historical UCU and DCI paragraphs below do not supersede this finite list.
 
+Completed prior catch-up context:
 UCU-13, UCU-14 and UCU-15 are Complete in order through fixed v26.12.0.
 All285 rows are processed; row271 remains approved Deferred/unverified Windows
 advisory work. The accepted pin is owned by docs/automation/parity-baseline.md.
