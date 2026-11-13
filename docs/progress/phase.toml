@@ -148,9 +148,10 @@ Bucket A:
 - scanner-owns-persistence-implementation (parity/scanner.toml): Preserve storage-neutral scanner
   ownership with infrastructure persistence, atomicity and retries. ADR0080 makes SQLite the sole
   backend; historical MySQL wording is stale, not new scope.
-- teletext-admin-recovery-flow (parity/teletext-support.toml): Local mandatory evidence part6
-  remains actionable: real FFmpeg/TSDuck/libzvbi. Part8 browser proof is complete through merged
-  PR154. Part7 additionally needs
+- teletext-admin-recovery-flow (parity/teletext-support.toml): Part6 ordinary delivery and joined
+  PMT/cue/refresh/isolation components are complete. Strict boundary subtitle qualification,
+  its pending maintainer decision and final ready-PR CI remain; PR155 stays draft. Part8 browser
+  proof is complete through merged PR154. Part7 additionally needs
   Bart-PC access and native Windows proof before replacing the channel workaround; never mutate that
   installation under this setup PR.
 - teletext-custom-pages-broadcast (parity/teletext-support.toml): Functionality then evidence,

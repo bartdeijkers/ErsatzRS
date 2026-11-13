@@ -2,7 +2,7 @@ import { Browser, BrowserContext, expect, Locator, Page } from '@playwright/test
 import { test } from './isolated-web-host';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -2686,19 +2686,67 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
         scope: 'Raw capture and strict transport gate remain unchanged; this prefix ends at positively completed AV PES packets.' }, null, 2));
       return complete;
     };
-    const captures: { name: string; path: string; opened: string; closed: string }[] = [];
+    const hostLog = info.outputPath('isolated-settings-host.log');
+    const captures: { name: string; path: string; opened: string; closed: string; channel_id: number;
+      log_start: number; log_first_chunk: number; log_end: number }[] = [];
     const captureRaw = async (channel: number, name: string, legacy = false) => {
       const path = info.outputPath(`${name}.ts`); const opened = new Date().toISOString();
+      const logStart = statSync(hostLog).size; let firstChunkLog: number | undefined;
       const route = legacy ? `/iptv/channel/${channel}.ts?mode=ts-legacy` : `/iptv/hls-direct/${channel}.ts`;
       const result = await captureTeletextChannelTs(`${isolatedWebHost.baseURL}${route}`, path,
-        { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+        { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 },
+        () => { firstChunkLog ??= statSync(hostLog).size; });
       expect(result.ended).toBe('byte-limit');
-      captures.push({ name, path, opened, closed: new Date().toISOString() });
+      expect(firstChunkLog).toBeDefined();
+      captures.push({ name, path, opened, closed: new Date().toISOString(), channel_id: channel,
+        log_start: logStart, log_first_chunk: firstChunkLog!, log_end: statSync(hostLog).size });
+      writeFileSync(info.outputPath('burst-capture-requests.json'), JSON.stringify(captures, null, 2));
       return path;
     };
     const rawGateFailures: { name: string; status: number | null }[] = [];
+    let boundaryGuidePath: string | undefined;
     const validateCapture = (path: string, name: string) => {
-      assertContinuousAuthoredPmt(path, info.outputPath(`${name}.pmt.json`), info.outputPath(`${name}.pmt.txt`));
+      if (name !== 'burst-programme-boundary') {
+        assertContinuousAuthoredPmt(path, info.outputPath(`${name}.pmt.json`), info.outputPath(`${name}.pmt.txt`));
+      } else {
+        // ADR0124 requires withdrawal before a blocked expiry recovery. Prove
+        // its actual owner, saved UTC cap and sink ACKs instead of requiring
+        // continuous signalling across that legitimate authority boundary.
+        const prefix = info.outputPath(name);
+        execFileSync('tstables', ['--tid', '2', '--packet-index', '--json-output', `${prefix}.pmt.json`,
+          '--text-output', `${prefix}.pmt.txt`, path], { timeout: 30_000, maxBuffer: 65_536 });
+        const sections = spawnSync('tstables', ['--tid', '2', '--all-sections', '--log', '--packet-index', path],
+          { timeout: 30_000, maxBuffer: 256 * 1024 });
+        expect(sections.status).toBe(0);
+        writeFileSync(`${prefix}.pmt-sections.txt`, Buffer.concat([sections.stdout ?? Buffer.alloc(0), sections.stderr ?? Buffer.alloc(0)]));
+        const request = captures.find(capture => capture.name === name)!;
+        const fullLog = readFileSync(hostLog);
+        const sliceStart = fullLog.lastIndexOf(10, request.log_start - 1) + 1;
+        const sliceEnd = fullLog.lastIndexOf(10, request.log_end - 1) + 1;
+        expect(sliceEnd).toBeGreaterThan(request.log_first_chunk);
+        writeFileSync(`${prefix}.request.log`, fullLog.subarray(sliceStart, sliceEnd));
+        writeFileSync(`${prefix}.request.json`, JSON.stringify({ ...request, log_start: request.log_start - sliceStart,
+          log_first_chunk: request.log_first_chunk - sliceStart, log_end: sliceEnd - sliceStart,
+          source_log_prefix_bytes: fullLog.length, source_log_prefix_sha256: sha256(fullLog),
+          source_log_slice_start: sliceStart, source_log_slice_end: sliceEnd }, null, 2));
+        const metadata = fixture.database.prepare(`
+          SELECT ChannelId AS channel_id,Id AS seed_id,GenerationId AS generation_id,NULL AS runtime_id,ValidUntil AS valid_until
+          FROM TeletextGuideRefreshSeed WHERE ChannelId=? AND Role=1
+          UNION ALL
+          SELECT s.ChannelId AS channel_id,s.Id AS seed_id,s.GenerationId AS generation_id,r.Id AS runtime_id,r.ValidUntil AS valid_until
+          FROM TeletextGuideRuntimeSnapshot r JOIN TeletextGuideRefreshSeed s ON s.Id=r.SeedId
+          WHERE s.ChannelId=? AND s.Role=1`).all(request.channel_id, request.channel_id) as { valid_until: string }[];
+        for (const row of metadata) row.valid_until = row.valid_until.replace(' ', 'T')
+          + (/(?:Z|[+-]\d{2}:\d{2})$/.test(row.valid_until) ? '' : 'Z');
+        writeFileSync(`${prefix}.metadata.json`, JSON.stringify(metadata, null, 2));
+        execFileSync('python3', ['scripts/e2e/teletext-guide-boundary.py', '--capture', path,
+          '--log', `${prefix}.request.log`, '--request', `${prefix}.request.json`, '--pmt', `${prefix}.pmt.json`,
+          '--sections', `${prefix}.pmt-sections.txt`, '--metadata', `${prefix}.metadata.json`, '--report', `${prefix}.boundary.json`],
+        { timeout: 30_000, maxBuffer: 65_536 });
+        const proof = JSON.parse(readFileSync(`${prefix}.boundary.json`, 'utf8')) as { recovered_packet: number };
+        boundaryGuidePath = `${prefix}.recovered-guide.ts`;
+        writeFileSync(boundaryGuidePath, readFileSync(path).subarray(proof.recovered_packet * 188));
+      }
       const streams = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-show_streams', '-of', 'json', path],
         { timeout: 30_000, maxBuffer: 1024 * 1024 }).toString()).streams;
       expect(streams.map((s: { codec_name: string }) => s.codec_name).sort()).toEqual(['aac', 'dvb_subtitle', 'dvb_teletext', 'h264']);
@@ -2763,7 +2811,9 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     expect(rollover.some(frame => frame.hash === cueHashes.b)).toBe(false);
     const last = captures.find(capture => capture.name === 'burst-programme-boundary')!;
     expect(utc(last.opened)).toBeLessThan(utc(first.Finish)); expect(utc(last.closed)).toBeGreaterThan(utc(first.Finish));
-    expect(guideText(boundary, 200)).toContain('DAY GUIDE'); expect(guideText(boundary, 201)).toContain('Now:');
+    expect(boundaryGuidePath).toBeDefined();
+    expect(guideText(boundaryGuidePath!, 200)).toContain('DAY GUIDE');
+    expect(guideText(boundaryGuidePath!, 201)).toContain('Now:');
     expect(current().SeedId).toBe(before.SeedId); expect(current().RuntimeId).not.toBeNull(); expect(current().Revoked).toBe(0);
     expect(current().Revision).toBeGreaterThan(before.Revision);
     for (const [index, channel] of fixture.channels.entries()) {

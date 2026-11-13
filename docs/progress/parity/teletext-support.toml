@@ -512,11 +512,11 @@ it does not waive the current required gate. Keep both complete raw gate results
 The initial manual invocation redundantly regenerated missing worktree clips;
 it was interrupted, and the final trials reuse hash-verified existing fixtures.
 
-The baseline legacy delivery gate is now complete within its ordinary playback
-scope, as recorded below. Next resolve the expiry/PMT assertion against the
-existing authorization contract and the pending subtitle-qualification decision.
-Then finish joined boundary/automatic-refresh proof, review and exact-head
-ready-PR CI. The current checkpoint remains draft.
+The ordinary legacy delivery gate and the joined PMT/cue/refresh/isolation
+components are complete within their scopes below. The finite remainder is
+strict boundary subtitle-timing qualification, including the pending maintainer
+decision, then final review and exact-head ready-PR CI. The checkpoint stays draft;
+whole part6 is not accepted while its raw strict gate remains red.
 
 The next proof obligation now has retained actual producer inputs and exact
 replay argv. The next item's complete coded video has zero source PTS/DTS shift;
@@ -552,6 +552,32 @@ PMT version2 withdrawal assertion and the unchanged sparse-subtitle qualifier
 (19/21 strict checks pass). No checker or expiry fence changes. ADR0134 owns the
 decision. Source-bound receipts and raw captures are retained in
 tmp/evidence/teletext-recovery-transport/finite-progress-checkpoint/.
+
+The PMT/expiry component now uses the existing owner/window oracle and three
+content-free sealed-candidate trace fields (guide seed, runtime ID and original
+UTC cap). Request log byte intervals assign the response before packet hashes
+validate it; the retained contiguous excerpt is checked against its complete
+source-log prefix. All raw PMT sections, exact exclusive ACK extents and unchanged
+AV/caption descriptors are checked. Initial absence must recover with actual
+complete-cycle delivery; installed withdrawal requires the original expiry and
+absent-signalling ACK before reannouncement. Confirmed coalescing remains valid.
+All22 new negative/positive controls and the existing10 expiry controls pass;
+strict web Clippy and matched build pass. Three retained actual4d657fa4 responses
+qualify677/674/678 sink windows across both expiry paths, including absent startup.
+The original stderr-recorder and initially-absent-oracle negatives remain retained.
+The final headed joined case reaches its last unchanged rawGateFailures assertion:
+all five original byte caps, selected nld audio/eng captions, fixed A/B/clear and
+next-programme clear/A glyphs, explicit zero-rectangle clear, recovered200/201
+suffix decoding, automatic runtime revision1to2, night isolation and saved
+history/package/source safety pass. Only the boundary's sparse-subtitle qualifier
+remains red (19/21; four other windows80/80). No subtitle checker, threshold,
+source/capture limit or production expiry safeguard changes. This closes the
+PMT/cue/refresh/isolation components, not whole part6 or Windows acceptance.
+Canonical raw positives/negatives, exact candidate/site, source-bound receipts
+and composed-oracle scope: tmp/evidence/teletext-recovery-transport/expiry-boundary-checkpoint/.
+Draft CI43498473479 on8957d988 passes every light job; its aggregate is intentionally
+red until ready-for-review behavioral proof runs. This is not ready-PR acceptance.
+
 Keep the tvguide-16 two-second holding and 100 ms lateness policy, source and capture limits
 unchanged. Original isolated and combined failures remain evidence.
 The test launches all real-time windows before synchronous diagnostics, preserving

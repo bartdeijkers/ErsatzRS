@@ -17,8 +17,11 @@ against the required 95percent. Actual completion reports match forwarded bytes,
 and the selected rows advance 1/2/3 without repeating the expiring tail.
 The current joined caption trial reaches all five original capture caps and
 advances at the predecessor finish without a delivery-deadline failure. Its four
-non-boundary windows pass 80 strict checks; the boundary remains blocked below. Complete joined acceptance remains open: the guide expiry/PMT transition
-and strict subtitle qualification still fail. The existing
+non-boundary windows pass 80 strict checks. Owner-bound expiry/PMT qualification
+now proves lawful withdrawal/reannouncement and confirmed coalescing without
+changing the expiry fence. The joined cue, refresh and page-isolation assertions
+pass; only the unchanged boundary subtitle qualification remains red (19/21).
+Complete joined acceptance remains open. The existing
 `teletext-admin-recovery-flow` debt owns acceptance and its finite remaining list.
 
 ## Context
