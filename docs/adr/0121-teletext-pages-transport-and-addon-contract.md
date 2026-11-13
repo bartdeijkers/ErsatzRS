@@ -36,6 +36,16 @@ Local-source legacy/Hybrid caption flows are proven in P9A-04. Current whole-win
 qualification is temporary incomplete coverage, not an accepted long-source or
 seek restriction; general cue/seek semantics and the full source matrix remain.
 
+Ordinary native bitmap preparation also has an explicit complete finite-source
+path. It reuses the constant-memory text-source reader, validates every original
+packet through EOF without prefix omission or tail repair, and reserves the
+complete copy under the existing [source-storage policy](0127-provider-selected-source-identity.md).
+The actual decoder retains the input and reservation through cleanup; uncertain
+cleanup preserves both. Complete receipts retain physical framing and the full
+byte hash for later source-clock revalidation. This does not enlarge bounded
+discovery spans, extend startup/event limits or grant native clock/cue authority.
+The owning recovery debt records the joined runtime acceptance separately.
+
 Read-only source-caption candidates now bind the exact item, version, file and
 original locator to existing current-parent validation. Raw PMT descriptors keep
 wire tags/ordinals, page language, subtitle roles and all actual programs. Only

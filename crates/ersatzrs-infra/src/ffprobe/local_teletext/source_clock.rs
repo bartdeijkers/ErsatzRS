@@ -17,7 +17,7 @@ use super::{
     source_cue::{CueCollector, SourceTeletextCueEvidence, SourceTeletextCueRequest},
     source_native_clock::{NativeClockCollector, SourceTeletextNativeClockEvidence},
     source_packet, source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
-    SourceTeletextPacketFormat, SourceTeletextPacketSpan,
+    SourceTeletextPacketFormat,
 };
 use crate::ffprobe::{
     teletext_decode::SourceTeletextPageDecodeRequest, teletext_demux::NativeSourceDemuxTrace,
@@ -294,8 +294,8 @@ fn observe<T>(
         for part in frame.parts() {
             digest.update(part);
         }
-        if let Some((expected, span, retained_end)) = span {
-            if ordinal >= span.first_packet() && ordinal < retained_end {
+        if let Some((expected, first_packet, retained_end)) = span {
+            if ordinal >= first_packet && ordinal < retained_end {
                 let raw_pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
                 if raw_pid == selection.pid
                     && skipped_prefix < expected.skipped_selected_prefix_packets
@@ -374,18 +374,21 @@ fn finish_observations(
 fn decoded_span(
     expected: SourceTeletextDecodeWindowEvidence,
     source_len: u64,
-) -> Result<(
-    SourceTeletextDecodeWindowEvidence,
-    SourceTeletextPacketSpan,
-    u64,
-)> {
-    let span = SourceTeletextPacketSpan::new_with_format(
-        expected.first_source_packet,
-        expected.source_packets,
-        expected.format,
-    )
-    .map_err(|_| invalid())?;
-    if span.byte_end_exclusive() > source_len
+) -> Result<(SourceTeletextDecodeWindowEvidence, u64, u64)> {
+    let end = expected
+        .first_source_packet
+        .checked_add(u64::from(expected.source_packets))
+        .ok_or_else(invalid)?;
+    let byte_end = end
+        .checked_mul(expected.format.packet_bytes() as u64)
+        .ok_or_else(invalid)?;
+    // An aggregate larger than the discovery limit is valid only for a complete
+    // unomitted source receipt; partial windows retain their existing bound.
+    if expected.source_packets == 0
+        || byte_end > source_len
+        || expected.ended_at_eof != (byte_end == source_len)
+        || (expected.source_packets as usize > MAX_SOURCE_OBSERVATION_PACKETS
+            && !expected.covers_entire_source_bytes())
         || u64::from(expected.decoder_packets)
             + u64::from(expected.skipped_selected_prefix_packets)
             + u64::from(expected.trimmed_source_tail_packets)
@@ -393,11 +396,10 @@ fn decoded_span(
     {
         return Err(invalid());
     }
-    let retained_end = span
-        .end_packet_exclusive()
+    let retained_end = end
         .checked_sub(u64::from(expected.trimmed_source_tail_packets))
         .ok_or_else(invalid)?;
-    Ok((expected, span, retained_end))
+    Ok((expected, expected.first_source_packet, retained_end))
 }
 
 fn validate_program(psi: &SourceTeletextPsiObserver, selection: SourceSelection) -> Result<()> {

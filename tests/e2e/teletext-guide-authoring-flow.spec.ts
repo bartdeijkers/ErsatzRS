@@ -2631,6 +2631,30 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     const current = () => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
       .get(fixture.channels[0]) as { SeedId: number; RuntimeId: number | null; Revision: number; Revoked: number };
     const before = current();
+    // Fixed RGBA glyph/control hashes from the qualified page888 source decoded
+    // by libzvbi. Full DVB-subtitle canvas hashes also constrain all padding;
+    // no crop, rescaling or OCR tolerance can hide extra or missing pixels.
+    const sourceHashes = { clear: '830edf21ee6bc8ed9dd01f0982075cb1',
+      a: '5518fb92c7291a2b6361428648ea83f4', b: '9251724c00efb989a709aadaa678e5b7' };
+    const cueHashes = { clear: '560a6eb7189cef2e710e7ceab48d97dc',
+      a: '5ebec4dababdb3be042375b19d190cb8', b: '210da77755dcf30f9ef0487a0ab30903' };
+    const captionFrames = (path: string, index: number, name: string, source = false) => {
+      const args = ['-v', 'error', '-nostdin', ...(source ? ['-fix_teletext_pts', '0', '-txt_page:2', '888',
+        '-txt_format:2', 'bitmap', '-txt_default_region:2', '-1'] : []), '-i', path,
+        '-filter_complex', `[0:${index}]format=rgba[caption]`, '-map', '[caption]',
+        '-an', '-fps_mode', 'passthrough', '-f', 'framemd5', '-'];
+      const raw = execFileSync(process.env.FFMPEG_PATH!, args, { timeout: 30_000, maxBuffer: 256 * 1024 }).toString();
+      writeFileSync(info.outputPath(`${name}.captions.framemd5`), raw);
+      expect(raw).toContain(source ? '#dimensions 0: 492x250' : '#dimensions 0: 720x576');
+      const frames = raw.split('\n').filter(line => line && !line.startsWith('#')).map(line => {
+        const fields = line.split(',').map(field => field.trim()); expect(Number(fields[4])).toBe(source ? 492 * 250 * 4 : 720 * 576 * 4);
+        expect(Object.values(source ? sourceHashes : cueHashes)).toContain(fields[5]); return { pts: Number(fields[2]), hash: fields[5] };
+      });
+      expect(frames.length).toBeGreaterThan(0); return frames;
+    };
+    const sourceFrames = captionFrames(burstSource!, 2, 'qualified-source', true);
+    expect([...new Set(sourceFrames.map(frame => frame.hash))]).toEqual([sourceHashes.clear, sourceHashes.a, sourceHashes.b]);
+    const cueReceipts: Record<string, { pts: number; hash: string }[]> = {};
     const captures: { name: string; path: string; opened: string; closed: string }[] = [];
     const capture = async (channel: number, name: string, legacy = false) => {
       const path = info.outputPath(`${name}.ts`); const opened = new Date().toISOString();
@@ -2645,6 +2669,8 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
       expect(streams.map((s: { codec_name: string }) => s.codec_name).sort()).toEqual(['aac', 'dvb_subtitle', 'dvb_teletext', 'h264']);
       expect(streams.find((s: { codec_type: string }) => s.codec_type === 'audio').tags.language).toBe('nld');
       expect(streams.find((s: { codec_name: string }) => s.codec_name === 'dvb_subtitle').tags.language).toBe('eng');
+      const captionIndex = streams.find((s: { codec_name: string }) => s.codec_name === 'dvb_subtitle').index;
+      cueReceipts[name] = captionFrames(path, captionIndex, name);
       const decoded = spawnSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-i', path, '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
         { timeout: 30_000, maxBuffer: 65_536 });
       expect(decoded.status).toBe(0); expect(decoded.stderr.length).toBe(0);
@@ -2655,6 +2681,7 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
       return path;
     };
     const cold = await Promise.all(fixture.channels.map((channel, index) => capture(channel, `burst-cold-${index}`)));
+    for (const name of ['burst-cold-0', 'burst-cold-1']) expect(cueReceipts[name].some(frame => frame.hash === cueHashes.a)).toBe(true);
     const guideText = (path: string, pageNumber: number) => execFileSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-fix_teletext_pts', '0',
       '-txt_page', String(pageNumber), '-txt_format', 'text', '-txt_duration', '1000', '-i', path,
       '-map', '0:i:512', '-c:s', 'srt', '-f', 'srt', '-'], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }).toString();
@@ -2666,8 +2693,16 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
       await expect.poll(() => Date.now() - utc(first.Start) >= seconds * 1000, { timeout: 45_000, intervals: [100] }).toBe(true);
       await capture(fixture.channels[0], name);
     }
+    expect(cueReceipts['burst-caption-b'].some(frame => frame.hash === cueHashes.b)).toBe(true);
+    const cleared = cueReceipts['burst-caption-clear'];
+    expect(cleared.some(frame => frame.hash === cueHashes.b)).toBe(true);
+    expect(cleared[cleared.length - 1].hash).toBe(cueHashes.clear);
     await expect.poll(() => utc(first.Finish) - Date.now() <= 6000, { timeout: 45_000, intervals: [100] }).toBe(true);
     const boundary = await capture(fixture.channels[0], 'burst-programme-boundary', true);
+    const rollover = cueReceipts['burst-programme-boundary'];
+    expect(rollover[0].hash).toBe(cueHashes.clear);
+    expect(rollover.some(frame => frame.hash === cueHashes.a)).toBe(true);
+    expect(rollover.some(frame => frame.hash === cueHashes.b)).toBe(false);
     const last = captures[captures.length - 1];
     expect(utc(last.opened)).toBeLessThan(utc(first.Finish)); expect(utc(last.closed)).toBeGreaterThan(utc(first.Finish));
     expect(guideText(boundary, 200)).toContain('DAY GUIDE'); expect(guideText(boundary, 201)).toContain('Now:');
@@ -2679,7 +2714,7 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     expect(installation(isolatedWebHost.databasePath)).toEqual(selected); compareInstalledFiles(selected);
     expect(fixture.calls()).toEqual([]); expect(errors).toEqual([]);
     writeFileSync(info.outputPath('burst-caption-host-receipt.json'), JSON.stringify({ source_sha256: sha256(readFileSync(burstSource!)),
-      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, before, after: current(),
-      scope: 'actual Local rescan, ordinary profile, published producer, cold/clear/boundary captures and transport; caption glyph/clear oracle remains separate' }, null, 2));
+      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, sourceFrames, cueReceipts, before, after: current(),
+      scope: 'actual Local rescan, ordinary profile, published producer, cold/clear/boundary transport and fixed page888 RGBA cue/clear oracle' }, null, 2));
   } finally { await context.close(); fixture.close(); }
 });

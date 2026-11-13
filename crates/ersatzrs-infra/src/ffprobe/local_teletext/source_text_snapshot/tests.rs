@@ -80,13 +80,26 @@ async fn capture_bytes(
 
 #[tokio::test]
 async fn complete_text_keeps_exact_bytes_and_page_after_observation_boundary() {
-    for bytes in [complete_source(), padded_source()] {
+    let m2ts = padded_source()
+        .chunks_exact(188)
+        .enumerate()
+        .flat_map(|(ordinal, raw)| {
+            [
+                u32::try_from(ordinal).unwrap().to_be_bytes().to_vec(),
+                raw.to_vec(),
+            ]
+            .concat()
+        })
+        .collect::<Vec<_>>();
+    for bytes in [complete_source(), padded_source(), m2ts] {
         let captured = capture_bytes(&bytes, request()).await.unwrap();
         assert!(captured.selected_page_observed);
         assert_eq!(std::fs::read(captured.snapshot.path()).unwrap(), bytes);
         let mut psi = SourceTeletextPsiObserver::new(0x100).unwrap();
-        for raw in bytes[..2 * 188].chunks_exact(188) {
-            psi.push(raw.try_into().unwrap()).unwrap();
+        let format = captured.evidence.format;
+        for frame in bytes.chunks_exact(format.packet_bytes()).take(2) {
+            psi.push(frame[format.sync_offset()..].try_into().unwrap())
+                .unwrap();
         }
         assert_eq!(
             captured.psi_fingerprint,
@@ -212,6 +225,103 @@ async fn complete_text_reuses_source_fences_scope_and_deadline() {
         ))
         .await
         .is_err());
+    scope.close();
+    scope.wait_cleanup().await.unwrap();
+    drop(work);
+    assert_eq!(locker.active_teletext_work(), 0);
+}
+
+#[tokio::test]
+async fn complete_bitmap_storage_reserves_all_bytes_and_retains_cleanup_ownership() {
+    let bytes = padded_source();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("synthetic-source.ts");
+    std::fs::write(&path, &bytes).unwrap();
+    let revision = LocalFileRevision::open(&path).unwrap().revision().unwrap();
+    let guard = Arc::new(LocalTeletextSourceGuard::open(&path, &revision).unwrap());
+    let store = ProviderSourceStore::new(directory.path().join("storage"));
+    let length = bytes.len() as u64;
+    let policy = Policy {
+        total_bytes: length,
+        maximum_source_bytes: length,
+        minimum_free_bytes: 0,
+    };
+    let locker = EntityLocker::new();
+    let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let scope = LocalProbeCleanupScope::new();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let captured = scope
+        .scope(capture_budgeted_owned(
+            guard.clone(),
+            (path.clone(), path.clone()),
+            request(),
+            (&store, policy),
+            deadline,
+            work.hold_work(),
+        ))
+        .await
+        .unwrap();
+    assert!(captured.evidence.covers_entire_source_bytes());
+    assert!(captured.evidence.source_packets as usize > MAX_SOURCE_OBSERVATION_PACKETS);
+    assert_eq!(
+        captured.evidence.decoder_sha256,
+        <[u8; 32]>::from(Sha256::digest(&bytes))
+    );
+    assert_eq!(std::fs::read(captured.snapshot.path()).unwrap(), bytes);
+    let lease = captured.storage.as_ref().unwrap().clone();
+    let cleanup = lease.cleanup();
+    let owned_directory = lease.directory().to_owned();
+    // No second source may bypass the shared total while the decoder owns its copy.
+    assert!(scope
+        .scope(capture_budgeted_owned(
+            guard.clone(),
+            (path.clone(), path.clone()),
+            request(),
+            (&store, policy),
+            deadline,
+            work.hold_work(),
+        ))
+        .await
+        .is_err());
+    let clock = scope
+        .scope(super::super::source_clock::observe_owned(
+            guard.clone(),
+            (path.clone(), path.clone()),
+            request().pid,
+            captured.evidence,
+            deadline,
+            work.hold_work(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(clock.source_sha256(), captured.evidence.decoder_sha256);
+    // A valid late payload mutation with restored metadata cannot reuse old bitmaps.
+    let metadata = std::fs::metadata(&path).unwrap();
+    let mut changed = bytes.clone();
+    changed[MAX_SOURCE_OBSERVATION_PACKETS * 188 + 100] ^= 1; // null PID, beyond PSI; preserves transport syntax
+    std::fs::write(&path, changed).unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(metadata.modified().unwrap()))
+        .unwrap();
+    assert!(scope
+        .scope(super::super::source_clock::observe_owned(
+            guard,
+            (path.clone(), path),
+            request().pid,
+            captured.evidence,
+            deadline,
+            work.hold_work(),
+        ))
+        .await
+        .is_err());
+    drop(captured);
+    assert!(owned_directory.exists()); // an actual remaining lease still owns it
+    drop(lease);
+    cleanup.wait().await.unwrap();
+    assert!(!owned_directory.exists());
     scope.close();
     scope.wait_cleanup().await.unwrap();
     drop(work);

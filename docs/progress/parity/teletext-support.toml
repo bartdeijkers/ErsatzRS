@@ -384,6 +384,34 @@ complete-source preparation through existing ownership/clock/cleanup boundaries,
 then rerun the exact failed joined test and finish its independent caption oracle.
 The new regression and original logs/trace/captures are retained at
 tmp/evidence/teletext-recovery-transport/joined-incomplete-source/.
+The complete-source preparation component now reuses the existing constant-memory
+finite text-source reader for bitmap qualification. It reserves every copied byte
+through the existing configurable source-storage budget and retains that lease in
+the actual decoder owner through cleanup; uncertain cleanup preserves both input
+and reservation. Discovery windows remain capped at32768 packets. Only full,
+unomitted EOF receipts can exceed that count in continuous hash revalidation.
+The15-second startup and4096-frame limits, exact PSI/PES/page/source checks and
+clock qualification are unchanged. Invalid storage policy health now describes
+local and provider caption impact.93 focused Rust regressions pass, including
+full-source decode, quota refusal, source changes beyond the discovery boundary,
+M2TS framing, caller cancellation and actual file/reservation cleanup. The real native37MB probe now proves complete197577-packet EOF coverage with
+no omission, exact e70b7cf1 source hash and both nonempty bitmap events. Bitmap
+carriage then returns InvalidOutput, so caption selection remains unavailable
+in both the original configured-native HTTP route and a diagnostic ts-legacy
+trial. Do not claim runtime caption acceptance. The route-name hypothesis was
+rejected: get_hls_direct_stream invokes the channel's configured native pipeline;
+the isolated host logs prove it attempted selection. Keep both raw trials.
+The exact endpoint guard rejects nonintegral millisecond coordinates. Observed
+source decoder endpoints are2100622/26640822us, enabled caption origin135061/90000
+seconds (1500678us under the native rescale), and the independently converted
+Matroska endpoints600/25140ms. The next bounded action is to qualify that actual
+native clock/quantization mapping without guessed rounding, retimestamping the
+source, dropping events or weakening endpoint/pixel/clear checks. A focused
+opt-in real-source regression retains the failure after proving complete decode.
+The rebuilt matched host17dfebde passes the ordinary playback smoke gate for
+legacy/hybrid TS and HLS. Fixed source/DVB RGBA glyph/clear hashes are integrated
+into the joined trial, but that trial still stops before those assertions.
+Logs and matched-source inventory: tmp/evidence/teletext-recovery-transport/complete-source/.
 Parts7 and8 retain their separate owners; this branch does not claim their completion.
 '''
 resolved    = false
