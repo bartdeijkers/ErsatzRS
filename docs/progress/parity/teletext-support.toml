@@ -362,6 +362,28 @@ a green result. Next: independently qualify sparse caption timing, then run the
 actual Local-rescan/published-addon burst-and-caption trial with all unchanged
 part6 obligations. Canonical raw logs, captures,80-check report, decoded pages,
 source hashes/packet comparisons and scanner receipt: tmp/evidence/teletext-recovery-transport/.
+The subsequent no-repair generator uses the existing -fix_teletext_pts0 control.
+Source e70b7cf1f0c18cd5c1b8316f4b1e6f8a8bca45282a30514f451796d9debfa05e
+retains both2814-packet audio tracks and all12 caption payloads, with the same
+21.333ms relative timestamp offset across all three tracks. The earlier repaired-
+timestamp source and raw cadence diagnostics remain retained, without a generic
+gate waiver. The actual Local rescan then proves H264, eng/nld AAC and the
+teletext descriptor on this source; no synthetic stream rows replace that scan.
+
+The joined host trial fails mandatory caption preservation: both cold outputs
+have H264, selected nld AAC and authored teletext, but no converted DVB subtitle
+stream. The host explicitly logs that the source interval is not fully qualified.
+The demonstrated path is checked_span's default32768-packet prefix limit
+(6160384 TS188 bytes), followed by runtime prepare rejecting a window that does
+not cover the entire source. The trial source is37144476bytes. Preserve that
+correct partial-evidence rejection. This is a local functionality blocker:
+complete bounded source preparation is required before the part6 burst/caption
+proof can pass. Do not raise the window limit, truncate/reduce the fixture merely
+to fit it, or mark captions accepted from video/guide success. Next implement
+complete-source preparation through existing ownership/clock/cleanup boundaries,
+then rerun the exact failed joined test and finish its independent caption oracle.
+The new regression and original logs/trace/captures are retained at
+tmp/evidence/teletext-recovery-transport/joined-incomplete-source/.
 Parts7 and8 retain their separate owners; this branch does not claim their completion.
 '''
 resolved    = false
