@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Security
 
+- Update the release-notes HTML sanitizer to Ammonia 4.2.5 to address
+  RUSTSEC-2026-0533 (mutation XSS with embedded SVG and MathML).
 - rustix is updated to 1.1.6 (RUSTSEC-2026-0486): 1.1.5 could mark unwritten
   bytes as initialized when its xattr functions got a zero-length buffer.
 - `cargo deny` temporarily ignores RUSTSEC-2026-0459 (bundled SQLite before
@@ -67,6 +69,13 @@ release section when tagging a release.
   requests and successful Release runs are kept.
 
 ### Changed
+
+- Teletext capacity-recovery browser proof now covers Chromium and Firefox with
+  and without JavaScript, including consent, custom-policy protection and repair.
+- Parity tracking now records the shipped yt-dlp authenticated-availability fix,
+  verified against the published add-on package and its restriction safeguards.
+- The parity-debt queue distinguishes actionable fixes, external prerequisites and
+  maintainer-deferred work, preserving each item's acceptance requirements.
 
 - YAML scheduling parity now records the remaining chapter-aware mid-roll gap:
   the current `true` case runs its sequence after the unsplit programme; saved

@@ -66,6 +66,17 @@ References:
   short segmenter idle timeout, fetches a real HLS segment, waits for session
   cleanup, then repeats the cleanup proof through the `mode=ts` wrapper.
 
+Run the `teletext capacity recovery` cases in
+`tests/e2e/teletext-channel-profiles.spec.ts` through the isolated Playwright
+wrapper with `--grep 'teletext capacity recovery' --headed --workers=1`.
+They exercise the native readiness/capacity form in both JavaScript modes:
+global-scope consent, protected custom policies, explicit replacement and
+invalid-policy repair. The fixture restores global policies after each case. Locale setup also primes
+absent date/time defaults before safety snapshots, preserves saved choices and
+restores their original values and presence.
+This browser scope does not establish transport carriage or native Windows
+acceptance; those remain in `teletext-admin-recovery-flow`.
+
 ## Add-on list task workspace
 
 AMM-N-01B task routes render populated native forms through
