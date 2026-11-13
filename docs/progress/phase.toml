@@ -74,7 +74,23 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Current UCU-16 source237008bd is technically qualified: all required local and
+four private platform/package/runtime scopes, plus full CI43287157728 attempt3,
+pass. All15 CI jobs succeed; only the prior failed Level1.5/aggregate are
+recovered, preserving13 successes. Recovery proves2437 workspace and17 real
+Next cases, including all six original provider/mode variants. The full-tree
+marker is downloaded and digest/content verified. Exact joined receipts and
+original negatives: tmp/evidence/ucu16/integration-fc6158c8/qualification.json
+and ci/full-ci-qualification.json. ARM proof is QEMU, not native hardware.
+Next: commit/push the authorized progress-only direct child, complete the
+eligible source PR, then apply the prepared ordered ledger/baseline closeout.
+Main merge retains its separate permission boundary. No new code, broad
+retesting, releases, installations or rows290/291 work is authorized here.
+
+Qualification history for the same fixed window:
 Active maintainer task2026-11-11: UCU-16 rows286–289 through fixed c41969b3.
+The maintainer reconfirms this boundary on2026-11-12: finish the current work;
+rows290/291 (84caf129/46a334c4) come afterward and are not added to this window.
 Milestone ucu-16 owns the finite functionality, mandatory evidence and external
 prerequisite list. Rows286/287/288 and row289's immutable-chapter/seeded-count
 local components are complete, including approved ADR0098 option2 fallback.
@@ -97,10 +113,66 @@ jobs at8e9720f1;12 original successes are reused and two Chromium infrastructure
 failures plus the aggregate are recovered. Exact annotations, available logs and
 the successful full-tree marker are retained; the capacity blocker is closed.
 Preserve this qualified candidate in the authorized progress checkpoint.
-Main is now fixedfc6158c8 with merged dependency/subtitle changes (including
-jiff/Pest and chardetng1.0). Integrate that base and verify its affected scheduler,
-subtitle and artifact/runtime inputs before final PR acceptance. Reuse completed
-source-scoped components explicitly; no relabelled old dependency/artifact proof.
+Qualified progress checkpoint59168718 is committed/pushed. Fixed mainfc6158c8,
+with merged dependency/subtitle changes (including jiff/Pest and chardetng1.0),
+is integrated and pushed as237008bd. UCU implementation bodies are unchanged;
+all eight imported non-overlapping inputs equal that main exactly, and both
+changelog entries survive. Verify the affected scheduler, subtitle and artifact/
+runtime inputs before final PR acceptance. Native Windows build/helper and
+124 Classic/11 SQLite/7 subtitle cases pass; ARM64 build and the same QEMU
+cases pass. New-source package/UI/playback and ARMv7 proof remain.
+Full existing self-hosted CI43287157728 loses runner communication in its
+artifact producer; retain its successful checks and retry only that producer
+and dependent jobs on the same source after owned heavy compilation finishes.
+That condition is met: all8537 canonical tests start and the six managed-runtime
+fixtures affected by the initial override now pass. CI43287157728 attempt2
+recovers only the failed producer and dependents on unchanged237008bd.
+The complete canonical local closeout now exits0:8537 actual passes and11
+successful doctest steps.123 test binary identities are retained. Required
+cargo clean removes the66.03GiB configured worktree target after all owned
+compilers stop; frozen applications, source and evidence remain intact.
+Attempt2's CI producer succeeds and downstream gates run. The matched Linux
+build/package/runtime/browser sequence completes: independent native package,
+Native/Next decoded smoke,93/86 TSDuck controls and32 headed Chromium/Firefox
+cases pass. Windows matched bundle, packaged launcher, native Edge and decoded
+Native/Next playback also pass. ARM64 independent package/startup and the
+ARMv7 build/test/package/emulation scope remain. CI ordinary Rust and Next pass;
+Level1.5 passes2437 workspace and16/17 runtime cases but its Emby provider case
+observes no source request. The exact verified CI binary then passes that same
+unchanged case and all six variants locally after owned heavy/timed work ends.
+Keep the original negative and unresolved cause; wait for remaining CI browsers
+and recover only failed Level1.5/aggregate. Mandatory platform/CI/delivery proof
+stays in milestone ucu-16's unchanged finite completion list.
+The initial local unit runner used inappropriate runtime overrides and debug
+package erasure flags. Preserve its interrupted negative result; the canonical
+closeout now runs with clean unit settings and build jobs2. No source, test
+expectation, workflow or acceptance-policy change is made for these failures.
+All required current-source local proof is now complete, including ARMv7's
+124 Classic/11 SQLite/7 subtitle cases and independently extracted package startup.
+The four private package/runtime scopes, canonical8537 tests/doctests, strict
+lint, matched SSR/WASM,32 headed browsers and Native/Next decoded smoke/TSDuck
+are joined in qualification.json. Both ARM executions are QEMU, not native.
+Linux/Windows raw runtime captures are retained with hash-verified copies outside
+the task worktree. All four general/base Chromium/Firefox CI jobs now pass.
+The same run reaches its actual attempt2 terminal result; only the previously
+diagnosed Level1.5 runtime job and aggregate fail. Their original receipts remain.
+Only that failed job/dependents are requested again on unchanged237008bd;
+attempt3 is in progress. Await ci/teletext15-rerun.json's scoped recovery,
+without repeating successful browsers or changing code/deadlines/expected data.
+All owned heavy/timed local work has ended.
+At2026-11-12T23:22:56Z both compatible existing runners report online/busy;
+the remaining Firefox job has no assignment. Its runner-capacity prerequisite
+and exact closure condition are recorded in milestone ucu-16 and
+ci/last-browser-capacity-observation.json. No independent required local work
+remains. Preserve the same queued job and all successful proof; no substitute
+audits, runner provisioning, test weakening or later-row work.
+The same Firefox job starts by2026-11-12T23:27:06Z, closing that capacity wait;
+ci/last-browser-started.json owns the exact observation. Await its result and
+then the scoped failed-job recovery; no required test pass is inferred yet.
+Then complete the eligible PR and ordered disposition/baseline closeout; main
+merge still retains its separate authorization boundary. No later-row work.
+Evidence: tmp/evidence/ucu16/integration-fc6158c8/. Reuse completed source-scoped
+components explicitly; no relabelled old dependency/artifact proof.
 Milestone ucu-16 owns the unchanged finite list and ordered delivery closeout.
 Preserve Native and the accepted v26.12.0 baseline until that acceptance;
 no later-tip chase, main merge, publication or installation is authorized.

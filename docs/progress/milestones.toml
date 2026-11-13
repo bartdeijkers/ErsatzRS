@@ -40534,6 +40534,229 @@ new dependency implementation is added by consuming these merged main changes.
 Next bounded action: authorized progress checkpoint, then the fixed-main
 integration proof required for reviewable source delivery and ordered closeout.
 
+2026-11-12 qualified checkpoint59168718 is committed/pushed; its direct parent
+is the fully qualified8e9720f1. Fixed-main integration237008bd is also committed/
+pushed, with no UCU implementation change. All eight imported non-overlapping
+dependency/subtitle/workflow inputs equal mainfc6158c8 exactly; the sole changelog
+conflict retains both UCU YAML-debt and main dependency/subtitle entries.
+Cargo.lock changes21 removed/18 added dependency versions. Fresh dependency-
+bound tests and application artifacts are required; this does not erase the
+completed original-source proof or advance the fixed upstream terminal.
+Preflight/source identities: tmp/evidence/ucu16/integration-fc6158c8/.
+Full existing self-hosted CI43287157728 runs at237008bd with normal full defaults;
+no focused mode, cache reset or artifact-reuse input is used. Local formatting
+and strict workspace/all-target Clippy pass on237008bd with Cargo.lock unchanged.
+Native Windows124 Classic and11 SQLite cases also pass on the new graph.
+The canonical local nextest/doctest closeout, native application build and
+retained ARM64 producer remain active. Native ARM remains unverified, and ordered source
+disposition/baseline/delivery remain pending the integrated candidate gates.
+Next bounded action is to finish this fixed-source integration proof, then the
+eligible progress checkpoint and reviewable source PR. No unrelated dependency
+repair, additional upstream row or CI engineering work is introduced.
+
+2026-11-12 source237008bd required build/focused-test components COMPLETE:
+native Windows builds all four applications and the fresh xtask helper;124
+Classic,11 SQLite and7 subtitle cases pass. Actual test-binary metadata/hashes
+and frozen applications are retained in windows/test-evidence.json under
+tmp/evidence/ucu16/integration-fc6158c8/. ARM64 builds all three applications;
+the same124/11/7 cases pass under QEMU with original read-only expectations.
+Its test-inputs.json, test-evidence.json and frozen ELF64/AArch64 applications
+retain exact identities. The112-second grouped SQL case is reported slow under
+the unchanged threshold. Native ARM remains unverified. Neither component claims
+new-source package/UI/decoded playback acceptance before those remaining trials.
+
+CI43287157728 attempt1 fails in its artifact producer: the self-hosted runner
+loses communication and rustc is killed with SIGKILL during archive preparation.
+Other executed lint/audit/format/doc/commit checks pass; downstream skipped jobs
+are not accepted. Original job131424101625 metadata, log and annotations remain
+in ci/; failed-build-recovery-plan.json selects only this producer and dependent
+jobs on the same source after the owned heavy compilers finish. No global
+runner, workflow, dependency or acceptance-policy repair is introduced.
+
+The initial local closeout runner was misconfigured: task-wide FFmpeg/Next
+overrides bypassed six managed-acquisition fixtures, and the package-only
+component-erasure flag was incorrectly applied to the canonical unit graph.
+Two raw HTML assertions also fail in that graph. The owned nextest process was
+explicitly interrupted to correct this configuration: original8293/8537 result
+has8281 passes,8 assertion failures,4 SIGINT failures and244 unrun cases.
+This is not full unit acceptance. Original100 exit, log, source and correction
+reason are preserved as test-closeout-initial.* and
+local-closeout-configuration-correction.json. The canonical closeout now runs
+without injected runtime overrides or the erasure flag, with build jobs2 and
+unchanged test threads4. No product/test source or expected result changed.
+Keep canonical unit settings separate from matched debug package erasure.
+
+The corrected canonical graph finishes compilation and starts all8537 tests.
+All six formerly bypassed managed-runtime fixtures pass with clean settings;
+managed-runtime-fixture-recovery.json binds that recovery to unchanged source/
+expectations. Full closeout remains pending its final result and doctests.
+Both original raw HTML assertion cases also pass in the canonical graph.
+unit-runner-configuration-recovery.json joins all eight recovered assertions
+without product/test/expectation changes. Interrupted and unrun cases from the
+initial invalid graph remain unaccepted until the canonical full run finishes.
+Only after heavy owned compilation ends, CI43287157728 attempt2 is requested
+through failed producer131424101625 and its dependent jobs. The same237008bd
+source and workflow remain; preceding successful checks are retained. Exact
+request and source guard: ci/producer-rerun.json. This is not a full-CI success
+claim before the downstream gates and aggregate actually complete.
+
+2026-11-12 source237008bd canonical local closeout COMPLETE. The actual
+./run.sh test-closeout exits0: all8537 tests pass,545 existing ignored cases are
+skipped, and all11 Cargo-doctest steps succeed with0 runnable doctests.
+The140.9-second finite100-page workload is reported slow under the unchanged
+threshold. Cargo.lock, product/test source and expectations remain unchanged.
+local-closeout-qualification.json and closeout-test-inputs.json retain command,
+results and exact identities for123 canonical test binaries. The initial invalid
+run remains negative history; none of its interrupted/unrun cases is counted
+as a pass in place of the completed canonical run.
+
+The configured real worktree target then reaches66.03GiB allocated. With every
+owned compiler/test process terminal and new Windows/ARM64 applications plus
+test identities preserved outside it, cargo clean exits0 and removes that
+target. The separate CI target, registries, source, worktrees and prior evidence
+are preserved. Exact inventory/guard/result: target-cleanup-preflight.json and
+target-cleanup.json under tmp/evidence/ucu16/integration-fc6158c8/.
+
+CI43287157728 attempt2's producer now succeeds with preceding checks retained;
+Rust/Next/Level1.5 and browser/aggregate acceptance remain pending. The owned
+matched Leptos/Linux package/runtime/browser sequence starts only after that
+producer's heavy compilation completes, using build jobs2. Its private size
+guard was corrected to accept a target directory absent after cargo clean,
+before any compiler/runtime started; no product/workflow/expected data changed.
+Next bounded step: complete this Linux package proof and the retained ARMv7
+build/package/emulation obligation, plus the unchanged full CI and ordered
+delivery/disposition/baseline closeout. No milestone acceptance is claimed yet.
+
+2026-11-12 source237008bd Linux and Windows integration components COMPLETE.
+The matched Linux server/site build and companions, structural web parity gate,
+independent package extraction/startup, Native/Next decoded smoke,93/86 TSDuck
+controls and32 headed Chromium/Firefox cases all pass. The web parity invocation
+explicitly reuses this source's full canonical unit/doctest and strict workspace
+Clippy components; it does not omit those obligations. Native Windows passes
+the matched bundle gate, independent packaged launcher/child and bundled Next
+identity, headed Edge at1440/390, and decoded Native/Next playback with bounded
+cleanup. Exact drivers/receipts and archive inventories are retained under
+tmp/evidence/ucu16/integration-fc6158c8/qualification.json. Linux archive260c955c
+and Windows archive58c7c068 are private development-profile acceptance candidates,
+not published releases. ARM64 build and124/11/7 QEMU tests remain completed;
+its independent current-source package/startup and ARMv7 scope remain separate.
+
+CI43287157728 attempt2 passes its producer, ordinary Rust and Next engine jobs.
+Level1.5 passes2437 workspace tests and16 of17 real Next runtime cases. Its
+remote-provider caption case fails at Emby-convert with no source request or
+dynamic callback observed; empty grant observations do not prove grant revocation.
+The original job logs, all available proof receipts and diagnostic archive are
+retained in ci/teletext15-failure-analysis.json. Cause is not established.
+After owned heavy compilation and timed playback/browser drivers finish, the
+exact successful CI producer's Rust archive is fetched by its published digest,
+source/host/capability/file inventory verified, and only that unchanged ignored
+case is executed. All six original provider/mode variants pass with unchanged
+deadlines, clip and grant/audio/caption/cleanup assertions. No source correction,
+test weakening or full CI acceptance is inferred. ci/runtime-diagnostic/trial.json
+and provider-variant-results.json own this scoped result. A missing empty nextest
+extraction directory initially prevented any test from starting; that setup-only
+negative is retained separately. Wait for the original remaining browser jobs,
+then recover only the failed Level1.5 job and dependent aggregate. ARMv7 and
+ordered delivery/disposition/baseline closeout retain their original requirements.
+
+The current ARM64 independent archive/startup component then completes: archive
+cb395961 has its complete extraction inventory checked, ELF AArch64 binaries,
+HTTP200 readiness, packaged healthcheck, matching served JS/WASM and bundled
+verified Next with FFmpeg9. Receipt: final-source/arm64/package-startup/
+qualification.json under the same evidence root. This is QEMU software proof,
+not native hardware acceptance. Remaining platform work is only the current
+ARMv7 build,124 Classic/11 SQLite/7 subtitle tests and independent package/startup.
+
+The current ARMv7 application build then completes in23m08s with the qualified
+scoped final-link wrapper and one compiler job. All three ELF32 ARM hard-float
+application identities are retained in final-source/armv7/app-build-component.json.
+The same producer continues test-binary preparation;124/11/7 QEMU execution
+and independent package/startup remain unaccepted until their actual results.
+
+2026-11-12 source237008bd ARMv7 qualification COMPLETE. The full producer and
+all three QEMU groups exit0:124 Classic,11 SQLite and7 subtitle cases pass.
+The97.7-second mixed-group restart case is reported slow under the unchanged
+threshold. The retained hard-float application hashes match the initial build.
+Archive34b178cf passes complete extraction inventory, ELF32/ARM hard-float,
+HTTP200 readiness, packaged healthcheck, matching served JS/WASM and bundled
+verified Next with FFmpeg9. Exact receipts: final-source/armv7/test-evidence.json,
+frozen-binaries.json and package-startup/qualification.json under the same root.
+Both ARM scopes remain QEMU software proof, with native hardware unverified.
+
+All required local platform/package/runtime and final-check components for237008bd
+are now complete. qualification.json joins the four private archive identities,
+canonical8537-test/doctest and lint proof, matched web assets, headed browsers
+and actual Native/Next playback. Actual Linux and native Windows smoke captures
+and Linux TSDuck inputs/reports are copied into the owning evidence root and
+verified against unchanged originals, before eventual worktree/temp cleanup.
+runtime-evidence-retention.json under final-source/ and windows/ owns those joins.
+No original is removed during this retention step.
+
+CI43287157728 now passes both general Chromium/Firefox and Level1.5 Chromium.
+Only Level1.5 Firefox remains; the earlier Level1.5 runtime failure still needs
+its source-bound recovery. All owned compilers and local timed playback work are
+terminal. Wait for that same run to complete, then retry only the failed
+Level1.5 job and dependent aggregate, preserving all previous successes and
+the original failure/unchanged six-variant diagnostic. Do not start a new full
+run or change source, deadlines, expected data or workflows. The maintainers
+reconfirm rows286–289 only;290/291 come afterward. Ordered dispositions,
+accepted-baseline advancement, eligible PR delivery and separately authorized
+main merge remain open. No milestone acceptance or later-row processing is claimed.
+
+At2026-11-12T23:22:56Z the sole remaining Firefox job131494775870 is queued
+without a runner assignment. Both compatible existing Linux/X64 self-hosted
+runners21/24 are online and report busy. Exact bounded API observations are
+retained in ci/last-browser-capacity-observation.json, last-browser-job.json and
+last-browser-runners.json. This is a current capacity prerequisite, not a test
+failure or a reason to restart the workflow. All independent required local
+work is complete; the source PR and four-file ordered-closeout draft are ready
+for final source-bound results. Closure: an existing compatible runner becomes
+available, the same Firefox job executes, then only failed Level1.5/aggregate
+recovery completes. Do not cancel other work, provision runners, weaken gates,
+or replace this finite completion list with unrelated activity while waiting.
+
+By2026-11-12T23:27:06Z the same Firefox job is in progress, closing the
+runner-capacity wait. ci/last-browser-started.json retains its source/run/job
+identity and actual start time. Required Firefox success and the existing
+failed Level1.5/aggregate recovery remain open; no pass is inferred from startup.
+
+2026-11-13T00:25:44Z CI attempt2 is terminal: all four required general/base
+Chromium/Firefox jobs and every other prior component pass. Only the previously
+diagnosed Level1.5 runtime job and its aggregate fail. The exact terminal receipt
+is preserved as ci/attempt-2-terminal.json before requesting only failed
+job131490940183 and its dependents through the GitHub job-rerun API. The request
+succeeds and the same source237008bd enters attempt3. ci/teletext15-rerun.json
+and attempt-3-run.json retain source, guards and actual request/result. No source,
+assertion, deadline, workflow or expected-data change is made. All four browser
+successes remain valid; full CI acceptance awaits runtime/aggregate recovery.
+
+2026-11-13 source237008bd technical qualification COMPLETE. CI43287157728
+attempt3 succeeds with all15 mandatory jobs. Thirteen prior successes are
+retained; only Level1.5 runtime and aggregate are recovered. Actual recovery
+logs prove2437 workspace and17 real Next passes, including the original
+provider case in12.282s and all six provider/mode proof receipts. Emby now has
+one upstream read/full read/acquisition/dynamic item, successful delivery,
+presentation-grant preservation and source-edit revocation, with zero callback
+failures and bounded work/storage cleanup. Source, assertions and deadlines
+are unchanged; the original failure's cause remains unproven, not a code fix.
+
+ci/full-ci-qualification.json owns exact successful run/job identities, scoped
+composition, original negatives and available log inventory. The directly
+requested textual job download was refused by the CLI's escape-sequence
+output protection; the complete positive job log is recovered from the already
+downloaded CRC-verified successful-run archive without rendering raw escapes
+or rerunning tests. The full-tree artifact13998182250 is downloaded, CRC/digest
+verified and its content matches source treeb575e384029314fb47381f81b4a236b41ef32249
+and the successful run URL. All four private package/runtime and local final
+components remain complete, with native ARM explicitly unverified QEMU proof.
+
+The fixed-main technical proof is ready for the authorized progress-only
+checkpoint and eligible source PR. Keep source237008bd as that checkpoint's
+direct parent; only the three existing progress files change. Four individually
+reviewed dispositions and the terminal baseline are prepared but remain
+unapplied until the eligible source PR gate; milestone acceptance and separately
+authorized main delivery stay open. Rows290/291 remain for afterward.
+
 Historical2026-11-11 external prerequisite at handoff: remaining CI jobs queued, both
 eligible Linux runners online but occupied by other work. Repeated live job and
 runner checks confirm the capacity dependency; no UCU-16 job failure or stopped
