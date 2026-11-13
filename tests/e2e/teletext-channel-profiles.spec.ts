@@ -124,9 +124,28 @@ async function missingProfile(page: Page, fixture: TeletextChannelFixture): Prom
   expect(fixture.binding(fixture.channels[0])).toEqual(before);
 }
 
+// Locale saves include date/time preferences. Establish their UI defaults
+// before the safety snapshot, retain existing choices, and restore exact
+// original presence through the fixture's normal settings cleanup.
+function prepareUiFormats(fixture: TeletextChannelFixture): void {
+  for (const key of ['pages.date_format', 'pages.time_format']) {
+    const original = fixture.setting(key);
+    fixture.originalUi.set(key, original);
+    if (original === undefined) fixture.database.prepare('INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, 'auto');
+  }
+}
+
+function uiFormats(fixture: TeletextChannelFixture): Record<string, string> {
+  return {
+    date_format: fixture.setting('pages.date_format') ?? 'auto',
+    time_format: fixture.setting('pages.time_format') ?? 'auto',
+  };
+}
+
 async function restoreUi(page: Page, fixture: TeletextChannelFixture): Promise<void> {
   await page.request.post('/admin-api/settings/ui/save', {
     form: {
+      ...uiFormats(fixture),
       language: fixture.originalUi.get('pages.language') ?? 'en-us',
       is_dark_mode: String(/^(1|true)$/i.test(fixture.originalUi.get('pages.is_dark_mode') ?? 'True')),
     }, maxRedirects: 0,
@@ -162,6 +181,7 @@ for (const javaScriptEnabled of [true, false]) {
       test.setTimeout(240_000);
       testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
       const fixture = new TeletextChannelFixture(databasePath!);
+      prepareUiFormats(fixture);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });
       const page = await context.newPage();
       const stale = await context.newPage();
@@ -175,7 +195,7 @@ for (const javaScriptEnabled of [true, false]) {
       try {
         const safe = fixture.safetySnapshot();
         await page.request.post('/admin-api/settings/ui/save', {
-          form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
+          form: { ...uiFormats(fixture), language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
         });
         await visit(page, fixture.channels[0], javaScriptEnabled);
         const day = await createProfile(page, fixture, 'Day <synthetic> & profile', 'day', javaScriptEnabled);
@@ -184,7 +204,7 @@ for (const javaScriptEnabled of [true, false]) {
         for (const [language, module] of cultures) {
           const text = translations(module);
           await page.request.post('/admin-api/settings/ui/save', {
-            form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
+            form: { ...uiFormats(fixture), language, is_dark_mode: String(dark) }, maxRedirects: 0,
           });
           await visit(page, fixture.channels[0], javaScriptEnabled);
           await expect(page.getByRole('heading', { name: text('TeletextChannelTitle'), exact: true })).toBeVisible();
@@ -294,6 +314,7 @@ for (const javaScriptEnabled of [true, false]) {
       test.setTimeout(120_000);
       testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
       const fixture = new TeletextChannelFixture(databasePath!);
+      prepareUiFormats(fixture);
       const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 1280, height: 900 } });
       const page = await context.newPage();
       const errors: string[] = [];
@@ -302,7 +323,7 @@ for (const javaScriptEnabled of [true, false]) {
       try {
         const safe = fixture.safetySnapshot();
         await page.request.post('/admin-api/settings/ui/save', {
-          form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
+          form: { ...uiFormats(fixture), language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
         });
         await visit(page, fixture.channels[0], javaScriptEnabled);
         const day = await createProfile(page, fixture, 'Day synthetic visual profile', 'day', javaScriptEnabled);
@@ -310,7 +331,7 @@ for (const javaScriptEnabled of [true, false]) {
         for (const [language, module] of cultures.filter(([culture]) => culture === 'en-us' || culture === 'nl')) {
           const text = translations(module);
           await page.request.post('/admin-api/settings/ui/save', {
-            form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
+            form: { ...uiFormats(fixture), language, is_dark_mode: String(dark) }, maxRedirects: 0,
           });
           for (const [index, profile, theme] of [[0, day, 'day'], [1, night, 'night']] as const) {
             await visit(page, fixture.channels[index], javaScriptEnabled);
@@ -363,6 +384,7 @@ for (const javaScriptEnabled of [true, false]) {
     test.skip(process.platform === 'win32', 'Existing fixture uses a POSIX producer; native Windows remains separate debt.');
     test.setTimeout(90_000);
     const fixture = new TeletextChannelFixture(databasePath!);
+    prepareUiFormats(fixture);
     const context = await browser.newContext({ baseURL, javaScriptEnabled });
     const page = await context.newPage();
     const errors: string[] = [];
