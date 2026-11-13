@@ -353,3 +353,101 @@ for (const javaScriptEnabled of [true, false]) {
     });
   }
 }
+
+// Debt teletext-admin-recovery-flow part8: browser proof of the existing native
+// recovery form. Global policy mutations are confined to the wrapper's DB and
+// restored by TeletextChannelFixture.close(), including after failed assertions.
+for (const javaScriptEnabled of [true, false]) {
+  test(`teletext capacity recovery (JavaScript ${javaScriptEnabled})`, async ({ browser, baseURL }, info) => {
+    test.skip(!databasePath, 'Requires the runner disposable E2E_DB_PATH.');
+    test.skip(process.platform === 'win32', 'Existing fixture uses a POSIX producer; native Windows remains separate debt.');
+    test.setTimeout(90_000);
+    const fixture = new TeletextChannelFixture(databasePath!);
+    const context = await browser.newContext({ baseURL, javaScriptEnabled });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error' && /hydration|failed_to_cast_marker_node|rust_panic/i.test(message.text())) errors.push(message.text());
+    });
+    const keys = ['teletext.authoring.policy', 'teletext.output.policy'];
+    const policies = () => keys.map(key => fixture.setting(key));
+    const unrelated = () => {
+      const snapshot = fixture.safetySnapshot() as { configuration: { Key: string }[] };
+      return { ...snapshot, configuration: snapshot.configuration.filter(row => !keys.includes(row.Key)) };
+    };
+    const setPolicy = (key: string, value?: string) => {
+      if (value === undefined) fixture.database.prepare('DELETE FROM "ConfigElement" WHERE "Key"=?').run(key);
+      else fixture.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, value);
+    };
+    const form = page.getByTestId('teletext-capacity-form');
+    const capacity = page.getByTestId('teletext-capacity');
+    const step = page.getByTestId('teletext-readiness-step').filter({ has: capacity });
+    const apply = async (suffix: string) => {
+      await form.locator('[name="profile"]').selectOption('tvguide-16');
+      await form.locator('[name="confirm_scope"]').check();
+      await Promise.all([
+        page.waitForURL(url => url.search === suffix),
+        form.locator('button[type="submit"]').click(),
+      ]);
+      if (javaScriptEnabled) await waitForHydration(page);
+    };
+    try {
+      const safe = unrelated();
+      keys.forEach(key => setPolicy(key));
+      await visit(page, fixture.channels[0], javaScriptEnabled);
+      await expect(capacity).toHaveAttribute('data-authoring', 'absent');
+      await expect(capacity).toHaveAttribute('data-output', 'absent');
+      await expect(step).toHaveAttribute('data-state', 'missing');
+      await expect(form.locator('[name="confirm_scope"]')).not.toBeChecked();
+      // The browser's required control must prevent accidental global writes.
+      await form.locator('button[type="submit"]').click();
+      expect(policies()).toEqual([undefined, undefined]);
+      expect(await form.locator('[name="confirm_scope"]').evaluate(node => (node as HTMLInputElement).validity.valueMissing)).toBe(true);
+      const rejected = await page.request.post('/admin-api/teletext/capacity/apply', {
+        form: { channel_id: String(fixture.channels[0]), profile: 'tvguide-16' }, maxRedirects: 0,
+      });
+      expect(rejected.status()).toBe(303);
+      expect(rejected.headers().location).toContain('error=scope-unconfirmed');
+      expect(policies()).toEqual([undefined, undefined]);
+      await apply('?saved=capacity');
+      await expect(step).toHaveAttribute('data-state', 'done');
+      await expect(capacity.locator('[data-capacity-profile="tvguide-16"]')).toBeVisible();
+      const accepted = policies();
+      expect(accepted.every(value => value !== undefined)).toBe(true);
+      // Global scope is observable on a second channel, without publishing or
+      // claiming carriage; the UI must keep those separate readiness facts.
+      await visit(page, fixture.channels[1], javaScriptEnabled);
+      await expect(capacity).toHaveAttribute('data-output', 'profile');
+      for (const name of ['published', 'broadcast']) {
+        await expect(page.locator(`[data-testid="teletext-readiness-step"][data-step="${name}"]`)).toHaveAttribute('data-state', 'missing');
+      }
+      const tuned = JSON.stringify({ ...JSON.parse(accepted[1]!), recovery_timeout_ms: 4000 });
+      setPolicy(keys[1], tuned);
+      await visit(page, fixture.channels[0], javaScriptEnabled);
+      await expect(capacity).toHaveAttribute('data-output', 'custom');
+      await expect(form.locator('[name="replace"]')).not.toBeChecked();
+      await apply('?error=policy-exists');
+      expect(policies()).toEqual([accepted[0], tuned]);
+      await form.locator('[name="replace"]').check();
+      await apply('?saved=capacity');
+      expect(policies()).toEqual(accepted);
+      // Malformed persisted policy can be repaired by the same visible form.
+      setPolicy(keys[1], '{"version":4}');
+      await visit(page, fixture.channels[0], javaScriptEnabled);
+      await expect(capacity).toHaveAttribute('data-output', 'invalid');
+      await expect(form.locator('[name="replace"]')).toHaveCount(0);
+      await apply('?saved=capacity');
+      expect(policies()).toEqual(accepted);
+      await expect(step).toHaveAttribute('data-state', 'done');
+      await page.getByTestId('teletext-readiness').screenshot({ path: info.outputPath('capacity-recovered.png') });
+      expect(unrelated()).toEqual(safe);
+      expect(fixture.calls()).toEqual([]);
+      expect(fixture.unchangedPackage()).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      try { await restoreUi(page, fixture); }
+      finally { await context.close(); fixture.close(); }
+    }
+  });
+}
