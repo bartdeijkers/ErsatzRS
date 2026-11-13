@@ -91,8 +91,9 @@ Finish one narrow PR at a time, starting with the cookie availability defect,
 then recovery/custom pages, artwork, YAML, Classic/UCU evidence, streaming,
 scanner identity, preparation/leases, architecture and tooling. Preserve the
 plan's separate custom-page parts, including part4 omitted from its short order.
-Each slice needs focused verification and exact-head required CI before merge
-approval; no main merge, release or live installation mutation is authorized.
+Each slice needs focused verification and exact-head required CI before merging.
+The maintainer authorized ready PR merges on 2026-11-13; release and live
+installation changes still require their own applicable authorization.
 Inventory: A=20, B=15, C=14.
 
 Bucket A:

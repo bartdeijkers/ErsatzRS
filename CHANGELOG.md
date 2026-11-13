@@ -70,6 +70,8 @@ release section when tagging a release.
 
 ### Changed
 
+- Parity tracking now records the shipped yt-dlp authenticated-availability fix,
+  verified against the published add-on package and its restriction safeguards.
 - The parity-debt queue distinguishes actionable fixes, external prerequisites and
   maintainer-deferred work, preserving each item's acceptance requirements.
 
