@@ -1,13 +1,12 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.12.0)'
+etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125', '0128', '0129', '0130', '0131']
 summary    = """
-UCU-00–15 are Complete through fixed v26.12.0:285 rows processed,0 pending.
-Active UCU-16 rows286–289 are being qualified through fixed c41969b3;
-milestone ucu-16 owns current component and final evidence. Source dispositions
-and the baseline stay pending ordered acceptance.
+UCU-00–16 are Complete within accepted scopes:289 processed,0 pending.
+Milestone ucu-16 owns final proof; the authoritative Pin table owns the baseline.
+Rows290/291 remain outside this window.
 UCU-13/14/15 close in order with source dispositions, four required platform
 scopes and current source-bound final gates. Native remains supported alongside
 Next; stored choices, controls, routes, international tracks, teletext and
@@ -16,7 +15,7 @@ PR125/10ffff4e delivery, original negatives and scoped evidence reuse.
 Milestone ucu-15 also owns retained evidence paths.
 
 The feature remains In progress for retained debt and upstream patch-retirement
-obligations and the new UCU-16 window. Row271 is Deferred under
+obligations. Completed UCU-16 does not close them. Row271 is Deferred under
 ucu14-windows-advisory-applicability, not fixed, covered or inapplicable.
 Resume when authoritative advisory/fix details appear. Native ARM, macOS and
 approved unavailable hardware remain unverified; QEMU is emulation. Temporary
@@ -510,7 +509,8 @@ resolved = true
 
 [[debt]]
 id = 'ucu16-post-baseline-observations'
-description = 'Execute the registered post-v26.12.0 rows286–289 under milestone ucu-16: retained Native/shared behavior, bounded duration discard, independently resumable grouped sources and safe deterministic filler expressions. Accepted baseline stays unchanged until ordered acceptance.'
+description = 'Accepted UCU-16 rows286–289: retained Native/shared behavior, bounded duration discard, independently resumable grouped sources and safe deterministic filler expressions. Ordered dispositions and the terminal baseline move together.'
 discovered = '2026-11-10'
 evidence = 'Initial2026-11-10 source triage registered rows287/288 after the retained-engine cleanup; row289 completed the fixed four-row window through c41969b3. Milestone ucu-16 owns the finite completion list, source maps and failures. Local retained-engine, duration, grouped-source/resume and approved ADR0098 expression/seeded-count components are complete. Integrated source8e9720f1 also completes four required native/emulated package/runtime scopes,32 headed browser cases,93/86 TSDuck controls and full CI43056494938/attempt2. Original Chromium upload/runner failures and recovered source-bound proof are retained in tmp/evidence/ucu16/integration-531c/qualification.json and ci/full-ci-qualification.json. The completed candidate checkpoint is preserved; final integration of mainfc6158c8 dependency/subtitle updates and ordered source disposition/baseline/delivery remain pending. This debt is not yet resolved. Existing YAML chapter-expression debt stays separate; UCU-13–15 completion and approved native ARM/macOS/hardware deferrals remain unchanged.'
-resolved = false
+resolved = true
+resolution = "Accepted 2026-11-13: final dependency integration237008bd retains all earlier implementation, four current-source private packages and their required native Linux/Windows or QEMU ARM scopes. Full canonical local gates, matched SSR/WASM, affected headed browsers, actual decoded Native/Next playback and full CI 43287157728 plus eligible source PR149 CI pass. The four ledger rows receive individual reviewed dispositions and the authoritative Pin table advances to the fixed terminal only. Milestone ucu-16 owns exact source/package/CI identities and retained failures, including the unchanged provider-runtime diagnostic and scoped recovery. Existing YAML chapter-expression debt, row271 advisory and approved native ARM/macOS/hardware deferrals remain separate; rows290/291 are not processed."

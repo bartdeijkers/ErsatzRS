@@ -40017,7 +40017,7 @@ acceptance, production installation or unavailable-hardware claim follows.
 id         = 'ucu-16'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Honor Classic duration, grouped content and filler settings while retaining Native'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-15']
@@ -40766,4 +40766,28 @@ an authoritative terminal result; resume from that same run and fix any actual
 failure before the checkpoint/PR. Keep the live observer and candidate intact.
 Investigate any concrete failure before accepting its affected obligation. All four ledger
 acceptances remain pending their window gates. Baseline remains v26.12.0.
+
+2026-11-13 UCU-16 acceptance COMPLETE within the unchanged required boundary.
+Items1–4 are closed by the retained source/implementation/persistence proof.
+Item5 now closes with individually reviewed dispositions for286 N/A(ADR0095),
+287 Port,288 Port and289 Adapt(ADR0098), plus their terminal baseline update
+in the same documentation checkpoint. The authoritative Pin table advances only
+to the fixed c41969b3 endpoint; rows290/291 remain outside this window.
+
+Compiled source237008bd, qualified progress checkpoint5893f525 and all four
+current private package/runtime scopes retain exact identities. Full source
+CI43287157728/attempt3 passes15 mandatory jobs. Eligible source PR149,
+head5893f525, passes CI43339800944 with MERGEABLE/CLEAN status: the required
+full-proof guard succeeds and omits duplicate domain execution. This is valid
+same-source proof reuse, not a new Rust/browser run. source-pr-ci-qualification.json
+owns actual guard/route evidence and the independently verified parent proof.
+All mandatory local/platform/playback/final obligations are satisfied; QEMU does
+not establish native ARM hardware operation. The existing deterministic-profile,
+YAML chapter-expression, advisory and approved platform/hardware debts remain
+with their original owners and scopes. Original negative results remain retained.
+
+This feature-acceptance checkpoint prepares source PR149 and its ordered
+closeout for separately authorized main delivery. The goal's main merge and
+safe task-resource cleanup remain distinct from acceptance. No release,
+publication, live installation or later-row processing is included.
 """

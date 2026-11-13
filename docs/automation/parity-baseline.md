@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `53b3b42a02533ad8e72af09565b494f2b19e40fc` |
-| **Commit subject** | `prep for release v26.12.0` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/53b3b42a02533ad8e72af09565b494f2b19e40fc |
+| **Pinned commit** | `c41969b3bba66f14bf1d0be9e041b52218f65871` |
+| **Commit subject** | `fix: classic filler expression and random count (#3139)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c41969b3bba66f14bf1d0be9e041b52218f65871 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -100,6 +100,20 @@ Retained source/evidence: tmp/evidence/ucu13-15-v26.12.0/. Later upstream
 commits remain outside this completed goal until explicitly selected. The shared
 upstream checkout remains untouched; ordinary gap discovery must verify the new
 Pin table before reading a checkout, as required above.
+
+UCU-16 accepts rows286–289 on 2026-11-13 through its fixed terminal
+revision in the Pin table: **289 processed,0 pending** in the approved window.
+Milestone ucu-16 owns the complete source audit, persisted Classic corrections,
+approved ADR0098 fallback, four required private package/runtime scopes and
+full source-bound CI 43287157728 plus eligible source PR149 CI.
+Source237008bd includes the separately merged rustix and main dependency/subtitle
+updates. Original failures and exact package/test identities remain retained.
+Native and Next stay selectable. Native ARM/macOS/hardware debt and the existing
+YAML chapter-expression gap remain unverified/open under their respective owners.
+Rows290/291 come afterward by explicit maintainer instruction; this closure
+neither processes them nor authorizes a later-tip chase, release or installation.
+The shared upstream checkout remains untouched; ordinary gap discovery checks
+this authoritative Pin table before selecting source.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not

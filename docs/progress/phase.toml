@@ -2,12 +2,15 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "UCU-16 rows286–289: Classic scheduling corrections; Native and Next retained"
+current_focus = "UCU-16 accepted through row289; main delivery pending"
 
 summary = '''
-UCU-16 rows286–289 are now active under milestone ucu-16. Its required Classic
-scheduling corrections and mandatory evidence are independent of the completed
-Phase9 and earlier catch-up scopes summarized below.
+UCU-16 rows286–289 are accepted within their unchanged required boundary.
+Milestone ucu-16 owns all four current private package/runtime scopes, source
+CI43287157728 and eligible source PR149 CI43339800944. The source and prepared
+ordered closeout await separately authorized main delivery. Rows290/291 come
+afterward; no new window, release or installation is included. Completed Phase9
+and earlier accepted catch-up scopes remain unchanged.
 
 The agreed current Phase9 delivery is Complete: accepted independentLevel1/1.5
 engine, production TV-guide add-on, four required package/runtime scopes and
@@ -74,18 +77,23 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current UCU-16 source237008bd is technically qualified: all required local and
-four private platform/package/runtime scopes, plus full CI43287157728 attempt3,
-pass. All15 CI jobs succeed; only the prior failed Level1.5/aggregate are
-recovered, preserving13 successes. Recovery proves2437 workspace and17 real
-Next cases, including all six original provider/mode variants. The full-tree
-marker is downloaded and digest/content verified. Exact joined receipts and
-original negatives: tmp/evidence/ucu16/integration-fc6158c8/qualification.json
-and ci/full-ci-qualification.json. ARM proof is QEMU, not native hardware.
-Next: commit/push the authorized progress-only direct child, complete the
-eligible source PR, then apply the prepared ordered ledger/baseline closeout.
-Main merge retains its separate permission boundary. No new code, broad
-retesting, releases, installations or rows290/291 work is authorized here.
+UCU-16 acceptance is Complete: all four individual rows286–289 are dispositioned,
+and the authoritative baseline update is bundled with their ordered ledger.
+Milestone ucu-16 owns source237008bd, checkpoint5893f525, full15-job
+CI43287157728/attempt3 and eligible source PR149 CI43339800944. Required local,
+matched SSR/WASM, four-platform/package/runtime, headed browser and actual
+Native/Next playback proof is complete. ARM execution is QEMU, not native.
+Exact receipts and original failures remain under
+tmp/evidence/ucu16/integration-fc6158c8/qualification.json.
+
+Next bounded action: main delivery of source PR149 and its prepared ordered
+closeout, after the separate merge permission. The source PR is ready and its
+CI accepts the existing full-proof guard; no unchanged Rust/browser rerun is
+needed for this documentation. After safe integration, clean only task-owned
+temporary resources whose deliverables/evidence are retained. Preserve unrelated
+root work/history, unique commits and remote branches. Existing native ARM,
+macOS/hardware, YAML and advisory debt remains explicit. Rows290/291 come later;
+no new implementation, release/publication or installation task is active here.
 
 Qualification history for the same fixed window:
 Active maintainer task2026-11-11: UCU-16 rows286–289 through fixed c41969b3.
