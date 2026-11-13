@@ -210,6 +210,12 @@ pub fn progress_to_stdout() -> PipelineStep {
     PipelineStep::global("progress", ["-progress", "pipe:1"])
 }
 
+/// Keep machine-readable completion reports separate from encoded stdout.
+#[must_use]
+pub fn progress_to_stderr() -> PipelineStep {
+    PipelineStep::global("progress_stderr", ["-progress", "pipe:2"])
+}
+
 #[must_use]
 pub fn loglevel_error() -> PipelineStep {
     PipelineStep::global("loglevel_error", ["-loglevel", "error"])

@@ -1,4 +1,4 @@
-# ADR 0134: Preserve owned caption programme continuations
+# ADR 0134: Preserve owned finite programme continuations
 
 ## Status
 
@@ -9,8 +9,16 @@ Proposed
 Partial — candidate implementation in PR #155; 17 focused continuity and
 ownership tests pass. Two actual joined trials select the next row at the
 completed predecessor's finish and reach every original 8 MiB capture cap.
-Complete joined acceptance remains open: the guide expiry/PMT transition and
-strict subtitle PTS/PCR gate still fail. Required final gates remain in progress. The existing
+A broader completion-receipt candidate now addresses the independently reproduced
+ordinary legacy delivery gap. Its 38 focused completion, command-seal, admission and ownership tests and
+strict FFmpeg/web Clippy pass. Matched candidate b7b6eb20 passes playback smoke
+and all 93 unchanged manual four-route checks; legacy delivery is 102percent
+against the required 95percent. Actual completion reports match forwarded bytes,
+and the selected rows advance 1/2/3 without repeating the expiring tail.
+The current joined caption trial reaches all five original capture caps and
+advances at the predecessor finish without a delivery-deadline failure. Its four
+non-boundary windows pass 80 strict checks; the boundary remains blocked below. Complete joined acceptance remains open: the guide expiry/PMT transition
+and strict subtitle qualification still fail. The existing
 `teletext-admin-recovery-flow` debt owns acceptance and its finite remaining list.
 
 ## Context
@@ -36,12 +44,21 @@ parameter or a different wrapper.
 
 ## Decision
 
-- Record a server-selected predecessor only for an owned, ordinary native
-  source-caption producer whose qualified nominal interval reaches its scheduled
-  finish. A shortened interval grants no continuation clock.
-- Publish that predecessor only after successful body completion and actual
-  producer cleanup. Source-caption rejection or fallback clears the pending
-  clock. Failure, cancellation and uncertain cleanup retain the existing fence.
+- Record a server-selected predecessor only for an owned, finite ordinary native
+  producer whose requested nominal interval reaches its scheduled finish. Exclude
+  retained, remote-stream, external-JSON and song producers. A shortened interval
+  grants no continuation clock.
+- Use FFmpeg9's existing progress capability on stderr, separate from media
+  stdout. The generated command must carry the exact sealed stderr-progress step;
+  opaque commands, stdout progress and duplicate progress options do not qualify.
+- Publish the predecessor only after successful body forwarding and actual child
+  cleanup. Require the last complete terminal report, consistent microsecond and
+  display timestamps, an exact match between reported size and forwarded bytes,
+  and produced duration covering the nominal interval. Successful early EOF is
+  not nominal completion. Missing/malformed reports and retries after prior media
+  clear the clock; failures, cancellation and uncertain cleanup retain the fence.
+- Use the final owned wrapper's pacer and bounded backpressure for these finite
+  producers. Direct, unowned and retained input pacing remains unchanged.
 - The next item may select at the recorded finish. Before doing so, query the
   fresh schedule at the predecessor's original selection time and require its
   exact row identity, start and finish. A removed, replaced or restamped row
@@ -59,7 +76,10 @@ parameter or a different wrapper.
 A correctly admitted continuation cannot waste another source preparation on
 the already completed tail. Fresh schedule validation preserves rebuild/Reset
 safety without changing persisted scheduling state. The extra metadata lookup
-uses the same absolute request deadline. The mechanism grants neither remote
+uses the same absolute request deadline. Completion uses the existing bounded
+stderr reader and actual byte accounting; there is no new worker, queue, cache,
+provider request or persisted state. A missing report grants no continuation
+clock and introduces no new optional runtime/dependency requirement. The mechanism grants neither remote
 EOF completeness nor platform/client acceptance.
 
 ## Alternatives Considered
@@ -82,3 +102,5 @@ EOF completeness nor platform/client acceptance.
 - `crates/ersatzrs-web/src/transport/iptv/stream.rs`
 - `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`
 - `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/Queries/GetPlayoutItemProcessByChannelNumberHandler.cs`
+
+- [FFmpeg progress reporting](https://ffmpeg.org/ffmpeg.html#toc-Main-options)

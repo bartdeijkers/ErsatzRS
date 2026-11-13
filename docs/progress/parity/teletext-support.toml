@@ -512,11 +512,47 @@ it does not waive the current required gate. Keep both complete raw gate results
 The initial manual invocation redundantly regenerated missing worktree clips;
 it was interrupted, and the final trials reuse hash-verified existing fixtures.
 
-Next resolve the expiry/PMT assertion against the existing authorization contract,
-correct the subtitle handover clock under unchanged strict checks, and resolve the
-baseline legacy delivery gate. Then finish joined boundary/automatic-refresh proof,
-review and exact-head ready-PR CI. The current checkpoint remains draft. Keep the
-tvguide-16 two-second holding and 100 ms lateness policy, source and capture limits
+The baseline legacy delivery gate is now complete within its ordinary playback
+scope, as recorded below. Next resolve the expiry/PMT assertion against the
+existing authorization contract and the pending subtitle-qualification decision.
+Then finish joined boundary/automatic-refresh proof, review and exact-head
+ready-PR CI. The current checkpoint remains draft.
+
+The next proof obligation now has retained actual producer inputs and exact
+replay argv. The next item's complete coded video has zero source PTS/DTS shift;
+its A/B/clear cue timestamps differ from the independent source anchors by about
+322us. Boundary A likewise differs by322us from its source-coupled presentation
+clock. The existing sparse-caption qualifier instead rejects variable packet/PCR
+lead: even the valid pre-concat native producer fails that proxy. Raw failures
+remain retained. A maintainer decision is pending: permit source-referenced cue
+qualification under the same8ms bound while retaining raw flags and all other
+strict checks, or explicitly retain the constant-lead proxy. No dependent checker
+or acceptance change has been made.
+
+Independent ordinary legacy diagnosis retains input-arrival/PCR clocks: an
+expiring row is selected twice, then the next handover accumulates another
+roughly2.4s delivery deficit. The candidate reuses FFmpeg9 stderr progress and
+actual forwarded-byte accounting to qualify finite completion before publishing
+any cursor, including successful-early-EOF refusal. It shares the final wrapper's
+pacer for owned finite native items. The first integration candidate fd3bcb3c
+still fails92/93 at86percent because ordinary internal admission discards the
+command snapshot required to qualify progress. The correction retains only the
+current sealed stderr-progress command for internal items and clears it on
+opaque or changed retries. All38 focused completion/progress, command-seal,
+admission and ownership tests pass, including capacity release before terminal
+EOF. Strict FFmpeg/web Clippy and matched build pass. Candidate b7b6eb20 passes
+playback smoke and all93 unchanged four-route manual checks: legacy media delivery
+is102percent, above95required; actual byte-matched completion reports accompany
+rows1/2/3 with no repeated tail. This closes the ordinary legacy delivery blocker,
+not whole part6. The current joined caption trial likewise reaches all five
+original8388560-byte caps and selects row10 at row9's exact finish, after a
+byte-matched5.8978s terminal report. No delivery-deadline failure occurs. Its four
+non-boundary windows pass80 strict checks; the boundary still fails the original
+PMT version2 withdrawal assertion and the unchanged sparse-subtitle qualifier
+(19/21 strict checks pass). No checker or expiry fence changes. ADR0134 owns the
+decision. Source-bound receipts and raw captures are retained in
+tmp/evidence/teletext-recovery-transport/finite-progress-checkpoint/.
+Keep the tvguide-16 two-second holding and 100 ms lateness policy, source and capture limits
 unchanged. Original isolated and combined failures remain evidence.
 The test launches all real-time windows before synchronous diagnostics, preserving
 source schedules and every capture bound. Raw traces/captures,80-check logs,

@@ -260,3 +260,54 @@ fn progress_sharing_stdout_is_not_a_qualified_final_ts_pipe() {
     let pipeline = build_pipeline_for_acceleration(HardwareAccelerationKind::None, request);
     assert!(pipeline.command(&[]).mpegts_output.is_none());
 }
+
+#[test]
+fn stderr_progress_preserves_the_exact_qualified_media_pipe_and_seal() {
+    let mut request = PipelineRequest::new(
+        InputFile::video("synthetic.mkv"),
+        DesiredVideoState::h264_1080p(),
+    );
+    request.state.progress_output = crate::FfmpegProgressOutput::Stderr;
+    let pipeline = build_pipeline_for_acceleration(HardwareAccelerationKind::None, request);
+    let command = pipeline.command(&[]);
+    assert!(command
+        .mpegts_output_policy()
+        .unwrap()
+        .reports_stderr_progress());
+    assert_eq!(
+        command
+            .arguments
+            .iter()
+            .filter(|arg| arg.as_str() == "pipe:1")
+            .count(),
+        1
+    );
+    insta::assert_snapshot!(
+        "native_stderr_completion_progress",
+        command.arguments.join("\n")
+    );
+    let mut changed = command;
+    let index = changed
+        .arguments
+        .iter()
+        .position(|arg| arg == "pipe:2")
+        .unwrap();
+    changed.arguments[index] = "pipe:1".into();
+    assert!(changed.mpegts_output_policy().is_none());
+}
+
+#[test]
+fn arbitrary_stderr_or_duplicate_progress_is_not_a_qualified_media_command() {
+    for step in [
+        PipelineStep::global("opaque", ["-progress", "pipe:2"]),
+        PipelineStep::global("progress_stderr", ["-progress", "pipe:3"]),
+    ] {
+        let mut candidate = steps();
+        candidate.insert(0, step);
+        assert!(generate(&candidate).mpegts_output_policy().is_none());
+    }
+    let mut candidate = steps();
+    candidate.insert(0, crate::progress_to_stderr());
+    candidate.insert(0, crate::progress_to_stderr());
+    assert!(generate(&candidate).mpegts_output_policy().is_none());
+}

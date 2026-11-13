@@ -266,9 +266,11 @@ release section when tagging a release.
   discovery window, with DVB conversion checked against FFmpeg's native clock
   rescaling. Preparation uses the existing storage quota and startup deadline;
   partial or changed sources remain unavailable for caption selection. Complete
-  reads use bounded I/O batches. Owned legacy caption producers share the final
-  wrapper's pacing and continue from a successfully completed programme, after
-  checking that its saved schedule identity and times are still current.
+  reads use bounded I/O batches. Owned finite legacy producers share the final
+  wrapper's pacing and continue from a completed programme after checking its
+  current schedule identity and times. Completion requires a terminal FFmpeg
+  report matching the forwarded bytes and nominal duration; successful early
+  EOF cannot advance the programme clock.
 
 - Invalid Classic chapter filler expressions now keep the whole programme
   without internal breaks and retain its clock-aligned padding. Unknown

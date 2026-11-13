@@ -19,6 +19,7 @@ use crate::PipelineStep;
 pub struct MpegTsOutputPolicy {
     muxrate_bps: u64,
     pcr_period_ms: u32,
+    stderr_progress: bool,
     arguments_digest: [u8; 32],
 }
 
@@ -33,6 +34,12 @@ impl MpegTsOutputPolicy {
     #[must_use]
     pub const fn pcr_period_ms(&self) -> u32 {
         self.pcr_period_ms
+    }
+
+    /// The sealed generated command reports completion on stderr, not media stdout.
+    #[must_use]
+    pub const fn reports_stderr_progress(&self) -> bool {
+        self.stderr_progress
     }
 
     pub(crate) fn from_generated(steps: &[PipelineStep], arguments: &[String]) -> Option<Self> {
@@ -62,6 +69,7 @@ impl MpegTsOutputPolicy {
         Some(Self {
             muxrate_bps,
             pcr_period_ms,
+            stderr_progress: has_stderr_progress(steps, arguments),
             arguments_digest: digest(arguments)?,
         })
     }
@@ -140,7 +148,29 @@ fn unique_flags(steps: &[PipelineStep], arguments: &[String]) -> bool {
         !argument.starts_with("pipe:")
             || index + 1 == arguments.len()
             || index > 0 && arguments[index - 1] == "-i"
+            || argument == "pipe:2"
+                && index > 0
+                && arguments[index - 1] == "-progress"
+                && has_stderr_progress(steps, arguments)
     })
+}
+
+fn has_stderr_progress(steps: &[PipelineStep], arguments: &[String]) -> bool {
+    let count = steps
+        .iter()
+        .filter(|step| {
+            matches!(step, PipelineStep::Generic {
+            name: "progress_stderr", global_options, filter_options, output_options, ..
+        } if global_options == &["-progress", "pipe:2"]
+            && filter_options.is_empty() && output_options.is_empty())
+        })
+        .count();
+    count == 1
+        && arguments
+            .iter()
+            .filter(|arg| arg.as_str() == "-progress")
+            .count()
+            == 1
 }
 
 // Only the repository's finite generated option grammar is recognized. A
