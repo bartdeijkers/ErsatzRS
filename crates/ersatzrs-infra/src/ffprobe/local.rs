@@ -121,6 +121,7 @@ pub(super) struct ProbeRetention {
     // admission, including the confirmed-cleanup path through ordinary Drop.
     snapshot: Option<tempfile::NamedTempFile>,
     shared_snapshot: Option<std::sync::Arc<tempfile::NamedTempFile>>,
+    storage: Option<std::sync::Arc<crate::provider_source_storage::ProviderSourceLease>>,
     source: std::sync::Arc<super::LocalTeletextSourceGuard>,
     hold: ersatzrs_core::locking::TeletextWorkHold,
     confirmed: bool,
@@ -138,10 +139,19 @@ impl ProbeRetention {
         Self {
             hold,
             source,
+            storage: None,
             snapshot: None,
             shared_snapshot,
             confirmed: true,
         }
+    }
+
+    pub(super) fn with_source_storage(
+        mut self,
+        storage: Option<std::sync::Arc<crate::provider_source_storage::ProviderSourceLease>>,
+    ) -> Self {
+        self.storage = storage;
+        self
     }
 
     pub(super) fn with_snapshot(mut self, snapshot: tempfile::NamedTempFile) -> Self {
@@ -162,6 +172,9 @@ impl Drop for ProbeRetention {
     fn drop(&mut self) {
         if !self.confirmed {
             self.hold.retain_until_restart();
+            if let Some(storage) = self.storage.take() {
+                let _ = std::sync::Arc::into_raw(storage);
+            }
             if let Some(snapshot) = self.shared_snapshot.take() {
                 let _ = std::sync::Arc::into_raw(snapshot);
                 let _ = std::sync::Arc::into_raw(self.source.clone());

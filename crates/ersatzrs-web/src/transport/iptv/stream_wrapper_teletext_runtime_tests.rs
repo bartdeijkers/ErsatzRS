@@ -372,7 +372,7 @@ async fn forward_wrapper(ffmpeg: &str, server: &ProgrammeServer) -> Vec<u8> {
     }
     let (outcome, bytes) = result.expect("wrapper handover fixture exceeded its deadline");
     match outcome {
-        DirectStreamOutcome::Completed => (),
+        DirectStreamOutcome::Completed | DirectStreamOutcome::CompletedWithProgress(_) => (),
         DirectStreamOutcome::TransportFailed(error) => {
             panic!("synthetic wrapper transport failed: {error:?}")
         }

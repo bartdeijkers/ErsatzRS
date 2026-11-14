@@ -1,6 +1,9 @@
 #[path = "stream_epoch_output.rs"]
 mod epoch_output;
 
+#[path = "stream_completion_progress.rs"]
+mod completion_progress;
+
 use epoch_output::{EpochStreamWriter, StreamEpochWrite};
 
 #[path = "stream_external.rs"]
@@ -829,7 +832,7 @@ fn retained_interval_stream_response(
             if matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed) {
                 slate_cleanup_confirmed = false;
             }
-            if !matches!(outcome, DirectStreamOutcome::Completed) {
+            if !outcome.is_completed() {
                 break None;
             }
         };
@@ -1029,7 +1032,17 @@ async fn serve_channel_stream_admitted_inner(
     let retained_teletext = interval_admission
         .as_ref()
         .and_then(|admission| admission.teletext.clone());
-    let now = Utc::now();
+    let now = if legacy_item.is_some() {
+        Box::pin(legacy_source_playback_time(
+            state,
+            channel.id,
+            legacy_item.as_ref(),
+            startup_deadline,
+        ))
+        .await
+    } else {
+        Utc::now()
+    };
     let active = tokio::time::timeout_at(
         startup_deadline,
         external::load(state, channel.id, now, startup_deadline),
@@ -1065,6 +1078,15 @@ async fn serve_channel_stream_admitted_inner(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+
+    if legacy_item.is_some() {
+        tracing::debug!(
+            channel_id = channel.id,
+            playout_item_id = active.playout_item_id,
+            playback_at = %now,
+            "owned legacy item selected"
+        );
+    }
 
     if legacy_cancellation
         .as_ref()
@@ -2445,20 +2467,37 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         None
     };
-    // The owned legacy wrapper paces its final output. Keep this exact-page
-    // Burn producer bounded by that consumer's backpressure instead of applying
-    // a second readrate clock to its source-page decoder. Independent prepared
-    // carriage captions retain ordinary AV pacing on the primary media input.
-    let wrapper_paces_source_caption = output.role() == TeletextOutputRole::InternalItem
+    // The owned legacy wrapper paces final output. Its finite native producers
+    // share that clock through bounded backpressure, rather than pacing twice.
+    // Cursor publication additionally requires actual terminal progress and EOF.
+    let wrapper_paces_finite_item = output.role() == TeletextOutputRole::InternalItem
         && legacy_item.is_some()
         && output_format == OutputFormat::MpegTs
         && effective_streaming_mode == StreamingMode::TransportStream
         && !retained_stream
-        && source_caption_owner.as_ref().is_some_and(|source| {
-            source.delivery() == ersatzrs_domain::SourceTeletextCaptionDelivery::Burn
-                && subtitle_input.as_ref() == Some(&source.input())
-        });
-    let primary_input = if wrapper_paces_source_caption {
+        && remaining_duration.is_some()
+        && active.remote_stream.is_none()
+        && active.external.is_none()
+        && song.is_none();
+    if wrapper_paces_finite_item {
+        if let (Some(item), Some(start), Some(finish), Some(duration)) = (
+            legacy_item.as_mut(),
+            parse_sqlite_utc_timestamp(&active.playout_start),
+            parse_sqlite_utc_timestamp(&active.playout_finish),
+            remaining_duration,
+        ) {
+            if let Some(cursor) = super::legacy_wrapper_admission::LegacyWrapperPlaybackCursor::new(
+                active.playout_item_id,
+                now,
+                start,
+                finish,
+                duration,
+            ) {
+                item.bind_playout(cursor);
+            }
+        }
+    }
+    let primary_input = if wrapper_paces_finite_item {
         media_input.clone().without_readrate()
     } else {
         media_input.clone()
@@ -2467,8 +2506,13 @@ async fn serve_channel_stream_admitted_inner(
         .remote_stream
         .as_ref()
         .is_some_and(|stream| stream.liveness == ersatzrs_domain::RemoteStreamLiveness::Live);
-    let build_command = |input, metadata, subtitle_input| {
-        let (acceleration, request) = build_stream_request_with_retained_inputs(
+    let build_command = |input: InputFile, metadata, subtitle_input| {
+        let input = if wrapper_paces_finite_item {
+            input.without_readrate()
+        } else {
+            input
+        };
+        let (acceleration, mut request) = build_stream_request_with_retained_inputs(
             input,
             output_format,
             start_position,
@@ -2489,6 +2533,7 @@ async fn serve_channel_stream_admitted_inner(
             is_live_remote,
             song.as_deref(),
         );
+        completion_progress::configure(&mut request, wrapper_paces_finite_item);
         let request = source_teletext::consumer_request(
             acceleration,
             request,
@@ -2706,36 +2751,50 @@ async fn serve_channel_stream_admitted_inner(
                     let ordinary_caption_fallback = ordinary_caption
                         .as_ref()
                         .map(|caption| {
-                            build_stream_command_with_retained_inputs(
-                                media_input.clone(),
-                                output_format,
-                                start_position,
-                                stream_duration,
-                                &playback_profile,
-                                target_frame_rate,
-                                effective_streaming_mode,
-                                caption.metadata.clone(),
-                                capabilities.clone(),
-                                source_stream.clone(),
-                                source_audio_streams.clone(),
-                                audio_selection,
-                                caption.input.clone(),
-                                watermark_inputs.clone(),
-                                graphics_overlays.clone(),
-                                Some(opacity_clock),
-                                retained_stream,
-                                is_live_remote,
-                                song.as_deref(),
+                            let fallback_input = if wrapper_paces_finite_item && !retained_stream {
+                                media_input.clone().without_readrate()
+                            } else {
+                                media_input.clone()
+                            };
+                            let (acceleration, mut request) =
+                                build_stream_request_with_retained_inputs(
+                                    fallback_input,
+                                    output_format,
+                                    start_position,
+                                    stream_duration,
+                                    &playback_profile,
+                                    target_frame_rate,
+                                    effective_streaming_mode,
+                                    caption.metadata.clone(),
+                                    capabilities.clone(),
+                                    source_stream.clone(),
+                                    source_audio_streams.clone(),
+                                    audio_selection,
+                                    caption.input.clone(),
+                                    watermark_inputs.clone(),
+                                    graphics_overlays.clone(),
+                                    Some(opacity_clock),
+                                    retained_stream,
+                                    is_live_remote,
+                                    song.as_deref(),
+                                );
+                            completion_progress::configure(
+                                &mut request,
+                                wrapper_paces_finite_item && !retained_stream,
+                            );
+                            ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+                                acceleration,
+                                request,
                             )
                             .map(|(command, _)| command)
                         })
                         .transpose();
-                    let primary_input = if wrapper_paces_source_caption && !retained_stream {
+                    let primary_input = if wrapper_paces_finite_item && !retained_stream {
                         media_input.without_readrate()
                     } else {
                         media_input
                     };
-                    let (acceleration, request) = build_stream_request_with_retained_inputs(
+                    let (acceleration, mut request) = build_stream_request_with_retained_inputs(
                         primary_input,
                         output_format,
                         start_position,
@@ -2755,6 +2814,10 @@ async fn serve_channel_stream_admitted_inner(
                         retained_stream,
                         is_live_remote,
                         song.as_deref(),
+                    );
+                    completion_progress::configure(
+                        &mut request,
+                        wrapper_paces_finite_item && !retained_stream,
                     );
                     let source_caption_request = source_teletext::consumer_request(
                         acceleration,
@@ -3893,7 +3956,7 @@ fn legacy_wrapper_capacity_wait_body(
             )
             .await
             {
-                DirectStreamOutcome::Completed => {}
+                DirectStreamOutcome::Completed | DirectStreamOutcome::CompletedWithProgress(_) => {}
                 outcome => break outcome,
             }
             tokio::select! {
@@ -4440,6 +4503,36 @@ impl ActivePlayoutItem {
     }
 }
 
+async fn legacy_source_playback_time(
+    state: &AppState,
+    channel_id: i64,
+    item: Option<&LegacyWrapperItemGuard>,
+    deadline: tokio::time::Instant,
+) -> DateTime<Utc> {
+    if let Some(cursor) = item.and_then(LegacyWrapperItemGuard::predecessor) {
+        let previous = tokio::time::timeout_at(
+            deadline,
+            external::load(state, channel_id, cursor.selected_at, deadline),
+        )
+        .await;
+        if let Ok(Ok(Some(previous))) = previous {
+            if legacy_cursor_matches(cursor, &previous) {
+                return cursor.finish;
+            }
+        }
+    }
+    Utc::now()
+}
+
+fn legacy_cursor_matches(
+    cursor: &super::legacy_wrapper_admission::LegacyWrapperPlaybackCursor,
+    active: &ActivePlayoutItem,
+) -> bool {
+    active.playout_item_id == cursor.item_id
+        && parse_sqlite_utc_timestamp(&active.playout_start) == Some(cursor.start)
+        && parse_sqlite_utc_timestamp(&active.playout_finish) == Some(cursor.finish)
+}
+
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn load_active_media_path(
     pool: &DbPool,
@@ -4904,6 +4997,7 @@ fn build_stream_command_with_input_and_opacity_clock(
     clippy::too_many_arguments,
     reason = "The command wrapper preserves the existing playback selection contract."
 )]
+#[cfg(test)]
 fn build_stream_command_with_retained_inputs(
     input: InputFile,
     output_format: OutputFormat,
@@ -5719,10 +5813,10 @@ impl LegacyStreamLifetime {
         }
     }
 
-    fn complete(self, success: bool) {
+    fn complete(self, success: bool, produced: Option<Duration>) {
         if let Self::Item(item) = self {
             if success {
-                item.complete();
+                item.complete(produced);
             }
         }
     }
@@ -5730,10 +5824,24 @@ impl LegacyStreamLifetime {
 
 enum DirectStreamOutcome {
     Completed,
+    CompletedWithProgress(Duration),
     Cancelled,
     Failed(DirectStreamFailure),
     TransportFailed(TeletextPumpError),
     CleanupUnconfirmed,
+}
+
+impl DirectStreamOutcome {
+    fn is_completed(&self) -> bool {
+        matches!(self, Self::Completed | Self::CompletedWithProgress(_))
+    }
+
+    fn completed_duration(&self) -> Option<Duration> {
+        match self {
+            Self::CompletedWithProgress(duration) => Some(*duration),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -6108,7 +6216,8 @@ async fn spawn_stream_body_with_lifetime(
         }
     }
     // The immutable snapshot is the command that created this exact child.
-    // Plain/fixed callers retain no new argv copy or application context.
+    // Finite internal completion also needs the exact generated command seal.
+    // Other plain/fixed callers retain no argv copy or application context.
     let output = output.with_command(command);
     if child.stdout.is_none() {
         return match reap_stream_process(&mut child).await {
@@ -6210,15 +6319,17 @@ async fn spawn_stream_body_with_lifetime(
             }
         }
         // The next concat request may arrive immediately after terminal EOF.
-        // Release the actual encoder and exclusive item permit before it.
+        // Retry consumers also retain the encoder lease. Release those owners,
+        // the actual encoder and exclusive item permit before exposing EOF.
+        drop(retry);
         drop(capacity_guard);
         if let Some(lifetime) = lifetime {
-            lifetime.complete(matches!(outcome, DirectStreamOutcome::Completed));
+            lifetime.complete(outcome.is_completed(), outcome.completed_duration());
         }
         let close_output = terminal.is_some() || output_completion.is_some();
         if let Some((terminal, completed)) = terminal {
             terminal.store(
-                if matches!(outcome, DirectStreamOutcome::Completed) {
+                if outcome.is_completed() {
                     TERMINAL_SUCCESS
                 } else {
                     TERMINAL_FAILURE
@@ -6481,7 +6592,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
             )
             .await
             {
-                DirectStreamOutcome::Completed => {
+                DirectStreamOutcome::Completed | DirectStreamOutcome::CompletedWithProgress(_) => {
                     tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL).await;
                 }
                 DirectStreamOutcome::Cancelled => break,
@@ -6558,7 +6669,7 @@ async fn supervise_capacity_slates_until_ready<W: StreamEpochWrite>(
             result = &mut ready => (Some(result), round.await),
         };
         match outcome {
-            DirectStreamOutcome::Completed => {
+            DirectStreamOutcome::Completed | DirectStreamOutcome::CompletedWithProgress(_) => {
                 if let Some(result) = ready_result {
                     return Ok(result);
                 }
@@ -6614,6 +6725,7 @@ async fn supervise_stream_command_with_retry_cancellable<W: StreamEpochWrite>(
 ) -> DirectStreamOutcome {
     let mut output = output.clone();
     let song = retry.as_ref().and_then(|retry| retry.song.clone());
+    let mut prior_media = false;
     loop {
         let outcome = supervise_stream_process_with_retry_context(
             &mut child,
@@ -6641,8 +6753,14 @@ async fn supervise_stream_command_with_retry_cancellable<W: StreamEpochWrite>(
         )
         .await;
         let DirectStreamOutcome::Failed(mut stderr) = outcome else {
-            return outcome;
+            return match outcome {
+                DirectStreamOutcome::CompletedWithProgress(_) if prior_media => {
+                    DirectStreamOutcome::Completed
+                }
+                outcome => outcome,
+            };
         };
+        prior_media |= stderr.wrote_media;
         if stderr.wrote_media
             && (output.has_authored_output()
                 || remote_stream.is_some_and(|stream| {
@@ -7002,7 +7120,7 @@ type StreamOutputCompletion = tokio::sync::oneshot::Sender<Result<(), &'static s
 
 fn stream_output_result(outcome: &DirectStreamOutcome) -> Result<(), &'static str> {
     match outcome {
-        DirectStreamOutcome::Completed => Ok(()),
+        DirectStreamOutcome::Completed | DirectStreamOutcome::CompletedWithProgress(_) => Ok(()),
         DirectStreamOutcome::Cancelled => Err("encoded output was cancelled"),
         DirectStreamOutcome::Failed(_) => Err("encoded output producer failed"),
         DirectStreamOutcome::TransportFailed(error) => {
@@ -7215,7 +7333,7 @@ async fn supervise_stream_process_with_retry_context<W: StreamEpochWrite>(
         }
         result
     };
-    let (wrote_media, transport_error) = tokio::select! {
+    let (wrote_media, written_bytes, transport_error) = tokio::select! {
         biased;
         () = cancel.notified() => {
             tracing::debug!(channel_number = %channel_number, "channel stream cancelled; killing ffmpeg");
@@ -7238,8 +7356,9 @@ async fn supervise_stream_process_with_retry_context<W: StreamEpochWrite>(
                 let _ = child.start_kill();
             }
             let wrote_media = !empty_output && result.as_ref().map_or(true, |bytes| *bytes > 0);
+            let written_bytes = result.as_ref().ok().copied();
             let transport_error = if output.has_authored_output() || joined_output { result.err() } else { None };
-            (wrote_media, transport_error)
+            (wrote_media, written_bytes, transport_error)
         }
     };
 
@@ -7282,9 +7401,32 @@ async fn supervise_stream_process_with_retry_context<W: StreamEpochWrite>(
     }
     match waited {
         Ok(status) if status.success() => {
-            let _ = await_stderr_tail(stderr_task).await;
-            transport_error.map_or(
-                DirectStreamOutcome::Completed,
+            let stderr = await_stderr_tail(stderr_task).await;
+            let generated_progress = output
+                .command()
+                .and_then(FfmpegCommand::mpegts_output_policy)
+                .is_some_and(ersatzrs_ffmpeg::MpegTsOutputPolicy::reports_stderr_progress);
+            let reported = generated_progress
+                .then(|| {
+                    written_bytes.and_then(|bytes| {
+                        completion_progress::completed_duration(&stderr.redacted_stderr, bytes)
+                    })
+                })
+                .flatten();
+            if generated_progress {
+                tracing::debug!(
+                    ?written_bytes,
+                    ?reported,
+                    "finite producer completion report evaluated"
+                );
+            }
+            transport_error.map_or_else(
+                || {
+                    reported.map_or(
+                        DirectStreamOutcome::Completed,
+                        DirectStreamOutcome::CompletedWithProgress,
+                    )
+                },
                 DirectStreamOutcome::TransportFailed,
             )
         }
@@ -7756,7 +7898,7 @@ mod tests {
             try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("item-success"));
         assert!(next_encoder.is_some());
         drop(next_encoder);
-        next.complete();
+        next.complete(None);
         drop(owner);
         drop(wrapper);
         assert_eq!(active_transcode_snapshot(2).active, 0);
@@ -8985,6 +9127,37 @@ mod tests {
             subtitle_stream_index: None,
             remote_stream: None,
         }
+    }
+
+    #[test]
+    fn legacy_playback_cursor_requires_the_fresh_predecessor_identity_and_bounds() {
+        use super::super::legacy_wrapper_admission::LegacyWrapperPlaybackCursor;
+        let mut active = active_playout_item(
+            "2026-11-13 12:00:00",
+            "2026-11-13 12:01:00",
+            Duration::ZERO,
+            Duration::from_mins(1),
+        );
+        let start = parse_sqlite_utc_timestamp(&active.playout_start).unwrap();
+        let finish = parse_sqlite_utc_timestamp(&active.playout_finish).unwrap();
+        let cursor = LegacyWrapperPlaybackCursor::new(
+            active.playout_item_id,
+            start + chrono::Duration::seconds(54),
+            start,
+            finish,
+            Duration::from_secs(6),
+        )
+        .unwrap();
+        assert!(legacy_cursor_matches(&cursor, &active));
+        // A replacement/reset cannot borrow a previously completed row's clock.
+        active.playout_item_id += 1;
+        assert!(!legacy_cursor_matches(&cursor, &active));
+        active.playout_item_id -= 1;
+        active.playout_start = "2026-11-13 12:00:01".into();
+        assert!(!legacy_cursor_matches(&cursor, &active));
+        active.playout_start = "2026-11-13 12:00:00".into();
+        active.playout_finish = "2026-11-13 12:01:01".into();
+        assert!(!legacy_cursor_matches(&cursor, &active));
     }
 
     #[test]

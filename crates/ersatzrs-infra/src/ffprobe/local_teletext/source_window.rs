@@ -164,7 +164,8 @@ impl SourceTeletextDecodeWindowEvidence {
 
 /// Own the completed snapshot until the actual decoder and its readers exit.
 pub(crate) struct LocalTeletextSourceWindow {
-    pub(crate) snapshot: tempfile::NamedTempFile,
+    pub(crate) snapshot: Arc<tempfile::NamedTempFile>,
+    pub(crate) storage: Option<Arc<crate::provider_source_storage::ProviderSourceLease>>,
     pub(crate) evidence: SourceTeletextDecodeWindowEvidence,
     pub(crate) headers: Option<SuppliedTeletextHeaderWindow>,
 }
@@ -416,7 +417,8 @@ fn write_snapshot<T>(
     file.flush().map_err(|_| invalid())?;
     stop.check_source_guard()?;
     Ok(LocalTeletextSourceWindow {
-        snapshot: file,
+        snapshot: Arc::new(file),
+        storage: None,
         evidence,
         headers: None,
     })

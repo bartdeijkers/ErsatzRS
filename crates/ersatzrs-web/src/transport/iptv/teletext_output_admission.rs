@@ -180,13 +180,16 @@ impl TeletextOutputAdmission {
         self.command.as_deref()
     }
 
-    /// Snapshot this attempt's actual argv only for accepted-original forwarding.
+    /// Snapshot this attempt's actual argv for forwarding or finite completion.
     /// Opaque retry commands replace earlier hints too; no policy is inferred.
     pub(crate) fn with_command(&self, command: &FfmpegCommand) -> Self {
         let mut next = self.clone();
-        if next.accepted.is_some() || next.live.is_some() {
-            next.command = Some(Arc::new(command.clone()));
-        }
+        let finite_progress = next.role == TeletextOutputRole::InternalItem
+            && command
+                .mpegts_output_policy()
+                .is_some_and(ersatzrs_ffmpeg::MpegTsOutputPolicy::reports_stderr_progress);
+        next.command = (next.accepted.is_some() || next.live.is_some() || finite_progress)
+            .then(|| Arc::new(command.clone()));
         next
     }
 
@@ -253,6 +256,46 @@ mod tests {
             )
             .unwrap(),
         )
+    }
+
+    #[test]
+    fn finite_internal_completion_keeps_only_the_current_sealed_command() {
+        let mut request = ersatzrs_ffmpeg::PipelineRequest::new(
+            ersatzrs_ffmpeg::InputFile::video("synthetic.mkv"),
+            ersatzrs_ffmpeg::DesiredVideoState::h264_1080p(),
+        );
+        request.state.progress_output = ersatzrs_ffmpeg::FfmpegProgressOutput::Stderr;
+        let command = ersatzrs_ffmpeg::build_pipeline_for_acceleration(
+            ersatzrs_domain::HardwareAccelerationKind::None,
+            request,
+        )
+        .command(&[]);
+        let plain = TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem);
+        let captured = plain.with_command(&command);
+        assert_eq!(captured.command(), Some(&command));
+        assert!(!captured.has_authored_output());
+        assert!(plain.command().is_none());
+
+        let mut changed = command.clone();
+        let target = changed
+            .arguments
+            .iter_mut()
+            .find(|arg| *arg == "pipe:2")
+            .unwrap();
+        *target = "pipe:1".into();
+        assert!(captured.with_command(&changed).command().is_none());
+        let ordinary = build_mpegts_concat_command(
+            "synthetic.ffconcat",
+            &OutputMetadata::default(),
+            Some(5_000_000),
+        );
+        assert!(captured.with_command(&ordinary).command().is_none());
+        assert!(
+            TeletextOutputAdmission::plain(TeletextOutputRole::HlsWorker)
+                .with_command(&command)
+                .command()
+                .is_none()
+        );
     }
 
     #[tokio::test]

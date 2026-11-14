@@ -84,7 +84,20 @@ _sparse_subtitle_pts_clock_matches() {
   ' "$1"
 }
 
-# analyze_ts TSFILE LABEL [JSON_OUT]
+# Opt-in fixed-source recovery qualification; never accepts a cached PASS flag.
+# Native-effective source timing is independently rederived on the exact raw
+# capture. All other runs keep the existing packet/PCR-lead qualification.
+_source_subtitle_pts_clock_matches() {
+  # TS CSV PID COUNT FLAGS FIRST FINAL SOURCE COMPLETE_AV REPORT
+  local checker
+  checker="$(dirname "${BASH_SOURCE[0]}")/teletext-source-cue-clock.py"
+  [ -n "${FFPROBE_PATH:-}" ] && [ -s "$9" ] || return 1
+  python3 "$checker" --ffprobe "$FFPROBE_PATH" --source "$8" \
+    --capture "$1" --clock-csv "$2" --pid "$3" --count "$4" --flags "$5" \
+    --first "$6" --final "$7" --complete-av "$9" --report "${10}"
+}
+
+# analyze_ts TSFILE LABEL [JSON_OUT [FIXED_CAPTION_SOURCE COMPLETE_AV_PREFIX]]
 # Runs the full structural battery against a transport-stream file.
 analyze_ts() {
   local ts="$1" label="$2" json="${3:-${WORKDIR:-/tmp}/${2//[^A-Za-z0-9]/_}.analyze.json}"
@@ -155,21 +168,37 @@ analyze_ts() {
   fi
   # Only strict CBR qualification may use pcrextract's estimated PCR offsets.
   # AV, other data, invalid/missing clocks and unmatched raw flags stay gated.
-  if [ "$ptsleap" -gt 0 ] && [ "$STRICT_PCR_JITTER" = 1 ]; then
-    local subtitle_csv="${json}.subtitle-pts.csv" pid count flags first final qualified=0
+  if [ -n "${4:-}" ] && [ "$STRICT_PCR_JITTER" != 1 ]; then
+    fail "$label · fixed-source qualification requires the strict CBR gate"
+  fi
+  if [ "$STRICT_PCR_JITTER" = 1 ] && { [ "$ptsleap" -gt 0 ] || [ -n "${4:-}" ]; }; then
+    local subtitle_csv="${json}.subtitle-pts.csv" pid count flags first final qualified=0 source_clock=0 qualified_pids=0
+    [ -z "${4:-}" ] || source_clock=1
     if tsp --bitrate "$bitrate" -I file "$ts" \
         -P pcrextract --pts --evaluate-pcr-offset --csv --noheader -o "$subtitle_csv" \
         -O drop >/dev/null 2>&1; then
       while read -r pid count flags first final; do
-        if _sparse_subtitle_pts_clock_matches "$subtitle_csv" "$pid" "$count" "$flags" "$first" "$final"; then
+        if [ -n "${4:-}" ]; then
+          if _source_subtitle_pts_clock_matches "$ts" "$subtitle_csv" "$pid" "$count" "$flags" "$first" "$final" \
+              "$4" "${5:-}" "${json}.subtitle-source.json"; then
+            pass "$label · DVB subtitle PID $pid source-bound within 8 ms (raw cadence flags: $flags)"
+            qualified=$((qualified + flags))
+            qualified_pids=$((qualified_pids + 1))
+          else
+            fail "$label · DVB subtitle PID $pid source-cue qualification" "raw cadence flags retained"
+          fi
+        elif _sparse_subtitle_pts_clock_matches "$subtitle_csv" "$pid" "$count" "$flags" "$first" "$final"; then
           pass "$label · DVB subtitle PID $pid PTS bound to PCR (raw cadence flags: $flags)"
           qualified=$((qualified + flags))
         else
           fail "$label · DVB subtitle PID $pid PTS/PCR qualification" "raw cadence flags retained"
         fi
-      done < <(jq -r '.pids[] | select(.packets["pts-leap"] > 0 and .audio == false and .video == false and (.description | test("^Subtitles \\(.*DVB subtitles"))) | [.id, .packets.pts, .packets["pts-leap"], .["first-pts"], .["last-pts"]] | @tsv' "$json")
+      done < <(jq -r --argjson source "$source_clock" '.pids[] | select((.packets["pts-leap"] > 0 or $source == 1) and .audio == false and .video == false and (.description | test("^Subtitles \\(.*DVB subtitles"))) | [.id, .packets.pts, .packets["pts-leap"], .["first-pts"], .["last-pts"]] | @tsv' "$json")
       info "$label · raw PTS cadence flags=$ptsleap; clock-qualified DVB subtitle flags=$qualified"
       ptsleap=$((ptsleap - qualified))
+    fi
+    if [ "$source_clock" = 1 ]; then
+      assert_eq "$qualified_pids" 1 "$label · one fixed-source subtitle PID qualified"
     fi
   fi
   assert_le "$ptsleap" "$MAX_PTS_LEAPS" "$label · PTS leaps (visible skips/jumps)"

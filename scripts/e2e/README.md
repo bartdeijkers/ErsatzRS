@@ -993,6 +993,19 @@ content or completeness: exact source-bound cue, transition and clear evidence
 is still required separately. Run `bash scripts/e2e/test-tsduck-delivery.sh` for
 the bundled positive, rejection, delivery and retention regressions.
 
+The fixed page888 recovery-boundary trial has a maintainer-approved alternative
+(2026-11-13): `analyze_ts` may receive the exact qualified caption source and
+the original complete-AV-PES capture prefix as its fourth and fifth arguments.
+It independently rederives native-effective source cue timing within the same
+8 ms from matching coded video and selected audio in both programme epochs.
+The source fixture hash, raw subtitle PES, counts, endpoints, monotonicity and
+three-second absolute clock bound remain checked. Raw cadence flags stay in the
+analysis and source report; all other strict checks and the separate glyph/clear
+oracle remain required. This does not change the generic qualifier or establish
+receiver delivery-deadline conformance. Run
+`python3 -W error -m unittest discover -s scripts/e2e -p test_teletext_source_cue_clock.py`
+for its positive and adversarial controls.
+
 ### A note on PCR jitter
 
 `pcrverify` measures each PCR against the average‑bitrate byte‑position model, so

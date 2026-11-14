@@ -11,6 +11,7 @@ use std::sync::{
     Arc, Mutex, MutexGuard, Weak,
 };
 
+use chrono::{DateTime, Utc};
 use ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation;
 use tokio::sync::Notify;
 use tokio::time::Instant;
@@ -91,6 +92,7 @@ impl LegacyWrapperRegistry {
                 first_item_started: false,
                 first_encoder: Some(first_encoder),
                 in_flight: None,
+                completed_playout: None,
             }),
             cancel_signal: Arc::new(Notify::new()),
             startup_changed: Notify::new(),
@@ -142,6 +144,38 @@ struct WrapperInner {
     first_item_started: bool,
     first_encoder: Option<ActiveTranscodeReservation>,
     in_flight: Option<Arc<ItemCancellation>>,
+    completed_playout: Option<Arc<LegacyWrapperPlaybackCursor>>,
+}
+
+/// Server-selected finite interval, committed only after actual producer cleanup.
+/// The next handler must revalidate this predecessor against the fresh schedule.
+#[derive(Debug)]
+pub(super) struct LegacyWrapperPlaybackCursor {
+    pub(super) item_id: i64,
+    pub(super) selected_at: DateTime<Utc>,
+    pub(super) start: DateTime<Utc>,
+    pub(super) finish: DateTime<Utc>,
+}
+
+impl LegacyWrapperPlaybackCursor {
+    pub(super) fn new(
+        item_id: i64,
+        selected_at: DateTime<Utc>,
+        start: DateTime<Utc>,
+        finish: DateTime<Utc>,
+        duration: std::time::Duration,
+    ) -> Option<Self> {
+        (item_id > 0
+            && start <= selected_at
+            && selected_at < finish
+            && (finish - selected_at).to_std().ok() == Some(duration))
+        .then_some(Self {
+            item_id,
+            selected_at,
+            start,
+            finish,
+        })
+    }
 }
 
 impl WrapperState {
@@ -314,6 +348,7 @@ impl LegacyWrapperRequest {
         inner.in_flight = Some(Arc::clone(&cancellation));
         inner.first_item_started = true;
         let first_encoder = inner.first_encoder.take();
+        let predecessor = inner.completed_playout.clone();
         drop(inner);
         self.state.startup_changed.notify_waiters();
         Ok((
@@ -321,6 +356,8 @@ impl LegacyWrapperRequest {
                 state: Arc::clone(&self.state),
                 cancellation,
                 completed: false,
+                predecessor,
+                selected: None,
             },
             first_encoder,
         ))
@@ -333,9 +370,19 @@ pub struct LegacyWrapperItemGuard {
     state: Arc<WrapperState>,
     cancellation: Arc<ItemCancellation>,
     completed: bool,
+    predecessor: Option<Arc<LegacyWrapperPlaybackCursor>>,
+    selected: Option<Arc<LegacyWrapperPlaybackCursor>>,
 }
 
 impl LegacyWrapperItemGuard {
+    pub(super) fn predecessor(&self) -> Option<&LegacyWrapperPlaybackCursor> {
+        self.predecessor.as_deref()
+    }
+
+    pub(super) fn bind_playout(&mut self, cursor: LegacyWrapperPlaybackCursor) {
+        self.selected = Some(Arc::new(cursor));
+    }
+
     /// Fence startup abandonment or premature body drop only while this item
     /// still owns the permit. After completion this is permanently harmless,
     /// including when another item has already begun on the same wrapper.
@@ -356,7 +403,14 @@ impl LegacyWrapperItemGuard {
 
     /// Call only after successful body completion AND producer cleanup.
     /// This frees the item permit, never a process-owned reservation.
-    pub fn complete(mut self) {
+    pub fn complete(mut self, produced: Option<std::time::Duration>) {
+        self.selected = self.selected.take().filter(|cursor| {
+            produced.is_some_and(|produced| {
+                (cursor.finish - cursor.selected_at)
+                    .to_std()
+                    .is_ok_and(|required| produced >= required)
+            })
+        });
         let mut inner = lock(&self.state.inner);
         if inner
             .in_flight
@@ -364,6 +418,9 @@ impl LegacyWrapperItemGuard {
             .is_some_and(|item| Arc::ptr_eq(item, &self.cancellation))
         {
             inner.in_flight = None;
+            if !inner.closed {
+                inner.completed_playout = self.selected.take();
+            }
         }
         self.completed = true;
     }
@@ -458,6 +515,132 @@ mod tests {
             .enable_time()
             .build()
             .unwrap()
+    }
+
+    fn playback_cursor() -> LegacyWrapperPlaybackCursor {
+        let start = "2026-11-13T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        LegacyWrapperPlaybackCursor::new(
+            41,
+            start + chrono::Duration::seconds(54),
+            start,
+            start + chrono::Duration::seconds(60),
+            Duration::from_secs(6),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn qualified_playout_clock_commits_after_completion_and_stays_wrapper_local() {
+        capacity_test(|| {
+            let registry = Arc::new(LegacyWrapperRegistry::new(2));
+            let (first, _first_wrapper) = owner(&registry, "same");
+            let (second, _second_wrapper) = owner(&registry, "same");
+            let request = registry.lookup(first.id(), "same").unwrap();
+            let (mut item, encoder) = request.begin_item().unwrap();
+            assert!(item.predecessor().is_none());
+            item.bind_playout(playback_cursor());
+            assert!(lock(&request.state.inner).completed_playout.is_none());
+            assert!(matches!(
+                request.begin_item(),
+                Err(LegacyWrapperAdmissionError::ItemInFlight)
+            ));
+            drop(encoder);
+            item.complete(Some(Duration::from_secs(6)));
+            let (mut next, encoder) = request.begin_item().unwrap();
+            assert!(encoder.is_none());
+            let previous = next.predecessor().unwrap();
+            assert_eq!(previous.item_id, 41);
+            assert_eq!(previous.finish, playback_cursor().finish);
+            let (other, encoder) = registry
+                .lookup(second.id(), "same")
+                .unwrap()
+                .begin_item()
+                .unwrap();
+            assert!(other.predecessor().is_none());
+            drop(encoder);
+            other.complete(None);
+            next.bind_playout(playback_cursor());
+            next.complete(None);
+            let (last, _) = request.begin_item().unwrap();
+            assert!(last.predecessor().is_none());
+            last.complete(None);
+        });
+    }
+
+    #[test]
+    fn failed_or_closed_item_cannot_publish_a_playout_clock() {
+        capacity_test(|| {
+            let registry = Arc::new(LegacyWrapperRegistry::new(2));
+            let (first, _first_wrapper) = owner(&registry, "failed");
+            let request = registry.lookup(first.id(), "failed").unwrap();
+            let (mut item, encoder) = request.begin_item().unwrap();
+            item.bind_playout(playback_cursor());
+            drop(item);
+            drop(encoder);
+            assert!(lock(&request.state.inner).completed_playout.is_none());
+            assert!(matches!(
+                request.begin_item(),
+                Err(LegacyWrapperAdmissionError::Closed)
+            ));
+            let (second, _second_wrapper) = owner(&registry, "closed");
+            let request = registry.lookup(second.id(), "closed").unwrap();
+            let (mut item, encoder) = request.begin_item().unwrap();
+            item.bind_playout(playback_cursor());
+            second.close();
+            drop(encoder);
+            item.complete(Some(Duration::from_secs(6)));
+            assert!(lock(&request.state.inner).completed_playout.is_none());
+            assert!(matches!(
+                request.begin_item(),
+                Err(LegacyWrapperAdmissionError::Closed)
+            ));
+        });
+    }
+
+    #[test]
+    fn successful_early_eof_or_missing_progress_cannot_publish_a_nominal_finish() {
+        for produced in [
+            None,
+            Some(Duration::from_secs(5)),
+            Some(Duration::from_millis(5_999)),
+        ] {
+            capacity_test(|| {
+                let registry = Arc::new(LegacyWrapperRegistry::new(1));
+                let (owner, _wrapper) = owner(&registry, "early-eof");
+                let request = registry.lookup(owner.id(), "early-eof").unwrap();
+                let (mut item, encoder) = request.begin_item().unwrap();
+                item.bind_playout(playback_cursor());
+                drop(encoder);
+                item.complete(produced);
+                let (next, _) = request.begin_item().unwrap();
+                assert!(next.predecessor().is_none());
+                next.complete(None);
+            });
+        }
+    }
+
+    #[test]
+    fn shortened_or_invalid_intervals_cannot_authorize_continuation() {
+        let cursor = playback_cursor();
+        for (id, selected, duration) in [
+            (0, cursor.selected_at, Duration::from_secs(6)),
+            (
+                41,
+                cursor.start - chrono::Duration::seconds(1),
+                Duration::from_secs(61),
+            ),
+            (41, cursor.finish, Duration::ZERO),
+            (41, cursor.selected_at, Duration::from_secs(5)),
+        ] {
+            assert!(LegacyWrapperPlaybackCursor::new(
+                id,
+                selected,
+                cursor.start,
+                cursor.finish,
+                duration,
+            )
+            .is_none());
+        }
     }
 
     #[test]
@@ -601,11 +784,11 @@ mod tests {
                 Err(LegacyWrapperAdmissionError::ItemInFlight)
             ));
             drop(first_encoder);
-            first.complete();
+            first.complete(None);
             let (second, second_encoder) = competing.begin_item().unwrap();
             assert!(second_encoder.is_none());
             assert_eq!(active_transcode_snapshot(16).active, 1);
-            second.complete();
+            second.complete(None);
         });
     }
 
@@ -666,7 +849,7 @@ mod tests {
                 tokio::time::timeout(Duration::from_millis(100), later_stage.cancelled())
                     .await
                     .unwrap();
-                item.complete();
+                item.complete(None);
                 drop(encoder);
             });
         });
@@ -694,7 +877,7 @@ mod tests {
                 .await
                 .unwrap();
                 assert!(cancellation.is_cancelled());
-                item.complete();
+                item.complete(None);
                 drop(encoder);
             });
         });
@@ -757,7 +940,7 @@ mod tests {
                 }
                 let (item, encoder) = request.begin_item().unwrap();
                 drop(encoder);
-                item.complete();
+                item.complete(None);
                 assert!(
                     tokio::time::timeout(Duration::from_millis(30), &mut deadline)
                         .await
@@ -765,7 +948,7 @@ mod tests {
                 );
                 let (later, encoder) = request.begin_item().unwrap();
                 assert!(encoder.is_none());
-                later.complete();
+                later.complete(None);
             });
         });
     }
@@ -784,7 +967,7 @@ mod tests {
                 request.begin_item(),
                 Err(LegacyWrapperAdmissionError::Closed)
             ));
-            item.complete();
+            item.complete(None);
             drop(encoder);
         });
     }
@@ -797,7 +980,7 @@ mod tests {
             let request = registry.lookup(owner.id(), "one").unwrap();
             let (first, encoder) = request.begin_item().unwrap();
             let first_body = first.close_handle();
-            first.complete();
+            first.complete(None);
             drop(encoder);
             first_body.close();
             assert!(registry.lookup(owner.id(), "one").is_ok());
@@ -818,7 +1001,7 @@ mod tests {
                 request.begin_item(),
                 Err(LegacyWrapperAdmissionError::Closed)
             ));
-            second.complete();
+            second.complete(None);
         });
     }
 }

@@ -94,7 +94,8 @@ plan's separate custom-page parts, including part4 omitted from its short order.
 Each slice needs focused verification and exact-head required CI before merging.
 The maintainer authorized ready PR merges on 2026-11-13; release and live
 installation changes still require their own applicable authorization.
-Inventory: A=20, B=15, C=14.
+Initial inventory: A=20, B=15, C=14.
+Current outstanding: A=18, B=16, C=14; one original A item resolved in PR153.
 
 Bucket A:
 - addon-preparation-readmission-context (parity/addon-metadata-management.toml): Implement or verify
@@ -109,10 +110,9 @@ Bucket A:
 - provider-lease-release-retains-unstarted-operation-delay (parity/addon-metadata-management.toml):
   Implement or verify the full owning description and its stated evidence/closure obligations;
   resolve only after focused regression and affected integration proof.
-- addon-ytdlp-needs-auth-despite-cookies (parity/addon-metadata-management.toml): First
-  implementation slice, official add-ons repository: successful cookie-enabled extraction with
-  playable formats must be available while genuine denial/removal stays unavailable. Verify
-  access/import agreement and package provenance.
+- addon-ytdlp-needs-auth-despite-cookies (parity/addon-metadata-management.toml): RESOLVED in
+  merged PR153; published authenticated availability and denial/removal safeguards are verified.
+  Retained here only as the original A classification, not executable remaining work.
 - addon-ytdlp-missing-maxres-thumbnail (parity/addon-metadata-management.toml): Official add-ons
   repository: select an existing thumbnail or bounded smaller fallback; verify unavailable-maxres
   and valid-artwork cases.
@@ -148,12 +148,10 @@ Bucket A:
 - scanner-owns-persistence-implementation (parity/scanner.toml): Preserve storage-neutral scanner
   ownership with infrastructure persistence, atomicity and retries. ADR0080 makes SQLite the sole
   backend; historical MySQL wording is stale, not new scope.
-- teletext-admin-recovery-flow (parity/teletext-support.toml): Local mandatory evidence parts6/8
-  remain actionable: real FFmpeg/TSDuck/libzvbi and hydrated/no-JS flows. Part7 additionally needs
-  Bart-PC access and native Windows proof before replacing the channel workaround; never mutate that
-  installation under this setup PR.
 - teletext-custom-pages-broadcast (parity/teletext-support.toml): Functionality then evidence,
-  separate PRs: 3b dynamic refresh; 3c effective Lua/Scripted intervals; subpage timing; FL links;
+  separate PRs: 3b dynamic refresh (PR158 owner/membership components verified; controlled owner
+  clock/cutoff, served-host restart, per-page admin/health and joined final gates remain);
+  3c effective Lua/Scripted intervals; subpage timing; FL links;
   retained part4 engine preview and applicable X26/X28 import; 3d/5 publication, independent decoded
   stream and no-JS/hydrated flows. Part4 must not be lost from the plan summary or silently deferred
   with enhanced-only debt.
@@ -166,6 +164,14 @@ Bucket A:
   regression and affected integration proof.
 
 Bucket B:
+- teletext-admin-recovery-flow (parity/teletext-support.toml): Part6 local mandatory proof is
+  complete in PR155: the approved native-effective8ms source criterion, fresh five-window joined
+  case and102 strict controls pass. Exact45da5300 ready CI43593269855 passes all13 jobs; PR155
+  is merged as005789a6. Local proof and Git delivery are complete within that scope. The sole
+  functional/evidence remainder is part7: missing Bart-PC access and native packaged Windows proof
+  before replacing the channel workaround. Close with that exact package/launcher/admin/scanner/
+  caption/playback repair and native acceptance; no shared/global or live installation mutation is
+  authorized here. The criterion decision is closed, not an outstanding external prerequisite.
 - hardware-graph-probes-cover-only-the-nvidia-graphs (parity/ffmpeg-9-performance-and-support.toml):
   Missing working Intel, AMD, Apple, Rockchip and V4L2M2M devices/drivers for the listed graphs.
   Close with characterized operation probes and real success/failure controls for each backend;

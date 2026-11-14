@@ -77,6 +77,16 @@ restores their original values and presence.
 This browser scope does not establish transport carriage or native Windows
 acceptance; those remain in `teletext-admin-recovery-flow`.
 
+The opt-in `ordinary bitrate bursts retain scanned captions` case in
+`teletext-guide-authoring-flow.spec.ts` also needs
+`RUST_LOG=info,ersatzrs_web::transport::iptv::teletext_provenance=debug` for its
+owner-bound expiry proof. Request log offsets assign the response; packet hashes,
+saved guide metadata, all raw PMT sections and actual sink ACKs qualify its
+handover. Pages 200/201 are decoded from the unmodified recovered suffix.
+The raw strict transport check remains independent; an expiry receipt cannot
+waive a subtitle timing failure. Source and 8 MiB/30-second capture bounds stay
+unchanged.
+
 ## Add-on list task workspace
 
 AMM-N-01B task routes render populated native forms through

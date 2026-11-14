@@ -2,6 +2,97 @@ use super::*;
 use crate::ffprobe::LocalProbeCleanupScope;
 use std::io::SeekFrom;
 
+#[tokio::test]
+async fn sequential_buffer_preserves_all_physical_frames_across_refills() {
+    for format in [
+        SourceTeletextPacketFormat::Ts188,
+        SourceTeletextPacketFormat::M2ts192,
+    ] {
+        let bytes = source(format).repeat(400);
+        let expected = bytes.clone();
+        inspect(bytes, move |file, stop| {
+            let mut reader = SourcePacketReader::new(file, expected.len() as u64, format);
+            for raw in expected.chunks_exact(format.packet_bytes()) {
+                assert_eq!(reader.read_next(stop)?.parts().concat(), raw);
+            }
+            assert!(reader.read_next(stop).is_err());
+            Ok(())
+        })
+        .await
+        .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn sequential_buffer_rejects_late_bad_headers_and_partial_frames() {
+    for format in [
+        SourceTeletextPacketFormat::Ts188,
+        SourceTeletextPacketFormat::M2ts192,
+    ] {
+        for truncate in [false, true] {
+            let mut bytes = source(format).repeat(400);
+            let bad = if truncate {
+                bytes.pop();
+                1599
+            } else {
+                bytes[380 * format.packet_bytes() + format.sync_offset()] = 0;
+                380
+            };
+            let len = bytes.len() as u64;
+            inspect(bytes, move |file, stop| {
+                let mut reader = SourcePacketReader::new(file, len, format);
+                for _ in 0..bad {
+                    reader.read_next(stop)?;
+                }
+                assert!(reader.read_next(stop).is_err());
+                Ok(())
+            })
+            .await
+            .unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn sequential_buffer_checks_cancellation_before_returning_cached_frames() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("source.bin");
+    let bytes = source(SourceTeletextPacketFormat::Ts188);
+    std::fs::write(&path, &bytes).unwrap();
+    let file = File::open(&path).unwrap();
+    let scope = LocalProbeCleanupScope::new();
+    let (primed_tx, primed_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let read = scope.scope(headers::run_owned(
+        &path,
+        std::time::Duration::from_secs(5),
+        move |stop| {
+            let mut reader = SourcePacketReader::new(
+                &file,
+                bytes.len() as u64,
+                SourceTeletextPacketFormat::Ts188,
+            );
+            reader.read_next(stop)?;
+            primed_tx.send(()).unwrap();
+            release_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+            reader.read_next(stop).map(|_| ())
+        },
+    ));
+    tokio::pin!(read);
+    tokio::select! {
+        ready = primed_rx => ready.unwrap(),
+        result = &mut read => panic!("source read ended before cancellation: {result:?}"),
+    }
+    scope.close();
+    release_tx.send(()).unwrap();
+    let result = read.await;
+    scope.wait_cleanup().await.unwrap();
+    assert!(matches!(result, Err(FfprobeError::Cancelled { .. })));
+    assert_eq!(scope.cleanup_status(), Ok(true));
+}
+
 fn source(format: SourceTeletextPacketFormat) -> Vec<u8> {
     let mut bytes = Vec::new();
     for ordinal in 0..4 {

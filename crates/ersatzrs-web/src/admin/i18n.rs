@@ -6414,7 +6414,9 @@ fn scan_and_playback_health_message(
 
 fn teletext_work_health_message(language: UiLanguage, message: &str) -> Option<String> {
     match message {
-        value if value == text(UiLanguage::English, TextKey::TeletextSourceStorageInvalid) => {
+        // Older persisted Health snapshots retain the provider-only spelling.
+        value if value == text(UiLanguage::English, TextKey::TeletextSourceStorageInvalid)
+            || value == "Provider source storage configuration is invalid or unavailable. Optional provider teletext captions are unavailable; ordinary audio/video playback remains available." => {
             Some(text(language, TextKey::TeletextSourceStorageInvalid).to_owned())
         }
         "Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready." => {
@@ -7692,6 +7694,40 @@ mod tests {
                 ),
                 "unrecognized diagnostic"
             );
+        }
+    }
+
+    #[test]
+    fn current_and_retained_source_storage_health_messages_use_every_locale() {
+        // Use the actual backend literals: generating the input from the UI's
+        // English catalog cannot detect a backend/catalog contract mismatch.
+        let messages = [
+            "Source storage configuration is invalid or unavailable. Optional local and provider teletext captions are unavailable; ordinary audio/video playback remains available.",
+            "Provider source storage configuration is invalid or unavailable. Optional provider teletext captions are unavailable; ordinary audio/video playback remains available.",
+        ];
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let expected = text(language, TextKey::TeletextSourceStorageInvalid);
+            for message in messages {
+                assert_eq!(
+                    health_check_message_text(
+                        language,
+                        "Teletext work configuration",
+                        message,
+                        message
+                    ),
+                    expected,
+                    "{} must recognize the backend or retained warning",
+                    definition.code,
+                );
+                assert_eq!(
+                    health_check_message_text(language, "Teletext work configuration", "", message),
+                    expected,
+                );
+            }
+            if language != UiLanguage::English {
+                assert_ne!(expected, messages[0]);
+            }
         }
     }
 

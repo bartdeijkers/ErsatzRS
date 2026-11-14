@@ -47,7 +47,10 @@ pub use source_cue::{SourceTeletextCueEvidence, SourceTeletextCueRequest};
 pub use source_cue_prelude::SourceTeletextPagePrelude;
 pub use source_native_clock::SourceTeletextNativeClockEvidence;
 pub use source_packet::SourceTeletextPacketFormat;
-pub(crate) use source_text_snapshot::capture_owned as capture_complete_text_source_owned;
+pub(crate) use source_text_snapshot::{
+    capture_budgeted_owned as capture_complete_bitmap_source_owned,
+    capture_owned as capture_complete_text_source_owned,
+};
 
 pub(crate) use source_window::{
     capture_observed_source_packet_span_owned, capture_source_packet_span_owned,
