@@ -575,9 +575,9 @@ async fn real_duplex_backpressure_recovers_within_budget_and_preserves_the_compl
         drop(sink);
         result
     };
-    let ((), result, output) = tokio::time::timeout(Duration::from_secs(2), async {
+    let ((), result, output) = Box::pin(tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(produce, forward, receive)
-    })
+    }))
     .await
     .unwrap();
     assert_eq!(result.unwrap(), u64::try_from(input.len()).unwrap());

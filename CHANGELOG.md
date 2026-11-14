@@ -77,8 +77,10 @@ release section when tagging a release.
   source, including its rows, field bindings and element revisions; later edits
   require explicit publication. Base output now derives current bound fields
   through the response owner; failed programme reads blank their logical page's
-  dynamic cells while independent clock pages continue. Per-page reporting and
-  joined automatic-refresh acceptance remain in progress.
+  dynamic cells while independent clock pages continue. Output status separates
+  requested and confirmed field refreshes, with page-specific blank-field warnings
+  retained in Health after a stream ends until confirmed recovery. Joined
+  automatic-refresh acceptance remains in progress.
 - Teletext capacity-recovery browser proof now covers Chromium and Firefox with
   and without JavaScript, including consent, custom-policy protection and repair.
 - Guide-boundary qualification distinguishes acknowledged expiry withdrawal from

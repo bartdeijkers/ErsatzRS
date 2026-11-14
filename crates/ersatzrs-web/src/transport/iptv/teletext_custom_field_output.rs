@@ -18,6 +18,19 @@ impl Deref for NativeCandidate {
 }
 
 impl NativeCandidate {
+    pub(in crate::transport::iptv::teletext_live_output) fn output_generation_observation(
+        &self,
+    ) -> Option<ersatzrs_domain::TeletextOutputGenerationObservation> {
+        let mut observation = self.selected.output_generation_observation()?;
+        observation.custom_fields = self.custom.as_ref().map(|custom| {
+            ersatzrs_domain::TeletextCustomFieldOutputObservation {
+                revision: custom.revision,
+                failed_pages: custom.failed_pages.clone(),
+            }
+        });
+        Some(observation)
+    }
+
     pub(in crate::transport::iptv::teletext_live_output) fn fields_current_at(
         &self,
         now: chrono::DateTime<chrono::Utc>,

@@ -184,7 +184,24 @@ to refresh under that same original rather than making stale derived cells a
 permanent rejection of their origin. A private UTC test seam runs the actual
 read/derive/encode owner; admission and operation deadlines keep the real
 monotonic clock.
-Per-page reporting and joined native acceptance remain open below.
+Field observations belong to each response and preserve the unchanged manual
+origin. A separate field revision and decimal failed logical page numbers travel
+with requested and sink-acknowledged selections. Merely preparing, installing or
+rejecting a proposal cannot imply recovery. The host-local registry retains the
+last acknowledged blank fields after an output ends; a later receipt clears
+that warning only when no other observed active output still confirms failures.
+No raw projection error, programme title or mutable element lookup enters these
+diagnostics. Other pages and audio/video remain independent.
+
+Admin source map: `/channels/{id}/teletext`, `TeletextDraftPreview` SSR component,
+`teletext_drafts/output_status.rs`, with data supplied by the existing preview
+server-function boundary and response-owned output observer. This read-only
+status uses native paragraphs and definition lists inside the existing preview;
+no island, shared primitive, new action or JavaScript dependency is added.
+The same SSR status works without JavaScript. Browser proof must distinguish
+requested blank fields from a healthy historical receipt, retain decimal page
+numbers after the stream ends and show the localized Health warning.
+Joined native and browser acceptance remain open below.
 Confirmation of an already published Base original retains its host producer
 membership, including the absence of that producer. Removing the last element
 link cannot revoke saved pages, and a newly linked page cannot become output
