@@ -674,6 +674,15 @@ timing uninitialized and give the non-seekable playlist a false positive
 start time. A subsequent CLI loop then fails with `ESPIPE` before reopening
 the next programme. Removing that outer shortcut preserves the existing
 per-programme optional-FPS policy, codecs, maps, source clocks and deadlines.
+The built-in Legacy concat wrapper retains a two-second initial read burst at
+the unchanged 1x readrate. This lets the next owned finite source's caption
+selection and initialization overlap delivery of the preceding programme.
+The existing output gate and source backpressure retain their packet/byte,
+holding and lateness bounds. Do not replace the source timestamps, prolong an
+expired guide, enlarge transcode admission or permit overdue catchup. The
+ordinary wrapper remains paced when optional authored output is unavailable;
+user-configured scripts keep their own arguments. Qualification must include
+the actual caption-bearing programme seam and unchanged final delivery gates.
 Candidate argv verification and compiled-host/platform acceptance stay separate.
 A repeated private URL can return different finite programme lengths. Its
 duration must come from the current opened input, without a previous input's

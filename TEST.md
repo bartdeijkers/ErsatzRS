@@ -80,6 +80,11 @@ acceptance; those remain in `teletext-admin-recovery-flow`.
 Run the `published custom fields report` cases in
 `tests/e2e/teletext-restart-flow.spec.ts` through the isolated Playwright wrapper
 with qualified FFmpeg9 and `--grep 'published custom fields report' --headed --workers=1`.
+Select the qualified managed package explicitly with `ERSATZRS_FFMPEG_DIR`
+(the directory containing `bin/`), `FFMPEG_PATH` and `FFPROBE_PATH`; record
+their executable hashes. The wrapper's optional local FFmpeg override can be
+an older build without the accepted concat-clock fixes. Leave browser `TMPDIR`
+at its ordinary short system path; application fixtures stay under repo `tmp/`.
 They cover Chromium/Firefox, hydrated English and no-JS Dutch, actual page-local
 projection failure, retained Health/recovery, independently decoded pages and AV,
 and an actual host replacement after deleting the latest elements and crossing

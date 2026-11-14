@@ -281,6 +281,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Legacy MPEG-TS playback keeps a short read-ahead buffer across programme
+  changes, preventing source-subtitle preparation from interrupting delivery.
 - Removing the last linked custom teletext page preserves its published original.
   Newly linked pages stay unpublished during automatic guide refresh; changes to
   real add-ons and checks for a new publication retain their existing safeguards.
