@@ -1074,14 +1074,20 @@ async fn run_monitor<B: UpdateBackend>(
                 break;
             }
         }
-        let Some(mut next) = Instant::now().checked_add(timing.poll_interval) else {
+        let now = Instant::now();
+        let Some(mut next) = now.checked_add(timing.poll_interval) else {
             state.withdraw(&updates);
             break;
         };
         if let Some(boundary) = backend.next_transition() {
             next = next.min(boundary);
         }
-        if let Some(boundary) = state.cached.as_ref().and_then(B::next_content_refresh) {
+        if let Some(boundary) = state
+            .cached
+            .as_ref()
+            .and_then(B::next_content_refresh)
+            .filter(|boundary| *boundary > now)
+        {
             next = next.min(boundary);
         }
         // One operation at a time, no tick catch-up burst or detached recovery.
@@ -1184,6 +1190,44 @@ mod tests {
         assert_eq!(backend.recoveries.load(Ordering::SeqCst), 0);
         assert_eq!(*backend.transition.lock().unwrap(), Some(expiry));
         assert_eq!(backend.reads.load(Ordering::SeqCst), 2);
+        drop(proposals);
+        drop(control);
+        owner.stopped().await.unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_read_after_content_wake_retries_at_poll_cadence_without_spinning() {
+        let mut initial = candidate(1, 9);
+        initial.content_refresh = Some(Instant::now() + Duration::from_millis(25));
+        let backend = Backend::new(Some(initial.clone()));
+        let (updates, control, _) = teletext_output_control_channel();
+        let mut proposals = updates.subscribe();
+        let task = tokio::spawn(run_monitor(
+            backend.clone(),
+            9,
+            TeletextAcceptedUpdatePolicy::new(Duration::from_secs(5), Duration::from_secs(1))
+                .unwrap(),
+            Some(initial),
+            updates,
+            || None,
+        ));
+        let owner = TeletextAcceptedUpdatesOwner { task: Some(task) };
+        backend.read_entered.notified().await;
+        tokio::task::yield_now().await;
+        let release = Arc::new(Notify::new());
+        {
+            let mut store = backend.store.lock().unwrap();
+            store.read_failure = true;
+            store.read_release = Some(Arc::clone(&release));
+        }
+        tokio::time::advance(Duration::from_millis(25)).await;
+        backend.read_entered.notified().await;
+        release.notify_one();
+        proposals.changed().await.unwrap();
+        tokio::task::yield_now().await;
+        assert_eq!(backend.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(proposals.borrow().as_ref().unwrap().sequence(), 1);
+        assert!(!proposals.borrow().as_ref().unwrap().is_display_refresh());
         drop(proposals);
         drop(control);
         owner.stopped().await.unwrap();

@@ -157,6 +157,12 @@ use repeat headers when service metadata, magazine data and resource banks are
 identical. Changed dependencies and ordinary publications retain full
 acquisition. Display indices are mapped past the carousel's resource prefix;
 resource lifecycle, exact ACK and programme-clock checks remain unchanged.
+The response monitor distinguishes content revisions and wake times from
+publication/guide expiry. Only future content wakes shorten its polling sleep;
+an overdue wake after a failed read must not create an immediate retry loop.
+The pump dispatches a confirmed same-origin content refresh through the native
+cache-preserving ACK path. Inactive and post-expiry replacements retain full
+acquisition. Field ownership and per-page reporting remain open below.
 Automatic Base guide regeneration borrows the custom source from the checked,
 immutable original design revision. It changes only the invocation correlation;
 rows, element revisions and field recipes remain exact, even after subsequent

@@ -314,8 +314,20 @@ async fn display_refresh_uses_native_cache_checks_and_ack_without_erasing_unchan
         let (first, _) = deliver_prefix(&mut gate, first_end, 0, &mut now);
         assert!(first.contains_complete_cycle());
         pump.acknowledge(&mut gate, &first, now, true).unwrap();
+        let replacement = if refresh {
+            // Reuse the actual unchanged banks through their checked lifecycle
+            // alternatives. Replaying a legacy Changed header at counter3 must
+            // still be rejected by the strict resource-update guard.
+            authored_service_with_counter(3)
+                .with_resource_lifecycle_variants(
+                    std::time::Instant::now() + Duration::from_secs(30),
+                )
+                .unwrap()
+        } else {
+            authored_service_with_counter(4)
+        };
         updates.send_replace(Some(
-            TeletextOutputUpdate::replace(1, Arc::new(authored_service_with_counter(3)))
+            TeletextOutputUpdate::replace(1, Arc::new(replacement))
                 .unwrap()
                 .with_display_refresh(refresh),
         ));
@@ -329,6 +341,10 @@ async fn display_refresh_uses_native_cache_checks_and_ack_without_erasing_unchan
         );
         let final_end = pump.window_end(&gate, 8).unwrap().unwrap();
         let (receipt, bytes) = deliver_prefix(&mut gate, final_end, second_end, &mut now);
+        assert_eq!(
+            bytes.len(),
+            usize::try_from(final_end - second_end).unwrap() * 188
+        );
         let mut displays = 0;
         for unit in actual_units(&bytes) {
             if let TeletextHeaderObservation::Header(header) =
