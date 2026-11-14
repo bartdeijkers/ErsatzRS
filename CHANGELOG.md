@@ -267,6 +267,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Local and provider teletext source storage warnings are localized in all
+  supported admin languages, including warnings stored by older versions.
 - Source teletext captions can be prepared from complete files larger than the
   discovery window, with DVB conversion checked against FFmpeg's native clock
   rescaling. Preparation uses the existing storage quota and startup deadline;

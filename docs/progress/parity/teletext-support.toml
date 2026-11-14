@@ -623,6 +623,27 @@ Rust, native policy, source, capture or transport-limit change was made in this
 qualification package. Ordinary93-check/smoke and scoped Rust/lint/bundle proof
 remain reused from the canonical candidate inputs above. Part6 local proof is
 complete; final required exact-head ready-PR CI/merge remain delivery gates.
+2026-11-14 ready-CI correction: run43521238278 passed its other jobs but failed
+four provider source-storage Health browser cases because the new shared
+local/provider backend warning no longer matched the provider-only UI catalog.
+The raw warning therefore bypassed localization. All nine cultures now name
+local and provider captions, and the exact old warning still routes through the
+same locale key for retained Health snapshots. Two focused tests pass across
+all nine cultures using the actual current/old backend literals rather than
+inputs generated from the UI catalog (1aa5e328-150f-4ba6-8cd0-2efefbe1e562).
+Strict web all-target Clippy, hydration-lint, formatting and architecture checks
+pass. The fresh matched SSR/WASM candidate13c9ac3c passes eight headed
+Chromium/Firefox Health cases, both themes and JS/no-JS modes, with English and
+Dutch Warning-to-Pass UI/storage assertions, zero page/console errors and no
+skips/flakes/unexpected results (27.9s). Sixteen warning screenshots are retained.
+The new candidate is7bdd4ab8 plus the recorded localization delta, not a relabel
+of the original4d transport candidate. No native transport, dependency, source
+or strict gate input changes; prior part6 transport proof retains its scope.
+The first bundle pipeline had an invalid relative tee path; unchanged cached
+SSR/WASM preparation then exits0 with the corrected log path. Original CI failure,
+source and candidate hashes, raw logs/report and current receipts are retained
+under source-criterion-qualification/health-localization-* and qualification.json.
+Required fresh exact-head ready CI/merge remain pending.
 The debt remains unresolved only for part7's separately blocked native
 Windows/Bart-PC proof and repair; no live installation mutation is authorized.
 Canonical joined evidence: tmp/evidence/teletext-recovery-transport/source-criterion-qualification/. Full

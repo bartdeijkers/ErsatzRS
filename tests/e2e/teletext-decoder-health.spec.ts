@@ -38,11 +38,11 @@ async function linkContrast(link: Locator): Promise<number> {
   });
 }
 
-// F5: invalid source-spool policy must remain visible in the existing localized
+// F5: invalid shared source-spool policy must remain visible in the existing localized
 // Health flow. Actual AV fallback and quota ownership have native runtime proof.
 for (const javaScriptEnabled of [true, false]) {
   for (const isDarkMode of [true, false]) {
-    test(`provider source storage Health (JavaScript ${javaScriptEnabled}, dark ${isDarkMode})`, async ({ browser, baseURL }, testInfo) => {
+    test(`local and provider source storage Health (JavaScript ${javaScriptEnabled}, dark ${isDarkMode})`, async ({ browser, baseURL }, testInfo) => {
       test.skip(!databasePath, 'Requires the disposable E2E database.');
       test.setTimeout(60_000);
       const database = new DatabaseSync(databasePath!);
@@ -69,10 +69,10 @@ for (const javaScriptEnabled of [true, false]) {
         page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
         for (const [language, title, invalid, healthy, refresh] of [
           ['en-us', 'Teletext work configuration',
-            'Provider source storage configuration is invalid or unavailable. Optional provider teletext captions are unavailable; ordinary audio/video playback remains available.',
+            'Source storage configuration is invalid or unavailable. Optional local and provider teletext captions are unavailable; ordinary audio/video playback remains available.',
             'Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready.', 'Refresh'],
           ['nl', 'Instellingen voor teleteksttaken',
-            'De opslaginstellingen voor providerbronnen zijn ongeldig of niet beschikbaar. Optionele teletekstondertitels van providers zijn niet beschikbaar; gewone audio- en videoweergave blijft beschikbaar.',
+            'De opslaginstellingen voor bronnen zijn ongeldig of niet beschikbaar. Optionele teletekstondertitels van lokale bronnen en providers zijn niet beschikbaar; gewone audio- en videoweergave blijft beschikbaar.',
             'Teleteksttaken worden standaard één voor één uitgevoerd. Dit is geen geheugenlimiet en bevestigt niet dat zelfgemaakte pagina’s klaar zijn voor uitzending.', 'Vernieuwen'],
         ]) {
           write(keys[2], '0');
