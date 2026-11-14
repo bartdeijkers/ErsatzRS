@@ -63,6 +63,42 @@ pub fn teletext_custom_pages_selection(channel_id: EntityId) -> TeletextSelectio
     }
 }
 
+/// Compare an already published original with current installed dependencies.
+/// Host custom-page membership is frozen by explicit publication; its latest
+/// links may be added or removed without changing that original. Every real
+/// add-on identity/settings and the channel remain exact. This comparison grants
+/// no publication authority; new Check/publication still use complete equality.
+#[must_use]
+pub fn teletext_published_selection_matches(
+    current: &super::TeletextChannelSelectionSnapshot,
+    published: &super::TeletextChannelSelectionSnapshot,
+) -> bool {
+    if current.channel_id <= 0 || current.channel_id != published.channel_id {
+        return false;
+    }
+    let host = teletext_custom_pages_selection(current.channel_id);
+    for selection in [current, published] {
+        if !selection
+            .bindings
+            .windows(2)
+            .all(|pair| pair[0].addon_id < pair[1].addon_id)
+            || selection.bindings.iter().any(|binding| {
+                is_teletext_custom_pages_producer(&binding.addon_id) && *binding != host
+            })
+        {
+            return false;
+        }
+    }
+    current
+        .bindings
+        .iter()
+        .filter(|binding| !is_teletext_custom_pages_producer(&binding.addon_id))
+        .eq(published
+            .bindings
+            .iter()
+            .filter(|binding| !is_teletext_custom_pages_producer(&binding.addon_id)))
+}
+
 /// Response of the host producer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -293,6 +329,44 @@ impl TeletextCustomPagesDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn published_selection_freezes_only_authentic_host_membership() {
+        let empty = super::super::TeletextChannelSelectionSnapshot {
+            channel_id: 1,
+            bindings: Vec::new(),
+        };
+        let host = super::super::TeletextChannelSelectionSnapshot {
+            channel_id: 1,
+            bindings: vec![teletext_custom_pages_selection(1)],
+        };
+        assert!(teletext_published_selection_matches(&empty, &host));
+        assert!(teletext_published_selection_matches(&host, &empty));
+        let mut forged = host.clone();
+        forged.bindings[0].binding_revision += 1;
+        assert!(!teletext_published_selection_matches(&forged, &host));
+        assert!(!teletext_published_selection_matches(&host, &forged));
+        let mut duplicate = host.clone();
+        duplicate.bindings.push(host.bindings[0].clone());
+        assert!(!teletext_published_selection_matches(&duplicate, &host));
+        let mut other_channel = empty.clone();
+        other_channel.channel_id = 2;
+        assert!(!teletext_published_selection_matches(&other_channel, &host));
+        let mut addon = teletext_custom_pages_selection(1);
+        addon.addon_id = "org.example.guide".to_owned();
+        addon.installation.addon_id.clone_from(&addon.addon_id);
+        let installed = super::super::TeletextChannelSelectionSnapshot {
+            channel_id: 1,
+            bindings: vec![addon.clone()],
+        };
+        let mut combined = installed.clone();
+        combined.bindings.insert(0, host.bindings[0].clone());
+        assert!(teletext_published_selection_matches(&installed, &combined));
+        let mut changed = installed.clone();
+        changed.bindings[0].profile_revision += 1;
+        assert!(!teletext_published_selection_matches(&changed, &combined));
+        assert!(!teletext_published_selection_matches(&empty, &installed));
+    }
 
     fn page(number: u16, subcode: u16) -> TeletextCustomPageWire {
         let mut cells = [b' '; 40];

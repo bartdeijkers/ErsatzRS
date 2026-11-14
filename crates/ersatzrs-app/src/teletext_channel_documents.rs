@@ -34,12 +34,24 @@ use std::{
 pub const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BINDINGS: usize = 1024;
 
+/// Host planner input for a new Check, or the custom source of a published
+/// original. `Published(None)` explicitly retains the absence of a host member.
+#[derive(Clone, Copy)]
+pub enum TeletextCustomPageSource<'a> {
+    /// Read the current element/link library for an unpublished Check.
+    Current,
+    /// Retain the host source, or its explicit absence, from a manual original.
+    Published(Option<&'a ersatzrs_domain::TeletextCustomPagesWire>),
+}
+
 /// Reuse an immutable published custom-page source during automatic guide work.
 /// The host must obtain it from the checked original revision. This data grants
 /// no selection or publication authority; all normal fences still apply.
 pub struct TeletextChannelDocumentRefresh<'a> {
     pub selection: &'a TeletextChannelSelectionSnapshot,
-    pub custom_pages: &'a ersatzrs_domain::TeletextCustomPagesWire,
+    /// None retains a published original without a host producer, even if one
+    /// has since been linked. It never invokes the latest mutable host planner.
+    pub custom_pages: Option<&'a ersatzrs_domain::TeletextCustomPagesWire>,
     pub deadline: Instant,
     pub hold: TeletextWorkHold,
 }
@@ -354,7 +366,7 @@ impl ApplicationServices {
             context,
             budget,
             (None, None, None),
-            None,
+            TeletextCustomPageSource::Current,
         )
         .await
     }
@@ -378,7 +390,7 @@ impl ApplicationServices {
             context,
             budget,
             (Some(deadline), Some(hold), None),
-            None,
+            TeletextCustomPageSource::Current,
         )
         .await
     }
@@ -417,7 +429,7 @@ impl ApplicationServices {
                 Some(admission.1),
                 Some(expected_selection),
             ),
-            None,
+            TeletextCustomPageSource::Current,
         )
         .await
     }
@@ -444,7 +456,7 @@ impl ApplicationServices {
                 Some(refresh.hold),
                 Some(refresh.selection),
             ),
-            Some(refresh.custom_pages),
+            TeletextCustomPageSource::Published(refresh.custom_pages),
         )
         .await
     }
@@ -460,7 +472,7 @@ impl ApplicationServices {
             Option<TeletextWorkHold>,
             Option<&TeletextChannelSelectionSnapshot>,
         ),
-        published_custom_pages: Option<&ersatzrs_domain::TeletextCustomPagesWire>,
+        custom_page_source: TeletextCustomPageSource<'_>,
     ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
         let (deadline, hold, expected_selection) = admission;
         let invoke = |selected: TeletextSelectionSnapshot, input: Vec<u8>, deadline| {
@@ -468,7 +480,9 @@ impl ApplicationServices {
             async move {
                 // The host-owned custom pages source runs in process.
                 if ersatzrs_domain::is_teletext_custom_pages_producer(&selected.addon_id) {
-                    if let Some(published) = published_custom_pages {
+                    if let TeletextCustomPageSource::Published(published) = custom_page_source {
+                        let published =
+                            published.ok_or(TeletextProfileRuntimeError::InvalidRequest)?;
                         return super::teletext_elements::broadcast::reproduce_published_custom_pages(
                             selected, &input, deadline, published,
                         );
@@ -503,7 +517,12 @@ impl ApplicationServices {
             context,
             budget,
             invoke,
-            (Instant::now, deadline, expected_selection),
+            (
+                Instant::now,
+                deadline,
+                expected_selection,
+                matches!(custom_page_source, TeletextCustomPageSource::Published(_)),
+            ),
         )
         .await
     }
@@ -522,6 +541,26 @@ impl ApplicationServices {
             selection,
             deadline,
             Instant::now,
+            false,
+        )
+        .await
+    }
+
+    /// Recheck installed dependencies after derived work on immutable originals.
+    /// Only host custom-page membership may differ; this grants no publication.
+    /// # Errors
+    /// Rejects expiry, unavailable configuration and changed real add-ons.
+    pub async fn recheck_published_channel_teletext_document_selection(
+        &self,
+        selection: &TeletextChannelSelectionSnapshot,
+        deadline: Instant,
+    ) -> Result<(), ChannelTeletextDocumentError> {
+        recheck_with_ports(
+            self.ports().teletext_profiles(),
+            selection,
+            deadline,
+            Instant::now,
+            true,
         )
         .await
     }
@@ -576,7 +615,7 @@ where
         context,
         budget,
         invoke,
-        (timing.0, timing.1, None),
+        (timing.0, timing.1, None, false),
     )
     .await
 }
@@ -592,6 +631,7 @@ async fn prepare_with_ports_before_selection<F, Fut, Clock>(
         Clock,
         Option<Instant>,
         Option<&TeletextChannelSelectionSnapshot>,
+        bool,
     ),
 ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError>
 where
@@ -599,7 +639,7 @@ where
     Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
     Clock: FnMut() -> Instant,
 {
-    let (mut now, supplied_deadline, expected_selection) = timing;
+    let (mut now, supplied_deadline, expected_selection, published) = timing;
     let started = now();
     let maximum = started
         .checked_add(PREPARATION_TIMEOUT)
@@ -608,12 +648,30 @@ where
     if supplied_deadline.is_some() {
         check_deadline(started, deadline)?;
     }
-    let selection = snapshot(repository, channel_id).await?;
+    let observed = snapshot(repository, channel_id).await?;
     check_deadline(now(), deadline)?;
-    validate_selection(&selection, channel_id, budget.max_producers)?;
-    if expected_selection.is_some_and(|expected| *expected != selection) {
-        return Err(ChannelTeletextDocumentError::SelectionChanged);
-    }
+    validate_selection(
+        &observed,
+        channel_id,
+        if published {
+            MAX_BINDINGS
+        } else {
+            budget.max_producers
+        },
+    )?;
+    let selection = if published {
+        let expected = expected_selection.ok_or(ChannelTeletextDocumentError::SelectionShape)?;
+        validate_selection(expected, channel_id, budget.max_producers)?;
+        if !ersatzrs_domain::teletext_published_selection_matches(&observed, expected) {
+            return Err(ChannelTeletextDocumentError::SelectionChanged);
+        }
+        expected.clone()
+    } else {
+        if expected_selection.is_some_and(|expected| *expected != observed) {
+            return Err(ChannelTeletextDocumentError::SelectionChanged);
+        }
+        observed
+    };
     let entry = select_entry(&selection, entry_addon_id)?;
     let requests = preflight_requests(&selection, context)?;
     check_deadline(now(), deadline)?;
@@ -643,7 +701,7 @@ where
         )?;
         receipts.push(receipt);
     }
-    recheck_with_ports(repository, &selection, deadline, &mut now).await?;
+    recheck_with_ports(repository, &selection, deadline, &mut now, published).await?;
     Ok(BoundChannelTeletextDocumentInput {
         selection,
         generation: context.generation.to_owned(),
@@ -767,6 +825,7 @@ async fn recheck_with_ports<Clock: FnMut() -> Instant>(
     selection: &TeletextChannelSelectionSnapshot,
     deadline: Instant,
     mut now: Clock,
+    published: bool,
 ) -> Result<(), ChannelTeletextDocumentError> {
     check_deadline(now(), deadline)?;
     let current = repository
@@ -774,7 +833,14 @@ async fn recheck_with_ports<Clock: FnMut() -> Instant>(
         .await
         .map_err(|_| ChannelTeletextDocumentError::StorageUnavailable)?;
     check_deadline(now(), deadline)?;
-    if current != Mutation::Saved(selection.clone()) {
+    let matches = match current {
+        Mutation::Saved(current) if published => {
+            ersatzrs_domain::teletext_published_selection_matches(&current, selection)
+        }
+        Mutation::Saved(current) => current == *selection,
+        Mutation::Rejected(_) => false,
+    };
+    if !matches {
         return Err(ChannelTeletextDocumentError::SelectionChanged);
     }
     Ok(())

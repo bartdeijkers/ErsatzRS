@@ -215,6 +215,45 @@ pub(crate) async fn observe_guide_refresh_seed_configuration_with_charge(
     Ok((recipe.original_selection, recipe.document_bytes))
 }
 
+/// Keep fresh installed-profile preparation, with only host membership frozen
+/// by the manual original. Adding/removing a real producer still needs review.
+fn retain_published_host_membership(
+    original: &ersatzrs_domain::TeletextChannelSelectionSnapshot,
+    mut current: ersatzrs_domain::TeletextChannelSelectionSnapshot,
+) -> Result<ersatzrs_domain::TeletextChannelSelectionSnapshot, Error> {
+    let installed = |binding: &&ersatzrs_domain::TeletextSelectionSnapshot| {
+        !ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id)
+    };
+    if original.channel_id != current.channel_id
+        || !original
+            .bindings
+            .iter()
+            .filter(installed)
+            .map(|binding| &binding.addon_id)
+            .eq(current
+                .bindings
+                .iter()
+                .filter(installed)
+                .map(|binding| &binding.addon_id))
+    {
+        return Err(Error::NeedsReview);
+    }
+    current
+        .bindings
+        .retain(|binding| !ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id));
+    if let Some(host) = original
+        .bindings
+        .iter()
+        .find(|binding| ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id))
+    {
+        let index = current
+            .bindings
+            .partition_point(|binding| binding.addon_id < host.addon_id);
+        current.bindings.insert(index, host.clone());
+    }
+    Ok(current)
+}
+
 fn request_channel(seed: &ersatzrs_core::repositories::TeletextGuideRefreshSeed) -> i64 {
     seed.generation.request.channel_id
 }
@@ -250,7 +289,10 @@ pub(in crate::host) async fn prepare_baseline(
         policy: &context.policy,
         deadline: context.deadline,
         hold: context.hold.clone(),
-        published_custom_pages: recipe.custom_pages.as_ref(),
+        custom_page_source:
+            ersatzrs_app::teletext_channel_documents::TeletextCustomPageSource::Published(
+                recipe.custom_pages.as_ref(),
+            ),
     };
     match claim.seed.role {
         TeletextGuideRefreshRole::Base => {
@@ -264,14 +306,7 @@ pub(in crate::host) async fn prepare_baseline(
             let TeletextGuideRefreshSelection::Base(original) = &recipe.original_selection else {
                 return Err(Error::NeedsReview);
             };
-            if !original
-                .bindings
-                .iter()
-                .map(|binding| &binding.addon_id)
-                .eq(selection.bindings.iter().map(|binding| &binding.addon_id))
-            {
-                return Err(Error::NeedsReview);
-            }
+            let selection = retain_published_host_membership(original, selection)?;
             let (candidate, qualification) = super::guide::prepare_base_current(
                 application,
                 pool,
@@ -385,4 +420,43 @@ fn same_original_scope(
                 TeletextEffectiveBindingSnapshot::Scripted(value) => Some(value),
                 TeletextEffectiveBindingSnapshot::Base(_) => None,
             }))
+}
+
+#[cfg(test)]
+mod published_host_tests {
+    use super::*;
+    use ersatzrs_domain::{teletext_custom_pages_selection, TeletextChannelSelectionSnapshot};
+
+    #[test]
+    fn base_guide_keeps_published_host_membership_and_current_installed_profiles() {
+        let host = teletext_custom_pages_selection(1);
+        let mut addon = host.clone();
+        addon.addon_id = "org.example.guide".to_owned();
+        addon.installation.addon_id.clone_from(&addon.addon_id);
+        let original = TeletextChannelSelectionSnapshot {
+            channel_id: 1,
+            bindings: vec![host.clone(), addon.clone()],
+        };
+        addon.profile_revision += 1;
+        let current = TeletextChannelSelectionSnapshot {
+            channel_id: 1,
+            bindings: vec![addon.clone()],
+        };
+        let retained = retain_published_host_membership(&original, current.clone()).unwrap();
+        assert_eq!(retained.bindings, [host, addon]);
+        let absent = retain_published_host_membership(&current, retained).unwrap();
+        assert_eq!(absent, current);
+        let mut removed = current.clone();
+        removed.bindings.clear();
+        assert!(matches!(
+            retain_published_host_membership(&original, removed),
+            Err(Error::NeedsReview)
+        ));
+        let mut wrong_channel = current;
+        wrong_channel.channel_id = 2;
+        assert!(matches!(
+            retain_published_host_membership(&original, wrong_channel),
+            Err(Error::NeedsReview)
+        ));
+    }
 }

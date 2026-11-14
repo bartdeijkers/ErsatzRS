@@ -175,6 +175,16 @@ encoding preserves unrelated displays, declarations and explicit resource
 lifecycles. The original selection is confirmed again after field work, under
 the same deadline and original authority cap. Derived cells cannot renew it.
 Per-page reporting and joined native acceptance remain open below.
+Confirmation of an already published Base original retains its host producer
+membership, including the absence of that producer. Removing the last element
+link cannot revoke saved pages, and a newly linked page cannot become output
+without publication. Installed add-on identities and settings remain exact at
+output confirmation; new Check and new publication retain full current-selection
+equality. Automatic Base guide preparation keeps its existing current installed
+profiles and producer-id checks, restoring only the manual original's host
+membership. Published-source preparation and its post-CPU recheck use this same
+distinction. The absence of a published host source never invokes the mutable
+element planner.
 Automatic Base guide regeneration borrows the custom source from the checked,
 immutable original design revision. It changes only the invocation correlation;
 rows, element revisions and field recipes remain exact, even after subsequent

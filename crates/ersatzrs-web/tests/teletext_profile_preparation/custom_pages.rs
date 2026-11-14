@@ -293,7 +293,7 @@ async fn reproduce(
             budget,
             ersatzrs_app::teletext_channel_documents::TeletextChannelDocumentRefresh {
                 selection,
-                custom_pages: source,
+                custom_pages: Some(source),
                 deadline,
                 hold: guard.hold_work(),
             },
@@ -381,6 +381,117 @@ async fn guide_reproduction_keeps_saved_custom_rows_after_edit_delete_and_restar
     assert_eq!(actual.pages[0].element_revision, stored.revision);
     assert_eq!(refreshed.selection, selection);
     assert!(fixture.playout.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn published_custom_source_survives_last_link_deletion_and_repository_restart() {
+    let fixture = fixture().await;
+    let element = link(&fixture, "%NOW%%%%%%%%%%", None).await;
+    let source = saved_source(&fixture).await;
+    let selection = fixture
+        .state
+        .application
+        .observe_channel_teletext_document_selection(CHANNEL)
+        .await
+        .unwrap();
+    fixture
+        .state
+        .application
+        .delete_teletext_element(element)
+        .await
+        .unwrap();
+    let fixture = fixture.reopen().await;
+    assert!(fixture
+        .state
+        .application
+        .observe_channel_teletext_document_selection(CHANNEL)
+        .await
+        .unwrap()
+        .bindings
+        .is_empty());
+    let policy = channel_documents::policy();
+    let replay = reproduce(
+        &fixture,
+        &selection,
+        &source,
+        policy.input,
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+    .validate(policy.validation)
+    .unwrap()
+    .into_parts_with_requests();
+    let actual: ersatzrs_domain::TeletextCustomPagesWire =
+        serde_json::from_slice(replay.sources[0].bytes()).unwrap();
+    assert_eq!(actual.pages, source.pages);
+    assert_eq!(replay.selection, selection);
+    fixture
+        .state
+        .application
+        .recheck_published_channel_teletext_document_selection(&selection, designs::deadline())
+        .await
+        .unwrap();
+    assert!(matches!(fixture.state.application.recheck_channel_teletext_document_selection(&selection, designs::deadline()).await,
+        Err(ersatzrs_app::teletext_channel_documents::ChannelTeletextDocumentError::SelectionChanged)));
+}
+
+#[tokio::test]
+async fn published_absence_does_not_adopt_a_new_unpublished_custom_link() {
+    use ersatzrs_app::teletext_channel_documents::TeletextChannelDocumentRefresh;
+    let fixture = fixture().await;
+    let selection = fixture
+        .state
+        .application
+        .observe_channel_teletext_document_selection(CHANNEL)
+        .await
+        .unwrap();
+    assert!(selection.bindings.is_empty());
+    link(&fixture, "%UNKNOWN%%%%%%", None).await;
+    let deadline = designs::deadline();
+    let guard =
+        ersatzrs_web::host::teletext_work::begin(&fixture.state.application, Some(deadline))
+            .await
+            .unwrap();
+    let policy = channel_documents::policy();
+    let input = fixture
+        .state
+        .application
+        .invoke_channel_teletext_documents_for_refresh(
+            CHANNEL,
+            None,
+            &guide(&[]),
+            policy.input,
+            TeletextChannelDocumentRefresh {
+                selection: &selection,
+                custom_pages: None,
+                deadline,
+                hold: guard.hold_work(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(input.producer_count(), 0);
+    assert!(input
+        .validate(policy.validation)
+        .unwrap()
+        .into_parts_with_requests()
+        .selection
+        .bindings
+        .is_empty());
+    assert!(fixture
+        .state
+        .application
+        .invoke_channel_teletext_documents_with_selection_and_hold(
+            CHANNEL,
+            None,
+            &guide(&[]),
+            policy.input,
+            &selection,
+            (deadline, guard.hold_work())
+        )
+        .await
+        .is_err());
 }
 
 #[tokio::test]

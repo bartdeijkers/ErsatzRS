@@ -271,6 +271,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Removing the last linked custom teletext page preserves its published original.
+  Newly linked pages stay unpublished during automatic guide refresh; changes to
+  real add-ons and checks for a new publication retain their existing safeguards.
 - Invalid Classic chapter filler expressions now keep the whole programme
   without internal breaks and retain its clock-aligned padding. Unknown
   variables are errors; a diagnostic names the filler preset and schedule item

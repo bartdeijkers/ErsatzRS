@@ -6,7 +6,7 @@ use ersatzrs_app::{
     teletext_channel_documents::{
         BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError,
         PreparedChannelTeletextDocumentParts, TeletextChannelDocumentInputBudget,
-        TeletextChannelDocumentRefresh, TeletextChannelRequestTemplates,
+        TeletextChannelDocumentRefresh, TeletextChannelRequestTemplates, TeletextCustomPageSource,
     },
     teletext_guide::SuppliedTeletextGuideContext,
     teletext_profile_documents::{
@@ -262,7 +262,7 @@ pub async fn prepare_channel_teletext_document_candidate(
         TeletextChannelDocumentPreparation {
             context,
             expected_selection: None,
-            published_custom_pages: None,
+            custom_page_source: TeletextCustomPageSource::Current,
             deadline,
         },
         policy,
@@ -275,7 +275,8 @@ pub async fn prepare_channel_teletext_document_candidate(
 pub(super) struct TeletextChannelDocumentPreparation<'context, 'guide> {
     pub(super) context: &'context SuppliedTeletextGuideContext<'guide>,
     pub(super) expected_selection: Option<&'context TeletextChannelSelectionSnapshot>,
-    pub(super) published_custom_pages: Option<&'context ersatzrs_domain::TeletextCustomPagesWire>,
+    /// `Published(None)` retains the absence of a host producer despite new links.
+    pub(super) custom_page_source: TeletextCustomPageSource<'context>,
     pub(super) deadline: Instant,
 }
 
@@ -299,9 +300,9 @@ pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
     input_budget.max_producers = maximum_producers(&policy);
     let input = match (
         preparation.expected_selection,
-        preparation.published_custom_pages,
+        preparation.custom_page_source,
     ) {
-        (Some(selection), Some(custom_pages)) => {
+        (Some(selection), TeletextCustomPageSource::Published(custom_pages)) => {
             application
                 .invoke_channel_teletext_documents_for_refresh(
                     channel_id,
@@ -317,7 +318,7 @@ pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
                 )
                 .await?
         }
-        (Some(expected_selection), None) => {
+        (Some(expected_selection), TeletextCustomPageSource::Current) => {
             application
                 .invoke_channel_teletext_documents_with_selection_and_hold(
                     channel_id,
@@ -329,7 +330,7 @@ pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
                 )
                 .await?
         }
-        (None, None) => {
+        (None, TeletextCustomPageSource::Current) => {
             application
                 .invoke_channel_teletext_documents_with_hold(
                     channel_id,
@@ -341,16 +342,33 @@ pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
                 )
                 .await?
         }
-        (None, Some(_)) => return Err(ChannelTeletextDocumentEncodingError::Association),
+        (None, TeletextCustomPageSource::Published(_)) => {
+            return Err(ChannelTeletextDocumentEncodingError::Association)
+        }
     };
     let candidate =
         super::teletext_work::spawn_blocking(hold.clone(), move || encode_channel(input, policy))
             .await
             .map_err(|_| ChannelTeletextDocumentEncodingError::WorkerFailed)??;
     let candidate = candidate.restrict_deadline(deadline);
-    application
-        .recheck_channel_teletext_document_selection(candidate.selection(), candidate.deadline())
-        .await?;
+    if matches!(
+        preparation.custom_page_source,
+        TeletextCustomPageSource::Published(_)
+    ) {
+        application
+            .recheck_published_channel_teletext_document_selection(
+                candidate.selection(),
+                candidate.deadline(),
+            )
+            .await?;
+    } else {
+        application
+            .recheck_channel_teletext_document_selection(
+                candidate.selection(),
+                candidate.deadline(),
+            )
+            .await?;
+    }
     check_deadline(candidate.deadline())?;
     Ok(candidate)
 }
