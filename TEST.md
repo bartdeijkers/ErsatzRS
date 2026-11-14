@@ -77,6 +77,17 @@ restores their original values and presence.
 This browser scope does not establish transport carriage or native Windows
 acceptance; those remain in `teletext-admin-recovery-flow`.
 
+Run the `published custom fields report` cases in
+`tests/e2e/teletext-restart-flow.spec.ts` through the isolated Playwright wrapper
+with qualified FFmpeg9 and `--grep 'published custom fields report' --headed --workers=1`.
+They cover Chromium/Firefox, hydrated English and no-JS Dutch, actual page-local
+projection failure, retained Health/recovery, independently decoded pages and AV,
+and an actual host replacement after deleting the latest elements and crossing
+a real minute. Leave the polling page before deliberately stopping its host;
+keep the zero-console/page-error assertion. This Base live-policy-v2 synthetic
+producer proof does not substitute for the production guide-worker join,
+programme transitions, final transport gates or native Windows acceptance.
+
 The opt-in `ordinary bitrate bursts retain scanned captions` case in
 `teletext-guide-authoring-flow.spec.ts` also needs
 `RUST_LOG=info,ersatzrs_web::transport::iptv::teletext_provenance=debug` for its
