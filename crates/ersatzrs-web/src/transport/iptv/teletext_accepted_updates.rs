@@ -29,6 +29,10 @@ use tracing::Instrument;
 mod expiry_preparation;
 use expiry_preparation::ExpiryPreparation;
 
+#[path = "teletext_custom_field_output.rs"]
+mod custom_fields;
+pub(super) use custom_fields::NativeCandidate;
+
 use crate::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy;
 
 use crate::transport::iptv::{
@@ -128,7 +132,7 @@ impl Drop for TeletextAcceptedUpdatesOwner {
 /// Pending requests and package invocation are deliberately absent from this API.
 pub(super) fn start_accepted_updates(
     context: TeletextAcceptedUpdatesContext,
-    initial: Option<Arc<SelectedTeletextOutputCandidate>>,
+    initial: Option<Arc<NativeCandidate>>,
 ) -> Result<
     (TeletextOutputControl, TeletextAcceptedUpdatesOwner),
     TeletextAcceptedUpdatesConfigurationError,
@@ -235,7 +239,7 @@ fn trace_native_candidate(
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ReadFailure;
+pub(super) struct ReadFailure;
 
 // Private test seam; production candidates can only be recovered by the existing
 // native validator. It adds no application bus, storage schema or public receipt.
@@ -432,7 +436,7 @@ impl NativeBackend {
 
 #[async_trait::async_trait]
 impl UpdateBackend for NativeBackend {
-    type Candidate = Arc<SelectedTeletextOutputCandidate>;
+    type Candidate = Arc<NativeCandidate>;
     type ContextIdentity = GuideOutputIdentity;
     fn candidate_context(candidate: &Self::Candidate) -> Option<Self::ContextIdentity> {
         candidate.guide_identity().cloned()
@@ -453,7 +457,7 @@ impl UpdateBackend for NativeBackend {
         candidate: &Self::Candidate,
         deadline: Instant,
     ) -> Result<Option<Self::Candidate>, ReadFailure> {
-        if candidate.guide_identity().is_some() {
+        let selected = if candidate.guide_identity().is_some() {
             let metadata = self
                 .latest_guide
                 .lock()
@@ -472,13 +476,22 @@ impl UpdateBackend for NativeBackend {
             if let Some(candidate) = &candidate {
                 self.record_guide_validity(candidate)?;
             }
-            Ok(candidate)
+            candidate
         } else {
-            Ok(self
-                .confirm(candidate, deadline)
+            self.confirm(candidate, deadline)
                 .await?
-                .then(|| candidate.clone()))
+                .then(|| Arc::clone(&candidate.selected))
+        };
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let refreshed =
+            NativeCandidate::prepare(&self.context, selected, Some(candidate), deadline).await?;
+        // Field work never authorizes its own derived bytes or renews a cap.
+        if !self.confirm(&refreshed, deadline).await? {
+            return Ok(None);
         }
+        Ok(Some(refreshed))
     }
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration {
@@ -487,6 +500,17 @@ impl UpdateBackend for NativeBackend {
 
     fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>> {
         candidate.service().map(Arc::clone)
+    }
+
+    fn content_revision(candidate: &Self::Candidate) -> Option<u64> {
+        candidate.custom.as_ref().map(|custom| custom.revision)
+    }
+
+    fn next_content_refresh(candidate: &Self::Candidate) -> Option<Instant> {
+        candidate
+            .custom
+            .as_ref()
+            .map(|custom| custom.next_wake.into())
     }
 
     fn original_transition(candidate: &Self::Candidate) -> Option<Instant> {
@@ -583,10 +607,14 @@ impl UpdateBackend for NativeBackend {
         if let Some(prepared) = prepared {
             self.record_guide_validity(&prepared)?;
             trace_native_candidate(&prepared, self.trace_id, "monitor_recovered");
-            return Ok(Some(prepared));
+            return NativeCandidate::prepare(&self.context, prepared, None, deadline)
+                .await
+                .map(Some);
         }
         if let Some(candidate) = self.recover_prepared_expiry(deadline).await? {
-            return Ok(Some(candidate));
+            return NativeCandidate::prepare(&self.context, candidate, None, deadline)
+                .await
+                .map(Some);
         }
         let candidate = if let Some(guide) = &self.context.guide {
             load_selected_teletext_output_candidate_with_guide(
@@ -613,7 +641,12 @@ impl UpdateBackend for NativeBackend {
             self.record_guide_validity(candidate)?;
             trace_native_candidate(candidate, self.trace_id, "monitor_recovered");
         }
-        Ok(candidate)
+        match candidate {
+            Some(candidate) => NativeCandidate::prepare(&self.context, candidate, None, deadline)
+                .await
+                .map(Some),
+            None => Ok(None),
+        }
     }
 
     async fn prepare_expiry(
@@ -621,7 +654,8 @@ impl UpdateBackend for NativeBackend {
         candidate: &Self::Candidate,
         deadline: Instant,
     ) -> Result<(), ReadFailure> {
-        self.prepare_native_expiry(candidate, deadline).await
+        self.prepare_native_expiry(&candidate.selected, deadline)
+            .await
     }
 }
 

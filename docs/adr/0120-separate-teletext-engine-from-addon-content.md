@@ -162,7 +162,19 @@ publication/guide expiry. Only future content wakes shorten its polling sleep;
 an overdue wake after a failed read must not create an immediate retry loop.
 The pump dispatches a confirmed same-origin content refresh through the native
 cache-preserving ACK path. Inactive and post-expiry replacements retain full
-acquisition. Field ownership and per-page reporting remain open below.
+acquisition.
+The Base response owner now loads the host producer recipe from the exact,
+digest-checked manual revision. It retains the final published physical rows,
+including fixed editorial cells, and derives only the saved dynamic ranges.
+Programme projections share the existing observation cadence and expose an
+earlier actual programme/gap boundary. Clock fields use local date/time and
+change only at their own boundaries. A failed programme read blanks every
+dynamic field on that logical page, including its clock-only subpages, until
+the programme read recovers; independent clock pages continue. Bounded native
+encoding preserves unrelated displays, declarations and explicit resource
+lifecycles. The original selection is confirmed again after field work, under
+the same deadline and original authority cap. Derived cells cannot renew it.
+Per-page reporting and joined native acceptance remain open below.
 Automatic Base guide regeneration borrows the custom source from the checked,
 immutable original design revision. It changes only the invocation correlation;
 rows, element revisions and field recipes remain exact, even after subsequent
@@ -170,7 +182,7 @@ element edits or deletion. New Check still uses the latest linked elements.
 This reuse retains the existing selection, response, admission and deadline
 fences and grants no independent publication authority. Effective/Scripted
 custom-page composition remains a separate open requirement.
-Live refresh ownership and per-page reporting are still being integrated.
+Joined refresh/restart qualification and per-page reporting are still being integrated.
 Refresh after publication, custom pages during published
 Scripted intervals, the element's subpage cycle time and the acceptance
 evidence remain open in the `teletext-support` parity record.
