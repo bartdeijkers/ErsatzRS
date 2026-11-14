@@ -60,6 +60,31 @@ impl TeletextOutputGate {
         service: &Arc<EncodedTeletextAuthoredService>,
         now: Duration,
     ) -> Result<(), TeletextOutputError> {
+        self.replace_authored_content(receipt, service, now, false)
+    }
+
+    /// Refresh display content at the same strict sink-ACK boundary. Unchanged
+    /// pages keep their caches when resource banks, magazine data and service
+    /// metadata are identical; changed dependencies retain full acquisition.
+    /// This grants no publication or source authority.
+    /// # Errors
+    /// Preserves every ordinary replacement/ACK, clock and lifecycle rejection.
+    pub fn refresh_authored_displays_at_acknowledged_boundary(
+        &mut self,
+        receipt: &TeletextOutputAcknowledgement,
+        service: &Arc<EncodedTeletextAuthoredService>,
+        now: Duration,
+    ) -> Result<(), TeletextOutputError> {
+        self.replace_authored_content(receipt, service, now, true)
+    }
+
+    fn replace_authored_content(
+        &mut self,
+        receipt: &TeletextOutputAcknowledgement,
+        service: &Arc<EncodedTeletextAuthoredService>,
+        now: Duration,
+        display_refresh: bool,
+    ) -> Result<(), TeletextOutputError> {
         self.check_transition(receipt, now)?;
         self.check_warm_metadata(service)?;
         let retirement = super::mot_retirement::MotRetirement::prepare(self, service)?;
@@ -74,7 +99,11 @@ impl TeletextOutputGate {
             .carousel
             .as_ref()
             .map(|carousel| {
-                carousel.prepare_authored_shared_replacement_at_boundary(Arc::clone(service))
+                if display_refresh {
+                    carousel.prepare_authored_display_refresh_at_boundary(service)
+                } else {
+                    carousel.prepare_authored_shared_replacement_at_boundary(Arc::clone(service))
+                }
             })
             .transpose()?;
         let descriptor = TeletextServiceDescriptor::from_authored_service(service);

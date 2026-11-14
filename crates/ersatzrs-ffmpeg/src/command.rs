@@ -157,9 +157,16 @@ pub fn build_mpegts_concat_command(
 ) -> FfmpegCommand {
     let mut input = InputFile::concat(concat_url);
     input.add_readrate("1.0");
-    input
-        .input_options
-        .extend(["-stream_loop".to_owned(), "-1".to_owned()]);
+    // Open the next finite source before the preceding programme drains.
+    // Source-caption initialization otherwise stalls the paced concat input
+    // at every boundary. Final output retains its own bounded backpressure,
+    // clock and delivery deadlines; this never changes source timestamps.
+    input.input_options.extend([
+        "-readrate_initial_burst".to_owned(),
+        "2".to_owned(),
+        "-stream_loop".to_owned(),
+        "-1".to_owned(),
+    ]);
 
     let mut steps = vec![
         no_standard_input(),

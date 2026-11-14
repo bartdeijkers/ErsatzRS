@@ -149,7 +149,13 @@ Bucket A:
   ownership with infrastructure persistence, atomicity and retries. ADR0080 makes SQLite the sole
   backend; historical MySQL wording is stale, not new scope.
 - teletext-custom-pages-broadcast (parity/teletext-support.toml): Functionality then evidence,
-  separate PRs: 3b dynamic refresh; 3c effective Lua/Scripted intervals; subpage timing; FL links;
+  separate PRs: 3b dynamic refresh is implemented and locally qualified in PR158. Matched8ccda13a/
+  ce5b8113 and publishedFFmpeg2.0.10 pass full own-channel production guide/custom-field102,
+  four headed Chromium/Firefox JS/no-JS restart/Health cases, canonical TSDuck93 and smoke/bundle.
+  Exact source-bound8ms, expiry/ACK/deadline/capacity controls and original negatives remain.
+  The bounded concat read-head-start correction closes the measured successor-preparation gap.
+  Only required ready-PR CI on the final head and authorized merge remain before the next package;
+  3c effective Lua/Scripted intervals; subpage timing; FL links;
   retained part4 engine preview and applicable X26/X28 import; 3d/5 publication, independent decoded
   stream and no-JS/hydrated flows. Part4 must not be lost from the plan summary or silently deferred
   with enhanced-only debt.
@@ -164,7 +170,8 @@ Bucket A:
 Bucket B:
 - teletext-admin-recovery-flow (parity/teletext-support.toml): Part6 local mandatory proof is
   complete in PR155: the approved native-effective8ms source criterion, fresh five-window joined
-  case and102 strict controls pass; exact-head ready-PR CI/merge remain delivery gates. The sole
+  case and102 strict controls pass. Exact45da5300 ready CI43593269855 passes all13 jobs; PR155
+  is merged as005789a6. Local proof and Git delivery are complete within that scope. The sole
   functional/evidence remainder is part7: missing Bart-PC access and native packaged Windows proof
   before replacing the channel workaround. Close with that exact package/launcher/admin/scanner/
   caption/playback repair and native acceptance; no shared/global or live installation mutation is

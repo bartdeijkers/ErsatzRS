@@ -101,7 +101,98 @@ def fixture(withdraw=True, startup=False):
     return [raw, log, request, tables, "".join(sections), metadata]
 
 
+def terminal_withdrawal(values):
+    line = next(line for line in values[1].splitlines(keepends=True)
+                if b'event="monitor_proposal"' in line and b'action="withdraw"' in line)
+    line = line.replace(b'sequence=1 ', b'sequence=3 ').replace(utc(1_000_010_000).encode(), utc(2_000_000_000).encode())
+    values[1] += line
+    values[2]["log_end"] = len(values[1])
+
+
+def repeated_observation(values, runtime=50):
+    lines = values[1].splitlines(keepends=True)
+    index = next(i for i, line in enumerate(lines) if b'event="monitor_recovered"' in line)
+    duplicate = lines[index].replace(b'guide_runtime_id=50 ', f'guide_runtime_id={runtime} '.encode())
+    duplicate = duplicate.replace(utc(1_001_200_000).encode(), utc(1_001_210_000).encode())
+    lines.insert(index + 1, duplicate)
+    values[1] = b"".join(lines)
+    values[2]["log_end"] = len(values[1])
+
+
 class GuideBoundaryTests(unittest.TestCase):
+    def test_repeated_observations_keep_one_exact_fresh_runtime_identity(self):
+        values = fixture()
+        repeated_observation(values)
+        result = G.qualify(*values)
+        self.assertEqual(result["fresh_runtime_observations"], 2)
+        self.assertFalse(result["caption_timing_waived"])
+
+    def test_repeated_observations_cannot_hide_a_different_runtime(self):
+        values = fixture()
+        repeated_observation(values, runtime=51)
+        with self.assertRaisesRegex(G.H.ProofError, "one fresh runtime identity"):
+            G.qualify(*values)
+
+    def test_terminal_undelivered_withdrawal_is_retained_outside_packet_scope(self):
+        values = fixture()
+        terminal_withdrawal(values)
+        result = G.qualify(*values)
+        self.assertEqual(result["capture_sha256"], G.H.digest(values[0]))
+        self.assertEqual([event["sequence"] for event in result["terminal_undelivered_proposals"]], [3])
+        self.assertFalse(result["caption_timing_waived"])
+
+    def test_terminal_withdrawal_cannot_have_any_delivery_event(self):
+        values = fixture()
+        terminal_withdrawal(values)
+        line = next(line for line in values[1].splitlines(keepends=True) if b'event="transition_installed"' in line)
+        values[1] += line.replace(b'sequence=1 ', b'sequence=3 ')
+        values[2]["log_end"] = len(values[1])
+        with self.assertRaisesRegex(G.H.ProofError, "terminal withdrawal has delivery"):
+            G.qualify(*values)
+
+    def test_terminal_proposal_sequences_remain_positive_and_unique(self):
+        for sequence in (0, 2):
+            with self.subTest(sequence=sequence):
+                values = fixture()
+                terminal_withdrawal(values)
+                lines = values[1].splitlines(keepends=True)
+                lines[-1] = lines[-1].replace(b'sequence=3 ', f'sequence={sequence} '.encode())
+                values[1] = b"".join(lines)
+                with self.assertRaisesRegex(G.H.ProofError, "proposal sequences are ambiguous"):
+                    G.qualify(*values)
+
+    def test_terminal_log_order_cannot_hide_a_preflush_utc_proposal(self):
+        values = fixture()
+        terminal_withdrawal(values)
+        values[1] = values[1].replace(utc(2_000_000_000).encode(), utc(1_050_000_000).encode())
+        with self.assertRaisesRegex(G.H.ProofError, "unexpected proposals"):
+            G.qualify(*values)
+
+    def test_withdrawal_before_the_last_captured_window_is_still_unexpected(self):
+        values = fixture()
+        terminal_withdrawal(values)
+        lines = values[1].splitlines(keepends=True)
+        terminal = lines.pop()
+        lines.insert(-1, terminal)
+        values[1] = b"".join(lines)
+        with self.assertRaisesRegex(G.H.ProofError, "unexpected proposals"):
+            G.qualify(*values)
+
+    def test_unflushed_partial_tail_cannot_exclude_a_terminal_proposal(self):
+        for terminal in (False, True):
+            with self.subTest(terminal=terminal):
+                values = fixture()
+                values[1] = b"".join(line.replace(b'end_packet=14 ', b'end_packet=15 ')
+                                     for line in values[1].splitlines(keepends=True)
+                                     if not (b'event="sink_window_flushed"' in line and b'first_packet=13 ' in line))
+                values[2]["log_end"] = len(values[1])
+                if terminal:
+                    terminal_withdrawal(values)
+                    with self.assertRaisesRegex(G.H.ProofError, "unexpected proposals"):
+                        G.qualify(*values)
+                else:
+                    self.assertEqual(G.qualify(*values)["terminal_undelivered_proposals"], [])
+
     def test_actual_withdrawal_ack_and_reannouncement(self):
         result = G.qualify(*fixture())
         self.assertEqual(result["recovered_packet"], 6)

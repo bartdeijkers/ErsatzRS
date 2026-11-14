@@ -872,6 +872,7 @@ async fn post_cpu_recheck_uses_whole_channel_and_original_deadline() {
         prepared.selection(),
         prepared.deadline(),
         Instant::now,
+        false,
     )
     .await
     .unwrap();
@@ -884,7 +885,8 @@ async fn post_cpu_recheck_uses_whole_channel_and_original_deadline() {
             &repo,
             prepared.selection(),
             prepared.deadline(),
-            Instant::now
+            Instant::now,
+            false
         )
         .await,
         Err(ChannelTeletextDocumentError::SelectionChanged)
@@ -894,15 +896,21 @@ async fn post_cpu_recheck_uses_whole_channel_and_original_deadline() {
         let ticks = Cell::new(0);
         let now = Instant::now();
         assert!(matches!(
-            recheck_with_ports(&repo, prepared.selection(), prepared.deadline(), || {
-                let tick = ticks.get();
-                ticks.set(tick + 1);
-                if !after_read || tick == 1 {
-                    prepared.deadline()
-                } else {
-                    now
-                }
-            })
+            recheck_with_ports(
+                &repo,
+                prepared.selection(),
+                prepared.deadline(),
+                || {
+                    let tick = ticks.get();
+                    ticks.set(tick + 1);
+                    if !after_read || tick == 1 {
+                        prepared.deadline()
+                    } else {
+                        now
+                    }
+                },
+                false
+            )
             .await,
             Err(ChannelTeletextDocumentError::TimedOut)
         ));
@@ -1207,7 +1215,12 @@ async fn observed_selection_changes_reject_before_entry_requests_or_first_produc
             &invalid,
             input_budget(),
             |_, _, _| async { panic!("changed observation invoked a producer") },
-            (|| start, Some(start + PREPARATION_TIMEOUT), Some(&observed)),
+            (
+                || start,
+                Some(start + PREPARATION_TIMEOUT),
+                Some(&observed),
+                false,
+            ),
         )
         .await;
         assert!(
@@ -1244,7 +1257,7 @@ async fn exact_observed_selection_keeps_one_deadline_and_final_membership_rechec
                 calls.set(calls.get() + 1);
                 async move { Ok(mixed_receipt(selected)) }
             },
-            (|| start, Some(deadline), Some(&observed)),
+            (|| start, Some(deadline), Some(&observed), false),
         )
         .await;
         if changed_after_invocation {
@@ -1279,6 +1292,7 @@ async fn observed_off_and_expired_admission_do_not_invoke_or_renew() {
             || start,
             Some(start + Duration::from_secs(15)),
             Some(&observed),
+            false,
         ),
     )
     .await
@@ -1295,7 +1309,7 @@ async fn observed_off_and_expired_admission_do_not_invoke_or_renew() {
         &context(),
         input_budget(),
         |_, _, _| async { panic!("expired observation invoked a producer") },
-        (|| start, Some(start), Some(&observed)),
+        (|| start, Some(start), Some(&observed), false),
     )
     .await;
     assert!(matches!(

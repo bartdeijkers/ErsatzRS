@@ -15,6 +15,53 @@ use sqlx::Executor as _;
 const MAX_DOCUMENT: usize = 4096;
 
 #[tokio::test]
+async fn published_host_membership_preserves_installed_fences_and_strict_new_acceptance() {
+    let fixture = Fixture::new().await;
+    let mut original = fixture.selection.clone();
+    let host = ersatzrs_domain::teletext_custom_pages_selection(1);
+    let index = original
+        .bindings
+        .partition_point(|binding| binding.addon_id < host.addon_id);
+    original.bindings.insert(index, host);
+    // Read-only transaction: compare the two confirmation policies.
+    let mut tx = fixture.repo.0.begin().await.unwrap();
+    assert_eq!(
+        check_selection(&mut tx, &original).await.unwrap(),
+        Err(R::Publication(P::SelectionChanged))
+    );
+    assert_eq!(
+        check_published_selection(&mut tx, &original).await.unwrap(),
+        Ok(())
+    );
+    tx.rollback().await.unwrap();
+    let element: i64 = sqlx::query_scalar(r#"INSERT INTO "TeletextElement" ("Name","SourceFormat","SourceFileName","Document","PageNumber","SubpageCount","CycleSeconds","Bindings","Revision","UpdatedAt") VALUES ('Published fixture',1,'fixture.tti',X'41',336,1,10,'[]',1,'2026-11-14T00:00:00Z') RETURNING "Id""#).fetch_one(&fixture.repo.0).await.unwrap();
+    sqlx::query(r#"INSERT INTO "ChannelTeletextElement" ("ChannelId","TeletextElementId","IsEnabled") VALUES (1,?,1)"#).bind(element).execute(&fixture.repo.0).await.unwrap();
+    // Read-only transaction: the unpublished addition changes no original.
+    let mut tx = fixture.repo.0.begin().await.unwrap();
+    assert_eq!(
+        check_selection(&mut tx, &fixture.selection).await.unwrap(),
+        Err(R::Publication(P::SelectionChanged))
+    );
+    assert_eq!(
+        check_published_selection(&mut tx, &fixture.selection)
+            .await
+            .unwrap(),
+        Ok(())
+    );
+    tx.rollback().await.unwrap();
+    sqlx::query(r#"UPDATE "TeletextProfile" SET "Revision"="Revision"+1"#)
+        .execute(&fixture.repo.0)
+        .await
+        .unwrap();
+    // Read-only transaction: changed installed profiles must still be refused.
+    let mut tx = fixture.repo.0.begin().await.unwrap();
+    assert!(check_published_selection(&mut tx, &original)
+        .await
+        .unwrap()
+        .is_err());
+}
+
+#[tokio::test]
 async fn base_artifact_versions_keep_legacy_and_lifecycle_roles_distinct() {
     for version in [
         TELETEXT_GENERATION_ARTIFACT_VERSION,

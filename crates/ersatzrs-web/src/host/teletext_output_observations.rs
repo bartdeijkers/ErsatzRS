@@ -1,7 +1,7 @@
 //! Bounded diagnostics owned by actual output lifetimes, isolated per host.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
@@ -10,8 +10,8 @@ use std::{
 
 use ersatzrs_app::TeletextOutputObserver;
 use ersatzrs_domain::{
-    TeletextChannelOutputObservations, TeletextOutputFailure, TeletextOutputFailureKind,
-    TeletextOutputObservation, TeletextOutputObservationPhase,
+    TeletextChannelOutputObservations, TeletextCustomFieldFailure, TeletextOutputFailure,
+    TeletextOutputFailureKind, TeletextOutputObservation, TeletextOutputObservationPhase,
 };
 
 // Diagnostic storage only. Reaching this bound never refuses ordinary playback.
@@ -27,6 +27,7 @@ struct Registry {
     // At most one per channel, so bounded by the number of channels; it
     // outlives the failed output so the admin can still explain the stop.
     failures: Mutex<BTreeMap<i64, TeletextOutputFailure>>,
+    field_failures: Mutex<BTreeMap<i64, TeletextCustomFieldFailure>>,
 }
 
 struct Owner {
@@ -68,6 +69,7 @@ impl OutputObservations {
 
     pub(super) fn snapshot(&self, channel_id: i64) -> Option<TeletextChannelOutputObservations> {
         let last_failure = self.0.failures.lock().ok()?.get(&channel_id).cloned();
+        let last_field_failure = self.0.field_failures.lock().ok()?.get(&channel_id).cloned();
         let entries = self.0.entries.lock().ok()?;
         Some(TeletextChannelOutputObservations {
             outputs: entries
@@ -78,11 +80,24 @@ impl OutputObservations {
             // Conservatively report host-wide overflow, even on another channel.
             incomplete: self.0.overflow.load(Ordering::Relaxed) != 0,
             last_failure,
+            last_field_failure,
         })
     }
 }
 
 impl OutputObservations {
+    pub(super) fn field_failures(&self) -> Vec<(i64, TeletextCustomFieldFailure)> {
+        self.0.field_failures.lock().map_or_else(
+            |_| Vec::new(),
+            |failures| {
+                failures
+                    .iter()
+                    .map(|(id, failure)| (*id, failure.clone()))
+                    .collect()
+            },
+        )
+    }
+
     /// Channels whose last authored output stopped on a transport failure.
     pub(super) fn failures(&self) -> Vec<(i64, TeletextOutputFailure)> {
         self.0.failures.lock().map_or_else(
@@ -110,7 +125,14 @@ impl TeletextOutputObserver for Owner {
         if let Ok(mut entries) = self.registry.entries.lock() {
             if let Some((channel, entry)) = entries.get_mut(&self.epoch) {
                 if *channel == self.channel_id {
+                    // Only a new sink receipt changes retained field health.
+                    // A request with an old applied value cannot imply recovery.
+                    let acknowledged =
+                        observation.applied.is_some() && entry.applied != observation.applied;
                     *entry = observation;
+                    if acknowledged {
+                        self.record_field_delivery(&entries);
+                    }
                 }
             }
         }
@@ -131,6 +153,47 @@ impl TeletextOutputObserver for Owner {
                     at: chrono::Utc::now(),
                 },
             );
+        }
+    }
+}
+
+impl Owner {
+    fn record_field_delivery(
+        &self,
+        entries: &BTreeMap<uuid::Uuid, (i64, TeletextOutputObservation)>,
+    ) {
+        // Plain AV, withdrawal and authored output without field metadata do
+        // not prove recovery of previously acknowledged blank fields.
+        let confirms_fields = entries
+            .get(&self.epoch)
+            .and_then(|(_, entry)| entry.applied.as_ref())
+            .filter(|selection| selection.authored)
+            .and_then(|selection| selection.generation.as_ref())
+            .is_some_and(|generation| generation.custom_fields.is_some());
+        if !confirms_fields {
+            return;
+        }
+        let pages: BTreeSet<_> = entries
+            .values()
+            .filter(|(channel, _)| *channel == self.channel_id)
+            .filter_map(|(_, entry)| entry.applied.as_ref())
+            .filter(|selection| selection.authored)
+            .filter_map(|selection| selection.generation.as_ref())
+            .filter_map(|generation| generation.custom_fields.as_ref())
+            .flat_map(|fields| fields.failed_pages.iter().copied())
+            .collect();
+        if let Ok(mut failures) = self.registry.field_failures.lock() {
+            if pages.is_empty() {
+                failures.remove(&self.channel_id);
+            } else {
+                failures.insert(
+                    self.channel_id,
+                    TeletextCustomFieldFailure {
+                        pages: pages.into_iter().collect(),
+                        at: chrono::Utc::now(),
+                    },
+                );
+            }
         }
     }
 }
@@ -246,5 +309,155 @@ mod tests {
         assert!(!registry.snapshot(1).unwrap().incomplete);
         drop(owners);
         assert!(registry.snapshot(1).unwrap().outputs.is_empty());
+    }
+    fn field_output(pages: &[u16]) -> TeletextOutputObservation {
+        let mut output = initial();
+        output.requested.authored = true;
+        output.requested.generation = Some(ersatzrs_domain::TeletextOutputGenerationObservation {
+            generation_id: 3,
+            request_id: 2,
+            design_id: 1,
+            revision: 1,
+            effective: false,
+            guide_refresh: None,
+            custom_fields: Some(ersatzrs_domain::TeletextCustomFieldOutputObservation {
+                revision: 1,
+                failed_pages: pages.to_vec(),
+            }),
+        });
+        output
+    }
+
+    #[test]
+    fn field_failure_requires_a_new_receipt_and_survives_proposals_and_output_end() {
+        let registry = OutputObservations::default();
+        let mut output = field_output(&[150, 151]);
+        let owner = registry.register(7, output.clone()).unwrap();
+        owner.record(output.clone());
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_none());
+        // A superseded receipt still describes actual delivery, not the latest request.
+        output.applied = Some(output.requested.clone());
+        output.requested.sequence = 2;
+        output
+            .requested
+            .generation
+            .as_mut()
+            .unwrap()
+            .custom_fields
+            .as_mut()
+            .unwrap()
+            .failed_pages
+            .clear();
+        owner.record(output.clone());
+        assert_eq!(
+            registry
+                .snapshot(7)
+                .unwrap()
+                .last_field_failure
+                .unwrap()
+                .pages,
+            [150, 151]
+        );
+        output.phase = Phase::Rejected;
+        owner.record(output.clone());
+        assert_eq!(
+            registry
+                .snapshot(7)
+                .unwrap()
+                .last_field_failure
+                .unwrap()
+                .pages,
+            [150, 151]
+        );
+        drop(owner);
+        assert_eq!(
+            registry
+                .snapshot(7)
+                .unwrap()
+                .last_field_failure
+                .unwrap()
+                .pages,
+            [150, 151]
+        );
+        assert!(registry.snapshot(8).unwrap().last_field_failure.is_none());
+        let mut recovered = field_output(&[]);
+        let retry = registry.register(7, recovered.clone()).unwrap();
+        // Historical failure remains while a healthy request is merely waiting.
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_some());
+        recovered.applied = Some(recovered.requested.clone());
+        recovered.phase = Phase::Applied;
+        retry.record(recovered);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_none());
+    }
+
+    #[test]
+    fn withdrawal_and_outputs_without_field_receipts_cannot_claim_field_recovery() {
+        let registry = OutputObservations::default();
+        let mut output = field_output(&[150]);
+        let owner = registry.register(7, output.clone()).unwrap();
+        output.applied = Some(output.requested.clone());
+        output.phase = Phase::Applied;
+        owner.record(output.clone());
+        output.requested.sequence = 1;
+        output.requested.authored = false;
+        output.requested.generation = None;
+        output.applied = Some(output.requested.clone());
+        owner.record(output);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_some());
+        drop(owner);
+
+        let mut unrelated = field_output(&[]);
+        unrelated
+            .requested
+            .generation
+            .as_mut()
+            .unwrap()
+            .custom_fields = None;
+        let other = registry.register(7, unrelated.clone()).unwrap();
+        unrelated.applied = Some(unrelated.requested.clone());
+        unrelated.phase = Phase::Applied;
+        other.record(unrelated);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_some());
+        drop(other);
+
+        let mut recovered = field_output(&[]);
+        let retry = registry.register(7, recovered.clone()).unwrap();
+        recovered.applied = Some(recovered.requested.clone());
+        recovered.phase = Phase::Applied;
+        retry.record(recovered);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_none());
+    }
+
+    #[test]
+    fn a_healthy_viewer_cannot_hide_another_active_viewers_confirmed_blank_fields() {
+        let registry = OutputObservations::default();
+        let mut failed = field_output(&[150]);
+        let owner = registry.register(7, failed.clone()).unwrap();
+        failed.applied = Some(failed.requested.clone());
+        failed.phase = Phase::Applied;
+        owner.record(failed);
+        let mut healthy = field_output(&[]);
+        let other = registry.register(7, healthy.clone()).unwrap();
+        healthy.applied = Some(healthy.requested.clone());
+        healthy.phase = Phase::Applied;
+        other.record(healthy.clone());
+        assert_eq!(
+            registry
+                .snapshot(7)
+                .unwrap()
+                .last_field_failure
+                .unwrap()
+                .pages,
+            [150]
+        );
+        drop(owner);
+        healthy.requested.sequence = 1;
+        healthy.phase = Phase::Waiting;
+        other.record(healthy.clone());
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_some());
+        healthy.applied = Some(healthy.requested.clone());
+        healthy.phase = Phase::Applied;
+        other.record(healthy);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_none());
     }
 }

@@ -749,7 +749,9 @@ async fn selection_current(
             {
                 return Ok(false);
             }
-            Ok(super::check_selection(tx, selection).await?.is_ok())
+            Ok(super::check_published_selection(tx, selection)
+                .await?
+                .is_ok())
         }
         (Role::Effective, TeletextGuideRefreshSelection::Effective(selection)) => {
             if selection.channel_id != seed.generation.request.channel_id {

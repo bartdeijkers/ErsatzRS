@@ -77,6 +77,22 @@ restores their original values and presence.
 This browser scope does not establish transport carriage or native Windows
 acceptance; those remain in `teletext-admin-recovery-flow`.
 
+Run the `published custom fields report` cases in
+`tests/e2e/teletext-restart-flow.spec.ts` through the isolated Playwright wrapper
+with qualified FFmpeg9 and `--grep 'published custom fields report' --headed --workers=1`.
+Select the qualified managed package explicitly with `ERSATZRS_FFMPEG_DIR`
+(the directory containing `bin/`), `FFMPEG_PATH` and `FFPROBE_PATH`; record
+their executable hashes. The wrapper's optional local FFmpeg override can be
+an older build without the accepted concat-clock fixes. Leave browser `TMPDIR`
+at its ordinary short system path; application fixtures stay under repo `tmp/`.
+They cover Chromium/Firefox, hydrated English and no-JS Dutch, actual page-local
+projection failure, retained Health/recovery, independently decoded pages and AV,
+and an actual host replacement after deleting the latest elements and crossing
+a real minute. Leave the polling page before deliberately stopping its host;
+keep the zero-console/page-error assertion. This Base live-policy-v2 synthetic
+producer proof does not substitute for the production guide-worker join,
+programme transitions, final transport gates or native Windows acceptance.
+
 The opt-in `ordinary bitrate bursts retain scanned captions` case in
 `teletext-guide-authoring-flow.spec.ts` also needs
 `RUST_LOG=info,ersatzrs_web::transport::iptv::teletext_provenance=debug` for its
@@ -86,6 +102,24 @@ handover. Pages 200/201 are decoded from the unmodified recovered suffix.
 The raw strict transport check remains independent; an expiry receipt cannot
 waive a subtitle timing failure. Source and 8 MiB/30-second capture bounds stay
 unchanged.
+
+Set `ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY=1` and select
+`--grep "immutable custom pages refresh"` to run the joined custom-page variant
+with two genuinely scanned movie identities and distinct programme
+titles. Pages150/151 remain published after their latest elements are deleted.
+Each output selects its own channel's real guide through the existing form.
+The fixture starts Reset during seconds14–16: the clear-cue direct capture
+must independently decode both sides of a real minute tick; the Legacy capture
+qualifies the actual programme transition with the existing guide-only oracle.
+This isolated fixture provides three transcode leases: the preceding direct
+capture may still be draining when the Legacy wrapper and encoder start. It
+restores the original setting afterward. Production admission limits, every
+strict oracle, and the original capture bounds remain unchanged.
+The boundary qualifier retains a shutdown withdrawal separately only after the
+window containing the final captured packet was flushed and no delivery event
+exists for that proposal. Repeated candidate reads must identify one exact
+immutable runtime. Packet hashes, expiry, signalling and complete-cycle ACKs
+remain mandatory; neither diagnostic case waives caption timing.
 
 ## Add-on list task workspace
 

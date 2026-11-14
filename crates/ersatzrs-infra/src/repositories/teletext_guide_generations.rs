@@ -72,6 +72,16 @@ impl Scope<'_> {
                 .map(|result| result.map_err(R::Publication)),
         }
     }
+
+    async fn check_published(
+        self,
+        tx: &mut Transaction<'_, Db>,
+    ) -> Result<std::result::Result<(), R>> {
+        match self {
+            Self::Base(selection) => super::check_published_selection(tx, selection).await,
+            Self::Effective(_) => self.check(tx).await,
+        }
+    }
 }
 
 struct Target<'a> {
@@ -466,7 +476,7 @@ async fn confirm_before(
     {
         return Ok(M::Rejected(R::Publication(P::SelectionChanged)));
     }
-    if let Err(reason) = scope.check(&mut tx).await? {
+    if let Err(reason) = scope.check_published(&mut tx).await? {
         return Ok(M::Rejected(reason));
     }
     if let Err(reason) = check_revision(

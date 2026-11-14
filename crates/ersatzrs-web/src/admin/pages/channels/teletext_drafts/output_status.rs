@@ -44,12 +44,19 @@ pub(super) fn view(data: &TeletextDraftPreviewData) -> AnyView {
             </li>
         }
     }).collect_view();
+    let last_failure = observations.last_field_failure.as_ref().map(|failure| {
+        tr(TextKey::TeletextFieldLastFailure)
+            .replace("{pages}", &page_numbers(&failure.pages))
+            .replace("{at}", &failure.at.to_rfc3339())
+    });
+    let no_field_failure = last_failure.is_none();
     view! {
         <section data-testid="teletext-output-status" data-state="observed">
             <h3>{tr(TextKey::TeletextDeliveryTitle)}</h3>
             <p>{tr(TextKey::TeletextDeliveryHelp)}</p>
             <p role="status" hidden=!observations.outputs.is_empty()>{tr(TextKey::TeletextDeliveryEmpty)}</p>
             <p role="status" hidden=!observations.incomplete>{tr(TextKey::TeletextDeliveryIncomplete)}</p>
+            <p data-testid="teletext-field-last-failure" hidden=no_field_failure>{last_failure}</p>
             <ul>{outputs}</ul>
         </section>
     }.into_any()
@@ -79,6 +86,20 @@ fn selection(selection: &TeletextOutputSelectionObservation) -> String {
                 refresh.captured_at.to_rfc3339(),
             );
         }
+        if let Some(fields) = &generation.custom_fields {
+            let status = if fields.failed_pages.is_empty() {
+                tr(TextKey::TeletextFieldReady).to_owned()
+            } else {
+                tr(TextKey::TeletextFieldFailed)
+                    .replace("{pages}", &page_numbers(&fields.failed_pages))
+            };
+            let _ = write!(
+                label,
+                " · {} {} · {status}",
+                tr(TextKey::TeletextFieldRevision),
+                fields.revision
+            );
+        }
         label
     });
     if selection.authored {
@@ -89,4 +110,12 @@ fn selection(selection: &TeletextOutputSelectionObservation) -> String {
             |generation| format!("{generation} · {}", tr(TextKey::TeletextDeliveryAbsent)),
         )
     }
+}
+
+fn page_numbers(pages: &[u16]) -> String {
+    pages
+        .iter()
+        .map(|page| format!("{page:03}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }

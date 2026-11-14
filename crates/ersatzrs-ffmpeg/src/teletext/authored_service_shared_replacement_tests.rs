@@ -2,6 +2,7 @@
 
 use super::authored_service_carousel_tests::{cycle, service_with_resources};
 use super::*;
+use crate::teletext::authored_service_tests as fixtures;
 use crate::teletext::service_update::tests::{candidate, spec};
 use crate::teletext::TeletextResourceFullUpdate::{Changed, Unchanged};
 
@@ -272,4 +273,131 @@ fn boundary_prediction_overflow_changes_neither_clock_nor_service() {
     );
     assert_eq!(cursor(&carousel), before);
     assert!(Arc::ptr_eq(retained(&carousel), &service));
+}
+
+fn display_field_service(value: u8) -> Arc<EncodedTeletextAuthoredService> {
+    use ersatzrs_domain::{TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow};
+    let baseline = service_with_resources(3, 0, false);
+    let owner = baseline.declared().semantic().base().pages[1].address;
+    let mut cells = [b' '; 40];
+    cells[0] = value;
+    let declared = baseline
+        .declared()
+        .clone()
+        .with_physical_base_overlays(
+            vec![TeletextPhysicalBaseOverlay::new(
+                owner,
+                vec![TeletextPhysicalBaseRow::new(1, cells).unwrap()],
+            )
+            .unwrap()],
+            fixtures::semantic_limits(),
+        )
+        .unwrap();
+    Arc::new(
+        crate::teletext::encode_teletext_authored_service(declared, &[], &fixtures::limits())
+            .unwrap(),
+    )
+}
+
+fn display_erase_flags(carousel: &mut TeletextCarousel) -> Vec<bool> {
+    cycle(carousel)
+        .iter()
+        .filter(|batch| batch.kind() == TeletextCarouselBatchKind::Header)
+        .map(|batch| match batch.data_units()[0][9].reverse_bits() {
+            0x15 => false, // Hamming(0): repeat, no C4.
+            0xd0 => true,  // Hamming(8): C4 erase, subcode high nibble zero.
+            _ => panic!("fixture must use subcodes below16"),
+        })
+        .collect()
+}
+
+#[test]
+fn display_refresh_erases_only_the_changed_physical_page_and_preserves_clock() {
+    let mut carousel = TeletextCarousel::new_authored_shared(display_field_service(b'A')).unwrap();
+    assert_eq!(display_erase_flags(&mut carousel), [true, true, true]);
+    let ticks = carousel.ticks;
+    let next = display_field_service(b'B');
+    let prepared = carousel
+        .prepare_authored_display_refresh_at_boundary(&next)
+        .unwrap();
+    assert_eq!(
+        prepared
+            .repeat_display_headers
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        [0, 2]
+    );
+    carousel.commit_prepared_replacement(prepared);
+    assert_eq!(carousel.ticks, ticks);
+    assert_eq!(display_erase_flags(&mut carousel), [false, true, false]);
+    assert_eq!(display_erase_flags(&mut carousel), [false, false, false]);
+}
+
+#[test]
+fn full_publication_still_acquires_every_display() {
+    let mut carousel = TeletextCarousel::new_authored_shared(display_field_service(b'A')).unwrap();
+    cycle(&mut carousel);
+    carousel
+        .replace_authored_shared_at_boundary(display_field_service(b'B'))
+        .unwrap();
+    assert_eq!(display_erase_flags(&mut carousel), [true, true, true]);
+}
+
+#[test]
+fn display_refresh_never_treats_an_unchanged_resource_header_as_a_display_repeat() {
+    let service = Arc::new(
+        service_with_resources(3, 1, false)
+            .with_resource_lifecycle_variants(
+                std::time::Instant::now() + std::time::Duration::from_secs(30),
+            )
+            .unwrap(),
+    );
+    let mut carousel = TeletextCarousel::new_authored_shared(Arc::clone(&service)).unwrap();
+    cycle(&mut carousel);
+    let prepared = carousel
+        .prepare_authored_display_refresh_at_boundary(&service)
+        .unwrap();
+    assert_eq!(prepared.repeat_display_headers.len(), 3);
+    for logical in &prepared.repeat_display_headers {
+        assert!(prepared.content.page(*logical).2.is_none());
+    }
+}
+
+#[test]
+fn changed_resource_banks_or_magazines_keep_full_acquisition() {
+    for next in [
+        service_with_resources(3, 1, false),
+        service_with_resources(3, 0, true),
+    ] {
+        let mut carousel =
+            TeletextCarousel::new_authored_shared(Arc::new(service_with_resources(3, 0, false)))
+                .unwrap();
+        cycle(&mut carousel);
+        let prepared = carousel
+            .prepare_authored_display_refresh_at_boundary(&Arc::new(next))
+            .unwrap();
+        assert!(prepared.repeat_display_headers.is_empty());
+    }
+}
+
+#[test]
+fn discarded_and_midcycle_display_refresh_cannot_change_the_current_carousel() {
+    let mut carousel = TeletextCarousel::new_authored_shared(display_field_service(b'A')).unwrap();
+    cycle(&mut carousel);
+    let before = cursor(&carousel);
+    drop(
+        carousel
+            .prepare_authored_display_refresh_at_boundary(&display_field_service(b'B'))
+            .unwrap(),
+    );
+    assert_eq!(cursor(&carousel), before);
+    assert!(carousel.repeat_display_headers.is_empty());
+    carousel.next_batch().unwrap();
+    let before = cursor(&carousel);
+    assert!(matches!(
+        carousel.prepare_authored_display_refresh_at_boundary(&display_field_service(b'B')),
+        Err(TeletextTransportError::MidCycleReplacement)
+    ));
+    assert_eq!(cursor(&carousel), before);
 }

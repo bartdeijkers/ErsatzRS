@@ -123,19 +123,30 @@ impl TeletextLiveOutputIntent {
         self.context.channel_id
     }
 
-    async fn current_initial(
-        &self,
-        deadline: Instant,
-    ) -> Option<Arc<SelectedTeletextOutputCandidate>> {
+    async fn current_initial(&self, deadline: Instant) -> Option<Arc<updates::NativeCandidate>> {
         let candidate = self.initial.as_ref()?;
-        candidate
+        if !candidate
             .confirm(
                 &self.context.application,
                 self.context.budget.max_serialized_bytes,
                 deadline.into_std(),
             )
             .await
-            .then(|| Arc::clone(candidate))
+        {
+            return None;
+        }
+        let prepared =
+            updates::NativeCandidate::prepare(&self.context, Arc::clone(candidate), None, deadline)
+                .await
+                .ok()?;
+        let confirmed = candidate
+            .confirm(
+                &self.context.application,
+                self.context.budget.max_serialized_bytes,
+                deadline.into_std(),
+            )
+            .await;
+        (confirmed && prepared.fields_current_at(chrono::Utc::now())).then_some(prepared)
     }
 }
 
