@@ -268,6 +268,14 @@ trait UpdateBackend: Send + Sync + 'static {
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration;
     fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>>;
+    /// Derived content identity is separate from immutable publication authority.
+    fn content_revision(_candidate: &Self::Candidate) -> Option<u64> {
+        None
+    }
+    /// A content wake never expires the selected manual or guide authority.
+    fn next_content_refresh(_candidate: &Self::Candidate) -> Option<Instant> {
+        None
+    }
     fn original_transition(_candidate: &Self::Candidate) -> Option<Instant> {
         None
     }
@@ -697,6 +705,7 @@ impl<C, I: Clone> MonitorState<C, I> {
         service: Arc<EncodedTeletextAuthoredService>,
         context: Option<I>,
         observation: Option<TeletextOutputGenerationObservation>,
+        display_refresh: bool,
     ) -> bool {
         // Reserve the last representable sequence for fail-closed withdrawal.
         let Some(sequence) = self
@@ -714,7 +723,9 @@ impl<C, I: Clone> MonitorState<C, I> {
         let Ok(update) = update else {
             return false;
         };
-        let update = update.with_generation_observation(observation);
+        let update = update
+            .with_generation_observation(observation)
+            .with_display_refresh(display_refresh && self.active && !self.expiry_replacement);
         self.sequence = sequence;
         self.active = true;
         self.observed_absence = None;
@@ -841,6 +852,7 @@ async fn reconcile<B: UpdateBackend>(
             return false;
         };
         let previous = B::generation_observation(candidate);
+        let previous_content = B::content_revision(candidate);
         let Some(confirmed) = bounded(
             updates,
             deadline,
@@ -857,14 +869,16 @@ async fn reconcile<B: UpdateBackend>(
             return state.withdraw(updates);
         }
         let observation = B::generation_observation(&candidate);
+        let content_changed = previous_content != B::content_revision(&candidate);
         let result = match B::service(&candidate) {
-            Some(_) if state.active && observation == previous => true,
+            Some(_) if state.active && observation == previous && !content_changed => true,
             Some(service) => state.replace(
                 updates,
                 &identity,
                 service,
                 B::candidate_context(&candidate),
                 observation,
+                content_changed,
             ),
             None => state.withdraw_with_identity(updates, Some(&identity)),
         };
@@ -984,6 +998,7 @@ async fn recover_successor<B: UpdateBackend>(
             service,
             B::candidate_context(&candidate),
             B::generation_observation(&candidate),
+            false,
         ),
         None => state.withdraw_with_identity(updates, Some(B::identity(&candidate))),
     };
@@ -1066,6 +1081,9 @@ async fn run_monitor<B: UpdateBackend>(
         if let Some(boundary) = backend.next_transition() {
             next = next.min(boundary);
         }
+        if let Some(boundary) = state.cached.as_ref().and_then(B::next_content_refresh) {
+            next = next.min(boundary);
+        }
         // One operation at a time, no tick catch-up burst or detached recovery.
         tokio::select! {
             biased;
@@ -1095,6 +1113,8 @@ mod tests {
         guide_context: Option<u64>,
         guide_revision: i64,
         guide_stale: bool,
+        content_revision: Option<u64>,
+        content_refresh: Option<Instant>,
     }
 
     fn candidate(id: i64, channel_id: i64) -> Candidate {
@@ -1117,9 +1137,75 @@ mod tests {
             guide_context: None,
             guide_revision: 1,
             guide_stale: false,
+            content_revision: None,
+            content_refresh: None,
             service: Arc::new(
                 crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(3),
             ),
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn content_wake_replaces_same_origin_without_expiring_authority_or_recovery() {
+        let now = Instant::now();
+        let expiry = now + Duration::from_secs(10);
+        let mut initial = candidate(1, 9);
+        initial.original_transition = Some(expiry);
+        initial.content_refresh = Some(now + Duration::from_millis(25));
+        initial.content_revision = Some(1);
+        let backend = Backend::new(Some(initial.clone()));
+        *backend.transition.lock().unwrap() = Some(expiry);
+        let mut refreshed = initial.clone();
+        refreshed.content_revision = Some(2);
+        refreshed.content_refresh = None;
+        backend.store.lock().unwrap().accepted = Some(refreshed);
+        let (updates, control, _) = teletext_output_control_channel();
+        let mut proposals = updates.subscribe();
+        let task = tokio::spawn(run_monitor(
+            backend.clone(),
+            9,
+            TeletextAcceptedUpdatePolicy::new(Duration::from_secs(5), Duration::from_secs(1))
+                .unwrap(),
+            Some(initial),
+            updates,
+            || None,
+        ));
+        let owner = TeletextAcceptedUpdatesOwner { task: Some(task) };
+        backend.read_entered.notified().await;
+        tokio::task::yield_now().await;
+        assert!(proposals.borrow().is_none());
+        tokio::time::advance(Duration::from_millis(24)).await;
+        tokio::task::yield_now().await;
+        assert!(proposals.borrow().is_none());
+        tokio::time::advance(Duration::from_millis(1)).await;
+        proposals.changed().await.unwrap();
+        assert_eq!(proposals.borrow().as_ref().unwrap().sequence(), 1);
+        assert!(proposals.borrow().as_ref().unwrap().is_display_refresh());
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 0);
+        assert_eq!(*backend.transition.lock().unwrap(), Some(expiry));
+        assert_eq!(backend.reads.load(Ordering::SeqCst), 2);
+        drop(proposals);
+        drop(control);
+        owner.stopped().await.unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn inactive_and_post_expiry_replacements_never_preserve_display_caches() {
+        for (active, expiry) in [(false, false), (true, true)] {
+            let initial = candidate(1, 9);
+            let (updates, _control, _) = teletext_output_control_channel();
+            let mut state: MonitorState<Candidate, u64> = MonitorState::new(Some(initial.clone()));
+            state.active = active;
+            state.expiry_replacement = expiry;
+            assert!(state.replace(
+                &updates,
+                &initial.identity,
+                initial.service.clone(),
+                None,
+                None,
+                true
+            ));
+            assert!(!updates.borrow().as_ref().unwrap().is_display_refresh());
         }
     }
 
@@ -1290,7 +1376,10 @@ mod tests {
             candidate: &Candidate,
             deadline: Instant,
         ) -> Result<Option<Candidate>, ReadFailure> {
-            if candidate.guide_context.is_some() {
+            let content_due = candidate
+                .content_refresh
+                .is_some_and(|at| Instant::now() >= at);
+            if candidate.guide_context.is_some() || content_due {
                 let store = self.store.lock().unwrap();
                 Ok(store
                     .accepted
@@ -1324,6 +1413,12 @@ mod tests {
             candidate
                 .service_present
                 .then(|| Arc::clone(&candidate.service))
+        }
+        fn content_revision(candidate: &Candidate) -> Option<u64> {
+            candidate.content_revision
+        }
+        fn next_content_refresh(candidate: &Candidate) -> Option<Instant> {
+            candidate.content_refresh
         }
         fn original_transition(candidate: &Candidate) -> Option<Instant> {
             candidate.original_transition
