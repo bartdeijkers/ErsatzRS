@@ -488,7 +488,7 @@ impl ApplicationServices {
                         );
                     }
                     return Box::pin(
-                        self.produce_teletext_custom_pages(selected, &input, deadline),
+                        self.produce_teletext_custom_pages(selected, &input, deadline, None),
                     )
                     .await;
                 }

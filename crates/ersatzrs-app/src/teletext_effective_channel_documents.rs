@@ -79,9 +79,12 @@ impl BoundEffectiveChannelTeletextDocumentInput {
         for (binding, receipt) in self.receipts {
             let selected_contract =
                 contract(&self.selection.bindings[binding]).ok_or(Error::SelectionShape)?;
-            // Effective (Scripted) selections never contain the host producer.
+            let producer = match &self.selection.bindings[binding] {
+                Binding::Base(base) => DocumentProducer::of(base),
+                Binding::Scripted(_) => DocumentProducer::addon(selected_contract),
+            };
             let (document, source) = validate_document_response(
-                DocumentProducer::addon(selected_contract),
+                producer,
                 &receipt.generation,
                 receipt.stdout,
                 budget,
@@ -266,13 +269,38 @@ impl ApplicationServices {
             context,
             budget,
             |selection, addon_id, input, deadline| {
-                self.invoke_effective_teletext_profile_before_with_hold(
-                    selection,
-                    addon_id,
-                    input,
-                    deadline,
-                    hold.clone(),
-                )
+                let hold = hold.clone();
+                async move {
+                    if ersatzrs_domain::is_teletext_custom_pages_producer(&addon_id) {
+                        let base = selection
+                            .bindings
+                            .iter()
+                            .find_map(|binding| match binding {
+                                Binding::Base(base) if base.addon_id == addon_id => {
+                                    Some(base.clone())
+                                }
+                                _ => None,
+                            })
+                            .ok_or(TeletextProfileRuntimeError::InvalidRequest)?;
+                        let receipt = Box::pin(self.produce_teletext_custom_pages(
+                            base,
+                            &input,
+                            deadline,
+                            Some(&selection),
+                        ))
+                        .await?;
+                        return Ok(TeletextEffectiveProfileRuntimeReceipt {
+                            selection,
+                            addon_id,
+                            stdout: receipt.stdout,
+                            generation: receipt.generation,
+                        });
+                    }
+                    self.invoke_effective_teletext_profile_before_with_hold(
+                        selection, addon_id, input, deadline, hold,
+                    )
+                    .await
+                }
             },
             (deadline, expected),
         )
@@ -462,6 +490,11 @@ fn validate_selection(
         if binding.channel_id() != channel
             || binding.addon_id().is_empty()
             || previous.is_some_and(|last| last >= binding.addon_id())
+        {
+            return Err(Error::SelectionShape);
+        }
+        if ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())
+            && *binding != Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(channel))
         {
             return Err(Error::SelectionShape);
         }

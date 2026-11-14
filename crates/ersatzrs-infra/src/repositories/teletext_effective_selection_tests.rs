@@ -490,3 +490,72 @@ async fn exact_effective_read_and_recheck_survive_reopen_without_writes_or_repla
     assert_eq!(writes, 0);
     repo.0.close().await;
 }
+
+#[tokio::test]
+async fn host_custom_pages_remain_base_members_during_scripted_on_and_off() {
+    for enabled in [false, true] {
+        let (fixture, candidate) = setup().await;
+        interval(&fixture, 1, ADDON, 0, 10, enabled.then_some(&candidate)).await;
+        sqlx::query(r#"INSERT INTO "TeletextElement"
+            ("Id", "Name", "SourceFormat", "SourceFileName", "Document", "PageNumber",
+             "SubpageCount", "CycleSeconds", "Bindings", "Revision", "UpdatedAt")
+            VALUES (1, 'Fixture custom page', 1, 'fixture.tti', X'20', 336, 1, 10, '[]', 1, 'fixture')"#)
+            .execute(&fixture.repo.0).await.unwrap();
+        sqlx::query(
+            r#"INSERT INTO "ChannelTeletextElement" ("ChannelId", "TeletextElementId", "IsEnabled")
+            VALUES (1, 1, 1)"#,
+        )
+        .execute(&fixture.repo.0)
+        .await
+        .unwrap();
+        let before = changes(&fixture).await;
+        let selection = read(&fixture, 1, 1).await;
+        assert_eq!(selection.bindings.len(), 2);
+        assert_eq!(
+            selection.bindings[0],
+            Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(1))
+        );
+        assert!(matches!(selection.bindings[1], Binding::Scripted(_)));
+        assert_eq!(selection.bindings[1].enabled(), enabled);
+        assert_eq!(selection.valid_until, Some(at(10)));
+        assert_eq!(
+            saved(
+                fixture
+                    .repo
+                    .recheck_effective_channel_snapshot(&selection, at(2))
+                    .await
+                    .unwrap()
+            ),
+            selection
+        );
+        assert_eq!(changes(&fixture).await, before);
+        assert!(!read(&fixture, 2, 1)
+            .await
+            .bindings
+            .iter()
+            .any(|binding| ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())));
+        // New Check/publication must observe link changes, unlike later output
+        // confirmation of an already published immutable original.
+        sqlx::query(r#"UPDATE "ChannelTeletextElement" SET "IsEnabled" = 0"#)
+            .execute(&fixture.repo.0)
+            .await
+            .unwrap();
+        assert_eq!(
+            fixture
+                .repo
+                .recheck_effective_channel_snapshot(&selection, at(2))
+                .await
+                .unwrap(),
+            M::Rejected(R::Conflict)
+        );
+        assert_eq!(read(&fixture, 1, 2).await.bindings.len(), 1);
+        assert_eq!(
+            fixture
+                .repo
+                .recheck_effective_channel_snapshot(&selection, at(10))
+                .await
+                .unwrap(),
+            M::Rejected(R::Conflict)
+        );
+    }
+}

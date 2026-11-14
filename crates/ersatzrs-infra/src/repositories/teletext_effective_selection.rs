@@ -126,6 +126,31 @@ pub(super) async fn read_in_transaction(
             M::Rejected(reason) => return Ok(M::Rejected(reason)),
         }
     }
+    // The host-owned producer is independent of installable add-on overrides.
+    // It remains a Base origin even while an add-on has an explicit Lua Off.
+    let custom_pages: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "ChannelTeletextElement"
+            WHERE "ChannelId" = ? AND "IsEnabled" = 1)"#,
+    )
+    .bind(channel)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if custom_pages {
+        let custom = ersatzrs_domain::teletext_custom_pages_selection(channel);
+        if bindings.contains_key(&custom.addon_id) {
+            return Ok(M::Rejected(R::WrongAddon));
+        }
+        if bindings
+            .values()
+            .filter(|binding| binding.enabled())
+            .count()
+            >= MAX_TELETEXT_PAGE_RECORDS
+        {
+            return Ok(M::Rejected(R::BindingLimit));
+        }
+        bindings.insert(custom.addon_id.clone(), Binding::Base(custom));
+    }
     let valid_until = next_transition(tx, channel, when).await?;
     Ok(M::Saved(TeletextEffectiveChannelSelectionSnapshot {
         channel_id: channel,

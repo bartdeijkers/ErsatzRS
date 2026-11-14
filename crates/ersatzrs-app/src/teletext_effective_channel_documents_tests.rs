@@ -735,3 +735,78 @@ async fn effective_same_addon_keeps_two_channels_profiles_and_metadata_independe
         prepared[1].sources[0].bytes()
     );
 }
+
+#[tokio::test]
+async fn effective_custom_source_is_host_typed_and_retains_exact_association() {
+    let host = ersatzrs_domain::teletext_custom_pages_selection(9);
+    let repo = Repository::new(vec![
+        Binding::Base(host.clone()),
+        scripted(fixtures::binding(A, 1)),
+        off(),
+    ]);
+    let custom = serde_json::to_vec(&ersatzrs_domain::TeletextCustomPagesWire {
+        schema: ersatzrs_domain::TELETEXT_CUSTOM_PAGES_SCHEMA.to_owned(),
+        generation: fixtures::context().generation.to_owned(),
+        pages: vec![ersatzrs_domain::TeletextCustomPageWire {
+            element_id: 1,
+            element_revision: 3,
+            page: 150,
+            subcode: 0,
+            national_option: 0,
+            rows: vec![ersatzrs_domain::TeletextCustomRowWire::new(1, &[b'X'; 40])],
+            dynamic_fields: vec![],
+        }],
+    })
+    .unwrap();
+    let input = prepare_with_ports(
+        &repo,
+        9,
+        Some(A),
+        &fixtures::context(),
+        input_budget(),
+        |selection, addon_id, _, _| {
+            let stdout = if addon_id == host.addon_id {
+                custom.clone()
+            } else {
+                response(&addon_id)
+            };
+            async move { Ok(receipt(selection, addon_id, stdout)) }
+        },
+        deadline(),
+    )
+    .await
+    .unwrap();
+    let prepared = input.validate(fixtures::document_budget()).unwrap();
+    assert_eq!(prepared.producer_bindings, [0, 1]);
+    assert_eq!(prepared.sources[0].bytes(), custom);
+    assert!(matches!(
+        prepared.documents[0],
+        TeletextProfileDocument::CustomPages(_)
+    ));
+    assert!(matches!(
+        prepared.selection.bindings[1],
+        Binding::Scripted(_)
+    ));
+
+    for forged in [
+        {
+            let mut invalid = host.clone();
+            invalid.profile_revision += 1;
+            Binding::Base(invalid)
+        },
+        scripted(host),
+    ] {
+        let repo = Repository::new(vec![forged]);
+        let result = prepare_with_ports(
+            &repo,
+            9,
+            Some(ersatzrs_domain::TELETEXT_CUSTOM_PAGES_PRODUCER_ID),
+            &fixtures::context(),
+            input_budget(),
+            |_, _, _, _| async { panic!("forged host invoked") },
+            deadline(),
+        )
+        .await;
+        assert!(matches!(result, Err(Error::SelectionShape)));
+    }
+}

@@ -364,7 +364,7 @@ fn encode_documents(
     let documents = borrow_source_documents(input.sources, budget)?;
     let contracts = producer_contracts(input.selection, input.producer_bindings)?;
     let parsed = parse_source_documents(
-        contracts.iter().copied().map(DocumentProducer::addon),
+        contracts.iter().copied(),
         input.generation,
         &documents,
         budget.validation,
@@ -383,7 +383,7 @@ fn encode_documents(
     })?;
     let guide_inputs = guide_inputs::borrow_for_contracts(
         requests,
-        guide_inputs::contract_presence(contracts),
+        guide_inputs::contract_presence(contracts.into_iter().map(|producer| producer.contract)),
         input.generation,
         context_bytes,
         budget,
@@ -477,7 +477,7 @@ pub fn decode_teletext_effective_design_documents(
     let contracts = producer_contracts(&selection, &envelope.producer_bindings)?;
     let guide_source = envelope.guide_source.0;
     let guide_inputs = envelope.guide_inputs.restore_for_contracts(
-        guide_inputs::contract_presence(contracts.iter().copied()),
+        guide_inputs::contract_presence(contracts.iter().map(|producer| producer.contract)),
         &envelope.generation,
         budget,
         guide_source.as_ref(),
@@ -492,7 +492,7 @@ pub fn decode_teletext_effective_design_documents(
         })
         .collect::<Vec<_>>();
     let parsed = parse_source_documents(
-        contracts.into_iter().map(DocumentProducer::addon),
+        contracts.into_iter(),
         &envelope.generation,
         &borrowed,
         budget.validation,
@@ -585,14 +585,17 @@ fn binding_contract(binding: &Binding) -> Option<TeletextPageContract> {
 fn producer_contracts(
     selection: &Selection,
     producers: &[usize],
-) -> Result<Vec<TeletextPageContract>, TeletextDesignDocumentError> {
+) -> Result<Vec<DocumentProducer>, TeletextDesignDocumentError> {
     producers
         .iter()
         .map(|index| {
             selection
                 .bindings
                 .get(*index)
-                .and_then(binding_contract)
+                .and_then(|binding| match binding {
+                    Binding::Base(base) => Some(DocumentProducer::of(base)),
+                    Binding::Scripted(_) => binding_contract(binding).map(DocumentProducer::addon),
+                })
                 .ok_or_else(|| failure(TeletextDesignDocumentFailure::Association))
         })
         .collect()
@@ -637,6 +640,14 @@ fn validate_context(
     for (index, binding) in selection.bindings.iter().enumerate() {
         if binding.channel_id() != selection.channel_id
             || index > 0 && selection.bindings[index - 1].addon_id() >= binding.addon_id()
+        {
+            return Err(failure(TeletextDesignDocumentFailure::Association));
+        }
+        if ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())
+            && *binding
+                != Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(
+                    selection.channel_id,
+                ))
         {
             return Err(failure(TeletextDesignDocumentFailure::Association));
         }
