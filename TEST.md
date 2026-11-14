@@ -98,6 +98,15 @@ The raw strict transport check remains independent; an expiry receipt cannot
 waive a subtitle timing failure. Source and 8 MiB/30-second capture bounds stay
 unchanged.
 
+Set `ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY=1` and select
+`--grep "immutable custom pages refresh"` to run the joined custom-page variant
+with two genuinely scanned movie identities and distinct programme
+titles. Pages150/151 remain published after their latest elements are deleted.
+This isolated fixture provides three transcode leases: the preceding direct
+capture may still be draining when the Legacy wrapper and encoder start. It
+restores the original setting afterward. Production admission limits, every
+strict oracle, and the original capture bounds remain unchanged.
+
 ## Add-on list task workspace
 
 AMM-N-01B task routes render populated native forms through

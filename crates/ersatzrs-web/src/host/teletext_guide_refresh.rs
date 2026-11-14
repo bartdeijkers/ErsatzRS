@@ -298,18 +298,20 @@ fn base_configuration(
     let before: BTreeSet<_> = expected
         .bindings
         .iter()
+        .filter(|binding| !ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id))
         .map(|binding| binding.addon_id.as_str())
         .collect();
     let after: BTreeSet<_> = current
         .bindings
         .iter()
+        .filter(|binding| !ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id))
         .map(|binding| binding.addon_id.as_str())
         .collect();
     if after.is_empty() || !before.is_subset(&after) {
         Configuration::Disabled
     } else if before != after {
         Configuration::NeedsReview
-    } else if current == expected {
+    } else if ersatzrs_domain::teletext_published_selection_matches(current, expected) {
         Configuration::Current
     } else {
         Configuration::Changed

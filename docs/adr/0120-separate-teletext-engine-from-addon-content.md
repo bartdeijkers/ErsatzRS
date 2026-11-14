@@ -188,8 +188,9 @@ Field observations belong to each response and preserve the unchanged manual
 origin. A separate field revision and decimal failed logical page numbers travel
 with requested and sink-acknowledged selections. Merely preparing, installing or
 rejecting a proposal cannot imply recovery. The host-local registry retains the
-last acknowledged blank fields after an output ends; a later receipt clears
+last acknowledged blank fields after an output ends; a later authored-field receipt clears
 that warning only when no other observed active output still confirms failures.
+Withdrawal and output without field metadata cannot establish field recovery.
 No raw projection error, programme title or mutable element lookup enters these
 diagnostics. Other pages and audio/video remain independent.
 
@@ -212,6 +213,9 @@ profiles and producer-id checks, restoring only the manual original's host
 membership. Published-source preparation and its post-CPU recheck use this same
 distinction. The absence of a published host source never invokes the mutable
 element planner.
+The background guide coordinator uses the same frozen host-membership comparison
+when classifying dependency changes; only actual installed producer removal can
+disable the guide on that basis.
 Automatic Base guide regeneration borrows the custom source from the checked,
 immutable original design revision. It changes only the invocation correlation;
 rows, element revisions and field recipes remain exact, even after subsequent

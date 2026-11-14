@@ -10,6 +10,7 @@ import { waitForHydration } from './hydration';
 import { addonContentHash } from './fixtures/addon-metadata';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
 import { captureTeletextChannelTs } from './helpers/teletext-stream-capture';
+import { decodeCustomPage, uploadCustomPage } from './helpers/teletext-custom-pages';
 import { archiveFiles, type Upload } from './helpers/teletext-native-editor';
 import { startupOwner } from './helpers/isolated-host-startup';
 
@@ -33,6 +34,7 @@ type Installation = {
   PackageSha256: string; ContentSha256: string; InstallPath: string;
 };
 type SavedOriginal = {
+  selection: { bindings: { addon_id: string }[] };
   guide_source: { channel_ids: number[] };
   guide_inputs: { v3: string };
   documents: { response: string }[];
@@ -456,7 +458,10 @@ async function prepareReceiverGuide(page: Page, fixture: TeletextChannelFixture,
   await form.locator('[name="v1_region"]').selectOption('western_latin');
   await form.locator('[name="guide_channel_id"]').selectOption(String(fixture.channels[1]));
   await submit(page, form, text('TeletextValidateSaveDraft'), true);
-  const response = JSON.parse(savedOriginal(fixture, channel).documents[0].response);
+  const original = savedOriginal(fixture, channel);
+  const document = original.documents[original.selection.bindings.findIndex(binding => binding.addon_id === addonId)];
+  expect(document).toBeDefined();
+  const response = JSON.parse(document.response);
   const map: ReceiverGuideMap = { theme: response.authoring.theme.id, entry: response.service.initial_page,
     pages: response.service.pages.map((value: ReceiverGuideMap['pages'][number]) => ({ address: value.address, navigation: value.navigation })) };
   expect(map.theme).toBe(night ? 'night' : 'classic');
@@ -2564,7 +2569,10 @@ test(reusedLuaDirectEvidence
 // Part6: preserve the qualified sparse caption oracle while adding measured
 // 0.55s video bursts. Exact sources and the real scanner are explicit inputs;
 // this manual production-package trial never substitutes synthetic track rows.
-test('production TV-guide ordinary bitrate bursts retain scanned captions across a programme boundary', async ({ browser, isolatedWebHost }, info) => {
+const customFieldsBoundary = process.env.ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY === '1';
+test(customFieldsBoundary
+  ? 'production TV-guide and immutable custom pages refresh across programme titles with scanned captions'
+  : 'production TV-guide ordinary bitrate bursts retain scanned captions across a programme boundary', async ({ browser, isolatedWebHost }, info) => {
   const baseSource = process.env.ERSATZRS_TELETEXT_RECOVERY_BASE_SOURCE;
   const burstSource = process.env.ERSATZRS_TELETEXT_RECOVERY_BURST_SOURCE;
   const scanner = process.env.ERSATZRS_TELETEXT_RECOVERY_SCANNER;
@@ -2577,13 +2585,22 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
   const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true,
     playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 60,
       captionSource: { path: baseSource!, sha256: sha256(readFileSync(baseSource!)) } } });
+  const transcodeLimitKey = 'ffmpeg.segmenter.active_transcode_limit';
+  const originalTranscodeLimit = fixture.setting(transcodeLimitKey);
   const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL });
   const page = await context.newPage(); const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   try {
+    if (customFieldsBoundary) {
+      // The clear-cue direct response can still be draining when the Legacy
+      // boundary response starts. Its wrapper and encoder need two additional
+      // leases; otherwise the response correctly starts with a capacity slate.
+      fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run(transcodeLimitKey, '3');
+    }
     const selected = await installProduction(browser, isolatedWebHost.baseURL, isolatedWebHost.databasePath);
     const initialScan = fixture.configureScannedScripted(scanner!, process.env.FFPROBE_PATH!, info.outputPath('initial-local-scan.log'));
     copyFileSync(burstSource!, join(fixture.root, 'scanned-library', 'Synthetic Caption.ts'));
+    if (customFieldsBoundary) copyFileSync(burstSource!, join(fixture.root, 'scanned-library', 'Next Caption.ts'));
     const library = fixture.channels[0] + 10;
     const scanLog = execFileSync(scanner!, ['--provider', 'local', '--library-id', String(library), '--deep-scan',
       '--ffprobe-path', process.env.FFPROBE_PATH!], { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
@@ -2594,15 +2611,32 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     writeFileSync(info.outputPath('burst-local-scan.log'), scanLog);
     const media = fixture.database.prepare(`SELECT v.MovieId AS item,v.Id AS version,v.Duration AS duration
       FROM MediaVersion v JOIN MediaItem m ON m.Id=v.MovieId JOIN LibraryPath p ON p.Id=m.LibraryPathId
-      WHERE p.LibraryId=?`).all(library) as { item: number; version: number; duration: string }[];
-    expect(media).toHaveLength(1); expect(media[0].item).toBe(initialScan.item);
-    const inventory = fixture.database.prepare('SELECT "Index",Codec,Language FROM MediaStream WHERE MediaVersionId=? ORDER BY "Index"')
-      .all(media[0].version);
-    expect(inventory.map(row => [row.Index, row.Codec, row.Language])).toEqual([
-      [0, 'h264', null], [1, 'aac', 'eng'], [2, 'dvb_teletext', 'eng,eng'], [3, 'aac', 'nld'],
-    ]);
-    expect(fixture.database.prepare('SELECT 1 FROM SourceTeletextMetadata WHERE MediaVersionId=? AND StreamIndex=2 AND Pid=258')
-      .get(media[0].version)).toBeDefined();
+      WHERE p.LibraryId=? ORDER BY v.MovieId`).all(library) as { item: number; version: number; duration: string }[];
+    expect(media).toHaveLength(customFieldsBoundary ? 2 : 1); expect(media[0].item).toBe(initialScan.item);
+    const inventories = media.map(movie => fixture.database.prepare(
+      'SELECT "Index",Codec,Language FROM MediaStream WHERE MediaVersionId=? ORDER BY "Index"').all(movie.version));
+    for (const [index, movie] of media.entries()) {
+      expect(inventories[index].map(row => [row.Index, row.Codec, row.Language])).toEqual([
+        [0, 'h264', null], [1, 'aac', 'eng'], [2, 'dvb_teletext', 'eng,eng'], [3, 'aac', 'nld'],
+      ]);
+      expect(fixture.database.prepare('SELECT 1 FROM SourceTeletextMetadata WHERE MediaVersionId=? AND StreamIndex=2 AND Pid=258')
+        .get(movie.version)).toBeDefined();
+    }
+    const inventory = inventories[0];
+    const programmeTitles = new Map<number, string>();
+    if (customFieldsBoundary) {
+      // Fixture inputs precede the real Reset. Both identities/streams come
+      // from the actual scanner; only their synthetic display titles/order
+      // are seeded here. No playout or teletext authority row is manufactured.
+      fixture.database.prepare('UPDATE Collection SET UseCustomPlaybackOrder=1 WHERE Id=?').run(library);
+      for (const [index, movie] of media.entries()) {
+        const title = `FIELD PROGRAMME ${index === 0 ? 'A' : 'B'}`;
+        fixture.database.prepare('UPDATE MovieMetadata SET Title=? WHERE MovieId=?').run(title, movie.item);
+        fixture.database.prepare('INSERT OR IGNORE INTO CollectionItem(CollectionId,MediaItemId) VALUES (?,?)').run(library, movie.item);
+        fixture.database.prepare('UPDATE CollectionItem SET CustomIndex=? WHERE CollectionId=? AND MediaItemId=?').run(index, library, movie.item);
+        programmeTitles.set(movie.item, title);
+      }
+    }
     expect(fixture.database.prepare('SELECT 1 FROM ManagedLibraryLease WHERE LibraryId=?').get(library)).toBeUndefined();
     for (const channel of fixture.channels) {
       await page.goto(`/channels/${channel}`); await ready(page, true);
@@ -2619,10 +2653,20 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     await Promise.all([page.waitForURL(url => url.search === '?saved=capacity'), capacity.locator('button[type="submit"]').click()]);
     await ready(page, true);
     const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
+    const customElements = customFieldsBoundary ? [
+      await uploadCustomPage(page, fixture.channels[0], 150, ['CUSTOM ORIGINAL150',
+        'NOW %NOW%%%%%%%%%%%%%%%%%%%%', 'NEXT %NEXT%%%%%%%%%%%%%%%%%%%%', 'START %NOWSTART%%%%']),
+      await uploadCustomPage(page, fixture.channels[0], 151, ['CLOCK ORIGINAL151', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%']),
+    ] : [];
     for (const channel of [...fixture.channels].reverse()) await resetGuidePlayout(page, fixture, channel,
       { count: 8, durationMilliseconds: 60_000, sourceDuration: media[0].duration });
     const rows = fixture.channels.map(channel => fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel));
     const first = rows[0][0] as { Start: string; Finish: string };
+    const programmeRows = rows[0] as { Start: string; Finish: string; MediaItemId: number }[];
+    if (customFieldsBoundary) {
+      expect(programmeRows[0].MediaItemId).not.toBe(programmeRows[1].MediaItemId);
+      expect(programmeTitles.get(programmeRows[0].MediaItemId)).not.toBe(programmeTitles.get(programmeRows[1].MediaItemId));
+    }
     expect(Date.now() - utc(first.Start)).toBeLessThan(25_000);
     const maps = [];
     for (const [index, channel] of fixture.channels.entries()) maps.push(await prepareReceiverGuide(page, fixture, channel, profiles[index], index === 1));
@@ -2631,7 +2675,17 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     const current = () => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
       .get(fixture.channels[0]) as { SeedId: number; RuntimeId: number | null; Revision: number; Revoked: number };
     const before = current();
-    writeFileSync(info.outputPath('burst-caption-seed-receipt.json'), JSON.stringify({ first, rows, media, inventory, maps, before, originals, accepted }, null, 2));
+    if (customFieldsBoundary) {
+      // Actual deletion removes every latest link. Both the native owner and
+      // later production-guide regeneration must retain the frozen originals.
+      for (const id of customElements) {
+        const response = await page.request.post(`/admin-api/teletext-elements/${id}/delete`,
+          { form: { confirm: 'yes' }, maxRedirects: 0 });
+        expect(response.status()).toBe(303); expect(response.headers().location).toBe('/teletext-elements?saved=deleted');
+      }
+      expect(fixture.database.prepare('SELECT 1 FROM ChannelTeletextElement WHERE ChannelId=?').get(fixture.channels[0])).toBeUndefined();
+    }
+    writeFileSync(info.outputPath('burst-caption-seed-receipt.json'), JSON.stringify({ first, rows, media, inventory, inventories, maps, before, originals, accepted, customElements, programmeTitles: [...programmeTitles], transcodeLimit: fixture.setting(transcodeLimitKey) }, null, 2));
     // Fixed RGBA glyph/control hashes from the qualified page888 source decoded
     // by libzvbi. Full 1280x720 DVB hashes are independently qualified through
     // an FFmpeg-only AV/caption mux. No oracle crop, rescale or OCR tolerance
@@ -2818,6 +2872,26 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     expect(boundaryGuidePath).toBeDefined();
     expect(guideText(boundaryGuidePath!, 200)).toContain('DAY GUIDE');
     expect(guideText(boundaryGuidePath!, 201)).toContain('Now:');
+    if (customFieldsBoundary) {
+      const decode = (path: string, number: number) => decodeCustomPage(process.env.FFMPEG_PATH!, path, number);
+      const coldFields = decode(cold[0], 150); const currentFields = decode(boundaryGuidePath!, 150);
+      expect(coldFields).toContain('CUSTOM ORIGINAL150'); expect(currentFields).toContain('CUSTOM ORIGINAL150');
+      expect(coldFields).toContain(`NOW ${programmeTitles.get(programmeRows[0].MediaItemId)}`);
+      expect(coldFields).toContain(`NEXT ${programmeTitles.get(programmeRows[1].MediaItemId)}`);
+      expect(currentFields).toContain(`NOW ${programmeTitles.get(programmeRows[1].MediaItemId)}`);
+      expect(currentFields).toContain(`NEXT ${programmeTitles.get(programmeRows[2].MediaItemId)}`);
+      const hasPair = (value: string, now: number, next: number) => value.split(/\r?\n\r?\n/)
+        .some(cue => cue.includes(`NOW ${programmeTitles.get(now)}`) && cue.includes(`NEXT ${programmeTitles.get(next)}`));
+      expect(hasPair(coldFields, programmeRows[0].MediaItemId, programmeRows[1].MediaItemId)).toBe(true);
+      expect(hasPair(currentFields, programmeRows[1].MediaItemId, programmeRows[2].MediaItemId)).toBe(true);
+      const clock = decode(boundaryGuidePath!, 151);
+      expect(clock).toContain('CLOCK ORIGINAL151'); expect(clock).toMatch(/TIME\s+\d{2}:\d{2}\s+FIXED/);
+      expect(decode(cold[1], 150)).toBe(''); expect(decode(cold[1], 151)).toBe('');
+      writeFileSync(info.outputPath('custom-fields-programme-transition.json'), JSON.stringify({
+        customElements, programmeRows: programmeRows.slice(0, 3), programmeTitles: [...programmeTitles],
+        coldFields, currentFields, clock, originalHashes: originals, compiledCandidateScope: 'Same immutable native field owner after latest-link deletion, alongside the actual production guide worker and unchanged caption/transport gates.',
+      }, null, 2));
+    }
     expect(current().SeedId).toBe(before.SeedId); expect(current().RuntimeId).not.toBeNull(); expect(current().Revoked).toBe(0);
     expect(current().Revision).toBeGreaterThan(before.Revision);
     for (const [index, channel] of fixture.channels.entries()) {
@@ -2827,8 +2901,14 @@ test('production TV-guide ordinary bitrate bursts retain scanned captions across
     expect(installation(isolatedWebHost.databasePath)).toEqual(selected); compareInstalledFiles(selected);
     expect(fixture.calls()).toEqual([]); expect(errors).toEqual([]);
     writeFileSync(info.outputPath('burst-caption-host-receipt.json'), JSON.stringify({ source_sha256: sha256(readFileSync(burstSource!)),
-      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, sourceFrames, cueReceipts, subtitleEvents, videoEnds, rawGateFailures, before, after: current(),
+      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, sourceFrames, cueReceipts, subtitleEvents, videoEnds, rawGateFailures, before, after: current(), customElements, programmeTitles: [...programmeTitles],
       scope: 'actual Local rescan, ordinary profile, published producer, cold/clear/boundary transport and fixed page888 RGBA cue/clear oracle' }, null, 2));
     expect(rawGateFailures).toEqual([]);
-  } finally { await context.close(); fixture.close(); }
+  } finally {
+    try { await context.close(); } finally {
+      if (originalTranscodeLimit === undefined) fixture.database.prepare('DELETE FROM ConfigElement WHERE Key=?').run(transcodeLimitKey);
+      else fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run(transcodeLimitKey, originalTranscodeLimit);
+      fixture.close();
+    }
+  }
 });

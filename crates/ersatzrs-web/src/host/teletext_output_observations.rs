@@ -162,6 +162,17 @@ impl Owner {
         &self,
         entries: &BTreeMap<uuid::Uuid, (i64, TeletextOutputObservation)>,
     ) {
+        // Plain AV, withdrawal and authored output without field metadata do
+        // not prove recovery of previously acknowledged blank fields.
+        let confirms_fields = entries
+            .get(&self.epoch)
+            .and_then(|(_, entry)| entry.applied.as_ref())
+            .filter(|selection| selection.authored)
+            .and_then(|selection| selection.generation.as_ref())
+            .is_some_and(|generation| generation.custom_fields.is_some());
+        if !confirms_fields {
+            return;
+        }
         let pages: BTreeSet<_> = entries
             .values()
             .filter(|(channel, _)| *channel == self.channel_id)
@@ -373,6 +384,44 @@ mod tests {
         let retry = registry.register(7, recovered.clone()).unwrap();
         // Historical failure remains while a healthy request is merely waiting.
         assert!(registry.snapshot(7).unwrap().last_field_failure.is_some());
+        recovered.applied = Some(recovered.requested.clone());
+        recovered.phase = Phase::Applied;
+        retry.record(recovered);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_none());
+    }
+
+    #[test]
+    fn withdrawal_and_outputs_without_field_receipts_cannot_claim_field_recovery() {
+        let registry = OutputObservations::default();
+        let mut output = field_output(&[150]);
+        let owner = registry.register(7, output.clone()).unwrap();
+        output.applied = Some(output.requested.clone());
+        output.phase = Phase::Applied;
+        owner.record(output.clone());
+        output.requested.sequence = 1;
+        output.requested.authored = false;
+        output.requested.generation = None;
+        output.applied = Some(output.requested.clone());
+        owner.record(output);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_some());
+        drop(owner);
+
+        let mut unrelated = field_output(&[]);
+        unrelated
+            .requested
+            .generation
+            .as_mut()
+            .unwrap()
+            .custom_fields = None;
+        let other = registry.register(7, unrelated.clone()).unwrap();
+        unrelated.applied = Some(unrelated.requested.clone());
+        unrelated.phase = Phase::Applied;
+        other.record(unrelated);
+        assert!(registry.snapshot(7).unwrap().last_field_failure.is_some());
+        drop(other);
+
+        let mut recovered = field_output(&[]);
+        let retry = registry.register(7, recovered.clone()).unwrap();
         recovered.applied = Some(recovered.requested.clone());
         recovered.phase = Phase::Applied;
         retry.record(recovered);

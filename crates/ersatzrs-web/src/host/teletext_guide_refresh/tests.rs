@@ -81,13 +81,12 @@ fn lease_clock_uses_only_the_original_remaining_operation_allowance() {
     assert!(wall_deadline(now, expired).is_none());
 }
 
-#[test]
-fn a_profile_change_refreshes_once_and_runtime_identity_cache_eviction_preserves_comparison() {
+fn base_selection(revision: i64) -> TeletextChannelSelectionSnapshot {
     use ersatzrs_domain::{
         TeletextChannelSelectionSnapshot, TeletextInstallationSnapshot, TeletextPageContract,
         TeletextSelectionSnapshot,
     };
-    let selection = |revision| TeletextChannelSelectionSnapshot {
+    TeletextChannelSelectionSnapshot {
         channel_id: 1,
         bindings: vec![TeletextSelectionSnapshot {
             contract: TeletextPageContract::V3,
@@ -106,9 +105,50 @@ fn a_profile_change_refreshes_once_and_runtime_identity_cache_eviction_preserves
             },
             effective_settings: vec![],
         }],
-    };
-    let original = selection(1);
-    let changed = selection(2);
+    }
+}
+
+#[test]
+fn published_host_membership_does_not_revoke_the_guide_worker() {
+    let original = base_selection(1);
+    let mut with_host = original.clone();
+    with_host
+        .bindings
+        .insert(0, ersatzrs_domain::teletext_custom_pages_selection(1));
+    // Deleting the final latest link must preserve the published recipe.
+    assert_eq!(
+        base_configuration(&with_host, &original),
+        Configuration::Current
+    );
+    // Adding a first link cannot publish its host membership implicitly.
+    assert_eq!(
+        base_configuration(&original, &with_host),
+        Configuration::Current
+    );
+    assert_eq!(
+        base_configuration(&with_host, &base_selection(2)),
+        Configuration::Changed
+    );
+    let mut disabled = with_host.clone();
+    disabled.bindings.pop();
+    assert_eq!(
+        base_configuration(&with_host, &disabled),
+        Configuration::Disabled
+    );
+    let mut added = original.clone();
+    let mut extra = added.bindings[0].clone();
+    extra.addon_id.push_str("-second");
+    added.bindings.push(extra);
+    assert_eq!(
+        base_configuration(&with_host, &added),
+        Configuration::NeedsReview
+    );
+}
+
+#[test]
+fn a_profile_change_refreshes_once_and_runtime_identity_cache_eviction_preserves_comparison() {
+    let original = base_selection(1);
+    let changed = base_selection(2);
     assert_eq!(
         base_configuration(&original, &changed),
         Configuration::Changed
