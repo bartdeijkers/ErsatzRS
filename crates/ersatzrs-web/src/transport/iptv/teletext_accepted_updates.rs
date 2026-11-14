@@ -29,6 +29,10 @@ use tracing::Instrument;
 mod expiry_preparation;
 use expiry_preparation::ExpiryPreparation;
 
+#[path = "teletext_custom_field_output.rs"]
+mod custom_fields;
+pub(super) use custom_fields::NativeCandidate;
+
 use crate::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy;
 
 use crate::transport::iptv::{
@@ -128,7 +132,7 @@ impl Drop for TeletextAcceptedUpdatesOwner {
 /// Pending requests and package invocation are deliberately absent from this API.
 pub(super) fn start_accepted_updates(
     context: TeletextAcceptedUpdatesContext,
-    initial: Option<Arc<SelectedTeletextOutputCandidate>>,
+    initial: Option<Arc<NativeCandidate>>,
 ) -> Result<
     (TeletextOutputControl, TeletextAcceptedUpdatesOwner),
     TeletextAcceptedUpdatesConfigurationError,
@@ -239,7 +243,7 @@ fn trace_native_candidate(
 }
 
 #[derive(Clone, Copy, Debug)]
-struct ReadFailure;
+pub(super) struct ReadFailure;
 
 // Private test seam; production candidates can only be recovered by the existing
 // native validator. It adds no application bus, storage schema or public receipt.
@@ -272,6 +276,14 @@ trait UpdateBackend: Send + Sync + 'static {
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration;
     fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>>;
+    /// Derived content identity is separate from immutable publication authority.
+    fn content_revision(_candidate: &Self::Candidate) -> Option<u64> {
+        None
+    }
+    /// A content wake never expires the selected manual or guide authority.
+    fn next_content_refresh(_candidate: &Self::Candidate) -> Option<Instant> {
+        None
+    }
     fn original_transition(_candidate: &Self::Candidate) -> Option<Instant> {
         None
     }
@@ -359,6 +371,23 @@ struct NativeBackend {
 }
 
 impl NativeBackend {
+    /// A cached root may remain authorized while its derived fields are due.
+    /// Check field validity only after refresh/final confirmation, not here.
+    async fn confirm_selected(
+        &self,
+        candidate: &SelectedTeletextOutputCandidate,
+        deadline: Instant,
+    ) -> Result<bool, ReadFailure> {
+        Ok(candidate
+            .confirm_cached(
+                &self.context.application,
+                self.context.budget.max_serialized_bytes,
+                deadline.into_std(),
+                self.context.timing.poll_interval,
+            )
+            .await)
+    }
+
     async fn prepare_guide_handover(
         &self,
         cached: &SelectedTeletextOutputCandidate,
@@ -428,7 +457,7 @@ impl NativeBackend {
 
 #[async_trait::async_trait]
 impl UpdateBackend for NativeBackend {
-    type Candidate = Arc<SelectedTeletextOutputCandidate>;
+    type Candidate = Arc<NativeCandidate>;
     type ContextIdentity = GuideOutputIdentity;
     fn candidate_context(candidate: &Self::Candidate) -> Option<Self::ContextIdentity> {
         candidate.guide_identity().cloned()
@@ -449,7 +478,7 @@ impl UpdateBackend for NativeBackend {
         candidate: &Self::Candidate,
         deadline: Instant,
     ) -> Result<Option<Self::Candidate>, ReadFailure> {
-        if candidate.guide_identity().is_some() {
+        let selected = if candidate.guide_identity().is_some() {
             let metadata = self
                 .latest_guide
                 .lock()
@@ -468,13 +497,22 @@ impl UpdateBackend for NativeBackend {
             if let Some(candidate) = &candidate {
                 self.record_guide_validity(candidate)?;
             }
-            Ok(candidate)
+            candidate
         } else {
-            Ok(self
-                .confirm(candidate, deadline)
+            self.confirm_selected(&candidate.selected, deadline)
                 .await?
-                .then(|| candidate.clone()))
+                .then(|| Arc::clone(&candidate.selected))
+        };
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let refreshed =
+            NativeCandidate::prepare(&self.context, selected, Some(candidate), deadline).await?;
+        // Field work never authorizes its own derived bytes or renews a cap.
+        if !self.confirm(&refreshed, deadline).await? {
+            return Ok(None);
         }
+        Ok(Some(refreshed))
     }
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration {
@@ -483,6 +521,17 @@ impl UpdateBackend for NativeBackend {
 
     fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>> {
         candidate.service().map(Arc::clone)
+    }
+
+    fn content_revision(candidate: &Self::Candidate) -> Option<u64> {
+        candidate.custom.as_ref().map(|custom| custom.revision)
+    }
+
+    fn next_content_refresh(candidate: &Self::Candidate) -> Option<Instant> {
+        candidate
+            .custom
+            .as_ref()
+            .map(|custom| custom.next_wake.into())
     }
 
     fn original_transition(candidate: &Self::Candidate) -> Option<Instant> {
@@ -560,14 +609,8 @@ impl UpdateBackend for NativeBackend {
         candidate: &Self::Candidate,
         deadline: Instant,
     ) -> Result<bool, ReadFailure> {
-        Ok(candidate
-            .confirm_cached(
-                &self.context.application,
-                self.context.budget.max_serialized_bytes,
-                deadline.into_std(),
-                self.context.timing.poll_interval,
-            )
-            .await)
+        Ok(self.confirm_selected(&candidate.selected, deadline).await?
+            && candidate.fields_current_at(chrono::Utc::now()))
     }
 
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure> {
@@ -579,10 +622,14 @@ impl UpdateBackend for NativeBackend {
         if let Some(prepared) = prepared {
             self.record_guide_validity(&prepared)?;
             trace_native_candidate(&prepared, self.trace_id, "monitor_recovered");
-            return Ok(Some(prepared));
+            return NativeCandidate::prepare(&self.context, prepared, None, deadline)
+                .await
+                .map(Some);
         }
         if let Some(candidate) = self.recover_prepared_expiry(deadline).await? {
-            return Ok(Some(candidate));
+            return NativeCandidate::prepare(&self.context, candidate, None, deadline)
+                .await
+                .map(Some);
         }
         let candidate = if let Some(guide) = &self.context.guide {
             load_selected_teletext_output_candidate_with_guide(
@@ -609,7 +656,12 @@ impl UpdateBackend for NativeBackend {
             self.record_guide_validity(candidate)?;
             trace_native_candidate(candidate, self.trace_id, "monitor_recovered");
         }
-        Ok(candidate)
+        match candidate {
+            Some(candidate) => NativeCandidate::prepare(&self.context, candidate, None, deadline)
+                .await
+                .map(Some),
+            None => Ok(None),
+        }
     }
 
     async fn prepare_expiry(
@@ -617,7 +669,8 @@ impl UpdateBackend for NativeBackend {
         candidate: &Self::Candidate,
         deadline: Instant,
     ) -> Result<(), ReadFailure> {
-        self.prepare_native_expiry(candidate, deadline).await
+        self.prepare_native_expiry(&candidate.selected, deadline)
+            .await
     }
 }
 
@@ -701,6 +754,7 @@ impl<C, I: Clone> MonitorState<C, I> {
         service: Arc<EncodedTeletextAuthoredService>,
         context: Option<I>,
         observation: Option<TeletextOutputGenerationObservation>,
+        display_refresh: bool,
     ) -> bool {
         // Reserve the last representable sequence for fail-closed withdrawal.
         let Some(sequence) = self
@@ -718,7 +772,9 @@ impl<C, I: Clone> MonitorState<C, I> {
         let Ok(update) = update else {
             return false;
         };
-        let update = update.with_generation_observation(observation);
+        let update = update
+            .with_generation_observation(observation)
+            .with_display_refresh(display_refresh && self.active && !self.expiry_replacement);
         self.sequence = sequence;
         self.active = true;
         self.observed_absence = None;
@@ -845,6 +901,7 @@ async fn reconcile<B: UpdateBackend>(
             return false;
         };
         let previous = B::generation_observation(candidate);
+        let previous_content = B::content_revision(candidate);
         let Some(confirmed) = bounded(
             updates,
             deadline,
@@ -861,14 +918,16 @@ async fn reconcile<B: UpdateBackend>(
             return state.withdraw(updates);
         }
         let observation = B::generation_observation(&candidate);
+        let content_changed = previous_content != B::content_revision(&candidate);
         let result = match B::service(&candidate) {
-            Some(_) if state.active && observation == previous => true,
+            Some(_) if state.active && observation == previous && !content_changed => true,
             Some(service) => state.replace(
                 updates,
                 &identity,
                 service,
                 B::candidate_context(&candidate),
                 observation,
+                content_changed,
             ),
             None => state.withdraw_with_identity(updates, Some(&identity)),
         };
@@ -988,6 +1047,7 @@ async fn recover_successor<B: UpdateBackend>(
             service,
             B::candidate_context(&candidate),
             B::generation_observation(&candidate),
+            false,
         ),
         None => state.withdraw_with_identity(updates, Some(B::identity(&candidate))),
     };
@@ -1063,11 +1123,20 @@ async fn run_monitor<B: UpdateBackend>(
                 break;
             }
         }
-        let Some(mut next) = Instant::now().checked_add(timing.poll_interval) else {
+        let now = Instant::now();
+        let Some(mut next) = now.checked_add(timing.poll_interval) else {
             state.withdraw(&updates);
             break;
         };
         if let Some(boundary) = backend.next_transition() {
+            next = next.min(boundary);
+        }
+        if let Some(boundary) = state
+            .cached
+            .as_ref()
+            .and_then(B::next_content_refresh)
+            .filter(|boundary| *boundary > now)
+        {
             next = next.min(boundary);
         }
         // One operation at a time, no tick catch-up burst or detached recovery.
@@ -1099,6 +1168,8 @@ mod tests {
         guide_context: Option<u64>,
         guide_revision: i64,
         guide_stale: bool,
+        content_revision: Option<u64>,
+        content_refresh: Option<Instant>,
     }
 
     fn candidate(id: i64, channel_id: i64) -> Candidate {
@@ -1121,9 +1192,113 @@ mod tests {
             guide_context: None,
             guide_revision: 1,
             guide_stale: false,
+            content_revision: None,
+            content_refresh: None,
             service: Arc::new(
                 crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(3),
             ),
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn content_wake_replaces_same_origin_without_expiring_authority_or_recovery() {
+        let now = Instant::now();
+        let expiry = now + Duration::from_secs(10);
+        let mut initial = candidate(1, 9);
+        initial.original_transition = Some(expiry);
+        initial.content_refresh = Some(now + Duration::from_millis(25));
+        initial.content_revision = Some(1);
+        let backend = Backend::new(Some(initial.clone()));
+        *backend.transition.lock().unwrap() = Some(expiry);
+        let mut refreshed = initial.clone();
+        refreshed.content_revision = Some(2);
+        refreshed.content_refresh = None;
+        backend.store.lock().unwrap().accepted = Some(refreshed);
+        let (updates, control, _) = teletext_output_control_channel();
+        let mut proposals = updates.subscribe();
+        let task = tokio::spawn(run_monitor(
+            backend.clone(),
+            9,
+            TeletextAcceptedUpdatePolicy::new(Duration::from_secs(5), Duration::from_secs(1))
+                .unwrap(),
+            Some(initial),
+            updates,
+            || None,
+        ));
+        let owner = TeletextAcceptedUpdatesOwner { task: Some(task) };
+        backend.read_entered.notified().await;
+        tokio::task::yield_now().await;
+        assert!(proposals.borrow().is_none());
+        tokio::time::advance(Duration::from_millis(24)).await;
+        tokio::task::yield_now().await;
+        assert!(proposals.borrow().is_none());
+        tokio::time::advance(Duration::from_millis(1)).await;
+        proposals.changed().await.unwrap();
+        assert_eq!(proposals.borrow().as_ref().unwrap().sequence(), 1);
+        assert!(proposals.borrow().as_ref().unwrap().is_display_refresh());
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 0);
+        assert_eq!(*backend.transition.lock().unwrap(), Some(expiry));
+        assert_eq!(backend.reads.load(Ordering::SeqCst), 2);
+        drop(proposals);
+        drop(control);
+        owner.stopped().await.unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_read_after_content_wake_retries_at_poll_cadence_without_spinning() {
+        let mut initial = candidate(1, 9);
+        initial.content_refresh = Some(Instant::now() + Duration::from_millis(25));
+        let backend = Backend::new(Some(initial.clone()));
+        let (updates, control, _) = teletext_output_control_channel();
+        let mut proposals = updates.subscribe();
+        let task = tokio::spawn(run_monitor(
+            backend.clone(),
+            9,
+            TeletextAcceptedUpdatePolicy::new(Duration::from_secs(5), Duration::from_secs(1))
+                .unwrap(),
+            Some(initial),
+            updates,
+            || None,
+        ));
+        let owner = TeletextAcceptedUpdatesOwner { task: Some(task) };
+        backend.read_entered.notified().await;
+        tokio::task::yield_now().await;
+        let release = Arc::new(Notify::new());
+        {
+            let mut store = backend.store.lock().unwrap();
+            store.read_failure = true;
+            store.read_release = Some(Arc::clone(&release));
+        }
+        tokio::time::advance(Duration::from_millis(25)).await;
+        backend.read_entered.notified().await;
+        release.notify_one();
+        proposals.changed().await.unwrap();
+        tokio::task::yield_now().await;
+        assert_eq!(backend.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(proposals.borrow().as_ref().unwrap().sequence(), 1);
+        assert!(!proposals.borrow().as_ref().unwrap().is_display_refresh());
+        drop(proposals);
+        drop(control);
+        owner.stopped().await.unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn inactive_and_post_expiry_replacements_never_preserve_display_caches() {
+        for (active, expiry) in [(false, false), (true, true)] {
+            let initial = candidate(1, 9);
+            let (updates, _control, _) = teletext_output_control_channel();
+            let mut state: MonitorState<Candidate, u64> = MonitorState::new(Some(initial.clone()));
+            state.active = active;
+            state.expiry_replacement = expiry;
+            assert!(state.replace(
+                &updates,
+                &initial.identity,
+                initial.service.clone(),
+                None,
+                None,
+                true
+            ));
+            assert!(!updates.borrow().as_ref().unwrap().is_display_refresh());
         }
     }
 
@@ -1294,7 +1469,10 @@ mod tests {
             candidate: &Candidate,
             deadline: Instant,
         ) -> Result<Option<Candidate>, ReadFailure> {
-            if candidate.guide_context.is_some() {
+            let content_due = candidate
+                .content_refresh
+                .is_some_and(|at| Instant::now() >= at);
+            if candidate.guide_context.is_some() || content_due {
                 let store = self.store.lock().unwrap();
                 Ok(store
                     .accepted
@@ -1328,6 +1506,12 @@ mod tests {
             candidate
                 .service_present
                 .then(|| Arc::clone(&candidate.service))
+        }
+        fn content_revision(candidate: &Candidate) -> Option<u64> {
+            candidate.content_revision
+        }
+        fn next_content_refresh(candidate: &Candidate) -> Option<Instant> {
+            candidate.content_refresh
         }
         fn original_transition(candidate: &Candidate) -> Option<Instant> {
             candidate.original_transition

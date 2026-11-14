@@ -219,7 +219,7 @@ impl TeletextGenerationRepository for SqliteTeletextGenerationRepository {
         {
             return Ok(M::Rejected(R::Publication(P::SelectionChanged)));
         }
-        if let Err(reason) = check_selection(&mut transaction, selection).await? {
+        if let Err(reason) = check_published_selection(&mut transaction, selection).await? {
             return Ok(M::Rejected(reason));
         }
         if let Err(reason) =
@@ -241,6 +241,27 @@ async fn check_selection(
                 Err(R::Publication(P::SelectionUnavailable(reason)))
             }
             TeletextProfileMutation::Saved(current) if current != *selection => {
+                Err(R::Publication(P::SelectionChanged))
+            }
+            TeletextProfileMutation::Saved(_) => Ok(()),
+        },
+    )
+}
+
+/// Output confirmation retains the manual original's host-only membership.
+/// Acceptance of a new generation deliberately continues to use `check_selection`.
+async fn check_published_selection(
+    transaction: &mut Transaction<'_, Db>,
+    selection: &TeletextChannelSelectionSnapshot,
+) -> Result<std::result::Result<(), R>> {
+    Ok(
+        match channel_snapshot_in_transaction(transaction, selection.channel_id).await? {
+            TeletextProfileMutation::Rejected(reason) => {
+                Err(R::Publication(P::SelectionUnavailable(reason)))
+            }
+            TeletextProfileMutation::Saved(current)
+                if !ersatzrs_domain::teletext_published_selection_matches(&current, selection) =>
+            {
                 Err(R::Publication(P::SelectionChanged))
             }
             TeletextProfileMutation::Saved(_) => Ok(()),

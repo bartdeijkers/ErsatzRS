@@ -15,6 +15,17 @@ pub struct TeletextOutputGenerationObservation {
     pub effective: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guide_refresh: Option<TeletextGuideRefreshOutputObservation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_fields: Option<TeletextCustomFieldOutputObservation>,
+}
+
+/// Response-local field derivation, separate from the immutable manual revision.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextCustomFieldOutputObservation {
+    pub revision: u64,
+    /// Decimal logical page numbers from the validated published recipe.
+    /// Every dynamic field on these pages is blank in this proposed output.
+    pub failed_pages: Vec<u16>,
 }
 
 /// Explicit automatic-guide association, separate from manual generation IDs.
@@ -66,6 +77,17 @@ pub struct TeletextChannelOutputObservations {
     /// kept after that output ended until a later output delivers teletext.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_failure: Option<TeletextOutputFailure>,
+    /// Last acknowledged blank fields, retained after the output ends until
+    /// later delivery recovers them. An unacknowledged proposal cannot clear it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_field_failure: Option<TeletextCustomFieldFailure>,
+}
+
+/// Host-local field failure; unrelated pages and audio/video can continue.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextCustomFieldFailure {
+    pub pages: Vec<u16>,
+    pub at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Why an authored output stopped; a stable code, never raw error text.
@@ -87,4 +109,27 @@ pub enum TeletextOutputFailureKind {
 pub struct TeletextOutputFailure {
     pub kind: TeletextOutputFailureKind,
     pub at: chrono::DateTime<chrono::Utc>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_observations_keep_absent_fields_without_inventing_success() {
+        let generation: TeletextOutputGenerationObservation = serde_json::from_str(
+            r#"{"generation_id":3,"request_id":2,"design_id":1,"revision":1,"effective":false}"#,
+        )
+        .unwrap();
+        assert!(generation.custom_fields.is_none());
+        let channel: TeletextChannelOutputObservations =
+            serde_json::from_str(r#"{"outputs":[],"incomplete":false}"#).unwrap();
+        assert!(channel.last_field_failure.is_none());
+        assert!(!serde_json::to_string(&generation)
+            .unwrap()
+            .contains("custom_fields"));
+        assert!(!serde_json::to_string(&channel)
+            .unwrap()
+            .contains("last_field_failure"));
+    }
 }

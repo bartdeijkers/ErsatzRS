@@ -25,6 +25,7 @@ pub struct TeletextOutputUpdate {
     withdraw_if_rejected: bool,
     rejected: Option<TeletextOutputTransitionRejection>,
     generation: Option<TeletextOutputGenerationObservation>,
+    display_refresh: bool,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("teletext output update sequence must be positive")]
@@ -44,6 +45,7 @@ impl TeletextOutputUpdate {
             withdraw_if_rejected: false,
             rejected: None,
             generation: None,
+            display_refresh: false,
         })
     }
     /// A freshly confirmed post-expiry successor must never leave expired
@@ -66,11 +68,23 @@ impl TeletextOutputUpdate {
             withdraw_if_rejected: false,
             rejected: None,
             generation: None,
+            display_refresh: false,
         })
     }
     #[must_use]
     pub const fn sequence(&self) -> u64 {
         self.sequence.get()
+    }
+
+    /// Only a confirmed same-origin content refresh may preserve display caches.
+    /// The engine independently checks resource, service and exact ACK identity.
+    pub(in crate::transport::iptv) fn with_display_refresh(mut self, enabled: bool) -> Self {
+        self.display_refresh = enabled;
+        self
+    }
+
+    pub(in crate::transport::iptv) const fn is_display_refresh(&self) -> bool {
+        self.display_refresh
     }
 
     pub(in crate::transport::iptv) fn with_generation(
@@ -500,7 +514,11 @@ impl PumpControl {
             matches!(update.action, Action::Withdraw) && !gate.authored_payload_selected();
         let result = match &update.action {
             Action::Replace(service) => {
-                gate.replace_authored_at_acknowledged_boundary(receipt, service, now)
+                if update.is_display_refresh() {
+                    gate.refresh_authored_displays_at_acknowledged_boundary(receipt, service, now)
+                } else {
+                    gate.replace_authored_at_acknowledged_boundary(receipt, service, now)
+                }
             }
             Action::Withdraw => gate.withdraw_at_acknowledged_boundary(receipt, now),
         };

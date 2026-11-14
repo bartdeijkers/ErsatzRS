@@ -142,6 +142,7 @@ pub(super) fn generation(
         revision: identity.request.revision,
         effective,
         guide_refresh: None,
+        custom_fields: None,
     })
 }
 
@@ -303,5 +304,63 @@ mod tests {
         observation.acknowledge(2);
         assert_eq!(observation.state.phase, Phase::Applied);
         assert_eq!(observation.state.applied.as_ref().unwrap().sequence, 2);
+    }
+    #[tokio::test]
+    async fn field_failure_reaches_channel_health_only_after_the_pump_receipt() {
+        use ersatzrs_domain::{
+            TeletextCustomFieldOutputObservation, TeletextOutputGenerationObservation,
+        };
+        let state = crate::host::state::AppState::for_tests(
+            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
+        );
+        let context = ObservationContext {
+            application: Arc::clone(&state.application),
+            channel_id: 44,
+            initial: Selection {
+                sequence: 0,
+                authored: true,
+                generation: Some(TeletextOutputGenerationObservation {
+                    generation_id: 3,
+                    request_id: 2,
+                    design_id: 1,
+                    revision: 1,
+                    effective: false,
+                    guide_refresh: None,
+                    custom_fields: Some(TeletextCustomFieldOutputObservation {
+                        revision: 1,
+                        failed_pages: vec![150],
+                    }),
+                }),
+            },
+        };
+        let snapshot = || {
+            context
+                .application
+                .teletext_output_observations(44)
+                .unwrap()
+        };
+        let mut pump = PumpObservation::new(&context, uuid::Uuid::new_v4()).unwrap();
+        pump.initial_receipt(false, false);
+        assert!(snapshot().last_field_failure.is_none());
+        pump.initial_receipt(true, false);
+        assert_eq!(snapshot().last_field_failure.unwrap().pages, [150]);
+        let mut recovered = context.initial.clone();
+        recovered.sequence = 1;
+        recovered
+            .generation
+            .as_mut()
+            .unwrap()
+            .custom_fields
+            .as_mut()
+            .unwrap()
+            .failed_pages
+            .clear();
+        pump.requested(recovered.clone());
+        pump.installed(recovered);
+        assert!(snapshot().last_field_failure.is_some());
+        pump.acknowledge(0);
+        assert!(snapshot().last_field_failure.is_some());
+        pump.acknowledge(1);
+        assert!(snapshot().last_field_failure.is_none());
     }
 }

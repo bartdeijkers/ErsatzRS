@@ -80,6 +80,18 @@ pub(crate) enum SelectedTeletextOutputCandidate {
 }
 
 impl SelectedTeletextOutputCandidate {
+    /// Effective Lua/template execution remains a separate delivery slice.
+    pub(super) fn supports_custom_field_refresh(&self) -> bool {
+        match self {
+            Self::Base(..) => true,
+            Self::Effective(..) => false,
+            Self::Guide(candidate, _) => matches!(
+                candidate.native.selection(),
+                TeletextGuideRefreshSelection::Base(_)
+            ),
+        }
+    }
+
     pub(crate) fn next_transition(&self) -> Option<tokio::time::Instant> {
         let scope = match self {
             Self::Base(_, next) | Self::Effective(_, next) | Self::Guide(_, next) => *next,

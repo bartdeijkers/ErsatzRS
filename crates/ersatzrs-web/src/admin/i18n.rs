@@ -1717,6 +1717,14 @@ pub enum TextKey {
     TeletextDeliveryUnconfirmed,
     TeletextDeliveryAbsent,
     TeletextDeliveryGeneration,
+    TeletextFieldRevision,
+    TeletextFieldReady,
+    TeletextFieldFailed,
+    TeletextFieldLastFailure,
+    TeletextFieldHealthTitle,
+    TeletextFieldHealthBrief,
+    TeletextFieldHealthHelp,
+
     TeletextGuideRuntimeSnapshot,
     TeletextGuideInitialSeed,
     TeletextGuideFresh,
@@ -4415,6 +4423,13 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TeletextDeliveryUnconfirmed,
     TextKey::TeletextDeliveryAbsent,
     TextKey::TeletextDeliveryGeneration,
+    TextKey::TeletextFieldRevision,
+    TextKey::TeletextFieldReady,
+    TextKey::TeletextFieldFailed,
+    TextKey::TeletextFieldLastFailure,
+    TextKey::TeletextFieldHealthTitle,
+    TextKey::TeletextFieldHealthBrief,
+    TextKey::TeletextFieldHealthHelp,
     TextKey::TeletextGuideRuntimeSnapshot,
     TextKey::TeletextGuideInitialSeed,
     TextKey::TeletextGuideFresh,
@@ -6013,6 +6028,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         "Playback Data Access" => text(language, TextKey::PlaybackDataAccessTitle).to_owned(),
         "Scanner worker" => text(language, TextKey::ScanWorkerTitle).to_owned(),
         "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
+        "Custom teletext fields" => text(language, TextKey::TeletextFieldHealthTitle).to_owned(),
         "Teletext work configuration" => text(language, TextKey::TeletextWorkTitle).to_owned(),
         "Teletext guide maintenance" => {
             text(language, TextKey::TeletextGuideMaintenanceTitle).to_owned()
@@ -6583,6 +6599,20 @@ fn localize_guide_maintenance_counts(language: UiLanguage, message: &str) -> Opt
     Some(result)
 }
 
+fn teletext_field_health_message(language: UiLanguage, message: &str) -> String {
+    const SUFFIX: &str = ". The last confirmed delivery has blank dynamic fields because programme data was unavailable. Open the channel's teletext page and check programme data. Other pages and audio/video continue. The warning remains until a later confirmed delivery recovers the fields.";
+    if message == "Published custom pages have blank dynamic fields" {
+        return text(language, TextKey::TeletextFieldHealthBrief).to_owned();
+    }
+    let Some(pages) = message
+        .strip_prefix("Channel/page(s): ")
+        .and_then(|rest| rest.strip_suffix(SUFFIX))
+    else {
+        return message.to_owned();
+    };
+    text(language, TextKey::TeletextFieldHealthHelp).replace("{pages}", pages)
+}
+
 fn teletext_configuration_health_message(
     language: UiLanguage,
     title: &str,
@@ -6590,6 +6620,7 @@ fn teletext_configuration_health_message(
 ) -> Option<String> {
     match title {
         "Teletext guide maintenance" => Some(teletext_guide_maintenance_message(language, message)),
+        "Custom teletext fields" => Some(teletext_field_health_message(language, message)),
         "Teletext decoding" => Some(
             teletext_decoder_health_message(language, message)
                 .unwrap_or(message)

@@ -299,6 +299,82 @@ fn deliver_prefix(
     (receipt, bytes)
 }
 
+#[tokio::test(start_paused = true)]
+async fn display_refresh_uses_native_cache_checks_and_ack_without_erasing_unchanged_pages() {
+    use ersatzrs_ffmpeg::teletext::source_header::{
+        observe_dvb_teletext_header, TeletextHeaderObservation,
+    };
+    for refresh in [false, true] {
+        let original = source_packets();
+        let mut gate = test_gate(&original);
+        let (updates, control, mut status) = teletext_output_control_channel();
+        let mut pump = PumpControl::new(control);
+        let mut now = Duration::ZERO;
+        let first_end = gate.window_end(8).unwrap().unwrap();
+        let (first, _) = deliver_prefix(&mut gate, first_end, 0, &mut now);
+        assert!(first.contains_complete_cycle());
+        pump.acknowledge(&mut gate, &first, now, true).unwrap();
+        let replacement = if refresh {
+            // Reuse the actual unchanged banks through their checked lifecycle
+            // alternatives. Replaying a legacy Changed header at counter3 must
+            // still be rejected by the strict resource-update guard.
+            authored_service_with_counter(3)
+                .with_resource_lifecycle_variants(
+                    std::time::Instant::now() + Duration::from_secs(30),
+                )
+                .unwrap()
+        } else {
+            authored_service_with_counter(4)
+        };
+        updates.send_replace(Some(
+            TeletextOutputUpdate::replace(1, Arc::new(replacement))
+                .unwrap()
+                .with_display_refresh(refresh),
+        ));
+        pump.observe();
+        let second_end = pump.window_end(&gate, 8).unwrap().unwrap();
+        let (second, _) = deliver_prefix(&mut gate, second_end, first_end, &mut now);
+        pump.acknowledge(&mut gate, &second, now, true).unwrap();
+        assert_eq!(
+            status.borrow_and_update().phase(),
+            TeletextOutputTransitionPhase::Waiting
+        );
+        let final_end = pump.window_end(&gate, 8).unwrap().unwrap();
+        let (receipt, bytes) = deliver_prefix(&mut gate, final_end, second_end, &mut now);
+        assert_eq!(
+            bytes.len(),
+            usize::try_from(final_end - second_end).unwrap() * 188
+        );
+        let mut displays = 0;
+        for unit in actual_units(&bytes) {
+            if let TeletextHeaderObservation::Header(header) =
+                observe_dvb_teletext_header(&unit).unwrap()
+            {
+                if header.display_page().is_some() {
+                    displays += 1;
+                    assert_eq!(header.controls.erase_page(), !refresh);
+                }
+            }
+        }
+        assert!(displays > 0);
+        for (before, after) in original
+            [usize::try_from(second_end).unwrap()..usize::try_from(final_end).unwrap()]
+            .iter()
+            .zip(bytes.chunks_exact(188))
+        {
+            let pid = u16::from_be_bytes([before[1] & 0x1f, before[2]]);
+            if pid != 0x1fff && pid != 3337 {
+                assert_eq!(before.as_slice(), after);
+            }
+        }
+        pump.acknowledge(&mut gate, &receipt, now, true).unwrap();
+        assert_eq!(
+            status.borrow_and_update().phase(),
+            TeletextOutputTransitionPhase::Applied
+        );
+    }
+}
+
 fn fragment_packet(template: &[u8; 188], cc: u8, first: bool, part: &[u8]) -> [u8; 188] {
     let mut packet = [0xff; 188];
     packet[..4].copy_from_slice(&template[..4]);

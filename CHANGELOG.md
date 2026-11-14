@@ -70,6 +70,17 @@ release section when tagging a release.
 
 ### Changed
 
+- Custom-page drafts preserve their checked dynamic-field bindings with the
+  page revision, so later element edits cannot replace the saved refresh recipe.
+  The native output can refresh changed display pages without clearing unchanged
+  receiver pages. Automatic guide regeneration retains the original custom-page
+  source, including its rows, field bindings and element revisions; later edits
+  require explicit publication. Base output now derives current bound fields
+  through the response owner; failed programme reads blank their logical page's
+  dynamic cells while independent clock pages continue. Output status separates
+  requested and confirmed field refreshes, with page-specific blank-field warnings
+  retained in Health after a stream ends until confirmed recovery. Joined
+  automatic-refresh acceptance remains in progress.
 - Teletext capacity-recovery browser proof now covers Chromium and Firefox with
   and without JavaScript, including consent, custom-policy protection and repair.
 - Guide-boundary qualification distinguishes acknowledged expiry withdrawal from
@@ -267,6 +278,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Removing the last linked custom teletext page preserves its published original.
+  Newly linked pages stay unpublished during automatic guide refresh; changes to
+  real add-ons and checks for a new publication retain their existing safeguards.
+- Custom-page clock refresh preserves the known programme transition during
+  clock-only work and refuses stale field values after processing or final
+  confirmation. Unbound clock categories and intentionally blank failed fields
+  do not invalidate unrelated pages.
 - Local and provider teletext source storage warnings are localized in all
   supported admin languages, including warnings stored by older versions.
 - Source teletext captions can be prepared from complete files larger than the

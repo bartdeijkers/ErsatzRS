@@ -28,6 +28,9 @@ const TELETEXT_OUTPUT_UNREADABLE_MESSAGE: &str = "The teletext output settings c
 const TELETEXT_TRANSPORT_TITLE: &str = "Teletext transport";
 const TELETEXT_TRANSPORT_BRIEF: &str = "A teletext output stopped on a transport failure";
 const TELETEXT_TRANSPORT_MESSAGE: &str = "The last authored teletext output stopped on a transport failure for channel(s) {channels} since teletext was last delivered there. Open the channel's teletext page: Teletext readiness shows the cause and the next step. Ordinary playback without teletext is unaffected.";
+const TELETEXT_FIELDS_TITLE: &str = "Custom teletext fields";
+const TELETEXT_FIELDS_BRIEF: &str = "Published custom pages have blank dynamic fields";
+const TELETEXT_FIELDS_MESSAGE: &str = "Channel/page(s): {pages}. The last confirmed delivery has blank dynamic fields because programme data was unavailable. Open the channel's teletext page and check programme data. Other pages and audio/video continue. The warning remains until a later confirmed delivery recovers the fields.";
 const TELETEXT_AUTHORING_TITLE: &str = "Teletext authoring configuration";
 const TELETEXT_AUTHORING_ABSENT_BRIEF: &str = "Teletext authoring is not configured";
 const TELETEXT_AUTHORING_ABSENT_MESSAGE: &str = "No authoring policy is configured. Draft preparation and preview are unavailable; ordinary playback is unaffected.";
@@ -90,6 +93,7 @@ impl NativeAdminHealthRuntime {
                     | TELETEXT_OUTPUT_TITLE
                     | TELETEXT_AUTHORING_TITLE
                     | TELETEXT_TRANSPORT_TITLE
+                    | TELETEXT_FIELDS_TITLE
             )
         });
         if !self.scan_activity.is_worker_available() {
@@ -112,6 +116,13 @@ impl NativeAdminHealthRuntime {
         {
             results.push(result);
         }
+        if let Some(result) = self
+            .teletext_outputs
+            .as_ref()
+            .and_then(teletext_field_failures)
+        {
+            results.push(result);
+        }
         results
     }
 
@@ -130,6 +141,35 @@ impl NativeAdminHealthRuntime {
             update_check_error: runtime.acquisition.update_check_error.clone(),
         }
     }
+}
+
+fn teletext_field_failures(
+    outputs: &super::teletext_output_observations::OutputObservations,
+) -> Option<HealthCheckResult> {
+    let failures = outputs.field_failures();
+    let first = failures.first()?.0;
+    let pages = failures
+        .iter()
+        .map(|(channel, failure)| {
+            let pages = failure
+                .pages
+                .iter()
+                .map(|page| format!("{page:03}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{channel}: {pages}")
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    Some(
+        HealthCheckResult::new(
+            TELETEXT_FIELDS_TITLE,
+            HealthCheckStatus::Warning,
+            TELETEXT_FIELDS_MESSAGE.replace("{pages}", &pages),
+            TELETEXT_FIELDS_BRIEF,
+        )
+        .with_link(format!("/channels/{first}/teletext")),
+    )
 }
 
 fn teletext_transport_failures(
@@ -618,5 +658,74 @@ mod tests {
         let row = configuration_row(&unreadable, TELETEXT_AUTHORING_TITLE);
         assert_eq!(row.status, HealthCheckStatus::Warning);
         assert_eq!(row.message, TELETEXT_AUTHORING_UNREADABLE_MESSAGE);
+    }
+    #[tokio::test]
+    async fn field_failure_health_uses_confirmed_pages_and_localizes_backend_messages() {
+        use crate::admin::i18n::{
+            health_check_message_text, health_check_title_text, text, TextKey, UiLanguage,
+        };
+        use ersatzrs_domain::{
+            TeletextCustomFieldOutputObservation, TeletextOutputGenerationObservation,
+            TeletextOutputObservation, TeletextOutputObservationPhase as Phase,
+            TeletextOutputSelectionObservation,
+        };
+        let outputs = super::super::teletext_output_observations::OutputObservations::default();
+        let runtime = health_fixture()
+            .await
+            .with_teletext_outputs(outputs.clone());
+        let selection = TeletextOutputSelectionObservation {
+            sequence: 0,
+            authored: true,
+            generation: Some(TeletextOutputGenerationObservation {
+                generation_id: 3,
+                request_id: 2,
+                design_id: 1,
+                revision: 1,
+                effective: false,
+                guide_refresh: None,
+                custom_fields: Some(TeletextCustomFieldOutputObservation {
+                    revision: 1,
+                    failed_pages: vec![150],
+                }),
+            }),
+        };
+        let mut output = TeletextOutputObservation {
+            epoch: uuid::Uuid::new_v4(),
+            requested: selection.clone(),
+            applied: None,
+            phase: Phase::Waiting,
+        };
+        let owner = outputs.register(7, output.clone()).unwrap();
+        assert!(teletext_field_failures(&outputs).is_none());
+        output.applied = Some(selection);
+        output.phase = Phase::Applied;
+        owner.record(output);
+        drop(owner);
+        let read = runtime.run_health_checks(false).await.unwrap();
+        let row = configuration_row(&read.results, TELETEXT_FIELDS_TITLE);
+        assert_eq!(row.status, HealthCheckStatus::Warning);
+        assert_eq!(row.link.as_ref().unwrap().link, "/channels/7/teletext");
+        assert!(row.message.contains("7: 150"));
+        assert!(!read
+            .results
+            .iter()
+            .any(|row| row.title == TELETEXT_TRANSPORT_TITLE));
+        for code in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let language = UiLanguage::from_config(code);
+            assert_eq!(
+                health_check_title_text(language, &row.title),
+                text(language, TextKey::TeletextFieldHealthTitle)
+            );
+            assert_eq!(
+                health_check_message_text(language, &row.title, &row.message, &row.brief_message),
+                text(language, TextKey::TeletextFieldHealthHelp).replace("{pages}", "7: 150")
+            );
+            assert_eq!(
+                health_check_message_text(language, &row.title, "", &row.brief_message),
+                text(language, TextKey::TeletextFieldHealthBrief)
+            );
+        }
     }
 }

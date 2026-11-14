@@ -988,6 +988,47 @@ fn checked_resource_variant_changes_only_after_ack_and_repeat_keeps_effective_co
 }
 
 #[test]
+fn display_refresh_requires_the_exact_sink_ack_and_preserves_an_unchanged_page() {
+    use crate::teletext::source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyEvent};
+    use crate::teletext::source_header::{observe_dvb_teletext_header, TeletextHeaderObservation};
+    let service = simple("nld", None);
+    let (mut first, source) = gate(Arc::clone(&service), 200);
+    let (mut other, _) = gate(Arc::clone(&service), 200);
+    let (foreign, _, _) = cycle(&mut other);
+    let (receipt, _, now) = cycle(&mut first);
+    let before = (first.source_start, first.batch_ticks);
+    assert_eq!(
+        first.refresh_authored_displays_at_acknowledged_boundary(&foreign, &service, now),
+        Err(TeletextOutputError::Acknowledgement)
+    );
+    assert_eq!((first.source_start, first.batch_ticks), before);
+    first
+        .refresh_authored_displays_at_acknowledged_boundary(&receipt, &service, now)
+        .unwrap();
+    assert_eq!((first.source_start, first.batch_ticks), before);
+    let (_, output, _) = cycle(&mut first);
+    assert_source_positions(&output, &source, usize::try_from(before.0).unwrap());
+    let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
+    let mut headers = 0;
+    for packet in &output {
+        if let TeletextAssemblyEvent::Complete(pes) = assembler.push(packet).unwrap() {
+            for unit in pes.units().filter_map(|unit| unit.teletext_unit()) {
+                if let TeletextHeaderObservation::Header(header) =
+                    observe_dvb_teletext_header(unit).unwrap()
+                {
+                    if header.display_page().is_some_and(|page| page.get() == 200) {
+                        assert!(!header.controls.erase_page());
+                        headers += 1;
+                    }
+                }
+            }
+        }
+    }
+    assembler.finish().unwrap();
+    assert!(headers > 0);
+}
+
+#[test]
 fn checked_resource_variant_pending_and_foreign_acks_leave_plan_and_prepared_bytes_untouched() {
     let old = Arc::new(candidate(spec(7, TeletextResourceFullUpdate::Changed)));
     let (mut first, _) = gate(Arc::clone(&old), 200);

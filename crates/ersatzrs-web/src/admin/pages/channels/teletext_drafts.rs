@@ -1073,6 +1073,7 @@ mod tests {
                     outputs: vec![],
                     incomplete: false,
                     last_failure: None,
+                    last_field_failure: None,
                 });
                 assert!(output_status::view(&data)
                     .to_html()
@@ -1086,6 +1087,7 @@ mod tests {
                         revision: 3,
                         effective: false,
                         guide_refresh: None,
+                        custom_fields: None,
                     }),
                     authored: true,
                 };
@@ -1098,6 +1100,7 @@ mod tests {
                     }],
                     incomplete: true,
                     last_failure: None,
+                    last_field_failure: None,
                 });
                 let html = output_status::view(&data).to_html();
                 for text in [
@@ -2381,6 +2384,105 @@ mod tests {
                 assert_resource_selection_catalogue(&html);
                 assert!(!html.contains("<fieldset disabled"));
                 assert_resource_selection_history(data, &observation);
+            });
+        }
+    }
+    #[test]
+    fn custom_field_receipts_show_decimal_pages_and_keep_requested_and_confirmed_separate() {
+        use ersatzrs_domain::{
+            TeletextChannelOutputObservations, TeletextCustomFieldFailure,
+            TeletextCustomFieldOutputObservation, TeletextOutputGenerationObservation,
+            TeletextOutputObservation, TeletextOutputObservationPhase as Phase,
+            TeletextOutputSelectionObservation as Selection,
+        };
+        for language in [
+            "en-us", "nl", "pl", "pt-br", "fr-fr", "de-de", "es-es", "es-419", "it-it",
+        ] {
+            let owner = Owner::new();
+            owner.with(|| {
+                provide_context(crate::admin::i18n::UiLanguage::from_config(language));
+                let generation = TeletextOutputGenerationObservation {
+                    generation_id: 3,
+                    request_id: 2,
+                    design_id: 1,
+                    revision: 1,
+                    effective: false,
+                    guide_refresh: None,
+                    custom_fields: Some(TeletextCustomFieldOutputObservation {
+                        revision: 4,
+                        failed_pages: vec![150, 151],
+                    }),
+                };
+                let requested = Selection {
+                    sequence: 4,
+                    generation: Some(generation),
+                    authored: true,
+                };
+                let mut confirmed = requested.clone();
+                confirmed.sequence = 3;
+                let fields = confirmed
+                    .generation
+                    .as_mut()
+                    .unwrap()
+                    .custom_fields
+                    .as_mut()
+                    .unwrap();
+                fields.revision = 3;
+                fields.failed_pages.clear();
+                let mut data = preview();
+                data.outputs = Some(TeletextChannelOutputObservations {
+                    outputs: vec![TeletextOutputObservation {
+                        epoch: uuid::Uuid::new_v4(),
+                        requested,
+                        applied: Some(confirmed),
+                        phase: Phase::Waiting,
+                    }],
+                    incomplete: false,
+                    last_failure: None,
+                    last_field_failure: None,
+                });
+                let html = output_status::view(&data).to_html();
+                let requested = html
+                    .split("<dd>")
+                    .nth(1)
+                    .unwrap()
+                    .split("</dd>")
+                    .next()
+                    .unwrap();
+                let confirmed = html
+                    .split("<dd>")
+                    .nth(2)
+                    .unwrap()
+                    .split("</dd>")
+                    .next()
+                    .unwrap();
+                assert!(
+                    requested
+                        .contains(&tr(TextKey::TeletextFieldFailed).replace("{pages}", "150, 151")),
+                    "{language}"
+                );
+                assert!(
+                    confirmed.contains(tr(TextKey::TeletextFieldReady)),
+                    "{language}"
+                );
+                assert!(!confirmed.contains("150, 151"));
+                assert!(!html.contains("096"));
+                let observations = data.outputs.as_mut().unwrap();
+                observations.outputs.clear();
+                observations.last_field_failure = Some(TeletextCustomFieldFailure {
+                    pages: vec![150],
+                    at: chrono::DateTime::from_timestamp(1_800_000_000, 0).unwrap(),
+                });
+                let html = output_status::view(&data).to_html();
+                assert!(
+                    html.contains(
+                        &tr(TextKey::TeletextFieldLastFailure)
+                            .replace("{pages}", "150")
+                            .replace("{at}", "2027-01-15T08:00:00+00:00")
+                    ),
+                    "{language}: {html}"
+                );
+                assert!(!html.contains("<form"));
             });
         }
     }

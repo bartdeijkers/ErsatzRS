@@ -8,6 +8,7 @@ import { test } from './isolated-web-host';
 import { waitForHydration } from './hydration';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
 import { captureTeletextChannelTs, observeTeletextUntilStop } from './helpers/teletext-stream-capture';
+import { decodeCustomPage, decodeCustomPageAv, uploadCustomPage } from './helpers/teletext-custom-pages';
 
 // Intentional Unix-only synthetic package, with an owned real host/database.
 // Publication setup is English; restart views prove EN and NL durability.
@@ -1181,6 +1182,143 @@ for (const variant of [
           closed, calls, browser: browser.version(), ...variant, live, errors }, null, 2));
       } finally {
         await viewer?.close(); fixture.close(); await context.close();
+      }
+    });
+}
+
+
+for (const variant of [
+  { language: 'en-us', module: 'en_us', js: true, dark: false },
+  { language: 'nl', module: 'nl', js: false, dark: true },
+] as const) {
+  test(`published custom fields report page failures and reload after host restart (${variant.language})`,
+    async ({ browser, isolatedWebHost }, info) => {
+      test.skip(process.platform !== 'linux', 'Intentional owned POSIX producer fixture.');
+      test.skip(!process.env.FFMPEG_PATH, 'Requires qualified FFmpeg9/libzvbi.');
+      test.setTimeout(240_000);
+      const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath,
+        { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 60 } });
+      fixture.setAuthoringPolicy();
+      const policyFile = fileURLToPath(new URL('../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', specUrl));
+      const policy = JSON.parse(readFileSync(policyFile, 'utf8'));
+      policy.version = 2; policy.live_updates = { poll_interval_ms: 250, recovery_timeout_ms: 2000 };
+      fixture.setOutputPolicy(JSON.stringify(policy));
+      const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, javaScriptEnabled: variant.js,
+        viewport: { width: 1280, height: 900 } });
+      const page = await context.newPage(); const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      const channel = fixture.channels[0];
+      let viewer: ReturnType<typeof observeTeletextUntilStop> | undefined;
+      let gap: number | undefined;
+      const capture = async (name: string) => {
+        fixture.resetSourceStart();
+        const file = info.outputPath(`${name}.ts`);
+        const result = await captureTeletextChannelTs(`${isolatedWebHost.baseURL}/iptv/channel/${channel}.ts?mode=ts-legacy`, file,
+          { maximumBytes: Math.floor(3 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+        expect(result.ended).toBe('byte-limit'); return file;
+      };
+      const decode = (file: string, number: number) => decodeCustomPage(process.env.FFMPEG_PATH!, file, number);
+      try {
+        await page.request.post('/admin-api/settings/ui/save',
+          { form: { language: 'en-us', is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+        const mixed = await uploadCustomPage(page, channel, 150,
+          ['CUSTOM ORIGINAL150', 'NOW %NOW%%%%%%%%%%%%', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%']);
+        const clock = await uploadCustomPage(page, channel, 151, ['CLOCK ORIGINAL151', 'TIME %TIME%% FIXED']);
+        await page.goto(`/channels/${channel}/teletext`); await ready(page, variant.js);
+        await bind(page, fixture, await createProfile(page, fixture, 'day', variant.js), variant.js);
+        const url = await prepare(page, fixture, 'Immutable field refresh', variant.js);
+        await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), variant.js);
+        await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), variant.js);
+        const published = publicationRows(fixture);
+        const originals = () => fixture.database.prepare(`SELECT * FROM TeletextDesignRevision
+          WHERE DesignId IN (SELECT DesignId FROM TeletextPublicationRequest WHERE ChannelId IN (?,?))
+          ORDER BY DesignId,Revision`).all(...fixture.channels);
+        const originalRows = originals(); const calls = fixture.calls();
+        await page.request.post('/admin-api/settings/ui/save',
+          { form: { language: variant.language, is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
+        fixture.resetSourceStart();
+        viewer = observeTeletextUntilStop(`${isolatedWebHost.baseURL}/iptv/channel/${channel}.ts?mode=ts-legacy`, () => false);
+        await viewer.ready;
+        const confirmed = () => page.getByTestId('teletext-output').first().locator('dd').nth(1);
+        await expect.poll(async () => {
+          await page.goto(url); await ready(page, variant.js); return confirmed().innerText();
+        }, { timeout: 10_000 }).toContain(text(variant.module)('TeletextFieldReady'));
+        // Only this future synthetic projection row is damaged. It is outside
+        // the current JSON playback schedule and cannot change its sealed AV.
+        gap = Number(fixture.database.prepare('INSERT INTO PlayoutGap(PlayoutId,Start,Finish) VALUES (?,?,?) RETURNING Id')
+          .get(channel, new Date(Date.now() + 5 * 60_000).toISOString(), 'unreadable-field-projection')!.Id);
+        const failed = text(variant.module)('TeletextFieldFailed').replace('{pages}', '150');
+        await expect.poll(async () => {
+          await page.goto(url); await ready(page, variant.js); return confirmed().innerText();
+        }, { timeout: 10_000 }).toContain(failed);
+        await page.getByTestId('teletext-output-status').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: info.outputPath('confirmed-field-failure.png') });
+        const closed = await viewer.close(); viewer = undefined;
+        expect(closed.ended).toBe('client-close');
+        const failedCapture = await capture('failed-page');
+        decodeCustomPageAv(process.env.FFMPEG_PATH!, failedCapture);
+        const failedText = decode(failedCapture, 150);
+        expect(failedText).toContain('CUSTOM ORIGINAL150');
+        expect(failedText).toMatch(/TIME\s+FIXED/);
+        expect(failedText).toMatch(/DATE[^\S\r\n]*(?:\r?\n|$)/);
+        expect(failedText).not.toContain('%');
+        expect(decode(failedCapture, 151)).toMatch(/TIME\s+\d{2}:\d{2}\s+FIXED/);
+        for (const number of [200, 201]) expect(decode(failedCapture, number)).toMatch(/[A-Za-z]/);
+        await expect.poll(async () => {
+          await page.goto(url); await ready(page, variant.js); return page.getByTestId('teletext-output').count();
+        }, { timeout: 10_000 }).toBe(0);
+        await expect(page.getByTestId('teletext-field-last-failure')).toBeVisible();
+        await expect(page.getByTestId('teletext-field-last-failure')).toContainText('150');
+        await page.goto('/system/health'); await ready(page, variant.js);
+        const warning = page.getByRole('row').filter({ hasText: text(variant.module)('TeletextFieldHealthTitle') });
+        await expect(warning).toContainText(text(variant.module)('TeletextFieldHealthHelp').replace('{pages}', `${channel}: 150`));
+        await warning.scrollIntoViewIfNeeded(); await page.screenshot({ path: info.outputPath('field-health-warning.png') });
+        fixture.database.prepare('DELETE FROM PlayoutGap WHERE Id=? AND PlayoutId=?').run(gap, channel); gap = undefined;
+        await page.goto(url); await ready(page, variant.js);
+        await expect(page.getByTestId('teletext-field-last-failure')).toBeVisible();
+        const recoveredCapture = await capture('recovered-page');
+        decodeCustomPageAv(process.env.FFMPEG_PATH!, recoveredCapture);
+        expect(decode(recoveredCapture, 150)).toMatch(/TIME\s+\d{2}:\d{2}/);
+        await page.goto(url); await ready(page, variant.js);
+        await expect(page.getByTestId('teletext-field-last-failure')).toBeHidden();
+        await page.goto('/system/health'); await ready(page, variant.js);
+        await expect(page.getByRole('row').filter({ hasText: text(variant.module)('TeletextFieldHealthTitle') })).toHaveCount(0);
+        for (const id of [mixed, clock]) {
+          const removed = await page.request.post(`/admin-api/teletext-elements/${id}/delete`, { form: { confirm: 'yes' }, maxRedirects: 0 });
+          expect(removed.status()).toBe(303); expect(removed.headers().location).toBe('/teletext-elements?saved=deleted');
+        }
+        expect(fixture.database.prepare('SELECT 1 FROM ChannelTeletextElement WHERE ChannelId=?').get(channel)).toBeUndefined();
+        // Leave the shell's polling page before deliberately stopping its host.
+        await page.goto('about:blank');
+        // Cross a real minute while no output is held, then replace the actual
+        // host process. This is separate from reopening SQLite or unit clocks.
+        const nextMinute = Math.floor(Date.now() / 60_000) * 60_000 + 60_000;
+        await expect.poll(() => Date.now(), { timeout: 65_000, intervals: [1000] }).toBeGreaterThan(nextMinute + 1000);
+        const restart = await isolatedWebHost.restart();
+        expect(restart.after.pid).not.toBe(restart.before.pid); expect(restart.stop.forced).toBe(false);
+        const before = new Date();
+        const freshCapture = await capture('restarted-page');
+        decodeCustomPageAv(process.env.FFMPEG_PATH!, freshCapture);
+        const after = new Date();
+        const time = (at: Date) => `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+        const freshText = decode(freshCapture, 150);
+        expect(freshText).toContain('CUSTOM ORIGINAL150');
+        expect([time(before), time(after)].some(value => new RegExp(`TIME\\s+${value}\\s+FIXED`).test(freshText))).toBe(true);
+        expect(decode(freshCapture, 151)).toContain('CLOCK ORIGINAL151');
+        for (const number of [200, 201]) expect(decode(freshCapture, number)).toMatch(/[A-Za-z]/);
+        await page.goto(url); await ready(page, variant.js);
+        await page.getByTestId('teletext-output-status').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: info.outputPath('restarted-immutable-publication.png') });
+        expect(publicationRows(fixture)).toEqual(published); expect(originals()).toEqual(originalRows);
+        expect(fixture.calls()).toEqual(calls); expect(fixture.unchangedPackage()).toBe(true); expect(errors).toEqual([]);
+        writeFileSync(info.outputPath('custom-field-native-receipt.json'), JSON.stringify({ restart, closed,
+          browser: browser.version(), ...variant, errors, nextMinute, observedBefore: before.toISOString(), observedAfter: after.toISOString(),
+          scope: 'Base synthetic producer, actual native field failure/recovery, immutable last-link host restart and independent served-page decoding; production guide-worker join remains separate.' }, null, 2));
+      } finally {
+        await viewer?.close();
+        if (gap !== undefined) fixture.database.prepare('DELETE FROM PlayoutGap WHERE Id=? AND PlayoutId=?').run(gap, channel);
+        fixture.close(); await context.close();
       }
     });
 }

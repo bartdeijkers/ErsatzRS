@@ -145,7 +145,82 @@ last page off changes the selection like an add-on binding does. Its response
 carries exact seven-bit rows that the engine applies as physical base rows on
 empty Base pages. The engine's no-hidden-row rule applies unchanged: a page
 with text under a double-height line, or double height on row 23 or 24, is a
-per-page Check issue rather than having those bytes dropped. Refresh after publication, custom pages during published
+per-page Check issue rather than having those bytes dropped. New Check results
+also retain validated dynamic-field locations and sources with the exact page
+rows and element revision. Older stored results without that recipe remain
+frozen; refresh must never infer bindings from a later element or link.
+The application can fill or blank only those saved dynamic cell ranges and
+identify affected pages. A read-only field snapshot includes the next actual
+programme/gap boundary; clock-only values need no programme query. The native
+engine also has a distinct ACK-bound display-refresh path: unchanged displays
+use repeat headers when service metadata, magazine data and resource banks are
+identical. Changed dependencies and ordinary publications retain full
+acquisition. Display indices are mapped past the carousel's resource prefix;
+resource lifecycle, exact ACK and programme-clock checks remain unchanged.
+The response monitor distinguishes content revisions and wake times from
+publication/guide expiry. Only future content wakes shorten its polling sleep;
+an overdue wake after a failed read must not create an immediate retry loop.
+The pump dispatches a confirmed same-origin content refresh through the native
+cache-preserving ACK path. Inactive and post-expiry replacements retain full
+acquisition.
+The Base response owner now loads the host producer recipe from the exact,
+digest-checked manual revision. It retains the final published physical rows,
+including fixed editorial cells, and derives only the saved dynamic ranges.
+Programme projections share the existing observation cadence and expose an
+earlier actual programme/gap boundary. Clock fields use local date/time and
+change only at their own boundaries. A failed programme read blanks every
+dynamic field on that logical page, including its clock-only subpages, until
+the programme read recovers; independent clock pages continue. Bounded native
+encoding preserves unrelated displays, declarations and explicit resource
+lifecycles. The original selection is confirmed again after field work, under
+the same deadline and original authority cap. Derived cells cannot renew it.
+The semantic programme transition is retained separately from the next polling
+time. A clock-only render must still refuse data that crosses that retained
+transition. Clock validity concerns only bound fields on healthy logical pages;
+intentionally blank failed fields and unbound clock categories do not expire
+unrelated output. Final origin confirmation also rechecks derived-field validity.
+Reauthorization of the cached original remains independent, allowing due fields
+to refresh under that same original rather than making stale derived cells a
+permanent rejection of their origin. A private UTC test seam runs the actual
+read/derive/encode owner; admission and operation deadlines keep the real
+monotonic clock.
+Field observations belong to each response and preserve the unchanged manual
+origin. A separate field revision and decimal failed logical page numbers travel
+with requested and sink-acknowledged selections. Merely preparing, installing or
+rejecting a proposal cannot imply recovery. The host-local registry retains the
+last acknowledged blank fields after an output ends; a later receipt clears
+that warning only when no other observed active output still confirms failures.
+No raw projection error, programme title or mutable element lookup enters these
+diagnostics. Other pages and audio/video remain independent.
+
+Admin source map: `/channels/{id}/teletext`, `TeletextDraftPreview` SSR component,
+`teletext_drafts/output_status.rs`, with data supplied by the existing preview
+server-function boundary and response-owned output observer. This read-only
+status uses native paragraphs and definition lists inside the existing preview;
+no island, shared primitive, new action or JavaScript dependency is added.
+The same SSR status works without JavaScript. Browser proof must distinguish
+requested blank fields from a healthy historical receipt, retain decimal page
+numbers after the stream ends and show the localized Health warning.
+Joined native and browser acceptance remain open below.
+Confirmation of an already published Base original retains its host producer
+membership, including the absence of that producer. Removing the last element
+link cannot revoke saved pages, and a newly linked page cannot become output
+without publication. Installed add-on identities and settings remain exact at
+output confirmation; new Check and new publication retain full current-selection
+equality. Automatic Base guide preparation keeps its existing current installed
+profiles and producer-id checks, restoring only the manual original's host
+membership. Published-source preparation and its post-CPU recheck use this same
+distinction. The absence of a published host source never invokes the mutable
+element planner.
+Automatic Base guide regeneration borrows the custom source from the checked,
+immutable original design revision. It changes only the invocation correlation;
+rows, element revisions and field recipes remain exact, even after subsequent
+element edits or deletion. New Check still uses the latest linked elements.
+This reuse retains the existing selection, response, admission and deadline
+fences and grants no independent publication authority. Effective/Scripted
+custom-page composition remains a separate open requirement.
+Joined refresh/restart qualification and per-page reporting are still being integrated.
+Refresh after publication, custom pages during published
 Scripted intervals, the element's subpage cycle time and the acceptance
 evidence remain open in the `teletext-support` parity record.
 Acceptance needs unit and native publication evidence, one independently decoded
