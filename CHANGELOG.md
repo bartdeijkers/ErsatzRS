@@ -82,8 +82,7 @@ release section when tagging a release.
   requested and confirmed field refreshes, with page-specific blank-field warnings
   retained in Health after a stream ends until confirmed field recovery;
   withdrawal or unrelated AV output cannot clear them. The guide worker retains
-  published custom-page membership when the latest links are deleted. Joined
-  automatic-refresh acceptance remains in progress.
+  published custom-page membership when the latest links are deleted.
 - Teletext capacity-recovery browser proof now covers Chromium and Firefox with
   and without JavaScript, including consent, custom-policy protection and repair.
 - Guide-boundary qualification distinguishes acknowledged expiry withdrawal from
