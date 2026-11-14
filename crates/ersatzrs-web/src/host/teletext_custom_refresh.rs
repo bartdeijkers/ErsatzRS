@@ -44,14 +44,39 @@ pub(crate) struct PublishedCustomRefresh {
     service: Arc<EncodedTeletextAuthoredService>,
     clock: FieldValues,
     next_projection: Option<DateTime<Utc>>,
+    programme_transition: Option<DateTime<Utc>>,
     pub(crate) next_wake: Instant,
     pub(crate) revision: u64,
     pub(crate) failed_pages: Vec<u16>,
 }
 
 impl PublishedCustomRefresh {
+    fn from_published(
+        document: TeletextCustomPagesWire,
+        transmissions: Vec<TeletextServiceResourceTransmission>,
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Self {
+        Self {
+            document,
+            transmissions,
+            service,
+            clock: FieldValues::default(),
+            next_projection: None,
+            programme_transition: None,
+            next_wake: Instant::now(),
+            revision: 0,
+            failed_pages: Vec::new(),
+        }
+    }
+
     pub(crate) fn service(&self) -> &Arc<EncodedTeletextAuthoredService> {
         &self.service
+    }
+
+    /// Content validity is separate from the original publication/guide cap.
+    pub(crate) fn current_at(&self, now: DateTime<Utc>) -> bool {
+        clock_fields_current(&self.document, &self.failed_pages, &self.clock, now)
+            && self.programme_transition.is_none_or(|at| now < at)
     }
 
     /// Load the exact digest-checked manual revision. Legacy recipes stay frozen.
@@ -146,16 +171,7 @@ impl PublishedCustomRefresh {
         let Some((document, transmissions, root)) = recipe else {
             return Ok(None);
         };
-        let initial = Self {
-            document,
-            transmissions,
-            service: root,
-            clock: FieldValues::default(),
-            next_projection: None,
-            next_wake: Instant::now(),
-            revision: 0,
-            failed_pages: Vec::new(),
-        };
+        let initial = Self::from_published(document, transmissions, root);
         initial
             .refresh_held(context, guard.hold_work(), true)
             .await
@@ -181,6 +197,19 @@ impl PublishedCustomRefresh {
         hold: ersatzrs_core::locking::TeletextWorkHold,
         initial: bool,
     ) -> Result<Arc<Self>, RefreshError> {
+        self.refresh_held_with_clock(context, hold, initial, Utc::now)
+            .await
+    }
+
+    /// The UTC seam exercises the actual read/derive/encode owner. Admission,
+    /// CPU cleanup and original deadlines always retain their real monotonic clock.
+    async fn refresh_held_with_clock(
+        &self,
+        context: RefreshContext<'_>,
+        hold: ersatzrs_core::locking::TeletextWorkHold,
+        initial: bool,
+        now: impl Fn() -> DateTime<Utc> + Send,
+    ) -> Result<Arc<Self>, RefreshError> {
         let RefreshContext {
             application,
             channel,
@@ -188,7 +217,7 @@ impl PublishedCustomRefresh {
             deadline,
             poll,
         } = context;
-        let captured = Utc::now();
+        let captured = now();
         let clock = FieldValues::clock(captured);
         let has_programme = self
             .document
@@ -211,6 +240,13 @@ impl PublishedCustomRefresh {
             None
         };
         let mut next_projection = self.next_projection;
+        let programme_transition = if projection_due {
+            projection
+                .as_ref()
+                .and_then(|snapshot| snapshot.next_programme_transition)
+        } else {
+            self.programme_transition
+        };
         if projection_due {
             let poll = chrono::Duration::from_std(poll).map_err(|_| RefreshError)?;
             let reconciliation = captured.checked_add_signed(poll).ok_or(RefreshError)?;
@@ -251,17 +287,14 @@ impl PublishedCustomRefresh {
         } else {
             Arc::clone(&self.service)
         };
-        let finished = Utc::now();
+        let finished = now();
         // Refuse values captured before a boundary crossed during encoding.
-        if FieldValues::clock(finished) != clock
-            || projection
-                .as_ref()
-                .and_then(|snapshot| snapshot.next_programme_transition)
-                .is_some_and(|at| at <= finished)
+        if !clock_fields_current(&document, &failed_pages, &clock, finished)
+            || programme_transition.is_some_and(|at| at <= finished)
         {
             return Err(RefreshError);
         }
-        let next = next_wake(captured, next_projection)?;
+        let next = next_wake(finished, next_projection)?;
         check(deadline)?;
         Ok(Arc::new(Self {
             document,
@@ -269,11 +302,31 @@ impl PublishedCustomRefresh {
             service,
             clock,
             next_projection,
+            programme_transition,
             next_wake: next,
             revision,
             failed_pages,
         }))
     }
+}
+
+fn clock_fields_current(
+    document: &TeletextCustomPagesWire,
+    failed_pages: &[u16],
+    captured: &FieldValues,
+    now: DateTime<Utc>,
+) -> bool {
+    let current = FieldValues::clock(now);
+    document
+        .pages
+        .iter()
+        .filter(|page| !failed_pages.contains(&page.page))
+        .flat_map(|page| &page.dynamic_fields)
+        .all(|field| match field.source {
+            TeletextElementBindingSource::Date => captured.date == current.date,
+            TeletextElementBindingSource::Time => captured.time == current.time,
+            _ => true,
+        })
 }
 
 fn render(
@@ -381,7 +434,7 @@ fn next_wake(
         .and_then(|at| at.checked_add_signed(chrono::Duration::minutes(1)))
         .ok_or(RefreshError)?;
     let next = projection.map_or(next_minute, |at| at.min(next_minute));
-    let duration = (next - Utc::now()).to_std().unwrap_or(Duration::ZERO);
+    let duration = (next - now).to_std().unwrap_or(Duration::ZERO);
     Instant::now().checked_add(duration).ok_or(RefreshError)
 }
 async fn before<T>(

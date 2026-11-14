@@ -279,6 +279,10 @@ release section when tagging a release.
 - Removing the last linked custom teletext page preserves its published original.
   Newly linked pages stay unpublished during automatic guide refresh; changes to
   real add-ons and checks for a new publication retain their existing safeguards.
+- Custom-page clock refresh preserves the known programme transition during
+  clock-only work and refuses stale field values after processing or final
+  confirmation. Unbound clock categories and intentionally blank failed fields
+  do not invalidate unrelated pages.
 - Local and provider teletext source storage warnings are localized in all
   supported admin languages, including warnings stored by older versions.
 - Source teletext captions can be prepared from complete files larger than the

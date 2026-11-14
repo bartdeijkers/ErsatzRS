@@ -162,18 +162,21 @@ async fn application() -> crate::host::state::AppState {
     )
 }
 
-#[tokio::test]
-async fn actual_owner_read_failure_encodes_blank_mixed_page_and_live_clock_page() {
-    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
-    let state = application().await;
-    let policy = super::super::teletext_runtime_policy::parse_native_teletext_runtime_policy(
-        include_str!("../../tests/fixtures/teletext-output-policy-v1.json"),
-    )
+fn policy() -> TeletextChannelDocumentEncodingPolicy {
+    super::super::teletext_runtime_policy::parse_native_teletext_runtime_policy(include_str!(
+        "../../tests/fixtures/teletext-output-policy-v1.json"
+    ))
     .unwrap()
-    .encoding;
-    let original = document();
+    .encoding
+}
+
+fn initial_source(
+    document: TeletextCustomPagesWire,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> PublishedCustomRefresh {
     let (draft, overlays) =
-        TeletextCustomPagesDocument::from_wire(original.clone(), &original.generation)
+        TeletextCustomPagesDocument::from_wire(document.clone(), &document.generation)
             .unwrap()
             .into_parts();
     let declared = super::super::teletext_documents::lift_base(
@@ -185,52 +188,50 @@ async fn actual_owner_read_failure_encodes_blank_mixed_page_and_live_clock_page(
     .unwrap()
     .with_physical_base_overlays(overlays, policy.validation.service)
     .unwrap();
-    let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
-    let encoded = Arc::new(
-        encode_teletext_authored_service_before(declared, &[], &policy.encoding, deadline).unwrap(),
-    );
-    let initial = PublishedCustomRefresh {
-        document: original,
-        transmissions: Vec::new(),
-        service: Arc::clone(&encoded),
-        clock: FieldValues::default(),
-        next_projection: None,
-        next_wake: Instant::now(),
-        revision: 0,
-        failed_pages: Vec::new(),
-    };
-    let locker = EntityLocker::new();
-    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
-    // Channel 999 is absent: use the actual repository projection failure path.
-    let refreshed = initial
-        .refresh_held(
-            RefreshContext {
-                application: &state.application,
-                channel: 999,
-                policy,
-                deadline,
-                poll: Duration::from_secs(5),
-            },
-            guard.hold_work(),
-            true,
-        )
-        .await
-        .unwrap();
-    assert_eq!(refreshed.failed_pages, [150]);
-    assert_eq!(refreshed.revision, 1);
-    assert!(!Arc::ptr_eq(&encoded, refreshed.service()));
-    assert_eq!(&cells(&refreshed.document, 0)[..5], b"     ");
-    assert_eq!(&cells(&refreshed.document, 1)[..5], b"     ");
-    assert_eq!(
-        &cells(&refreshed.document, 2)[..5],
-        refreshed.clock.time.as_bytes()
-    );
-    let native = refreshed
+    PublishedCustomRefresh::from_published(
+        document,
+        Vec::new(),
+        Arc::new(
+            encode_teletext_authored_service_before(declared, &[], &policy.encoding, deadline)
+                .unwrap(),
+        ),
+    )
+}
+
+fn context<'a>(
+    state: &'a crate::host::state::AppState,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> RefreshContext<'a> {
+    RefreshContext {
+        application: &state.application,
+        channel: 999,
+        policy: policy.clone(),
+        deadline,
+        poll: Duration::from_secs(5),
+    }
+}
+
+fn deadline() -> Instant {
+    Instant::now().checked_add(Duration::from_secs(30)).unwrap()
+}
+
+fn local_time(day: u32, hour: u32, minute: u32, second: u32) -> DateTime<Utc> {
+    use chrono::TimeZone as _;
+    chrono::Local
+        .with_ymd_and_hms(2026, 11, day, hour, minute, second)
+        .single()
+        .unwrap()
+        .with_timezone(&Utc)
+}
+
+fn assert_native_rows(owner: &PublishedCustomRefresh) {
+    let native = owner
         .service()
         .declared()
         .semantic()
         .physical_base_overlays();
-    for page in &refreshed.document.pages {
+    for page in &owner.document.pages {
         let overlay = native
             .values()
             .find(|overlay| {
@@ -239,7 +240,7 @@ async fn actual_owner_read_failure_encodes_blank_mixed_page_and_live_clock_page(
             })
             .unwrap();
         assert_eq!(overlay.rows()[0].cells(), &page.rows[0].decode().unwrap());
-        let units = refreshed
+        let units = owner
             .service()
             .pages()
             .iter()
@@ -257,8 +258,258 @@ async fn actual_owner_read_failure_encodes_blank_mixed_page_and_live_clock_page(
                 |index| unit[6 + index].reverse_bits() & 0x7f
             ) == *overlay.rows()[0].cells()));
     }
+}
+
+#[tokio::test]
+async fn actual_owner_read_failure_encodes_blank_mixed_page_and_live_clock_page() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    let state = application().await;
+    let policy = policy();
+    let deadline = deadline();
+    let initial = initial_source(document(), &policy, deadline);
+    let encoded = Arc::clone(initial.service());
+    let locker = EntityLocker::new();
+    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let captured = Utc::now();
+    // Channel999 is absent: use the actual repository projection failure path.
+    let refreshed = initial
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            true,
+            || captured,
+        )
+        .await
+        .unwrap();
+    assert_eq!(refreshed.failed_pages, [150]);
+    assert_eq!(refreshed.revision, 1);
+    assert!(!Arc::ptr_eq(&encoded, refreshed.service()));
+    assert_eq!(&cells(&refreshed.document, 0)[..5], b"     ");
+    assert_eq!(&cells(&refreshed.document, 1)[..5], b"     ");
+    assert_eq!(
+        &cells(&refreshed.document, 2)[..5],
+        refreshed.clock.time.as_bytes()
+    );
+    assert_native_rows(&refreshed);
     assert!(refreshed.next_wake > Instant::now());
     assert!(refreshed.next_wake <= Instant::now().checked_add(Duration::from_secs(5)).unwrap());
+    drop(guard);
+    assert_eq!(locker.active_teletext_work(), 0);
+}
+
+#[tokio::test]
+async fn native_clock_rows_change_at_local_midnight_once_per_minute_and_reconstruct() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    let state = application().await;
+    let policy = policy();
+    let deadline = deadline();
+    let mut original = document();
+    original.pages.retain(|page| page.page >= 151);
+    let initial = initial_source(original.clone(), &policy, deadline);
+    let locker = EntityLocker::new();
+    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let before = local_time(14, 23, 59, 20);
+    let first = initial
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            true,
+            || before,
+        )
+        .await
+        .unwrap();
+    assert_eq!(&cells(&first.document, 0)[..5], b"23:59");
+    assert_eq!(&cells(&first.document, 1)[..5], b"14-11");
+    assert_native_rows(&first);
+    let same_minute = local_time(14, 23, 59, 45);
+    let unchanged = first
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            false,
+            || same_minute,
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.revision, unchanged.revision);
+    assert!(Arc::ptr_eq(first.service(), unchanged.service()));
+    let midnight = local_time(15, 0, 0, 0);
+    assert!(!first.current_at(midnight));
+    let next = unchanged
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            false,
+            || midnight,
+        )
+        .await
+        .unwrap();
+    assert_eq!(&cells(&next.document, 0)[..5], b"00:00");
+    assert_eq!(&cells(&next.document, 1)[..5], b"15-11");
+    assert_eq!(next.revision, first.revision + 1);
+    assert!(next.current_at(midnight));
+    assert_native_rows(&next);
+    let reconstructed = initial_source(original, &policy, deadline)
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            true,
+            || midnight,
+        )
+        .await
+        .unwrap();
+    assert_eq!(reconstructed.document, next.document);
+    assert_native_rows(&reconstructed);
+}
+
+#[tokio::test]
+async fn unbound_clock_categories_and_failed_blank_fields_do_not_revoke_valid_rows() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let state = application().await;
+    let policy = policy();
+    let deadline = deadline();
+    let locker = EntityLocker::new();
+    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let mut date_only = document();
+    date_only.pages.retain(|page| page.page == 152);
+    let before = local_time(14, 23, 58, 59);
+    let after = local_time(14, 23, 59, 0);
+    let calls = AtomicUsize::new(0);
+    let dated = initial_source(date_only, &policy, deadline)
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            true,
+            || {
+                if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    before
+                } else {
+                    after
+                }
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    assert!(dated.current_at(after));
+    assert_native_rows(&dated);
+    let mut mixed = document();
+    mixed.pages.retain(|page| page.page == 150);
+    let mut fixed = page(153, 0, TeletextElementBindingSource::Date);
+    fixed.dynamic_fields.clear();
+    mixed.pages.push(fixed.clone());
+    let before = local_time(14, 23, 59, 59);
+    let after = local_time(15, 0, 0, 0);
+    let calls = AtomicUsize::new(0);
+    let blank = initial_source(mixed, &policy, deadline)
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            true,
+            || {
+                if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    before
+                } else {
+                    after
+                }
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    assert_eq!(blank.failed_pages, [150]);
+    assert!(blank.current_at(after));
+    assert_eq!(&cells(&blank.document, 0)[..5], b"     ");
+    assert_eq!(&cells(&blank.document, 1)[..5], b"     ");
+    assert_eq!(blank.document.pages[2], fixed);
+    assert_native_rows(&blank);
+}
+
+#[tokio::test]
+async fn clock_or_retained_programme_boundary_crossed_during_encoding_refuses_the_result() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let state = application().await;
+    let policy = policy();
+    let deadline = deadline();
+    let locker = EntityLocker::new();
+    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let mut original = document();
+    original.pages.retain(|page| page.page >= 151);
+    let initial = initial_source(original, &policy, deadline);
+    let before = local_time(14, 23, 59, 59);
+    let after = local_time(15, 0, 0, 0);
+    let calls = AtomicUsize::new(0);
+    let result = initial
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            true,
+            || {
+                if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    before
+                } else {
+                    after
+                }
+            },
+        )
+        .await;
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    assert!(result.is_err());
+    assert_eq!(initial.revision, 0);
+    let captured = after;
+    let transition = captured
+        .checked_add_signed(chrono::Duration::milliseconds(500))
+        .unwrap();
+    let finished = captured
+        .checked_add_signed(chrono::Duration::seconds(1))
+        .unwrap();
+    let mut retained = initial_source(document(), &policy, deadline);
+    retained.clock = FieldValues::clock(before);
+    retained.next_projection = Some(transition);
+    retained.programme_transition = Some(transition);
+    let calls = AtomicUsize::new(0);
+    let result = retained
+        .refresh_held_with_clock(
+            context(&state, &policy, deadline),
+            guard.hold_work(),
+            false,
+            || {
+                if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    captured
+                } else {
+                    finished
+                }
+            },
+        )
+        .await;
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    assert!(result.is_err());
+    assert!(!retained.current_at(finished));
+}
+
+#[tokio::test]
+async fn a_test_utc_clock_cannot_renew_the_real_original_operation_deadline() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    let state = application().await;
+    let policy = policy();
+    let mut original = document();
+    original.pages.retain(|page| page.page >= 151);
+    let initial = initial_source(original, &policy, deadline());
+    let expired = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
+    let locker = EntityLocker::new();
+    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let result = initial
+        .refresh_held_with_clock(
+            context(&state, &policy, expired),
+            guard.hold_work(),
+            true,
+            || local_time(14, 0, 0, 0),
+        )
+        .await;
+    assert!(result.is_err());
+    assert_eq!(initial.revision, 0);
     drop(guard);
     assert_eq!(locker.active_teletext_work(), 0);
 }

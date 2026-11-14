@@ -174,6 +174,16 @@ the programme read recovers; independent clock pages continue. Bounded native
 encoding preserves unrelated displays, declarations and explicit resource
 lifecycles. The original selection is confirmed again after field work, under
 the same deadline and original authority cap. Derived cells cannot renew it.
+The semantic programme transition is retained separately from the next polling
+time. A clock-only render must still refuse data that crosses that retained
+transition. Clock validity concerns only bound fields on healthy logical pages;
+intentionally blank failed fields and unbound clock categories do not expire
+unrelated output. Final origin confirmation also rechecks derived-field validity.
+Reauthorization of the cached original remains independent, allowing due fields
+to refresh under that same original rather than making stale derived cells a
+permanent rejection of their origin. A private UTC test seam runs the actual
+read/derive/encode owner; admission and operation deadlines keep the real
+monotonic clock.
 Per-page reporting and joined native acceptance remain open below.
 Confirmation of an already published Base original retains its host producer
 membership, including the absence of that producer. Removing the last element

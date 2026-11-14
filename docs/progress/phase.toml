@@ -149,8 +149,8 @@ Bucket A:
   ownership with infrastructure persistence, atomicity and retries. ADR0080 makes SQLite the sole
   backend; historical MySQL wording is stale, not new scope.
 - teletext-custom-pages-broadcast (parity/teletext-support.toml): Functionality then evidence,
-  separate PRs: 3b dynamic refresh (PR158 owner/membership components verified; controlled owner
-  clock/cutoff, served-host restart, per-page admin/health and joined final gates remain);
+  separate PRs: 3b dynamic refresh (PR158 owner/membership/controlled-clock components verified;
+  served-host restart, per-page admin/health and joined final gates remain);
   3c effective Lua/Scripted intervals; subpage timing; FL links;
   retained part4 engine preview and applicable X26/X28 import; 3d/5 publication, independent decoded
   stream and no-JS/hydrated flows. Part4 must not be lost from the plan summary or silently deferred

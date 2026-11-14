@@ -139,14 +139,14 @@ impl TeletextLiveOutputIntent {
             updates::NativeCandidate::prepare(&self.context, Arc::clone(candidate), None, deadline)
                 .await
                 .ok()?;
-        candidate
+        let confirmed = candidate
             .confirm(
                 &self.context.application,
                 self.context.budget.max_serialized_bytes,
                 deadline.into_std(),
             )
-            .await
-            .then_some(prepared)
+            .await;
+        (confirmed && prepared.fields_current_at(chrono::Utc::now())).then_some(prepared)
     }
 }
 

@@ -371,6 +371,23 @@ struct NativeBackend {
 }
 
 impl NativeBackend {
+    /// A cached root may remain authorized while its derived fields are due.
+    /// Check field validity only after refresh/final confirmation, not here.
+    async fn confirm_selected(
+        &self,
+        candidate: &SelectedTeletextOutputCandidate,
+        deadline: Instant,
+    ) -> Result<bool, ReadFailure> {
+        Ok(candidate
+            .confirm_cached(
+                &self.context.application,
+                self.context.budget.max_serialized_bytes,
+                deadline.into_std(),
+                self.context.timing.poll_interval,
+            )
+            .await)
+    }
+
     async fn prepare_guide_handover(
         &self,
         cached: &SelectedTeletextOutputCandidate,
@@ -482,7 +499,7 @@ impl UpdateBackend for NativeBackend {
             }
             candidate
         } else {
-            self.confirm(candidate, deadline)
+            self.confirm_selected(&candidate.selected, deadline)
                 .await?
                 .then(|| Arc::clone(&candidate.selected))
         };
@@ -592,14 +609,8 @@ impl UpdateBackend for NativeBackend {
         candidate: &Self::Candidate,
         deadline: Instant,
     ) -> Result<bool, ReadFailure> {
-        Ok(candidate
-            .confirm_cached(
-                &self.context.application,
-                self.context.budget.max_serialized_bytes,
-                deadline.into_std(),
-                self.context.timing.poll_interval,
-            )
-            .await)
+        Ok(self.confirm_selected(&candidate.selected, deadline).await?
+            && candidate.fields_current_at(chrono::Utc::now()))
     }
 
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure> {

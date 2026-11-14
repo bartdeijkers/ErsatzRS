@@ -18,6 +18,15 @@ impl Deref for NativeCandidate {
 }
 
 impl NativeCandidate {
+    pub(in crate::transport::iptv::teletext_live_output) fn fields_current_at(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> bool {
+        self.custom
+            .as_ref()
+            .is_none_or(|custom| custom.current_at(now))
+    }
+
     pub(in crate::transport::iptv::teletext_live_output) async fn prepare(
         context: &TeletextAcceptedUpdatesContext,
         selected: Arc<SelectedTeletextOutputCandidate>,
