@@ -34,6 +34,16 @@ use std::{
 pub const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BINDINGS: usize = 1024;
 
+/// Reuse an immutable published custom-page source during automatic guide work.
+/// The host must obtain it from the checked original revision. This data grants
+/// no selection or publication authority; all normal fences still apply.
+pub struct TeletextChannelDocumentRefresh<'a> {
+    pub selection: &'a TeletextChannelSelectionSnapshot,
+    pub custom_pages: &'a ersatzrs_domain::TeletextCustomPagesWire,
+    pub deadline: Instant,
+    pub hold: TeletextWorkHold,
+}
+
 /// Exact preflight request bytes for the contracts selected by one channel.
 /// At most three independently capped 4 MiB templates are retained, separately
 /// from the response budget. These bytes convey no durable guide authority.
@@ -344,6 +354,7 @@ impl ApplicationServices {
             context,
             budget,
             (None, None, None),
+            None,
         )
         .await
     }
@@ -367,6 +378,7 @@ impl ApplicationServices {
             context,
             budget,
             (Some(deadline), Some(hold), None),
+            None,
         )
         .await
     }
@@ -405,6 +417,34 @@ impl ApplicationServices {
                 Some(admission.1),
                 Some(expected_selection),
             ),
+            None,
+        )
+        .await
+    }
+
+    /// Refresh installed guide producers while retaining published custom rows,
+    /// field recipes and element revisions. Never reads mutable custom elements.
+    /// # Errors
+    /// Preserves producer, budget, selection, receipt and deadline checks.
+    pub async fn invoke_channel_teletext_documents_for_refresh(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+        refresh: TeletextChannelDocumentRefresh<'_>,
+    ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
+        self.invoke_channel_teletext_documents_with_optional_hold(
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            (
+                Some(refresh.deadline),
+                Some(refresh.hold),
+                Some(refresh.selection),
+            ),
+            Some(refresh.custom_pages),
         )
         .await
     }
@@ -420,6 +460,7 @@ impl ApplicationServices {
             Option<TeletextWorkHold>,
             Option<&TeletextChannelSelectionSnapshot>,
         ),
+        published_custom_pages: Option<&ersatzrs_domain::TeletextCustomPagesWire>,
     ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
         let (deadline, hold, expected_selection) = admission;
         let invoke = |selected: TeletextSelectionSnapshot, input: Vec<u8>, deadline| {
@@ -427,6 +468,11 @@ impl ApplicationServices {
             async move {
                 // The host-owned custom pages source runs in process.
                 if ersatzrs_domain::is_teletext_custom_pages_producer(&selected.addon_id) {
+                    if let Some(published) = published_custom_pages {
+                        return super::teletext_elements::broadcast::reproduce_published_custom_pages(
+                            selected, &input, deadline, published,
+                        );
+                    }
                     return Box::pin(
                         self.produce_teletext_custom_pages(selected, &input, deadline),
                     )

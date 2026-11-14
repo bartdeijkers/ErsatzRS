@@ -157,6 +157,13 @@ use repeat headers when service metadata, magazine data and resource banks are
 identical. Changed dependencies and ordinary publications retain full
 acquisition. Display indices are mapped past the carousel's resource prefix;
 resource lifecycle, exact ACK and programme-clock checks remain unchanged.
+Automatic Base guide regeneration borrows the custom source from the checked,
+immutable original design revision. It changes only the invocation correlation;
+rows, element revisions and field recipes remain exact, even after subsequent
+element edits or deletion. New Check still uses the latest linked elements.
+This reuse retains the existing selection, response, admission and deadline
+fences and grants no independent publication authority. Effective/Scripted
+custom-page composition remains a separate open requirement.
 Live refresh ownership and per-page reporting are still being integrated.
 Refresh after publication, custom pages during published
 Scripted intervals, the element's subpage cycle time and the acceptance

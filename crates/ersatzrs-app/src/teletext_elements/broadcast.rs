@@ -159,6 +159,44 @@ fn addon_ranges(bindings: &[TeletextSelectionSnapshot]) -> Vec<(String, u16, u16
         .collect()
 }
 
+/// Copy a bounded historical source into a fresh invocation correlation. Guide
+/// refresh must not adopt later element/link edits or rerun their admission.
+/// Full selected-contract and aggregate validation remains with the caller.
+pub(crate) fn reproduce_published_custom_pages(
+    selection: TeletextSelectionSnapshot,
+    input: &[u8],
+    deadline: Instant,
+    published: &TeletextCustomPagesWire,
+) -> Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError> {
+    if !is_teletext_custom_pages_producer(&selection.addon_id) {
+        return Err(TeletextProfileRuntimeError::Unsupported);
+    }
+    let request = wire::TeletextPagesRequest::from_json_for_schema(
+        input,
+        selection.contract.schema_version(),
+    )
+    .map_err(|_| TeletextProfileRuntimeError::InvalidRequest)?;
+    if Instant::now() >= deadline {
+        return Err(TeletextProfileRuntimeError::TimedOut);
+    }
+    ersatzrs_domain::TeletextCustomPagesDocument::from_wire(
+        published.clone(),
+        &published.generation,
+    )
+    .map_err(|_| TeletextProfileRuntimeError::Failed)?;
+    let mut document = published.clone();
+    document.generation.clone_from(&request.generation);
+    let stdout = serde_json::to_vec(&document).map_err(|_| TeletextProfileRuntimeError::Failed)?;
+    if Instant::now() >= deadline {
+        return Err(TeletextProfileRuntimeError::TimedOut);
+    }
+    Ok(TeletextProfileRuntimeReceipt {
+        stdout,
+        selection,
+        generation: request.generation,
+    })
+}
+
 impl ApplicationServices {
     /// Prepare the enabled custom pages of one channel with fields filled for
     /// `now`, and list every page that blocks Check.

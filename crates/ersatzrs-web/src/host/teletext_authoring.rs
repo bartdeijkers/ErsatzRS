@@ -1079,6 +1079,7 @@ async fn prepare_static_candidate(
         TeletextChannelDocumentPreparation {
             context: &context,
             expected_selection: Some(selection),
+            published_custom_pages: None,
             deadline: operation.deadline,
         },
         policy,

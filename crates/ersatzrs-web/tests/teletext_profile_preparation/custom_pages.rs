@@ -13,6 +13,7 @@ use ersatzrs_web::host::{
     teletext_work::MAX_CONCURRENT_SETTING,
 };
 use serde_json::json;
+use std::time::Instant;
 
 const CHANNEL: i64 = 1;
 
@@ -243,6 +244,201 @@ async fn stored_dynamic_field_recipe_ignores_later_element_binding_edits() {
         .unwrap();
     assert!(cells.starts_with(b"\x06Kanaal: \x03Published reci"));
     assert_eq!(refreshed.changed, [(150, 0)]);
+}
+
+async fn saved_source(fixture: &Fixture) -> ersatzrs_domain::TeletextCustomPagesWire {
+    let saved = prepare_static_teletext_design(
+        &fixture.state.application,
+        request(observe(fixture).await),
+        designs::deadline(),
+    )
+    .await
+    .unwrap();
+    let identity = saved.identity;
+    drop(saved);
+    let original = reload_original_teletext_design_revision(
+        &fixture.state.application,
+        identity.design_id,
+        identity.revision,
+        designs::budget(),
+        channel_documents::policy(),
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    serde_json::from_slice(original.sources()[0].bytes()).unwrap()
+}
+
+async fn reproduce(
+    fixture: &Fixture,
+    selection: &ersatzrs_domain::TeletextChannelSelectionSnapshot,
+    source: &ersatzrs_domain::TeletextCustomPagesWire,
+    budget: ersatzrs_app::teletext_channel_documents::TeletextChannelDocumentInputBudget,
+    deadline: Instant,
+) -> Result<
+    ersatzrs_app::teletext_channel_documents::BoundChannelTeletextDocumentInput,
+    ersatzrs_app::teletext_channel_documents::ChannelTeletextDocumentError,
+> {
+    let guard = ersatzrs_web::host::teletext_work::begin(&fixture.state.application, None)
+        .await
+        .unwrap();
+    fixture
+        .state
+        .application
+        .invoke_channel_teletext_documents_for_refresh(
+            CHANNEL,
+            Some(ersatzrs_domain::TELETEXT_CUSTOM_PAGES_PRODUCER_ID),
+            &guide(&[]),
+            budget,
+            ersatzrs_app::teletext_channel_documents::TeletextChannelDocumentRefresh {
+                selection,
+                custom_pages: source,
+                deadline,
+                hold: guard.hold_work(),
+            },
+        )
+        .await
+}
+
+#[tokio::test]
+async fn guide_reproduction_keeps_saved_custom_rows_after_edit_delete_and_restart() {
+    let mut fixture = fixture().await;
+    let element = link(&fixture, "%NOW%%%%%%%%%%", None).await;
+    let source = saved_source(&fixture).await;
+    let selection = fixture
+        .state
+        .application
+        .observe_channel_teletext_document_selection(CHANNEL)
+        .await
+        .unwrap();
+    let stored = fixture
+        .state
+        .application
+        .get_teletext_element(element)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut bindings = stored.bindings.clone();
+    bindings[0].source = ersatzrs_domain::TeletextElementBindingSource::Time;
+    fixture
+        .state
+        .application
+        .save_teletext_element_bindings(element, stored.revision, bindings)
+        .await
+        .unwrap();
+    // A new linked page retains the host producer's identity. Neither it nor
+    // later bindings may replace the saved original during automatic refresh.
+    link(&fixture, "%UNKNOWN%%%%%%", Some(0x151)).await;
+    fixture
+        .state
+        .application
+        .delete_teletext_element(element)
+        .await
+        .unwrap();
+    fixture = fixture.reopen().await;
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .observe_channel_teletext_document_selection(CHANNEL)
+            .await
+            .unwrap(),
+        selection
+    );
+    let latest = fixture
+        .state
+        .application
+        .plan_teletext_custom_pages(CHANNEL, Utc::now())
+        .await
+        .unwrap();
+    assert!(latest.pages.is_empty());
+    assert_eq!(latest.issues.len(), 1);
+    assert_eq!(latest.issues[0].page, "151");
+    assert_eq!(latest.issues[0].kind, CustomPageIssueKind::UnsetField);
+    let policy = channel_documents::policy();
+    let refreshed = reproduce(
+        &fixture,
+        &selection,
+        &source,
+        policy.input,
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+    .validate(policy.validation)
+    .unwrap()
+    .into_parts_with_requests();
+    let actual: ersatzrs_domain::TeletextCustomPagesWire =
+        serde_json::from_slice(refreshed.sources[0].bytes()).unwrap();
+    assert_ne!(source.generation, actual.generation);
+    assert_eq!(actual.generation, GENERATION);
+    assert_eq!(actual.pages, source.pages);
+    assert_eq!(
+        actual.pages[0].dynamic_fields[0].source,
+        ersatzrs_domain::TeletextElementBindingSource::NowTitle
+    );
+    assert_eq!(actual.pages[0].element_revision, stored.revision);
+    assert_eq!(refreshed.selection, selection);
+    assert!(fixture.playout.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn published_custom_reproduction_preserves_selection_deadline_and_response_fences() {
+    use ersatzrs_app::teletext_channel_documents::ChannelTeletextDocumentError as Error;
+    let fixture = fixture().await;
+    link(&fixture, "%NOW%%%%%%%%%%", None).await;
+    let source = saved_source(&fixture).await;
+    let selection = fixture
+        .state
+        .application
+        .observe_channel_teletext_document_selection(CHANNEL)
+        .await
+        .unwrap();
+    let budget = channel_documents::policy().input;
+    let mut stale = selection.clone();
+    stale.bindings[0].binding_revision += 1;
+    assert!(matches!(
+        reproduce(&fixture, &stale, &source, budget, designs::deadline()).await,
+        Err(Error::SelectionChanged)
+    ));
+    assert!(matches!(
+        reproduce(
+            &fixture,
+            &selection,
+            &source,
+            budget,
+            Instant::now().checked_sub(Duration::from_secs(1)).unwrap()
+        )
+        .await,
+        Err(Error::TimedOut)
+    ));
+    assert!(matches!(
+        reproduce(
+            &fixture,
+            &selection,
+            &source,
+            ersatzrs_app::teletext_channel_documents::TeletextChannelDocumentInputBudget {
+                max_response_bytes: 1,
+                ..budget
+            },
+            designs::deadline()
+        )
+        .await,
+        Err(Error::AggregateResponseBudget { .. })
+    ));
+    let mut invalid = source.clone();
+    invalid.pages[0].rows[0].cells = "ff".repeat(40);
+    assert!(matches!(
+        reproduce(&fixture, &selection, &invalid, budget, designs::deadline()).await,
+        Err(Error::Runtime { .. })
+    ));
+    // Refusal does not poison the immutable source or renew the failed deadline.
+    assert!(
+        reproduce(&fixture, &selection, &source, budget, designs::deadline())
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]

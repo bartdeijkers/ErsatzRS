@@ -6,7 +6,7 @@ use ersatzrs_app::{
     teletext_channel_documents::{
         BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError,
         PreparedChannelTeletextDocumentParts, TeletextChannelDocumentInputBudget,
-        TeletextChannelRequestTemplates,
+        TeletextChannelDocumentRefresh, TeletextChannelRequestTemplates,
     },
     teletext_guide::SuppliedTeletextGuideContext,
     teletext_profile_documents::{
@@ -262,6 +262,7 @@ pub async fn prepare_channel_teletext_document_candidate(
         TeletextChannelDocumentPreparation {
             context,
             expected_selection: None,
+            published_custom_pages: None,
             deadline,
         },
         policy,
@@ -274,6 +275,7 @@ pub async fn prepare_channel_teletext_document_candidate(
 pub(super) struct TeletextChannelDocumentPreparation<'context, 'guide> {
     pub(super) context: &'context SuppliedTeletextGuideContext<'guide>,
     pub(super) expected_selection: Option<&'context TeletextChannelSelectionSnapshot>,
+    pub(super) published_custom_pages: Option<&'context ersatzrs_domain::TeletextCustomPagesWire>,
     pub(super) deadline: Instant,
 }
 
@@ -295,8 +297,27 @@ pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
     check_deadline(deadline)?;
     let mut input_budget = policy.input;
     input_budget.max_producers = maximum_producers(&policy);
-    let input = match preparation.expected_selection {
-        Some(expected_selection) => {
+    let input = match (
+        preparation.expected_selection,
+        preparation.published_custom_pages,
+    ) {
+        (Some(selection), Some(custom_pages)) => {
+            application
+                .invoke_channel_teletext_documents_for_refresh(
+                    channel_id,
+                    entry_addon_id,
+                    preparation.context,
+                    input_budget,
+                    TeletextChannelDocumentRefresh {
+                        selection,
+                        custom_pages,
+                        deadline,
+                        hold: hold.clone(),
+                    },
+                )
+                .await?
+        }
+        (Some(expected_selection), None) => {
             application
                 .invoke_channel_teletext_documents_with_selection_and_hold(
                     channel_id,
@@ -308,7 +329,7 @@ pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
                 )
                 .await?
         }
-        None => {
+        (None, None) => {
             application
                 .invoke_channel_teletext_documents_with_hold(
                     channel_id,
@@ -320,6 +341,7 @@ pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
                 )
                 .await?
         }
+        (None, Some(_)) => return Err(ChannelTeletextDocumentEncodingError::Association),
     };
     let candidate =
         super::teletext_work::spawn_blocking(hold.clone(), move || encode_channel(input, policy))

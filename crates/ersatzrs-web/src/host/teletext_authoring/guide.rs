@@ -36,6 +36,7 @@ pub(super) struct GuidePreparationContext<'a> {
     pub(super) policy: &'a NativeTeletextAuthoringPolicy,
     pub(super) deadline: Instant,
     pub(super) hold: TeletextWorkHold,
+    pub(super) published_custom_pages: Option<&'a ersatzrs_domain::TeletextCustomPagesWire>,
 }
 
 impl<'a> GuidePreparationContext<'a> {
@@ -44,6 +45,7 @@ impl<'a> GuidePreparationContext<'a> {
             policy: &operation.policy,
             deadline: operation.deadline,
             hold: operation.guard.hold_work(),
+            published_custom_pages: None,
         }
     }
 }
@@ -190,6 +192,7 @@ async fn prepare_base_inner(
         TeletextChannelDocumentPreparation {
             context: &context,
             expected_selection: Some(selection),
+            published_custom_pages: operation.published_custom_pages,
             deadline: operation.deadline,
         },
         policy,

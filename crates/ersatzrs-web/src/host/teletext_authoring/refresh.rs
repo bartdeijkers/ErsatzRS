@@ -97,6 +97,7 @@ struct Recipe {
     region: Option<TeletextSavedV1Region>,
     transmissions: Vec<TeletextSavedResourceTransmission>,
     original_selection: TeletextGuideRefreshSelection,
+    custom_pages: Option<ersatzrs_domain::TeletextCustomPagesWire>,
     document_bytes: usize,
 }
 
@@ -149,6 +150,18 @@ async fn recipe(
                     return Err(Error::NeedsReview);
                 }
                 Ok(Recipe {
+                    custom_pages: parts
+                        .selection
+                        .bindings
+                        .iter()
+                        .position(|binding| {
+                            ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id)
+                        })
+                        .map(|index| {
+                            serde_json::from_slice(parts.sources[index].bytes())
+                                .map_err(|_| Error::NeedsReview)
+                        })
+                        .transpose()?,
                     entry_addon_id: parts.entry_addon_id.ok_or(Error::NeedsReview)?,
                     entry: parts.entry.ok_or(Error::NeedsReview)?,
                     region: parts.v1_region,
@@ -177,6 +190,7 @@ async fn recipe(
                     region: parts.v1_region,
                     transmissions: parts.resource_transmissions,
                     original_selection: TeletextGuideRefreshSelection::Effective(parts.selection),
+                    custom_pages: None,
                     document_bytes,
                 })
             }
@@ -236,6 +250,7 @@ pub(in crate::host) async fn prepare_baseline(
         policy: &context.policy,
         deadline: context.deadline,
         hold: context.hold.clone(),
+        published_custom_pages: recipe.custom_pages.as_ref(),
     };
     match claim.seed.role {
         TeletextGuideRefreshRole::Base => {
