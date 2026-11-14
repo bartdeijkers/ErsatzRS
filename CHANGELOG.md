@@ -72,6 +72,11 @@ release section when tagging a release.
 
 - Teletext capacity-recovery browser proof now covers Chromium and Firefox with
   and without JavaScript, including consent, custom-policy protection and repair.
+- Guide-boundary qualification distinguishes acknowledged expiry withdrawal from
+  unexpected teletext loss, preserves AV/caption descriptors and independently
+  decodes pages after recovery. The fixed-source boundary trial now qualifies
+  subtitle cues against their source timing within 8 ms, retaining raw timing
+  flags and every other strict transport check.
 - Parity tracking now records the shipped yt-dlp authenticated-availability fix,
   verified against the published add-on package and its restriction safeguards.
 - The parity-debt queue distinguishes actionable fixes, external prerequisites and
@@ -261,6 +266,18 @@ release section when tagging a release.
   logs showed US dates and playouts ISO/UTC times.
 
 ### Fixed
+
+- Local and provider teletext source storage warnings are localized in all
+  supported admin languages, including warnings stored by older versions.
+- Source teletext captions can be prepared from complete files larger than the
+  discovery window, with DVB conversion checked against FFmpeg's native clock
+  rescaling. Preparation uses the existing storage quota and startup deadline;
+  partial or changed sources remain unavailable for caption selection. Complete
+  reads use bounded I/O batches. Owned finite legacy producers share the final
+  wrapper's pacing and continue from a completed programme after checking its
+  current schedule identity and times. Completion requires a terminal FFmpeg
+  report matching the forwarded bytes and nominal duration; successful early
+  EOF cannot advance the programme clock.
 
 - Invalid Classic chapter filler expressions now keep the whole programme
   without internal breaks and retain its clock-aligned padding. Unknown

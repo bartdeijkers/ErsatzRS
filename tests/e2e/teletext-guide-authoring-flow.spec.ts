@@ -2,8 +2,9 @@ import { Browser, BrowserContext, expect, Locator, Page } from '@playwright/test
 import { test } from './isolated-web-host';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitForHydration } from './hydration';
 import { addonContentHash } from './fixtures/addon-metadata';
@@ -74,6 +75,12 @@ function translation(module: string): (key: string) => string {
 async function ready(page: Page, js: boolean): Promise<void> {
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
   if (js) await waitForHydration(page);
+  // Current-guide preview lives inside the page's native advanced disclosure.
+  // Follow the visible control instead of treating hidden rendered data as proof.
+  if (new URL(page.url()).searchParams.has('guide_preview')) {
+    const advanced = page.getByTestId('teletext-publish-advanced');
+    if (await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
+  }
 }
 
 async function submit(page: Page, form: Locator, button: string, js: boolean): Promise<void> {
@@ -2552,4 +2559,276 @@ test(reusedLuaDirectEvidence
     expect(installation(isolatedWebHost.databasePath)).toEqual(selectedInstallation); compareInstalledFiles(selectedInstallation);
     expect(errors).toEqual([]); receipts.complete = true; persist();
   } finally { try { await context?.close(); } finally { persist(); fixture.close(); } }
+});
+
+// Part6: preserve the qualified sparse caption oracle while adding measured
+// 0.55s video bursts. Exact sources and the real scanner are explicit inputs;
+// this manual production-package trial never substitutes synthetic track rows.
+test('production TV-guide ordinary bitrate bursts retain scanned captions across a programme boundary', async ({ browser, isolatedWebHost }, info) => {
+  const baseSource = process.env.ERSATZRS_TELETEXT_RECOVERY_BASE_SOURCE;
+  const burstSource = process.env.ERSATZRS_TELETEXT_RECOVERY_BURST_SOURCE;
+  const scanner = process.env.ERSATZRS_TELETEXT_RECOVERY_SCANNER;
+  test.skip(!baseSource || !burstSource || !scanner || !process.env.FFMPEG_PATH || !process.env.FFPROBE_PATH,
+    'Requires qualified base/burst sources, the actual Local scanner and FFmpeg9.');
+  test.skip(process.platform === 'win32', 'Existing POSIX fixture; native Windows remains part7.');
+  test.setTimeout(240_000);
+  expect(sha256(readFileSync(baseSource!))).toBe('b6ffa783e1cc96926a846b73fa8182755a11555296294ef9a740c09d9245c560');
+  expect(sha256(readFileSync(burstSource!))).toBe('e70b7cf1f0c18cd5c1b8316f4b1e6f8a8bca45282a30514f451796d9debfa05e');
+  const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true,
+    playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 60,
+      captionSource: { path: baseSource!, sha256: sha256(readFileSync(baseSource!)) } } });
+  const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL });
+  const page = await context.newPage(); const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    const selected = await installProduction(browser, isolatedWebHost.baseURL, isolatedWebHost.databasePath);
+    const initialScan = fixture.configureScannedScripted(scanner!, process.env.FFPROBE_PATH!, info.outputPath('initial-local-scan.log'));
+    copyFileSync(burstSource!, join(fixture.root, 'scanned-library', 'Synthetic Caption.ts'));
+    const library = fixture.channels[0] + 10;
+    const scanLog = execFileSync(scanner!, ['--provider', 'local', '--library-id', String(library), '--deep-scan',
+      '--ffprobe-path', process.env.FFPROBE_PATH!], { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
+      env: { ...process.env, DATABASE_URL: `sqlite:${isolatedWebHost.databasePath}`,
+        ERSATZRS_DATABASE__URL: `sqlite:${isolatedWebHost.databasePath}`, ErsatzRS_DATABASE__URL: `sqlite:${isolatedWebHost.databasePath}`,
+        ERSATZRS_APP_STATE_DIR: join(fixture.root, 'scanner-state'), ERSATZRS_APP_DATA_DIR: join(fixture.root, 'scanner-data'),
+        TMPDIR: join(fixture.root, 'scanner-tmp'), ERSATZRS_FFMPEG_DOWNLOAD: 'false' } });
+    writeFileSync(info.outputPath('burst-local-scan.log'), scanLog);
+    const media = fixture.database.prepare(`SELECT v.MovieId AS item,v.Id AS version,v.Duration AS duration
+      FROM MediaVersion v JOIN MediaItem m ON m.Id=v.MovieId JOIN LibraryPath p ON p.Id=m.LibraryPathId
+      WHERE p.LibraryId=?`).all(library) as { item: number; version: number; duration: string }[];
+    expect(media).toHaveLength(1); expect(media[0].item).toBe(initialScan.item);
+    const inventory = fixture.database.prepare('SELECT "Index",Codec,Language FROM MediaStream WHERE MediaVersionId=? ORDER BY "Index"')
+      .all(media[0].version);
+    expect(inventory.map(row => [row.Index, row.Codec, row.Language])).toEqual([
+      [0, 'h264', null], [1, 'aac', 'eng'], [2, 'dvb_teletext', 'eng,eng'], [3, 'aac', 'nld'],
+    ]);
+    expect(fixture.database.prepare('SELECT 1 FROM SourceTeletextMetadata WHERE MediaVersionId=? AND StreamIndex=2 AND Pid=258')
+      .get(media[0].version)).toBeDefined();
+    expect(fixture.database.prepare('SELECT 1 FROM ManagedLibraryLease WHERE LibraryId=?').get(library)).toBeUndefined();
+    for (const channel of fixture.channels) {
+      await page.goto(`/channels/${channel}`); await ready(page, true);
+      for (const [name, value] of Object.entries({ preferred_audio_language_code: 'dut', preferred_subtitle_language_code: 'eng',
+        subtitle_mode: '3', source_teletext_delivery: '1' })) await page.locator(`select[name="${name}"]`).selectOption(value);
+      await page.getByRole('button', { name: translation('en_us')('SaveChannel'), exact: true }).click();
+      await expect(page).toHaveURL(/\/channels$/); await ready(page, true);
+    }
+    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.getByTestId('teletext-broadcast-check').locator(':scope > summary').click();
+    const capacity = page.getByTestId('teletext-capacity-form');
+    await capacity.locator('[name="profile"]').selectOption('tvguide-16');
+    await capacity.locator('[name="confirm_scope"]').check();
+    await Promise.all([page.waitForURL(url => url.search === '?saved=capacity'), capacity.locator('button[type="submit"]').click()]);
+    await ready(page, true);
+    const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
+    for (const channel of [...fixture.channels].reverse()) await resetGuidePlayout(page, fixture, channel,
+      { count: 8, durationMilliseconds: 60_000, sourceDuration: media[0].duration });
+    const rows = fixture.channels.map(channel => fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel));
+    const first = rows[0][0] as { Start: string; Finish: string };
+    expect(Date.now() - utc(first.Start)).toBeLessThan(25_000);
+    const maps = [];
+    for (const [index, channel] of fixture.channels.entries()) maps.push(await prepareReceiverGuide(page, fixture, channel, profiles[index], index === 1));
+    const originals = fixture.channels.map(channel => sha256(originalBytes(fixture, channel)));
+    const accepted = fixture.channels.map(channel => acceptedGuide(fixture, channel));
+    const current = () => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
+      .get(fixture.channels[0]) as { SeedId: number; RuntimeId: number | null; Revision: number; Revoked: number };
+    const before = current();
+    writeFileSync(info.outputPath('burst-caption-seed-receipt.json'), JSON.stringify({ first, rows, media, inventory, maps, before, originals, accepted }, null, 2));
+    // Fixed RGBA glyph/control hashes from the qualified page888 source decoded
+    // by libzvbi. Full 1280x720 DVB hashes are independently qualified through
+    // an FFmpeg-only AV/caption mux. No oracle crop, rescale or OCR tolerance
+    // can hide extra or missing pixels.
+    const sourceHashes = { clear: '830edf21ee6bc8ed9dd01f0982075cb1',
+      a: '5518fb92c7291a2b6361428648ea83f4', b: '9251724c00efb989a709aadaa678e5b7' };
+    const cueHashes = { clear: '7b3ba1b1b5fedb562f08fe3428e99dc2',
+      a: 'e4935f1ddeaa71da89c6519b573d70e7', b: 'efc315343b410d63c3c4334356dea670' };
+    const captionFrames = (path: string, index: number, name: string, source = false) => {
+      const args = ['-v', 'error', '-nostdin', ...(source ? ['-fix_teletext_pts', '0', '-txt_page:2', '888',
+        '-txt_format:2', 'bitmap', '-txt_default_region:2', '-1'] : []), '-i', path,
+        '-filter_complex', `[0:${index}]format=rgba[caption]`, '-map', '[caption]',
+        '-an', '-fps_mode', 'passthrough', '-f', 'framemd5', '-'];
+      const raw = execFileSync(process.env.FFMPEG_PATH!, args, { timeout: 30_000, maxBuffer: 256 * 1024 }).toString();
+      writeFileSync(info.outputPath(`${name}.captions.framemd5`), raw);
+      expect(raw).toContain(source ? '#dimensions 0: 492x250' : '#dimensions 0: 1280x720');
+      const frames = raw.split('\n').filter(line => line && !line.startsWith('#')).map(line => {
+        const fields = line.split(',').map(field => field.trim()); expect(Number(fields[4])).toBe(source ? 492 * 250 * 4 : 1280 * 720 * 4);
+        expect(Object.values(source ? sourceHashes : cueHashes)).toContain(fields[5]); return { pts: Number(fields[2]), hash: fields[5] };
+      });
+      expect(frames.length).toBeGreaterThan(0); return frames;
+    };
+    const sourceFrames = captionFrames(burstSource!, 2, 'qualified-source', true);
+    expect([...new Set(sourceFrames.map(frame => frame.hash))]).toEqual([sourceHashes.clear, sourceHashes.a, sourceHashes.b]);
+    const cueReceipts: Record<string, { pts: number; hash: string }[]> = {};
+    const subtitleEvents: Record<string, { pts: number; num_rects: number }[]> = {};
+    const videoEnds: Record<string, number> = {};
+    const completeAvPrefix = (path: string, name: string, streams: { codec_type: string; id: string }[]) => {
+      const video = Number(streams.find(stream => stream.codec_type === 'video')!.id);
+      const audio = Number(streams.find(stream => stream.codec_type === 'audio')!.id);
+      const trace = execFileSync('tsp', ['-I', 'file', path, '-P', 'pes', '--pid', String(video), '--pid', String(audio),
+        '--trace-packets', '--packet-index', '-O', 'drop'], { timeout: 30_000, maxBuffer: 256 * 1024 }).toString();
+      writeFileSync(info.outputPath(`${name}.av-pes.txt`), trace);
+      // TSDuck's default does not flush the final unbounded video PES as if it
+      // were complete. Only its positively completed PES endpoints qualify.
+      const ends = new Map([[video, new Set<number>()], [audio, new Set<number>()]]);
+      for (const match of trace.matchAll(/PID 0x([0-9a-f]+), TS packets ([\d,]+)-([\d,]+),/gi)) {
+        ends.get(parseInt(match[1], 16))!.add(Number(match[3].replaceAll(',', '')));
+      }
+      const raw = readFileSync(path); let lastAudio = -1; let boundary = 0;
+      for (let ordinal = 0; ordinal < raw.length / 188; ordinal++) {
+        const offset = ordinal * 188; if (raw[offset] !== 0x47) throw new Error('Captured transport packet framing changed.');
+        const pid = ((raw[offset + 1] & 31) << 8) | raw[offset + 2];
+        if (!(raw[offset + 3] & 0x10)) continue;
+        if (pid === audio) lastAudio = ordinal;
+        if (pid === video && ends.get(video)!.has(ordinal) && ends.get(audio)!.has(lastAudio)) boundary = (ordinal + 1) * 188;
+      }
+      expect(boundary).toBeGreaterThan(raw.length * 0.9);
+      const complete = info.outputPath(`${name}.complete-av.ts`); writeFileSync(complete, raw.subarray(0, boundary));
+      writeFileSync(info.outputPath(`${name}.complete-av.json`), JSON.stringify({ raw_bytes: raw.length,
+        complete_av_prefix_bytes: boundary, omitted_terminal_bytes: raw.length - boundary, video, audio,
+        scope: 'Raw capture and strict transport gate remain unchanged; this prefix ends at positively completed AV PES packets.' }, null, 2));
+      return complete;
+    };
+    const hostLog = info.outputPath('isolated-settings-host.log');
+    const captures: { name: string; path: string; opened: string; closed: string; channel_id: number;
+      log_start: number; log_first_chunk: number; log_end: number }[] = [];
+    const captureRaw = async (channel: number, name: string, legacy = false) => {
+      const path = info.outputPath(`${name}.ts`); const opened = new Date().toISOString();
+      const logStart = statSync(hostLog).size; let firstChunkLog: number | undefined;
+      const route = legacy ? `/iptv/channel/${channel}.ts?mode=ts-legacy` : `/iptv/hls-direct/${channel}.ts`;
+      const result = await captureTeletextChannelTs(`${isolatedWebHost.baseURL}${route}`, path,
+        { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 },
+        () => { firstChunkLog ??= statSync(hostLog).size; });
+      expect(result.ended).toBe('byte-limit');
+      expect(firstChunkLog).toBeDefined();
+      captures.push({ name, path, opened, closed: new Date().toISOString(), channel_id: channel,
+        log_start: logStart, log_first_chunk: firstChunkLog!, log_end: statSync(hostLog).size });
+      writeFileSync(info.outputPath('burst-capture-requests.json'), JSON.stringify(captures, null, 2));
+      return path;
+    };
+    const rawGateFailures: { name: string; status: number | null }[] = [];
+    let boundaryGuidePath: string | undefined;
+    const validateCapture = (path: string, name: string) => {
+      if (name !== 'burst-programme-boundary') {
+        assertContinuousAuthoredPmt(path, info.outputPath(`${name}.pmt.json`), info.outputPath(`${name}.pmt.txt`));
+      } else {
+        // ADR0124 requires withdrawal before a blocked expiry recovery. Prove
+        // its actual owner, saved UTC cap and sink ACKs instead of requiring
+        // continuous signalling across that legitimate authority boundary.
+        const prefix = info.outputPath(name);
+        execFileSync('tstables', ['--tid', '2', '--packet-index', '--json-output', `${prefix}.pmt.json`,
+          '--text-output', `${prefix}.pmt.txt`, path], { timeout: 30_000, maxBuffer: 65_536 });
+        const sections = spawnSync('tstables', ['--tid', '2', '--all-sections', '--log', '--packet-index', path],
+          { timeout: 30_000, maxBuffer: 256 * 1024 });
+        expect(sections.status).toBe(0);
+        writeFileSync(`${prefix}.pmt-sections.txt`, Buffer.concat([sections.stdout ?? Buffer.alloc(0), sections.stderr ?? Buffer.alloc(0)]));
+        const request = captures.find(capture => capture.name === name)!;
+        const fullLog = readFileSync(hostLog);
+        const sliceStart = fullLog.lastIndexOf(10, request.log_start - 1) + 1;
+        const sliceEnd = fullLog.lastIndexOf(10, request.log_end - 1) + 1;
+        expect(sliceEnd).toBeGreaterThan(request.log_first_chunk);
+        writeFileSync(`${prefix}.request.log`, fullLog.subarray(sliceStart, sliceEnd));
+        writeFileSync(`${prefix}.request.json`, JSON.stringify({ ...request, log_start: request.log_start - sliceStart,
+          log_first_chunk: request.log_first_chunk - sliceStart, log_end: sliceEnd - sliceStart,
+          source_log_prefix_bytes: fullLog.length, source_log_prefix_sha256: sha256(fullLog),
+          source_log_slice_start: sliceStart, source_log_slice_end: sliceEnd }, null, 2));
+        const metadata = fixture.database.prepare(`
+          SELECT ChannelId AS channel_id,Id AS seed_id,GenerationId AS generation_id,NULL AS runtime_id,ValidUntil AS valid_until
+          FROM TeletextGuideRefreshSeed WHERE ChannelId=? AND Role=1
+          UNION ALL
+          SELECT s.ChannelId AS channel_id,s.Id AS seed_id,s.GenerationId AS generation_id,r.Id AS runtime_id,r.ValidUntil AS valid_until
+          FROM TeletextGuideRuntimeSnapshot r JOIN TeletextGuideRefreshSeed s ON s.Id=r.SeedId
+          WHERE s.ChannelId=? AND s.Role=1`).all(request.channel_id, request.channel_id) as { valid_until: string }[];
+        for (const row of metadata) row.valid_until = row.valid_until.replace(' ', 'T')
+          + (/(?:Z|[+-]\d{2}:\d{2})$/.test(row.valid_until) ? '' : 'Z');
+        writeFileSync(`${prefix}.metadata.json`, JSON.stringify(metadata, null, 2));
+        execFileSync('python3', ['scripts/e2e/teletext-guide-boundary.py', '--capture', path,
+          '--log', `${prefix}.request.log`, '--request', `${prefix}.request.json`, '--pmt', `${prefix}.pmt.json`,
+          '--sections', `${prefix}.pmt-sections.txt`, '--metadata', `${prefix}.metadata.json`, '--report', `${prefix}.boundary.json`],
+        { timeout: 30_000, maxBuffer: 65_536 });
+        const proof = JSON.parse(readFileSync(`${prefix}.boundary.json`, 'utf8')) as { recovered_packet: number };
+        boundaryGuidePath = `${prefix}.recovered-guide.ts`;
+        writeFileSync(boundaryGuidePath, readFileSync(path).subarray(proof.recovered_packet * 188));
+      }
+      const streams = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-show_streams', '-of', 'json', path],
+        { timeout: 30_000, maxBuffer: 1024 * 1024 }).toString()).streams;
+      expect(streams.map((s: { codec_name: string }) => s.codec_name).sort()).toEqual(['aac', 'dvb_subtitle', 'dvb_teletext', 'h264']);
+      expect(streams.find((s: { codec_type: string }) => s.codec_type === 'audio').tags.language).toBe('nld');
+      expect(streams.find((s: { codec_name: string }) => s.codec_name === 'dvb_subtitle').tags.language).toBe('eng');
+      const captionIndex = streams.find((s: { codec_name: string }) => s.codec_name === 'dvb_subtitle').index;
+      cueReceipts[name] = captionFrames(path, captionIndex, name);
+      // Probe actual transmitted subtitle events with demux timestamp repair
+      // disabled. The sub2video renderer's EOF/timeout blank is not a clear PES.
+      const events = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-fix_teletext_pts', '0',
+        '-select_streams', String(captionIndex), '-show_frames', '-show_entries', 'frame=pts,num_rects', '-of', 'json', path],
+        { timeout: 30_000, maxBuffer: 256 * 1024 }).toString()).frames;
+      subtitleEvents[name] = events;
+      const complete = completeAvPrefix(path, name, streams);
+      const packets = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-select_streams', 'v:0',
+        '-show_packets', '-show_entries', 'packet=pts_time', '-of', 'json', complete],
+        { timeout: 30_000, maxBuffer: 256 * 1024 }).toString()).packets;
+      videoEnds[name] = Math.max(...packets.map((packet: { pts_time: string }) => Math.round(Number(packet.pts_time) * 1_000_000)));
+      writeFileSync(info.outputPath(`${name}.subtitle-events.json`), JSON.stringify({ events, videoEnd: videoEnds[name] }, null, 2));
+      const decoded = spawnSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-i', complete, '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
+        { timeout: 30_000, maxBuffer: 65_536 });
+      writeFileSync(info.outputPath(`${name}.decode.stderr`), decoded.stderr ?? '');
+      expect(decoded.status).toBe(0); expect(decoded.stderr.length).toBe(0);
+      writeFileSync(info.outputPath(`${name}.streams.json`), JSON.stringify(streams, null, 2));
+      // Maintainer-approved 2026-11-13: only this fixed-source rollover uses
+      // source-bound native-effective cue timing under the existing8ms limit.
+      // Every raw cadence flag and all other strict gates remain observable.
+      const sourceClock = name === 'burst-programme-boundary' ? [burstSource!, complete] : [];
+      const gate = spawnSync('bash', ['-c', 'source scripts/e2e/tsduck-checks.sh; STRICT_PCR_JITTER=1; analyze_ts "$1" "$2" "$3" "${4:-}" "${5:-}"; check_pcr_jitter "$1" "$2"; check_continuity_plugin "$1" "$2"; checks_summary',
+        'gate', path, name, info.outputPath(`${name}.analyze.json`), ...sourceClock], { timeout: 30_000, maxBuffer: 256 * 1024 });
+      writeFileSync(info.outputPath(`${name}.gate.log`), Buffer.concat([gate.stdout ?? Buffer.alloc(0), gate.stderr ?? Buffer.alloc(0)]));
+      if (gate.status !== 0) rawGateFailures.push({ name, status: gate.status });
+      return path;
+    };
+    // Launch all windows against the real programme clock before synchronous
+    // decoding/TSDuck work. Each response retains its original 8MiB/30s limits.
+    const timed = async (seconds: number, name: string, legacy = false) => {
+      await expect.poll(() => Date.now() - utc(first.Start) >= seconds * 1000,
+        { timeout: 70_000, intervals: [100] }).toBe(true);
+      return captureRaw(fixture.channels[0], name, legacy);
+    };
+    const paths = await Promise.all([
+      ...fixture.channels.map((channel, index) => captureRaw(channel, `burst-cold-${index}`)),
+      timed(24, 'burst-caption-b'), timed(38, 'burst-caption-clear'), timed(54, 'burst-programme-boundary', true),
+    ]);
+    const names = ['burst-cold-0', 'burst-cold-1', 'burst-caption-b', 'burst-caption-clear', 'burst-programme-boundary'];
+    for (const [index, path] of paths.entries()) validateCapture(path, names[index]);
+    const cold = paths.slice(0, 2); const boundary = paths[4];
+    for (const name of ['burst-cold-0', 'burst-cold-1']) expect(cueReceipts[name].some(frame => frame.hash === cueHashes.a)).toBe(true);
+    const guideText = (path: string, pageNumber: number) => execFileSync(process.env.FFMPEG_PATH!, ['-v', 'error', '-nostdin', '-fix_teletext_pts', '0',
+      '-txt_page', String(pageNumber), '-txt_format', 'text', '-txt_duration', '1000', '-i', path,
+      '-map', '0:i:512', '-c:s', 'srt', '-f', 'srt', '-'], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }).toString();
+    expect(guideText(cold[0], 200)).toContain('DAY GUIDE'); expect(guideText(cold[0], 201)).toContain('Now:');
+    expect(guideText(cold[1], 410)).toContain('NIGHT GUIDE'); expect(guideText(cold[1], 200)).toBe('');
+    expect(cueReceipts['burst-caption-b'].some(frame => frame.hash === cueHashes.b)).toBe(true);
+    const cleared = cueReceipts['burst-caption-clear'];
+    expect(cleared.some(frame => frame.hash === cueHashes.b)).toBe(true);
+    expect(cleared[cleared.length - 1].hash).toBe(cueHashes.clear);
+    const beforeClear = subtitleEvents['burst-caption-clear'].find(frame => frame.num_rects > 0)!;
+    expect(beforeClear).toBeDefined();
+    expect(subtitleEvents['burst-caption-clear'].some(frame => frame.num_rects === 0
+      && frame.pts > beforeClear.pts && frame.pts <= videoEnds['burst-caption-clear'])).toBe(true);
+    const rollover = cueReceipts['burst-programme-boundary'];
+    expect(rollover[0].hash).toBe(cueHashes.clear);
+    expect(rollover.some(frame => frame.hash === cueHashes.a)).toBe(true);
+    expect(rollover.some(frame => frame.hash === cueHashes.b)).toBe(false);
+    const last = captures.find(capture => capture.name === 'burst-programme-boundary')!;
+    expect(utc(last.opened)).toBeLessThan(utc(first.Finish)); expect(utc(last.closed)).toBeGreaterThan(utc(first.Finish));
+    expect(boundaryGuidePath).toBeDefined();
+    expect(guideText(boundaryGuidePath!, 200)).toContain('DAY GUIDE');
+    expect(guideText(boundaryGuidePath!, 201)).toContain('Now:');
+    expect(current().SeedId).toBe(before.SeedId); expect(current().RuntimeId).not.toBeNull(); expect(current().Revoked).toBe(0);
+    expect(current().Revision).toBeGreaterThan(before.Revision);
+    for (const [index, channel] of fixture.channels.entries()) {
+      expect(sha256(originalBytes(fixture, channel))).toBe(originals[index]); expect(acceptedGuide(fixture, channel)).toEqual(accepted[index]);
+      expect(fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel)).toEqual(rows[index]);
+    }
+    expect(installation(isolatedWebHost.databasePath)).toEqual(selected); compareInstalledFiles(selected);
+    expect(fixture.calls()).toEqual([]); expect(errors).toEqual([]);
+    writeFileSync(info.outputPath('burst-caption-host-receipt.json'), JSON.stringify({ source_sha256: sha256(readFileSync(burstSource!)),
+      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, sourceFrames, cueReceipts, subtitleEvents, videoEnds, rawGateFailures, before, after: current(),
+      scope: 'actual Local rescan, ordinary profile, published producer, cold/clear/boundary transport and fixed page888 RGBA cue/clear oracle' }, null, 2));
+    expect(rawGateFailures).toEqual([]);
+  } finally { await context.close(); fixture.close(); }
 });

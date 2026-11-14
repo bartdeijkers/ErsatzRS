@@ -29,6 +29,7 @@ pub(super) struct SelectionContext<'a> {
 }
 
 pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selection>> {
+    let started = Instant::now();
     if context.active.external.is_some()
         || context.active.remote_stream.is_some()
         || context.subtitle_mode == ChannelSubtitleMode::None
@@ -46,7 +47,7 @@ pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selec
     )
     .await
     .map_err(|_| unavailable())??;
-    Box::pin(runtime::select(RuntimeSelectionContext {
+    let result = Box::pin(runtime::select(RuntimeSelectionContext {
         pool: &context.state.pool,
         locker: &locker,
         media_item_id: Some(context.active.media_item_id),
@@ -61,7 +62,14 @@ pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selec
         playback_interval: context.playback_interval,
         deadline: context.deadline,
     }))
-    .await
+    .await;
+    tracing::debug!(
+        channel_id = context.output_channel_id,
+        elapsed_seconds = started.elapsed().as_secs_f64(),
+        success = result.is_ok(),
+        "source caption selection completed"
+    );
+    result
 }
 
 /// Bind only the explicitly selected prepared source input, never a fallback.
@@ -122,13 +130,21 @@ impl Consumer {
     ) -> Result<ersatzrs_ffmpeg::FfmpegCommand> {
         self.check_command(command)?;
         self.reservation = Some(reservation.ok_or_else(unavailable)?.clone());
+        let started = Instant::now();
+        tracing::debug!("source caption consumer initialization started");
         let initialized = Box::pin(self.source.initialize_consumer(
             command,
             self.plan.as_ref(),
             self.request.as_ref().ok_or_else(unavailable)?,
             deadline,
         ))
-        .await?;
+        .await;
+        tracing::debug!(
+            elapsed_seconds = started.elapsed().as_secs_f64(),
+            success = initialized.is_ok(),
+            "source caption consumer initialization completed"
+        );
+        let initialized = initialized?;
         let (command, owner) = initialized.into_parts();
         self.initialized = owner;
         Ok(command)

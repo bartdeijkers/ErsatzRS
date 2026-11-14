@@ -15,23 +15,24 @@ use crate::{
     loglevel_error, mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_autoscale, no_b_frames,
     no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats, normalize_loudness_filter,
     pad_filter, pad_vaapi_filter, pad_vaapi_software_filter, pipe_output, preserve_hdr10_filter,
-    progress_to_stdout, realtime_filter, reset_pts_filter, scale_subtitle_image_filter,
-    sdr_to_hdr10_cuda_filter, sdr_to_hdr10_filter, select_forced_software_video_decoder,
-    select_software_video_decoder, select_video_decoder, song_progress_filter,
-    standard_format_flags, still_image_loop_filter, strip_dolby_vision_metadata_filter,
-    subtitle_overlay_cuda_filter, subtitle_overlay_filter, subtitle_overlay_vaapi_filter,
-    subtitle_scale_npp_filter, subtitles_filter, time_limit, tonemap_filter_for,
-    unknown_source_scale_filter, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
-    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
-    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
-    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
-    ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling, FfmpegCapability,
-    FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FilterChain, FrameRate, FrameSize,
-    FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, HardwareGraphOperation,
-    Hdr10OutputSupport, IncompleteDolbyVisionMetadata, InputFile, InputKind,
-    MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags,
-    SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay, NVENC_HDR_DEVICE_PREFIX,
+    progress_to_stderr, progress_to_stdout, realtime_filter, reset_pts_filter,
+    scale_subtitle_image_filter, sdr_to_hdr10_cuda_filter, sdr_to_hdr10_filter,
+    select_forced_software_video_decoder, select_software_video_decoder, select_video_decoder,
+    song_progress_filter, standard_format_flags, still_image_loop_filter,
+    strip_dolby_vision_metadata_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
+    subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
+    tonemap_filter_for, unknown_source_scale_filter, vaapi_subtitle_pixel_format_filter,
+    watermark_alpha_format_filter, watermark_opacity_expression_filter_with_clock,
+    watermark_opacity_filter, watermark_overlay_cuda_filter, watermark_overlay_filter,
+    watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
+    ComplexFilter, ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling,
+    FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FilterChain,
+    FrameRate, FrameSize, FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory,
+    HardwareGraphOperation, Hdr10OutputSupport, IncompleteDolbyVisionMetadata, InputFile,
+    InputKind, MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat,
+    SourceColorTags, SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod,
+    TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
+    NVENC_HDR_DEVICE_PREFIX,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -134,6 +135,14 @@ pub struct OutputMetadata {
     pub subtitle_title: Option<String>,
 }
 
+/// Destination for optional machine-readable `FFmpeg` progress reports.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FfmpegProgressOutput {
+    #[default]
+    Stdout,
+    Stderr,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -159,6 +168,8 @@ pub struct FfmpegState {
     pub output_ts_offset: Option<Duration>,
     pub thread_count: Option<u32>,
     pub report_progress: bool,
+    /// Used only while progress reporting is enabled; media stdout stays separate on `Stderr`.
+    pub progress_output: FfmpegProgressOutput,
     pub do_not_map_metadata: bool,
     pub metadata: OutputMetadata,
     pub hls: Option<HlsOutput>,
@@ -180,6 +191,7 @@ impl Default for FfmpegState {
             output_ts_offset: None,
             thread_count: None,
             report_progress: true,
+            progress_output: FfmpegProgressOutput::Stdout,
             do_not_map_metadata: true,
             metadata: OutputMetadata::default(),
             hls: None,
@@ -1393,7 +1405,13 @@ fn build_transcode_pipeline(
     ];
 
     if request.state.report_progress {
-        steps.insert(3, progress_to_stdout());
+        steps.insert(
+            3,
+            match request.state.progress_output {
+                FfmpegProgressOutput::Stdout => progress_to_stdout(),
+                FfmpegProgressOutput::Stderr => progress_to_stderr(),
+            },
+        );
     }
 
     if request.state.retained_stream_timestamps {

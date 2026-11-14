@@ -372,7 +372,7 @@ mod unix {
     }
 
     struct Probe {
-        _directory: tempfile::TempDir,
+        directory: tempfile::TempDir,
         extractor: FfprobeExtractor,
         source: PathBuf,
         pid_file: PathBuf,
@@ -396,7 +396,7 @@ mod unix {
                 source,
                 pid_file: program.with_extension("pid"),
                 window_path_file: program.with_extension("window"),
-                _directory: directory,
+                directory,
             }
         }
 
@@ -443,6 +443,89 @@ mod unix {
         })
         .await
         .expect("completed owned decode must remove its temporary snapshot");
+    }
+
+    #[tokio::test]
+    async fn complete_bitmap_decode_retains_late_source_bytes_and_refuses_insufficient_storage() {
+        use crate::provider_source_storage::{Policy, ProviderSourceStore};
+        let probe = Probe::new(&format!(
+            "cat <<'DECODE_JSON'\n{}\nDECODE_JSON",
+            decoded_output()
+        ));
+        let source = decoder_fixture();
+        let mut bytes = source[..2 * 188].to_vec();
+        let mut null = [0xff; 188];
+        null[..4].copy_from_slice(&[0x47, 0x1f, 0xff, 0x10]);
+        while bytes.len() / 188
+            <= ersatzrs_ffmpeg::teletext::source_observation::MAX_SOURCE_OBSERVATION_PACKETS
+        {
+            bytes.extend_from_slice(&null);
+        }
+        bytes.extend_from_slice(&source[2 * 188..]);
+        std::fs::write(&probe.source, &bytes).unwrap();
+        std::fs::write(probe.directory.path().join("probe.expected-window"), &bytes).unwrap();
+        let scope = LocalProbeCleanupScope::new();
+        let requested = probe.request(&scope).await;
+        let locker = EntityLocker::new();
+        let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let store = ProviderSourceStore::new(probe.directory.path().join("storage"));
+        let length = bytes.len() as u64;
+        let policy = Policy {
+            total_bytes: length,
+            maximum_source_bytes: length,
+            minimum_free_bytes: 0,
+        };
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let decoded = scope
+            .scope(probe.extractor.decode_complete_local_teletext_page(
+                requested.clone(),
+                probe.source.clone(),
+                probe.source.clone(),
+                (&store, policy),
+                deadline,
+                work.hold_work(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(decoded.events().count, 2);
+        assert!(decoded.window().covers_entire_source_bytes());
+        assert_eq!(
+            decoded.window().decoder_sha256,
+            <[u8; 32]>::from(Sha256::digest(&bytes))
+        );
+        let clock = scope
+            .scope(decoded.observe_source_clock(deadline, work.hold_work()))
+            .await
+            .unwrap();
+        assert_eq!(clock.source_sha256(), decoded.window().decoder_sha256);
+        let snapshot = probe.decoder_path().await;
+        let reservation = snapshot.parent().unwrap().to_owned();
+        snapshot_is_removed(&snapshot).await;
+        snapshot_is_removed(&reservation).await;
+        std::fs::remove_file(&probe.window_path_file).unwrap();
+        let too_small = Policy {
+            maximum_source_bytes: length - 1,
+            ..policy
+        };
+        assert!(scope
+            .scope(probe.extractor.decode_complete_local_teletext_page(
+                requested,
+                probe.source.clone(),
+                probe.source.clone(),
+                (&store, too_small),
+                deadline,
+                work.hold_work(),
+            ))
+            .await
+            .is_err());
+        assert!(
+            !probe.window_path_file.exists(),
+            "quota refusal must launch no decoder"
+        );
+        scope.close();
+        scope.wait_cleanup().await.unwrap();
+        drop(work);
+        assert_eq!(locker.active_teletext_work(), 0);
     }
 
     #[tokio::test]
@@ -524,49 +607,160 @@ mod unix {
 
     #[tokio::test]
     async fn abandoned_decode_caller_leaves_process_cleanup_with_the_actual_capacity_owner() {
-        let probe = Probe::new("printf '%s' \"$$\" >\"${0}.pid\"; exec sleep 30");
-        let scope = LocalProbeCleanupScope::new();
-        let requested = probe.request(&scope).await;
-        let locker = EntityLocker::new();
-        let admitted = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
-        let hold = admitted.hold_work();
-        drop(admitted);
-        let caller_scope = scope.clone();
-        let extractor = probe.extractor.clone();
-        let source = probe.source.clone();
-        let caller = tokio::spawn(async move {
-            caller_scope
-                .scope(extractor.decode_local_teletext_page(
-                    requested,
-                    source.clone(),
-                    source,
-                    Instant::now() + Duration::from_secs(10),
-                    hold,
-                ))
-                .await
-        });
-        let pid = probe.pid().await;
-        let decoder_path = probe.decoder_path().await;
-        assert_ne!(decoder_path, probe.source);
-        assert!(tokio::fs::try_exists(&decoder_path).await.unwrap());
-        assert_eq!(locker.active_teletext_work(), 1);
-        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
-        caller.abort();
-        assert!(caller.await.unwrap_err().is_cancelled());
-        tokio::time::timeout(Duration::from_secs(8), async {
-            while locker.active_teletext_work() != 0 {
-                tokio::time::sleep(Duration::from_millis(10)).await;
+        for complete in [false, true] {
+            let probe = Probe::new("printf '%s' \"$$\" >\"${0}.pid\"; exec sleep 30");
+            if complete {
+                std::fs::write(&probe.source, decoder_fixture()).unwrap();
             }
-        })
-        .await
-        .expect("confirmed cleanup must eventually release admitted work");
-        assert_eq!(
-            nix::sys::signal::kill(pid, None),
-            Err(nix::errno::Errno::ESRCH)
-        );
-        scope.close();
-        assert_eq!(scope.wait_cleanup().await, Ok(()));
-        snapshot_is_removed(&decoder_path).await;
-        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_some());
+            let store = crate::provider_source_storage::ProviderSourceStore::new(
+                probe.directory.path().join("storage"),
+            );
+            let scope = LocalProbeCleanupScope::new();
+            let requested = probe.request(&scope).await;
+            let locker = EntityLocker::new();
+            let admitted = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+            let hold = admitted.hold_work();
+            drop(admitted);
+            let caller_scope = scope.clone();
+            let extractor = probe.extractor.clone();
+            let source = probe.source.clone();
+            let caller = tokio::spawn(async move {
+                caller_scope
+                    .scope(async {
+                        let deadline = Instant::now() + Duration::from_secs(10);
+                        if complete {
+                            extractor
+                                .decode_complete_local_teletext_page(
+                                    requested,
+                                    source.clone(),
+                                    source,
+                                    (
+                                        &store,
+                                        crate::provider_source_storage::Policy {
+                                            total_bytes: 1024 * 1024,
+                                            maximum_source_bytes: 1024 * 1024,
+                                            minimum_free_bytes: 0,
+                                        },
+                                    ),
+                                    deadline,
+                                    hold,
+                                )
+                                .await
+                        } else {
+                            extractor
+                                .decode_local_teletext_page(
+                                    requested,
+                                    source.clone(),
+                                    source,
+                                    deadline,
+                                    hold,
+                                )
+                                .await
+                        }
+                    })
+                    .await
+            });
+            let pid = probe.pid().await;
+            let decoder_path = probe.decoder_path().await;
+            assert_ne!(decoder_path, probe.source);
+            assert!(tokio::fs::try_exists(&decoder_path).await.unwrap());
+            assert_eq!(locker.active_teletext_work(), 1);
+            assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+            caller.abort();
+            assert!(caller.await.unwrap_err().is_cancelled());
+            tokio::time::timeout(Duration::from_secs(8), async {
+                while locker.active_teletext_work() != 0 {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("confirmed cleanup must eventually release admitted work");
+            assert_eq!(
+                nix::sys::signal::kill(pid, None),
+                Err(nix::errno::Errno::ESRCH)
+            );
+            scope.close();
+            assert_eq!(scope.wait_cleanup().await, Ok(()));
+            snapshot_is_removed(&decoder_path).await;
+            if complete {
+                snapshot_is_removed(decoder_path.parent().unwrap()).await;
+            }
+            assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_some());
+        }
     }
+}
+
+#[tokio::test]
+#[ignore = "requires explicit FFmpeg/ffprobe9 and the qualified synthetic 37MB burst source"]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Explicit opt-in synthetic source input, never product configuration"
+)]
+async fn complete_burst_source_prepares_real_bitmap_carriage() {
+    use crate::provider_source_storage::{Policy, ProviderSourceStore};
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    use sha2::{Digest as _, Sha256};
+    let path = PathBuf::from(
+        std::env::var_os("ERSATZRS_TELETEXT_RECOVERY_BURST_SOURCE")
+            .expect("qualified synthetic source input"),
+    );
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(
+        <[u8; 32]>::from(Sha256::digest(&bytes)),
+        [
+            0xe7, 0x0b, 0x7c, 0xf1, 0xf0, 0xc1, 0x8c, 0xd5, 0xc1, 0xb8, 0x31, 0x6f, 0x4b, 0x1e,
+            0x6f, 0x8a, 0x8b, 0xca, 0x45, 0x28, 0x2a, 0x30, 0x51, 0x4f, 0x45, 0x17, 0x96, 0xd9,
+            0xde, 0xbf, 0xa0, 0x5e
+        ]
+    );
+    let mut requested = request();
+    requested.stream_index = 2;
+    requested.pid = 258;
+    let temporary = tempfile::tempdir().unwrap();
+    let store = ProviderSourceStore::new(temporary.path().join("storage"));
+    let scope = LocalProbeCleanupScope::new();
+    let locker = EntityLocker::new();
+    let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let extractor = FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
+    requested.binding.source_revision = scope
+        .scope(extractor.extract_local_with_teletext(&path))
+        .await
+        .unwrap()
+        .teletext
+        .unwrap()
+        .revision()
+        .clone();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let decoded = scope
+        .scope(extractor.decode_complete_local_teletext_page(
+            requested,
+            path.clone(),
+            path,
+            (&store, Policy::default()),
+            deadline,
+            work.hold_work(),
+        ))
+        .await
+        .expect("actual complete-source bitmap decode");
+    assert!(decoded.window().covers_entire_source_bytes());
+    assert_eq!(decoded.events().count, 2);
+    eprintln!(
+        "complete source: {:?}; bitmap events: {:?}",
+        decoded.window(),
+        decoded.events()
+    );
+    let artifact = scope
+        .scope(extractor.prepare_local_teletext_bitmap_artifact(
+            Arc::new(decoded),
+            deadline,
+            work.hold_work(),
+        ))
+        .await
+        .expect("actual source-bound bitmap carriage");
+    assert_eq!(artifact.observation().nonempty_frames(), 2);
+    assert!(artifact.observation().clear_frames() > 0);
+    scope.close();
+    scope.wait_cleanup().await.unwrap();
+    drop(work);
+    assert_eq!(locker.active_teletext_work(), 0);
 }

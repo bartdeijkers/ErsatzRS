@@ -214,6 +214,7 @@ fn trace_native_candidate(
 ) {
     let identity = candidate.generation();
     let valid_until = candidate.effective_valid_until();
+    let guide = candidate.guide_refresh_confirmation();
     let now = Instant::now();
     tracing::debug!(
         target: "ersatzrs_web::transport::iptv::teletext_provenance",
@@ -227,6 +228,9 @@ fn trace_native_candidate(
         artifact_version = identity.artifact_version,
         authored_selected = candidate.service().is_some(),
         original_valid_until = ?valid_until,
+        guide_seed_id = ?guide.map(|value| value.seed.id),
+        guide_runtime_id = ?guide.and_then(|value| value.runtime.as_ref().map(|runtime| runtime.id)),
+        guide_valid_until = ?guide.map(|value| value.available_until),
         next_transition_remaining_ns = ?candidate.next_transition().map(|next| next.saturating_duration_since(now).as_nanos()),
         next_transition_overdue_ns = ?candidate.next_transition().and_then(|next| now.checked_duration_since(next)).map(|elapsed| elapsed.as_nanos()),
         observed_utc = %chrono::Utc::now().to_rfc3339(),

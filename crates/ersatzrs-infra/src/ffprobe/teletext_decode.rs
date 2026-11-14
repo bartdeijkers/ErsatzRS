@@ -277,6 +277,65 @@ impl FfprobeExtractor {
             .await
     }
 
+    /// Decode a complete finite source under the existing source-storage quota.
+    /// Unlike the discovery window, this path rejects any omitted prefix or tail
+    /// and validates every original packet through EOF with constant memory.
+    /// The absolute startup deadline, bitmap event limit and cleanup ownership
+    /// are unchanged. Byte completeness alone grants no native clock authority.
+    pub(crate) async fn decode_complete_local_teletext_page(
+        &self,
+        request: SourceTeletextPageDecodeRequest,
+        original: PathBuf,
+        resolved: PathBuf,
+        storage: (
+            &crate::provider_source_storage::ProviderSourceStore,
+            crate::provider_source_storage::Policy,
+        ),
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        request.validate()?;
+        check_deadline(deadline)?;
+        if LocalProbeCleanupScope::current().is_none() {
+            return Err(SourceTeletextPageDecodeError::NoCleanupScope);
+        }
+        let guard = local_teletext::open_source_guard_owned(
+            original.clone(),
+            resolved.clone(),
+            request.binding.source_revision.clone(),
+            deadline,
+            hold.clone(),
+        )
+        .await
+        .map_err(probe_error)?;
+        let captured = local_teletext::capture_complete_bitmap_source_owned(
+            guard.clone(),
+            (original.clone(), resolved.clone()),
+            request.clone(),
+            storage,
+            deadline,
+            hold.clone(),
+        )
+        .await
+        .map_err(probe_error)?;
+        if !captured.selected_page_observed {
+            return Err(SourceTeletextPageDecodeError::UnobservedPage);
+        }
+        self.decode_captured_local_teletext_page(
+            request,
+            (original, resolved, guard),
+            local_teletext::LocalTeletextSourceWindow {
+                snapshot: captured.snapshot,
+                storage: captured.storage,
+                evidence: captured.evidence,
+                headers: None,
+            },
+            deadline,
+            hold,
+        )
+        .await
+    }
+
     /// Decode an exact page from an explicitly positioned bounded source span.
     ///
     /// A locator supplies only untrusted packet positions. The original held
@@ -418,13 +477,9 @@ impl FfprobeExtractor {
             )
             .await
         };
-        let local_teletext::LocalTeletextSourceWindow {
-            snapshot,
-            evidence,
-            headers,
-        } = captured.map_err(probe_error)?;
+        let captured = captured.map_err(probe_error)?;
         if observe_headers
-            && !headers.as_ref().is_some_and(|window| {
+            && !captured.headers.as_ref().is_some_and(|window| {
                 window
                     .headers()
                     .iter()
@@ -433,13 +488,42 @@ impl FfprobeExtractor {
         {
             return Err(SourceTeletextPageDecodeError::UnobservedPage);
         }
+        self.decode_captured_local_teletext_page(
+            request,
+            (original, resolved, guard),
+            captured,
+            deadline,
+            hold,
+        )
+        .await
+    }
+
+    async fn decode_captured_local_teletext_page(
+        &self,
+        request: SourceTeletextPageDecodeRequest,
+        source: (PathBuf, PathBuf, Arc<LocalTeletextSourceGuard>),
+        captured: local_teletext::LocalTeletextSourceWindow,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        let (original, resolved, guard) = source;
         check_deadline(deadline)?;
-        let command = self.teletext_page_decode_command(&request, snapshot.path())?;
+        let command = self.teletext_page_decode_command(&request, captured.snapshot.path())?;
+        let local_teletext::LocalTeletextSourceWindow {
+            snapshot,
+            storage,
+            evidence,
+            headers,
+        } = captured;
         let output = local::capture_retained(
             command,
             PathBuf::from(SOURCE_LABEL),
             Some(deadline),
-            Some(local::ProbeRetention::new(hold.clone(), guard.clone()).with_snapshot(snapshot)),
+            Some(
+                local::ProbeRetention::new(hold.clone(), guard.clone())
+                    .with_shared_snapshot(snapshot)
+                    .with_source_storage(storage),
+            ),
         )
         .await
         .map_err(probe_error)?;

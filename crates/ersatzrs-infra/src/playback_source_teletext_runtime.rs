@@ -1,8 +1,8 @@
 //! Shared native preparation for ordinary source captions, independent of UI.
 //!
-//! Until source seek-window indexing exists, later reads qualify only when the
-//! bounded initial transport was complete and unomitted. This is an explicit
-//! coverage gap, not a permanent product limit or full source acceptance.
+//! Ordinary selection validates a complete finite source under the existing
+//! storage quota, startup deadline and actual-worker cleanup ownership. Bounded
+//! discovery windows remain separate and grant no later playback authority.
 
 use std::{num::NonZeroUsize, path::PathBuf, sync::Arc, time::Duration};
 
@@ -436,6 +436,15 @@ async fn prepare(
     let work = begin(context.pool, context.locker, deadline).await?;
     let scope = ClosingScope(LocalProbeCleanupScope::new());
     let extractor = FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
+    let policy = before(deadline, async {
+        crate::provider_source_storage::Policy::load(context.pool)
+            .await
+            .map_err(|_| unavailable())
+    })
+    .await?;
+    let store = crate::provider_source_storage::ProviderSourceStore::new(
+        crate::file_system_layout::provider_source_storage_folder(),
+    );
     let operation = async {
         let mut qualified = Vec::new();
         for candidate in candidates {
@@ -453,10 +462,11 @@ async fn prepare(
             )
             .await?;
             let decoded = extractor
-                .decode_local_teletext_page(
+                .decode_complete_local_teletext_page(
                     candidate.request.clone(),
                     physical_original,
                     PathBuf::from(context.resolved_path),
+                    (&store, policy),
                     deadline,
                     work.hold_work(),
                 )

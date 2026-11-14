@@ -62,6 +62,57 @@ pub(super) struct SourcePacketFrame {
     format: SourceTeletextPacketFormat,
 }
 
+/// Fixed-memory positioned reads for a complete sequential source walk.
+/// Every returned frame retains its original bytes and per-frame stop check.
+pub(super) struct SourcePacketReader<'a> {
+    file: &'a File,
+    len: u64,
+    format: SourceTeletextPacketFormat,
+    offset: u64,
+    buffer: Vec<u8>,
+    cursor: usize,
+    filled: usize,
+}
+
+impl<'a> SourcePacketReader<'a> {
+    pub(super) fn new(file: &'a File, len: u64, format: SourceTeletextPacketFormat) -> Self {
+        Self {
+            file,
+            len,
+            format,
+            offset: 0,
+            buffer: vec![0; 64 * 1024],
+            cursor: 0,
+            filled: 0,
+        }
+    }
+
+    pub(super) fn read_next<T>(
+        &mut self,
+        stop: &headers::ReadStop<'_, T>,
+    ) -> Result<SourcePacketFrame> {
+        stop.check_source_guard()?;
+        let stride = self.format.packet_bytes();
+        let end = self.offset.checked_add(stride as u64).ok_or_else(invalid)?;
+        if end > self.len {
+            return Err(invalid());
+        }
+        if self.filled - self.cursor < stride {
+            let remaining = self.len.checked_sub(self.offset).ok_or_else(invalid)?;
+            let count =
+                usize::try_from(remaining.min(self.buffer.len() as u64)).map_err(|_| invalid())?;
+            read_bytes(self.file, &mut self.buffer[..count], self.offset, stop)?;
+            self.cursor = 0;
+            self.filled = count;
+        }
+        let frame = parse_frame(&self.buffer[self.cursor..self.cursor + stride], self.format)?;
+        self.cursor += stride;
+        self.offset = end;
+        stop.check_source_guard()?;
+        Ok(frame)
+    }
+}
+
 impl SourcePacketFrame {
     /// Original byte order for hashing or writing: opaque prefix, then TS188.
     pub(super) fn parts(&self) -> [&[u8]; 2] {
@@ -124,6 +175,10 @@ pub(super) fn read<T>(
         .ok_or_else(invalid)?;
     let mut raw = [0; MAX_FRAME_BYTES];
     read_bytes(file, &mut raw[..format.packet_bytes()], offset, stop)?;
+    parse_frame(&raw[..format.packet_bytes()], format)
+}
+
+fn parse_frame(raw: &[u8], format: SourceTeletextPacketFormat) -> Result<SourcePacketFrame> {
     let packet = &raw[format.sync_offset()..format.sync_offset() + TS_BYTES];
     if !packet_header(packet) {
         return Err(invalid());

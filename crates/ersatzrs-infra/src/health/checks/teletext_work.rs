@@ -10,7 +10,7 @@ use crate::{provider_source_storage::Policy, repositories::common::decode_string
 const KEY: &str = "teletext.work.max_concurrent";
 const DEFAULT_MESSAGE: &str = "Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready.";
 const INVALID_MESSAGE: &str = "Teletext work concurrency must be a positive integer. Native teletext operations are unavailable until this setting is corrected.";
-const INVALID_STORAGE_MESSAGE: &str = "Provider source storage configuration is invalid or unavailable. Optional provider teletext captions are unavailable; ordinary audio/video playback remains available.";
+const INVALID_STORAGE_MESSAGE: &str = "Source storage configuration is invalid or unavailable. Optional local and provider teletext captions are unavailable; ordinary audio/video playback remains available.";
 
 pub(crate) struct TeletextWorkHealthCheck {
     pool: Pool<Db>,

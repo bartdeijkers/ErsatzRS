@@ -85,9 +85,9 @@ impl FfprobeExtractor {
     /// Prepare a finite exact-page DVB-subtitle candidate from the original source.
     ///
     /// Current qualification requires a decoder snapshot covering every source
-    /// byte and endpoint coordinates exactly representable in Matroska's 1 ms
-    /// time base. These are explicit remaining coverage/precision gaps, not
-    /// permanent source limits. No active-cue-at-seek or actual output is claimed.
+    /// byte and endpoints matching the audited `FFmpeg` 9 90kHz input shift and
+    /// Matroska millisecond rescaling. Unknown clocks remain unavailable. No
+    /// active-cue-at-seek or actual output is claimed.
     /// Source/process/file workers share the original bounded deadline and hold.
     /// # Errors
     /// Rejects partial/stale sources, missing scope/origin, malformed or lost
@@ -121,6 +121,9 @@ impl FfprobeExtractor {
             || streams[0].index() != source.request.stream_index
             || streams[0].pid() != source.request.pid
             || streams[0].codec_type() != "subtitle"
+            || !streams[0]
+                .time_base()
+                .is_some_and(|base| base.numerator() == 1 && base.denominator() == 90_000)
         {
             return Err(SourceTeletextPageDecodeError::StreamChanged);
         }

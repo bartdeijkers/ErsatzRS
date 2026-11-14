@@ -125,19 +125,49 @@ fn ticks(value: i64) -> Result<i64, SourceTeletextPageDecodeError> {
         .filter(|value| *value >= 0)
         .ok_or_else(invalid)
 }
+/// `FFmpeg` n9.0 MPEG-TS input shift, subtitle decode and Matroska mux rescaling.
+/// Source decoder microseconds must identify one exact 90kHz tick; arbitrary
+/// nearby values do not acquire authority from millisecond output quantization.
+/// See ADR 0133 for the audited native operations and their order.
 fn expected_endpoint(
     value: Option<i64>,
     origin: i64,
 ) -> Result<i64, SourceTeletextPageDecodeError> {
-    let value = value
-        .and_then(|value| value.checked_sub(origin))
-        .ok_or_else(invalid)?;
-    // No guessed rounding window: nonintegral millisecond mapping remains open.
-    if value < 0 || value % 1000 != 0 {
+    let ticks = source_ticks(value.ok_or_else(invalid)?)?;
+    let origin_ticks = source_ticks(origin)?;
+    let shifted = ticks.checked_sub(origin_ticks).ok_or_else(invalid)?;
+    if shifted < 0 {
         return Err(invalid());
     }
-    Ok(value)
+    let decoded = rescale_nearest(shifted, 1_000_000, 90_000)?;
+    let milliseconds = rescale_nearest(decoded, 1, 1000)?;
+    milliseconds.checked_mul(1000).ok_or_else(invalid)
 }
+
+fn source_ticks(microseconds: i64) -> Result<i64, SourceTeletextPageDecodeError> {
+    if matches!(microseconds, i64::MIN | i64::MAX) {
+        return Err(invalid());
+    }
+    let ticks = rescale_nearest(microseconds, 90_000, 1_000_000)?;
+    if rescale_nearest(ticks, 1_000_000, 90_000)? != microseconds {
+        return Err(invalid());
+    }
+    Ok(ticks)
+}
+
+// All factors are positive compile-time constants at the call sites. i128
+// intermediates cover every i64 timestamp times those factors; conversion back
+// to i64 rejects overflow. Ties go away from zero, as AV_ROUND_NEAR_INF does.
+fn rescale_nearest(
+    value: i64,
+    numerator: i64,
+    denominator: i64,
+) -> Result<i64, SourceTeletextPageDecodeError> {
+    let scaled = i128::from(value) * i128::from(numerator);
+    let magnitude = (scaled.abs() + i128::from(denominator) / 2) / i128::from(denominator);
+    i64::try_from(if scaled < 0 { -magnitude } else { magnitude }).map_err(|_| invalid())
+}
+
 pub(super) fn parse(
     bytes: &[u8],
     source: SourceTeletextBitmapEvents,
@@ -346,4 +376,27 @@ fn pair(
         rectangles: num_rects,
         sha256,
     })
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::expected_endpoint;
+
+    #[test]
+    fn native_millisecond_half_tick_is_nearest_away_with_exact_source_ticks() {
+        // Source ticks 44,45,46 map to 489,500,511 us. The native mux rounds
+        // the exact half millisecond up; a tolerance comparison cannot select it.
+        for (source, origin, expected) in [
+            (489, 0, 0),
+            (500, 0, 1000),
+            (511, 0, 1000),
+            (0, -500, 1000),
+            (-500, -1000, 1000),
+        ] {
+            assert_eq!(expected_endpoint(Some(source), origin), Ok(expected));
+        }
+        for (source, origin) in [(501, 0), (500, 1), (-500, 0), (i64::MAX, 0), (0, i64::MIN)] {
+            assert!(expected_endpoint(Some(source), origin).is_err());
+        }
+    }
 }
