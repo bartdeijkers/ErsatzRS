@@ -261,6 +261,55 @@ fn assert_native_rows(owner: &PublishedCustomRefresh) {
 }
 
 #[tokio::test]
+async fn field_refresh_waits_for_actual_worker_release_without_renewing_its_deadline() {
+    let state = application().await;
+    let policy = policy();
+    let mut document = document();
+    document
+        .pages
+        .retain(|page| page.page == 150 && page.subcode == 0);
+    let owner = Arc::new(initial_source(document.clone(), &policy, deadline()));
+    let guard = teletext_work::begin(&state.application, Some(deadline()))
+        .await
+        .unwrap();
+    let operation_deadline = Instant::now() + Duration::from_secs(2);
+    let mut pending = Box::pin(owner.refresh(context(&state, &policy, operation_deadline)));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(10), pending.as_mut())
+            .await
+            .is_err()
+    );
+    // This is the real field owner and global admission, not a mocked retry.
+    drop(guard);
+    let refreshed = pending.await.unwrap();
+    assert_eq!(refreshed.failed_pages, [150]);
+    assert_native_rows(&refreshed);
+    assert!(Instant::now() < operation_deadline);
+
+    let owner = Arc::new(initial_source(document, &policy, deadline()));
+    let guard = teletext_work::begin(&state.application, Some(deadline()))
+        .await
+        .unwrap();
+    let original_deadline = Instant::now() + Duration::from_millis(20);
+    assert!(owner
+        .refresh(context(&state, &policy, original_deadline))
+        .await
+        .is_err());
+    assert!(Instant::now() >= original_deadline);
+    assert!(state
+        .application
+        .operations()
+        .try_begin_teletext_work(1)
+        .is_none());
+    drop(guard);
+    assert!(state
+        .application
+        .operations()
+        .try_begin_teletext_work(1)
+        .is_some());
+}
+
+#[tokio::test]
 async fn actual_owner_read_failure_encodes_blank_mixed_page_and_live_clock_page() {
     use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
     let state = application().await;

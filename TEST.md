@@ -102,10 +102,19 @@ Set `ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY=1` and select
 `--grep "immutable custom pages refresh"` to run the joined custom-page variant
 with two genuinely scanned movie identities and distinct programme
 titles. Pages150/151 remain published after their latest elements are deleted.
+Each output selects its own channel's real guide through the existing form.
+The fixture starts Reset during seconds14–16: the clear-cue direct capture
+must independently decode both sides of a real minute tick; the Legacy capture
+qualifies the actual programme transition with the existing guide-only oracle.
 This isolated fixture provides three transcode leases: the preceding direct
 capture may still be draining when the Legacy wrapper and encoder start. It
 restores the original setting afterward. Production admission limits, every
 strict oracle, and the original capture bounds remain unchanged.
+The boundary qualifier retains a shutdown withdrawal separately only after the
+window containing the final captured packet was flushed and no delivery event
+exists for that proposal. Repeated candidate reads must identify one exact
+immutable runtime. Packet hashes, expiry, signalling and complete-cycle ACKs
+remain mandatory; neither diagnostic case waives caption timing.
 
 ## Add-on list task workspace
 

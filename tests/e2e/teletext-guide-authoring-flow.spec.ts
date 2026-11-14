@@ -445,7 +445,7 @@ function acceptedGuide(fixture: TeletextChannelFixture, channel: number): Record
 type ReceiverGuideMap = { theme: string; entry: number; pages: { address: { page: number; subcode: number }; navigation: unknown[] }[] };
 
 async function prepareReceiverGuide(page: Page, fixture: TeletextChannelFixture, channel: number,
-  profile: number, night: boolean): Promise<ReceiverGuideMap> {
+  profile: number, night: boolean, guideChannel = fixture.channels[1]): Promise<ReceiverGuideMap> {
   const text = translation('en_us');
   await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
   const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
@@ -456,7 +456,7 @@ async function prepareReceiverGuide(page: Page, fixture: TeletextChannelFixture,
     entry_subcode: '0000', resource_transmissions: '[]' })) await form.locator(`[name="${key}"]`).fill(value);
   await form.locator('[name="entry_addon_id"]').selectOption(addonId);
   await form.locator('[name="v1_region"]').selectOption('western_latin');
-  await form.locator('[name="guide_channel_id"]').selectOption(String(fixture.channels[1]));
+  await form.locator('[name="guide_channel_id"]').selectOption(String(guideChannel));
   await submit(page, form, text('TeletextValidateSaveDraft'), true);
   const original = savedOriginal(fixture, channel);
   const document = original.documents[original.selection.bindings.findIndex(binding => binding.addon_id === addonId)];
@@ -2658,6 +2658,15 @@ test(customFieldsBoundary
         'NOW %NOW%%%%%%%%%%%%%%%%%%%%', 'NEXT %NEXT%%%%%%%%%%%%%%%%%%%%', 'START %NOWSTART%%%%']),
       await uploadCustomPage(page, fixture.channels[0], 151, ['CLOCK ORIGINAL151', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%']),
     ] : [];
+    if (customFieldsBoundary) {
+      // Exercise the minute tick in the clear-cue direct window, and the real
+      // programme transition in the Legacy window. Each retains its original
+      // capture/oracle; their independent native coincidence controls remain.
+      await expect.poll(() => {
+        const second = new Date().getUTCSeconds();
+        return second >= 14 && second <= 16;
+      }, { timeout: 65_000, intervals: [100] }).toBe(true);
+    }
     for (const channel of [...fixture.channels].reverse()) await resetGuidePlayout(page, fixture, channel,
       { count: 8, durationMilliseconds: 60_000, sourceDuration: media[0].duration });
     const rows = fixture.channels.map(channel => fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel));
@@ -2669,7 +2678,8 @@ test(customFieldsBoundary
     }
     expect(Date.now() - utc(first.Start)).toBeLessThan(25_000);
     const maps = [];
-    for (const [index, channel] of fixture.channels.entries()) maps.push(await prepareReceiverGuide(page, fixture, channel, profiles[index], index === 1));
+    for (const [index, channel] of fixture.channels.entries()) maps.push(await prepareReceiverGuide(page, fixture, channel,
+      profiles[index], index === 1, customFieldsBoundary ? channel : fixture.channels[1]));
     const originals = fixture.channels.map(channel => sha256(originalBytes(fixture, channel)));
     const accepted = fixture.channels.map(channel => acceptedGuide(fixture, channel));
     const current = () => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
@@ -2886,10 +2896,21 @@ test(customFieldsBoundary
       expect(hasPair(currentFields, programmeRows[1].MediaItemId, programmeRows[2].MediaItemId)).toBe(true);
       const clock = decode(boundaryGuidePath!, 151);
       expect(clock).toContain('CLOCK ORIGINAL151'); expect(clock).toMatch(/TIME\s+\d{2}:\d{2}\s+FIXED/);
+      const minuteCapture = captures.find(capture => capture.name === 'burst-caption-clear')!;
+      const minuteClock = decode(paths[3], 151);
+      const openedMinute = Math.floor(utc(minuteCapture.opened) / 60_000);
+      const closedMinute = Math.floor(utc(minuteCapture.closed) / 60_000);
+      expect(closedMinute).toBe(openedMinute + 1);
+      const clockLabel = (minute: number) => {
+        const value = new Date(minute * 60_000);
+        return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
+      };
+      expect(minuteClock).toContain(`TIME ${clockLabel(openedMinute)}`);
+      expect(minuteClock).toContain(`TIME ${clockLabel(closedMinute)}`);
       expect(decode(cold[1], 150)).toBe(''); expect(decode(cold[1], 151)).toBe('');
       writeFileSync(info.outputPath('custom-fields-programme-transition.json'), JSON.stringify({
         customElements, programmeRows: programmeRows.slice(0, 3), programmeTitles: [...programmeTitles],
-        coldFields, currentFields, clock, originalHashes: originals, compiledCandidateScope: 'Same immutable native field owner after latest-link deletion, alongside the actual production guide worker and unchanged caption/transport gates.',
+        coldFields, currentFields, clock, minuteClock, originalHashes: originals, compiledCandidateScope: 'Same immutable native field owner after latest-link deletion, alongside the actual production guide worker and unchanged caption/transport gates.',
       }, null, 2));
     }
     expect(current().SeedId).toBe(before.SeedId); expect(current().RuntimeId).not.toBeNull(); expect(current().Revoked).toBe(0);

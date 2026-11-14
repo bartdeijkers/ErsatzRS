@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("ci_domains", ROOT / "scripts/ci-domains.py")
@@ -274,9 +275,19 @@ class DomainSelection(unittest.TestCase):
         self.assertTrue(domains.select([path], added_paths=[path])["everything"])
 
     def test_page_without_any_spec_selects_only_the_smoke_set(self):
-        result = select("crates/ersatzrs-web/src/admin/pages/teletext_elements/list.rs")
+        # Isolate the no-coverage branch: the real element list now has
+        # upload coverage through the shared custom-page browser helper.
+        with patch.object(domains._evidence.Evidence, "page_specs", return_value=set()):
+            result = select("crates/ersatzrs-web/src/admin/pages/teletext_elements/list.rs")
         self.assertFalse(result["everything"] or result["teletext_browser"] or result["next"])
         self.assertEqual(result["general_specs"], sorted(domains.SMOKE_SPECS))
+
+    def test_custom_page_uploads_select_their_real_element_list_coverage(self):
+        result = select("crates/ersatzrs-web/src/admin/pages/teletext_elements/list.rs")
+        self.assertFalse(result["everything"] or result["next"])
+        self.assertTrue(result["teletext_browser"])
+        self.assertEqual(result["general_specs"], sorted(domains.SMOKE_SPECS))
+        self.assertEqual(result["teletext_specs"], ["teletext-guide-authoring-flow", "teletext-restart-flow"])
 
     def test_backend_items_used_only_by_admin_code_select_their_pages(self):
         path = "crates/ersatzrs-app/src/queries.rs"

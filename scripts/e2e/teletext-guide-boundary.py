@@ -65,17 +65,44 @@ def qualify(raw, log, request, tables, sections, metadata):
     expiry = candidate(initial, metadata, request["channel_id"])
     require(initial["_utc_ns"] < expiry, "initial guide is already expired")
     proposals = [event for event in group if event["event"] == "monitor_proposal"]
+    observed_proposals = proposals
+    require(all(H.integer(event.get("sequence"), 1) for event in observed_proposals)
+            and len({event["sequence"] for event in observed_proposals}) == len(observed_proposals), "proposal sequences are ambiguous")
+    # Closing a byte-capped response can wake a bounded monitor read and log
+    # one terminal withdrawal after the window containing the final captured
+    # packet was flushed. It cannot describe bytes in this finite capture.
+    # Keep it as evidence, and refuse this exclusion if any delivery followed.
+    final_window = one([window for window in windows if window["first"] < count <= window["end"]],
+                       "capture lacks its final packet window")
+    final_flush = final_window["flushed"]
+    terminal = [event for event in proposals if final_flush is not None
+                and event["_line"] > final_flush["_line"] and event["_utc_ns"] >= final_flush["_utc_ns"]]
+    require(len(terminal) <= 1 and all(event is proposals[-1] and event.get("action") == "withdraw"
+            for event in terminal), "capture has unexpected terminal proposals")
+    require(not any(event["event"] in ("transition_installed", "transition_applied")
+                    and event.get("sequence") == proposal.get("sequence")
+                    for proposal in terminal for event in group), "terminal withdrawal has delivery")
+    proposals = [event for event in proposals if event not in terminal]
     replacements = [event for event in proposals if event.get("action") == "replace"]
     startup = initial["event"] == "monitor_recovered"
     require(len(replacements) == (2 if startup else 1), "guide lacks its initial or refreshed proposal")
     replacement = replacements[-1]
     withdrawals = [event for event in proposals if event.get("action") == "withdraw"]
     require(len(withdrawals) <= 1 and len(proposals) == len(withdrawals) + len(replacements), "guide has unexpected proposals")
-    require(all(H.integer(event.get("sequence"), 1) for event in proposals)
-            and len({event["sequence"] for event in proposals}) == len(proposals), "proposal sequences are ambiguous")
-    recovered = one([event for event in group if event["event"] == "monitor_recovered"
-                     and initial["_line"] < event["_line"] < replacement["_line"]
-                     and event.get("guide_runtime_id") != initial.get("guide_runtime_id")], "replacement lacks one fresh runtime observation")
+    observations = [event for event in group if event["event"] == "monitor_recovered"
+                    and initial["_line"] < event["_line"] < replacement["_line"]
+                    and event.get("guide_runtime_id") != initial.get("guide_runtime_id")]
+    # A candidate may be read again after bounded field preparation fails.
+    # Repeated observations must identify the exact same immutable lineage;
+    # neither retries nor their count grant new authority or delivery proof.
+    identity_keys = ("channel_id", "generation_id", "request_id", "design_id", "revision",
+                     "artifact_version", "guide_seed_id", "guide_runtime_id", "guide_valid_until",
+                     "original_valid_until", "authored_selected")
+    require(len({tuple(event.get(key) for key in identity_keys) for event in observations}) == 1,
+            "replacement lacks one fresh runtime identity")
+    recovered = observations[-1]
+    for event in observations:
+        candidate(event, metadata, request["channel_id"])
     fresh_expiry = candidate(recovered, metadata, request["channel_id"])
     require(recovered.get("guide_seed_id") == initial.get("guide_seed_id")
             and H.integer(recovered.get("guide_runtime_id"), 1) and fresh_expiry > expiry,
@@ -93,10 +120,13 @@ def qualify(raw, log, request, tables, sections, metadata):
         # follow saved UTC expiry and precede recovery; their mutual log order
         # grants no extra authority. Physical withdrawal/ACK checks below stay.
         require(initial["_line"] < min(boundary["_line"], withdrawal["_line"])
-                and max(boundary["_line"], withdrawal["_line"]) < recovered["_line"]
+                and max(boundary["_line"], withdrawal["_line"]) < min(event["_line"] for event in observations)
                 and expiry <= withdrawal["_utc_ns"] <= recovered["_utc_ns"]
                 and boundary["_utc_ns"] <= recovered["_utc_ns"]
                 and withdrawal["sequence"] < replacement["sequence"], "expiry recovery precedes its withdrawal proposal or saved UTC expiry")
+        require(all(expiry <= withdrawal["_utc_ns"] <= event["_utc_ns"]
+                    and boundary["_utc_ns"] <= event["_utc_ns"] for event in observations),
+                "fresh observations precede the withdrawal or saved UTC expiry")
     else:
         require(not withdrawals and recovered["_utc_ns"] < expiry, "unexplained guide withdrawal or late renewal")
 
@@ -212,6 +242,7 @@ def qualify(raw, log, request, tables, sections, metadata):
             "original_valid_until": initial["guide_valid_until"], "fresh_valid_until": recovered["guide_valid_until"],
             "recovered_packet": cut, "packet_count": count, "qualified_windows": len(windows),
             "unretained_suffix_window_events": len(suffix), "ignored_unflushed_windows": ignored,
+            "terminal_undelivered_proposals": terminal, "fresh_runtime_observations": len(observations),
             "startup_recovery": startup, "request_provenance": request,
             "full_response_eof_claimed": False, "caption_timing_waived": False}
 

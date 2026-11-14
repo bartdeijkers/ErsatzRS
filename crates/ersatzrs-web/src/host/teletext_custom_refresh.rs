@@ -91,7 +91,7 @@ impl PublishedCustomRefresh {
         if context.channel != generation.request.channel_id {
             return Err(RefreshError);
         }
-        let guard = teletext_work::begin(application, Some(deadline))
+        let guard = teletext_work::begin_cached_confirmation(application, deadline, context.poll)
             .await
             .map_err(|_| RefreshError)?;
         let stored = before(
@@ -185,9 +185,13 @@ impl PublishedCustomRefresh {
         if Instant::now() < self.next_wake {
             return Ok(Arc::clone(self));
         }
-        let guard = teletext_work::begin(context.application, Some(context.deadline))
-            .await
-            .map_err(|_| RefreshError)?;
+        let guard = teletext_work::begin_cached_confirmation(
+            context.application,
+            context.deadline,
+            context.poll,
+        )
+        .await
+        .map_err(|_| RefreshError)?;
         self.refresh_held(context, guard.hold_work(), false).await
     }
 

@@ -216,6 +216,10 @@ element planner.
 The background guide coordinator uses the same frozen host-membership comparison
 when classifying dependency changes; only actual installed producer removal can
 disable the guide on that basis.
+Native custom-field reads/encoding share the existing response-local bounded
+admission wait used by cached guide confirmation. A temporary occupied slot can
+wait for actual worker release within the original deadline and cadence; it
+cannot create a queue, increase capacity or renew source/operation validity.
 Automatic Base guide regeneration borrows the custom source from the checked,
 immutable original design revision. It changes only the invocation correlation;
 rows, element revisions and field recipes remain exact, even after subsequent

@@ -76,7 +76,8 @@ release section when tagging a release.
   receiver pages. Automatic guide regeneration retains the original custom-page
   source, including its rows, field bindings and element revisions; later edits
   require explicit publication. Base output now derives current bound fields
-  through the response owner; failed programme reads blank their logical page's
+  through the response owner, sharing the existing bounded wait for occupied
+  teletext work slots; failed programme reads blank their logical page's
   dynamic cells while independent clock pages continue. Output status separates
   requested and confirmed field refreshes, with page-specific blank-field warnings
   retained in Health after a stream ends until confirmed field recovery;

@@ -1,9 +1,13 @@
-//! Immediate process-wide teletext admission with actual-worker ownership.
+//! Process-wide teletext admission with actual-worker ownership.
 
 use std::{num::NonZeroUsize, time::Instant};
 
 use ersatzrs_app::ApplicationServices;
 use ersatzrs_core::locking::{TeletextWorkGuard, TeletextWorkHold};
+
+#[path = "teletext_cached_admission.rs"]
+mod cached_admission;
+pub(crate) use cached_admission::begin_cached_confirmation;
 
 /// Existing `ConfigElement` resource policy, read afresh at operation admission.
 pub const MAX_CONCURRENT_SETTING: &str = "teletext.work.max_concurrent";
