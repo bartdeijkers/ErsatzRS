@@ -153,6 +153,38 @@ release candidates still require the exact-source full gate in
 [BUILD.md](BUILD.md#release-candidate-ci-gate). See
 [CI lanes](BUILD.md#ci-lanes) for ownership, fallback and runner details.
 
+### Checkpoint delivery
+
+Coordinate one integration owner for the shared integration branch (`main`),
+across concurrent workstreams. Other contributors can prepare isolated changes
+and continue independent local work while CI runs. Ownership does not grant
+permission to commit, push or merge.
+
+1. Before integration, refresh remote refs and inspect divergence. Preserve
+   unique commits and unrelated uncommitted work; ahead/behind counts alone do
+   not determine how to reconcile branches.
+2. Prepare a coherent, reviewed checkpoint with appropriate local verification.
+   A checkpoint may contain several commits; do not push after every integration
+   commit merely because it exists.
+3. Perform the authorized push or merge and record the candidate SHA and relevant
+   CI run links in the existing PR or progress record. For integration checkpoints
+   and candidates being qualified, wait for the relevant run's verdict before
+   advancing the same branch with another checkpoint. This is not a waiting
+   requirement for every ordinary development-branch push.
+4. Inspect the required checks before advancing. Resolve failures; a cancelled
+   run does not establish complete acceptance. Completed component evidence may
+   be reused only under the existing source, input and assumption rules in
+   [Delivery claims](#delivery-claims). Recover missing checks before claiming
+   acceptance.
+5. A demonstrably broken candidate may be superseded by a corrective checkpoint
+   without waiting for its remaining checks. Record the failure and reason for
+   superseding it; the replacement must satisfy its required checks. A queued or
+   slow run alone is not grounds for this exception.
+
+Preserve qualification runs needed for acceptance. Small CI success remains
+distinct from integration proof and exact-source release qualification; this
+procedure changes neither their required gates nor delivery authorization.
+
 ## Pull Request Checklist
 
 - The change is in English.

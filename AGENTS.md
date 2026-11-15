@@ -37,6 +37,11 @@ ErsatzRS exists to deliver dependable, personally meaningful television. Prefer 
 - Every substantial change must support an accepted requirement, correct a demonstrated defect, or preserve an existing safety invariant.
 - Prefer existing repository and dependency capabilities. New infrastructure requires a demonstrated gap and the smallest justified solution.
 - Keep work reviewable through coherent engineering checkpoints. A checkpoint commit does not imply milestone completion.
+- Designate one integration owner for `main` across concurrent workstreams.
+  Other agents prepare isolated changes; only the designated owner integrates
+  and performs authorized pushes or merges into `main`. Follow the
+  [checkpoint delivery procedure](CONTRIBUTING.md#checkpoint-delivery).
+  Ownership does not itself authorize committing, pushing or merging.
 - Review findings must identify the affected behavior, credible failure path, impact and smallest correction. Speculative improvements are not automatically blockers.
 - Reuse valid evidence. Repeat checks when relevant code, inputs or assumptions change—not simply to obtain another green result.
 - If repeated work produces no new evidence, identify the failed hypothesis and change the approach. Do not silently expand the task.
