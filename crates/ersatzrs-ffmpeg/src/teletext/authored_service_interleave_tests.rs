@@ -198,3 +198,30 @@ fn refresh_is_not_a_replacement_boundary_and_overflow_retains_resume_state() {
         state
     );
 }
+
+#[test]
+fn timed_priority_resume_does_not_skip_an_intervening_acquisition_prefix() {
+    let mut carousel = TeletextCarousel::new_authored(service_with_resources(3, 2, false)).unwrap();
+    // A due display interrupted the ordinary cursor, then B.6 acquisition
+    // interrupted that display before its header. Both resumes must survive
+    // complete resource bodies; only the display may consume its own resume.
+    carousel.rotation_resume = Some(4);
+    carousel.resource_resume = Some(2);
+    let resources: Vec<_> = (0..2)
+        .map(|page| carousel.content.page(page).0.to_vec())
+        .collect();
+    for (index, expected) in resources.into_iter().enumerate() {
+        let header = carousel.next_batch().unwrap();
+        assert_eq!(header.kind(), TeletextCarouselBatchKind::Header);
+        assert_eq!(carousel.page, index);
+        let body = carousel.next_batch().unwrap();
+        assert_eq!(body.data_units(), &expected[1..]);
+        assert_eq!(carousel.rotation_resume, Some(4));
+    }
+    assert_eq!(carousel.page, 2);
+    assert_eq!(carousel.resource_resume, None);
+    carousel.next_batch().unwrap();
+    carousel.next_batch().unwrap();
+    assert_eq!(carousel.page, 4);
+    assert_eq!(carousel.rotation_resume, None);
+}

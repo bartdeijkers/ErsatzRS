@@ -1,12 +1,16 @@
 import { expect, type Page } from '@playwright/test';
-import { spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 // Setup uses the actual upload/link handlers on the owned throwaway host.
 // It grants no publication authority and never edits a checked document.
-export async function uploadCustomPage(page: Page, channel: number, number: number, rows: string[]): Promise<number> {
-  const bytes = Buffer.from(`DE,Synthetic fields\r\nPN,${number}00\r\nSC,0000\r\nPS,8000\r\n`
-    + rows.map((row, index) => `OL,${index + 1},${row}\r\n`).join(''), 'ascii');
+export async function uploadCustomPage(page: Page, channel: number, number: number, rows: string[],
+  timing?: { seconds: number; nextRows: string[] }): Promise<number> {
+  const subpages = timing ? [rows, timing.nextRows] : [rows];
+  const bytes = Buffer.from('DE,Synthetic fields\r\n' + subpages.map((cells, subpage) =>
+    `PN,${number}${String(subpage).padStart(2, '0')}\r\nSC,${String(subpage).padStart(4, '0')}\r\nPS,8000\r\n`
+    + (timing ? `CT,${timing.seconds},T\r\n` : '')
+    + cells.map((row, index) => `OL,${index + 1},${row}\r\n`).join('')).join(''), 'ascii');
   const uploaded = await page.request.post('/admin-api/teletext-elements/upload', {
     multipart: { file: { name: `synthetic-${number}.tti`, mimeType: 'text/plain', buffer: bytes } }, maxRedirects: 0,
   });
@@ -47,4 +51,73 @@ export function decodeCustomPageAv(ffmpeg: string, capture: string): void {
   const lines = decoded.stdout.toString().split('\n');
   expect(lines.filter(line => line.startsWith('0,')).length).toBeGreaterThan(50);
   expect(lines.filter(line => line.startsWith('1,')).length).toBeGreaterThan(100);
+}
+
+// The public FFprobe demuxer supplies actual PES PTS/data. Decode only the
+// standardized header address/subcode here; libzvbi separately proves visible
+// rows. No product carousel index, wall clock or rewritten TS is an oracle.
+export function qualifyCustomPageCycles(ffprobe: string, capture: string,
+  expected: { page: number; seconds: number }[]): void {
+  const raw = execFileSync(ffprobe, ['-v', 'error', '-select_streams', 'i:512',
+    '-show_packets', '-show_data', '-show_entries', 'packet=pts,data', '-of', 'json', capture],
+    { timeout: 30_000, maxBuffer: 8 * 1024 * 1024 });
+  writeFileSync(`${capture}.cycle-packets.json`, raw);
+  const packets = JSON.parse(raw.toString()).packets as { pts: number; data: string }[];
+  const hamming = [0x15, 0x02, 0x49, 0x5e, 0x64, 0x73, 0x38, 0x2f,
+    0xd0, 0xc7, 0x8c, 0x9b, 0xa1, 0xb6, 0xfd, 0xea];
+  const nibble = (byte: number) => {
+    const reversed = Number.parseInt(byte.toString(2).padStart(8, '0').split('').reverse().join(''), 2);
+    const value = hamming.indexOf(reversed); expect(value).toBeGreaterThanOrEqual(0); return value;
+  };
+  const headers = new Map(expected.map(value => [value.page, [] as { pts: number; subcode: number }[]]));
+  for (const packet of packets) {
+    expect(Number.isSafeInteger(packet.pts)).toBe(true);
+    const hex = packet.data.trim().split('\n').map(line => {
+      const match = line.match(/^[0-9a-f]{8}: ([0-9a-f ]+?)  /i);
+      expect(match).not.toBeNull(); return match![1].replaceAll(' ', '');
+    }).join('');
+    const data = Buffer.from(hex, 'hex'); expect(data[0]).toBe(0x10);
+    expect((data.length - 1) % 46).toBe(0);
+    for (let offset = 1; offset < data.length; offset += 46) {
+      const unit = data.subarray(offset, offset + 46); expect(unit[1]).toBe(44);
+      if (unit[0] === 0xff) continue;
+      expect(unit[0]).toBe(2); expect(unit[3]).toBe(0xe4);
+      const address = nibble(unit[4]) | (nibble(unit[5]) << 4);
+      if (address >> 3 !== 0) continue;
+      const number = nibble(unit[6]) | (nibble(unit[7]) << 4);
+      if ((number & 15) > 9 || (number >> 4) > 9) continue;
+      const page = ((address & 7) || 8) * 100 + (number >> 4) * 10 + (number & 15);
+      const selected = headers.get(page); if (!selected) continue;
+      const subcode = nibble(unit[8]) | ((nibble(unit[9]) & 7) << 4)
+        | (nibble(unit[10]) << 8) | ((nibble(unit[11]) & 3) << 12);
+      expect([1, 2]).toContain(subcode);
+      if (!selected.length || selected.at(-1)!.subcode !== subcode) selected.push({ pts: packet.pts, subcode });
+    }
+  }
+  const source = readFileSync('crates/ersatzrs-ffmpeg/src/teletext/output.rs', 'utf8');
+  const bound = (name: string) => {
+    const literal = source.match(new RegExp(`const ${name}: u32 = (\\d+);`));
+    expect(literal).not.toBeNull(); return Number(literal![1]);
+  };
+  // Keep the existing capacity contract: a header may await null slots for
+  // five seconds, while a started body retains B.9 spacing. Earliest-due
+  // priority can finish the current page and one page per other timed group
+  // before placing this header. Caption timing keeps its separate strict gate.
+  const placementBound = (expected.length + 1)
+    * (bound('MAX_PAGE_START_DEFERRED_INTERVALS') + bound('MAX_DEFERRED_INTERVALS') + 2) * 0.02;
+  const result = expected.map(({ page, seconds }) => {
+    const changes = headers.get(page)!;
+    // The first observed subpage may already be part way through its dwell.
+    const durations = changes.slice(2).map((change, index) => (change.pts - changes[index + 1].pts) / 90_000);
+    return { page, seconds, changes, complete_dwell_seconds: durations, existing_placement_bound_seconds: placementBound };
+  });
+  // Retain every measurement before any assertion, including negative trials.
+  writeFileSync(`${capture}.cycles.json`, JSON.stringify(result, null, 2));
+  for (const value of result) {
+    expect(value.changes.length).toBeGreaterThanOrEqual(4);
+    for (const duration of value.complete_dwell_seconds) {
+      expect(duration).toBeGreaterThanOrEqual(value.seconds);
+      expect(duration).toBeLessThanOrEqual(value.seconds + placementBound);
+    }
+  }
 }

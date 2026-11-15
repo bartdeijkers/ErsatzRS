@@ -17,7 +17,7 @@ use super::{
     TeletextInstallationSnapshot, TeletextLanguage, TeletextNationalOption, TeletextPageAddress,
     TeletextPageContract, TeletextPageDraft, TeletextPageKind, TeletextPageNumber,
     TeletextPageSetDraft, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
-    TeletextSelectionSnapshot, TeletextSubcode,
+    TeletextSelectionSnapshot, TeletextSubcode, TeletextSubpageCycle,
 };
 use crate::{validate_teletext_element_bindings, EntityId, TeletextElementBinding};
 
@@ -119,6 +119,10 @@ pub struct TeletextCustomPageWire {
     pub page: u16,
     pub subcode: u16,
     pub national_option: u8,
+    /// Explicitly checked element timing. Older originals retain their legacy
+    /// transmission behavior; never infer timing from mutable current elements.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cycle_seconds: Option<u16>,
     /// Display rows 1..=24, each 40 seven-bit cells as 80 hexadecimal digits.
     pub rows: Vec<TeletextCustomRowWire>,
     /// Published dynamic-field locations, normalized to this single subpage.
@@ -180,6 +184,8 @@ pub enum TeletextCustomPagesError {
     Row { page: u16, row: u8 },
     #[error("custom page {page} has an invalid dynamic field snapshot")]
     Fields { page: u16 },
+    #[error("custom page {page} has invalid or inconsistent subpage timing")]
+    Cycle { page: u16 },
 }
 
 /// A checked host response: empty Base pages plus their exact rows.
@@ -188,6 +194,7 @@ pub struct TeletextCustomPagesDocument {
     draft: TeletextPageSetDraft,
     overlays: Vec<TeletextPhysicalBaseOverlay>,
     origins: Vec<TeletextCustomPageOrigin>,
+    cycles: Vec<TeletextSubpageCycle>,
 }
 
 /// Which element revision produced one page; recorded with the publication.
@@ -224,6 +231,7 @@ impl TeletextCustomPagesDocument {
         let language = TeletextLanguage::new("und".to_owned())
             .map_err(|_| TeletextCustomPagesError::RecordCount)?;
         let mut seen = BTreeSet::new();
+        let mut cycles = std::collections::BTreeMap::new();
         let mut pages = Vec::with_capacity(wire.pages.len());
         let mut overlays = Vec::with_capacity(wire.pages.len());
         let mut origins = Vec::with_capacity(wire.pages.len());
@@ -238,6 +246,7 @@ impl TeletextCustomPagesDocument {
             if page.element_id <= 0 || page.element_revision <= 0 {
                 return Err(invalid);
             }
+            collect_cycle(&mut cycles, &page, address.page)?;
             if validate_teletext_element_bindings(&page.dynamic_fields, 1).is_err()
                 || page.dynamic_fields.iter().any(|field| {
                     !field.source.is_dynamic()
@@ -302,6 +311,7 @@ impl TeletextCustomPagesDocument {
             },
             overlays,
             origins,
+            cycles: cycles.into_values().flatten().collect(),
         })
     }
 
@@ -320,12 +330,41 @@ impl TeletextCustomPagesDocument {
         &self.origins
     }
 
+    /// Published timing per logical page, absent for older frozen originals.
+    #[must_use]
+    pub fn subpage_cycles(&self) -> &[TeletextSubpageCycle] {
+        &self.cycles
+    }
+
     /// Move the empty Base pages and their exact rows to the encoder.
     #[must_use]
     pub fn into_parts(self) -> (TeletextPageSetDraft, Vec<TeletextPhysicalBaseOverlay>) {
         (self.draft, self.overlays)
     }
 }
+
+fn collect_cycle(
+    cycles: &mut std::collections::BTreeMap<TeletextPageNumber, Option<TeletextSubpageCycle>>,
+    page: &TeletextCustomPageWire,
+    number: TeletextPageNumber,
+) -> Result<(), TeletextCustomPagesError> {
+    let cycle = page
+        .cycle_seconds
+        .map(|seconds| TeletextSubpageCycle::new(number, seconds))
+        .transpose()
+        .map_err(|_| TeletextCustomPagesError::Cycle { page: page.page })?;
+    if cycles
+        .insert(number, cycle)
+        .is_some_and(|previous| previous != cycle)
+    {
+        return Err(TeletextCustomPagesError::Cycle { page: page.page });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "custom_pages_cycle_tests.rs"]
+mod cycle_tests;
 
 #[cfg(test)]
 mod tests {
@@ -404,6 +443,7 @@ mod tests {
             page: number,
             subcode,
             national_option: 0,
+            cycle_seconds: None,
             rows: vec![TeletextCustomRowWire::new(1, &cells)],
             dynamic_fields: Vec::new(),
         }

@@ -206,12 +206,53 @@ pub struct EncodedTeletextAuthoredService {
     inventory: Vec<TeletextPhysicalPageInventoryRecord>,
     unit_count: usize,
     resource_lifecycle_variants: Option<super::TeletextResourceLifecyclePlan>,
+    subpage_cycles: Vec<ersatzrs_domain::TeletextSubpageCycle>,
 }
 impl EncodedTeletextAuthoredService {
     #[must_use]
     pub const fn declared(&self) -> &TeletextDeclaredService {
         &self.declared
     }
+    /// Bind published timing to existing logical display owners. The already
+    /// admitted display count bounds these records; no new index is allocated.
+    /// Carousel feasibility and actual output acknowledgement remain separate.
+    /// # Errors
+    /// Rejects excess, repeated or unknown display owners before mutation.
+    pub fn with_subpage_cycles(
+        mut self,
+        mut cycles: Vec<ersatzrs_domain::TeletextSubpageCycle>,
+    ) -> Result<Self, ersatzrs_domain::TeletextSubpageCycleError> {
+        use ersatzrs_domain::TeletextSubpageCycleError as Error;
+        let displays = &self.declared.semantic().base().pages;
+        if cycles.len() > displays.len() {
+            return Err(Error::Count);
+        }
+        cycles.sort_unstable_by_key(ersatzrs_domain::TeletextSubpageCycle::page);
+        for (ordinal, cycle) in cycles.iter().enumerate() {
+            if ordinal > 0 && cycles[ordinal - 1].page() == cycle.page() {
+                return Err(Error::Duplicate {
+                    page: cycle.page().get(),
+                });
+            }
+            if !displays
+                .iter()
+                .any(|display| display.address.page == cycle.page())
+            {
+                return Err(Error::MissingPage {
+                    page: cycle.page().get(),
+                });
+            }
+        }
+        self.subpage_cycles = cycles;
+        Ok(self)
+    }
+
+    /// Exact published timing; empty preserves older originals' transmission.
+    #[must_use]
+    pub fn subpage_cycles(&self) -> &[ersatzrs_domain::TeletextSubpageCycle] {
+        &self.subpage_cycles
+    }
+
     /// Engine-owned physical resources, separate from immutable addon intent.
     /// These definitions and their generated links confer no editor authority.
     #[must_use]
@@ -594,6 +635,7 @@ fn encode_owned_service(
         inventory,
         unit_count: units,
         resource_lifecycle_variants: None,
+        subpage_cycles: Vec::new(),
     })
 }
 
@@ -1002,3 +1044,7 @@ fn append_page(
     pages.push(page);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "subpage_cycle_tests.rs"]
+mod subpage_cycle_tests;

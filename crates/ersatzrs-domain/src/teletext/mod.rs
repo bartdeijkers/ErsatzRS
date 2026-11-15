@@ -76,6 +76,7 @@ mod source;
 mod source_headers;
 mod source_pages;
 mod spatial_trace;
+mod subpage_cycle;
 
 pub use attribute_execution::*;
 pub use attribute_observations::*;
@@ -141,6 +142,7 @@ pub use source::*;
 pub use source_headers::*;
 pub use source_pages::*;
 pub use spatial_trace::*;
+pub use subpage_cycle::*;
 
 #[cfg(test)]
 mod tests;

@@ -757,6 +757,7 @@ fn effective_original_roundtrip_retains_host_source_beside_scripted_and_off_memb
             page: 150,
             subcode: 0,
             national_option: 0,
+            cycle_seconds: None,
             rows: vec![ersatzrs_domain::TeletextCustomRowWire::new(1, &[b'X'; 40])],
             dynamic_fields: vec![],
         }],

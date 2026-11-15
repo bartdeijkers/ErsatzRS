@@ -249,9 +249,18 @@ fences and grants no independent publication authority. Response-owned
 Effective/Scripted field refresh and joined automatic-guide output now retain the
 published recipe and membership. Actual Lua On/Off ordinary-output proof covers
 page-local field failure/Health/recovery and original interval expiry to the
-independent Base original. The parity record owns exact evidence and outstanding
-integration/CI gates. Base refresh/restart/reporting remains complete within its
-recorded scope; subpage cycle time and the other custom-page packages stay open.
+independent Base original. Part3c local qualification and required exact-head CI,
+merge and safe task cleanup are complete through PR159/617a2e92. The parity record
+owns exact evidence and the remaining feature requirements. Base refresh/restart/
+reporting remains complete within its recorded scope. PR160 additionally captures
+validated element cycle timing in the immutable original. Native rotation never
+advances before those seconds have elapsed; a due subpage uses the next complete
+page boundary and the existing bounded null-slot capacity. Field/guide refresh
+retains the published timing and applicable phase. Older originals keep their
+legacy transmission behavior until an explicit new Check/publication. Native
+and independently decoded ordinary-output qualification are complete within the
+scope recorded in the parity checklist; CI/delivery are tracked there. Other
+custom-page packages stay open.
 Acceptance needs unit and native publication evidence, one independently decoded
 stream that carries a custom page with refreshed fields next to the TV-guide
 pages, and the Playwright flows for upload, field binding, channel linking and

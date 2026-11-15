@@ -421,9 +421,12 @@ fn render(
 ) -> Result<Arc<EncodedTeletextAuthoredService>, RefreshError> {
     check(deadline)?;
     let correlation = document.generation.clone();
-    let (_, replacements) = TeletextCustomPagesDocument::from_wire(document, &correlation)
-        .map_err(|_| RefreshError)?
-        .into_parts();
+    let document =
+        TeletextCustomPagesDocument::from_wire(document, &correlation).map_err(|_| RefreshError)?;
+    if document.subpage_cycles() != root.subpage_cycles() {
+        return Err(RefreshError);
+    }
+    let (_, replacements) = document.into_parts();
     let mut overlays = root.declared().semantic().physical_base_overlays().clone();
     for overlay in replacements {
         overlays.insert(overlay.owner(), overlay);
@@ -439,6 +442,8 @@ fn render(
         &policy.encoding,
         deadline,
     )
+    .map_err(|_| RefreshError)?
+    .with_subpage_cycles(root.subpage_cycles().to_vec())
     .map_err(|_| RefreshError)?
     .with_resource_lifecycle_variants(deadline)
     .map_err(|_| RefreshError)?;

@@ -121,6 +121,19 @@ exists for that proposal. Repeated candidate reads must identify one exact
 immutable runtime. Packet hashes, expiry, signalling and complete-cycle ACKs
 remain mandatory; neither diagnostic case waives caption timing.
 
+For the custom subpage-cycle proof, set
+`ERSATZRS_TELETEXT_CUSTOM_CYCLE_BOUNDARY=1` and select
+`--grep "immutable custom subpage cycles"`. The same isolated scanned-caption
+case publishes two subpages on150 at1s and on151 at2s, edits the library cycle
+to20s, then deletes the elements. The checked original, independent FFprobe
+header/PTS measurements and libzvbi rows must retain the published cycles in
+cold, minute-field and recovered programme output beside the production guide.
+All existing capture, caption, AV, transport, scope and ACK gates remain required.
+Measure complete dwells separately from the initial partial observation. Use the
+existing bounded page-start/B.9 placement contract; an assumed200ms maximum
+placement delay is invalid under the qualified bitrate bursts. Retain raw
+measurements and negative trials. Source-caption timing still uses its8ms bound.
+
 For the effective custom-page guide-worker proof, set
 `ERSATZRS_TELETEXT_CUSTOM_EFFECTIVE_BOUNDARY=present`, then run a separate
 `absent` trial with `--grep "actual Lua interval with scanned captions"`.

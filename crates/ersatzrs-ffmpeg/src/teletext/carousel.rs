@@ -5,6 +5,10 @@ use std::{
 
 use ersatzrs_domain::{TeletextResourceHeaderMetadata, TeletextResourceKind};
 
+#[path = "carousel_rotation.rs"]
+mod rotation;
+use rotation::SubpageRotation;
+
 use super::{
     packets, EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextTransportError,
 };
@@ -97,9 +101,11 @@ pub struct TeletextCarousel {
     magazine_pending: bool,
     resource_start_ticks: u64,
     resource_resume: Option<usize>,
+    rotation_resume: Option<usize>,
     resource_history: super::service_update::ResourceUpdateHistory,
     // A checked display refresh must not erase unrelated receiver pages.
     repeat_display_headers: BTreeSet<usize>,
+    rotation: SubpageRotation,
 }
 
 #[derive(Debug)]
@@ -117,6 +123,7 @@ enum CarouselContent {
 pub(super) struct PreparedCarouselReplacement {
     content: CarouselContent,
     repeat_display_headers: BTreeSet<usize>,
+    rotation: SubpageRotation,
 }
 
 impl CarouselContent {
@@ -284,6 +291,18 @@ fn page_batches(units: &[[u8; 46]]) -> usize {
 }
 
 impl TeletextCarousel {
+    /// Check immutable authored acquisition/rotation cadence before publication.
+    /// This borrows the exact encoded candidate and grants no output authority.
+    /// # Errors
+    /// Rejects excessive acquisition or timed-update demand that leaves no room
+    /// for complete ordinary sweeps.
+    pub fn validate_authored_timing(
+        service: &EncodedTeletextAuthoredService,
+    ) -> Result<(), TeletextTransportError> {
+        CarouselContent::validate_authored(service)?;
+        SubpageRotation::validate(service)
+    }
+
     pub(super) fn validate_retirement_prefix(
         service: &EncodedTeletextAuthoredService,
         batches: usize,
@@ -309,8 +328,10 @@ impl TeletextCarousel {
             magazine_pending: false,
             resource_start_ticks: 0,
             resource_resume: None,
+            rotation_resume: None,
             resource_history: super::service_update::ResourceUpdateHistory::default(),
             repeat_display_headers: BTreeSet::new(),
+            rotation: SubpageRotation::default(),
         }
     }
 
@@ -335,6 +356,7 @@ impl TeletextCarousel {
         service: Arc<EncodedTeletextAuthoredService>,
     ) -> Result<Self, TeletextTransportError> {
         let content = CarouselContent::authored(service)?;
+        let rotation = SubpageRotation::new(&content, None)?;
         let magazine_pending = !content.magazines().is_empty();
         Ok(Self {
             content,
@@ -346,8 +368,10 @@ impl TeletextCarousel {
             magazine_pending,
             resource_start_ticks: 0,
             resource_resume: None,
+            rotation_resume: None,
             resource_history: super::service_update::ResourceUpdateHistory::default(),
             repeat_display_headers: BTreeSet::new(),
+            rotation,
         })
     }
 
@@ -371,7 +395,7 @@ impl TeletextCarousel {
         if !self.boundary {
             return Err(TeletextTransportError::MidCycleReplacement);
         }
-        self.replace_content(CarouselContent::Legacy(set));
+        self.replace_content(CarouselContent::Legacy(set), SubpageRotation::default());
         Ok(())
     }
 
@@ -414,9 +438,12 @@ impl TeletextCarousel {
         }
         CarouselContent::validate_authored(&service)?;
         let selected = self.select_resource_headers(&service)?;
+        let content = CarouselContent::authored_prevalidated(service, selected);
+        let rotation = SubpageRotation::new(&content, Some(&self.rotation))?;
         Ok(PreparedCarouselReplacement {
-            content: CarouselContent::authored_prevalidated(service, selected),
+            content,
             repeat_display_headers: BTreeSet::new(),
+            rotation,
         })
     }
 
@@ -449,7 +476,11 @@ impl TeletextCarousel {
                     .zip(&previous.pages()[..count])
                     .enumerate()
                     .filter_map(|(index, (new, old))| {
-                        (new.data_units() == old.data_units()).then_some(index)
+                        (new.data_units() == old.data_units()
+                            && self
+                                .rotation
+                                .was_transmitted(index + self.content.resource_count()))
+                        .then_some(index)
                     })
                     .collect();
                 // The carousel emits resources before displays; its cursor is
@@ -468,7 +499,7 @@ impl TeletextCarousel {
     /// The synchronous caller must retain the same carousel and must not advance
     /// or replace its cursor, content or history between preparation and commit.
     pub(super) fn commit_prepared_replacement(&mut self, prepared: PreparedCarouselReplacement) {
-        self.replace_content(prepared.content);
+        self.replace_content(prepared.content, prepared.rotation);
         self.repeat_display_headers = prepared.repeat_display_headers;
     }
 
@@ -578,7 +609,8 @@ impl TeletextCarousel {
         Ok(())
     }
 
-    fn replace_content(&mut self, content: CarouselContent) {
+    fn replace_content(&mut self, content: CarouselContent, rotation: SubpageRotation) {
+        self.rotation = rotation;
         self.repeat_display_headers.clear();
         self.magazine_pending = !content.magazines().is_empty();
         let previous = std::mem::replace(&mut self.content, content);
@@ -610,6 +642,7 @@ impl TeletextCarousel {
         self.first_cycle = true;
         self.resource_start_ticks = self.ticks;
         self.resource_resume = None;
+        self.rotation_resume = None;
     }
 
     fn cursor(&self) -> CarouselCursor {
@@ -622,6 +655,7 @@ impl TeletextCarousel {
             magazine_pending: self.magazine_pending,
             resource_start_ticks: self.resource_start_ticks,
             resource_resume: self.resource_resume,
+            rotation_resume: self.rotation_resume,
         }
     }
 
@@ -634,6 +668,7 @@ impl TeletextCarousel {
         self.magazine_pending = cursor.magazine_pending;
         self.resource_start_ticks = cursor.resource_start_ticks;
         self.resource_resume = cursor.resource_resume;
+        self.rotation_resume = cursor.rotation_resume;
     }
 
     /// Predict the first closing FF within a bounded prefix using the same cursor
@@ -643,8 +678,14 @@ impl TeletextCarousel {
         maximum: usize,
     ) -> Result<Option<usize>, TeletextTransportError> {
         let mut cursor = self.cursor();
+        let mut rotation = self.rotation.clone();
         for count in 0..maximum {
-            if matches!(cursor.next_plan(&self.content)?, BatchPlan::Terminator) {
+            let ticks = cursor.ticks;
+            let plan = cursor.next_plan(&self.content, &rotation)?;
+            if let BatchPlan::Header { page, .. } = plan {
+                rotation.record_header(page, ticks);
+            }
+            if matches!(plan, BatchPlan::Terminator) {
                 return Ok(Some(count + 1));
             }
         }
@@ -681,6 +722,7 @@ impl TeletextCarousel {
                 });
             }
         }
+        self.rotation.defer_pending_header()?;
         self.ticks = next;
         Ok(())
     }
@@ -692,7 +734,7 @@ impl TeletextCarousel {
         if self.unit != 1 || self.page >= self.content.page_count() {
             return Vec::new();
         }
-        self.content.page(self.page).0[1..]
+        self.content.page(self.rotation.current(self.page)).0[1..]
             .chunks(MAX_BATCH_UNITS)
             .map(|units| (units.len() + 1).div_ceil(4))
             .collect()
@@ -708,7 +750,7 @@ impl TeletextCarousel {
         let mut total = 1 + 1 + RESOURCE_WINDOW_MARGIN;
         let mut next_page = self.page;
         if self.unit > 0 && self.page < pages {
-            let units = self.content.page(self.page).0;
+            let units = self.content.page(self.rotation.current(self.page)).0;
             total += units
                 .len()
                 .saturating_sub(self.unit)
@@ -733,9 +775,13 @@ impl TeletextCarousel {
     /// Clock overflow leaves the cursor and encoded set unchanged.
     pub fn next_batch(&mut self) -> Result<TeletextCarouselBatch, TeletextTransportError> {
         let mut cursor = self.cursor();
-        let plan = cursor.next_plan(&self.content)?;
+        let plan = cursor.next_plan(&self.content, &self.rotation)?;
         let (kind, units) = self.units_for_plan(plan);
         let ticks = self.ticks;
+        self.rotation.begin_batch();
+        if let BatchPlan::Header { page, .. } = plan {
+            self.rotation.record_header(page, ticks);
+        }
         self.apply_cursor(cursor);
         Ok(TeletextCarouselBatch { ticks, kind, units })
     }
@@ -758,7 +804,9 @@ impl TeletextCarousel {
                 )
             }
             BatchPlan::Header { page, repeat } => {
-                let repeat = repeat || self.repeat_display_headers.contains(&page);
+                let repeat =
+                    self.rotation
+                        .repeat(page, repeat, self.repeat_display_headers.contains(&page));
                 if let Some(header) = self.content.selected_header(page, repeat) {
                     return (TeletextCarouselBatchKind::Header, vec![header]);
                 }
@@ -794,6 +842,7 @@ struct CarouselCursor {
     magazine_pending: bool,
     resource_start_ticks: u64,
     resource_resume: Option<usize>,
+    rotation_resume: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -812,9 +861,13 @@ enum BatchPlan {
 }
 
 impl CarouselCursor {
-    fn prepare_acquisition(&mut self, content: &CarouselContent) {
+    fn prepare_acquisition(
+        &mut self,
+        content: &CarouselContent,
+        rotation: &SubpageRotation,
+    ) -> Result<(), TeletextTransportError> {
         if !content.has_acquisition() {
-            return;
+            return Ok(());
         }
         if !self.magazine_pending
             && self.unit == 0
@@ -824,7 +877,8 @@ impl CarouselCursor {
             let elapsed = (self.ticks - self.resource_start_ticks) / STEP_TICKS;
             // Reserve the sole closing FF as well as the next whole display.
             // Preflight guarantees a complete sweep plus any display can fit.
-            let following = page_batches(content.page(self.page).0) + 1 + RESOURCE_WINDOW_MARGIN;
+            let selected = rotation.choose(self.page, self.ticks)?;
+            let following = page_batches(content.page(selected).0) + 1 + RESOURCE_WINDOW_MARGIN;
             if elapsed + following as u64 > MAX_RESOURCE_CYCLE_BATCHES as u64 {
                 self.resource_resume = Some(self.page);
                 self.page = 0;
@@ -836,6 +890,7 @@ impl CarouselCursor {
         {
             self.resource_start_ticks = self.ticks;
         }
+        Ok(())
     }
 
     fn resume_display(&mut self, content: &CarouselContent) {
@@ -846,15 +901,41 @@ impl CarouselCursor {
         }
     }
 
+    fn prioritize_due_display(
+        &mut self,
+        content: &CarouselContent,
+        rotation: &SubpageRotation,
+    ) -> Result<(), TeletextTransportError> {
+        if self.unit == 0
+            && !self.magazine_pending
+            && self.rotation_resume.is_none()
+            && self.page >= content.resource_count()
+            && self.page < content.page_count()
+        {
+            if let Some(due) = rotation.due(self.ticks)? {
+                if due != self.page {
+                    self.rotation_resume = Some(self.page);
+                    self.page = due;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn next_plan(
         &mut self,
         content: &CarouselContent,
+        rotation: &SubpageRotation,
     ) -> Result<BatchPlan, TeletextTransportError> {
         let next_ticks = self
             .ticks
             .checked_add(STEP_TICKS)
             .ok_or(TeletextTransportError::ClockOverflow)?;
-        self.prepare_acquisition(content);
+        while self.unit == 0 && self.page < content.page_count() && !rotation.emits(self.page) {
+            self.page += 1;
+        }
+        self.prioritize_due_display(content, rotation)?;
+        self.prepare_acquisition(content, rotation)?;
         let plan = if self.magazine_pending {
             self.magazine_pending = false;
             self.boundary = false;
@@ -868,22 +949,31 @@ impl CarouselCursor {
             self.magazine_pending = !content.magazines().is_empty();
             BatchPlan::Terminator
         } else {
-            let (units, _, resource_header) = content.page(self.page);
+            let selected = if self.unit == 0 {
+                rotation.choose(self.page, self.ticks)?
+            } else {
+                rotation.current(self.page)
+            };
+            let (units, _, resource_header) = content.page(selected);
             self.boundary = false;
             if self.unit == 0 {
                 self.unit = 1;
                 BatchPlan::Header {
-                    page: self.page,
+                    page: selected,
                     repeat: !self.first_cycle
                         || (resource_header.is_some() && self.resource_resume.is_some()),
                 }
             } else {
-                let page = self.page;
+                let page = selected;
                 let start = self.unit;
                 let end = (self.unit + MAX_BATCH_UNITS).min(units.len());
                 self.unit = end;
                 if end == units.len() {
-                    self.page += 1;
+                    self.page = if self.page < content.resource_count() {
+                        self.page + 1
+                    } else {
+                        self.rotation_resume.take().unwrap_or(self.page + 1)
+                    };
                     self.unit = 0;
                     self.resume_display(content);
                 }
