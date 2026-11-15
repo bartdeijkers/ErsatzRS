@@ -103,6 +103,9 @@ release section when tagging a release.
 - The parity-debt queue distinguishes actionable fixes, external prerequisites and
   maintainer-deferred work, preserving each item's acceptance requirements.
 
+- Contributor guidance assigns one integration owner for `main` and batches
+  delivery into coherent checkpoints, allowing required CI to finish before
+  advancing a candidate while retaining corrective checkpoints and release gates.
 - YAML scheduling parity now records the remaining chapter-aware mid-roll gap:
   the current `true` case runs its sequence after the unsplit programme; saved
   chapter-point expressions are not yet implemented.
