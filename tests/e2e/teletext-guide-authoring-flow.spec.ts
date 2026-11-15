@@ -39,6 +39,13 @@ type SavedOriginal = {
   guide_inputs: { v3: string };
   documents: { response: string }[];
 };
+type EffectiveSavedOriginal = Omit<SavedOriginal, 'selection'> & {
+  effective_selection: { valid_until: string; bindings: {
+    base: { addon_id: string } | null;
+    scripted: { state: { addon_id: string } } | null;
+  }[] };
+  producer_bindings: number[];
+};
 let installed: Installation;
 let originalUnverified: string | undefined;
 let originalLanguage: string | undefined;
@@ -373,13 +380,27 @@ for (const js of [true, false]) {
 }
 
 // A real Reset owns programme publication. No synthetic SQL guide rows, source
-// clock rewrites, teletext Lua overrides or producer replay are used here.
+// clock rewrites or producer replay are used here. Only the explicit effective
+// boundary variant adds production teletext commands to that actual Lua build.
 async function resetGuidePlayout(page: Page, fixture: TeletextChannelFixture, channel: number,
-  expected: { count: number; durationMilliseconds: number; sourceDuration?: string } = { count: 3, durationMilliseconds: 180_000 }): Promise<void> {
+  expected: { count: number; durationMilliseconds: number; sourceDuration?: string; teletextProfile?: number } = { count: 3, durationMilliseconds: 180_000 }): Promise<void> {
   const text = translation('en_us');
   const previous = fixture.database.prepare('SELECT LastBuild FROM PlayoutBuildStatus WHERE PlayoutId=?')
     .get(channel) as { LastBuild: string } | undefined;
   fixture.writeScriptedControls(channel, undefined, expected.count);
+  if (expected.teletextProfile !== undefined) {
+    expect(Number.isSafeInteger(expected.teletextProfile)).toBe(true);
+    expect(fixture.database.prepare('SELECT AddonId,IsDeleted FROM TeletextProfile WHERE Id=?')
+      .get(expected.teletextProfile)).toEqual({ AddonId: addonId, IsDeleted: 0 });
+    const script = join(fixture.root, `synthetic-controls-${channel}.lua`);
+    writeFileSync(script, `assert(teletext_profile('${addonId}',${expected.teletextProfile}).ok)\n`
+      + `assert(teletext_enabled('${addonId}',true).ok)\n` + readFileSync(script, 'utf8'));
+  }
+  const selected = () => fixture.database.prepare(`SELECT Start,Finish,State,
+    json_extract(CandidateSnapshot,'$.profile') AS ProfileId FROM PlayoutTeletextInterval
+    WHERE PlayoutId=? AND AddonId=? ORDER BY Start`).all(channel, addonId) as {
+      Start: string; Finish: string; State: number; ProfileId: number | null;
+    }[];
   await page.goto('/playouts'); await ready(page, true);
   const name = fixture.database.prepare('SELECT Name FROM Channel WHERE Id=?').get(channel) as { Name: string };
   await page.getByPlaceholder(text('SearchForPlayouts'), { exact: true }).fill(name.Name);
@@ -406,7 +427,9 @@ async function resetGuidePlayout(page: Page, fixture: TeletextChannelFixture, ch
     const items = fixture.database.prepare('SELECT COUNT(*) AS count FROM PlayoutItem WHERE PlayoutId=?').get(channel) as { count: number };
     return status?.Success === 1 && status.LastBuild !== previous?.LastBuild
       && status.LastSuccessfulBuild === status.LastBuild && items.count === expected.count
-      && fixture.scriptedIntervals(channel).length === 0;
+      && fixture.scriptedIntervals(channel).length === 0
+      && (expected.teletextProfile === undefined ? selected().length === 0
+        : selected().length === 1 && selected()[0].State === 1 && selected()[0].ProfileId === expected.teletextProfile);
   }, { timeout: 45_000 }).toBe(true);
   const spans = fixture.database.prepare('SELECT Start,Finish,InPoint,OutPoint FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
     .all(channel) as { Start: string; Finish: string; InPoint: string; OutPoint: string }[];
@@ -416,6 +439,10 @@ async function resetGuidePlayout(page: Page, fixture: TeletextChannelFixture, ch
       expect(span.OutPoint).toBe(expected.sourceDuration);
       expect(utc(span.Finish)).toBeGreaterThan(utc(span.Start));
     } else expect(utc(span.Finish) - utc(span.Start)).toBe(expected.durationMilliseconds);
+  }
+  if (expected.teletextProfile !== undefined) {
+    expect(selected()[0].Start).toBe(spans[0].Start);
+    expect(selected()[0].Finish).toBe(spans.at(-1)!.Finish);
   }
 }
 
@@ -433,33 +460,48 @@ function originalBytes(fixture: TeletextChannelFixture, channel: number): Buffer
   return Buffer.from(row.Document);
 }
 
-function acceptedGuide(fixture: TeletextChannelFixture, channel: number): Record<string, unknown> {
-  const row = fixture.database.prepare(`SELECT g.*,r.DesignId,r.Revision FROM TeletextAcceptedGenerationCurrent c
+function acceptedGuide(fixture: TeletextChannelFixture, channel: number, effective = false): Record<string, unknown> {
+  const row = fixture.database.prepare(`SELECT g.*,r.DesignId,r.Revision FROM ${effective ? 'TeletextEffectiveAcceptedGenerationCurrent' : 'TeletextAcceptedGenerationCurrent'} c
     JOIN TeletextAcceptedGeneration g ON g.Id=c.GenerationId
     JOIN TeletextPublicationRequest r ON r.Id=g.RequestId WHERE c.ChannelId=?`).get(channel);
   expect(row).toBeDefined();
-  expect(row!.ArtifactVersion).toBe(5);
+  expect(row!.ArtifactVersion).toBe(effective ? 6 : 5);
   return row!;
 }
 
 type ReceiverGuideMap = { theme: string; entry: number; pages: { address: { page: number; subcode: number }; navigation: unknown[] }[] };
 
 async function prepareReceiverGuide(page: Page, fixture: TeletextChannelFixture, channel: number,
-  profile: number, night: boolean, guideChannel = fixture.channels[1]): Promise<ReceiverGuideMap> {
+  profile: number, night: boolean, guideChannel = fixture.channels[1], effective = false): Promise<ReceiverGuideMap> {
   const text = translation('en_us');
   await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
-  const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
-  await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
-  await submit(page, binding, text('TeletextBindingSave'), true);
-  const form = page.getByTestId('teletext-authoring-form');
+  if (!effective) {
+    const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+    await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
+    await submit(page, binding, text('TeletextBindingSave'), true);
+  }
+  const form = page.getByTestId(effective ? 'teletext-effective-authoring-form' : 'teletext-authoring-form');
+  const advanced = page.getByTestId('teletext-publish-advanced');
+  if (effective && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
   for (const [key, value] of Object.entries({ name: `Production receiver ${channel}`, entry_page: night ? '410' : '200',
     entry_subcode: '0000', resource_transmissions: '[]' })) await form.locator(`[name="${key}"]`).fill(value);
   await form.locator('[name="entry_addon_id"]').selectOption(addonId);
   await form.locator('[name="v1_region"]').selectOption('western_latin');
   await form.locator('[name="guide_channel_id"]').selectOption(String(guideChannel));
   await submit(page, form, text('TeletextValidateSaveDraft'), true);
-  const original = savedOriginal(fixture, channel);
-  const document = original.documents[original.selection.bindings.findIndex(binding => binding.addon_id === addonId)];
+  const original = JSON.parse(originalBytes(fixture, channel).toString('utf8')) as SavedOriginal | EffectiveSavedOriginal;
+  let source: number;
+  if ('effective_selection' in original) {
+    expect(effective).toBe(true);
+    source = original.producer_bindings.findIndex(index => {
+      const binding = original.effective_selection.bindings[index];
+      return (binding.base?.addon_id ?? binding.scripted?.state.addon_id) === addonId;
+    });
+  } else {
+    expect(effective).toBe(false);
+    source = original.selection.bindings.findIndex(binding => binding.addon_id === addonId);
+  }
+  const document = original.documents[source];
   expect(document).toBeDefined();
   const response = JSON.parse(document.response);
   const map: ReceiverGuideMap = { theme: response.authoring.theme.id, entry: response.service.initial_page,
@@ -2569,8 +2611,16 @@ test(reusedLuaDirectEvidence
 // Part6: preserve the qualified sparse caption oracle while adding measured
 // 0.55s video bursts. Exact sources and the real scanner are explicit inputs;
 // this manual production-package trial never substitutes synthetic track rows.
-const customFieldsBoundary = process.env.ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY === '1';
-test(customFieldsBoundary
+const effectiveCustomBoundary = process.env.ERSATZRS_TELETEXT_CUSTOM_EFFECTIVE_BOUNDARY;
+if (effectiveCustomBoundary !== undefined && !['present', 'absent'].includes(effectiveCustomBoundary)) {
+  throw new Error('Effective custom boundary requires published presence or absence.');
+}
+const customFieldsBoundary = process.env.ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY === '1'
+  || effectiveCustomBoundary !== undefined;
+const publishedCustomBoundary = customFieldsBoundary && effectiveCustomBoundary !== 'absent';
+test(effectiveCustomBoundary
+  ? `production TV-guide immutable custom ${effectiveCustomBoundary} refresh during actual Lua interval with scanned captions`
+  : customFieldsBoundary
   ? 'production TV-guide and immutable custom pages refresh across programme titles with scanned captions'
   : 'production TV-guide ordinary bitrate bursts retain scanned captions across a programme boundary', async ({ browser, isolatedWebHost }, info) => {
   const baseSource = process.env.ERSATZRS_TELETEXT_RECOVERY_BASE_SOURCE;
@@ -2653,11 +2703,17 @@ test(customFieldsBoundary
     await Promise.all([page.waitForURL(url => url.search === '?saved=capacity'), capacity.locator('button[type="submit"]').click()]);
     await ready(page, true);
     const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
-    const customElements = customFieldsBoundary ? [
+    const customElements = publishedCustomBoundary ? [
       await uploadCustomPage(page, fixture.channels[0], 150, ['CUSTOM ORIGINAL150',
         'NOW %NOW%%%%%%%%%%%%%%%%%%%%', 'NEXT %NEXT%%%%%%%%%%%%%%%%%%%%', 'START %NOWSTART%%%%']),
       await uploadCustomPage(page, fixture.channels[0], 151, ['CLOCK ORIGINAL151', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%']),
     ] : [];
+    if (effectiveCustomBoundary) {
+      await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+      const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
+      await binding.locator('[name="profile_choice"]').selectOption(`${profiles[0]}:1`);
+      await submit(page, binding, translation('en_us')('TeletextBindingSave'), true);
+    }
     if (customFieldsBoundary) {
       // Exercise the minute tick in the clear-cue direct window, and the real
       // programme transition in the Legacy window. Each retains its original
@@ -2668,7 +2724,8 @@ test(customFieldsBoundary
       }, { timeout: 65_000, intervals: [100] }).toBe(true);
     }
     for (const channel of [...fixture.channels].reverse()) await resetGuidePlayout(page, fixture, channel,
-      { count: 8, durationMilliseconds: 60_000, sourceDuration: media[0].duration });
+      { count: 8, durationMilliseconds: 60_000, sourceDuration: media[0].duration,
+        teletextProfile: effectiveCustomBoundary && channel === fixture.channels[0] ? profiles[0] : undefined });
     const rows = fixture.channels.map(channel => fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel));
     const first = rows[0][0] as { Start: string; Finish: string };
     const programmeRows = rows[0] as { Start: string; Finish: string; MediaItemId: number }[];
@@ -2679,11 +2736,15 @@ test(customFieldsBoundary
     expect(Date.now() - utc(first.Start)).toBeLessThan(25_000);
     const maps = [];
     for (const [index, channel] of fixture.channels.entries()) maps.push(await prepareReceiverGuide(page, fixture, channel,
-      profiles[index], index === 1, customFieldsBoundary ? channel : fixture.channels[1]));
+      profiles[index], index === 1, customFieldsBoundary ? channel : fixture.channels[1], Boolean(effectiveCustomBoundary) && index === 0));
     const originals = fixture.channels.map(channel => sha256(originalBytes(fixture, channel)));
-    const accepted = fixture.channels.map(channel => acceptedGuide(fixture, channel));
-    const current = () => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=1')
-      .get(fixture.channels[0]) as { SeedId: number; RuntimeId: number | null; Revision: number; Revoked: number };
+    const accepted = fixture.channels.map((channel, index) => acceptedGuide(fixture, channel, Boolean(effectiveCustomBoundary) && index === 0));
+    const refreshRole = effectiveCustomBoundary ? 2 : 1;
+    const originalScopeUntil = effectiveCustomBoundary
+      ? (JSON.parse(originalBytes(fixture, fixture.channels[0]).toString('utf8')) as EffectiveSavedOriginal).effective_selection.valid_until : null;
+    if (effectiveCustomBoundary) expect(utc(originalScopeUntil!)).toBe(utc((rows[0].at(-1) as { Finish: string }).Finish));
+    const current = () => fixture.database.prepare('SELECT SeedId,RuntimeId,Revision,Revoked FROM TeletextGuideRefreshCurrent WHERE ChannelId=? AND Role=?')
+      .get(fixture.channels[0], refreshRole) as { SeedId: number; RuntimeId: number | null; Revision: number; Revoked: number };
     const before = current();
     if (customFieldsBoundary) {
       // Actual deletion removes every latest link. Both the native owner and
@@ -2694,6 +2755,10 @@ test(customFieldsBoundary
         expect(response.status()).toBe(303); expect(response.headers().location).toBe('/teletext-elements?saved=deleted');
       }
       expect(fixture.database.prepare('SELECT 1 FROM ChannelTeletextElement WHERE ChannelId=?').get(fixture.channels[0])).toBeUndefined();
+      if (effectiveCustomBoundary === 'absent') {
+        customElements.push(await uploadCustomPage(page, fixture.channels[0], 150, ['UNPUBLISHED LATER150', 'NOW %NOW%%%%%%%%%%%%%%%%%%%%']));
+        customElements.push(await uploadCustomPage(page, fixture.channels[0], 151, ['UNPUBLISHED LATER151', 'TIME %TIME%% FIXED']));
+      }
     }
     writeFileSync(info.outputPath('burst-caption-seed-receipt.json'), JSON.stringify({ first, rows, media, inventory, inventories, maps, before, originals, accepted, customElements, programmeTitles: [...programmeTitles], transcodeLimit: fixture.setting(transcodeLimitKey) }, null, 2));
     // Fixed RGBA glyph/control hashes from the qualified page888 source decoded
@@ -2795,13 +2860,16 @@ test(customFieldsBoundary
           source_log_slice_start: sliceStart, source_log_slice_end: sliceEnd }, null, 2));
         const metadata = fixture.database.prepare(`
           SELECT ChannelId AS channel_id,Id AS seed_id,GenerationId AS generation_id,NULL AS runtime_id,ValidUntil AS valid_until
-          FROM TeletextGuideRefreshSeed WHERE ChannelId=? AND Role=1
+          FROM TeletextGuideRefreshSeed WHERE ChannelId=? AND Role=?
           UNION ALL
           SELECT s.ChannelId AS channel_id,s.Id AS seed_id,s.GenerationId AS generation_id,r.Id AS runtime_id,r.ValidUntil AS valid_until
           FROM TeletextGuideRuntimeSnapshot r JOIN TeletextGuideRefreshSeed s ON s.Id=r.SeedId
-          WHERE s.ChannelId=? AND s.Role=1`).all(request.channel_id, request.channel_id) as { valid_until: string }[];
-        for (const row of metadata) row.valid_until = row.valid_until.replace(' ', 'T')
-          + (/(?:Z|[+-]\d{2}:\d{2})$/.test(row.valid_until) ? '' : 'Z');
+          WHERE s.ChannelId=? AND s.Role=?`).all(request.channel_id, refreshRole, request.channel_id, refreshRole) as { valid_until: string; original_valid_until?: string | null }[];
+        for (const row of metadata) {
+          row.valid_until = row.valid_until.replace(' ', 'T')
+            + (/(?:Z|[+-]\d{2}:\d{2})$/.test(row.valid_until) ? '' : 'Z');
+          row.original_valid_until = originalScopeUntil;
+        }
         writeFileSync(`${prefix}.metadata.json`, JSON.stringify(metadata, null, 2));
         execFileSync('python3', ['scripts/e2e/teletext-guide-boundary.py', '--capture', path,
           '--log', `${prefix}.request.log`, '--request', `${prefix}.request.json`, '--pmt', `${prefix}.pmt.json`,
@@ -2882,7 +2950,7 @@ test(customFieldsBoundary
     expect(boundaryGuidePath).toBeDefined();
     expect(guideText(boundaryGuidePath!, 200)).toContain('DAY GUIDE');
     expect(guideText(boundaryGuidePath!, 201)).toContain('Now:');
-    if (customFieldsBoundary) {
+    if (publishedCustomBoundary) {
       const decode = (path: string, number: number) => decodeCustomPage(process.env.FFMPEG_PATH!, path, number);
       const coldFields = decode(cold[0], 150); const currentFields = decode(boundaryGuidePath!, 150);
       expect(coldFields).toContain('CUSTOM ORIGINAL150'); expect(currentFields).toContain('CUSTOM ORIGINAL150');
@@ -2913,16 +2981,23 @@ test(customFieldsBoundary
         coldFields, currentFields, clock, minuteClock, originalHashes: originals, compiledCandidateScope: 'Same immutable native field owner after latest-link deletion, alongside the actual production guide worker and unchanged caption/transport gates.',
       }, null, 2));
     }
+    if (effectiveCustomBoundary === 'absent') {
+      for (const path of [cold[0], paths[3], boundaryGuidePath!]) {
+        expect(decodeCustomPage(process.env.FFMPEG_PATH!, path, 150)).toBe('');
+        expect(decodeCustomPage(process.env.FFMPEG_PATH!, path, 151)).toBe('');
+      }
+    }
+    if (effectiveCustomBoundary) expect(Date.now()).toBeLessThan(utc(originalScopeUntil!));
     expect(current().SeedId).toBe(before.SeedId); expect(current().RuntimeId).not.toBeNull(); expect(current().Revoked).toBe(0);
     expect(current().Revision).toBeGreaterThan(before.Revision);
     for (const [index, channel] of fixture.channels.entries()) {
-      expect(sha256(originalBytes(fixture, channel))).toBe(originals[index]); expect(acceptedGuide(fixture, channel)).toEqual(accepted[index]);
+      expect(sha256(originalBytes(fixture, channel))).toBe(originals[index]); expect(acceptedGuide(fixture, channel, Boolean(effectiveCustomBoundary) && index === 0)).toEqual(accepted[index]);
       expect(fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel)).toEqual(rows[index]);
     }
     expect(installation(isolatedWebHost.databasePath)).toEqual(selected); compareInstalledFiles(selected);
     expect(fixture.calls()).toEqual([]); expect(errors).toEqual([]);
     writeFileSync(info.outputPath('burst-caption-host-receipt.json'), JSON.stringify({ source_sha256: sha256(readFileSync(burstSource!)),
-      scanner_sha256: sha256(readFileSync(scanner!)), media, inventory, maps, captures, sourceFrames, cueReceipts, subtitleEvents, videoEnds, rawGateFailures, before, after: current(), customElements, programmeTitles: [...programmeTitles],
+      scanner_sha256: sha256(readFileSync(scanner!)), effectiveCustomBoundary, originalScopeUntil, refreshRole, media, inventory, maps, captures, sourceFrames, cueReceipts, subtitleEvents, videoEnds, rawGateFailures, before, after: current(), customElements, programmeTitles: [...programmeTitles],
       scope: 'actual Local rescan, ordinary profile, published producer, cold/clear/boundary transport and fixed page888 RGBA cue/clear oracle' }, null, 2));
     expect(rawGateFailures).toEqual([]);
   } finally {

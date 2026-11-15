@@ -121,6 +121,22 @@ exists for that proposal. Repeated candidate reads must identify one exact
 immutable runtime. Packet hashes, expiry, signalling and complete-cycle ACKs
 remain mandatory; neither diagnostic case waives caption timing.
 
+For the effective custom-page guide-worker proof, set
+`ERSATZRS_TELETEXT_CUSTOM_EFFECTIVE_BOUNDARY=present`, then run a separate
+`absent` trial with `--grep "actual Lua interval with scanned captions"`.
+Use the same qualified runtime, scanner, caption sources and production package
+as the custom-field boundary case. Actual Lua Reset selects the production
+profile for the exact eight-programme interval. Effective Check/publication and
+its saved refresh role must retain the immutable original after last-element
+deletion or first-link addition. The existing ordinary captures, native guide
+regeneration, independent custom/guide decoding, source-bound 8 ms caption
+checks, raw cadence flags, AV, packet hashes and sink ACKs stay mandatory.
+The boundary oracle checks the exact saved original Lua cap separately from
+source-guide expiry; a runtime cannot extend or substitute it. Test discovery
+and the offline oracle controls do not establish a passing runtime trial.
+Lua Off/custom presence, exact interval expiry/Base return and other retained
+part3c gates remain separate required proofs.
+
 ## Add-on list task workspace
 
 AMM-N-01B task routes render populated native forms through

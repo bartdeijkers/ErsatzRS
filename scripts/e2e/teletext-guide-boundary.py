@@ -22,13 +22,23 @@ WINDOW_EVENTS = {"sink_window_prepared", "sink_window_first_packet_written", "si
 
 
 def candidate(event, metadata, channel):
-    require(event.get("channel_id") == channel and event.get("authored_selected") is True
-            and event.get("original_valid_until") is None, "candidate is not this authored Base guide")
+    require(event.get("channel_id") == channel and event.get("authored_selected") is True,
+            "candidate is not this authored guide")
     row = one([row for row in metadata if row["channel_id"] == channel and row["seed_id"] == event.get("guide_seed_id")
                and row["runtime_id"] == event.get("guide_runtime_id")
                and row["generation_id"] == event.get("generation_id")], "guide candidate lacks exact saved metadata")
     until = H.utc_ns(event.get("guide_valid_until"))
     require(until == H.utc_ns(row["valid_until"]), "guide expiry differs from its saved metadata")
+    # Base still requires no original scope. Effective output must name the
+    # exact immutable Lua cap; no fresh source/runtime may extend that cap.
+    original = row.get("original_valid_until")
+    observed = event.get("original_valid_until")
+    if original is None:
+        require(observed is None, "Base guide unexpectedly carries an original scope")
+    else:
+        original_ns = H.utc_ns(original)
+        require(H.utc_ns(observed) == original_ns, "Lua expiry differs from its saved original")
+        require(until <= original_ns, "guide expiry exceeds its original Lua scope")
     return until
 
 
@@ -240,6 +250,7 @@ def qualify(raw, log, request, tables, sections, metadata):
     return {"capture_sha256": H.digest(raw), "log_sha256": H.digest(log), "proposal_slot": link["proposal_slot"],
             "intent_id": intent["intent_id"], "output_epoch": owner["output_epoch"], "path": path,
             "original_valid_until": initial["guide_valid_until"], "fresh_valid_until": recovered["guide_valid_until"],
+            "original_lua_valid_until": initial.get("original_valid_until"),
             "recovered_packet": cut, "packet_count": count, "qualified_windows": len(windows),
             "unretained_suffix_window_events": len(suffix), "ignored_unflushed_windows": ignored,
             "terminal_undelivered_proposals": terminal, "fresh_runtime_observations": len(observations),

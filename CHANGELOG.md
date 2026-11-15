@@ -81,7 +81,10 @@ release section when tagging a release.
   those intervals. Scripted Health follows the published original, including
   automatic-guide generations. Published output also retains its original custom
   pages or absence when later links would exceed the producer limit. Complete
-  scoped playback remains under qualification.
+  production-guide renewal and ordinary output during Lua On now retain those
+  published pages or absence through later link edits, with current programme
+  and clock fields. Lua Off and exact interval expiry/Base return remain under
+  qualification.
 - Custom-page drafts preserve their checked dynamic-field bindings with the
   page revision, so later element edits cannot replace the saved refresh recipe.
   The native output can refresh changed display pages without clearing unchanged

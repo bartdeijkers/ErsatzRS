@@ -119,7 +119,54 @@ def repeated_observation(values, runtime=50):
     values[2]["log_end"] = len(values[1])
 
 
+def effective_scope(values, until=100_000_000_000):
+    previous = values[1]
+    old = b'original_valid_until=None'
+    new = b'original_valid_until=' + json.dumps(utc(until)).encode()
+    values[1] = previous.replace(old, new)
+    values[2]["log_first_chunk"] = len(previous[:values[2]["log_first_chunk"]].replace(old, new))
+    values[2]["log_end"] = len(values[1])
+    for row in values[5]:
+        row["original_valid_until"] = utc(until)
+
+
 class GuideBoundaryTests(unittest.TestCase):
+    def test_effective_guide_keeps_exact_original_cap_and_all_boundary_checks(self):
+        values = fixture()
+        effective_scope(values)
+        result = G.qualify(*values)
+        self.assertEqual(result["capture_sha256"], G.H.digest(values[0]))
+        self.assertEqual(result["original_lua_valid_until"], utc(100_000_000_000))
+        self.assertFalse(result["caption_timing_waived"])
+
+    def test_effective_runtime_cannot_extend_original_lua_cap(self):
+        values = fixture()
+        effective_scope(values, 60_000_000_000)
+        with self.assertRaisesRegex(G.H.ProofError, "exceeds its original Lua scope"):
+            G.qualify(*values)
+
+    def test_recovered_effective_output_cannot_substitute_a_new_lua_cap(self):
+        values = fixture()
+        effective_scope(values)
+        values[1] = b"".join(line.replace(utc(100_000_000_000).encode(), utc(101_000_000_000).encode())
+            if b'event="monitor_recovered"' in line else line for line in values[1].splitlines(keepends=True))
+        values[2]["log_end"] = len(values[1])
+        with self.assertRaisesRegex(G.H.ProofError, "differs from its saved original"):
+            G.qualify(*values)
+
+    def test_effective_cap_requires_saved_metadata_and_base_keeps_absence(self):
+        values = fixture()
+        effective_scope(values)
+        for row in values[5]:
+            del row["original_valid_until"]
+        with self.assertRaisesRegex(G.H.ProofError, "Base guide unexpectedly"):
+            G.qualify(*values)
+        values = fixture()
+        for row in values[5]:
+            row["original_valid_until"] = utc(100_000_000_000)
+        with self.assertRaisesRegex(G.H.ProofError, "UTC timestamp is not a string"):
+            G.qualify(*values)
+
     def test_repeated_observations_keep_one_exact_fresh_runtime_identity(self):
         values = fixture()
         repeated_observation(values)
