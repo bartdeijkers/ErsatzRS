@@ -5,7 +5,8 @@ use std::time::Instant;
 use ersatzrs_app::{
     teletext_design_documents::{
         decode_teletext_design_documents, decode_teletext_effective_design_documents,
-        TeletextDesignDocumentBudget, TeletextSavedResourceTransmission, TeletextSavedV1Region,
+        TeletextDesignDocumentBudget, TeletextSavedDocumentSource,
+        TeletextSavedResourceTransmission, TeletextSavedV1Region,
     },
     ApplicationServices,
 };
@@ -101,6 +102,17 @@ struct Recipe {
     document_bytes: usize,
 }
 
+/// Decoded originals already validate unique producers and source association.
+/// Effective callers map through producer bindings so Off members never shift bytes.
+fn original_custom_pages<'a>(
+    mut sources: impl Iterator<Item = (&'a str, &'a [u8])>,
+) -> Result<Option<ersatzrs_domain::TeletextCustomPagesWire>, Error> {
+    sources
+        .find(|(addon, _)| ersatzrs_domain::is_teletext_custom_pages_producer(addon))
+        .map(|(_, bytes)| serde_json::from_slice(bytes).map_err(|_| Error::NeedsReview))
+        .transpose()
+}
+
 async fn recipe(
     application: &ApplicationServices,
     seed: &ersatzrs_core::repositories::TeletextGuideRefreshSeed,
@@ -150,18 +162,14 @@ async fn recipe(
                     return Err(Error::NeedsReview);
                 }
                 Ok(Recipe {
-                    custom_pages: parts
-                        .selection
-                        .bindings
-                        .iter()
-                        .position(|binding| {
-                            ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id)
-                        })
-                        .map(|index| {
-                            serde_json::from_slice(parts.sources[index].bytes())
-                                .map_err(|_| Error::NeedsReview)
-                        })
-                        .transpose()?,
+                    custom_pages: original_custom_pages(
+                        parts
+                            .selection
+                            .bindings
+                            .iter()
+                            .map(|binding| binding.addon_id.as_str())
+                            .zip(parts.sources.iter().map(TeletextSavedDocumentSource::bytes)),
+                    )?,
                     entry_addon_id: parts.entry_addon_id.ok_or(Error::NeedsReview)?,
                     entry: parts.entry.ok_or(Error::NeedsReview)?,
                     region: parts.v1_region,
@@ -184,13 +192,20 @@ async fn recipe(
                 {
                     return Err(Error::NeedsReview);
                 }
+                let custom_pages = original_custom_pages(
+                    parts
+                        .producer_bindings
+                        .iter()
+                        .map(|index| parts.selection.bindings[*index].addon_id())
+                        .zip(parts.sources.iter().map(TeletextSavedDocumentSource::bytes)),
+                )?;
                 Ok(Recipe {
                     entry_addon_id: parts.entry_addon_id.ok_or(Error::NeedsReview)?,
                     entry: parts.entry.ok_or(Error::NeedsReview)?,
                     region: parts.v1_region,
                     transmissions: parts.resource_transmissions,
                     original_selection: TeletextGuideRefreshSelection::Effective(parts.selection),
-                    custom_pages: None,
+                    custom_pages,
                     document_bytes,
                 })
             }
@@ -249,6 +264,44 @@ fn retain_published_host_membership(
         let index = current
             .bindings
             .partition_point(|binding| binding.addon_id < host.addon_id);
+        current.bindings.insert(index, host.clone());
+    }
+    Ok(current)
+}
+
+/// Keep fresh real Base profiles, exact Lua origins and the manual host member.
+fn retain_published_effective_host_membership(
+    original: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+    mut current: ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+) -> Result<ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot, Error> {
+    let installed = |binding: &&TeletextEffectiveBindingSnapshot| {
+        !ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())
+    };
+    if !same_original_scope(original, &current)
+        || !original
+            .bindings
+            .iter()
+            .filter(installed)
+            .map(TeletextEffectiveBindingSnapshot::addon_id)
+            .eq(current
+                .bindings
+                .iter()
+                .filter(installed)
+                .map(TeletextEffectiveBindingSnapshot::addon_id))
+    {
+        return Err(Error::NeedsReview);
+    }
+    current
+        .bindings
+        .retain(|binding| !ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id()));
+    if let Some(host) = original
+        .bindings
+        .iter()
+        .find(|binding| ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id()))
+    {
+        let index = current
+            .bindings
+            .partition_point(|binding| binding.addon_id() < host.addon_id());
         current.bindings.insert(index, host.clone());
     }
     Ok(current)
@@ -365,18 +418,7 @@ async fn prepare_effective_baseline(
     let TeletextGuideRefreshSelection::Effective(original) = &recipe.original_selection else {
         return Err(Error::NeedsReview);
     };
-    if !original
-        .bindings
-        .iter()
-        .map(TeletextEffectiveBindingSnapshot::addon_id)
-        .eq(selection
-            .bindings
-            .iter()
-            .map(TeletextEffectiveBindingSnapshot::addon_id))
-        || !same_original_scope(original, &selection)
-    {
-        return Err(Error::NeedsReview);
-    }
+    let selection = retain_published_effective_host_membership(original, selection)?;
     let (candidate, qualification) =
         super::guide::prepare_effective_current(application, pool, input, &selection, preparation)
             .await
@@ -425,6 +467,7 @@ fn same_original_scope(
 #[cfg(test)]
 mod published_host_tests {
     use super::*;
+    use chrono::Utc;
     use ersatzrs_domain::{teletext_custom_pages_selection, TeletextChannelSelectionSnapshot};
 
     #[test]
@@ -458,5 +501,81 @@ mod published_host_tests {
             retain_published_host_membership(&original, wrong_channel),
             Err(Error::NeedsReview)
         ));
+    }
+
+    #[test]
+    fn effective_guide_retains_host_recipe_but_never_rewrites_lua_scope() {
+        use ersatzrs_domain::{
+            TeletextEffectiveChannelSelectionSnapshot, TeletextOverrideInterval,
+            TeletextOverrideState, TeletextPublishedOverride,
+        };
+        let until = Utc::now() + chrono::Duration::minutes(10);
+        let host = teletext_custom_pages_selection(1);
+        let mut addon = host.clone();
+        addon.addon_id = "org.example.guide".to_owned();
+        addon.installation.addon_id.clone_from(&addon.addon_id);
+        let original = TeletextEffectiveChannelSelectionSnapshot {
+            channel_id: 1,
+            bindings: vec![
+                TeletextEffectiveBindingSnapshot::Base(host.clone()),
+                TeletextEffectiveBindingSnapshot::Base(addon.clone()),
+                TeletextEffectiveBindingSnapshot::Scripted(TeletextPublishedOverride {
+                    playout_id: 10,
+                    interval: TeletextOverrideInterval {
+                        start: Utc::now() - chrono::Duration::minutes(1),
+                        finish: until,
+                        state: TeletextOverrideState::Off {
+                            channel_id: 1,
+                            addon_id: "org.example.off".to_owned(),
+                        },
+                    },
+                }),
+            ],
+            valid_until: Some(until),
+        };
+        let mut current = original.clone();
+        current.bindings.remove(0);
+        let TeletextEffectiveBindingSnapshot::Base(base) = &mut current.bindings[0] else {
+            unreachable!()
+        };
+        base.profile_revision += 1;
+        let retained =
+            retain_published_effective_host_membership(&original, current.clone()).unwrap();
+        assert_eq!(
+            retained.bindings[0],
+            TeletextEffectiveBindingSnapshot::Base(host)
+        );
+        assert_eq!(retained.bindings[1..], current.bindings);
+        assert_eq!(
+            retain_published_effective_host_membership(&current, retained).unwrap(),
+            current
+        );
+        for change in ["owner", "boundary", "member", "channel", "expired"] {
+            let mut invalid = current.clone();
+            match change {
+                "owner" => {
+                    let TeletextEffectiveBindingSnapshot::Scripted(scope) =
+                        &mut invalid.bindings[1]
+                    else {
+                        unreachable!()
+                    };
+                    scope.playout_id += 1;
+                }
+                "boundary" => invalid.valid_until = None,
+                "member" => {
+                    invalid.bindings.remove(0);
+                }
+                "channel" => invalid.channel_id += 1,
+                "expired" => invalid.valid_until = Some(Utc::now() - chrono::Duration::seconds(1)),
+                _ => unreachable!(),
+            }
+            assert!(
+                matches!(
+                    retain_published_effective_host_membership(&original, invalid),
+                    Err(Error::NeedsReview)
+                ),
+                "{change}"
+            );
+        }
     }
 }

@@ -216,3 +216,97 @@ fn a_profile_change_refreshes_once_and_runtime_identity_cache_eviction_preserves
     assert_eq!(cache.values.len(), MAX_TELETEXT_GUIDE_REFRESH_BATCH);
     assert!(cache.get(&key(257, None)).is_some());
 }
+
+fn effective_selection() -> ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot {
+    use ersatzrs_domain::{
+        TeletextOverrideInterval, TeletextOverrideState, TeletextPublishedOverride,
+    };
+    let until = Utc::now() + chrono::Duration::minutes(10);
+    ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot {
+        channel_id: 1,
+        bindings: vec![
+            TeletextEffectiveBindingSnapshot::Base(base_selection(1).bindings.remove(0)),
+            TeletextEffectiveBindingSnapshot::Scripted(TeletextPublishedOverride {
+                playout_id: 10,
+                interval: TeletextOverrideInterval {
+                    start: Utc::now() - chrono::Duration::minutes(1),
+                    finish: until,
+                    state: TeletextOverrideState::Off {
+                        channel_id: 1,
+                        addon_id: "org.example.off".to_owned(),
+                    },
+                },
+            }),
+        ],
+        valid_until: Some(until),
+    }
+}
+
+#[test]
+fn effective_guide_policy_keeps_published_host_and_exact_scripted_scope() {
+    let original = effective_selection();
+    let mut with_host = original.clone();
+    with_host.bindings.insert(
+        0,
+        TeletextEffectiveBindingSnapshot::Base(ersatzrs_domain::teletext_custom_pages_selection(1)),
+    );
+    for (published, current) in [(&original, &with_host), (&with_host, &original)] {
+        assert_eq!(
+            effective_configuration(published, current),
+            Configuration::Current
+        );
+        let mut updated = current.clone();
+        let base = updated
+            .bindings
+            .iter_mut()
+            .find_map(|binding| match binding {
+                TeletextEffectiveBindingSnapshot::Base(base)
+                    if !ersatzrs_domain::is_teletext_custom_pages_producer(&base.addon_id) =>
+                {
+                    Some(base)
+                }
+                _ => None,
+            })
+            .unwrap();
+        base.profile_revision += 1;
+        assert_eq!(
+            effective_configuration(published, &updated),
+            Configuration::Changed
+        );
+        let mut wrong_scope = current.clone();
+        wrong_scope.valid_until = None;
+        assert_eq!(
+            effective_configuration(published, &wrong_scope),
+            Configuration::Disabled
+        );
+        let mut removed = current.clone();
+        removed.bindings.pop();
+        assert_eq!(
+            effective_configuration(published, &removed),
+            Configuration::Disabled
+        );
+        let mut owner = current.clone();
+        let TeletextEffectiveBindingSnapshot::Scripted(scope) = owner.bindings.last_mut().unwrap()
+        else {
+            unreachable!()
+        };
+        scope.playout_id += 1;
+        assert_eq!(
+            effective_configuration(published, &owner),
+            Configuration::Disabled
+        );
+    }
+    // Published host pages still run when all installed producers are Off.
+    let mut only_off = original.clone();
+    only_off.bindings.remove(0);
+    let mut host_off = only_off.clone();
+    host_off.bindings.insert(0, with_host.bindings[0].clone());
+    assert_eq!(
+        effective_configuration(&host_off, &only_off),
+        Configuration::Current
+    );
+    assert_eq!(
+        effective_configuration(&only_off, &host_off),
+        Configuration::Disabled
+    );
+}

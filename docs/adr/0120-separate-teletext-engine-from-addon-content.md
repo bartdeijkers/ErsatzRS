@@ -226,6 +226,16 @@ expiry/deadline and is followed by full artifact and accepted-pointer
 confirmation; historical reload and fresh publication do not gain output
 authority. Later link addition cannot fill a published absence, and removing
 the last element cannot replace saved source bytes or trigger producer/Lua replay.
+Effective automatic guide regeneration also retains the immutable manual host
+source and its presence or absence. Only real Base profiles retain the guide
+worker's existing current-profile refresh behavior; Scripted owners, targets,
+intervals and the original transition remain exact. The native add-on adapter
+checks these published dependencies at resolution and immediately before
+launch; fresh Check still checks full current membership. Unsupported adapters
+refuse this published-source invocation. The same comparison fences derived
+runtime settlement and output confirmation, with manual generation/source,
+lease, qualification and transaction checks unchanged. This does not authorize
+new publication or substitute current element content.
 Native custom-field reads/encoding share the existing response-local bounded
 admission wait used by cached guide confirmation. A temporary occupied slot can
 wait for actual worker release within the original deadline and cadence; it
@@ -235,9 +245,9 @@ immutable original design revision. It changes only the invocation correlation;
 rows, element revisions and field recipes remain exact, even after subsequent
 element edits or deletion. New Check still uses the latest linked elements.
 This reuse retains the existing selection, response, admission and deadline
-fences and grants no independent publication authority. Effective/Scripted
-automatic guide regeneration and response-owned field refresh remain separate open
-requirements.
+fences and grants no independent publication authority. Response-owned
+Effective/Scripted field refresh and joined automatic-guide output acceptance
+remain open requirements.
 The parity record retains the completed Base refresh/restart/reporting scope and
 the distinct remaining Effective/Scripted integration. The element's subpage cycle
 time and the remaining acceptance evidence stay open there.

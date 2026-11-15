@@ -27,6 +27,7 @@ const OFF: &str = "org.example.off";
 struct Repository {
     selection: Selection,
     final_selection: Mutex<Option<Mutation<Selection>>>,
+    latest_snapshot: Mutex<Option<Selection>>,
     reads: AtomicUsize,
 }
 
@@ -39,6 +40,7 @@ impl Repository {
                 valid_until: None,
             },
             final_selection: Mutex::new(None),
+            latest_snapshot: Mutex::new(None),
             reads: AtomicUsize::new(0),
         }
     }
@@ -53,7 +55,13 @@ impl TeletextProfileRepository for Repository {
     ) -> RepositoryResult<Mutation<Selection>> {
         assert_eq!(channel, self.selection.channel_id);
         self.reads.fetch_add(1, Ordering::SeqCst);
-        Ok(Mutation::Saved(self.selection.clone()))
+        Ok(Mutation::Saved(
+            self.latest_snapshot
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| self.selection.clone()),
+        ))
     }
     async fn recheck_effective_channel_snapshot(
         &self,
@@ -270,7 +278,11 @@ async fn effective_rendered_scope_is_checked_before_preflight_and_first_producer
             &context,
             input_budget(),
             |_, _, _, _| async { panic!("changed rendered scope invoked a producer") },
-            (deadline(), Some(&expected)),
+            (
+                deadline(),
+                Some(&expected),
+                TeletextCustomPageSource::Current,
+            ),
         )
         .await;
         assert!(matches!(result, Err(Error::SelectionChanged)));
@@ -297,7 +309,11 @@ async fn effective_rendered_scope_preserves_original_deadline_and_final_fence() 
             *repo.final_selection.lock().unwrap() = Some(Mutation::Saved(changed));
             async move { Ok(receipt(selection, addon, response(A))) }
         },
-        (original_deadline, Some(&repo.selection)),
+        (
+            original_deadline,
+            Some(&repo.selection),
+            TeletextCustomPageSource::Current,
+        ),
     )
     .await;
     assert!(matches!(result, Err(Error::SelectionChanged)));
@@ -865,5 +881,211 @@ async fn published_effective_recheck_retains_host_membership_without_renewing_sc
                 Err(Error::SelectionChanged)
             ));
         }
+    }
+}
+
+fn published_custom_wire() -> ersatzrs_domain::TeletextCustomPagesWire {
+    ersatzrs_domain::TeletextCustomPagesWire {
+        schema: ersatzrs_domain::TELETEXT_CUSTOM_PAGES_SCHEMA.to_owned(),
+        generation: fixtures::context().generation.to_owned(),
+        pages: vec![ersatzrs_domain::TeletextCustomPageWire {
+            element_id: 1,
+            element_revision: 3,
+            page: 150,
+            subcode: 0,
+            national_option: 0,
+            rows: vec![ersatzrs_domain::TeletextCustomRowWire::new(1, &[b'X'; 40])],
+            dynamic_fields: vec![],
+        }],
+    }
+}
+
+#[tokio::test]
+async fn effective_guide_preparation_keeps_published_host_presence_and_absence() {
+    for published_host in [false, true] {
+        let host = Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(9));
+        let mut original =
+            Repository::new(vec![scripted(fixtures::binding(A, 1)), off()]).selection;
+        original.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+        let mut current = original.clone();
+        if published_host {
+            original.bindings.insert(0, host.clone());
+        } else {
+            current.bindings.insert(0, host);
+        }
+        let mut repo = Repository::new(vec![]);
+        repo.selection = current;
+        let wire = published_custom_wire();
+        let bytes = serde_json::to_vec(&wire).unwrap();
+        let source = TeletextCustomPageSource::Published(published_host.then_some(&wire));
+        let observed = Mutex::new(vec![]);
+        let expires = deadline();
+        let input = prepare_with_ports_expected(
+            &repo,
+            9,
+            Some(A),
+            &fixtures::context(),
+            input_budget(),
+            |selection, addon_id, _, producer_deadline| {
+                assert_eq!(*selection, original);
+                assert!(producer_deadline <= expires);
+                observed.lock().unwrap().push(addon_id.clone());
+                let stdout = if ersatzrs_domain::is_teletext_custom_pages_producer(&addon_id) {
+                    bytes.clone()
+                } else {
+                    response(&addon_id)
+                };
+                async move { Ok(receipt(selection, addon_id, stdout)) }
+            },
+            (expires, Some(&original), source),
+        )
+        .await
+        .unwrap();
+        let prepared = input.validate(fixtures::document_budget()).unwrap();
+        assert_eq!(prepared.selection.as_ref(), &original);
+        assert_eq!(prepared.sources.len(), usize::from(published_host) + 1);
+        assert_eq!(observed.lock().unwrap().last().unwrap(), A);
+        if published_host {
+            assert_eq!(prepared.sources[0].bytes(), bytes);
+            assert_eq!(prepared.producer_bindings, [0, 1]);
+        } else {
+            assert_eq!(prepared.producer_bindings, [0]);
+        }
+        // A fresh Check keeps the full current membership fence.
+        assert!(matches!(
+            preparation_selection(
+                Arc::new(repo.selection.clone()),
+                Some(&original),
+                TeletextCustomPageSource::Current,
+            ),
+            Err(Error::SelectionChanged)
+        ));
+    }
+}
+
+#[test]
+fn effective_guide_source_association_and_real_scope_changes_stay_strict() {
+    let mut original = Repository::new(vec![scripted(fixtures::binding(A, 1)), off()]).selection;
+    original.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+    let wire = published_custom_wire();
+    assert!(matches!(
+        preparation_selection(
+            Arc::new(original.clone()),
+            Some(&original),
+            TeletextCustomPageSource::Published(Some(&wire)),
+        ),
+        Err(Error::SelectionShape)
+    ));
+    original.bindings.insert(
+        0,
+        Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(9)),
+    );
+    assert!(matches!(
+        preparation_selection(
+            Arc::new(original.clone()),
+            Some(&original),
+            TeletextCustomPageSource::Published(None),
+        ),
+        Err(Error::SelectionShape)
+    ));
+    assert!(matches!(
+        preparation_selection(
+            Arc::new(original.clone()),
+            None,
+            TeletextCustomPageSource::Published(Some(&wire)),
+        ),
+        Err(Error::SelectionShape)
+    ));
+    for change in ["owner", "expiry", "member", "profile"] {
+        let mut current = original.clone();
+        match change {
+            "expiry" => current.valid_until = None,
+            "member" => {
+                current.bindings.pop();
+            }
+            "owner" | "profile" => {
+                let Binding::Scripted(scope) = &mut current.bindings[1] else {
+                    unreachable!()
+                };
+                if change == "owner" {
+                    scope.playout_id += 1;
+                } else {
+                    let TeletextOverrideState::Enabled(profile) = &mut scope.interval.state else {
+                        unreachable!()
+                    };
+                    profile.profile_revision += 1;
+                }
+            }
+            _ => unreachable!(),
+        }
+        assert!(
+            matches!(
+                preparation_selection(
+                    Arc::new(current),
+                    Some(&original),
+                    TeletextCustomPageSource::Published(Some(&wire)),
+                ),
+                Err(Error::SelectionChanged)
+            ),
+            "{change}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn effective_guide_rechecks_real_scope_after_invocation_without_adopting_new_host() {
+    for change in ["host", "owner", "profile", "expiry"] {
+        let mut repo = Repository::new(vec![scripted(fixtures::binding(A, 1)), off()]);
+        repo.selection.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+        let mut changed = repo.selection.clone();
+        match change {
+            "host" => changed.bindings.insert(
+                0,
+                Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(9)),
+            ),
+            "expiry" => changed.valid_until = None,
+            "owner" | "profile" => {
+                let Binding::Scripted(scope) = &mut changed.bindings[0] else {
+                    unreachable!()
+                };
+                if change == "owner" {
+                    scope.playout_id += 1;
+                } else {
+                    let TeletextOverrideState::Enabled(profile) = &mut scope.interval.state else {
+                        unreachable!()
+                    };
+                    profile.profile_revision += 1;
+                }
+            }
+            _ => unreachable!(),
+        }
+        let result = prepare_with_ports_expected(
+            &repo,
+            9,
+            Some(A),
+            &fixtures::context(),
+            input_budget(),
+            |selection, addon_id, _, _| {
+                *repo.latest_snapshot.lock().unwrap() = Some(changed.clone());
+                async move { Ok(receipt(selection, addon_id, response(A))) }
+            },
+            (
+                deadline(),
+                Some(&repo.selection),
+                TeletextCustomPageSource::Published(None),
+            ),
+        )
+        .await;
+        if change == "host" {
+            let prepared = result
+                .unwrap()
+                .validate(fixtures::document_budget())
+                .unwrap();
+            assert_eq!(prepared.selection.as_ref(), &repo.selection);
+            assert_eq!(prepared.sources.len(), 1);
+        } else {
+            assert!(matches!(result, Err(Error::SelectionChanged)), "{change}");
+        }
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
     }
 }

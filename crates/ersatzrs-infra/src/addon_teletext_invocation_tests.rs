@@ -167,6 +167,7 @@ async fn request_preflight_precedes_even_an_unavailable_database_or_filesystem()
             cancellation: None,
             selection: None,
             effective_selection: None,
+            effective_host_membership: EffectiveHostMembership::Current,
             hold: None,
         };
         assert_eq!(
@@ -291,6 +292,7 @@ mod unix {
                 cancellation,
                 selection: None,
                 effective_selection: None,
+                effective_host_membership: EffectiveHostMembership::Current,
                 hold: None,
             }
         }
@@ -524,6 +526,139 @@ mod unix {
             guard.hold_work(),
         )
         .await
+    }
+
+    async fn link_effective_host(fixture: &Fixture) {
+        let element: i64 = sqlx::query_scalar(r#"INSERT INTO "TeletextElement"
+            ("Name","SourceFormat","SourceFileName","Document","PageNumber","SubpageCount","CycleSeconds","Bindings","Revision","UpdatedAt")
+            VALUES ('Scoped host fixture',1,'fixture.tti',X'41',336,1,10,'[]',1,'2026-11-15T00:00:00Z') RETURNING "Id""#)
+            .fetch_one(&fixture.pool).await.unwrap();
+        sqlx::query(r#"INSERT INTO "ChannelTeletextElement" ("ChannelId","TeletextElementId","IsEnabled") VALUES (1,?,1)"#)
+            .bind(element).execute(&fixture.pool).await.unwrap();
+    }
+
+    async fn scripted_fixture() -> Fixture {
+        let fixture = Fixture::with_contracts(
+            "cat >/dev/null; printf '%s' \"$ERSATZRS_ADDON_SETTING_VALUE\"",
+            &["teletext.pages.v2"],
+        )
+        .await;
+        let [_, other] = fixture.profile_selections(false).await;
+        let repo = crate::repositories::SqliteTeletextProfileRepository(fixture.pool.clone());
+        let candidate = saved(
+            repo.candidate_snapshot(1, &fixture.manifest.id, other.profile_id)
+                .await
+                .unwrap(),
+        );
+        install_effective_interval(&fixture, 1, Some(&candidate)).await;
+        fixture
+    }
+
+    #[tokio::test]
+    async fn published_effective_invocation_retains_host_membership_without_relaxing_fresh_check() {
+        for published_host in [false, true] {
+            let fixture = scripted_fixture().await;
+            if published_host {
+                link_effective_host(&fixture).await;
+            }
+            let original = effective_snapshot(&fixture, 1).await;
+            if published_host {
+                sqlx::query(r#"DELETE FROM "ChannelTeletextElement" WHERE "ChannelId"=1"#)
+                    .execute(&fixture.pool)
+                    .await
+                    .unwrap();
+            } else {
+                link_effective_host(&fixture).await;
+            }
+            assert!(matches!(
+                invoke_effective_fixture(&fixture, Arc::clone(&original)).await,
+                Err(TeletextInvocationError::AdmissionRejected)
+            ));
+            assert!(!fixture.marker.exists());
+            let locker = ersatzrs_core::locking::EntityLocker::new();
+            let guard = ersatzrs_core::locking::TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+            let receipt = invoke_published_effective_profile_with_deadline_and_hold(
+                fixture.pool.clone(),
+                Arc::clone(&original),
+                fixture.manifest.id.clone(),
+                AddonRuntimeContext::default(),
+                request_for_contract(TeletextPageContract::V2),
+                std::time::Instant::now() + Duration::from_secs(10),
+                guard.hold_work(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(receipt.stdout, b"right");
+            assert!(Arc::ptr_eq(&receipt.selection, &original));
+            assert!(fixture.marker.exists());
+            assert_eq!(receipt.generation, "fixture");
+            assert!(guard.is_settled());
+        }
+    }
+
+    #[tokio::test]
+    async fn published_effective_prelaunch_allows_only_host_link_edits() {
+        for change in ["add-host", "delete-host", "profile", "owner", "boundary"] {
+            let fixture = scripted_fixture().await;
+            if change == "delete-host" {
+                link_effective_host(&fixture).await;
+            }
+            let original = effective_snapshot(&fixture, 1).await;
+            let blocker = Blocker::new("canonicalize", 1);
+            let _release = ReleaseOnDrop(Arc::clone(&blocker));
+            let mut invocation = fixture.invocation(None);
+            invocation.input = request_for_contract(TeletextPageContract::V2);
+            invocation.effective_selection = Some(original);
+            invocation.effective_host_membership = EffectiveHostMembership::Published;
+            let mut fence = ResolutionFence::new(Instant::now() + Duration::from_secs(5));
+            fence.hook = Some(blocker.hook());
+            let task = tokio::spawn(invoke_with_fence(invocation, fence, Duration::from_secs(1)));
+            blocker.wait_entered().await;
+            match change {
+                "add-host" => link_effective_host(&fixture).await,
+                "delete-host" => {
+                    sqlx::query(r#"DELETE FROM "ChannelTeletextElement" WHERE "ChannelId"=1"#)
+                        .execute(&fixture.pool)
+                        .await
+                        .unwrap();
+                }
+                "profile" => {
+                    sqlx::query(r#"UPDATE "TeletextProfileSetting" SET "Value"='changed' WHERE "Key"='VALUE'"#)
+                        .execute(&fixture.pool).await.unwrap();
+                }
+                "owner" => {
+                    sqlx::query(r#"DELETE FROM "PlayoutTeletextInterval" WHERE "PlayoutId"=1"#)
+                        .execute(&fixture.pool)
+                        .await
+                        .unwrap();
+                }
+                "boundary" => {
+                    sqlx::query(
+                        r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=? WHERE "PlayoutId"=1"#,
+                    )
+                    .bind(crate::repositories::common::encode_datetime(
+                        chrono::Utc::now() + chrono::Duration::minutes(1),
+                    ))
+                    .execute(&fixture.pool)
+                    .await
+                    .unwrap();
+                }
+                _ => unreachable!(),
+            }
+            blocker.release();
+            let result = task.await.unwrap();
+            if change.ends_with("host") {
+                assert_eq!(result.unwrap().stdout, b"right");
+                assert!(fixture.marker.exists());
+            } else {
+                assert_eq!(
+                    result,
+                    Err(TeletextInvocationError::AdmissionRejected),
+                    "{change}"
+                );
+                assert!(!fixture.marker.exists());
+            }
+        }
     }
 
     #[tokio::test]

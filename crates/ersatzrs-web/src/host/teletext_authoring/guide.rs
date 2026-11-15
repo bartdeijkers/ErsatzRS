@@ -11,6 +11,7 @@ use crate::host::{
     teletext_channel_documents::EncodedChannelTeletextDocumentCandidate,
     teletext_effective_channel_documents::{
         prepare_effective_channel_teletext_document_candidate_checked_with_hold,
+        prepare_effective_channel_teletext_document_candidate_for_refresh,
         EncodedEffectiveChannelTeletextDocumentCandidate,
     },
     teletext_guide::{
@@ -18,6 +19,10 @@ use crate::host::{
         TeletextGuideCaptureError,
     },
     teletext_runtime_policy::{NativeTeletextAuthoringInput, NativeTeletextAuthoringPolicy},
+};
+use ersatzrs_app::{
+    teletext_channel_documents::TeletextCustomPageSource,
+    teletext_effective_channel_documents::TeletextEffectiveChannelDocumentRefresh,
 };
 use ersatzrs_core::{
     locking::TeletextWorkHold, repositories::TeletextGuideGenerationQualification,
@@ -36,8 +41,7 @@ pub(super) struct GuidePreparationContext<'a> {
     pub(super) policy: &'a NativeTeletextAuthoringPolicy,
     pub(super) deadline: Instant,
     pub(super) hold: TeletextWorkHold,
-    pub(super) custom_page_source:
-        ersatzrs_app::teletext_channel_documents::TeletextCustomPageSource<'a>,
+    pub(super) custom_page_source: TeletextCustomPageSource<'a>,
 }
 
 impl<'a> GuidePreparationContext<'a> {
@@ -46,8 +50,7 @@ impl<'a> GuidePreparationContext<'a> {
             policy: &operation.policy,
             deadline: operation.deadline,
             hold: operation.guard.hold_work(),
-            custom_page_source:
-                ersatzrs_app::teletext_channel_documents::TeletextCustomPageSource::Current,
+            custom_page_source: TeletextCustomPageSource::Current,
         }
     }
 }
@@ -290,17 +293,38 @@ async fn prepare_effective_inner(
         .policy
         .encoding_policy(input)
         .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
-    let candidate = prepare_effective_channel_teletext_document_candidate_checked_with_hold(
-        application,
-        input.channel_id(),
-        Some(input.entry_addon_id()),
-        &context,
-        policy,
-        selection,
-        (operation.deadline, operation.hold.clone()),
-    )
-    .await
-    .map_err(channel_error)?;
+    let candidate = match operation.custom_page_source {
+        TeletextCustomPageSource::Current => {
+            prepare_effective_channel_teletext_document_candidate_checked_with_hold(
+                application,
+                input.channel_id(),
+                Some(input.entry_addon_id()),
+                &context,
+                policy,
+                selection,
+                (operation.deadline, operation.hold.clone()),
+            )
+            .await
+            .map_err(channel_error)?
+        }
+        TeletextCustomPageSource::Published(custom_pages) => {
+            prepare_effective_channel_teletext_document_candidate_for_refresh(
+                application,
+                input.channel_id(),
+                Some(input.entry_addon_id()),
+                &context,
+                policy,
+                TeletextEffectiveChannelDocumentRefresh {
+                    selection,
+                    custom_pages,
+                    deadline: operation.deadline,
+                    hold: operation.hold.clone(),
+                },
+            )
+            .await
+            .map_err(channel_error)?
+        }
+    };
     captured
         .recheck_context(&mut read)
         .await

@@ -21,7 +21,8 @@ use ersatzrs_domain::{
 use crate::{
     teletext_channel_documents::{
         preflight_contracts, ChannelTeletextDocumentError as Error,
-        TeletextChannelDocumentInputBudget, TeletextChannelRequestTemplates, PREPARATION_TIMEOUT,
+        TeletextChannelDocumentInputBudget, TeletextChannelRequestTemplates,
+        TeletextCustomPageSource, PREPARATION_TIMEOUT,
     },
     teletext_effective_profiles::TeletextEffectiveProfileRuntimeReceipt,
     teletext_guide::SuppliedTeletextGuideContext,
@@ -32,6 +33,17 @@ use crate::{
     teletext_profiles::TeletextProfileRuntimeError,
     ApplicationServices,
 };
+
+/// Frozen manual host source for effective automatic guide preparation.
+/// This data grants no invocation/publication authority; all real dependencies,
+/// exact Lua scope, original deadline and actual work ownership stay mandatory.
+pub struct TeletextEffectiveChannelDocumentRefresh<'a> {
+    pub selection: &'a Selection,
+    /// None preserves the manual original's explicit host absence.
+    pub custom_pages: Option<&'a ersatzrs_domain::TeletextCustomPagesWire>,
+    pub deadline: Instant,
+    pub hold: TeletextWorkHold,
+}
 
 /// Complete fenced raw output, still uninterpreted and unpublished.
 pub struct BoundEffectiveChannelTeletextDocumentInput {
@@ -225,6 +237,7 @@ impl ApplicationServices {
             context,
             budget,
             (admission.0, admission.1, None),
+            TeletextCustomPageSource::Current,
         )
         .await
     }
@@ -249,6 +262,30 @@ impl ApplicationServices {
             context,
             budget,
             (admission.0, admission.1, Some(admission.2)),
+            TeletextCustomPageSource::Current,
+        )
+        .await
+    }
+
+    /// Prepare automatic guide output from an immutable manual host source.
+    /// # Errors
+    /// Rejects changed real dependencies/Lua scope, invalid original association,
+    /// deadline, budgets, runtime failures or a failed final dependency fence.
+    pub async fn invoke_effective_channel_teletext_documents_for_refresh(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+        refresh: TeletextEffectiveChannelDocumentRefresh<'_>,
+    ) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error> {
+        self.invoke_effective_channel_teletext_documents_with_optional_expectation(
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            (refresh.deadline, refresh.hold, Some(refresh.selection)),
+            TeletextCustomPageSource::Published(refresh.custom_pages),
         )
         .await
     }
@@ -260,6 +297,7 @@ impl ApplicationServices {
         context: &SuppliedTeletextGuideContext<'_>,
         budget: TeletextChannelDocumentInputBudget,
         admission: (Instant, TeletextWorkHold, Option<&Selection>),
+        custom_page_source: TeletextCustomPageSource<'_>,
     ) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error> {
         let (deadline, hold, expected) = admission;
         prepare_with_ports_expected(
@@ -282,13 +320,24 @@ impl ApplicationServices {
                                 _ => None,
                             })
                             .ok_or(TeletextProfileRuntimeError::InvalidRequest)?;
-                        let receipt = Box::pin(self.produce_teletext_custom_pages(
-                            base,
-                            &input,
-                            deadline,
-                            Some(&selection),
-                        ))
-                        .await?;
+                        let receipt = if let TeletextCustomPageSource::Published(published) =
+                            custom_page_source
+                        {
+                            super::teletext_elements::broadcast::reproduce_published_custom_pages(
+                                base,
+                                &input,
+                                deadline,
+                                published.ok_or(TeletextProfileRuntimeError::InvalidRequest)?,
+                            )?
+                        } else {
+                            Box::pin(self.produce_teletext_custom_pages(
+                                base,
+                                &input,
+                                deadline,
+                                Some(&selection),
+                            ))
+                            .await?
+                        };
                         return Ok(TeletextEffectiveProfileRuntimeReceipt {
                             selection,
                             addon_id,
@@ -296,13 +345,23 @@ impl ApplicationServices {
                             generation: receipt.generation,
                         });
                     }
-                    self.invoke_effective_teletext_profile_before_with_hold(
-                        selection, addon_id, input, deadline, hold,
-                    )
-                    .await
+                    match custom_page_source {
+                        TeletextCustomPageSource::Current => {
+                            self.invoke_effective_teletext_profile_before_with_hold(
+                                selection, addon_id, input, deadline, hold,
+                            )
+                            .await
+                        }
+                        TeletextCustomPageSource::Published(_) => {
+                            self.invoke_published_effective_teletext_profile_before_with_hold(
+                                selection, addon_id, input, deadline, hold,
+                            )
+                            .await
+                        }
+                    }
                 }
             },
-            (deadline, expected),
+            (deadline, expected, custom_page_source),
         )
         .await
     }
@@ -355,7 +414,7 @@ where
         context,
         budget,
         invoke,
-        (supplied_deadline, None),
+        (supplied_deadline, None, TeletextCustomPageSource::Current),
     )
     .await
 }
@@ -367,7 +426,7 @@ async fn prepare_with_ports_expected<F, Fut>(
     context: &SuppliedTeletextGuideContext<'_>,
     budget: TeletextChannelDocumentInputBudget,
     mut invoke: F,
-    admission: (Instant, Option<&Selection>),
+    admission: (Instant, Option<&Selection>, TeletextCustomPageSource<'_>),
 ) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error>
 where
     F: FnMut(Arc<Selection>, String, Vec<u8>, Instant) -> Fut,
@@ -375,37 +434,10 @@ where
         Output = Result<TeletextEffectiveProfileRuntimeReceipt, TeletextProfileRuntimeError>,
     >,
 {
-    let (supplied_deadline, expected) = admission;
-    let started = Instant::now();
-    let maximum = started
-        .checked_add(PREPARATION_TIMEOUT)
-        .ok_or(Error::TimedOut)?;
-    let mut deadline = maximum.min(supplied_deadline);
-    check_deadline(deadline)?;
-    let selection = match repository
-        .effective_channel_snapshot(channel_id, Utc::now())
-        .await
-        .map_err(|_| Error::StorageUnavailable)?
-    {
-        Mutation::Saved(selection) => Arc::new(selection),
-        Mutation::Rejected(reason) => return Err(Error::SelectionRejected(reason)),
-    };
-    if let Some(boundary) = selection.valid_until {
-        // Measure after observation: storage time is part of the original budget.
-        let observed_monotonic = Instant::now();
-        let remaining = (boundary - Utc::now())
-            .to_std()
-            .map_err(|_| Error::TimedOut)?;
-        deadline = deadline.min(
-            observed_monotonic
-                .checked_add(remaining.min(PREPARATION_TIMEOUT))
-                .ok_or(Error::TimedOut)?,
-        );
-    }
-    check_deadline(deadline)?;
-    if expected.is_some_and(|expected| expected != selection.as_ref()) {
-        return Err(Error::SelectionChanged);
-    }
+    let (supplied_deadline, expected, custom_page_source) = admission;
+    let (selection, deadline) =
+        observe_selection_before(repository, channel_id, supplied_deadline).await?;
+    let selection = preparation_selection(selection, expected, custom_page_source)?;
     validate_selection(&selection, channel_id, budget.max_producers)?;
     let producers = selection
         .bindings
@@ -464,7 +496,12 @@ where
                 })?;
         receipts.push((binding, receipt));
     }
-    recheck(repository, &selection, deadline).await?;
+    match custom_page_source {
+        TeletextCustomPageSource::Current => recheck(repository, &selection, deadline).await?,
+        TeletextCustomPageSource::Published(_) => {
+            recheck_published(repository, &selection, deadline).await?;
+        }
+    }
     Ok(BoundEffectiveChannelTeletextDocumentInput {
         selection,
         generation: context.generation.to_owned(),
@@ -473,6 +510,71 @@ where
         entry_addon_id: entry,
         deadline,
     })
+}
+
+/// Bound the initial storage observation and producer lease with one original clock.
+async fn observe_selection_before(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+    supplied_deadline: Instant,
+) -> Result<(Arc<Selection>, Instant), Error> {
+    let started = Instant::now();
+    let maximum = started
+        .checked_add(PREPARATION_TIMEOUT)
+        .ok_or(Error::TimedOut)?;
+    let mut deadline = maximum.min(supplied_deadline);
+    check_deadline(deadline)?;
+    let selection = match repository
+        .effective_channel_snapshot(channel_id, Utc::now())
+        .await
+        .map_err(|_| Error::StorageUnavailable)?
+    {
+        Mutation::Saved(selection) => Arc::new(selection),
+        Mutation::Rejected(reason) => return Err(Error::SelectionRejected(reason)),
+    };
+    if let Some(boundary) = selection.valid_until {
+        // Measure after observation: storage time is part of the original budget.
+        let observed_monotonic = Instant::now();
+        let remaining = (boundary - Utc::now())
+            .to_std()
+            .map_err(|_| Error::TimedOut)?;
+        deadline = deadline.min(
+            observed_monotonic
+                .checked_add(remaining.min(PREPARATION_TIMEOUT))
+                .ok_or(Error::TimedOut)?,
+        );
+    }
+    check_deadline(deadline)?;
+    Ok((selection, deadline))
+}
+
+fn preparation_selection(
+    current: Arc<Selection>,
+    expected: Option<&Selection>,
+    source: TeletextCustomPageSource<'_>,
+) -> Result<Arc<Selection>, Error> {
+    match source {
+        TeletextCustomPageSource::Current => {
+            if expected.is_some_and(|expected| expected != current.as_ref()) {
+                return Err(Error::SelectionChanged);
+            }
+            Ok(current)
+        }
+        TeletextCustomPageSource::Published(document) => {
+            let expected = expected.ok_or(Error::SelectionShape)?;
+            if !ersatzrs_domain::teletext_published_effective_selection_matches(&current, expected)
+            {
+                return Err(Error::SelectionChanged);
+            }
+            let has_host = expected.bindings.iter().any(|binding| {
+                ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())
+            });
+            if has_host != document.is_some() {
+                return Err(Error::SelectionShape);
+            }
+            Ok(Arc::new(expected.clone()))
+        }
+    }
 }
 
 fn contract(binding: &Binding) -> Option<TeletextPageContract> {

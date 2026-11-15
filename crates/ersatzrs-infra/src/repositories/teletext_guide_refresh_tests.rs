@@ -576,10 +576,29 @@ async fn refresh_stale_owner_source_selection_budget_and_manual_head_cannot_prom
     check_draft_alone_keeps_fresh_until_source_loss().await;
 }
 
-#[tokio::test]
-async fn refresh_effective_scope_end_cannot_be_extended_by_new_source_or_runtime() {
+async fn effective_seeded(
+    published_host: bool,
+) -> (
+    crate::repositories::teletext_publications::effective::tests::Fixture,
+    SqliteTeletextGenerationRepository,
+    TeletextEffectiveGuideGenerationSave,
+) {
     use crate::repositories::teletext_publications::effective::tests as scoped;
-    let fixture = scoped::Fixture::new(true).await;
+    let mut fixture = scoped::Fixture::new(true).await;
+    if published_host {
+        use ersatzrs_core::repositories::TeletextProfileRepository as _;
+        scoped::link_custom_page(&fixture.base).await;
+        let profiles =
+            crate::repositories::SqliteTeletextProfileRepository(fixture.base.repo.0.clone());
+        let ersatzrs_core::repositories::TeletextProfileMutation::Saved(selection) = profiles
+            .effective_channel_snapshot(1, Utc::now())
+            .await
+            .unwrap()
+        else {
+            panic!("host scope unavailable")
+        };
+        fixture.save.selection = selection;
+    }
     let repo = SqliteTeletextGenerationRepository(fixture.base.repo.0.clone());
     let mut qualification = qualification(&fixture.base).await;
     let scope_until = fixture.save.selection.valid_until.unwrap();
@@ -614,6 +633,13 @@ async fn refresh_effective_scope_end_cannot_be_extended_by_new_source_or_runtime
             .await
             .unwrap(),
     );
+    (fixture, repo, save)
+}
+
+#[tokio::test]
+async fn refresh_effective_scope_end_cannot_be_extended_by_new_source_or_runtime() {
+    let (fixture, repo, save) = effective_seeded(false).await;
+    let scope_until = save.original.selection.valid_until.unwrap();
     let port = repo.guide_refresh().unwrap();
     assert!(port
         .current(1, TeletextGuideRefreshRole::Base, MAXIMUM)
@@ -672,14 +698,14 @@ async fn refresh_effective_scope_end_cannot_be_extended_by_new_source_or_runtime
 
 fn output_confirmation(
     current: &ersatzrs_core::repositories::TeletextGuideRefreshCurrentMetadata,
-    fixture: &Fixture,
+    selection: TeletextGuideRefreshSelection,
     now: chrono::DateTime<Utc>,
 ) -> OutputConfirmation {
     OutputConfirmation {
         seed: current.seed.clone(),
         current_revision: current.revision,
         runtime: current.runtime.clone(),
-        selection: TeletextGuideRefreshSelection::Base(fixture.selection.clone()),
+        selection,
         qualification: current.runtime.as_ref().map_or_else(
             || current.seed.qualification.clone(),
             |runtime| runtime.qualification.clone(),
@@ -696,7 +722,11 @@ async fn check_fresh_output(
     now: chrono::DateTime<Utc>,
 ) {
     let port = repo.guide_refresh().unwrap();
-    let expected = output_confirmation(metadata, fixture, now);
+    let expected = output_confirmation(
+        metadata,
+        TeletextGuideRefreshSelection::Base(fixture.selection.clone()),
+        now,
+    );
     assert_eq!(
         port.confirm_output(&expected, now, &OutputCheck::Fresh(check()), MAXIMUM)
             .await
@@ -751,7 +781,11 @@ async fn check_stale_output(
         .await
         .unwrap()
         .unwrap();
-    let expected = output_confirmation(&metadata, fixture, now);
+    let expected = output_confirmation(
+        &metadata,
+        TeletextGuideRefreshSelection::Base(fixture.selection.clone()),
+        now,
+    );
     assert_eq!(expected.status, TeletextGuideRefreshStatus::Stale);
     sqlx::query("UPDATE Channel SET Name='Changed stale output source' WHERE Id=2")
         .execute(&repo.0)
@@ -852,7 +886,11 @@ async fn check_new_pending_preserves_old_read(
         .await
         .unwrap()
         .unwrap();
-    let expected = output_confirmation(&metadata, fixture, now);
+    let expected = output_confirmation(
+        &metadata,
+        TeletextGuideRefreshSelection::Base(fixture.selection.clone()),
+        now,
+    );
     assert_eq!(expected.status, status);
     let output_check = if status == TeletextGuideRefreshStatus::Fresh {
         OutputCheck::Fresh(check())
@@ -1026,7 +1064,11 @@ async fn check_source_loss_during_review(
         .await
         .unwrap()
         .unwrap();
-    let expected = output_confirmation(&metadata, fixture, loss);
+    let expected = output_confirmation(
+        &metadata,
+        TeletextGuideRefreshSelection::Base(fixture.selection.clone()),
+        loss,
+    );
     assert_eq!(
         port.confirm_output(
             &expected,
@@ -1044,3 +1086,93 @@ async fn check_source_loss_during_review(
 
 #[path = "teletext_guide_refresh_health_tests.rs"]
 mod health;
+
+#[tokio::test]
+async fn effective_guide_settlement_and_reopened_output_keep_published_host_membership() {
+    use crate::repositories::teletext_publications::effective::tests as scoped;
+    for published_host in [false, true] {
+        let (fixture, repo, save) = effective_seeded(published_host).await;
+        let scope = &save.original.selection;
+        let port = repo.guide_refresh().unwrap();
+        let current = port
+            .current(1, TeletextGuideRefreshRole::Effective, MAXIMUM)
+            .await
+            .unwrap()
+            .unwrap();
+        let now = current.next_due_at;
+        let claim = claim_at(port, current.seed.id, now).await;
+        if published_host {
+            sqlx::query(r#"DELETE FROM "ChannelTeletextElement" WHERE "ChannelId"=1"#)
+                .execute(&repo.0)
+                .await
+                .unwrap();
+        } else {
+            scoped::link_custom_page(&fixture.base).await;
+        }
+        let mut candidate = candidate_at(&fixture.base, now).await;
+        candidate.selection = TeletextGuideRefreshSelection::Effective(scope.clone());
+        candidate.snapshot.qualification.valid_until = candidate
+            .snapshot
+            .qualification
+            .valid_until
+            .min(scope.valid_until.unwrap());
+        let manual = unchanged_manual(&repo).await;
+        let M::Accepted(runtime) = port
+            .complete(&claim, &candidate, now, &check(), MAXIMUM)
+            .await
+            .unwrap()
+        else {
+            panic!("published host runtime rejected")
+        };
+        assert_eq!(runtime.saved, candidate.snapshot);
+        assert!(runtime.saved.qualification.valid_until <= scope.valid_until.unwrap());
+        assert_eq!(unchanged_manual(&repo).await, manual);
+        let reopened = SqliteTeletextGenerationRepository(
+            open(&fixture.base.root.path().join("requests.sqlite")).await,
+        );
+        let port = reopened.guide_refresh().unwrap();
+        let current = port
+            .observe_current(1, TeletextGuideRefreshRole::Effective, MAXIMUM)
+            .await
+            .unwrap()
+            .unwrap();
+        let confirmation = output_confirmation(&current, candidate.selection.clone(), now);
+        assert_eq!(
+            port.confirm_output(&confirmation, now, &OutputCheck::Fresh(check()), MAXIMUM)
+                .await
+                .unwrap(),
+            M::Accepted(())
+        );
+        assert_eq!(unchanged_manual(&reopened).await, manual);
+        // A real Lua membership change must reject both output and a new runtime.
+        sqlx::query(r#"DELETE FROM "PlayoutTeletextInterval" WHERE "AddonId"='org.example.publication.second'"#)
+            .execute(&reopened.0).await.unwrap();
+        assert_eq!(
+            port.confirm_output(&confirmation, now, &OutputCheck::Fresh(check()), MAXIMUM)
+                .await
+                .unwrap(),
+            M::Rejected(R::Publication(P::SelectionChanged))
+        );
+        assert_eq!(
+            port.changed(current.seed.id, now + ChronoDuration::seconds(1))
+                .await
+                .unwrap(),
+            M::Accepted(())
+        );
+        let changed = port
+            .observe_current(1, TeletextGuideRefreshRole::Effective, MAXIMUM)
+            .await
+            .unwrap()
+            .unwrap();
+        let next = changed.next_due_at;
+        assert!(next < scope.valid_until.unwrap());
+        let claim = claim_at(port, current.seed.id, next).await;
+        assert_eq!(
+            port.complete(&claim, &candidate, next, &check(), MAXIMUM)
+                .await
+                .unwrap(),
+            M::Rejected(R::Publication(P::SelectionChanged))
+        );
+        assert_eq!(unchanged_manual(&reopened).await, manual);
+    }
+}

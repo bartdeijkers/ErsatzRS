@@ -822,6 +822,23 @@ pub trait AddonRuntime: Send + Sync {
         Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
     }
 
+    /// Invoke a published effective guide member with only host membership frozen.
+    /// Real add-on/Scripted dependencies, original deadline and actual cleanup
+    /// remain exact. Unsupported adapters must refuse, never use current elements.
+    async fn invoke_published_effective_teletext_profile_before_with_hold(
+        &self,
+        _selection: std::sync::Arc<ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+        _addon_id: String,
+        _input: Vec<u8>,
+        _deadline: std::time::Instant,
+        _hold: ersatzrs_core::locking::TeletextWorkHold,
+    ) -> Result<
+        crate::teletext_effective_profiles::TeletextEffectiveProfileRuntimeReceipt,
+        crate::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
+    }
+
     /// Invoke one exact profile selection without publication authority.
     /// Native adapters retain process cleanup after caller abandonment.
     async fn invoke_teletext_profile(

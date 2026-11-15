@@ -318,6 +318,60 @@ fn base_configuration(
     }
 }
 
+fn effective_configuration(
+    expected: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+    current: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+) -> Configuration {
+    let published_host = expected
+        .bindings
+        .iter()
+        .any(|binding| ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id()));
+    if !published_host
+        && current.bindings.iter().all(|binding| {
+            ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())
+                || !binding.enabled()
+        })
+    {
+        return Configuration::Disabled;
+    }
+    let before: BTreeSet<_> = expected
+        .bindings
+        .iter()
+        .filter(|binding| !ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id()))
+        .map(TeletextEffectiveBindingSnapshot::addon_id)
+        .collect();
+    let after: BTreeSet<_> = current
+        .bindings
+        .iter()
+        .filter(|binding| !ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id()))
+        .map(TeletextEffectiveBindingSnapshot::addon_id)
+        .collect();
+    if !before.is_subset(&after) {
+        return Configuration::Disabled;
+    }
+    if before != after {
+        return Configuration::NeedsReview;
+    }
+    let scripted = |binding: &TeletextEffectiveBindingSnapshot| match binding {
+        TeletextEffectiveBindingSnapshot::Scripted(scope) => Some(scope.clone()),
+        TeletextEffectiveBindingSnapshot::Base(_) => None,
+    };
+    if expected.valid_until != current.valid_until
+        || !expected
+            .bindings
+            .iter()
+            .filter_map(scripted)
+            .eq(current.bindings.iter().filter_map(scripted))
+    {
+        return Configuration::Disabled;
+    }
+    if ersatzrs_domain::teletext_published_effective_selection_matches(current, expected) {
+        Configuration::Current
+    } else {
+        Configuration::Changed
+    }
+}
+
 async fn configuration(
     application: &ApplicationServices,
     expected: &TeletextGuideRefreshSelection,
@@ -365,43 +419,7 @@ async fn configuration(
             else {
                 return Ok(Configuration::Disabled);
             };
-            if current.bindings.iter().all(|binding| !binding.enabled()) {
-                return Ok(Configuration::Disabled);
-            }
-            let before: BTreeSet<_> = expected
-                .bindings
-                .iter()
-                .map(TeletextEffectiveBindingSnapshot::addon_id)
-                .collect();
-            let after: BTreeSet<_> = current
-                .bindings
-                .iter()
-                .map(TeletextEffectiveBindingSnapshot::addon_id)
-                .collect();
-            if !before.is_subset(&after) {
-                return Ok(Configuration::Disabled);
-            }
-            if before != after {
-                return Ok(Configuration::NeedsReview);
-            }
-            let scripted = |binding: &TeletextEffectiveBindingSnapshot| match binding {
-                TeletextEffectiveBindingSnapshot::Scripted(scope) => Some(scope.clone()),
-                TeletextEffectiveBindingSnapshot::Base(_) => None,
-            };
-            if expected.valid_until != current.valid_until
-                || !expected
-                    .bindings
-                    .iter()
-                    .filter_map(scripted)
-                    .eq(current.bindings.iter().filter_map(scripted))
-            {
-                return Ok(Configuration::Disabled);
-            }
-            Ok(if &current == expected {
-                Configuration::Current
-            } else {
-                Configuration::Changed
-            })
+            Ok(effective_configuration(expected, &current))
         }
     }
 }

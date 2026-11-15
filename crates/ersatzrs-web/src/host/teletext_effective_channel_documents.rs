@@ -6,9 +6,12 @@
 use std::{fmt, sync::Arc, time::Instant};
 
 use ersatzrs_app::{
-    teletext_channel_documents::{TeletextChannelRequestTemplates, PREPARATION_TIMEOUT},
+    teletext_channel_documents::{
+        TeletextChannelRequestTemplates, TeletextCustomPageSource, PREPARATION_TIMEOUT,
+    },
     teletext_effective_channel_documents::{
         PreparedEffectiveChannelTeletextDocumentParts, PreparedEffectiveChannelTeletextDocuments,
+        TeletextEffectiveChannelDocumentRefresh,
     },
     teletext_guide::SuppliedTeletextGuideContext,
     teletext_profile_documents::{TeletextProfileDocument, TeletextValidatedDocumentSource},
@@ -175,7 +178,7 @@ pub(super) async fn prepare_effective_channel_teletext_document_candidate_with_h
         context,
         policy,
         None,
-        admission,
+        (admission.0, admission.1, TeletextCustomPageSource::Current),
     )
     .await
 }
@@ -199,7 +202,34 @@ pub(super) async fn prepare_effective_channel_teletext_document_candidate_checke
         context,
         policy,
         Some(expected),
-        admission,
+        (admission.0, admission.1, TeletextCustomPageSource::Current),
+    )
+    .await
+}
+
+/// Prepare derived guide content from a fenced immutable manual host recipe.
+/// Real add-on/Scripted dependencies and original work/deadline remain mandatory.
+pub(super) async fn prepare_effective_channel_teletext_document_candidate_for_refresh(
+    application: &ApplicationServices,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    refresh: TeletextEffectiveChannelDocumentRefresh<'_>,
+) -> Result<EncodedEffectiveChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError>
+{
+    prepare_effective_checked(
+        application,
+        channel_id,
+        entry_addon_id,
+        context,
+        policy,
+        Some(refresh.selection),
+        (
+            refresh.deadline,
+            refresh.hold,
+            TeletextCustomPageSource::Published(refresh.custom_pages),
+        ),
     )
     .await
 }
@@ -211,14 +241,29 @@ async fn prepare_effective_checked(
     context: &SuppliedTeletextGuideContext<'_>,
     policy: TeletextChannelDocumentEncodingPolicy,
     expected: Option<&TeletextEffectiveChannelSelectionSnapshot>,
-    admission: (Instant, TeletextWorkHold),
+    admission: (Instant, TeletextWorkHold, TeletextCustomPageSource<'_>),
 ) -> Result<EncodedEffectiveChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError>
 {
-    let (deadline, hold) = admission;
+    let (deadline, hold, custom_page_source) = admission;
     check_deadline(deadline)?;
     let mut budget = policy.input;
     budget.max_producers = maximum_producers(&policy);
-    let input = if let Some(expected) = expected {
+    let input = if let TeletextCustomPageSource::Published(custom_pages) = custom_page_source {
+        application
+            .invoke_effective_channel_teletext_documents_for_refresh(
+                channel_id,
+                entry_addon_id,
+                context,
+                budget,
+                TeletextEffectiveChannelDocumentRefresh {
+                    selection: expected.ok_or(ChannelTeletextDocumentEncodingError::Association)?,
+                    custom_pages,
+                    deadline,
+                    hold: hold.clone(),
+                },
+            )
+            .await?
+    } else if let Some(expected) = expected {
         application
             .invoke_effective_channel_teletext_documents_with_expected_hold(
                 channel_id,
@@ -246,12 +291,24 @@ async fn prepare_effective_checked(
     })
     .await
     .map_err(|_| ChannelTeletextDocumentEncodingError::WorkerFailed)??;
-    application
-        .recheck_effective_channel_teletext_document_selection(
-            candidate.selection(),
-            candidate.deadline(),
-        )
-        .await?;
+    match custom_page_source {
+        TeletextCustomPageSource::Current => {
+            application
+                .recheck_effective_channel_teletext_document_selection(
+                    candidate.selection(),
+                    candidate.deadline(),
+                )
+                .await?;
+        }
+        TeletextCustomPageSource::Published(_) => {
+            application
+                .recheck_published_effective_channel_teletext_document_selection(
+                    candidate.selection(),
+                    candidate.deadline(),
+                )
+                .await?;
+        }
+    }
     check_deadline(candidate.deadline())?;
     Ok(candidate)
 }

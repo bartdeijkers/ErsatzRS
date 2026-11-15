@@ -74,8 +74,10 @@ release section when tagging a release.
 - Lua/Scripted custom-page checks use the interval's selected add-on page
   ranges. Stored originals retain the custom-page source beside Scripted On/Off
   selections. Native recovery keeps their published custom pages or absence after
-  current links change, without producer or Lua replay. Ordinary scoped playback
-  and live refresh remain under qualification.
+  current links change, without producer or Lua replay. Automatic guide
+  regeneration also retains the published custom-page source and membership,
+  with the original Lua scope and real add-on dependencies still exact. Ordinary
+  scoped playback and response-owned field refresh remain under qualification.
 - Custom-page drafts preserve their checked dynamic-field bindings with the
   page revision, so later element edits cannot replace the saved refresh recipe.
   The native output can refresh changed display pages without clearing unchanged
