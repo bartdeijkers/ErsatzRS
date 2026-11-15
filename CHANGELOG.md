@@ -71,22 +71,14 @@ release section when tagging a release.
 
 ### Changed
 
-- Lua/Scripted custom-page checks use the interval's selected add-on page
-  ranges. Stored originals retain the custom-page source beside Scripted On/Off
-  selections. Native recovery keeps their published custom pages or absence after
-  current links change, without producer or Lua replay. Automatic guide
-  regeneration also retains the published custom-page source and membership,
-  with the original Lua scope and real add-on dependencies still exact. Native
-  field loading retains the same published recipe and final fixed rows during
-  those intervals. Scripted Health follows the published original, including
-  automatic-guide generations. Published output also retains its original custom
-  pages or absence when later links would exceed the producer limit. Complete
-  production-guide renewal and ordinary output during Lua On now retain those
-  published pages or absence through later link edits, with current programme
-  and clock fields. Ordinary Lua Off output now preserves those same published
-  choices and restores the independent base at the original interval expiry.
-  Field failures remain page-local, with a retained Health warning until
-  acknowledged recovery. Final integration qualification remains open.
+- Custom-page checks use the add-on page ranges selected by the active
+  Lua/Scripted interval. Published pages, their field bindings and their absence
+  remain stable during On/Off intervals when elements or links change. Guide and
+  field refresh retain that original source; new Check/Publish actions still
+  validate current settings. Interval expiry restores the independently accepted
+  base output. Field failures stay page-local, with Health warnings retained
+  until acknowledged recovery. Published output also remains valid at the
+  producer limit when later custom links would exceed it.
 - Custom-page drafts preserve their checked dynamic-field bindings with the
   page revision, so later element edits cannot replace the saved refresh recipe.
   The native output can refresh changed display pages without clearing unchanged

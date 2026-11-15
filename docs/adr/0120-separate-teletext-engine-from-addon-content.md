@@ -246,11 +246,12 @@ rows, element revisions and field recipes remain exact, even after subsequent
 element edits or deletion. New Check still uses the latest linked elements.
 This reuse retains the existing selection, response, admission and deadline
 fences and grants no independent publication authority. Response-owned
-Effective/Scripted field refresh and joined automatic-guide output acceptance
-remain open requirements.
-The parity record retains the completed Base refresh/restart/reporting scope and
-the distinct remaining Effective/Scripted integration. The element's subpage cycle
-time and the remaining acceptance evidence stay open there.
+Effective/Scripted field refresh and joined automatic-guide output now retain the
+published recipe and membership. Actual Lua On/Off ordinary-output proof covers
+page-local field failure/Health/recovery and original interval expiry to the
+independent Base original. The parity record owns exact evidence and outstanding
+integration/CI gates. Base refresh/restart/reporting remains complete within its
+recorded scope; subpage cycle time and the other custom-page packages stay open.
 Acceptance needs unit and native publication evidence, one independently decoded
 stream that carries a custom page with refreshed fields next to the TV-guide
 pages, and the Playwright flows for upload, field binding, channel linking and
