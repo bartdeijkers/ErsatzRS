@@ -29,6 +29,7 @@ use super::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
     teletext_designs::NativeTeletextDesignError,
     teletext_effective_designs::{
+        reload_effective_original_for_output_with_hold,
         reload_effective_original_for_publication_with_hold, RestoredEffectiveOriginalDesign,
     },
     teletext_generations::{
@@ -359,7 +360,7 @@ pub async fn reload_accepted_effective_teletext_generation(
     ) {
         return Err(NativeTeletextGenerationError::ArtifactMismatch);
     }
-    let Some((design, deadline)) = reload_effective_original_for_publication_with_hold(
+    let Some((design, deadline)) = reload_effective_original_for_output_with_hold(
         application,
         generation.request.design_id,
         generation.request.revision,

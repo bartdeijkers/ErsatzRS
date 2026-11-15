@@ -1240,3 +1240,31 @@ fn native_text_spellings_survive_cold_composition_with_raw_command_and_storage_f
     )
     .is_err());
 }
+
+#[test]
+fn base_subpage_producers_can_reach_the_existing_whole_channel_producer_limit() {
+    let maximum = MAX_TELETEXT_PAGE_RECORDS;
+    let producers = (0..=u16::MAX)
+        .filter_map(|value| TeletextSubcode::new(value).ok())
+        .take(maximum)
+        .map(|subcode| producer(draft(vec![page(100, subcode.get())]), vec![]))
+        .collect();
+    let mut limits = budget();
+    limits.max_producers = maximum;
+    limits.max_input_items = maximum * 16;
+    limits.max_input_content_bytes = maximum * 16;
+    limits.max_work = maximum * maximum * 4;
+    limits.service.max_records = maximum;
+    limits.declarations.max_displays = maximum;
+    let composed = TeletextColdProducerComposition::new(
+        producers,
+        TeletextProducerCompositionMetadata {
+            language: language("eng"),
+            entry: address(100, 0),
+        },
+        limits,
+    )
+    .unwrap();
+    assert_eq!(composed.producers().len(), maximum);
+    assert_eq!(composed.composed().semantic().base().pages.len(), maximum);
+}

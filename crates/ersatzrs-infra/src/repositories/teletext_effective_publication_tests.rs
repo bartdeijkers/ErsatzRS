@@ -1182,3 +1182,106 @@ async fn original_scope_streaming_comparison_rejects_loss_duplicates_and_wrong_s
     );
     assert!(!matches(unknown.as_bytes(), scope));
 }
+
+pub(in crate::repositories) async fn link_custom_page(base: &BaseFixture) {
+    let element: i64 = sqlx::query_scalar(r#"INSERT INTO "TeletextElement"
+        ("Name","SourceFormat","SourceFileName","Document","PageNumber","SubpageCount","CycleSeconds","Bindings","Revision","UpdatedAt")
+        VALUES ('Scoped host fixture',1,'fixture.tti',X'41',336,1,10,'[]',1,'2026-11-15T00:00:00Z') RETURNING "Id""#)
+        .fetch_one(&base.repo.0).await.unwrap();
+    sqlx::query(r#"INSERT INTO "ChannelTeletextElement" ("ChannelId","TeletextElementId","IsEnabled") VALUES (1,?,1)"#)
+        .bind(element).execute(&base.repo.0).await.unwrap();
+}
+
+#[tokio::test]
+async fn published_effective_host_membership_survives_link_edits_but_new_publication_stays_exact() {
+    for version in [
+        TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+        TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    ] {
+        for published_host in [false, true] {
+            let mut fixture = Fixture::new(true).await;
+            if published_host {
+                link_custom_page(&fixture.base).await;
+                let selection = saved(
+                    fixture
+                        .profiles
+                        .effective_channel_snapshot(1, Utc::now())
+                        .await
+                        .unwrap(),
+                );
+                fixture.save = design(&fixture.base, selection, b"{\"format_version\":2}").await;
+            }
+            let request = fixture.request().await;
+            let mut input = fixture.generation_save(request.clone(), None);
+            input.artifact_version = version;
+            let generation = accepted(
+                fixture
+                    .generations
+                    .accept_effective(&input, DOCUMENT_BUDGET, deadline())
+                    .await
+                    .unwrap(),
+            );
+            let original_counts = counts(&fixture.base.repo.0).await;
+            if published_host {
+                sqlx::query(r#"DELETE FROM "ChannelTeletextElement" WHERE "ChannelId"=1"#)
+                    .execute(&fixture.base.repo.0)
+                    .await
+                    .unwrap();
+            } else {
+                link_custom_page(&fixture.base).await;
+            }
+            assert_eq!(
+                fixture
+                    .profiles
+                    .recheck_effective_channel_snapshot(&fixture.save.selection, Utc::now())
+                    .await
+                    .unwrap(),
+                TeletextProfileMutation::Rejected(TeletextProfileRejection::Conflict)
+            );
+            let mut republish = fixture.save.clone();
+            republish.expected_request_id = Some(request.id);
+            assert_eq!(
+                fixture
+                    .base
+                    .repo
+                    .request_effective(&republish, DOCUMENT_BUDGET, deadline())
+                    .await
+                    .unwrap(),
+                M::Rejected(R::SelectionChanged)
+            );
+            assert_eq!(fixture.confirm(&generation).await, G::Accepted(()));
+            let reopened = SqliteTeletextGenerationRepository(
+                open(&fixture.base.root.path().join("requests.sqlite")).await,
+            );
+            assert_eq!(
+                reopened.current_effective(1).await.unwrap(),
+                Some(generation.clone())
+            );
+            assert_eq!(
+                reopened
+                    .confirm_current_effective(
+                        &generation,
+                        &fixture.save.selection,
+                        DOCUMENT_BUDGET,
+                        deadline()
+                    )
+                    .await
+                    .unwrap(),
+                G::Accepted(())
+            );
+            assert_eq!(counts(&fixture.base.repo.0).await, original_counts);
+            fixture.assert_base_unchanged().await;
+            // Host-only comparison must not change exact Lua origins or their expiry.
+            sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=? WHERE "AddonId"=?"#)
+                .bind(crate::repositories::common::encode_datetime(
+                    Utc::now() + chrono::Duration::minutes(9),
+                ))
+                .bind(FIRST)
+                .execute(&fixture.base.repo.0)
+                .await
+                .unwrap();
+            assert!(matches!(fixture.confirm(&generation).await, G::Rejected(_)));
+            fixture.assert_base_unchanged().await;
+        }
+    }
+}

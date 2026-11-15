@@ -216,6 +216,26 @@ element planner.
 The background guide coordinator uses the same frozen host-membership comparison
 when classifying dependency changes; only actual installed producer removal can
 disable the guide on that basis.
+Accepted Effective originals use the same host-membership distinction during
+output confirmation and native reconstruction. The host remains a canonical
+Base-origin member beside Scripted On/Off members; every real add-on, Lua
+origin/owner, original interval boundary and stored-original association stays
+exact. New Check, publication requests and generation acceptance keep full
+current-selection equality. The native output reload retains the original
+expiry/deadline and is followed by full artifact and accepted-pointer
+confirmation; historical reload and fresh publication do not gain output
+authority. Later link addition cannot fill a published absence, and removing
+the last element cannot replace saved source bytes or trigger producer/Lua replay.
+Effective automatic guide regeneration also retains the immutable manual host
+source and its presence or absence. Only real Base profiles retain the guide
+worker's existing current-profile refresh behavior; Scripted owners, targets,
+intervals and the original transition remain exact. The native add-on adapter
+checks these published dependencies at resolution and immediately before
+launch; fresh Check still checks full current membership. Unsupported adapters
+refuse this published-source invocation. The same comparison fences derived
+runtime settlement and output confirmation, with manual generation/source,
+lease, qualification and transaction checks unchanged. This does not authorize
+new publication or substitute current element content.
 Native custom-field reads/encoding share the existing response-local bounded
 admission wait used by cached guide confirmation. A temporary occupied slot can
 wait for actual worker release within the original deadline and cadence; it
@@ -225,12 +245,13 @@ immutable original design revision. It changes only the invocation correlation;
 rows, element revisions and field recipes remain exact, even after subsequent
 element edits or deletion. New Check still uses the latest linked elements.
 This reuse retains the existing selection, response, admission and deadline
-fences and grants no independent publication authority. Effective/Scripted
-custom-page composition remains a separate open requirement.
-Joined refresh/restart qualification and per-page reporting are still being integrated.
-Refresh after publication, custom pages during published
-Scripted intervals, the element's subpage cycle time and the acceptance
-evidence remain open in the `teletext-support` parity record.
+fences and grants no independent publication authority. Response-owned
+Effective/Scripted field refresh and joined automatic-guide output now retain the
+published recipe and membership. Actual Lua On/Off ordinary-output proof covers
+page-local field failure/Health/recovery and original interval expiry to the
+independent Base original. The parity record owns exact evidence and outstanding
+integration/CI gates. Base refresh/restart/reporting remains complete within its
+recorded scope; subpage cycle time and the other custom-page packages stay open.
 Acceptance needs unit and native publication evidence, one independently decoded
 stream that carries a custom page with refreshed fields next to the TV-guide
 pages, and the Playwright flows for upload, field binding, channel linking and

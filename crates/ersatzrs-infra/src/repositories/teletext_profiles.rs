@@ -36,6 +36,16 @@ pub(super) async fn recheck_effective_in_transaction(
     effective_selection::recheck_in_transaction(tx, expected, when).await
 }
 
+/// Confirm an accepted effective original without adopting latest host links.
+/// New Check/publication still use the exact effective snapshot recheck.
+pub(super) async fn recheck_published_effective_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    expected: &TeletextEffectiveChannelSelectionSnapshot,
+    when: DateTime<Utc>,
+) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+    effective_selection::recheck_published_in_transaction(tx, expected, when).await
+}
+
 #[path = "teletext_effective_selection.rs"]
 mod effective_selection;
 
@@ -126,6 +136,15 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         channel_snapshot_in_transaction(&mut tx, channel_id).await
     }
 
+    async fn published_channel_dependencies(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<M<TeletextChannelSelectionSnapshot>> {
+        // Read-only transaction: observe real dependencies without adopting host edits.
+        let mut tx = self.0.begin().await.repository()?;
+        channel_published_dependencies_in_transaction(&mut tx, channel_id).await
+    }
+
     async fn candidate_snapshot(
         &self,
         channel_id: EntityId,
@@ -174,6 +193,17 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         // Read-only transaction: exact base and published origins share one observation.
         let mut tx = self.0.begin().await.repository()?;
         effective_selection::read_in_transaction(&mut tx, channel_id, when).await
+    }
+
+    async fn published_effective_channel_dependencies(
+        &self,
+        channel_id: EntityId,
+        when: DateTime<Utc>,
+    ) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+        // Read-only transaction: observe real dependencies without adopting host edits.
+        let mut tx = self.0.begin().await.repository()?;
+        effective_selection::read_published_dependencies_in_transaction(&mut tx, channel_id, when)
+            .await
     }
 
     async fn recheck_effective_channel_snapshot(
@@ -375,6 +405,47 @@ pub(super) async fn channel_snapshot_in_transaction(
     tx: &mut Transaction<'_, Db>,
     channel_id: EntityId,
 ) -> Result<M<TeletextChannelSelectionSnapshot>> {
+    let mut snapshot = match channel_published_dependencies_in_transaction(tx, channel_id).await? {
+        M::Saved(snapshot) => snapshot,
+        M::Rejected(reason) => return Ok(M::Rejected(reason)),
+    };
+    // ADR 0120 amendment (2026-11-07): one host-owned custom pages producer
+    // while at least one linked element is switched on. Its identity is
+    // constant, so element and link edits never disturb live output.
+    let custom_pages: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "ChannelTeletextElement"
+            WHERE "ChannelId" = ? AND "IsEnabled" = 1"#,
+    )
+    .bind(channel_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if custom_pages > 0 {
+        let custom = ersatzrs_domain::teletext_custom_pages_selection(channel_id);
+        let index = snapshot
+            .bindings
+            .partition_point(|binding| binding.addon_id < custom.addon_id);
+        if snapshot
+            .bindings
+            .get(index)
+            .is_some_and(|binding| binding.addon_id == custom.addon_id)
+        {
+            // An installed package can never own the reserved producer id.
+            return Ok(M::Rejected(R::WrongAddon));
+        }
+        if snapshot.bindings.len() >= MAX_TELETEXT_PAGE_RECORDS {
+            return Ok(M::Rejected(R::BindingLimit));
+        }
+        snapshot.bindings.insert(index, custom);
+    }
+    Ok(M::Saved(snapshot))
+}
+
+/// Bounded real Base profiles; published callers retain their original host.
+pub(super) async fn channel_published_dependencies_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    channel_id: EntityId,
+) -> Result<M<TeletextChannelSelectionSnapshot>> {
     if !channel_exists(tx, channel_id).await? {
         return Ok(M::Rejected(R::MissingChannel));
     }
@@ -401,32 +472,6 @@ pub(super) async fn channel_snapshot_in_transaction(
             M::Saved(selection) => bindings.push(selection),
             M::Rejected(reason) => return Ok(M::Rejected(reason)),
         }
-    }
-    // ADR 0120 amendment (2026-11-07): one host-owned custom pages producer
-    // while at least one linked element is switched on. Its identity is
-    // constant, so element and link edits never disturb live output.
-    let custom_pages: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "ChannelTeletextElement"
-            WHERE "ChannelId" = ? AND "IsEnabled" = 1"#,
-    )
-    .bind(channel_id)
-    .fetch_one(&mut **tx)
-    .await
-    .repository()?;
-    if custom_pages > 0 {
-        let custom = ersatzrs_domain::teletext_custom_pages_selection(channel_id);
-        let index = bindings.partition_point(|binding| binding.addon_id < custom.addon_id);
-        if bindings
-            .get(index)
-            .is_some_and(|binding| binding.addon_id == custom.addon_id)
-        {
-            // An installed package can never own the reserved producer id.
-            return Ok(M::Rejected(R::WrongAddon));
-        }
-        if bindings.len() >= MAX_TELETEXT_PAGE_RECORDS {
-            return Ok(M::Rejected(R::BindingLimit));
-        }
-        bindings.insert(index, custom);
     }
     Ok(M::Saved(TeletextChannelSelectionSnapshot {
         channel_id,

@@ -70,7 +70,7 @@ impl NativeCandidate {
                 Some(custom) => Some(custom.refresh(refresh).await.map_err(|_| ReadFailure)?),
                 None => None,
             },
-            None if selected.supports_custom_field_refresh() => match selected.service() {
+            None => match selected.service() {
                 Some(root) => PublishedCustomRefresh::load(
                     refresh,
                     selected.generation(),
@@ -81,7 +81,6 @@ impl NativeCandidate {
                 .map_err(|_| ReadFailure)?,
                 None => None,
             },
-            None => None,
         };
         Ok(Arc::new(Self { selected, custom }))
     }

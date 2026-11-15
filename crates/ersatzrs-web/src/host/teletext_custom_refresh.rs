@@ -3,12 +3,21 @@
 use super::{teletext_channel_documents::TeletextChannelDocumentEncodingPolicy, teletext_work};
 use chrono::{DateTime, Timelike as _, Utc};
 use ersatzrs_app::{
-    teletext_design_documents::{decode_teletext_design_documents, TeletextDesignDocumentBudget},
+    teletext_design_documents::{
+        decode_teletext_design_documents, decode_teletext_effective_design_documents,
+        TeletextDesignDocumentBudget,
+    },
     teletext_elements::{
         fields::{FieldSnapshot, FieldValues},
         refresh::{refresh_published_custom_pages, CustomPageRefreshTriggers},
     },
     ApplicationServices,
+};
+use ersatzrs_core::repositories::{
+    TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION, TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::{
     TeletextAcceptedGeneration, TeletextCustomPagesDocument, TeletextCustomPagesWire,
@@ -48,6 +57,97 @@ pub(crate) struct PublishedCustomRefresh {
     pub(crate) next_wake: Instant,
     pub(crate) revision: u64,
     pub(crate) failed_pages: Vec<u16>,
+}
+
+/// Data-only field recipe. It grants no accepted-pointer or guide freshness authority.
+struct PublishedCustomRecipe {
+    document: TeletextCustomPagesWire,
+    transmissions: Vec<TeletextServiceResourceTransmission>,
+}
+
+fn decode_published_recipe(
+    stored: &ersatzrs_domain::TeletextDesignRevision,
+    artifact_version: u16,
+    channel: i64,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<Option<PublishedCustomRecipe>, RefreshError> {
+    let (owner, source, saved, overlay) =
+        match artifact_version {
+            TELETEXT_GENERATION_ARTIFACT_VERSION
+            | TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+            | TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION => {
+                if stored.document_version != ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION {
+                    return Err(RefreshError);
+                }
+                let parts = decode_teletext_design_documents(&stored.document, budget)
+                    .map_err(|_| RefreshError)?
+                    .into_parts();
+                let source = parts.selection.bindings.iter().zip(parts.sources).find_map(
+                    |(binding, source)| {
+                        ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id)
+                            .then_some(source)
+                    },
+                );
+                (
+                    parts.selection.channel_id,
+                    source,
+                    parts.resource_transmissions,
+                    parts.editorial_overlay,
+                )
+            }
+            TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION
+            | TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+            | TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION => {
+                if stored.document_version
+                    != ersatzrs_domain::TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION
+                {
+                    return Err(RefreshError);
+                }
+                let parts = decode_teletext_effective_design_documents(&stored.document, budget)
+                    .map_err(|_| RefreshError)?
+                    .into_parts();
+                // Off members have no producer source. Never index sources by whole membership.
+                let source = parts.producer_bindings.iter().zip(parts.sources).find_map(
+                    |(index, source)| {
+                        ersatzrs_domain::is_teletext_custom_pages_producer(
+                            parts.selection.bindings[*index].addon_id(),
+                        )
+                        .then_some(source)
+                    },
+                );
+                (
+                    parts.selection.channel_id,
+                    source,
+                    parts.resource_transmissions,
+                    parts.editorial_overlay,
+                )
+            }
+            _ => return Err(RefreshError),
+        };
+    if owner != channel {
+        return Err(RefreshError);
+    }
+    let Some(source) = source else {
+        return Ok(None);
+    };
+    let document: TeletextCustomPagesWire =
+        serde_json::from_slice(source.bytes()).map_err(|_| RefreshError)?;
+    if !document
+        .pages
+        .iter()
+        .any(|page| !page.dynamic_fields.is_empty())
+    {
+        return Ok(None);
+    }
+    TeletextCustomPagesDocument::from_wire(document.clone(), &document.generation)
+        .map_err(|_| RefreshError)?;
+    let banks = overlay
+        .as_ref()
+        .map_or(&[][..], |overlay| overlay.object_resource_additions());
+    Ok(Some(PublishedCustomRecipe {
+        document,
+        transmissions: super::teletext_stored_designs::resource_transmissions(&saved, banks),
+    }))
 }
 
 impl PublishedCustomRefresh {
@@ -112,31 +212,18 @@ impl PublishedCustomRefresh {
             return Err(RefreshError);
         }
         let digest = generation.request.digest.clone();
+        let artifact_version = generation.artifact_version;
+        let channel = context.channel;
         let recipe = teletext_work::spawn_blocking(guard.hold_work(), move || {
             check(deadline)?;
             if super::teletext_guide_refresh_native::digest(&stored.document) != digest {
                 return Err(RefreshError);
             }
-            let parts = decode_teletext_design_documents(&stored.document, budget)
-                .map_err(|_| RefreshError)?
-                .into_parts();
-            let Some(index) = parts.selection.bindings.iter().position(|binding| {
-                ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id)
-            }) else {
+            let Some(recipe) = decode_published_recipe(&stored, artifact_version, channel, budget)?
+            else {
                 return Ok(None);
             };
-            let mut document: TeletextCustomPagesWire =
-                serde_json::from_slice(parts.sources.get(index).ok_or(RefreshError)?.bytes())
-                    .map_err(|_| RefreshError)?;
-            if !document
-                .pages
-                .iter()
-                .any(|page| !page.dynamic_fields.is_empty())
-            {
-                return Ok(None);
-            }
-            TeletextCustomPagesDocument::from_wire(document.clone(), &document.generation)
-                .map_err(|_| RefreshError)?;
+            let mut document = recipe.document;
             // Retain final published rows, including editorial edits outside fields.
             for page in &mut document.pages {
                 let overlay = root
@@ -155,16 +242,8 @@ impl PublishedCustomRefresh {
                     .map(|row| TeletextCustomRowWire::new(row.row(), row.cells()))
                     .collect();
             }
-            let banks = parts
-                .editorial_overlay
-                .as_ref()
-                .map_or(&[][..], |overlay| overlay.object_resource_additions());
-            let transmissions = super::teletext_stored_designs::resource_transmissions(
-                &parts.resource_transmissions,
-                banks,
-            );
             check(deadline)?;
-            Ok(Some((document, transmissions, root)))
+            Ok(Some((document, recipe.transmissions, root)))
         })
         .await
         .map_err(|_| RefreshError)??;

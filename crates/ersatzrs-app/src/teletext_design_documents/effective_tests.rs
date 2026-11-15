@@ -743,3 +743,68 @@ fn assert_invalid_guide_and_lifecycle(encoded: &EncodedEffectiveTeletextDesignDo
         TeletextDesignDocumentFailure::Lifecycle
     );
 }
+
+#[test]
+fn effective_original_roundtrip_retains_host_source_beside_scripted_and_off_members() {
+    let mut fixture = Fixture::mixed();
+    let host = ersatzrs_domain::teletext_custom_pages_selection(9);
+    let original = serde_json::to_vec(&ersatzrs_domain::TeletextCustomPagesWire {
+        schema: ersatzrs_domain::TELETEXT_CUSTOM_PAGES_SCHEMA.to_owned(),
+        generation: GENERATION.to_owned(),
+        pages: vec![ersatzrs_domain::TeletextCustomPageWire {
+            element_id: 7,
+            element_revision: 4,
+            page: 150,
+            subcode: 0,
+            national_option: 0,
+            rows: vec![ersatzrs_domain::TeletextCustomRowWire::new(1, &[b'X'; 40])],
+            dynamic_fields: vec![],
+        }],
+    })
+    .unwrap();
+    let (_, source) = validate_document_response(
+        DocumentProducer::of(&host),
+        GENERATION,
+        original.clone(),
+        budget().validation,
+        Instant::now() + StdDuration::from_secs(30),
+    )
+    .unwrap();
+    fixture.selection.bindings.insert(0, Binding::Base(host));
+    for index in &mut fixture.producers {
+        *index += 1;
+    }
+    fixture.producers.insert(0, 0);
+    fixture.sources.insert(0, source);
+    let encoded = fixture.encode();
+    let restored = decode_teletext_effective_design_documents(encoded.bytes(), budget())
+        .unwrap()
+        .into_parts();
+    assert_eq!(restored.selection, fixture.selection);
+    assert_eq!(restored.producer_bindings, fixture.producers);
+    assert_eq!(restored.sources[0].bytes(), original);
+    assert!(matches!(
+        restored.documents[0],
+        TeletextProfileDocument::CustomPages(_)
+    ));
+    assert!(
+        matches!(restored.selection.bindings[2], Binding::Scripted(ref scope)
+        if matches!(scope.interval.state, TeletextOverrideState::Off { .. }))
+    );
+    assert_eq!(
+        restored.selection.valid_until,
+        fixture.selection.valid_until
+    );
+    // Stored host data cannot masquerade as an installable add-on response.
+    let mut forged: Value = serde_json::from_slice(encoded.bytes()).unwrap();
+    assert_eq!(
+        forged["effective_selection"]["bindings"][0]["base"]["profile_revision"],
+        json!(1)
+    );
+    forged["effective_selection"]["bindings"][0]["base"]["profile_revision"] = json!(2);
+    assert!(decode_teletext_effective_design_documents(
+        &serde_json::to_vec(&forged).unwrap(),
+        budget()
+    )
+    .is_err());
+}

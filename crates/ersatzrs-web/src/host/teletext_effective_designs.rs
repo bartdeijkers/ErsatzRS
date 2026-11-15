@@ -450,6 +450,56 @@ pub(super) async fn reload_effective_original_for_publication_with_hold(
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<Option<(RestoredEffectiveOriginalDesign, Instant)>, NativeTeletextDesignError> {
+    reload_effective_original_before(
+        application,
+        id,
+        revision,
+        budget,
+        policy,
+        (deadline, hold),
+        EffectiveOriginalUse::Publication,
+    )
+    .await
+}
+
+/// Reconstruct accepted output while retaining its published host membership.
+/// Final accepted-generation confirmation remains mandatory for the caller.
+pub(super) async fn reload_effective_original_for_output_with_hold(
+    application: &ApplicationServices,
+    id: EntityId,
+    revision: i64,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<Option<(RestoredEffectiveOriginalDesign, Instant)>, NativeTeletextDesignError> {
+    reload_effective_original_before(
+        application,
+        id,
+        revision,
+        budget,
+        policy,
+        (deadline, hold),
+        EffectiveOriginalUse::Output,
+    )
+    .await
+}
+
+enum EffectiveOriginalUse {
+    Publication,
+    Output,
+}
+
+async fn reload_effective_original_before(
+    application: &ApplicationServices,
+    id: EntityId,
+    revision: i64,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    admission: (Instant, TeletextWorkHold),
+    purpose: EffectiveOriginalUse,
+) -> Result<Option<(RestoredEffectiveOriginalDesign, Instant)>, NativeTeletextDesignError> {
+    let (deadline, hold) = admission;
     let Some((stored, parts)) = read_original_parts(
         application,
         id,
@@ -478,8 +528,28 @@ pub(super) async fn reload_effective_original_for_publication_with_hold(
     let deadline = deadline
         .min(now + remaining.min(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT));
     check_deadline(deadline)?;
-    application.recheck_effective_channel_teletext_document_selection(&parts.selection,deadline).await
-        .map_err(|error|NativeTeletextDesignError::Encoding(Box::new(super::teletext_channel_documents::ChannelTeletextDocumentEncodingError::Preparation(error))))?;
+    let confirmed = match purpose {
+        EffectiveOriginalUse::Publication => {
+            application
+                .recheck_effective_channel_teletext_document_selection(&parts.selection, deadline)
+                .await
+        }
+        EffectiveOriginalUse::Output => {
+            application
+                .recheck_published_effective_channel_teletext_document_selection(
+                    &parts.selection,
+                    deadline,
+                )
+                .await
+        }
+    };
+    confirmed.map_err(|error| {
+        NativeTeletextDesignError::Encoding(Box::new(
+            super::teletext_channel_documents::ChannelTeletextDocumentEncodingError::Preparation(
+                error,
+            ),
+        ))
+    })?;
     let restored = Box::pin(restore_parts(
         application,
         stored,

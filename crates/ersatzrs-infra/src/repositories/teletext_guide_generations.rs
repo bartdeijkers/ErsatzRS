@@ -79,7 +79,9 @@ impl Scope<'_> {
     ) -> Result<std::result::Result<(), R>> {
         match self {
             Self::Base(selection) => super::check_published_selection(tx, selection).await,
-            Self::Effective(_) => self.check(tx).await,
+            Self::Effective(selection) => publication::check_published_scope(tx, selection)
+                .await
+                .map(|result| result.map_err(R::Publication)),
         }
     }
 }

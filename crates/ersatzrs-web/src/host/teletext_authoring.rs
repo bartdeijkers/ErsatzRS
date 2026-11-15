@@ -1402,6 +1402,23 @@ async fn observed_selection(
     .map_err(|error| preparation_error(&error))
 }
 
+/// Published guide preparation observes real dependencies without current host edits.
+async fn observed_published_selection(
+    application: &ApplicationServices,
+    channel_id: i64,
+    deadline: Instant,
+) -> Result<TeletextChannelSelectionSnapshot, TeletextAuthoringError> {
+    if channel_id <= 0 {
+        return Err(failure(TeletextAuthoringStatus::WrongChannel));
+    }
+    before(
+        deadline,
+        application.observe_published_channel_teletext_dependencies(channel_id),
+    )
+    .await?
+    .map_err(|error| preparation_error(&error))
+}
+
 async fn checked_selection(
     selection: TeletextChannelSelectionSnapshot,
     expected: &str,

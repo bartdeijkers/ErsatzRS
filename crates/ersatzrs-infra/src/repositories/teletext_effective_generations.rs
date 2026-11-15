@@ -233,7 +233,7 @@ async fn confirm_before(
     {
         return Ok(M::Rejected(R::GenerationConflict));
     }
-    if let Err(reason) = publication::check_scope(&mut tx, selection).await? {
+    if let Err(reason) = publication::check_published_scope(&mut tx, selection).await? {
         return Ok(M::Rejected(R::Publication(reason)));
     }
     if let Err(reason) = check_revision_for_version(
@@ -254,6 +254,93 @@ async fn confirm_before(
         return Ok(M::Rejected(changed()));
     }
     Ok(M::Accepted(()))
+}
+
+/// Bounded read-only Health association, not native or guide-freshness authority.
+/// Fresh output keeps its existing strict caller-supplied original and source gates.
+pub(super) async fn observe_association(
+    pool: &DbPool,
+    generation: &TeletextAcceptedGeneration,
+    selection: &Selection,
+    maximum: usize,
+    deadline: Instant,
+) -> Result<M<()>> {
+    if generation.id <= 0
+        || !valid_request(&generation.request)
+        || !publication::valid_scope(selection)
+        || selection.channel_id != generation.request.channel_id
+        || !valid_stored_artifact_role(
+            generation.artifact_version,
+            TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+        )
+        || !valid_digest(&generation.artifact_digest)
+        || maximum == 0
+        || isize::try_from(maximum).is_err()
+    {
+        return Ok(M::Rejected(invalid()));
+    }
+    if Instant::now() >= deadline {
+        return Ok(M::Rejected(timeout()));
+    }
+    let Some(deadline) = publication::scope_deadline(selection, deadline) else {
+        return Ok(M::Rejected(changed()));
+    };
+    tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), async {
+        // Read-only transaction: bind dependencies/pointer to the bounded original.
+        let mut tx = pool.begin().await.repository()?;
+        if current_in_transaction(&mut tx, generation.request.channel_id)
+            .await?
+            .as_ref()
+            != Some(generation)
+        {
+            return Ok(M::Rejected(R::GenerationConflict));
+        }
+        if let Err(reason) = publication::check_published_scope(&mut tx, selection).await? {
+            return Ok(M::Rejected(R::Publication(reason)));
+        }
+        let Some(revision) = revision_in_transaction(
+            &mut tx,
+            generation.request.design_id,
+            generation.request.revision,
+            maximum,
+        )
+        .await?
+        else {
+            return Ok(M::Rejected(R::Publication(P::MissingRevision)));
+        };
+        if revision.document_version != TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION {
+            return Ok(M::Rejected(invalid()));
+        }
+        if revision.digest != generation.request.digest {
+            return Ok(M::Rejected(R::Publication(P::DigestConflict)));
+        }
+        if !super::super::teletext_publications::effective_scope::matches_published_observation(
+            &revision.document,
+            selection,
+        ) {
+            return Ok(M::Rejected(changed()));
+        }
+        let guide = matches!(
+            generation.artifact_version,
+            ersatzrs_core::repositories::TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION
+        );
+        match stored_fence(&revision.document) {
+            Ok(Some(_)) if guide => {}
+            Ok(None) if !guide => {}
+            Ok(Some(_)) => return Ok(M::Rejected(R::GuideFreshnessRequired)),
+            Ok(None) => return Ok(M::Rejected(R::Publication(P::GuideFenceRequired))),
+            Err(()) => return Ok(M::Rejected(R::Publication(P::GuideUnavailable))),
+        }
+        if Instant::now() >= deadline {
+            return Ok(M::Rejected(timeout()));
+        }
+        if publication::expired(selection) {
+            return Ok(M::Rejected(changed()));
+        }
+        Ok(M::Accepted(()))
+    })
+    .await
+    .unwrap_or_else(|_| Ok(M::Rejected(timeout())))
 }
 
 pub(super) async fn current_in_transaction(

@@ -95,6 +95,54 @@ pub struct TeletextEffectiveChannelSelectionSnapshot {
     pub valid_until: Option<DateTime<Utc>>,
 }
 
+/// Compare current dependencies with an already published effective original.
+/// Only canonical Base-origin host membership may differ. Every Scripted origin,
+/// On/Off state, interval boundary and real add-on dependency remains exact.
+/// This grants no new Check, publication or generation acceptance authority.
+#[must_use]
+pub fn teletext_published_effective_selection_matches(
+    current: &TeletextEffectiveChannelSelectionSnapshot,
+    published: &TeletextEffectiveChannelSelectionSnapshot,
+) -> bool {
+    if current.channel_id <= 0
+        || current.channel_id != published.channel_id
+        || current.valid_until != published.valid_until
+    {
+        return false;
+    }
+    let host = TeletextEffectiveBindingSnapshot::Base(super::teletext_custom_pages_selection(
+        current.channel_id,
+    ));
+    for selection in [current, published] {
+        if selection
+            .bindings
+            .iter()
+            .filter(|binding| binding.enabled())
+            .count()
+            > crate::MAX_TELETEXT_PAGE_RECORDS
+            || !selection
+                .bindings
+                .windows(2)
+                .all(|pair| pair[0].addon_id() < pair[1].addon_id())
+            || selection.bindings.iter().any(|binding| {
+                binding.channel_id() != selection.channel_id
+                    || super::is_teletext_custom_pages_producer(binding.addon_id())
+                        && *binding != host
+            })
+        {
+            return false;
+        }
+    }
+    current
+        .bindings
+        .iter()
+        .filter(|binding| !super::is_teletext_custom_pages_producer(binding.addon_id()))
+        .eq(published
+            .bindings
+            .iter()
+            .filter(|binding| !super::is_teletext_custom_pages_producer(binding.addon_id())))
+}
+
 impl fmt::Debug for TeletextEffectiveChannelSelectionSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TeletextEffectiveChannelSelectionSnapshot")
@@ -181,3 +229,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "effective_selection_published_tests.rs"]
+mod published_tests;

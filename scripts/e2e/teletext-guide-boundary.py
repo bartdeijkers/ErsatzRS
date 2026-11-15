@@ -22,17 +22,27 @@ WINDOW_EVENTS = {"sink_window_prepared", "sink_window_first_packet_written", "si
 
 
 def candidate(event, metadata, channel):
-    require(event.get("channel_id") == channel and event.get("authored_selected") is True
-            and event.get("original_valid_until") is None, "candidate is not this authored Base guide")
+    require(event.get("channel_id") == channel and event.get("authored_selected") is True,
+            "candidate is not this authored guide")
     row = one([row for row in metadata if row["channel_id"] == channel and row["seed_id"] == event.get("guide_seed_id")
                and row["runtime_id"] == event.get("guide_runtime_id")
                and row["generation_id"] == event.get("generation_id")], "guide candidate lacks exact saved metadata")
     until = H.utc_ns(event.get("guide_valid_until"))
     require(until == H.utc_ns(row["valid_until"]), "guide expiry differs from its saved metadata")
+    # Base still requires no original scope. Effective output must name the
+    # exact immutable Lua cap; no fresh source/runtime may extend that cap.
+    original = row.get("original_valid_until")
+    observed = event.get("original_valid_until")
+    if original is None:
+        require(observed is None, "Base guide unexpectedly carries an original scope")
+    else:
+        original_ns = H.utc_ns(original)
+        require(H.utc_ns(observed) == original_ns, "Lua expiry differs from its saved original")
+        require(until <= original_ns, "guide expiry exceeds its original Lua scope")
     return until
 
 
-def qualify(raw, log, request, tables, sections, metadata):
+def request_windows(raw, log, request):
     require(raw and len(raw) <= 8 * 1024 * 1024 and len(raw) % H.PACKET == 0, "capture exceeds its unchanged byte bound")
     count = len(raw) // H.PACKET
     require(H.integer(request.get("channel_id"), 1), "request lacks its actual channel")
@@ -58,6 +68,21 @@ def qualify(raw, log, request, tables, sections, metadata):
     retained = [event for event in group if event not in suffix]
     owner = {"events": retained, "output_epoch": next(iter(epochs))}
     windows, ignored = H.qualified_windows(owner, raw)
+    return count, intent, link, group, owner, windows, ignored, suffix
+
+
+def matching_ack(event, windows, owner):
+    require(event.get("output_epoch") == owner["output_epoch"], "transition belongs to another sink")
+    window = one([window for window in windows if window["fully_retained"] and window["end"] == event.get("end_packet")], "transition ACK is outside the captured prefix")
+    flushed = window["flushed"]
+    require(event["_line"] > flushed["_line"] and event["_utc_ns"] >= flushed["_utc_ns"]
+            and event.get("accepted_elapsed_ns", -1) >= flushed.get("accepted_elapsed_ns", 0)
+            and all(event.get(key) == flushed.get(key) for key in ("cycle_boundary", "complete_cycle", "signalling_announced")), "transition does not match its exact flushed ACK")
+    return window
+
+
+def qualify(raw, log, request, tables, sections, metadata):
+    count, intent, link, group, owner, windows, ignored, suffix = request_windows(raw, log, request)
     candidates = [event for event in group if event["event"] in ("monitor_initial", "monitor_recovered")
                   and event.get("authored_selected") is True]
     require(candidates, "request never acquires a guide candidate")
@@ -133,13 +158,7 @@ def qualify(raw, log, request, tables, sections, metadata):
     installations = [event for event in group if event["event"] == "transition_installed"]
     require(len({event.get("sequence") for event in installations}) == len(installations), "duplicate actual installation")
     def ack(event):
-        require(event.get("output_epoch") == owner["output_epoch"], "transition belongs to another sink")
-        window = one([window for window in windows if window["fully_retained"] and window["end"] == event.get("end_packet")], "transition ACK is outside the captured prefix")
-        flushed = window["flushed"]
-        require(event["_line"] > flushed["_line"] and event["_utc_ns"] >= flushed["_utc_ns"]
-                and event.get("accepted_elapsed_ns", -1) >= flushed.get("accepted_elapsed_ns", 0)
-                and all(event.get(key) == flushed.get(key) for key in ("cycle_boundary", "complete_cycle", "signalling_announced")), "transition does not match its exact flushed ACK")
-        return window
+        return matching_ack(event, windows, owner)
     for event in installations:
         proposal = one([proposal for proposal in proposals if proposal["sequence"] == event.get("sequence")], "installation lacks its actual proposal")
         require(event.get("action") == proposal["action"] and event["_line"] > proposal["_line"] and event.get("cycle_boundary") is True, "installation changes action or precedes proposal")
@@ -240,6 +259,7 @@ def qualify(raw, log, request, tables, sections, metadata):
     return {"capture_sha256": H.digest(raw), "log_sha256": H.digest(log), "proposal_slot": link["proposal_slot"],
             "intent_id": intent["intent_id"], "output_epoch": owner["output_epoch"], "path": path,
             "original_valid_until": initial["guide_valid_until"], "fresh_valid_until": recovered["guide_valid_until"],
+            "original_lua_valid_until": initial.get("original_valid_until"),
             "recovered_packet": cut, "packet_count": count, "qualified_windows": len(windows),
             "unretained_suffix_window_events": len(suffix), "ignored_unflushed_windows": ignored,
             "terminal_undelivered_proposals": terminal, "fresh_runtime_observations": len(observations),
@@ -247,14 +267,177 @@ def qualify(raw, log, request, tables, sections, metadata):
             "full_response_eof_claimed": False, "caption_timing_waived": False}
 
 
+def qualify_lua_off(raw, log, request, tables, sections, metadata):
+    count, intent, link, group, owner, windows, ignored, suffix = request_windows(raw, log, request)
+    off, base = metadata["off"], metadata["base"]
+    keys = ("channel_id", "generation_id", "request_id", "design_id", "revision")
+    require(all(H.integer(identity.get(key), 1) for identity in (off, base) for key in keys)
+            and off["channel_id"] == base["channel_id"] == request["channel_id"]
+            and off["generation_id"] != base["generation_id"]
+            and metadata["off_artifact_version"] == 4 and metadata["base_artifact_version"] == 5,
+            "Lua proof lacks distinct saved Off4 and Base5 identities")
+    cap, base_cap = H.utc_ns(metadata["valid_until"]), H.utc_ns(metadata["base_valid_until"])
+    present = metadata["published_custom"]
+    require(type(present) is bool and base_cap > cap, "Lua proof lacks original membership or independent Base cap")
+    def identity(event, expected):
+        return all(event.get(key) == expected[key] for key in keys)
+    observed = [event for event in group if event["event"] in ("monitor_initial", "monitor_recovered", "expiry_base_confirmed")]
+    scoped = [event for event in observed if identity(event, off)]
+    require(scoped and min(event["_utc_ns"] for event in scoped) < cap, "Off was not observed within its original scope")
+    for event in scoped:
+        require(H.utc_ns(event.get("original_valid_until")) == cap
+                and event.get("guide_valid_until") is None and event.get("authored_selected") is present,
+                "Off observation changes its exact original cap or membership")
+    recovered = [event for event in observed if identity(event, base)]
+    require(recovered and all(event["_utc_ns"] >= cap and event.get("original_valid_until") is None
+            and event.get("authored_selected") is True
+            and H.utc_ns(event.get("guide_valid_until")) == base_cap for event in recovered),
+            "Base observation precedes Lua expiry or changes independent source authority")
+    boundary = one([event for event in group if event["event"] == "scope_boundary_expired"], "Lua proof lacks one original scope boundary")
+    require(boundary.get("generation_id") == off["generation_id"] and boundary["_utc_ns"] >= cap,
+            "Lua boundary changes the original generation or UTC cap")
+    proposals = [event for event in group if event["event"] == "monitor_proposal"]
+    require(all(H.integer(event.get("sequence"), 1) for event in proposals)
+            and len({event["sequence"] for event in proposals}) == len(proposals), "Lua proposal sequences are ambiguous")
+    for event in proposals:
+        if event.get("action") == "withdraw":
+            require(event["_utc_ns"] >= cap, "Lua withdrawal precedes original expiry")
+        else:
+            require(event.get("action") == "replace" and
+                    (identity(event, off) and event["_utc_ns"] < cap
+                     or identity(event, base) and cap <= event["_utc_ns"] < base_cap),
+                    "Lua replacement changes identity or authority time")
+    base_proposal = one([event for event in proposals if event.get("action") == "replace" and identity(event, base)],
+                        "Lua expiry lacks one independent Base proposal")
+    withdrawals = [event for event in proposals if event.get("action") == "withdraw"
+                   and event["_line"] < base_proposal["_line"]]
+    # A confirmed Off absence is already withdrawn: MonitorState::withdraw
+    # emits no redundant proposal when it has no active service to retire.
+    require(len(withdrawals) == 1 if present else len(withdrawals) <= 1,
+            "Lua expiry lacks its fail-closed withdrawal")
+    fences = [boundary, *withdrawals]
+    require(max(event["_line"] for event in fences) < min(event["_line"] for event in recovered)
+            and max(event["_utc_ns"] for event in fences) <= min(event["_utc_ns"] for event in recovered)
+            and max(event["_line"] for event in recovered) < base_proposal["_line"]
+            and all(event["sequence"] < base_proposal["sequence"] for event in withdrawals),
+            "Base recovery precedes expiry withdrawal or its confirmed original")
+    installations = [event for event in group if event["event"] == "transition_installed"]
+    require(len({event.get("sequence") for event in installations}) == len(installations), "duplicate Lua installation")
+    installed = {}
+    for event in installations:
+        proposal = one([row for row in proposals if row["sequence"] == event.get("sequence")], "Lua installation lacks its proposal")
+        require(event.get("action") == proposal["action"] and event["_line"] > proposal["_line"]
+                and event.get("cycle_boundary") is True, "Lua installation changes action or precedes proposal")
+        matching_ack(event, windows, owner)
+        kind = None if proposal["action"] == "withdraw" else "off" if identity(proposal, off) else "base"
+        require((kind != "off" or event["_utc_ns"] < cap)
+                and (kind != "base" or cap <= event["_utc_ns"] < base_cap), "Lua installation exceeds its original authority")
+        installed[event["sequence"]] = (event, kind)
+    initial = [event for event in group if event["event"] == "monitor_initial"]
+    initial_kind = "off" if initial and identity(initial[0], off) else None
+    bases = [event for event, kind in installed.values() if kind == "base"]
+    require(bases, "Lua expiry lacks an actual Base installation")
+    first_base = min(bases, key=lambda event: event["end_packet"])
+    applied = one([event for event in group if event["event"] == "transition_applied"
+                   and event.get("sequence") == first_base["sequence"] and event.get("action") == "replace"],
+                  "Base lacks actual complete-cycle delivery")
+    matching_ack(applied, windows, owner)
+    require(applied.get("complete_cycle") is True and first_base["_line"] < applied["_line"]
+            and cap <= applied["_utc_ns"] < base_cap, "Base delivery is incomplete or outside its saved authority")
+    for window in windows:
+        prior = [(event, kind) for event, kind in installed.values() if event["end_packet"] <= window["first"]]
+        latest = max(prior, key=lambda row: row[0]["end_packet"]) if prior else None
+        require(window["sequence"] == (latest[0]["sequence"] if latest else 0), "Lua window changes installed sequence")
+        kind = latest[1] if latest else initial_kind
+        authored = kind == "base" or kind == "off" and present
+        window["expected_authored"] = authored
+        require(kind != "base" or window["prepared"]["_utc_ns"] >= cap, "Base window prepares before Lua expiry")
+        if window["flushed"] is not None:
+            require(window["flushed"]["authored_selected"] is authored, "Lua ACK changes actual authored membership")
+    pmts = [table for table in tables if table.get("#name") == "PMT"]
+    require(pmts, "Lua capture lacks PMT")
+    versions, reference = [], None
+    for table in pmts:
+        nodes = table["#nodes"]
+        meta = one([node for node in nodes if node["#name"] == "metadata"], "Lua PMT lacks packet extent")
+        av = [node for node in nodes if node["#name"] == "component" and node["elementary_pid"] != 512]
+        authored = [node for node in nodes if node["#name"] == "component" and node["elementary_pid"] == 512]
+        require(len(authored) <= 1 and {256, 257} <= {node["elementary_pid"] for node in av}
+                and len(av) == len({node["elementary_pid"] for node in av}), "Lua PMT loses or duplicates AV/captions")
+        if reference is None:
+            reference = av
+        require(av == reference and table["current"] is True and H.integer(table["version"])
+                and table["version"] < 32 and table["service_id"] == pmts[0]["service_id"]
+                and table["pcr_pid"] == pmts[0]["pcr_pid"] and 0 <= meta["first_ts_packet"] <= meta["last_ts_packet"] < count,
+                "Lua PMT changes source AV/captions, clock or valid extent")
+        versions.append(dict(version=table["version"], first=meta["first_ts_packet"], last=meta["last_ts_packet"], pid=meta["pid"], present=bool(authored)))
+    raw_versions, previous = [], -1
+    for line in sections.splitlines():
+        match = SECTION.fullmatch(line)
+        require(match is not None, "unrecognized raw Lua PMT section")
+        first, last = (int(match[index].replace(',', '')) for index in (1, 2))
+        require(previous < first <= last < count and int(match[3], 16) == versions[0]["pid"]
+                and int(match[4], 16) == pmts[0]["service_id"], "raw Lua PMT changes programme or extent")
+        previous = last
+        version = int(match[5])
+        if not raw_versions or version != raw_versions[-1]["version"]:
+            raw_versions.append(dict(version=version, first=first, last=last))
+    require(len(raw_versions) == len(versions) and all(all(raw[key] == table[key] for key in ("version", "first", "last"))
+            for raw, table in zip(raw_versions, versions)) and all(b["version"] == (a["version"] + 1) % 32
+            for a, b in zip(versions, versions[1:])), "raw Lua PMT repeats an obsolete/unreported version")
+    first_text = next((raw[index * 188:(index + 1) * 188] for index in range(first_base["end_packet"], count)
+                       if ((raw[index * 188 + 1] & 31) << 8 | raw[index * 188 + 2]) == 512), None)
+    require(first_text is not None and first_text[1] & 0x40,
+            "authored PES crosses the exact Base installation cut")
+    # ADR0124 permits finishing the already-started logical cycle through its
+    # qualified sink ACK. Its individual windows may straddle UTC expiry;
+    # starting another scoped cycle at or after that expiry remains forbidden.
+    next_cycle, cycle_starts = True, []
+    for window in windows:
+        first, end = window["first"], min(window["end"], count)
+        has_text = any(((raw[index * 188 + 1] & 31) << 8 | raw[index * 188 + 2]) == 512
+                       for index in range(first, end))
+        if has_text and next_cycle:
+            next_cycle = False
+            cycle_starts.append(first)
+            require(window["sequence"] != 0 or not present or window["prepared"]["_utc_ns"] < cap,
+                    "a new Scoped logical cycle was prepared at or after immutable expiry")
+            prior = installed.get(window["sequence"])
+            require(prior is None or prior[1] != "off" or window["prepared"]["_utc_ns"] < cap,
+                    "a new Scoped logical cycle was prepared at or after immutable expiry")
+        if window["flushed"] is not None and window["flushed"].get("complete_cycle") is True:
+            require(window["flushed"].get("cycle_boundary") is True, "complete cycle lacks its boundary ACK")
+            next_cycle = True
+    index, window_index, announced = 0, 0, False
+    for ordinal in range(count):
+        while index < len(versions) and versions[index]["first"] <= ordinal:
+            announced = versions[index]["present"]
+            index += 1
+        packet = raw[ordinal * 188:(ordinal + 1) * 188]
+        pid = (packet[1] & 31) << 8 | packet[2]
+        while windows[window_index]["end"] <= ordinal:
+            window_index += 1
+        require((announced and windows[window_index]["expected_authored"]) or pid != 512,
+                "Lua authored payload lacks PMT signalling or actual published membership")
+    return dict(capture_sha256=H.digest(raw), log_sha256=H.digest(log), original_lua_valid_until=metadata["valid_until"],
+                base_valid_until=metadata["base_valid_until"], published_custom=present, proposal_slot=link["proposal_slot"],
+                intent_id=intent["intent_id"], output_epoch=owner["output_epoch"], qualified_windows=len(windows),
+                unretained_suffix_window_events=len(suffix), ignored_unflushed_windows=ignored,
+                base_install_packet=first_base["end_packet"], base_complete_cycle_packet=applied["end_packet"],
+                packet_count=count, cycle_start_windows=cycle_starts,
+                full_response_eof_claimed=False, caption_timing_waived=False)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("capture", "log", "request", "pmt", "sections", "metadata", "report"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--kind", choices=("guide", "lua-off"), default="guide")
     args = parser.parse_args()
     load = lambda path: json.loads(H.bounded(path, 65_536), object_pairs_hook=H.unique_object)
     try:
-        result = qualify(H.bounded(args.capture, 8 * 1024 * 1024), H.bounded(args.log, H.MAX_LOG, reject_cap=True),
+        validator = qualify_lua_off if args.kind == "lua-off" else qualify
+        result = validator(H.bounded(args.capture, 8 * 1024 * 1024), H.bounded(args.log, H.MAX_LOG, reject_cap=True),
                          load(args.request), load(args.pmt), H.bounded(args.sections, 262_144).decode(), load(args.metadata))
         args.report.write_text(json.dumps(result, indent=2) + "\n")
     except (H.ProofError, ValueError, KeyError, TypeError, OSError) as error:

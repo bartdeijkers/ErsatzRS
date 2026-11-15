@@ -42,6 +42,8 @@ struct TeletextPolicyProjection {
     _source: IgnoredAny,
     #[serde(default, rename = "live_updates")]
     _live_updates: Option<IgnoredAny>,
+    #[serde(default, rename = "guide_limits")]
+    _guide_limits: Option<IgnoredAny>,
 }
 
 #[derive(Deserialize)]
@@ -88,7 +90,7 @@ fn document_limit(value: &str) -> Option<usize> {
     let maximum = policy.design.max_serialized_bytes;
     // This projection establishes only the explicit document bound. The host
     // still owns complete policy validation and native/stream readiness.
-    (matches!(policy.version, 1 | 2)
+    (matches!(policy.version, 1..=4)
         && maximum > 0
         && isize::try_from(maximum).is_ok()
         && i64::try_from(maximum).is_ok())
@@ -231,11 +233,29 @@ impl ScriptedPlayoutStateHealthCheck {
         else {
             return Some(UNAVAILABLE);
         };
-        if !intervals
+        let has_on = intervals
             .iter()
-            .any(|interval| matches!(interval.state, TeletextOverrideState::Enabled(_)))
+            .any(|interval| matches!(interval.state, TeletextOverrideState::Enabled(_)));
+        let Ok(TeletextProfileMutation::Saved(selection)) =
+            SqliteTeletextProfileRepository(self.pool.clone())
+                .published_effective_channel_dependencies(channel, when)
+                .await
+        else {
+            return Some(UNAVAILABLE);
+        };
+        let generations = SqliteTeletextGenerationRepository(self.pool.clone());
+        let Ok(generation) = generations.current_effective(channel).await else {
+            return Some(UNAVAILABLE);
+        };
+        // Plain Off needs no native original/policy. A retained scoped original
+        // may still own published host pages after the latest link is removed.
+        if !has_on
+            && !selection
+                .bindings
+                .iter()
+                .any(ersatzrs_domain::TeletextEffectiveBindingSnapshot::enabled)
+            && generation.is_none()
         {
-            // Off is safe without healthy profiles/packages or an output policy.
             return None;
         }
         let maximum = match self.teletext_document_limit().await {
@@ -243,21 +263,11 @@ impl ScriptedPlayoutStateHealthCheck {
             Ok(None) => return Some(PENDING),
             Err(_) => return Some(UNAVAILABLE),
         };
-        let Ok(TeletextProfileMutation::Saved(selection)) =
-            SqliteTeletextProfileRepository(self.pool.clone())
-                .effective_channel_snapshot(channel, when)
-                .await
-        else {
-            return Some(UNAVAILABLE);
-        };
-        let generations = SqliteTeletextGenerationRepository(self.pool.clone());
-        let generation = match generations.current_effective(channel).await {
-            Ok(Some(generation)) => generation,
-            Ok(None) => return Some(PENDING),
-            Err(_) => return Some(UNAVAILABLE),
+        let Some(generation) = generation else {
+            return Some(PENDING);
         };
         match generations
-            .confirm_current_effective(&generation, &selection, maximum, deadline)
+            .observe_effective_health_association(&generation, &selection, maximum, deadline)
             .await
         {
             // This verifies durable pointer/original/current-scope association,

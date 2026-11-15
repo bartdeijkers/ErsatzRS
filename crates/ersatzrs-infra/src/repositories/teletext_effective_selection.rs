@@ -37,6 +37,34 @@ pub(super) async fn recheck_in_transaction(
     }
 }
 
+/// Retain the manual original's host membership only for accepted output.
+/// New preparation/publication continues to use the exact recheck above.
+pub(super) async fn recheck_published_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    expected: &TeletextEffectiveChannelSelectionSnapshot,
+    when: DateTime<Utc>,
+) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+    if expected
+        .valid_until
+        .is_some_and(|boundary| when >= boundary)
+    {
+        return Ok(M::Rejected(R::Conflict));
+    }
+    match read_published_dependencies_in_transaction(tx, expected.channel_id, when).await {
+        Ok(M::Saved(current))
+            if ersatzrs_domain::teletext_published_effective_selection_matches(
+                &current, expected,
+            ) =>
+        {
+            Ok(M::Saved(expected.clone()))
+        }
+        Ok(_) | Err(ersatzrs_core::repositories::RepositoryError::Conflict(_)) => {
+            Ok(M::Rejected(R::Conflict))
+        }
+        Err(error) => Err(error),
+    }
+}
+
 async fn next_transition(
     tx: &mut Transaction<'_, Db>,
     channel: EntityId,
@@ -68,6 +96,52 @@ async fn next_transition(
 }
 
 pub(super) async fn read_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    channel: EntityId,
+    when: DateTime<Utc>,
+) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+    let mut snapshot = match read_published_dependencies_in_transaction(tx, channel, when).await? {
+        M::Saved(snapshot) => snapshot,
+        M::Rejected(reason) => return Ok(M::Rejected(reason)),
+    };
+    // The host-owned producer is independent of installable add-on overrides.
+    // It remains a Base origin even while an add-on has an explicit Lua Off.
+    let custom_pages: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "ChannelTeletextElement"
+            WHERE "ChannelId" = ? AND "IsEnabled" = 1)"#,
+    )
+    .bind(channel)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if custom_pages {
+        let custom = ersatzrs_domain::teletext_custom_pages_selection(channel);
+        if snapshot
+            .bindings
+            .iter()
+            .any(|binding| binding.addon_id() == custom.addon_id)
+        {
+            return Ok(M::Rejected(R::WrongAddon));
+        }
+        if snapshot
+            .bindings
+            .iter()
+            .filter(|binding| binding.enabled())
+            .count()
+            >= MAX_TELETEXT_PAGE_RECORDS
+        {
+            return Ok(M::Rejected(R::BindingLimit));
+        }
+        let index = snapshot
+            .bindings
+            .partition_point(|binding| binding.addon_id() < custom.addon_id.as_str());
+        snapshot.bindings.insert(index, Binding::Base(custom));
+    }
+    Ok(M::Saved(snapshot))
+}
+
+/// Real dependencies only; the immutable original owns synthetic host membership.
+pub(super) async fn read_published_dependencies_in_transaction(
     tx: &mut Transaction<'_, Db>,
     channel: EntityId,
     when: DateTime<Utc>,

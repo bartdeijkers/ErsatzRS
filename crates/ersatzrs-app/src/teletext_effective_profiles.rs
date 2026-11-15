@@ -42,6 +42,19 @@ impl ApplicationServices {
             .await
     }
 
+    /// Read real dependencies of published effective output, excluding the latest
+    /// synthetic host. Restore/validate original membership before using output.
+    pub async fn observe_published_effective_teletext_dependencies(
+        &self,
+        channel_id: EntityId,
+        when: DateTime<Utc>,
+    ) -> RepositoryResult<TeletextProfileMutation<TeletextEffectiveChannelSelectionSnapshot>> {
+        self.ports()
+            .teletext_profiles()
+            .published_effective_channel_dependencies(channel_id, when)
+            .await
+    }
+
     /// Recheck the complete captured observation without replacing its target.
     pub async fn recheck_effective_channel_teletext_selection(
         &self,
@@ -67,6 +80,24 @@ impl ApplicationServices {
         self.ports()
             .addons()
             .invoke_effective_teletext_profile_before_with_hold(
+                selection, addon_id, input, deadline, hold,
+            )
+            .await
+    }
+    /// Invoke a published guide member with only canonical host membership frozen.
+    /// All real add-on/Scripted dependencies, original deadline and work ownership
+    /// remain exact; this grants no publication or activation authority.
+    pub async fn invoke_published_effective_teletext_profile_before_with_hold(
+        &self,
+        selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
+        addon_id: String,
+        input: Vec<u8>,
+        deadline: std::time::Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<TeletextEffectiveProfileRuntimeReceipt, TeletextProfileRuntimeError> {
+        self.ports()
+            .addons()
+            .invoke_published_effective_teletext_profile_before_with_hold(
                 selection, addon_id, input, deadline, hold,
             )
             .await

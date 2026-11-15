@@ -119,7 +119,201 @@ def repeated_observation(values, runtime=50):
     values[2]["log_end"] = len(values[1])
 
 
+def effective_scope(values, until=100_000_000_000):
+    previous = values[1]
+    old = b'original_valid_until=None'
+    new = b'original_valid_until=' + json.dumps(utc(until)).encode()
+    values[1] = previous.replace(old, new)
+    values[2]["log_first_chunk"] = len(previous[:values[2]["log_first_chunk"]].replace(old, new))
+    values[2]["log_end"] = len(values[1])
+    for row in values[5]:
+        row["original_valid_until"] = utc(until)
+
+
+def lua_off_fixture(present=True):
+    values = fixture()
+    # Protocol fixtures carry framing/PUSI flags only, not native page bytes.
+    values[0] = b"".join(bytes([0x47, values[0][index * 188 + 1] | 0x40]) + values[0][index * 188 + 2:(index + 1) * 188]
+                         if index in (2, 3, 7, 8) else values[0][index * 188:(index + 1) * 188] for index in range(14))
+    original = fixture()[0]
+    for index in (2, 3, 7, 8):
+        values[1] = values[1].replace(G.H.digest(original[index * 188:(index + 1) * 188]).encode(),
+                                    G.H.digest(values[0][index * 188:(index + 1) * 188]).encode())
+    old_raw = values[0]
+    if not present:
+        values[0] = b"".join(bytes([0x47, 0x01]) + old_raw[index * 188 + 2:(index + 1) * 188]
+                             if index in (2, 3) else old_raw[index * 188:(index + 1) * 188] for index in range(14))
+        values[3][0]["#nodes"] = [node for node in values[3][0]["#nodes"] if node.get("elementary_pid") != 512]
+    lines = []
+    ready_prefix = values[1][:values[2]["log_first_chunk"]]
+    ready_lines = ready_prefix.count(b"\n")
+    for line in values[1].splitlines(keepends=True):
+        if b'event="monitor_initial"' in line:
+            line = line.replace(b'original_valid_until=None', b'original_valid_until=' + json.dumps(utc(1_000_000_000)).encode())
+            line = line.replace(b'guide_seed_id=40', b'guide_seed_id=None').replace(b'guide_valid_until=' + json.dumps(utc(1_000_000_000)).encode(), b'guide_valid_until=None')
+            if not present:
+                line = line.replace(b'authored_selected=true', b'authored_selected=false')
+        if b'event="monitor_recovered"' in line or (b'event="monitor_proposal"' in line and b'sequence=2 ' in line):
+            line = line.replace(b'generation_id=10 ', b'generation_id=11 ').replace(b'request_id=20 ', b'request_id=21 ').replace(b'design_id=30 ', b'design_id=31 ')
+            line = line.replace(b'event="monitor_recovered"', b'event="expiry_base_confirmed"')
+        if not present:
+            if b'event="sink_window_flushed"' in line and b'active_sequence=0 ' in line:
+                line = line.replace(b'authored_selected=true', b'authored_selected=false')
+            for index in (2, 3):
+                if f'first_packet={index} '.encode() in line:
+                    line = line.replace(G.H.digest(old_raw[index * 188:(index + 1) * 188]).encode(),
+                                        G.H.digest(values[0][index * 188:(index + 1) * 188]).encode())
+        lines.append(line)
+    values[1] = b"".join(lines)
+    values[2]["log_first_chunk"] = len(b"".join(lines[:ready_lines]))
+    values[2]["log_end"] = len(values[1])
+    values[5] = dict(off=dict(channel_id=1, generation_id=10, request_id=20, design_id=30, revision=1),
+                     base=dict(channel_id=1, generation_id=11, request_id=21, design_id=31, revision=1),
+                     off_artifact_version=4, base_artifact_version=5, published_custom=present,
+                     valid_until=utc(1_000_000_000), base_valid_until=utc(61_000_000_000))
+    return values
+
+
+class LuaOffBoundaryTests(unittest.TestCase):
+    def test_confirmed_off_absence_needs_no_redundant_withdrawal_proposal(self):
+        values = lua_off_fixture(False)
+        values[1] = b''.join(line.replace(b'active_sequence=1 ', b'active_sequence=0 ')
+                            for line in values[1].splitlines(keepends=True) if b'action="withdraw"' not in line)
+        values[2]['log_end'] = len(values[1])
+        values[3].pop(1)
+        values[3][-1]['version'] = 2
+        values[4] = ''.join(line.replace('V3,', 'V2,') for line in values[4].splitlines(keepends=True)
+                            if not line.startswith('Packet 4 '))
+        result = G.qualify_lua_off(*values)
+        self.assertFalse(result['published_custom'])
+        self.assertEqual(result['base_install_packet'], 6)
+
+    def test_finishing_the_existing_cycle_may_straddle_expiry(self):
+        values = lua_off_fixture()
+        lines = []
+        for line in values[1].splitlines(keepends=True):
+            if b'first_packet=3 ' in line:
+                line = line.replace(utc(900_000_000).encode(), utc(1_000_000_001).encode())
+                line = line.replace(utc(900_100_000).encode(), utc(1_000_000_002).encode())
+            lines.append(line)
+        values[1] = b''.join(lines)
+        self.assertEqual(G.qualify_lua_off(*values)['base_install_packet'], 6)
+
+    def test_another_scoped_cycle_cannot_start_after_original_expiry(self):
+        values = lua_off_fixture()
+        values[5]['valid_until'] = utc(250_000_000)
+        values[1] = b''.join(line.replace(utc(1_000_000_000).encode(), utc(250_000_000).encode())
+                            if b'event="monitor_initial"' in line else
+                            line.replace(b'cycle_boundary=false', b'cycle_boundary=true')
+                                .replace(b'complete_cycle=false', b'complete_cycle=true')
+                            if b'event="sink_window_flushed"' in line and b'first_packet=1 ' in line else line
+                            for line in values[1].splitlines(keepends=True))
+        # Both false-to-true flag replacements shorten the suffix by one byte.
+        self.assertEqual(len(values[1]), values[2]['log_end'] - 2)
+        values[2]['log_end'] = len(values[1])
+        with self.assertRaisesRegex(G.H.ProofError, 'new Scoped logical cycle'):
+            G.qualify_lua_off(*values)
+
+    def test_base_recovery_requires_withdrawal_and_exact_confirmed_source_cap(self):
+        for kind in ('missing-withdrawal', 'missing-confirmation', 'changed-source-cap'):
+            values = lua_off_fixture()
+            if kind == 'missing-withdrawal':
+                values[1] = b''.join(line for line in values[1].splitlines(keepends=True)
+                    if not (b'event="monitor_proposal"' in line and b'action="withdraw"' in line))
+            elif kind == 'missing-confirmation':
+                values[1] = values[1].replace(b'event="expiry_base_confirmed"', b'event="unconfirmed_base"')
+            else:
+                values[1] = values[1].replace(utc(61_000_000_000).encode(), utc(62_000_000_000).encode())
+            values[2]['log_end'] = len(values[1])
+            with self.subTest(kind=kind), self.assertRaises(G.H.ProofError):
+                G.qualify_lua_off(*values)
+
+    def test_saved_presence_and_absence_recover_independent_base_with_exact_acks(self):
+        for present in (False, True):
+            with self.subTest(present=present):
+                values = lua_off_fixture(present)
+                result = G.qualify_lua_off(*values)
+                self.assertEqual(result["published_custom"], present)
+                self.assertEqual(result["base_install_packet"], 6)
+                self.assertEqual(result["base_complete_cycle_packet"], 11)
+                self.assertFalse(result["caption_timing_waived"])
+
+    def test_changed_original_cap_identity_and_saved_base_authority_are_refused(self):
+        for mutation in (lambda v: v[5].update(valid_until=utc(1_000_000_001)),
+                         lambda v: v[5]["base"].update(generation_id=12),
+                         lambda v: v[5].update(base_valid_until=utc(1_000_000_000)),
+                         lambda v: v[5].update(off_artifact_version=6)):
+            with self.subTest(mutation=mutation):
+                values = lua_off_fixture()
+                mutation(values)
+                with self.assertRaises(G.H.ProofError):
+                    G.qualify_lua_off(*values)
+
+    def test_missing_base_cycle_ack_foreign_epoch_packet_hash_and_av_loss_are_refused(self):
+        for kind in ('cycle', 'epoch', 'hash', 'av'):
+            values = lua_off_fixture()
+            if kind == 'cycle':
+                values[1] = b"".join(line for line in values[1].splitlines(keepends=True)
+                    if not (b'event="transition_applied"' in line and b'action="replace"' in line))
+            elif kind == 'epoch':
+                values[1] = values[1].replace(b'event="transition_applied" proposal_slot=',
+                    b'event="transition_applied" output_epoch="00000000-0000-0000-0000-000000000099" proposal_slot=')
+            elif kind == 'hash':
+                values[0] = bytes([0x46]) + values[0][1:]
+            else:
+                values[3][1]["#nodes"][1]["stream_type"] = 3
+            values[2]["log_end"] = len(values[1])
+            with self.subTest(kind=kind), self.assertRaises(G.H.ProofError):
+                G.qualify_lua_off(*values)
+
+    def test_a_continuing_pes_cannot_become_the_qualified_base_prefix(self):
+        values = lua_off_fixture()
+        changed = bytearray(values[0]); changed[7 * 188 + 1] &= ~0x40
+        values[1] = b"".join(line.replace(G.H.digest(values[0][7 * 188:8 * 188]).encode(),
+                                        G.H.digest(bytes(changed[7 * 188:8 * 188])).encode())
+                             if b'first_packet=7 ' in line else line for line in values[1].splitlines(keepends=True))
+        values[0] = bytes(changed)
+        with self.assertRaisesRegex(G.H.ProofError, "PES crosses"):
+            G.qualify_lua_off(*values)
+
+
 class GuideBoundaryTests(unittest.TestCase):
+    def test_effective_guide_keeps_exact_original_cap_and_all_boundary_checks(self):
+        values = fixture()
+        effective_scope(values)
+        result = G.qualify(*values)
+        self.assertEqual(result["capture_sha256"], G.H.digest(values[0]))
+        self.assertEqual(result["original_lua_valid_until"], utc(100_000_000_000))
+        self.assertFalse(result["caption_timing_waived"])
+
+    def test_effective_runtime_cannot_extend_original_lua_cap(self):
+        values = fixture()
+        effective_scope(values, 60_000_000_000)
+        with self.assertRaisesRegex(G.H.ProofError, "exceeds its original Lua scope"):
+            G.qualify(*values)
+
+    def test_recovered_effective_output_cannot_substitute_a_new_lua_cap(self):
+        values = fixture()
+        effective_scope(values)
+        values[1] = b"".join(line.replace(utc(100_000_000_000).encode(), utc(101_000_000_000).encode())
+            if b'event="monitor_recovered"' in line else line for line in values[1].splitlines(keepends=True))
+        values[2]["log_end"] = len(values[1])
+        with self.assertRaisesRegex(G.H.ProofError, "differs from its saved original"):
+            G.qualify(*values)
+
+    def test_effective_cap_requires_saved_metadata_and_base_keeps_absence(self):
+        values = fixture()
+        effective_scope(values)
+        for row in values[5]:
+            del row["original_valid_until"]
+        with self.assertRaisesRegex(G.H.ProofError, "Base guide unexpectedly"):
+            G.qualify(*values)
+        values = fixture()
+        for row in values[5]:
+            row["original_valid_until"] = utc(100_000_000_000)
+        with self.assertRaisesRegex(G.H.ProofError, "UTC timestamp is not a string"):
+            G.qualify(*values)
+
     def test_repeated_observations_keep_one_exact_fresh_runtime_identity(self):
         values = fixture()
         repeated_observation(values)

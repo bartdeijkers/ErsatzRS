@@ -139,24 +139,49 @@ fn dynamic_fields(
 }
 
 /// Declared page ranges of the enabled add-ons in a selection.
-fn addon_ranges(bindings: &[TeletextSelectionSnapshot]) -> Vec<(String, u16, u16)> {
-    let literal = |binding: &TeletextSelectionSnapshot, key: &str| {
-        binding.effective_settings.iter().find_map(|setting| {
-            match (&setting.value, setting.key == key) {
+fn addon_ranges<'a>(
+    bindings: impl Iterator<Item = (&'a str, &'a [ersatzrs_domain::TeletextProfileSetting])>,
+) -> Vec<(String, u16, u16)> {
+    let literal = |settings: &[ersatzrs_domain::TeletextProfileSetting], key: &str| {
+        settings
+            .iter()
+            .find_map(|setting| match (&setting.value, setting.key == key) {
                 (TeletextProfileValue::Literal(value), true) => value.trim().parse::<u16>().ok(),
                 _ => None,
-            }
-        })
+            })
     };
     bindings
-        .iter()
-        .filter(|binding| !is_teletext_custom_pages_producer(&binding.addon_id))
-        .filter_map(|binding| {
-            let start = literal(binding, "PAGE_START")?;
-            let end = literal(binding, "PAGE_END").unwrap_or(start).max(start);
-            Some((binding.addon_id.clone(), start, end))
+        .filter(|(addon, _)| !is_teletext_custom_pages_producer(addon))
+        .filter_map(|(addon, settings)| {
+            let start = literal(settings, "PAGE_START")?;
+            let end = literal(settings, "PAGE_END").unwrap_or(start).max(start);
+            Some((addon.to_owned(), start, end))
         })
         .collect()
+}
+
+fn effective_addon_ranges(
+    selection: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+) -> Vec<(String, u16, u16)> {
+    addon_ranges(
+        selection
+            .bindings
+            .iter()
+            .filter_map(|binding| match binding {
+                ersatzrs_domain::TeletextEffectiveBindingSnapshot::Base(base) => {
+                    Some((base.addon_id.as_str(), base.effective_settings.as_slice()))
+                }
+                ersatzrs_domain::TeletextEffectiveBindingSnapshot::Scripted(scope) => {
+                    match &scope.interval.state {
+                        ersatzrs_domain::TeletextOverrideState::Enabled(candidate) => Some((
+                            candidate.addon_id.as_str(),
+                            candidate.effective_settings.as_slice(),
+                        )),
+                        ersatzrs_domain::TeletextOverrideState::Off { .. } => None,
+                    }
+                }
+            }),
+    )
 }
 
 /// Copy a bounded historical source into a fresh invocation correlation. Guide
@@ -207,6 +232,39 @@ impl ApplicationServices {
         channel_id: EntityId,
         now: DateTime<Utc>,
     ) -> Result<CustomPagesPlan, TeletextElementError> {
+        self.plan_teletext_custom_pages_in_selection(channel_id, now, None)
+            .await
+    }
+
+    async fn teletext_custom_page_ranges(
+        &self,
+        channel_id: EntityId,
+        effective: Option<&ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+    ) -> Vec<(String, u16, u16)> {
+        // Without a readable selection the add-on side fails Check by itself.
+        match effective {
+            Some(selection) => effective_addon_ranges(selection),
+            None => self
+                .observe_channel_teletext_document_selection(channel_id)
+                .await
+                .map(|selection| {
+                    addon_ranges(selection.bindings.iter().map(|binding| {
+                        (
+                            binding.addon_id.as_str(),
+                            binding.effective_settings.as_slice(),
+                        )
+                    }))
+                })
+                .unwrap_or_default(),
+        }
+    }
+
+    async fn plan_teletext_custom_pages_in_selection(
+        &self,
+        channel_id: EntityId,
+        now: DateTime<Utc>,
+        effective: Option<&ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+    ) -> Result<CustomPagesPlan, TeletextElementError> {
         let links: Vec<_> = self
             .channel_teletext_elements(channel_id)
             .await?
@@ -220,12 +278,9 @@ impl ApplicationServices {
             .teletext_element_field_values(channel_id, now)
             .await?
             .ok_or(TeletextElementError::NotFound)?;
-        // Without a readable selection the add-on side fails Check by itself.
         let ranges = self
-            .observe_channel_teletext_document_selection(channel_id)
-            .await
-            .map(|selection| addon_ranges(&selection.bindings))
-            .unwrap_or_default();
+            .teletext_custom_page_ranges(channel_id, effective)
+            .await;
         let mut uses: BTreeMap<u16, usize> = BTreeMap::new();
         for link in &links {
             *uses.entry(link.effective_page_number).or_default() += 1;
@@ -309,6 +364,7 @@ impl ApplicationServices {
         selection: TeletextSelectionSnapshot,
         input: &[u8],
         deadline: Instant,
+        effective: Option<&ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
     ) -> Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError> {
         if !is_teletext_custom_pages_producer(&selection.addon_id) {
             return Err(TeletextProfileRuntimeError::Unsupported);
@@ -322,7 +378,11 @@ impl ApplicationServices {
             return Err(TeletextProfileRuntimeError::TimedOut);
         }
         let plan = self
-            .plan_teletext_custom_pages(selection.channel_id, request.captured_at)
+            .plan_teletext_custom_pages_in_selection(
+                selection.channel_id,
+                request.captured_at,
+                effective,
+            )
             .await
             .map_err(|_| TeletextProfileRuntimeError::IoFailed)?;
         if Instant::now() >= deadline {
@@ -402,5 +462,70 @@ mod tests {
         assert_eq!(display_page(0x150), Some(150));
         assert_eq!(display_page(0x1a0), None);
         assert_eq!(display_page(0x0ff), None);
+    }
+    #[test]
+    fn effective_ranges_use_selected_scripted_settings_and_exclude_off_and_host() {
+        use ersatzrs_domain::{
+            TeletextEffectiveBindingSnapshot as Binding, TeletextEffectiveChannelSelectionSnapshot,
+            TeletextOverrideInterval, TeletextOverrideState, TeletextProfileCandidateSnapshot,
+            TeletextProfileSetting, TeletextPublishedOverride,
+        };
+        let settings = |start: &str, end: &str| {
+            vec![
+                TeletextProfileSetting {
+                    key: "PAGE_START".to_owned(),
+                    value: TeletextProfileValue::Literal(start.to_owned()),
+                },
+                TeletextProfileSetting {
+                    key: "PAGE_END".to_owned(),
+                    value: TeletextProfileValue::Literal(end.to_owned()),
+                },
+            ]
+        };
+        let host = ersatzrs_domain::teletext_custom_pages_selection(1);
+        let mut base = host.clone();
+        base.addon_id = "org.example.base".to_owned();
+        base.effective_settings = settings("300", "309");
+        let now = Utc::now();
+        let scope = |state| {
+            Binding::Scripted(TeletextPublishedOverride {
+                playout_id: 1,
+                interval: TeletextOverrideInterval {
+                    start: now,
+                    finish: now + chrono::Duration::minutes(5),
+                    state,
+                },
+            })
+        };
+        let selection = TeletextEffectiveChannelSelectionSnapshot {
+            channel_id: 1,
+            valid_until: Some(now + chrono::Duration::minutes(5)),
+            bindings: vec![
+                Binding::Base(host.clone()),
+                Binding::Base(base),
+                scope(TeletextOverrideState::Off {
+                    channel_id: 1,
+                    addon_id: "org.example.off".to_owned(),
+                }),
+                scope(TeletextOverrideState::Enabled(
+                    TeletextProfileCandidateSnapshot {
+                        contract: host.contract,
+                        channel_id: 1,
+                        addon_id: "org.example.target".to_owned(),
+                        profile_id: 2,
+                        profile_revision: 4,
+                        installation: host.installation,
+                        effective_settings: settings("150", "159"),
+                    },
+                )),
+            ],
+        };
+        assert_eq!(
+            effective_addon_ranges(&selection),
+            vec![
+                ("org.example.base".to_owned(), 300, 309),
+                ("org.example.target".to_owned(), 150, 159),
+            ]
+        );
     }
 }

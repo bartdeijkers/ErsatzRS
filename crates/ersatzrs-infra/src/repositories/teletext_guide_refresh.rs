@@ -758,7 +758,7 @@ async fn selection_current(
                 return Ok(false);
             }
             Ok(
-                matches!(super::super::teletext_profiles::recheck_effective_in_transaction(tx,selection,now).await?,TeletextProfileMutation::Saved(actual) if actual==*selection),
+                matches!(super::super::teletext_profiles::recheck_published_effective_in_transaction(tx,selection,now).await?,TeletextProfileMutation::Saved(actual) if actual==*selection),
             )
         }
         _ => Ok(false),

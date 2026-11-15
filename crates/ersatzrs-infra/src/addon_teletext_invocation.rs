@@ -95,6 +95,60 @@ pub async fn invoke_effective_profile_with_deadline_and_hold(
     deadline: std::time::Instant,
     hold: TeletextWorkHold,
 ) -> Result<TeletextEffectiveProfileInvocationReceipt, TeletextInvocationError> {
+    invoke_effective_with_host_membership(
+        pool,
+        selection,
+        addon_id,
+        runtime,
+        input,
+        (deadline, hold),
+        EffectiveHostMembership::Current,
+    )
+    .await
+}
+
+/// Invoke one published guide member while retaining canonical host membership.
+/// Every real add-on, Scripted origin/boundary, pinned installation and setting
+/// remains exact at resolution and prelaunch. No publication authority is granted.
+/// # Errors
+/// Returns the same bounded admission/request/deadline/cleanup failures as fresh invocation.
+pub async fn invoke_published_effective_profile_with_deadline_and_hold(
+    pool: DbPool,
+    selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
+    addon_id: String,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    deadline: std::time::Instant,
+    hold: TeletextWorkHold,
+) -> Result<TeletextEffectiveProfileInvocationReceipt, TeletextInvocationError> {
+    invoke_effective_with_host_membership(
+        pool,
+        selection,
+        addon_id,
+        runtime,
+        input,
+        (deadline, hold),
+        EffectiveHostMembership::Published,
+    )
+    .await
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EffectiveHostMembership {
+    Current,
+    Published,
+}
+
+async fn invoke_effective_with_host_membership(
+    pool: DbPool,
+    selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
+    addon_id: String,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    admission: (std::time::Instant, TeletextWorkHold),
+    host_membership: EffectiveHostMembership,
+) -> Result<TeletextEffectiveProfileInvocationReceipt, TeletextInvocationError> {
+    let (deadline, hold) = admission;
     let fence = effective_fence(&selection, deadline)?;
     let receipt = invoke_with_fence(
         Invocation {
@@ -105,6 +159,7 @@ pub async fn invoke_effective_profile_with_deadline_and_hold(
             cancellation: None,
             selection: None,
             effective_selection: Some(Arc::clone(&selection)),
+            effective_host_membership: host_membership,
             hold: Some(hold),
         },
         fence,
@@ -210,6 +265,7 @@ pub async fn invoke(
             cancellation,
             selection: None,
             effective_selection: None,
+            effective_host_membership: EffectiveHostMembership::Current,
             hold: None,
         },
         fence,
@@ -321,6 +377,7 @@ async fn invoke_profile_before_owned(
             cancellation,
             selection: Some(selection),
             effective_selection: None,
+            effective_host_membership: EffectiveHostMembership::Current,
             hold,
         },
         fence,
@@ -344,6 +401,7 @@ struct Invocation {
     cancellation: Option<oneshot::Receiver<()>>,
     selection: Option<TeletextSelectionSnapshot>,
     effective_selection: Option<Arc<TeletextEffectiveChannelSelectionSnapshot>>,
+    effective_host_membership: EffectiveHostMembership,
     hold: Option<TeletextWorkHold>,
 }
 
@@ -354,6 +412,11 @@ async fn invoke_with_fence(
     fence: ResolutionFence,
     settlement_timeout: Duration,
 ) -> Result<InvocationReceipt, TeletextInvocationError> {
+    if invocation.effective_host_membership == EffectiveHostMembership::Published
+        && invocation.effective_selection.is_none()
+    {
+        return Err(TeletextInvocationError::AdmissionRejected);
+    }
     if invocation.input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES {
         return Err(TeletextInvocationError::InvalidRequest);
     }
@@ -490,6 +553,7 @@ async fn invoke_owned(
         &invocation.runtime,
         invocation.selection.as_ref(),
         invocation.effective_selection.as_deref(),
+        invocation.effective_host_membership,
         &fence,
     );
     tokio::pin!(resolution);
@@ -584,6 +648,7 @@ async fn resolve_invocation_for_launch(
     runtime: &AddonRuntimeContext,
     selection: Option<&TeletextSelectionSnapshot>,
     effective: Option<&TeletextEffectiveChannelSelectionSnapshot>,
+    host_membership: EffectiveHostMembership,
     fence: &ResolutionFence,
 ) -> Result<ResolvedAddonCommand, AddonError> {
     if let Some(selection) = effective {
@@ -592,6 +657,7 @@ async fn resolve_invocation_for_launch(
             ProfileAuthority::Effective {
                 selection,
                 addon_id,
+                host_membership,
             },
             runtime,
             fence,
@@ -676,6 +742,7 @@ enum ProfileAuthority<'a> {
     Effective {
         selection: &'a TeletextEffectiveChannelSelectionSnapshot,
         addon_id: &'a str,
+        host_membership: EffectiveHostMembership,
     },
 }
 
@@ -693,18 +760,32 @@ impl ProfileAuthority<'_> {
             Self::Effective {
                 selection,
                 addon_id,
+                host_membership,
             } => {
                 fence.check()?;
                 effective_binding(selection, addon_id)?;
-                let current = crate::repositories::SqliteTeletextProfileRepository(pool.clone())
-                    .recheck_effective_channel_snapshot(selection, chrono::Utc::now())
-                    .await
-                    .map_err(|_| {
-                        AddonError::Database("effective profile unavailable".to_owned())
-                    })?;
+                let profiles = crate::repositories::SqliteTeletextProfileRepository(pool.clone());
+                let current = match host_membership {
+                    EffectiveHostMembership::Current => {
+                        profiles
+                            .recheck_effective_channel_snapshot(selection, chrono::Utc::now())
+                            .await
+                    }
+                    EffectiveHostMembership::Published => {
+                        profiles
+                            .published_effective_channel_dependencies(
+                                selection.channel_id,
+                                chrono::Utc::now(),
+                            )
+                            .await
+                    }
+                }
+                .map_err(|_| AddonError::Database("effective profile unavailable".to_owned()))?;
                 fence.check()?;
-                if !matches!(current, TeletextProfileMutation::Saved(current) if current == **selection)
-                {
+                if !matches!(current, TeletextProfileMutation::Saved(current) if match host_membership {
+                    EffectiveHostMembership::Current => current == **selection,
+                    EffectiveHostMembership::Published => ersatzrs_domain::teletext_published_effective_selection_matches(&current, selection),
+                }) {
                     return Err(AddonError::Validation(
                         "effective selection changed".to_owned(),
                     ));
@@ -725,6 +806,7 @@ impl ProfileAuthority<'_> {
             Self::Effective {
                 selection,
                 addon_id,
+                ..
             } => match effective_binding(selection, addon_id)? {
                 TeletextEffectiveBindingSnapshot::Base(base) => Ok(ProfileData {
                     addon_id: &base.addon_id,

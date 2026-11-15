@@ -47,8 +47,9 @@ release section when tagging a release.
   double-height line, or a page inside an enabled add-on's range. Editing an element or link never changes what is on
   air until you publish again; switching the first page on or the last page
   off changes the channel's sources like an add-on does. Automatic field
-  refresh after publishing, custom pages during published Lua/Scripted
-  intervals and the element's own subpage cycle time are not done yet. The add-on id
+  refresh after publishing is described below. Custom pages during published
+  Lua/Scripted intervals and the element's own subpage cycle time remain open.
+  The add-on id
   `ersatzrs.host.custom-pages` is reserved.
 - Channel teletext pages show one ordered readiness checklist: add-on enabled,
   valid profile, teletext capacity, output route, published pages and
@@ -70,6 +71,14 @@ release section when tagging a release.
 
 ### Changed
 
+- Custom-page checks use the add-on page ranges selected by the active
+  Lua/Scripted interval. Published pages, their field bindings and their absence
+  remain stable during On/Off intervals when elements or links change. Guide and
+  field refresh retain that original source; new Check/Publish actions still
+  validate current settings. Interval expiry restores the independently accepted
+  base output. Field failures stay page-local, with Health warnings retained
+  until acknowledged recovery. Published output also remains valid at the
+  producer limit when later custom links would exceed it.
 - Custom-page drafts preserve their checked dynamic-field bindings with the
   page revision, so later element edits cannot replace the saved refresh recipe.
   The native output can refresh changed display pages without clearing unchanged

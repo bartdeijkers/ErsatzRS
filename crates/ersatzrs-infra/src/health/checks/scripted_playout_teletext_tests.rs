@@ -168,119 +168,15 @@ async fn set_policy(pool: &Pool<Db>, value: &str) {
     .unwrap();
 }
 
-fn original_scope(selection: &TeletextEffectiveChannelSelectionSnapshot) -> Vec<u8> {
-    let [TeletextEffectiveBindingSnapshot::Scripted(published)] = selection.bindings.as_slice()
-    else {
-        panic!("single Scripted fixture")
-    };
-    let TeletextOverrideState::Enabled(candidate) = &published.interval.state else {
-        panic!("enabled fixture")
-    };
-    let install = &candidate.installation;
-    let producer = serde_json::json!({
-        "contract":candidate.contract.schema_version(),"channel_id":candidate.channel_id,
-        "addon_id":candidate.addon_id,"profile_id":candidate.profile_id,"profile_revision":candidate.profile_revision,
-        "effective_settings":[],"installation":{"addon_id":install.addon_id,"state_revision":install.state_revision,
-            "version":install.version,"package_sha256":install.package_sha256,"content_sha256":install.content_sha256,
-            "manifest_sha256":install.manifest_sha256}
-    });
-    serde_json::to_vec(&serde_json::json!({
-        "format_version":TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
-        "effective_selection":{"channel_id":selection.channel_id,"valid_until":selection.valid_until,
-            "bindings":[{"origin":"scripted","base":null,"scripted":{
-                "playout_id":published.playout_id,"start":published.interval.start,"finish":published.interval.finish,
-                "state":{"kind":"enabled","channel_id":candidate.channel_id,"addon_id":candidate.addon_id,
-                    "candidate":producer}
-            }}]}
-    })).unwrap()
-}
-
-// SQL ledger fixtures deliberately omit native payloads. They prove only the
-// Health projection's durable association, never compiled pages or sink output.
+// SQL association fixtures omit native payloads; no compiled/sink proof is inferred.
 async fn accepted_fixture() -> (
     Pool<Db>,
     DateTime<Utc>,
     DateTime<Utc>,
     TeletextAcceptedGeneration,
 ) {
-    let (pool, candidate) = setup().await;
-    let now = Utc::now();
-    let finish = now + chrono::Duration::hours(1);
-    insert(
-        &pool,
-        now - chrono::Duration::hours(1),
-        finish,
-        Some(snapshot(&candidate)),
-    )
-    .await;
-    set_policy(&pool, &policy(4096).to_string()).await;
-    let selection = saved(
-        SqliteTeletextProfileRepository(pool.clone())
-            .effective_channel_snapshot(1, now)
-            .await
-            .unwrap(),
-    );
-    let designs = SqliteTeletextDesignRepository(pool.clone());
-    let TeletextDesignMutation::Saved(head) = designs
-        .save(
-            &TeletextDesignSave {
-                name: "Synthetic scoped health originals".to_owned(),
-                document_version: TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
-                document: original_scope(&selection),
-                existing: None,
-            },
-            4096,
-        )
+    published_host::accepted_variant(false, true, TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION)
         .await
-        .unwrap()
-    else {
-        panic!("design fixture rejected")
-    };
-    let revision = designs
-        .revision(head.id, head.revision, 4096)
-        .await
-        .unwrap()
-        .unwrap();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let TeletextPublicationMutation::Requested(request) =
-        SqliteTeletextPublicationRepository(pool.clone())
-            .request_effective(
-                &TeletextEffectivePublicationRequestSave {
-                    design_id: head.id,
-                    revision: head.revision,
-                    digest: revision.digest,
-                    expected_design_head: head.revision,
-                    expected_request_id: None,
-                    selection: selection.clone(),
-                },
-                4096,
-                deadline,
-            )
-            .await
-            .unwrap()
-    else {
-        panic!("request fixture rejected")
-    };
-    let TeletextGenerationMutation::Accepted(generation) =
-        SqliteTeletextGenerationRepository(pool.clone())
-            .accept_effective(
-                &TeletextEffectiveGenerationSave {
-                    request,
-                    expected_design_head: head.revision,
-                    expected_generation_id: None,
-                    selection,
-                    artifact_version: TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
-                    artifact_digest: "a".repeat(64),
-                },
-                4096,
-                deadline,
-            )
-            .await
-            .unwrap()
-    else {
-        panic!("generation fixture rejected")
-    };
-    (pool, now, finish, generation)
 }
 
 #[tokio::test]
@@ -562,3 +458,6 @@ async fn future_override_and_mirror_channel_do_not_report_active_source_state() 
     assert!(result.message.contains("channel 1:"));
     assert!(!result.message.contains("channel 2:"));
 }
+
+#[path = "scripted_playout_teletext_tests/published_host.rs"]
+mod published_host;

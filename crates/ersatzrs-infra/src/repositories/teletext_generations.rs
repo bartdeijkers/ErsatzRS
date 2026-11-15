@@ -33,6 +33,20 @@ mod guide;
 #[path = "teletext_guide_refresh.rs"]
 mod refresh;
 
+impl SqliteTeletextGenerationRepository {
+    /// Health-only durable association; never native reconstruction, source
+    /// freshness, stream admission or sink acknowledgement authority.
+    pub(crate) async fn observe_effective_health_association(
+        &self,
+        generation: &TeletextAcceptedGeneration,
+        selection: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+        maximum: usize,
+        deadline: std::time::Instant,
+    ) -> Result<M<()>> {
+        effective::observe_association(&self.0, generation, selection, maximum, deadline).await
+    }
+}
+
 #[async_trait]
 impl TeletextGenerationRepository for SqliteTeletextGenerationRepository {
     fn guide_refresh(
@@ -255,7 +269,12 @@ async fn check_published_selection(
     selection: &TeletextChannelSelectionSnapshot,
 ) -> Result<std::result::Result<(), R>> {
     Ok(
-        match channel_snapshot_in_transaction(transaction, selection.channel_id).await? {
+        match super::teletext_profiles::channel_published_dependencies_in_transaction(
+            transaction,
+            selection.channel_id,
+        )
+        .await?
+        {
             TeletextProfileMutation::Rejected(reason) => {
                 Err(R::Publication(P::SelectionUnavailable(reason)))
             }
