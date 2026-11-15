@@ -22,6 +22,7 @@ use crate::host::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
     teletext_designs::NativeTeletextDesignError,
     teletext_effective_designs::{
+        reload_effective_original_for_output_with_hold,
         reload_effective_original_for_publication_with_hold, RestoredEffectiveOriginalDesign,
     },
     teletext_effective_generations::{
@@ -223,7 +224,7 @@ pub(crate) async fn reload_accepted_effective_guide_teletext_generation(
     if generation.artifact_version != TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION {
         return Err(NativeTeletextGenerationError::ArtifactMismatch);
     }
-    let Some((design, deadline)) = reload_effective_original_for_publication_with_hold(
+    let Some((design, deadline)) = reload_effective_original_for_output_with_hold(
         application,
         generation.request.design_id,
         generation.request.revision,

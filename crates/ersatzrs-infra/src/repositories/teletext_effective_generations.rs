@@ -233,7 +233,7 @@ async fn confirm_before(
     {
         return Ok(M::Rejected(R::GenerationConflict));
     }
-    if let Err(reason) = publication::check_scope(&mut tx, selection).await? {
+    if let Err(reason) = publication::check_published_scope(&mut tx, selection).await? {
         return Ok(M::Rejected(R::Publication(reason)));
     }
     if let Err(reason) = check_revision_for_version(

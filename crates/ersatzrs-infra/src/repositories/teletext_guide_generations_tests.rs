@@ -352,6 +352,23 @@ async fn source_guide_effective_keeps_base_and_exact_original_scope_expiry() {
         repository.current(1).await.unwrap(),
         Some(fixture.base_generation)
     );
+    // A later unpublished custom link must not invalidate a guide original
+    // that explicitly contains no host member. Native/source fences stay exact.
+    scoped::link_custom_page(&fixture.base).await;
+    let profiles =
+        crate::repositories::SqliteTeletextProfileRepository(fixture.base.repo.0.clone());
+    assert_eq!(
+        ersatzrs_core::repositories::TeletextProfileRepository::recheck_effective_channel_snapshot(
+            &profiles,
+            &save.original.selection,
+            Utc::now(),
+        )
+        .await
+        .unwrap(),
+        ersatzrs_core::repositories::TeletextProfileMutation::Rejected(
+            ersatzrs_core::repositories::TeletextProfileRejection::Conflict,
+        ),
+    );
     assert_eq!(
         repository
             .confirm_current_effective_guide(

@@ -810,3 +810,60 @@ async fn effective_custom_source_is_host_typed_and_retains_exact_association() {
         assert!(matches!(result, Err(Error::SelectionShape)));
     }
 }
+
+#[tokio::test]
+async fn published_effective_recheck_retains_host_membership_without_renewing_scope_or_deadline() {
+    for published_host in [false, true] {
+        for current_host in [false, true] {
+            let mut original = Repository::new(vec![off()]).selection;
+            original.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+            if published_host {
+                original.bindings.insert(
+                    0,
+                    Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(9)),
+                );
+            }
+            let mut current = original.clone();
+            current.bindings.retain(|binding| {
+                !ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())
+            });
+            if current_host {
+                current.bindings.insert(
+                    0,
+                    Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(9)),
+                );
+            }
+            let mut repo = Repository::new(current.bindings.clone());
+            repo.selection = current;
+            recheck_published(&repo, &original, deadline())
+                .await
+                .unwrap();
+            assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+            assert!(matches!(
+                recheck_published(&repo, &original, Instant::now()).await,
+                Err(Error::TimedOut)
+            ));
+            assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+            let mut expired = original.clone();
+            expired.valid_until = Some(Utc::now() - chrono::Duration::seconds(1));
+            assert!(matches!(
+                recheck_published(&repo, &expired, deadline()).await,
+                Err(Error::SelectionChanged)
+            ));
+            let Binding::Scripted(scope) = repo
+                .selection
+                .bindings
+                .iter_mut()
+                .find(|binding| matches!(binding, Binding::Scripted(_)))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            scope.playout_id += 1;
+            assert!(matches!(
+                recheck_published(&repo, &original, deadline()).await,
+                Err(Error::SelectionChanged)
+            ));
+        }
+    }
+}

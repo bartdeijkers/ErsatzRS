@@ -77,6 +77,32 @@ pub(in crate::repositories) async fn check_scope(
     )
 }
 
+/// Confirm dependencies of accepted output while retaining manual host membership.
+/// Every new request and acceptance continues to call the exact `check_scope`.
+pub(in crate::repositories) async fn check_published_scope(
+    tx: &mut Transaction<'_, Db>,
+    selection: &Selection,
+) -> Result<std::result::Result<(), R>> {
+    if expired(selection) {
+        return Ok(Err(R::SelectionChanged));
+    }
+    Ok(
+        match super::super::teletext_profiles::recheck_published_effective_in_transaction(
+            tx,
+            selection,
+            Utc::now(),
+        )
+        .await?
+        {
+            TeletextProfileMutation::Saved(_) => Ok(()),
+            TeletextProfileMutation::Rejected(TeletextProfileRejection::Conflict) => {
+                Err(R::SelectionChanged)
+            }
+            TeletextProfileMutation::Rejected(reason) => Err(R::SelectionUnavailable(reason)),
+        },
+    )
+}
+
 pub(super) async fn request(
     pool: &DbPool,
     save: &TeletextEffectivePublicationRequestSave,

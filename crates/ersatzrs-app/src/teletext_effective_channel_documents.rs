@@ -307,6 +307,19 @@ impl ApplicationServices {
         .await
     }
 
+    /// Check dependencies of an accepted original without adopting latest host links.
+    /// Every Scripted origin/boundary and real add-on dependency remains exact.
+    /// This grants no new Check, publication or generation acceptance authority.
+    /// # Errors
+    /// Rejects expiry, deadline, storage failure or changed non-host dependencies.
+    pub async fn recheck_published_effective_channel_teletext_document_selection(
+        &self,
+        selection: &Selection,
+        deadline: Instant,
+    ) -> Result<(), Error> {
+        recheck_published(self.ports().teletext_profiles(), selection, deadline).await
+    }
+
     /// Check the complete scope after CPU/encoding without renewing its lease.
     /// # Errors
     /// Rejects expiry, unavailable storage or changed membership/interval targets.
@@ -527,6 +540,32 @@ async fn recheck(
         return Err(Error::SelectionChanged);
     }
     Ok(())
+}
+
+async fn recheck_published(
+    repository: &dyn TeletextProfileRepository,
+    selection: &Selection,
+    deadline: Instant,
+) -> Result<(), Error> {
+    check_deadline(deadline)?;
+    let current = repository
+        .effective_channel_snapshot(selection.channel_id, Utc::now())
+        .await
+        .map_err(|_| Error::StorageUnavailable)?;
+    check_deadline(deadline)?;
+    match current {
+        Mutation::Saved(current)
+            if selection
+                .valid_until
+                .is_some_and(|until| Utc::now() < until)
+                && ersatzrs_domain::teletext_published_effective_selection_matches(
+                    &current, selection,
+                ) =>
+        {
+            Ok(())
+        }
+        _ => Err(Error::SelectionChanged),
+    }
 }
 
 fn check_deadline(deadline: Instant) -> Result<(), Error> {

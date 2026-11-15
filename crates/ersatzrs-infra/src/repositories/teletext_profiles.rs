@@ -36,6 +36,16 @@ pub(super) async fn recheck_effective_in_transaction(
     effective_selection::recheck_in_transaction(tx, expected, when).await
 }
 
+/// Confirm an accepted effective original without adopting latest host links.
+/// New Check/publication still use the exact effective snapshot recheck.
+pub(super) async fn recheck_published_effective_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    expected: &TeletextEffectiveChannelSelectionSnapshot,
+    when: DateTime<Utc>,
+) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+    effective_selection::recheck_published_in_transaction(tx, expected, when).await
+}
+
 #[path = "teletext_effective_selection.rs"]
 mod effective_selection;
 

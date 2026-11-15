@@ -41,7 +41,7 @@ async fn fixture() -> Fixture {
     fixture
 }
 
-async fn link(fixture: &Fixture, marker: &str, page: Option<u16>) -> i64 {
+pub(super) async fn link(fixture: &Fixture, marker: &str, page: Option<u16>) -> i64 {
     let application = &fixture.state.application;
     let upload = application
         .upload_teletext_element(
@@ -80,7 +80,7 @@ async fn observe(fixture: &Fixture) -> String {
 
 /// Seven-bit row contents of every encoded packet (EN 300 472 data units
 /// carry each packet bit-reversed after a four-byte unit header).
-fn packet_rows(
+pub(super) fn packet_rows(
     encoded: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
 ) -> Vec<[u8; 40]> {
     designs::units(encoded)

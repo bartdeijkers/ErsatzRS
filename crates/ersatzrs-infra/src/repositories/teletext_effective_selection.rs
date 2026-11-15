@@ -37,6 +37,34 @@ pub(super) async fn recheck_in_transaction(
     }
 }
 
+/// Retain the manual original's host membership only for accepted output.
+/// New preparation/publication continues to use the exact recheck above.
+pub(super) async fn recheck_published_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    expected: &TeletextEffectiveChannelSelectionSnapshot,
+    when: DateTime<Utc>,
+) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+    if expected
+        .valid_until
+        .is_some_and(|boundary| when >= boundary)
+    {
+        return Ok(M::Rejected(R::Conflict));
+    }
+    match read_in_transaction(tx, expected.channel_id, when).await {
+        Ok(M::Saved(current))
+            if ersatzrs_domain::teletext_published_effective_selection_matches(
+                &current, expected,
+            ) =>
+        {
+            Ok(M::Saved(expected.clone()))
+        }
+        Ok(_) | Err(ersatzrs_core::repositories::RepositoryError::Conflict(_)) => {
+            Ok(M::Rejected(R::Conflict))
+        }
+        Err(error) => Err(error),
+    }
+}
+
 async fn next_transition(
     tx: &mut Transaction<'_, Db>,
     channel: EntityId,

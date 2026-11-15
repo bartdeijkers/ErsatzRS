@@ -455,3 +455,6 @@ async fn scoped_artifact_corruption_deadline_and_profile_drift_never_consume_pen
     );
     assert!(fixture.playout.try_recv().is_err());
 }
+
+#[path = "effective_generations/custom_pages.rs"]
+mod custom_pages;
