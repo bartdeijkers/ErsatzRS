@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'PR160 custom-page subpage cycles locally qualified; final required CI and bounded delivery/audit remain'
+current_focus = 'PR160 custom-page subpage-cycle delivery complete; no next current-thread parity slice'
 
 summary = '''
 UCU-16 rows286–289 are Complete within their unchanged required boundary.
@@ -79,21 +79,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Active current-thread goal, maintainer amendment2026-11-15: fully finish PR160
-custom-page subpage-cycle timing only. The single finite F1/F2/E1/E2/E3/D1
-checklist in parity/teletext-support.toml owns remaining functionality, mandatory
-evidence, blockers and final delivery audit. F1/F2 implementation and E2/E3
-ordinary/playback qualification are complete within their recorded scopes.
-E1 requires the named host-private controls in final CI; D1 owns delivery.
-Preserve all approved requirements, valid proof and original negatives.
-Finish required final-head CI,
-merge under existing permission, verify integration and safely clean task-owned
-resources, then stop and mark this bounded goal complete. Do not start FastLinks,
-preview/import, another parity-debt slice, release or installation. An external
-prerequisite or required acceptance change needs a safe checkpoint and the exact
-blocker/decision, not substitute work. The broader parity list below remains
-backlog for this thread; independent programme ownership/status is unchanged.
-
+The maintainer-bounded PR160 subpage-cycle delivery is Complete within its
+recorded scope. The single F1/F2/E1/E2/E3/D1 checklist in
+parity/teletext-support.toml is audited against actual implementation,
+69 focused controls, matched native/ordinary qualification, unchanged102/93
+strict ordinary/playback checks, smoke, final review, all13 required Ready CI
+jobs on719c3830, expected-head merge5db1f742 and verified main integration.
+Required raw positive/negative proof is retained outside the removed clean
+source worktree; its local branch is removed without force. Foreign root main,
+its3 unique commits, unrelated worktrees and the unchanged full backlog remain.
+This factual progress closeout ends the current-thread delivery. No next parity
+slice is scheduled here: do not start FastLinks, preview/import, other parity
+debt, release or installation under this goal. The broader list below remains
+backlog; independent programme ownership/status and approved deferrals are
+unchanged. Do not infer completion of the whole custom-page debt.
 
 Retained parity-debt backlog (original maintainer task2026-11-13; setup inventory at origin/main
 ffdc0f7edf429b4b1d4ea8e23275db40aacbfbc7):
