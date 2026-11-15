@@ -2190,7 +2190,14 @@ test('production TV-guide actual command timeout retains last-good output and re
 // One real production-addon Lua lifecycle. The collection/media fixture supplies
 // AV only; Lua resolves existing production profiles through the normal app API.
 const reusedLuaDirectEvidence = process.env.ERSATZRS_TVGUIDE_LUA_REUSE_DIRECT;
-test(reusedLuaDirectEvidence
+const customLuaFlow = process.env.ERSATZRS_TELETEXT_CUSTOM_LUA_FLOW;
+if (customLuaFlow !== undefined && (!['present', 'absent'].includes(customLuaFlow) || reusedLuaDirectEvidence)) {
+  throw new Error('Custom Lua flow requires present/absent and fresh actual captures.');
+}
+const offCustomPresent = customLuaFlow === 'present';
+test(customLuaFlow
+  ? `production TV-guide Lua custom Off ${customLuaFlow} and exact expiry to independent Base`
+  : reusedLuaDirectEvidence
   ? 'production TV-guide Lua Legacy repair with qualified paired direct evidence'
   : 'production TV-guide Lua profile On Off Continue and natural expiry to Base', async ({ browser, isolatedWebHost }, info) => {
   test.skip(process.env.ERSATZRS_TVGUIDE_LUA_FLOW !== '1', 'Explicit production Lua lifecycle qualification.');
@@ -2199,9 +2206,10 @@ test(reusedLuaDirectEvidence
   test.setTimeout(300_000);
   const baseURL = isolatedWebHost.baseURL;
   const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, {
-    authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: 180 },
+    authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH!, durationSeconds: customLuaFlow ? 300 : 180 },
   });
   let context: BrowserContext | undefined;
+  let fieldGap: number | undefined;
   const receipts: Record<string, unknown> = { repository_zip_sha256: candidateDigest,
     scope: 'Real production profile On/effective6, Off/effective4, command-free Continue and natural60s Off expiry to Base5; paired direct-TS ordinary On/isolation responses and one public Legacy Off-to-Base response. No simultaneous paired Legacy-capacity, restart, physical client or whole P9B claim.' };
   if (reusedLuaDirectEvidence) receipts.scope = 'Affected ordinary Legacy Off-to-Base transport repair, with fresh admin/profile/publication/Lua checks. Previously qualified paired direct responses are explicitly reused within the checked source/runtime boundary; no new paired direct receiver claim.';
@@ -2245,7 +2253,8 @@ test(reusedLuaDirectEvidence
     await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
     const classic = await createProfile(page, fixture, 'classic', true), night = await createProfile(page, fixture, 'night', true);
     receipts.profiles = { classic, night }; persist();
-    for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
+    for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id,
+      { count: 3, durationMilliseconds: customLuaFlow ? 300_000 : 180_000 });
     const retainedSource = sourceRows();
     const sourceNow = fixture.database.prepare(`SELECT * FROM PlayoutItem WHERE PlayoutId=?
       AND julianday(Start)<=julianday(?) AND julianday(Finish)>julianday(?) ORDER BY Start LIMIT 1`)
@@ -2297,7 +2306,7 @@ test(reusedLuaDirectEvidence
       expect(document(url)).toEqual(before); expect(pointers()).toEqual(acceptedBefore);
       historicalReads.push({ url, busy_reread: busy }); receipts.historical_reads = historicalReads; persist();
     };
-    const prepare = async (effective: boolean, name: string, absent = false): Promise<string> => {
+    const prepare = async (effective: boolean, name: string, absent = false, customOnly = false): Promise<string> => {
       await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
       const form = page.getByTestId(effective ? 'teletext-effective-authoring-form' : 'teletext-authoring-form');
       const publishAdvanced = page.getByTestId('teletext-publish-advanced');
@@ -2309,17 +2318,32 @@ test(reusedLuaDirectEvidence
           await expect(form.locator(`[name="${field}"]`)).toHaveCount(0);
         }
       } else {
-        await form.locator('[name="entry_addon_id"]').selectOption(addonId);
-        await form.locator('[name="entry_page"]').fill(effective ? '410' : '200');
+        await form.locator('[name="entry_addon_id"]').selectOption(customOnly ? 'ersatzrs.host.custom-pages' : addonId);
+        await form.locator('[name="entry_page"]').fill(customOnly ? '150' : effective ? '410' : '200');
         await form.locator('[name="entry_subcode"]').fill('0000');
         await form.locator('[name="v1_region"]').selectOption('western_latin');
         await form.locator('[name="resource_transmissions"]').fill('[]');
-        await form.locator('[name="guide_channel_id"]').selectOption(String(source));
+        await form.locator('[name="guide_channel_id"]').selectOption(customOnly ? [] : String(source));
       }
       await submit(page, form, text('TeletextValidateSaveDraft'), true);
       await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
       return page.url();
     };
+    const customElements: number[] = [];
+    const addCustom = async (label: string): Promise<void> => {
+      customElements.push(await uploadCustomPage(page, channel, 150,
+        [`${label}150`, 'NOW %NOW%%%%%%%%%%%%', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%']));
+      customElements.push(await uploadCustomPage(page, channel, 151, [`${label}151`, 'TIME %TIME%% FIXED']));
+    };
+    const removeCustom = async (): Promise<void> => {
+      for (const id of customElements.splice(0)) {
+        const response = await page.request.post(`/admin-api/teletext-elements/${id}/delete`,
+          { form: { confirm: 'yes' }, maxRedirects: 0 });
+        expect(response.status()).toBe(303); expect(response.headers().location).toBe('/teletext-elements?saved=deleted');
+      }
+      expect(fixture.database.prepare('SELECT 1 FROM ChannelTeletextElement WHERE ChannelId=?').get(channel)).toBeUndefined();
+    };
+    if (customLuaFlow === 'absent') await addCustom('BASE ORIGINAL');
     for (const id of fixture.channels) {
       await page.goto(`/channels/${id}/teletext`); await ready(page, true);
       const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
@@ -2346,8 +2370,9 @@ test(reusedLuaDirectEvidence
       if (typeof profile === 'number') expect(profilesBefore.some(row => row.Id === profile && !row.IsDeleted)).toBe(true);
       const controls = profile === undefined ? '' : profile === null ? `assert(teletext_enabled('${addonId}',false).ok)`
         : `assert(teletext_profile('${addonId}',${profile}).ok)\nassert(teletext_enabled('${addonId}',true).ok)`;
+      const duration = customLuaFlow && typeof profile === 'number' ? '00:02:00' : '00:01:00';
       const script = `add_collection('clip','Synthetic Scripted ${fixture.addonId}')\n${controls}\n`
-        + (mode === 'reset' ? "add_duration('clip','00:01:00',{trim=true,stop_before_end=true})\n" : "add_count('clip',3)\n");
+        + (mode === 'reset' ? `add_duration('clip','${duration}',{trim=true,stop_before_end=true})\n` : "add_count('clip',3)\n");
       writeFileSync(`${fixture.root}/synthetic-controls-${channel}.lua`, script);
       await page.goto('/playouts'); await ready(page, true);
       const name = fixture.database.prepare('SELECT Name FROM Channel WHERE Id=?').get(channel) as { Name: string };
@@ -2382,7 +2407,7 @@ test(reusedLuaDirectEvidence
       if (mode === 'reset') {
         const items = fixture.database.prepare('SELECT Start,Finish,InPoint,OutPoint FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
           .all(channel) as { Start: string; Finish: string; InPoint: string; OutPoint: string }[];
-        expect(items).toHaveLength(1); expect(utc(items[0].Finish) - utc(items[0].Start)).toBe(60_000);
+        expect(items).toHaveLength(1); expect(utc(items[0].Finish) - utc(items[0].Start)).toBe(customLuaFlow && typeof profile === 'number' ? 120_000 : 60_000);
         expect(intervals()[0].Start).toBe(items[0].Start); expect(intervals()[0].Finish).toBe(items[0].Finish);
       }
     };
@@ -2390,7 +2415,8 @@ test(reusedLuaDirectEvidence
       first_off_av_utc?: string; last_off_av_utc?: string; packets: number;
       pmt_transitions: { authored: boolean; received_utc: string; packet: number }[] };
     const capture = async (id: number, name: string, address: number, theme: string,
-      authoredObserved?: () => void, offFinish?: number, mode: 'direct' | 'legacy' = 'legacy'): Promise<{ path: string; decoded: string; timing: CaptureTiming }> => {
+      authoredObserved?: () => void, offFinish?: number, mode: 'direct' | 'legacy' = 'legacy'): Promise<{ path: string; decoded: string; timing: CaptureTiming;
+        provenance?: { logStart: number; firstChunkLog: number; logEnd: number; hostLog: string } }> => {
       const number = (fixture.database.prepare('SELECT Number FROM Channel WHERE Id=?').get(id) as { Number: string }).Number;
       const path = info.outputPath(`${name}.ts`), opened = new Date().toISOString();
       const route = mode === 'direct' ? `/iptv/hls-direct/${id}.ts` : `/iptv/channel/${number}.ts?mode=ts-legacy`;
@@ -2410,8 +2436,11 @@ test(reusedLuaDirectEvidence
         if (offset + length > 188) return undefined;
         return packet.subarray(offset, offset + length);
       };
+      const hostLog = info.outputPath('isolated-settings-host.log');
+      const logStart = statSync(hostLog).size; let firstChunkLog: number | undefined;
       const result = await captureTeletextChannelTs(`${baseURL}${route}`, path,
         { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 }, (bytes, receivedUtc) => {
+          firstChunkLog ??= statSync(hostLog).size;
           timing.first_read_utc ??= receivedUtc; timing.last_read_utc = receivedUtc;
           const previousCarry = carry.length, previousCarryUtc = carryUtc;
           const joined = previousCarry ? Buffer.concat([carry, bytes]) : Buffer.from(bytes);
@@ -2467,10 +2496,35 @@ test(reusedLuaDirectEvidence
       }
       expect(malformed).toBe(0);
       for (const pid of [0, 256, 257, 512]) expect(pids.has(pid)).toBe(true);
-      const av = spawnSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', path,
-        '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'], { encoding: 'utf8', timeout: 30_000, maxBuffer: 65_536 });
+      const av = spawnSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+        ...(customLuaFlow ? ['-copyts'] : []), '-i', path, '-map', '0:v:0', '-map', '0:a:0',
+        ...(customLuaFlow ? ['-fps_mode:v', 'passthrough', '-enc_time_base:v', 'demux', '-f', 'framemd5'] : ['-f', 'null']), '-'],
+        { encoding: 'utf8', timeout: 30_000, maxBuffer: customLuaFlow ? 2 * 1024 * 1024 : 65_536 });
       writeFileSync(info.outputPath(`${name}.av.stderr`), av.stderr ?? '');
       expect(av.error).toBeUndefined(); expect(av.signal).toBeNull(); expect(av.status).toBe(0); expect(av.stderr).toBe('');
+      if (customLuaFlow) {
+        // Preserve demux PTS instead of rounding valid seam frames onto one
+        // nominal 25fps tick. Check the raw clock and every decoded frame too.
+        const probe = (args: string[], suffix: string) => {
+          const result = spawnSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-select_streams', 'v:0',
+            ...args, '-of', 'json', path], { encoding: 'utf8', timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
+          writeFileSync(info.outputPath(`${name}.${suffix}.json`), result.stdout);
+          writeFileSync(info.outputPath(`${name}.${suffix}.stderr`), result.stderr);
+          expect(result.error).toBeUndefined(); expect(result.status).toBe(0); expect(result.stderr).toBe('');
+          return JSON.parse(result.stdout);
+        };
+        const packets = probe(['-show_packets', '-show_streams', '-show_entries', 'packet=dts:stream=time_base'], 'raw-video-clock');
+        const frames = probe(['-show_frames', '-show_entries', 'frame=pts'], 'source-video-clock').frames as { pts: number }[];
+        const monotonic = (values: number[]) => values.length > 0 && values.every((value, index) =>
+          Number.isSafeInteger(value) && (index === 0 || values[index - 1] < value));
+        expect(monotonic(packets.packets.map((packet: { dts: number }) => packet.dts))).toBe(true);
+        expect(monotonic(frames.map(frame => frame.pts))).toBe(true);
+        writeFileSync(info.outputPath(`${name}.av.framemd5`), av.stdout);
+        expect(av.stdout).toContain(`#tb 0: ${packets.streams[0].time_base}`);
+        const decoded = av.stdout.split('\n').filter(line => line.startsWith('0,'))
+          .map(line => Number(line.split(',')[2].trim()));
+        expect(decoded).toEqual(frames.map(frame => frame.pts));
+      }
       const subtitle = spawnSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
         '-txt_format', 'text', '-txt_page', String(address), '-txt_duration', '1000', '-i', path,
         '-map', '0:s:0', '-c:s', 'srt', '-f', 'srt', '-'], { encoding: 'utf8', timeout: 30_000, maxBuffer: 1_048_576 });
@@ -2479,7 +2533,7 @@ test(reusedLuaDirectEvidence
       expect(subtitle.error).toBeUndefined(); expect(subtitle.signal).toBeNull(); expect(subtitle.status).toBe(0); expect(subtitle.stderr).toBe('');
       const decoded = subtitle.stdout;
       expect(decoded).toContain(theme); expect(decoded).toContain('Now: Synthetic red video and tone');
-      return { path, decoded, timing };
+      return { path, decoded, timing, provenance: { logStart, firstChunkLog: firstChunkLog!, logEnd: statSync(hostLog).size, hostLog } };
     };
     await queue('reset', night);
     const on = intervals(); expect(on[0].CandidateSnapshot).not.toBeNull();
@@ -2489,6 +2543,7 @@ test(reusedLuaDirectEvidence
     const onOriginal = document(onUrl), onRaster = await rasterBytes(page);
     const effectiveOn = await publication(true, 6);
     receipts.on_generation = effectiveOn; receipts.on_original_sha256 = sha256(onOriginal); persist();
+    if (customLuaFlow === 'absent') await removeCustom();
     expect(utc(on[0].Finish) - Date.now()).toBeGreaterThan(30_000);
     expect(utc(sourceNow.Finish) - Date.now()).toBeGreaterThan(30_000);
     let onCapture: Awaited<ReturnType<typeof capture>>, isolatedCapture: Awaited<ReturnType<typeof capture>>;
@@ -2534,12 +2589,40 @@ test(reusedLuaDirectEvidence
       // second cap1 reconstruction until the first actually delivers teletext.
       // Failure/completion without authored bytes terminates; it is never retried.
       await Promise.race([onAuthored, onPending.then(() => { throw new Error('On response completed before authored delivery.'); })]);
+      if (customLuaFlow === 'absent') {
+        // The output AV is already sealed and the independent guide-source
+        // channel is healthy. Damage only the future field projection.
+        fieldGap = Number(fixture.database.prepare('INSERT INTO PlayoutGap(PlayoutId,Start,Finish) VALUES (?,?,?) RETURNING Id')
+          .get(channel, new Date(Date.now() + 5 * 60_000).toISOString(), 'unreadable-field-projection')!.Id);
+      }
       const paired = await Promise.allSettled([onPending,
         capture(source, 'production-guide-lua-isolated-classic', 201, 'DAY GUIDE', undefined, undefined, 'direct')]);
       // Both original bounded responses settle before fixture cleanup, even when
       // one strict decoder/transport assertion rejects its own observation.
       for (const result of paired) if (result.status === 'rejected') throw result.reason;
       [onCapture, isolatedCapture] = paired.map(result => (result as PromiseFulfilledResult<Awaited<typeof onPending>>).value);
+    }
+    if (customLuaFlow === 'absent') {
+      const mixed = decodeCustomPage(process.env.FFMPEG_PATH!, onCapture.path, 150);
+      expect(mixed).toContain('BASE ORIGINAL150'); expect(mixed).toMatch(/TIME[^\S\r\n]+FIXED/);
+      expect(decodeCustomPage(process.env.FFMPEG_PATH!, onCapture.path, 151)).toMatch(/TIME\s+\d{2}:\d{2}\s+FIXED/);
+      await page.goto(onUrl); await ready(page, true);
+      await expect(page.getByTestId('teletext-field-last-failure')).toBeVisible();
+      await expect(page.getByTestId('teletext-field-last-failure')).toContainText('150');
+      await page.goto('/system/health'); await ready(page, true);
+      await expect(page.getByRole('row').filter({ hasText: text('TeletextFieldHealthTitle') }))
+        .toContainText(text('TeletextFieldHealthHelp').replace('{pages}', `${channel}: 150`));
+      fixture.database.prepare('DELETE FROM PlayoutGap WHERE Id=? AND PlayoutId=?').run(fieldGap!, channel); fieldGap = undefined;
+      await page.goto(onUrl); await ready(page, true);
+      await expect(page.getByTestId('teletext-field-last-failure')).toBeVisible();
+      const recovered = await capture(channel, 'production-guide-lua-fields-recovered', 400, 'NIGHT GUIDE', undefined, undefined, 'direct');
+      expect(decodeCustomPage(process.env.FFMPEG_PATH!, recovered.path, 150)).toMatch(/TIME\s+\d{2}:\d{2}\s+FIXED/);
+      await page.goto(onUrl); await ready(page, true);
+      await expect(page.getByTestId('teletext-field-last-failure')).toBeHidden();
+      await page.goto('/system/health'); await ready(page, true);
+      await expect(page.getByRole('row').filter({ hasText: text('TeletextFieldHealthTitle') })).toHaveCount(0);
+      receipts.effective_field_failure_recovery = { failed150: mixed, recovered150: decodeCustomPage(process.env.FFMPEG_PATH!, recovered.path, 150) };
+      persist();
     }
     expect(utc(isolatedCapture.timing.first_read_utc!)).toBeLessThan(utc(onCapture.timing.last_read_utc!));
     expect(utc(isolatedCapture.timing.first_authored_utc!)).toBeLessThan(utc(onCapture.timing.last_read_utc!));
@@ -2552,13 +2635,19 @@ test(reusedLuaDirectEvidence
     await historical(onUrl); expect(await rasterBytes(page)).toEqual(onRaster);
     for (const [index, id] of fixture.channels.entries()) expect(generation(id, false)).toEqual(baseAccepted[index]);
     expect(generation(source, true)).toBeUndefined();
+    if (customLuaFlow === 'present') await addCustom('OFF ORIGINAL');
     await queue('reset', null);
     const off = intervals(); expect(off[0].CandidateSnapshot).toBeNull();
     await queue('continue', undefined); expect(intervals()).toEqual(off);
-    const offUrl = await prepare(true, 'Production Lua Off absence', true);
-    expect(new URL(offUrl).searchParams.get('absence')).toBe('1');
+    const offUrl = await prepare(true, offCustomPresent ? 'Production Lua Off custom pages' : 'Production Lua Off absence',
+      !offCustomPresent, offCustomPresent);
+    expect(new URL(offUrl).searchParams.get('absence')).toBe(offCustomPresent ? null : '1');
     const offOriginal = document(offUrl), effectiveOff = await publication(true, 4);
-    await expect(page.getByTestId('teletext-preview-model').locator('img')).toHaveCount(0);
+    await expect(page.getByTestId('teletext-preview-model').locator('img')).toHaveCount(offCustomPresent ? 1 : 0);
+    if (customLuaFlow) {
+      if (offCustomPresent) await removeCustom();
+      else await addCustom('UNPUBLISHED LATER');
+    }
     receipts.off_interval = off; receipts.off_generation = effectiveOff; receipts.off_original_sha256 = sha256(offOriginal); persist();
     const finish = utc(off[0].Finish);
     // The source channel is separate: its unchanged role must cover the full
@@ -2570,10 +2659,12 @@ test(reusedLuaDirectEvidence
     const returned = await capture(channel, 'production-guide-lua-off-expiry-base', 201, 'DAY GUIDE', undefined, finish);
     expect(utc(returned.timing.first_off_av_utc!)).toBeLessThan(finish - 1000);
     expect(utc(returned.timing.last_off_av_utc!) - utc(returned.timing.first_off_av_utc!)).toBeGreaterThanOrEqual(1000);
-    expect(utc(returned.timing.first_authored_utc!)).toBeGreaterThanOrEqual(finish);
-    expect(returned.timing.pmt_transitions.map(value => value.authored)).toEqual([false, true]);
-    expect(utc(returned.timing.pmt_transitions[0].received_utc)).toBeLessThan(finish);
-    expect(utc(returned.timing.pmt_transitions[1].received_utc)).toBeGreaterThanOrEqual(finish);
+    if (!offCustomPresent) {
+      expect(utc(returned.timing.first_authored_utc!)).toBeGreaterThanOrEqual(finish);
+      expect(returned.timing.pmt_transitions.map(value => value.authored)).toEqual([false, true]);
+      expect(utc(returned.timing.pmt_transitions[0].received_utc)).toBeLessThan(finish);
+      expect(utc(returned.timing.pmt_transitions[1].received_utc)).toBeGreaterThanOrEqual(finish);
+    } else expect(utc(returned.timing.first_authored_utc!)).toBeLessThan(finish);
     execFileSync('tstables', ['--tid', '2', '--json-output', info.outputPath('lua-expiry.pmt.json'),
       '--text-output', info.outputPath('lua-expiry.pmt.txt'), returned.path], { timeout: 30_000, maxBuffer: 65_536 });
     const tables = JSON.parse(readFileSync(info.outputPath('lua-expiry.pmt.json'), 'utf8')) as {
@@ -2581,10 +2672,52 @@ test(reusedLuaDirectEvidence
     }[];
     const authoredStates = tables.filter(row => row['#name'] === 'PMT').map(row => row['#nodes']
       .some(node => node['#name'] === 'component' && node.elementary_pid === 512));
-    expect(authoredStates[0], 'The same response starts with explicit Off and AV.').toBe(false);
+    expect(authoredStates[0], 'The same response starts with the exact published Off membership.').toBe(offCustomPresent);
     expect(authoredStates).toContain(true);
-    const firstBase = authoredStates.indexOf(true);
-    expect(authoredStates.slice(firstBase).every(Boolean)).toBe(true);
+    if (!offCustomPresent) {
+      const firstBase = authoredStates.indexOf(true);
+      expect(authoredStates.slice(firstBase).every(Boolean)).toBe(true);
+    } else {
+      // ADR0124 admits direct confirmed replacement or acknowledged withdrawal
+      // and reannouncement. The owner-bound proof below checks actual ACKs.
+      expect([[true], [true, false, true]]).toContainEqual(authoredStates);
+    }
+    if (customLuaFlow) {
+      const prefix = info.outputPath('lua-custom-expiry');
+      execFileSync('tstables', ['--tid', '2', '--packet-index', '--json-output', `${prefix}.pmt.json`,
+        '--text-output', `${prefix}.pmt.txt`, returned.path], { timeout: 30_000, maxBuffer: 65_536 });
+      const sections = spawnSync('tstables', ['--tid', '2', '--all-sections', '--log', '--packet-index', returned.path],
+        { timeout: 30_000, maxBuffer: 256 * 1024 });
+      expect(sections.status).toBe(0); writeFileSync(`${prefix}.sections.txt`, Buffer.concat([sections.stdout, sections.stderr]));
+      expect(returned.provenance).toBeDefined(); const logged = returned.provenance!;
+      const fullLog = readFileSync(logged.hostLog), start = fullLog.lastIndexOf(10, logged.logStart - 1) + 1;
+      const end = fullLog.lastIndexOf(10, logged.logEnd - 1) + 1;
+      writeFileSync(`${prefix}.log`, fullLog.subarray(start, end));
+      writeFileSync(`${prefix}.request.json`, JSON.stringify({ channel_id: channel, log_start: logged.logStart - start,
+        log_first_chunk: logged.firstChunkLog - start, log_end: end - start }, null, 2));
+      const identity = (row: Record<string, unknown>) => ({ channel_id: row.ChannelId, generation_id: row.Id,
+        request_id: row.RequestId, design_id: row.DesignId, revision: row.Revision });
+      writeFileSync(`${prefix}.metadata.json`, JSON.stringify({ off: identity(effectiveOff), base: identity(baseAccepted[0]),
+        off_artifact_version: effectiveOff.ArtifactVersion, base_artifact_version: baseAccepted[0].ArtifactVersion,
+        valid_until: off[0].Finish.replace(' ', 'T') + (/(?:Z|[+-]\d{2}:\d{2})$/.test(off[0].Finish) ? '' : 'Z'),
+        base_valid_until: sourceNow.Finish.replace(' ', 'T') + (/(?:Z|[+-]\d{2}:\d{2})$/.test(sourceNow.Finish) ? '' : 'Z'),
+        published_custom: offCustomPresent }, null, 2));
+      execFileSync('python3', ['scripts/e2e/teletext-guide-boundary.py', '--kind', 'lua-off', '--capture', returned.path,
+        '--log', `${prefix}.log`, '--request', `${prefix}.request.json`, '--pmt', `${prefix}.pmt.json`,
+        '--sections', `${prefix}.sections.txt`, '--metadata', `${prefix}.metadata.json`, '--report', `${prefix}.proof.json`],
+        { timeout: 30_000, maxBuffer: 65_536 });
+      const proof = JSON.parse(readFileSync(`${prefix}.proof.json`, 'utf8'));
+      const suffix = `${prefix}.base.ts`; writeFileSync(suffix, readFileSync(returned.path).subarray(proof.base_install_packet * 188));
+      const customBefore = decodeCustomPage(process.env.FFMPEG_PATH!, returned.path, 150);
+      const customAfter = decodeCustomPage(process.env.FFMPEG_PATH!, suffix, 150);
+      if (offCustomPresent) {
+        expect(customBefore).toContain('OFF ORIGINAL150'); expect(customAfter).not.toContain('OFF ORIGINAL150');
+        expect(customAfter).not.toContain('BASE ORIGINAL150');
+      } else {
+        expect(customBefore).not.toContain('UNPUBLISHED LATER150'); expect(customAfter).toContain('BASE ORIGINAL150');
+      }
+      receipts.custom_scope = { mode: customLuaFlow, proof, customBefore, customAfter };
+    }
     expect(returned.decoded).not.toContain('NIGHT GUIDE');
     receipts.expiry = { exact_finish: off[0].Finish, pmt_authored_states: authoredStates,
       observed_after_utc: new Date().toISOString() }; persist();
@@ -2605,7 +2738,10 @@ test(reusedLuaDirectEvidence
     expect(fixture.setting('teletext.work.max_concurrent')).toBe('1'); expect(fixture.calls()).toEqual([]);
     expect(installation(isolatedWebHost.databasePath)).toEqual(selectedInstallation); compareInstalledFiles(selectedInstallation);
     expect(errors).toEqual([]); receipts.complete = true; persist();
-  } finally { try { await context?.close(); } finally { persist(); fixture.close(); } }
+  } finally {
+    if (fieldGap !== undefined) fixture.database.prepare('DELETE FROM PlayoutGap WHERE Id=? AND PlayoutId=?').run(fieldGap, channel);
+    try { await context?.close(); } finally { persist(); fixture.close(); }
+  }
 });
 
 // Part6: preserve the qualified sparse caption oracle while adding measured

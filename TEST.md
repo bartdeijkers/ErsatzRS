@@ -134,8 +134,25 @@ checks, raw cadence flags, AV, packet hashes and sink ACKs stay mandatory.
 The boundary oracle checks the exact saved original Lua cap separately from
 source-guide expiry; a runtime cannot extend or substitute it. Test discovery
 and the offline oracle controls do not establish a passing runtime trial.
-Lua Off/custom presence, exact interval expiry/Base return and other retained
-part3c gates remain separate required proofs.
+For actual Off/custom expiry, set `ERSATZRS_TVGUIDE_LUA_FLOW=1` and run
+`ERSATZRS_TELETEXT_CUSTOM_LUA_FLOW=present`, then a separate `absent` trial,
+with `--grep "production TV-guide Lua custom Off"`. Both require fresh captures
+and the matched candidate; direct-evidence reuse is refused. The opt-in variant
+uses bounded 300s synthetic AV and 120s On for field failure/recovery; the original
+60s Off, 8MiB/30s capture and 300s overall timeout remain unchanged. Publish Base
+with opposite custom membership, retain On6 and Off4 originals after link edits,
+and independently decode the same Legacy response across exact Off expiry.
+The `lua-off` boundary oracle checks saved identities/caps, request/epoch,
+packet hashes, PMT/source AV, installation and complete-cycle ACKs. ADR0124
+permits finishing the current logical cycle; starting another after expiry is
+refused. A confirmed Off absence does not require a redundant withdrawal.
+The absence variant also faults only a future output-channel projection after
+AV starts, checks page-local blanking and clock-page liveness, retained Health
+and acknowledged recovery. Its independent guide source stays unchanged.
+AV decoder output uses the demux timebase without timestamp repair; require
+strict raw DTS/decoded PTS monotonicity and exact video-frame count/PTS equality,
+exit0 and empty stderr. This synthetic AV proof does not replace scanned-caption
+qualification. Browser/restart and final playback/ready-CI gates remain required.
 
 ## Add-on list task workspace
 

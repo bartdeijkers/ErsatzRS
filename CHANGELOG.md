@@ -83,8 +83,10 @@ release section when tagging a release.
   pages or absence when later links would exceed the producer limit. Complete
   production-guide renewal and ordinary output during Lua On now retain those
   published pages or absence through later link edits, with current programme
-  and clock fields. Lua Off and exact interval expiry/Base return remain under
-  qualification.
+  and clock fields. Ordinary Lua Off output now preserves those same published
+  choices and restores the independent base at the original interval expiry.
+  Field failures remain page-local, with a retained Health warning until
+  acknowledged recovery. Final integration qualification remains open.
 - Custom-page drafts preserve their checked dynamic-field bindings with the
   page revision, so later element edits cannot replace the saved refresh recipe.
   The native output can refresh changed display pages without clearing unchanged
