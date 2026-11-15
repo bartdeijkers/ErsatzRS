@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = "Parity-debt classification and ordered narrow fixes; independent CI milestone retained"
+current_focus = 'Bounded current-thread PR160 custom-page subpage-cycle delivery; other programme records retained unchanged'
 
 summary = '''
 UCU-16 rows286–289 are Complete within their unchanged required boundary.
@@ -79,7 +79,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Parity-debt burn-down (maintainer task2026-11-13; setup inventory at origin/main
+Active current-thread goal, maintainer amendment2026-11-15: fully finish PR160
+custom-page subpage-cycle timing only. The single finite F1/F2/E1/E2/E3/D1
+checklist in parity/teletext-support.toml owns remaining functionality, mandatory
+evidence, blockers and final delivery audit. Preserve all approved requirements,
+valid component evidence and original negatives. Finish required final-head CI,
+merge under existing permission, verify integration and safely clean task-owned
+resources, then stop and mark this bounded goal complete. Do not start FastLinks,
+preview/import, another parity-debt slice, release or installation. An external
+prerequisite or required acceptance change needs a safe checkpoint and the exact
+blocker/decision, not substitute work. The broader parity list below remains
+backlog for this thread; independent programme ownership/status is unchanged.
+
+
+Retained parity-debt backlog (original maintainer task2026-11-13; setup inventory at origin/main
 ffdc0f7edf429b4b1d4ea8e23275db40aacbfbc7):
 This is the single finite classification list for all49 open debt IDs at that
 revision. Owning parity files retain full requirements and evidence; no debt is

@@ -1592,6 +1592,15 @@ fn channel_error(error: ChannelTeletextDocumentEncodingError) -> TeletextAuthori
         ChannelTeletextDocumentEncodingError::WorkerFailed => {
             failure(TeletextAuthoringStatus::WorkerFailed)
         }
+        ChannelTeletextDocumentEncodingError::Timing(error)
+            if matches!(
+                error.as_ref(),
+                ersatzrs_ffmpeg::teletext::TeletextTransportError::CycleTiming { .. }
+                    | ersatzrs_ffmpeg::teletext::TeletextTransportError::SubpageCapacity
+            ) =>
+        {
+            failure(TeletextAuthoringStatus::ResourceLimit)
+        }
         ChannelTeletextDocumentEncodingError::Encoding(error) => {
             let mut location = TeletextAuthoringLocation {
                 owner: error.display,

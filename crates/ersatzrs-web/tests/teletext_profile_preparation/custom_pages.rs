@@ -140,7 +140,7 @@ async fn linked_element_reaches_check_storage_and_encoder_as_exact_rows() {
     fixture
         .state
         .application
-        .save_teletext_element_details(element, stored.revision, "Renamed", 0x150, 10)
+        .save_teletext_element_details(element, stored.revision, "Renamed", 0x150, 20)
         .await
         .unwrap();
     assert_eq!(observe(&fixture).await, observed);
@@ -167,6 +167,18 @@ async fn linked_element_reaches_check_storage_and_encoder_as_exact_rows() {
         serde_json::from_slice(historical.sources()[0].bytes()).unwrap();
     assert_eq!(source["pages"][0]["element_id"], element);
     assert_eq!(source["pages"][0]["element_revision"], stored.revision);
+    assert_eq!(source["pages"][0]["cycle_seconds"], 10);
+    assert_eq!(
+        historical.encoded().unwrap().subpage_cycles()[0].seconds(),
+        10
+    );
+    let current = fixture
+        .state
+        .application
+        .plan_teletext_custom_pages(CHANNEL, chrono::Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(current.pages[0].cycle_seconds, Some(20));
 }
 
 #[tokio::test]

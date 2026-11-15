@@ -226,6 +226,8 @@ pub enum ChannelTeletextDocumentEncodingError {
     Composition(Box<TeletextProducerCompositionError>),
     #[error("native teletext channel encoding: {0}")]
     Encoding(Box<TeletextAuthoredServiceEncodingError>),
+    #[error("native teletext channel timing: {0}")]
+    Timing(Box<ersatzrs_ffmpeg::teletext::TeletextTransportError>),
     #[error("teletext channel preparation exceeded its original deadline")]
     TimedOut,
     #[error("teletext channel validation/encoding worker failed")]
@@ -765,6 +767,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     // join any editorial rows as one physical overlay set; an editorial row
     // on a custom page is rejected by the composition as a repeated owner.
     let mut physical_rows = std::mem::take(&mut editorial.programs.0);
+    let subpage_cycles = custom_subpage_cycles(&documents, policy.composition.service.max_records)?;
     for document in &documents {
         if let TeletextProfileDocument::CustomPages(custom) = document {
             physical_rows.extend(custom.overlays().iter().cloned());
@@ -808,6 +811,14 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
         }
     })?;
     check_deadline(deadline)?;
+    let encoded = encoded
+        .with_subpage_cycles(subpage_cycles)
+        .map_err(|_| ChannelTeletextDocumentEncodingError::Association)?;
+    if !encoded.subpage_cycles().is_empty() {
+        ersatzrs_ffmpeg::teletext::TeletextCarousel::validate_authored_timing(&encoded)
+            .map_err(|error| ChannelTeletextDocumentEncodingError::Timing(Box::new(error)))?;
+    }
+    check_deadline(deadline)?;
     let descriptor = TeletextServiceDescriptor::from_authored_service(&encoded);
     check_deadline(deadline)?;
     Ok(EncodedChannelTeletextOriginals {
@@ -819,6 +830,48 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
         descriptor: Some(descriptor),
         transmissions: policy.transmissions,
     })
+}
+
+// A timed logical page must belong entirely to its authenticated host source;
+// another producer's distinct subcode must never join its rotation implicitly.
+fn custom_subpage_cycles(
+    documents: &[TeletextProfileDocument],
+    maximum: usize,
+) -> Result<Vec<ersatzrs_domain::TeletextSubpageCycle>, ChannelTeletextDocumentEncodingError> {
+    if !documents.iter().any(|document| {
+        matches!(document,
+            TeletextProfileDocument::CustomPages(custom) if !custom.subpage_cycles().is_empty()
+        )
+    }) {
+        return Ok(Vec::new());
+    }
+    let mut records = 0_usize;
+    for document in documents {
+        records = records
+            .checked_add(document.pages_draft().pages.len())
+            .filter(|count| *count <= maximum)
+            .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
+    }
+    let mut cycles = Vec::new();
+    for (owner, document) in documents.iter().enumerate() {
+        let TeletextProfileDocument::CustomPages(custom) = document else {
+            continue;
+        };
+        for cycle in custom.subpage_cycles() {
+            if documents.iter().enumerate().any(|(index, other)| {
+                index != owner
+                    && other
+                        .pages_draft()
+                        .pages
+                        .iter()
+                        .any(|page| page.address.page == cycle.page())
+            }) {
+                return Err(ChannelTeletextDocumentEncodingError::Association);
+            }
+            cycles.push(*cycle);
+        }
+    }
+    Ok(cycles)
 }
 
 fn check_original_editorial_input(
@@ -1630,3 +1683,7 @@ fn check_deadline(deadline: Instant) -> Result<(), ChannelTeletextDocumentEncodi
 
 #[path = "teletext_channel_documents/object_page_selections.rs"]
 mod object_page_selections;
+
+#[cfg(test)]
+#[path = "teletext_channel_cycle_tests.rs"]
+mod cycle_tests;

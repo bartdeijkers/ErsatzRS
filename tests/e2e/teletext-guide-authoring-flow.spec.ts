@@ -10,7 +10,7 @@ import { waitForHydration } from './hydration';
 import { addonContentHash } from './fixtures/addon-metadata';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
 import { captureTeletextChannelTs } from './helpers/teletext-stream-capture';
-import { decodeCustomPage, uploadCustomPage } from './helpers/teletext-custom-pages';
+import { decodeCustomPage, qualifyCustomPageCycles, uploadCustomPage } from './helpers/teletext-custom-pages';
 import { archiveFiles, type Upload } from './helpers/teletext-native-editor';
 import { startupOwner } from './helpers/isolated-host-startup';
 
@@ -2751,10 +2751,13 @@ const effectiveCustomBoundary = process.env.ERSATZRS_TELETEXT_CUSTOM_EFFECTIVE_B
 if (effectiveCustomBoundary !== undefined && !['present', 'absent'].includes(effectiveCustomBoundary)) {
   throw new Error('Effective custom boundary requires published presence or absence.');
 }
-const customFieldsBoundary = process.env.ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY === '1'
+const customCycleBoundary = process.env.ERSATZRS_TELETEXT_CUSTOM_CYCLE_BOUNDARY === '1';
+const customFieldsBoundary = customCycleBoundary || process.env.ERSATZRS_TELETEXT_CUSTOM_FIELDS_BOUNDARY === '1'
   || effectiveCustomBoundary !== undefined;
 const publishedCustomBoundary = customFieldsBoundary && effectiveCustomBoundary !== 'absent';
-test(effectiveCustomBoundary
+test(customCycleBoundary
+  ? 'production TV-guide immutable custom subpage cycles survive field and programme refresh with scanned captions'
+  : effectiveCustomBoundary
   ? `production TV-guide immutable custom ${effectiveCustomBoundary} refresh during actual Lua interval with scanned captions`
   : customFieldsBoundary
   ? 'production TV-guide and immutable custom pages refresh across programme titles with scanned captions'
@@ -2840,9 +2843,12 @@ test(effectiveCustomBoundary
     await ready(page, true);
     const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
     const customElements = publishedCustomBoundary ? [
-      await uploadCustomPage(page, fixture.channels[0], 150, ['CUSTOM ORIGINAL150',
-        'NOW %NOW%%%%%%%%%%%%%%%%%%%%', 'NEXT %NEXT%%%%%%%%%%%%%%%%%%%%', 'START %NOWSTART%%%%']),
-      await uploadCustomPage(page, fixture.channels[0], 151, ['CLOCK ORIGINAL151', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%']),
+      await uploadCustomPage(page, fixture.channels[0], 150, [customCycleBoundary ? 'CUSTOM ORIGINAL150 A' : 'CUSTOM ORIGINAL150',
+        'NOW %NOW%%%%%%%%%%%%%%%%%%%%', 'NEXT %NEXT%%%%%%%%%%%%%%%%%%%%', 'START %NOWSTART%%%%'], customCycleBoundary
+        ? { seconds: 1, nextRows: ['CUSTOM ORIGINAL150 B', 'NOW %NOW%%%%%%%%%%%%%%%%%%%%',
+          'NEXT %NEXT%%%%%%%%%%%%%%%%%%%%', 'START %NOWSTART%%%%'] } : undefined),
+      await uploadCustomPage(page, fixture.channels[0], 151, [customCycleBoundary ? 'CLOCK ORIGINAL151 A' : 'CLOCK ORIGINAL151', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%'],
+        customCycleBoundary ? { seconds: 2, nextRows: ['CLOCK ORIGINAL151 B', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%'] } : undefined),
     ] : [];
     if (effectiveCustomBoundary) {
       await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
@@ -2874,6 +2880,23 @@ test(effectiveCustomBoundary
     for (const [index, channel] of fixture.channels.entries()) maps.push(await prepareReceiverGuide(page, fixture, channel,
       profiles[index], index === 1, customFieldsBoundary ? channel : fixture.channels[1], Boolean(effectiveCustomBoundary) && index === 0));
     const originals = fixture.channels.map(channel => sha256(originalBytes(fixture, channel)));
+    if (customCycleBoundary) {
+      const original = JSON.parse(originalBytes(fixture, fixture.channels[0]).toString('utf8')) as SavedOriginal;
+      const host = original.documents.map(document => JSON.parse(document.response))
+        .find(document => document.schema === 'ersatzrs.host.custom-pages/1');
+      expect(host.pages.map((value: { page: number; subcode: number; cycle_seconds: number }) =>
+        [value.page, value.subcode, value.cycle_seconds])).toEqual([[150, 1, 1], [150, 2, 1], [151, 1, 2], [151, 2, 2]]);
+      writeFileSync(info.outputPath('published-subpage-original.json'), JSON.stringify(host, null, 2));
+      for (const [index, id] of customElements.entries()) {
+        const row = fixture.database.prepare('SELECT Revision FROM TeletextElement WHERE Id=?').get(id) as { Revision: number };
+        const edited = await page.request.post(`/admin-api/teletext-elements/${id}/details`, {
+          form: { revision: String(row.Revision), name: `Later cycle ${index}`, page_number: String(150 + index), cycle_seconds: '20' },
+          maxRedirects: 0,
+        });
+        expect(edited.status()).toBe(303); expect(edited.headers().location).toContain('saved=details');
+      }
+      expect(sha256(originalBytes(fixture, fixture.channels[0]))).toBe(originals[0]);
+    }
     const accepted = fixture.channels.map((channel, index) => acceptedGuide(fixture, channel, Boolean(effectiveCustomBoundary) && index === 0));
     const refreshRole = effectiveCustomBoundary ? 2 : 1;
     const originalScopeUntil = effectiveCustomBoundary
@@ -3112,6 +3135,16 @@ test(effectiveCustomBoundary
       expect(minuteClock).toContain(`TIME ${clockLabel(openedMinute)}`);
       expect(minuteClock).toContain(`TIME ${clockLabel(closedMinute)}`);
       expect(decode(cold[1], 150)).toBe(''); expect(decode(cold[1], 151)).toBe('');
+      if (customCycleBoundary) {
+        for (const path of [cold[0], paths[3], boundaryGuidePath!]) {
+          const fields = decode(path, 150); const clock = decode(path, 151);
+          for (const suffix of ['A', 'B']) {
+            expect(fields).toContain(`CUSTOM ORIGINAL150 ${suffix}`);
+            expect(clock).toContain(`CLOCK ORIGINAL151 ${suffix}`);
+          }
+          qualifyCustomPageCycles(process.env.FFPROBE_PATH!, path, [{ page: 150, seconds: 1 }, { page: 151, seconds: 2 }]);
+        }
+      }
       writeFileSync(info.outputPath('custom-fields-programme-transition.json'), JSON.stringify({
         customElements, programmeRows: programmeRows.slice(0, 3), programmeTitles: [...programmeTitles],
         coldFields, currentFields, clock, minuteClock, originalHashes: originals, compiledCandidateScope: 'Same immutable native field owner after latest-link deletion, alongside the actual production guide worker and unchanged caption/transport gates.',

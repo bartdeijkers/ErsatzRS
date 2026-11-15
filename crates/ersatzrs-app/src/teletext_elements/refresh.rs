@@ -123,6 +123,7 @@ mod tests {
             page: number,
             subcode: 0,
             national_option: 0,
+            cycle_seconds: None,
             rows: vec![TeletextCustomRowWire::new(1, &cells)],
             dynamic_fields: vec![TeletextElementBinding {
                 field: "published".to_owned(),

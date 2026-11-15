@@ -13,6 +13,7 @@ fn page(number: u16, subcode: u16, source: TeletextElementBindingSource) -> Tele
         page: number,
         subcode,
         national_option: 0,
+        cycle_seconds: None,
         rows: vec![TeletextCustomRowWire::new(1, &cells)],
         dynamic_fields: vec![TeletextElementBinding {
             field: "frozen".to_owned(),
@@ -175,10 +176,10 @@ fn initial_source(
     policy: &TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> PublishedCustomRefresh {
-    let (draft, overlays) =
-        TeletextCustomPagesDocument::from_wire(document.clone(), &document.generation)
-            .unwrap()
-            .into_parts();
+    let checked =
+        TeletextCustomPagesDocument::from_wire(document.clone(), &document.generation).unwrap();
+    let cycles = checked.subpage_cycles().to_vec();
+    let (draft, overlays) = checked.into_parts();
     let declared = super::super::teletext_documents::lift_base(
         draft,
         policy.v1_region,
@@ -193,6 +194,8 @@ fn initial_source(
         Vec::new(),
         Arc::new(
             encode_teletext_authored_service_before(declared, &[], &policy.encoding, deadline)
+                .unwrap()
+                .with_subpage_cycles(cycles)
                 .unwrap(),
         ),
     )
@@ -565,3 +568,38 @@ async fn a_test_utc_clock_cannot_renew_the_real_original_operation_deadline() {
 
 #[path = "teletext_custom_refresh_tests/effective.rs"]
 mod effective;
+
+#[test]
+fn field_reencoding_retains_published_cycles_and_refuses_timing_changes() {
+    let policy = policy();
+    let deadline = deadline();
+    let mut original = document();
+    for page in &mut original.pages {
+        page.cycle_seconds = Some(if page.page == 150 { 2 } else { 3 });
+    }
+    let owner = initial_source(original.clone(), &policy, deadline);
+    let (refreshed, failures) = derive_pages(
+        &original,
+        &[],
+        CustomPageRefreshTriggers {
+            programme: true,
+            time: true,
+            date: true,
+        },
+        None,
+        &clock(),
+    )
+    .unwrap();
+    assert_eq!(failures, [150]);
+    let service = render(owner.service(), refreshed.clone(), &[], &policy, deadline).unwrap();
+    assert_eq!(service.subpage_cycles(), owner.service().subpage_cycles());
+    assert_eq!(service.subpage_cycles().len(), 3);
+    let mut changed = refreshed;
+    for page in &mut changed.pages {
+        if page.page == 150 {
+            page.cycle_seconds = Some(5);
+        }
+    }
+    assert!(render(owner.service(), changed, &[], &policy, deadline).is_err());
+    assert_eq!(owner.document, original);
+}

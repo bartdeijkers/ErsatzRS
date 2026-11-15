@@ -345,6 +345,7 @@ impl ApplicationServices {
                     page: page_number,
                     subcode: subcode(index, count),
                     national_option: subpage.national_option(),
+                    cycle_seconds: Some(element.cycle_seconds),
                     rows: (1..=24_u8)
                         .map(|row| TeletextCustomRowWire::new(row, &subpage.rows[usize::from(row)]))
                         .collect(),

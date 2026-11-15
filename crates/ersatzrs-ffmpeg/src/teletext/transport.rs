@@ -21,6 +21,9 @@ pub enum TeletextTransportError {
     /// A complete acquisition sweep plus one display/closure exceeds fixed capacity.
     #[error("teletext acquisition interval requires {batches} batches; resource repetition permits {maximum}")]
     CycleTiming { batches: usize, maximum: usize },
+    /// Timed updates and mandatory acquisition must leave room for complete sweeps.
+    #[error("timed teletext subpages exhaust the existing carousel interval capacity")]
+    SubpageCapacity,
     /// A resource update would retain stale content or skip its known counter.
     #[error("teletext resource {resource:?} update from {previous:?} requires {expected_transmission:?}/{expected:?}, received {transmission:?}/{requested:?}")]
     ResourceUpdate {
