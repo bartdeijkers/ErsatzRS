@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Bounded current-thread PR160 custom-page subpage-cycle delivery; other programme records retained unchanged'
+current_focus = 'PR160 custom-page subpage cycles locally qualified; final required CI and bounded delivery/audit remain'
 
 summary = '''
 UCU-16 rows286–289 are Complete within their unchanged required boundary.
@@ -82,8 +82,11 @@ next_steps = '''
 Active current-thread goal, maintainer amendment2026-11-15: fully finish PR160
 custom-page subpage-cycle timing only. The single finite F1/F2/E1/E2/E3/D1
 checklist in parity/teletext-support.toml owns remaining functionality, mandatory
-evidence, blockers and final delivery audit. Preserve all approved requirements,
-valid component evidence and original negatives. Finish required final-head CI,
+evidence, blockers and final delivery audit. F1/F2 implementation and E2/E3
+ordinary/playback qualification are complete within their recorded scopes.
+E1 requires the named host-private controls in final CI; D1 owns delivery.
+Preserve all approved requirements, valid proof and original negatives.
+Finish required final-head CI,
 merge under existing permission, verify integration and safely clean task-owned
 resources, then stop and mark this bounded goal complete. Do not start FastLinks,
 preview/import, another parity-debt slice, release or installation. An external

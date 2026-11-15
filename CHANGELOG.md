@@ -291,7 +291,8 @@ release section when tagging a release.
 - Custom teletext pages rotate their subpages at the saved element cycle time.
   Timing is frozen when Check creates the draft and stays unchanged during field
   updates. Run Check and publish again to apply it to existing pages. Check
-  refuses a cycle that cannot fit the page set.
+  refuses unsustainable timed-update demand. Page placement keeps the existing
+  bounded wait for available transport capacity.
 - Legacy MPEG-TS playback keeps a short read-ahead buffer across programme
   changes, preventing source-subtitle preparation from interrupting delivery.
 - Removing the last linked custom teletext page preserves its published original.

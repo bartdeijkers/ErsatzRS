@@ -129,6 +129,10 @@ to20s, then deletes the elements. The checked original, independent FFprobe
 header/PTS measurements and libzvbi rows must retain the published cycles in
 cold, minute-field and recovered programme output beside the production guide.
 All existing capture, caption, AV, transport, scope and ACK gates remain required.
+Measure complete dwells separately from the initial partial observation. Use the
+existing bounded page-start/B.9 placement contract; an assumed200ms maximum
+placement delay is invalid under the qualified bitrate bursts. Retain raw
+measurements and negative trials. Source-caption timing still uses its8ms bound.
 
 For the effective custom-page guide-worker proof, set
 `ERSATZRS_TELETEXT_CUSTOM_EFFECTIVE_BOUNDARY=present`, then run a separate
