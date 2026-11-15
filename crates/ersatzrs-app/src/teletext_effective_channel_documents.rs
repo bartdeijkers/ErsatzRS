@@ -435,8 +435,13 @@ where
     >,
 {
     let (supplied_deadline, expected, custom_page_source) = admission;
-    let (selection, deadline) =
-        observe_selection_before(repository, channel_id, supplied_deadline).await?;
+    let (selection, deadline) = observe_selection_before(
+        repository,
+        channel_id,
+        supplied_deadline,
+        matches!(custom_page_source, TeletextCustomPageSource::Published(_)),
+    )
+    .await?;
     let selection = preparation_selection(selection, expected, custom_page_source)?;
     validate_selection(&selection, channel_id, budget.max_producers)?;
     let producers = selection
@@ -517,6 +522,7 @@ async fn observe_selection_before(
     repository: &dyn TeletextProfileRepository,
     channel_id: EntityId,
     supplied_deadline: Instant,
+    published: bool,
 ) -> Result<(Arc<Selection>, Instant), Error> {
     let started = Instant::now();
     let maximum = started
@@ -524,11 +530,16 @@ async fn observe_selection_before(
         .ok_or(Error::TimedOut)?;
     let mut deadline = maximum.min(supplied_deadline);
     check_deadline(deadline)?;
-    let selection = match repository
-        .effective_channel_snapshot(channel_id, Utc::now())
-        .await
-        .map_err(|_| Error::StorageUnavailable)?
-    {
+    let observed = if published {
+        repository
+            .published_effective_channel_dependencies(channel_id, Utc::now())
+            .await
+    } else {
+        repository
+            .effective_channel_snapshot(channel_id, Utc::now())
+            .await
+    };
+    let selection = match observed.map_err(|_| Error::StorageUnavailable)? {
         Mutation::Saved(selection) => Arc::new(selection),
         Mutation::Rejected(reason) => return Err(Error::SelectionRejected(reason)),
     };
@@ -651,7 +662,7 @@ async fn recheck_published(
 ) -> Result<(), Error> {
     check_deadline(deadline)?;
     let current = repository
-        .effective_channel_snapshot(selection.channel_id, Utc::now())
+        .published_effective_channel_dependencies(selection.channel_id, Utc::now())
         .await
         .map_err(|_| Error::StorageUnavailable)?;
     check_deadline(deadline)?;

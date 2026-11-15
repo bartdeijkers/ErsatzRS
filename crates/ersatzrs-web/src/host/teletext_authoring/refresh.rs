@@ -349,7 +349,7 @@ pub(in crate::host) async fn prepare_baseline(
     };
     match claim.seed.role {
         TeletextGuideRefreshRole::Base => {
-            let selection = super::observed_selection(
+            let selection = super::observed_published_selection(
                 application,
                 request_channel(&claim.seed),
                 context.deadline,
@@ -411,10 +411,19 @@ async fn prepare_effective_baseline(
     context: &GuideRefreshPreparationContext,
     preparation: &super::guide::GuidePreparationContext<'_>,
 ) -> Result<FreshGuideBaseline, Error> {
-    let selection =
-        super::scope::observed(application, request_channel(&claim.seed), context.deadline)
-            .await
-            .map_err(|error| Error::from_authoring(&error))?;
+    let ersatzrs_core::repositories::TeletextProfileMutation::Saved(selection) = super::before(
+        context.deadline,
+        application.observe_published_effective_teletext_dependencies(
+            request_channel(&claim.seed),
+            chrono::Utc::now(),
+        ),
+    )
+    .await
+    .map_err(|error| Error::from_authoring(&error))?
+    .map_err(|_| Error::Unavailable)?
+    else {
+        return Err(Error::NeedsReview);
+    };
     let TeletextGuideRefreshSelection::Effective(original) = &recipe.original_selection else {
         return Err(Error::NeedsReview);
     };

@@ -78,10 +78,11 @@ pub fn teletext_published_selection_matches(
     }
     let host = teletext_custom_pages_selection(current.channel_id);
     for selection in [current, published] {
-        if !selection
-            .bindings
-            .windows(2)
-            .all(|pair| pair[0].addon_id < pair[1].addon_id)
+        if selection.bindings.len() > super::MAX_TELETEXT_PAGE_RECORDS
+            || !selection
+                .bindings
+                .windows(2)
+                .all(|pair| pair[0].addon_id < pair[1].addon_id)
             || selection.bindings.iter().any(|binding| {
                 is_teletext_custom_pages_producer(&binding.addon_id) && *binding != host
             })
@@ -329,6 +330,31 @@ impl TeletextCustomPagesDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn published_host_cannot_exceed_the_original_base_producer_limit() {
+        let bindings = (0..super::super::MAX_TELETEXT_PAGE_RECORDS)
+            .map(|index| {
+                let mut base = teletext_custom_pages_selection(1);
+                base.addon_id = format!("org.example.capacity.p{index:04}");
+                base.installation.addon_id.clone_from(&base.addon_id);
+                base
+            })
+            .collect();
+        let original = super::super::TeletextChannelSelectionSnapshot {
+            channel_id: 1,
+            bindings,
+        };
+        assert!(teletext_published_selection_matches(&original, &original));
+        let mut with_host = original.clone();
+        with_host
+            .bindings
+            .insert(0, teletext_custom_pages_selection(1));
+        assert!(!teletext_published_selection_matches(&original, &with_host));
+        assert!(!teletext_published_selection_matches(&with_host, &original));
+        with_host.bindings.pop();
+        assert!(teletext_published_selection_matches(&with_host, &with_host));
+    }
 
     #[test]
     fn published_selection_freezes_only_authentic_host_membership() {

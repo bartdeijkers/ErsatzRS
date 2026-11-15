@@ -127,3 +127,37 @@ fn published_effective_host_exception_rejects_scope_origin_dependency_and_order_
         );
     }
 }
+
+#[test]
+fn original_host_still_consumes_a_published_producer_slot() {
+    let mut bindings = Vec::new();
+    for index in 0..crate::MAX_TELETEXT_PAGE_RECORDS {
+        let mut base = crate::teletext_custom_pages_selection(1);
+        base.addon_id = format!("org.example.capacity.p{index:04}");
+        base.installation.addon_id.clone_from(&base.addon_id);
+        bindings.push(TeletextEffectiveBindingSnapshot::Base(base));
+    }
+    let original = TeletextEffectiveChannelSelectionSnapshot {
+        channel_id: 1,
+        bindings,
+        valid_until: None,
+    };
+    assert!(teletext_published_effective_selection_matches(
+        &original, &original
+    ));
+    let mut with_host = original.clone();
+    with_host.bindings.insert(
+        0,
+        TeletextEffectiveBindingSnapshot::Base(crate::teletext_custom_pages_selection(1)),
+    );
+    assert!(!teletext_published_effective_selection_matches(
+        &original, &with_host
+    ));
+    assert!(!teletext_published_effective_selection_matches(
+        &with_host, &original
+    ));
+    with_host.bindings.pop();
+    assert!(teletext_published_effective_selection_matches(
+        &with_host, &with_host
+    ));
+}

@@ -80,18 +80,6 @@ pub(crate) enum SelectedTeletextOutputCandidate {
 }
 
 impl SelectedTeletextOutputCandidate {
-    /// Effective Lua/template execution remains a separate delivery slice.
-    pub(super) fn supports_custom_field_refresh(&self) -> bool {
-        match self {
-            Self::Base(..) => true,
-            Self::Effective(..) => false,
-            Self::Guide(candidate, _) => matches!(
-                candidate.native.selection(),
-                TeletextGuideRefreshSelection::Base(_)
-            ),
-        }
-    }
-
     pub(crate) fn next_transition(&self) -> Option<tokio::time::Instant> {
         let scope = match self {
             Self::Base(_, next) | Self::Effective(_, next) | Self::Guide(_, next) => *next,
@@ -592,7 +580,7 @@ pub(super) async fn observe_selected_teletext_output_with_guide(
     let monotonic = tokio::time::Instant::now();
     let observed = Utc::now();
     let scope = application
-        .observe_effective_channel_teletext_selection(channel_id, observed)
+        .observe_published_effective_teletext_dependencies(channel_id, observed)
         .await
         .map_err(|_| SelectedTeletextReadFailure)?;
     let TeletextProfileMutation::Saved(scope) = scope else {

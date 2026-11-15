@@ -79,6 +79,36 @@ pub(in crate::repositories) fn matches(bytes: &[u8], selection: &Selection) -> b
     Root(&expected).deserialize(&mut decoder).is_ok() && decoder.end().is_ok()
 }
 
+/// Health-only association against either canonical host membership. Each attempt
+/// still uses the exact original scope parser; this grants no output authority.
+pub(in crate::repositories) fn matches_published_observation(
+    bytes: &[u8],
+    current: &Selection,
+) -> bool {
+    if !ersatzrs_domain::teletext_published_effective_selection_matches(current, current) {
+        return false;
+    }
+    if matches(bytes, current) {
+        return true;
+    }
+    let mut original = current.clone();
+    if let Some(index) = original
+        .bindings
+        .iter()
+        .position(|binding| ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id()))
+    {
+        original.bindings.remove(index);
+    } else {
+        let host = ersatzrs_domain::teletext_custom_pages_selection(current.channel_id);
+        let index = original
+            .bindings
+            .partition_point(|binding| binding.addon_id() < host.addon_id.as_str());
+        original.bindings.insert(index, Binding::Base(host));
+    }
+    ersatzrs_domain::teletext_published_effective_selection_matches(&original, &original)
+        && matches(bytes, &original)
+}
+
 fn charge(remaining: &mut usize, size: usize) -> bool {
     let Some(next) = remaining.checked_sub(size) else {
         return false;

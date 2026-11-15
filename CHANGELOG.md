@@ -76,8 +76,12 @@ release section when tagging a release.
   selections. Native recovery keeps their published custom pages or absence after
   current links change, without producer or Lua replay. Automatic guide
   regeneration also retains the published custom-page source and membership,
-  with the original Lua scope and real add-on dependencies still exact. Ordinary
-  scoped playback and response-owned field refresh remain under qualification.
+  with the original Lua scope and real add-on dependencies still exact. Native
+  field loading retains the same published recipe and final fixed rows during
+  those intervals. Scripted Health follows the published original, including
+  automatic-guide generations. Published output also retains its original custom
+  pages or absence when later links would exceed the producer limit. Complete
+  scoped playback remains under qualification.
 - Custom-page drafts preserve their checked dynamic-field bindings with the
   page revision, so later element edits cannot replace the saved refresh recipe.
   The native output can refresh changed display pages without clearing unchanged

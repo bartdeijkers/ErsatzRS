@@ -42,6 +42,19 @@ impl ApplicationServices {
             .await
     }
 
+    /// Read real dependencies of published effective output, excluding the latest
+    /// synthetic host. Restore/validate original membership before using output.
+    pub async fn observe_published_effective_teletext_dependencies(
+        &self,
+        channel_id: EntityId,
+        when: DateTime<Utc>,
+    ) -> RepositoryResult<TeletextProfileMutation<TeletextEffectiveChannelSelectionSnapshot>> {
+        self.ports()
+            .teletext_profiles()
+            .published_effective_channel_dependencies(channel_id, when)
+            .await
+    }
+
     /// Recheck the complete captured observation without replacing its target.
     pub async fn recheck_effective_channel_teletext_selection(
         &self,

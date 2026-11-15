@@ -773,7 +773,10 @@ impl ProfileAuthority<'_> {
                     }
                     EffectiveHostMembership::Published => {
                         profiles
-                            .effective_channel_snapshot(selection.channel_id, chrono::Utc::now())
+                            .published_effective_channel_dependencies(
+                                selection.channel_id,
+                                chrono::Utc::now(),
+                            )
                             .await
                     }
                 }

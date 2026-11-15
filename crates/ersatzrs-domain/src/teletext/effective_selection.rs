@@ -114,10 +114,16 @@ pub fn teletext_published_effective_selection_matches(
         current.channel_id,
     ));
     for selection in [current, published] {
-        if !selection
+        if selection
             .bindings
-            .windows(2)
-            .all(|pair| pair[0].addon_id() < pair[1].addon_id())
+            .iter()
+            .filter(|binding| binding.enabled())
+            .count()
+            > crate::MAX_TELETEXT_PAGE_RECORDS
+            || !selection
+                .bindings
+                .windows(2)
+                .all(|pair| pair[0].addon_id() < pair[1].addon_id())
             || selection.bindings.iter().any(|binding| {
                 binding.channel_id() != selection.channel_id
                     || super::is_teletext_custom_pages_producer(binding.addon_id())

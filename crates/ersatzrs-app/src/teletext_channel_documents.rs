@@ -403,7 +403,18 @@ impl ApplicationServices {
         &self,
         channel_id: EntityId,
     ) -> Result<TeletextChannelSelectionSnapshot, ChannelTeletextDocumentError> {
-        snapshot(self.ports().teletext_profiles(), channel_id).await
+        snapshot(self.ports().teletext_profiles(), channel_id, false).await
+    }
+
+    /// Real Base dependencies for an existing published original. The latest
+    /// host is omitted; this observation grants no Check/publication authority.
+    /// # Errors
+    /// Preserves bounded storage and dependency-observation failures.
+    pub async fn observe_published_channel_teletext_dependencies(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<TeletextChannelSelectionSnapshot, ChannelTeletextDocumentError> {
+        snapshot(self.ports().teletext_profiles(), channel_id, true).await
     }
 
     /// Prepare exactly a previously checked host-side selection under one hold.
@@ -648,7 +659,7 @@ where
     if supplied_deadline.is_some() {
         check_deadline(started, deadline)?;
     }
-    let observed = snapshot(repository, channel_id).await?;
+    let observed = snapshot(repository, channel_id, published).await?;
     check_deadline(now(), deadline)?;
     validate_selection(
         &observed,
@@ -715,12 +726,14 @@ where
 async fn snapshot(
     repository: &dyn TeletextProfileRepository,
     channel_id: EntityId,
+    published: bool,
 ) -> Result<TeletextChannelSelectionSnapshot, ChannelTeletextDocumentError> {
-    match repository
-        .channel_invocation_snapshot(channel_id)
-        .await
-        .map_err(|_| ChannelTeletextDocumentError::StorageUnavailable)?
-    {
+    let current = if published {
+        repository.published_channel_dependencies(channel_id).await
+    } else {
+        repository.channel_invocation_snapshot(channel_id).await
+    };
+    match current.map_err(|_| ChannelTeletextDocumentError::StorageUnavailable)? {
         Mutation::Saved(selection) => Ok(selection),
         Mutation::Rejected(reason) => Err(ChannelTeletextDocumentError::SelectionRejected(reason)),
     }
@@ -828,10 +841,16 @@ async fn recheck_with_ports<Clock: FnMut() -> Instant>(
     published: bool,
 ) -> Result<(), ChannelTeletextDocumentError> {
     check_deadline(now(), deadline)?;
-    let current = repository
-        .channel_invocation_snapshot(selection.channel_id)
-        .await
-        .map_err(|_| ChannelTeletextDocumentError::StorageUnavailable)?;
+    let current = if published {
+        repository
+            .published_channel_dependencies(selection.channel_id)
+            .await
+    } else {
+        repository
+            .channel_invocation_snapshot(selection.channel_id)
+            .await
+    }
+    .map_err(|_| ChannelTeletextDocumentError::StorageUnavailable)?;
     check_deadline(now(), deadline)?;
     let matches = match current {
         Mutation::Saved(current) if published => {

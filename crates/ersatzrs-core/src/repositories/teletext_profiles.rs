@@ -99,6 +99,18 @@ pub trait TeletextProfileRepository: Send + Sync {
         &self,
         channel_id: EntityId,
     ) -> Result<TeletextProfileMutation<TeletextChannelSelectionSnapshot>>;
+    /// Observe real Base dependencies without adopting the latest synthetic host.
+    /// Published callers must restore and validate the original host membership
+    /// and budget. This data grants no new Check/publication/output authority.
+    async fn published_channel_dependencies(
+        &self,
+        _channel_id: EntityId,
+    ) -> Result<TeletextProfileMutation<TeletextChannelSelectionSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "published teletext channel dependencies",
+            "published dependency observation is unsupported",
+        ))
+    }
     /// Validate an existing profile for an already-bound channel/add-on in one
     /// read transaction, including a disabled base or a different base profile.
     /// Reuse the enabled-selection installation/settings checks without granting
@@ -156,6 +168,19 @@ pub trait TeletextProfileRepository: Send + Sync {
         Err(RepositoryError::unavailable(
             "teletext effective channel selection",
             "effective teletext selection is unsupported",
+        ))
+    }
+    /// Current real effective dependencies, with synthetic host membership omitted.
+    /// Preserve exact Scripted origins/bounds and normal real-producer limits;
+    /// callers must restore/validate the immutable original before using output.
+    async fn published_effective_channel_dependencies(
+        &self,
+        _channel_id: EntityId,
+        _when: DateTime<Utc>,
+    ) -> Result<TeletextProfileMutation<TeletextEffectiveChannelSelectionSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "published effective teletext dependencies",
+            "published dependency observation is unsupported",
         ))
     }
     /// Repeat the effective observation in one transaction, rechecking exact

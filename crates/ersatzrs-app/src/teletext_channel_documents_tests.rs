@@ -108,6 +108,18 @@ impl TeletextProfileRepository for Repository {
     ) -> RepositoryResult<Mutation<TeletextSelectionSnapshot>> {
         unreachable!("per-binding read misses membership fence")
     }
+    async fn published_channel_dependencies(
+        &self,
+        channel: EntityId,
+    ) -> RepositoryResult<Mutation<TeletextChannelSelectionSnapshot>> {
+        let mut current = self.channel_invocation_snapshot(channel).await?;
+        if let Mutation::Saved(selection) = &mut current {
+            selection.bindings.retain(|binding| {
+                !ersatzrs_domain::is_teletext_custom_pages_producer(&binding.addon_id)
+            });
+        }
+        Ok(current)
+    }
     async fn installation_snapshot(&self, _: &str) -> RepositoryResult<TeletextInstallationRead> {
         unreachable!("unscoped read")
     }

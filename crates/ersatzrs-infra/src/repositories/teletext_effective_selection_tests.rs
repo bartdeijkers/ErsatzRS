@@ -559,3 +559,214 @@ async fn host_custom_pages_remain_base_members_during_scripted_on_and_off() {
         );
     }
 }
+
+async fn producer_limit_fixture() -> Fixture {
+    let (fixture, _) = setup().await;
+    interval(&fixture, 1, ADDON, 0, 10, None).await;
+    sqlx::query(r#"UPDATE "ChannelTeletextBinding" SET "Enabled"=0 WHERE "ChannelId"=1"#)
+        .execute(&fixture.repo.0)
+        .await
+        .unwrap();
+    for index in 0..MAX_TELETEXT_PAGE_RECORDS {
+        let mut manifest = fixture.manifest.clone();
+        manifest.id = format!("org.example.capacity.p{index:04}");
+        insert_installation(&fixture.repo.0, &manifest).await;
+        let token = fixture
+            .repo
+            .installation_snapshot(&manifest.id)
+            .await
+            .unwrap()
+            .snapshot
+            .unwrap();
+        let profile = saved(
+            fixture
+                .repo
+                .save_profile(&TeletextProfileSave {
+                    addon_id: manifest.id,
+                    name: "Capacity".to_owned(),
+                    settings: vec![literal("THEME", "day")],
+                    expected_installation: token,
+                    existing: None,
+                })
+                .await
+                .unwrap(),
+        )
+        .profile;
+        fixture.bind(1, &profile).await;
+    }
+    fixture
+}
+
+// Real durable Base confirmation at the bound. Its opaque body/artifact is a
+// storage fixture; native composition feasibility is proved independently.
+async fn base_generation_at_limit(
+    fixture: &Fixture,
+    selection: &TeletextChannelSelectionSnapshot,
+) -> ersatzrs_domain::TeletextAcceptedGeneration {
+    use ersatzrs_core::repositories::{
+        TeletextDesignMutation, TeletextDesignRepository as _, TeletextGenerationMutation,
+        TeletextGenerationRepository as _, TeletextPublicationMutation,
+        TeletextPublicationRepository as _,
+    };
+    let designs = crate::repositories::SqliteTeletextDesignRepository(fixture.repo.0.clone());
+    let TeletextDesignMutation::Saved(head) = designs
+        .save(
+            &ersatzrs_core::repositories::TeletextDesignSave {
+                name: "Capacity Base fixture".to_owned(),
+                document_version: 1,
+                document: br#"{"format_version":1}"#.to_vec(),
+                existing: None,
+            },
+            1024,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("design rejected")
+    };
+    let revision = designs
+        .revision(head.id, head.revision, 1024)
+        .await
+        .unwrap()
+        .unwrap();
+    let publications =
+        crate::repositories::SqliteTeletextPublicationRepository(fixture.repo.0.clone());
+    let TeletextPublicationMutation::Requested(request) = publications
+        .request(
+            &ersatzrs_core::repositories::TeletextPublicationRequestSave {
+                design_id: head.id,
+                revision: head.revision,
+                digest: revision.digest,
+                expected_design_head: head.revision,
+                expected_request_id: None,
+                selection: selection.clone(),
+            },
+            1024,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("request rejected")
+    };
+    let generations =
+        crate::repositories::SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+    let TeletextGenerationMutation::Accepted(generation) = generations
+        .accept(
+            &ersatzrs_core::repositories::TeletextGenerationSave {
+                request,
+                expected_design_head: head.revision,
+                expected_generation_id: None,
+                selection: selection.clone(),
+                artifact_version: 1,
+                artifact_digest: "a".repeat(64),
+            },
+            1024,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("generation rejected")
+    };
+    generation
+}
+
+#[tokio::test]
+async fn published_host_absence_at_producer_limit_survives_unpublished_link_addition() {
+    let fixture = producer_limit_fixture().await;
+    let original = read(&fixture, 1, 1).await;
+    let base = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    let base_generation = base_generation_at_limit(&fixture, &base).await;
+    assert_eq!(
+        original
+            .bindings
+            .iter()
+            .filter(|binding| binding.enabled())
+            .count(),
+        MAX_TELETEXT_PAGE_RECORDS
+    );
+    sqlx::query(r#"INSERT INTO "TeletextElement"
+        ("Id","Name","SourceFormat","SourceFileName","Document","PageNumber","SubpageCount","CycleSeconds","Bindings","Revision","UpdatedAt")
+        VALUES (1,'New unpublished page',1,'fixture.tti',X'20',336,1,10,'[]',1,'fixture')"#)
+        .execute(&fixture.repo.0).await.unwrap();
+    sqlx::query(r#"INSERT INTO "ChannelTeletextElement" ("ChannelId","TeletextElementId","IsEnabled") VALUES (1,1,1)"#)
+        .execute(&fixture.repo.0).await.unwrap();
+    // The next Check must reject this new producer; published output retains absence.
+    assert_eq!(
+        fixture
+            .repo
+            .effective_channel_snapshot(1, at(2))
+            .await
+            .unwrap(),
+        M::Rejected(R::BindingLimit)
+    );
+    assert_eq!(
+        fixture.repo.channel_invocation_snapshot(1).await.unwrap(),
+        M::Rejected(R::BindingLimit)
+    );
+    assert_eq!(
+        saved(
+            fixture
+                .repo
+                .published_channel_dependencies(1)
+                .await
+                .unwrap()
+        ),
+        base
+    );
+    assert_eq!(
+        saved(
+            fixture
+                .repo
+                .published_effective_channel_dependencies(1, at(2))
+                .await
+                .unwrap()
+        ),
+        original
+    );
+    {
+        use ersatzrs_core::repositories::TeletextGenerationRepository as _;
+        let generations =
+            crate::repositories::SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+        assert_eq!(
+            generations
+                .confirm_current(&base_generation, &base, 1024)
+                .await
+                .unwrap(),
+            ersatzrs_core::repositories::TeletextGenerationMutation::Accepted(())
+        );
+    }
+    let before = changes(&fixture).await;
+    // Read-only transaction: recheck dependencies; never accept or publish a generation.
+    let mut tx = fixture.repo.0.begin().await.unwrap();
+    let retained = recheck_published_effective_in_transaction(&mut tx, &original, at(2))
+        .await
+        .unwrap();
+    tx.rollback().await.unwrap();
+    assert_eq!(retained, M::Saved(original.clone()));
+    assert_eq!(changes(&fixture).await, before);
+    let mut over_budget = original.clone();
+    over_budget.bindings.insert(
+        0,
+        Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(1)),
+    );
+    // Read-only transaction: recheck dependencies; never accept or publish a generation.
+    let mut tx = fixture.repo.0.begin().await.unwrap();
+    assert_eq!(
+        recheck_published_effective_in_transaction(&mut tx, &over_budget, at(2))
+            .await
+            .unwrap(),
+        M::Rejected(R::Conflict)
+    );
+    tx.rollback().await.unwrap();
+    sqlx::query(r#"UPDATE "TeletextProfile" SET "Revision"="Revision"+1 WHERE "AddonId"='org.example.capacity.p0000'"#)
+        .execute(&fixture.repo.0).await.unwrap();
+    // Read-only transaction: recheck dependencies; never accept or publish a generation.
+    let mut tx = fixture.repo.0.begin().await.unwrap();
+    assert_eq!(
+        recheck_published_effective_in_transaction(&mut tx, &original, at(2))
+            .await
+            .unwrap(),
+        M::Rejected(R::Conflict)
+    );
+    tx.rollback().await.unwrap();
+}

@@ -562,3 +562,6 @@ async fn a_test_utc_clock_cannot_renew_the_real_original_operation_deadline() {
     drop(guard);
     assert_eq!(locker.active_teletext_work(), 0);
 }
+
+#[path = "teletext_custom_refresh_tests/effective.rs"]
+mod effective;

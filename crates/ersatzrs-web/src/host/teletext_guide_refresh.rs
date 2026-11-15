@@ -379,7 +379,7 @@ async fn configuration(
 ) -> Result<Configuration, GuideRefreshNativeError> {
     match expected {
         TeletextGuideRefreshSelection::Base(expected) => {
-            let current = match application.observe_channel_teletext_document_selection(expected.channel_id).await {
+            let current = match application.observe_published_channel_teletext_dependencies(expected.channel_id).await {
                 Ok(current) => current,
                 Err(ersatzrs_app::teletext_channel_documents::ChannelTeletextDocumentError::SelectionRejected(_)) => return Ok(Configuration::Disabled),
                 Err(_) => return Err(GuideRefreshNativeError::Unavailable),
@@ -389,7 +389,7 @@ async fn configuration(
                 return Ok(result);
             }
             let effective = application
-                .observe_effective_channel_teletext_selection(expected.channel_id, now)
+                .observe_published_effective_teletext_dependencies(expected.channel_id, now)
                 .await
                 .map_err(|_| GuideRefreshNativeError::Unavailable)?;
             if matches!(effective, TeletextProfileMutation::Saved(ref scope) if scope.bindings.iter().any(|binding| matches!(binding,TeletextEffectiveBindingSnapshot::Scripted(_))))
@@ -413,7 +413,7 @@ async fn configuration(
                 return Ok(Configuration::Disabled);
             }
             let TeletextProfileMutation::Saved(current) = application
-                .observe_effective_channel_teletext_selection(expected.channel_id, now)
+                .observe_published_effective_teletext_dependencies(expected.channel_id, now)
                 .await
                 .map_err(|_| GuideRefreshNativeError::Unavailable)?
             else {

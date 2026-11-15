@@ -63,6 +63,19 @@ impl TeletextProfileRepository for Repository {
                 .unwrap_or_else(|| self.selection.clone()),
         ))
     }
+    async fn published_effective_channel_dependencies(
+        &self,
+        channel: EntityId,
+        when: DateTime<Utc>,
+    ) -> RepositoryResult<Mutation<Selection>> {
+        let mut current = self.effective_channel_snapshot(channel, when).await?;
+        if let Mutation::Saved(selection) = &mut current {
+            selection.bindings.retain(|binding| {
+                !ersatzrs_domain::is_teletext_custom_pages_producer(binding.addon_id())
+            });
+        }
+        Ok(current)
+    }
     async fn recheck_effective_channel_snapshot(
         &self,
         expected: &Selection,
