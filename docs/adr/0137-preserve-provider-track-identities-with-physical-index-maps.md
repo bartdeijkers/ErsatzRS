@@ -9,8 +9,10 @@ Proposed
 Partial — row295's index calculation, stable identity storage, ordinary scan
 repair and localized Health diagnostics have focused passing evidence. Next
 ordinary AV/embedded tracks, probe hints and caption preparation consume the map
-and bind it to mutable source authority. Native and qualified source-reader
-integration remain in `ucu-16-continuation`; the row is not fully accepted.
+and bind it to mutable source authority. Native HLS and MPEG-TS/Direct final
+requests use the same physical boundary, including transport fallback/retries.
+Background extraction, qualified source-reader integration and actual Native
+runtime proof remain in `ucu-16-continuation`; the row is not fully accepted.
 
 ## Context
 

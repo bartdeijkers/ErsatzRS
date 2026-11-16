@@ -14,6 +14,8 @@ pub(crate) struct StreamIndexes {
     movie: Option<i64>,
     episode: Option<i64>,
     updated: String,
+    library: i64,
+    source: i64,
     indexes: BTreeMap<i32, i32>,
 }
 
@@ -29,6 +31,11 @@ pub(crate) async fn load(pool: &DbPool, version: i64) -> Result<Option<StreamInd
             JOIN "LibraryPath" p ON p."Id"=i."LibraryPathId"
             JOIN "JellyfinLibrary" l ON l."Id"=p."LibraryId"
             WHERE i."Id"=COALESCE(v."MovieId",v."EpisodeId")) AS "JellyfinLibrary",
+        (SELECT p."LibraryId" FROM "MediaItem" i JOIN "LibraryPath" p ON p."Id"=i."LibraryPathId"
+            WHERE i."Id"=COALESCE(v."MovieId",v."EpisodeId")) AS "LibraryId",
+        (SELECT l."MediaSourceId" FROM "MediaItem" i JOIN "LibraryPath" p ON p."Id"=i."LibraryPathId"
+            JOIN "Library" l ON l."Id"=p."LibraryId"
+            WHERE i."Id"=COALESCE(v."MovieId",v."EpisodeId")) AS "SourceId",
         ({invalid_map}) AS "InvalidMap",m."StreamIndex",m."SourceStreamIndex"
         FROM "MediaVersion" v LEFT JOIN "ProviderStreamIndex" m ON m."MediaVersionId"=v."Id"
         WHERE v."Id"=? ORDER BY m."StreamIndex""#
@@ -68,6 +75,8 @@ pub(crate) async fn load(pool: &DbPool, version: i64) -> Result<Option<StreamInd
         movie: row.try_get("MovieId").repository()?,
         episode: row.try_get("EpisodeId").repository()?,
         updated: row.try_get("DateUpdated").repository()?,
+        library: row.try_get("LibraryId").repository()?,
+        source: row.try_get("SourceId").repository()?,
         indexes: BTreeMap::new(),
     };
     for row in rows {
@@ -205,4 +214,41 @@ pub(crate) fn apply_native_request(
     }
     *request = mapped;
     Ok(())
+}
+
+/// Captured provider-to-file authority for a native transport preparation.
+/// Paths and map contents are deliberately excluded from Debug output.
+#[derive(Clone)]
+pub struct NativeStreamIndexMap {
+    version: i64,
+    indexes: Option<StreamIndexes>,
+}
+impl NativeStreamIndexMap {
+    /// Capture before loading logical tracks or running selection.
+    /// # Errors
+    /// Refuses missing, incomplete or ambiguous Jellyfin maps.
+    pub async fn capture(pool: &DbPool, version: i64) -> Result<Self> {
+        Ok(Self {
+            version,
+            indexes: load(pool, version).await?,
+        })
+    }
+    /// Recheck immediately before building commands, including retry commands.
+    /// # Errors
+    /// Refuses changed ownership, projection revision or mapping.
+    pub async fn validate(&self, pool: &DbPool) -> Result<()> {
+        ensure_current(pool, self.version, self.indexes.as_ref()).await
+    }
+    /// Apply after logical selection, before final pipeline command construction.
+    /// The caller must validate this authority first. Prepared inputs preserve
+    /// their independent indexes; errors leave the request unchanged.
+    /// # Errors
+    /// Refuses selected original-file identities absent from the captured map.
+    pub fn apply(
+        &self,
+        original: &str,
+        request: &mut ersatzrs_ffmpeg::PipelineRequest,
+    ) -> Result<()> {
+        apply_native_request(self.indexes.as_ref(), original, request)
+    }
 }

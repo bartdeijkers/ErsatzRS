@@ -1186,6 +1186,22 @@ async fn serve_channel_stream_admitted_inner(
             replace_path(&replacements, &active.media_path, PathPlatform::Unix)
         };
 
+    let native_indexes = if active.external.is_none() && active.remote_stream.is_none() {
+        match ersatzrs_infra::playback::NativeStreamIndexMap::capture(
+            &state.pool,
+            active.media_version_id,
+        )
+        .await
+        {
+            Ok(indexes) => Some(indexes),
+            Err(error) => {
+                tracing::warn!(%error, channel_id=channel.id, "Native source mapping unavailable");
+                return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+            }
+        }
+    } else {
+        None
+    };
     let source_stream = match async {
         if let Some(media) = &active.external {
             ersatzrs_infra::playback::source_video_stream_from_probe(&media.probe)
@@ -2518,6 +2534,10 @@ async fn serve_channel_stream_admitted_inner(
         .remote_stream
         .as_ref()
         .is_some_and(|stream| stream.liveness == ersatzrs_domain::RemoteStreamLiveness::Live);
+    let native_mapping_valid = match &native_indexes {
+        Some(indexes) => indexes.validate(&state.pool).await.is_ok(),
+        None => true,
+    };
     let build_command = |input: InputFile, metadata, subtitle_input| {
         let input = if wrapper_paces_finite_item {
             input.without_readrate()
@@ -2545,6 +2565,12 @@ async fn serve_channel_stream_admitted_inner(
             is_live_remote,
             song.as_deref(),
         );
+        if !native_mapping_valid {
+            return Err(ersatzrs_ffmpeg::UnsupportedSource {
+                reason: "Jellyfin source mapping changed during preparation".into(),
+            });
+        }
+        apply_native_indexes(native_indexes.as_ref(), &resolved, &mut request)?;
         completion_progress::configure(&mut request, wrapper_paces_finite_item);
         let request = source_teletext::consumer_request(
             acceleration,
@@ -2638,6 +2664,8 @@ async fn serve_channel_stream_admitted_inner(
             let song = song.clone();
             let channel_number = channel.number.clone();
             let pool = state.pool.clone();
+            let native_indexes = native_indexes.clone();
+            let original = resolved.clone();
             Box::new(move |mode, cancel| {
                 Box::pin(async move {
                     let (capabilities, force_software_encode) = match mode {
@@ -2760,6 +2788,18 @@ async fn serve_channel_stream_admitted_inner(
                         force_software_encode,
                         "rebuilding channel stream command after runtime hardware rejection"
                     );
+                    if let Some(indexes) = &native_indexes {
+                        if indexes.validate(&pool).await.is_err() {
+                            if let Some(fresh) = fresh.take() {
+                                fresh
+                                    .prepared
+                                    .cancel()
+                                    .await
+                                    .map_err(|error| StreamSpawnError::prepared(&error))?;
+                            }
+                            return Ok(None);
+                        }
+                    }
                     let ordinary_caption_fallback = ordinary_caption
                         .as_ref()
                         .map(|caption| {
@@ -2794,11 +2834,9 @@ async fn serve_channel_stream_admitted_inner(
                                 &mut request,
                                 wrapper_paces_finite_item && !retained_stream,
                             );
-                            ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
-                                acceleration,
-                                request,
-                            )
-                            .map(|(command, _)| command)
+                            apply_native_indexes(native_indexes.as_ref(), &original, &mut request)
+                                .and_then(|()| ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(acceleration,request))
+                                .map(|(command, _)| command)
                         })
                         .transpose();
                     let primary_input = if wrapper_paces_finite_item && !retained_stream {
@@ -2831,12 +2869,14 @@ async fn serve_channel_stream_admitted_inner(
                         &mut request,
                         wrapper_paces_finite_item && !retained_stream,
                     );
+                    let native_mapping =
+                        apply_native_indexes(native_indexes.as_ref(), &original, &mut request);
                     let source_caption_request = source_teletext::consumer_request(
                         acceleration,
                         request,
                         retry_source_caption_owner.as_deref(),
                     );
-                    let command = source_caption_request.build();
+                    let command = native_mapping.and_then(|()| source_caption_request.build());
                     let (Ok((command, source_caption_plan)), Ok(ordinary_caption_fallback)) =
                         (command, ordinary_caption_fallback)
                     else {
@@ -7612,6 +7652,21 @@ fn ffmpeg_stderr_is_hardware_encoder_open_failure(stderr: &str) -> bool {
         || lower.contains("no capable devices found")
 }
 
+fn apply_native_indexes(
+    indexes: Option<&ersatzrs_infra::playback::NativeStreamIndexMap>,
+    original: &str,
+    request: &mut PipelineRequest,
+) -> Result<(), ersatzrs_ffmpeg::UnsupportedSource> {
+    if let Some(indexes) = indexes {
+        indexes
+            .apply(original, request)
+            .map_err(|_| ersatzrs_ffmpeg::UnsupportedSource {
+                reason: "Jellyfin physical stream mapping is unavailable".into(),
+            })?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -11137,7 +11192,7 @@ mod tests {
         "rect 0 0 480 270 setcolor #00ff00 fill\n"
     }
 
-    fn playback_profile() -> PlaybackProfile {
+    pub(super) fn playback_profile() -> PlaybackProfile {
         PlaybackProfile {
             profile: FFmpegProfile {
                 video_format: FFmpegProfileVideoFormat::H264,
@@ -11586,3 +11641,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "stream_native_indexes_tests.rs"]
+mod native_indexes_tests;

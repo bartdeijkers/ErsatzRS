@@ -41717,6 +41717,48 @@ remaining reopen/source-owner and unchanged smoke/TSDuck/final/package/browser/
 platform/CI/delivery gates remain mandatory. The snapshot and builder tests do
 not establish worker runtime acceptance or full Native/row acceptance.
 
+2026-11-17 row295 MPEG-TS/Direct final-request routing checkpoint:
+R295-B transport command routing is implemented. The existing infra map snapshot
+is exposed as an opaque NativeStreamIndexMap adapter; it captures before logical
+track reads, validates current revision/owner/map and applies the same atomic
+original-file mapping used by HLS. The web transport retains its current saved
+pin, custom selector, language/title and subtitle selection paths. Initial and
+ordinary-caption fallback requests map after those choices and before final
+command construction. Runtime hardware retry validates the captured map again,
+then maps both the rebuilt primary request and ordinary-caption fallback.
+Refused authority/translation uses existing startup refusal or retry cleanup,
+including cancellation of a newly prepared retained producer. Prepared/retained,
+external JSON, remote streams, generated song video and qualified page inputs
+keep their independently observed indexes. No new implementation is added to
+FFmpeg's pipeline selector and no persisted identities are rewritten.
+The command regression compares MPEG-TS, Direct MKV and Direct MP4 across all
+three provider layouts. Each format must produce identical final argv with
+physical video0 and selected alternate audio2. Original-file embedded caption4
+and standalone caption0 are checked at the same transport boundary. Captured
+map authority is invalidated by a source revision change before a retry. Review
+also identified a concrete ownership gap in the earlier snapshot: moving the
+same library to another Jellyfin server could preserve version/stream-map fields.
+The snapshot now captures library and media-source IDs; the regression changes
+the owning server independently after a fresh capture and requires refusal.
+The additional binding fields also protect existing Next source fingerprints;
+its focused map/descriptor and HLS boundary regressions are rechecked.
+All77 transport regressions pass in row295-native-transport-regressions.log,
+including cancellation/capacity/retry controls and the reviewed MPEG-TS/MKV/MP4
+snapshot. All16 focused map, descriptor, report and HLS boundary cases pass in
+row295-native-transport-map-controls.log after adding library/source authority.
+Strict infra/web all-target Clippy passes in
+row295-native-transport-clippy-final.log. Formatting, architecture and progress
+validation pass. The first lint trial found a missing test-only import; the
+first snapshot trial is the expected new-snapshot refusal, retained for review.
+Rust/build input hashes are unchanged through the final passing runs.
+Evidence receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-native-transport-checkpoint.json.
+The remaining R295-B implementation is background embedded extraction and
+remaining mapped/qualified-source layout, enrichment and caption readers.
+R295-C actual current-candidate Native AV/caption playback, actual Convert,
+remaining reopen/source-owner and all unchanged smoke/TSDuck/final/package/
+browser/platform/CI/delivery gates remain mandatory. Builder and snapshot proof
+alone does not establish complete Native playback or row295 acceptance.
+
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local
 component is closed; next is row295 Native and qualified-source physical-map consumption. Row291's local component is complete; item2's consolidated

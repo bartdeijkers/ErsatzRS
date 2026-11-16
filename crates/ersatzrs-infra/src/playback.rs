@@ -5,6 +5,7 @@
 mod candidate;
 #[path = "playback_stream_indexes.rs"]
 pub(crate) mod source_indexes;
+pub use source_indexes::NativeStreamIndexMap;
 #[path = "playback_source_teletext.rs"]
 pub mod source_teletext;
 #[path = "playback_transient.rs"]
