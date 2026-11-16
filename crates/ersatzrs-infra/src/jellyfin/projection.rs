@@ -375,7 +375,8 @@ pub(super) fn project_chapters(
 pub(super) fn project_playback(
     response: JellyfinPlaybackInfoResponse,
 ) -> Option<JellyfinPlaybackMetadata> {
-    let media_source = response.media_sources.into_iter().next()?;
+    let mut media_source = response.media_sources.into_iter().next()?;
+    normalize_source_stream_indexes(&mut media_source.media_streams);
     let source_declaration = media_source
         .id
         .clone()
@@ -423,6 +424,24 @@ pub(super) fn project_playback(
             .filter_map(project_stream)
             .collect(),
     })
+}
+
+// ErsatzTV 1a566770 SourceStreamIndex: subtract external positions before each
+// physical stream, independently of response-array order. Negative external IDs
+// name separate provider files; they are not positions in the mixed source list.
+fn normalize_source_stream_indexes(streams: &mut [JellyfinMediaStreamResponse]) {
+    let external = streams
+        .iter()
+        .filter(|stream| stream.is_external)
+        .filter_map(|stream| stream.index)
+        .filter(|index| *index >= 0)
+        .collect::<std::collections::BTreeSet<_>>();
+    for stream in streams.iter_mut().filter(|stream| !stream.is_external) {
+        if let Some(index) = stream.index.filter(|index| *index >= 0) {
+            // There are at most index distinct nonnegative positions below index.
+            stream.index = Some(external.range(..index).fold(index, |mapped, _| mapped - 1));
+        }
+    }
 }
 
 pub(super) fn project_stream(stream: JellyfinMediaStreamResponse) -> Option<MediaStream> {
@@ -607,3 +626,6 @@ mod source_declaration_tests;
 
 #[cfg(test)]
 mod external_audio_tests;
+
+#[cfg(test)]
+mod stream_index_tests;

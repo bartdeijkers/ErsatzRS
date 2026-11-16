@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Row294 local cache/order/continuity proof Complete; next row295 Jellyfin source indexes with all shared window gates retained'
+current_focus = 'Row295 in progress: projection mapping proven; next persisted repair, exact-pin safety and Health, then Native/Next proof'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -128,7 +128,9 @@ retains rows290–292. After explicit resume, row293's local ASS/SRT shaping pro
 is Complete on the existing qualified FFmpeg9 runtime. Row294 local component
 is Complete: per-build smart-source material, batched artist memberships,80
 composed data/order/choice/continuity cases and strict infra all-target Clippy.
-Continue at row295 Jellyfin source indexes and persisted repair/Health. Item2
+Row295 projection component now passes10 cases and strict infra all-target
+lint. Continue at R295-B persisted ordinary-scan repair, exact-pin identity and
+Health; R295-C Native/Next/persisted proof remains required. Item2
 consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
 The accepted Pin table remains unchanged; no new row has a final disposition.

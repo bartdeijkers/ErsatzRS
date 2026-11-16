@@ -41471,6 +41471,52 @@ matched-bundle, four-platform or window acceptance claim. The changed scheduling
 code and embedded changelog require current-candidate proof at the retained
 shared final gates; row292's server receipt remains its earlier tested candidate.
 
+Row295 finite local completion list (in progress, source1a566770):
+R295-A projection functionality/proof Complete within unit scope: normalize each physical file index by the
+number of distinct nonnegative external positions below it, independently of
+response order. Preserve external subtitle provider indexes, internal track
+metadata and the existing refusal to treat an external audio file as a physical
+AV stream. Keep source declaration/native-file qualification strict. Existing
+Rust already handled external-last without introducing negative indexes; do
+not import upstream's old whole-list offset behavior. The current red trial
+row295-index-baseline.log reproduces external-first raw2/3/4 versus0/1/2.
+R295-B missing persisted repair and Health: existing Jellyfin movies/episodes
+must be revisited through ordinary claimed scans even with unchanged or absent
+ETags. Preserve old rows/cache and source ownership until successful transactional
+replacement; preserve disabled-library state. Track pending repair truthfully
+in Health. Audit/remap or refuse stale exact pins so normalization cannot
+silently retarget a saved track; preserve the distinction between physical
+subtitle indexes and external provider indexes when they overlap. The prior
+negative-index-only migration cannot repair positive shifted raw indexes.
+R295-C missing mandatory integration proof: persisted/restart/idempotency and
+failed-scan controls, before/after/interleaved projection-to-Native/Next selected
+AV/caption proof, retained source qualification and applicable strict local
+checks. Reuse unaffected provider/track evidence within its real source scope.
+Stopping condition: A/B implemented or proven covered and all named C controls
+pass; then close this local component before row296. Shared full-window,
+matched-bundle, four-platform, final/CI and ordered delivery gates remain open.
+Source map: tmp/evidence/ucu16-tail-9c6b3dea/row295-source-map.json records all7
+upstream path hashes. MySQL migrations are outside the SQLite-only product;
+the two generated Designer files carry EF model metadata, while migration
+bodies request data rescans. No new upstream schema is being ported wholesale.
+Current source changes are limited to projection; no migration or live DB,
+operator install, pin rewrite or accepted ledger disposition has occurred.
+Run6ae579b9-ada6-4d74-945c-d0f694fb0e52 passes10 projection cases. The before/after/interleaved
+matrix also reverses response order; separate gap/negative/missing/duplicate
+external-ID controls preserve the stronger existing Rust behavior. External
+subtitle indexes and internal codec/language/title/channel/default/forced data
+survive. The existing8 projection/source-declaration/external-audio cases pass
+alongside the2 new controls. The exact upstream algorithm's count of negative
+external IDs is not copied: existing Rust tests already prove those IDs refer
+to separate provider files, not source positions. Source declaration indexes
+are normalized consistently with native stream projection; acquisition still
+requires its unchanged independent native layout/source/owner proof.
+No persisted pin or end-to-end runtime acceptance is inferred from this scoped
+component. Receipt: row295-projection-checkpoint.json. Strict infra all-target
+lint passes in row295-projection-clippy-final.log. Formatting, architecture and
+progress checks pass. R295-B/C remain required before this row can close.
+
+
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local
 component is closed; next is row295 Jellyfin source-index mapping and repair/Health. Row291's local component is complete; item2's consolidated
