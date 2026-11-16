@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Paused after row292 local functionality/proof Complete; resume at row293 with all shared UCU-16 window qualification retained'
+current_focus = 'Row293 local Arabic shaping proof Complete; next row294 load measurement, with all shared UCU-16 window qualification retained'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -32,8 +32,11 @@ row292 reassessment, preservation of stronger existing ErsatzRS behavior, reuse
 of passing evidence and a pause after this row. Milestone ucu-16-continuation
 records completed R292-C/D/E: Native/Next smoke and93/86 TSDuck checks pass on
 the exact current server. No row292 functionality or mandatory local proof
-remains. Pause here before row293; all shared window/package/platform/browser/CI
-acceptance remains mandatory and no ledger disposition/pin is advanced. Direct GitHub recheck
+remains. Checkpoint2f49534d retains rows290–292. The maintainer resumed;
+row293 native Linux shaping proof now confirms existing managed FFmpeg9
+behavior with paired ASS/SRT complex/simple render controls and a font lacking
+U+FEFF. No runtime/filter change is needed. Row294 load measurement is next;
+all shared window/package/platform/browser/CI acceptance remains mandatory and no ledger disposition/pin is advanced. Direct GitHub recheck
 still ends at row296; no new moving endpoint is selected.
 
 UCU-16 rows286–289 are Complete within their unchanged required boundary.
@@ -119,9 +122,11 @@ with92 focused,109 request and actual old/new worker controls. Row292 scan
 notifications and probe hints have82 composed controls and seven decoded runtime
 cases. Ordinary local/provider/prepared missing-caption components are locally
 verified; R292-C/D/E are Complete with117 current regressions,62 actual Next
-cases, current Native/Next smoke and93/86 TSDuck checks. Preserve the paused
-row292 checkpoint and do not start row293 until explicit resume. Item2 consolidated
-runtime qualification, functionality3–7 and
+cases, current Native/Next smoke and93/86 TSDuck checks. Checkpoint2f49534d
+retains rows290–292. After explicit resume, row293's local ASS/SRT shaping proof
+is Complete on the existing qualified FFmpeg9 runtime. Continue at row294 with
+measured repeated collection/state loads and preserve existing caches. Item2
+consolidated runtime qualification, functionality5–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
 The accepted Pin table remains unchanged; no new row has a final disposition.
 Prepare work in isolated branch work/ucu16-tail at mainc5aff430, preserving

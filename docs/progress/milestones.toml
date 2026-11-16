@@ -41365,7 +41365,40 @@ No row292 functionality or mandatory local proof remains. Shared full-window mat
 source/runtime/package/four-platform/CI and ordered delivery gates remain
 mandatory before accepted ledger dispositions or pin advancement.
 
-Remaining functionality: items4–7
+2026-11-16 row293 local component Complete; reviewed as Covered by the existing
+qualified FFmpeg9 runtime within native Linux x64 scope. Source map: exact
+ErsatzTV d1e6d52e changes .github/ffmpeg.json, CHANGELOG.md and the three
+Dockerfiles only; there are no UI, validator, repository or persisted-state
+changes. Rust filter/simple.rs::subtitles_filter, its subtitle graphics helper
+and pipeline/mod.rs text Burn consumer already use the subtitles filter without
+forcing simple shaping. Existing fontsdir, seek, hardware-transfer and selected
+track behavior remain unchanged. No dependency downgrade or application change
+is needed. Actual managed ErsatzRS-ffmpeg2.0.10/n9.0 binary SHA256
+bb2f58a41e252d115f878e84340317a17caa440e801a4c54126b60b9dcff8cb4
+renders Arabic U+0628 U+0644 U+0627 (lam-alef example) with FreeMono Bold,
+font SHA2567a5ded6ffe5ba84c7c478de521ad0653efae4d2b92b251216bc390c6022e91ac.
+Fontconfig character coverage verifies those letters and U+FEFB present and
+U+FEFF absent; verbose libass font selection confirms that exact font.
+Controlled640x360 RGB24 single-frame ASS rendering: default subtitles and
+explicit ass:shaping=complex are byte-identical, SHA256
+735fd1f39f82738da92aa1a59f3be3dd7e1d47b77aa60feaba169a51564f6f08,
+787 lit pixels; explicit simple has1888 lit pixels and visibly adds a box.
+SRT at the same explicit font/style also equals its converted-ASS complex
+reference, SHA25659a316903fae41ddc6c5d89ebc8b85e507f3cdbbc9733eeb1ebcc219109ebf33,
+1121 lit pixels; simple has2882 lit pixels and differs. ASS and SRT retain their own
+native canvas/scale and are compared only against matching references.
+An initial SRT control used its tiny default Arial style and failed the
+fixture's >100-lit-pixel threshold; that was a fixture mismatch, not a product
+failure. The corrected paired trial fixes the same FreeMono Bold style in
+both SRT and its converted reference. No production setting was changed.
+Reproducer, raw frames, selected-font logs, hashes and visual comparison are
+retained under tmp/evidence/ucu16-tail-9c6b3dea/{run-row293-shaping-proof.py,
+row293-shaping-proof.json,row293-shaping/}. This closes finite list item4's
+local functionality/applicability and mandatory shaping proof; unchanged
+source/package/platform/window gates remain required. No blanket four-platform
+shaping acceptance, final ledger disposition or pin advancement is inferred.
+
+Remaining functionality: items5–7
 still require individual implementation/applicability proof. Row291's local component is complete; item2's consolidated
 runtime/package qualification remains in the shared mandatory proof list. Row290's implemented local component remains distinct
 from its required integrated/window acceptance. All provisional ledger mappings
@@ -41376,7 +41409,8 @@ unchanged source/final/playback/platform/CI and ordered delivery gates above.
 No new native Windows or ARM/platform acceptance is inferred from Linux.
 Delivery follows CONTRIBUTING checkpoint delivery; no main integration, push,
 new CI, dependency/application release, operator install or live mutation here.
-Row292 local functionality/proof checkpoint is Complete; pause here as requested.
-On explicit resume, continue with row293 and retain all shared window gates.
-No row293 work, accepted ledger disposition or authoritative pin advancement here.
+Row292 local functionality/proof checkpoint is Complete and committed as2f49534d.
+The maintainer explicitly resumed the goal. Row293's local shaping proof is now
+Complete; next bounded work is row294 collection/state load measurement.
+No accepted ledger disposition or authoritative pin advancement here.
 """
