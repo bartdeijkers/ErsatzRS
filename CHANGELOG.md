@@ -70,6 +70,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Classic and block builds reuse smart-collection results within each build,
+  including playlist children. Artist searches load video memberships together.
+  Source order, independent playback choices and fresh membership on the next
+  build are preserved.
+
 - Custom-page checks use the add-on page ranges selected by the active
   Lua/Scripted interval. Published pages, their field bindings and their absence
   remain stable during On/Off intervals when elements or links change. Guide and

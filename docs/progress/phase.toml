@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Row294 in progress: Classic duplicate smart loads measured; complete block/playlist/artist measurement and bounded cache/continuity proof'
+current_focus = 'Row294 local cache/order/continuity proof Complete; next row295 Jellyfin source indexes with all shared window gates retained'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -35,7 +35,8 @@ the exact current server. No row292 functionality or mandatory local proof
 remains. Checkpoint2f49534d retains rows290–292. The maintainer resumed;
 row293 native Linux shaping proof now confirms existing managed FFmpeg9
 behavior with paired ASS/SRT complex/simple render controls and a font lacking
-U+FEFF. No runtime/filter change is needed. Row294 load measurement is next;
+U+FEFF. No runtime/filter change is needed. Row294 local query/order/continuity proof is Complete with80 composed
+repository cases and strict all-target lint; row295 Jellyfin source indexes are next;
 all shared window/package/platform/browser/CI acceptance remains mandatory and no ledger disposition/pin is advanced. Direct GitHub recheck
 still ends at row296; no new moving endpoint is selected.
 
@@ -124,9 +125,11 @@ cases. Ordinary local/provider/prepared missing-caption components are locally
 verified; R292-C/D/E are Complete with117 current regressions,62 actual Next
 cases, current Native/Next smoke and93/86 TSDuck checks. Checkpoint2f49534d
 retains rows290–292. After explicit resume, row293's local ASS/SRT shaping proof
-is Complete on the existing qualified FFmpeg9 runtime. Continue at row294 with
-measured repeated collection/state loads and preserve existing caches. Item2
-consolidated runtime qualification, functionality5–7 and
+is Complete on the existing qualified FFmpeg9 runtime. Row294 local component
+is Complete: per-build smart-source material, batched artist memberships,80
+composed data/order/choice/continuity cases and strict infra all-target Clippy.
+Continue at row295 Jellyfin source indexes and persisted repair/Health. Item2
+consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
 The accepted Pin table remains unchanged; no new row has a final disposition.
 Prepare work in isolated branch work/ucu16-tail at mainc5aff430, preserving
