@@ -296,6 +296,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Health reports Jellyfin media versions that need stream index repair. An ordinary
+  library scan repairs missing maps even when provider metadata is unchanged,
+  retaining saved track choices and disabled-library settings.
 - Jellyfin scan metadata preserves provider track identities separately from
   physical stream indexes, keeping saved choices and subtitle download indexes
   stable. Ordinary scans revisit legacy mappings even with unchanged ETags;

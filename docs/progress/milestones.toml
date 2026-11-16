@@ -41480,8 +41480,8 @@ AV stream. Keep source declaration/native-file qualification strict. Existing
 Rust already handled external-last without introducing negative indexes; do
 not import upstream's old whole-list offset behavior. The current red trial
 row295-index-baseline.log reproduces external-first raw2/3/4 versus0/1/2.
-R295-B persisted storage implemented/proven; Health and physical consumer routing
-remain open: existing Jellyfin movies/episodes
+R295-B persisted storage and localized Health implemented/proven; physical consumer
+routing remains open: existing Jellyfin movies/episodes
 must be revisited through ordinary claimed scans even with unchanged or absent
 ETags. Preserve old rows/cache and source ownership until successful transactional
 replacement; preserve disabled-library state. Track pending repair truthfully
@@ -41551,14 +41551,49 @@ required fields and incorrect choice of CollectionItem (which has no exact pin
 columns) are retained failures; the corrected proof uses the real PlaylistItem
 contract from migration202607271400. Core/infra strict all-target Clippy passes
 in row295-storage-clippy.log. No local/Emby/Plex index contract is changed.
-Remaining finite B functionality: registered/localized pending-map Health and
-application of the qualified physical map at Native/Next video/audio/embedded
+Remaining finite B functionality after the storage checkpoint: registered/localized
+pending-map Health (closed by the next checkpoint below) and application of the
+qualified physical map at Native/Next video/audio/embedded
 routing and mapped-source readers. Bind the map to mutable source authority;
 missing or changed maps must not silently route an old logical selection.
 Remaining C proof: actual selected AV/captions across the agreed source layouts,
 SQLite reopen/restart, source/ownership and failure refusals, required local
 checks and unchanged shared final gates. No map consumption/runtime acceptance,
 accepted disposition, authoritative pin or release/installation is claimed here.
+
+
+2026-11-16 row295 Health/ordinary repair checkpoint:
+R295-B Health is locally Complete. The registered check counts pending or
+structurally invalid Jellyfin movie/episode version maps, without counting
+non-Jellyfin versions or requiring physical entries for external subtitles.
+Retained attachment mappings are valid even when no MediaStream row projects
+that attachment. Missing native mappings, unsupported projection revisions,
+ambiguous native identities and impossible index bounds produce a warning.
+Health uses the same predicate as scan admission: a revision1 map missing a
+track cannot be hidden by equal provider ETags. Ordinary scans repair it while
+keeping saved choices and disabled-library settings. This is structural stored
+map evidence, not native file/source authority or decoded playback acceptance.
+The title, count, remedy and brief warning are translated in all nine cultures;
+unknown diagnostics remain verbatim and unrelated checks are not relabeled.
+Four Health/registration/persisted-result cases pass in row295-health-tests.log.
+The initial service run row295-health-scan-controls.log passes25 of26 cases,
+including all11 Emby controls and current movie/episode repair. Its one failure
+is an obsolete baseline expectation that negative audio must remain until a
+migration forces a rescan. The new ordinary admission already repairs it.
+The revised existing regression preserves both ordinary repair and the older
+migration path by injecting the same legacy row again before migration; it
+passes in row295-health-audio-repair.log. This composes26 passing service cases
+without discarding the old migration/track/idempotency requirements. All41 i18n
+cases pass in row295-health-i18n.log, including the nine-culture new diagnostic.
+Strict infra/web all-target Clippy passes in row295-health-clippy.log. Formatting,
+architecture, hydration and progress validation pass with no new debt.
+Receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-health-checkpoint.json.
+Remaining B functionality is qualified physical-map consumption at Native/Next
+video/audio/embedded routing and mapped-source readers, bound to mutable source
+authority. Remaining C proof is unchanged: actual selected AV/captions across
+the agreed layouts, SQLite reopen/restart, source/ownership/failure refusals
+and applicable final gates. No final row disposition, baseline advancement,
+matched server/browser/runtime/platform or window acceptance is claimed.
 
 
 

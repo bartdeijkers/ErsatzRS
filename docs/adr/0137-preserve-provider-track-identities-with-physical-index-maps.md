@@ -6,7 +6,8 @@ Proposed
 
 ## Implementation
 
-Partial — row295's index calculation is proven. Persistent maps, repair/Health,
+Partial — row295's index calculation, stable identity storage, ordinary scan
+repair and localized Health diagnostics have focused passing evidence. Physical
 consumer routing and Native/Next integration remain in `ucu-16-continuation`.
 
 ## Context

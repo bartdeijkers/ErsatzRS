@@ -1874,6 +1874,9 @@ pub enum TextKey {
     JavascriptAudioSelectionTitle,
     JavascriptAudioSelectionHealthy,
     JavascriptAudioSelectionFailures,
+    JellyfinStreamIndexesTitle,
+    JellyfinStreamIndexesRepairBrief,
+    JellyfinStreamIndexesRepair,
     LocalDateAddedRepair,
     LocalDateAddedRepairBrief,
     AddonListDiskUsageTitle,
@@ -4583,6 +4586,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::JavascriptAudioSelectionTitle,
     TextKey::JavascriptAudioSelectionHealthy,
     TextKey::JavascriptAudioSelectionFailures,
+    TextKey::JellyfinStreamIndexesTitle,
+    TextKey::JellyfinStreamIndexesRepairBrief,
+    TextKey::JellyfinStreamIndexesRepair,
     TextKey::LocalDateAddedRepair,
     TextKey::LocalDateAddedRepairBrief,
     TextKey::AddonListDiskUsageTitle,
@@ -6027,6 +6033,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
             text(language, TextKey::ExternalJsonPlayoutState).to_owned()
         }
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
+        "Jellyfin stream indexes" => text(language, TextKey::JellyfinStreamIndexesTitle).to_owned(),
         "Subtitle Encoding" => text(language, TextKey::SubtitleEncoding).to_owned(),
         "Subtitle Cleanup" => text(language, TextKey::SubtitleCleanup).to_owned(),
         "Artwork Orphans" => text(language, TextKey::ArtworkOrphans).to_owned(),
@@ -6653,6 +6660,23 @@ fn teletext_configuration_health_message(
     }
 }
 
+fn jellyfin_stream_indexes_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+) -> Option<String> {
+    if title != "Jellyfin stream indexes" {
+        return None;
+    }
+    if message == "Jellyfin stream index repair needed" {
+        return Some(text(language, TextKey::JellyfinStreamIndexesRepairBrief).to_owned());
+    }
+    let count = message.strip_suffix(" Jellyfin media versions need stream index repair. Rescan their libraries to repair audio, video and embedded subtitle routing. Saved track choices are retained. Disabled libraries remain disabled; enable scanning only if wanted.")?.parse::<usize>().ok()?;
+    Some(
+        text(language, TextKey::JellyfinStreamIndexesRepair).replace("{count}", &count.to_string()),
+    )
+}
+
 fn local_date_added_health_message(
     language: UiLanguage,
     title: &str,
@@ -6684,6 +6708,11 @@ pub fn health_check_message_text(
     } else {
         message
     };
+    if let Some(localized) =
+        jellyfin_stream_indexes_health_message(language, title, displayed_message)
+    {
+        return localized;
+    }
     if let Some(localized) = local_date_added_health_message(language, title, displayed_message) {
         return localized;
     }
@@ -8110,6 +8139,46 @@ mod tests {
                 }
             }
             assert!(text(language, TextKey::PreviewStartHelp).contains("UTC"));
+        }
+    }
+
+    #[test]
+    fn row295_jellyfin_index_health_is_localized_for_every_language() {
+        let message = "17 Jellyfin media versions need stream index repair. Rescan their libraries to repair audio, video and embedded subtitle routing. Saved track choices are retained. Disabled libraries remain disabled; enable scanning only if wanted.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = "Jellyfin stream indexes";
+            assert_eq!(
+                health_check_title_text(language, title),
+                text(language, TextKey::JellyfinStreamIndexesTitle)
+            );
+            let localized = health_check_message_text(language, title, message, "");
+            assert_eq!(
+                localized,
+                text(language, TextKey::JellyfinStreamIndexesRepair).replace("{count}", "17")
+            );
+            assert!(!localized.contains('{'));
+            assert_eq!(
+                health_check_message_text(
+                    language,
+                    title,
+                    "",
+                    "Jellyfin stream index repair needed"
+                ),
+                text(language, TextKey::JellyfinStreamIndexesRepairBrief)
+            );
+            if language != UiLanguage::English {
+                assert_ne!(localized, message);
+                assert_ne!(health_check_title_text(language, title), title);
+            }
+            assert_eq!(
+                health_check_message_text(language, title, "future diagnostic", ""),
+                "future diagnostic"
+            );
+            assert_eq!(
+                health_check_message_text(language, "Other check", message, ""),
+                message
+            );
         }
     }
 

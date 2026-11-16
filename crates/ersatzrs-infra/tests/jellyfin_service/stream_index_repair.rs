@@ -170,6 +170,44 @@ async fn row295_absent_etag_repairs_pending_map_and_skips_qualified_items() {
     assert_eq!(response.calls_async().await, 2);
 }
 
+#[tokio::test]
+async fn row295_ordinary_scan_repairs_missing_map_with_current_revision() {
+    for episode in [false, true] {
+        let server = MockServer::start_async().await;
+        let _show = if episode {
+            Some(mock_target_show_pages(&server).await)
+        } else {
+            None
+        };
+        let _movies = if episode {
+            None
+        } else {
+            Some(mock_detailed_movie_items(&server).await)
+        };
+        let response = playback(&server, episode).await;
+        let pool = common::test_db().await;
+        if episode {
+            seed_jellyfin_show_scan_config(&pool, &server.base_url()).await;
+        }
+        scan(&pool, &server, episode).await.unwrap();
+        sqlx::query(r#"DELETE FROM "ProviderStreamIndex" WHERE "StreamIndex"=3"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(scan(&pool, &server, episode).await.unwrap(), 1);
+        assert_eq!(response.calls_async().await, 2);
+        let physical: i32 = sqlx::query_scalar(
+            r#"SELECT "SourceStreamIndex" FROM "ProviderStreamIndex" WHERE "StreamIndex"=3"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(physical, 2);
+        scan(&pool, &server, episode).await.unwrap();
+        assert_eq!(response.calls_async().await, 2);
+    }
+}
+
 async fn assert_pending_pin(pool: &SqlitePool, owner: i64, version: i64, caption: i64) {
     assert_eq!(
         sqlx::query_scalar::<_, i64>(

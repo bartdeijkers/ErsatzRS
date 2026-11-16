@@ -554,13 +554,20 @@ pub(crate) async fn item_etag_matches(
     let table = item_table.table_name();
     let (metadata_select, metadata_join) = item_table.metadata_projection();
     let source_indexes_ready = match item_table {
-        ProviderItemTable::JellyfinMovie => {
-            r#"EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."MovieId"="JellyfinMovie"."Id") AND NOT EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."MovieId"="JellyfinMovie"."Id" AND v."ProviderStreamIndexVersion"<>1)"#
+        ProviderItemTable::JellyfinMovie | ProviderItemTable::JellyfinEpisode => {
+            let owner_column = if matches!(item_table, ProviderItemTable::JellyfinMovie) {
+                "MovieId"
+            } else {
+                "EpisodeId"
+            };
+            let invalid_map = crate::jellyfin::INVALID_SOURCE_INDEX_MAP;
+            format!(
+                r#"EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."{owner_column}"="{table}"."Id")
+                AND NOT EXISTS (SELECT 1 FROM "MediaVersion" v
+                    WHERE v."{owner_column}"="{table}"."Id" AND ({invalid_map}))"#
+            )
         }
-        ProviderItemTable::JellyfinEpisode => {
-            r#"EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."EpisodeId"="JellyfinEpisode"."Id") AND NOT EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."EpisodeId"="JellyfinEpisode"."Id" AND v."ProviderStreamIndexVersion"<>1)"#
-        }
-        ProviderItemTable::EmbyMovie | ProviderItemTable::EmbyEpisode => "1",
+        ProviderItemTable::EmbyMovie | ProviderItemTable::EmbyEpisode => "1".to_owned(),
     };
     let sql = format!(
         r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State",

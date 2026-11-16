@@ -32,16 +32,17 @@ use checks::{
     EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
     FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
     HardwareAccelerationHealthCheck, HardwareGraphHealthCheck, HlsDeliveryHealthCheck,
-    LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
-    MovieMetadataHealthCheck, NextRuntimeHealthCheck, OutputDynamicRangeHealthCheck,
-    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
-    RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
-    ScanRefreshStateHealthCheck, ScriptedPlayoutStateHealthCheck, SearchProjectionHealthCheck,
-    SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck,
-    SubtitleEncodingHealthCheck, TeletextDecoderHealthCheck, TeletextWorkHealthCheck,
-    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
-    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    JellyfinStreamIndexesHealthCheck, LocalTelevisionIdentityHealthCheck,
+    MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
+    NextRuntimeHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck,
+    RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck,
+    RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck, ScanRefreshStateHealthCheck,
+    ScriptedPlayoutStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
+    SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck, SubtitleEncodingHealthCheck,
+    TeletextDecoderHealthCheck, TeletextWorkHealthCheck, TsduckAvailabilityHealthCheck,
+    UnavailableHealthCheck, VaapiDeviceHealthCheck, VaapiDriverHealthCheck,
+    ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -65,7 +66,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 52] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 53] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -86,6 +87,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 52] = [
     "HLS Live Delivery",
     "Playback Data Access",
     "Pinned Stream Selection",
+    "Jellyfin stream indexes",
     "Movie Metadata",
     "Episode Metadata",
     "Local television identity",
@@ -287,6 +289,7 @@ fn registered_health_checks(
         Box::new(HlsDeliveryHealthCheck::new(pool.clone())),
         Box::new(PlaybackDataAccessHealthCheck::new(pool.clone())),
         Box::new(PinnedStreamSelectionHealthCheck::new(pool.clone())),
+        Box::new(JellyfinStreamIndexesHealthCheck::new(pool.clone())),
         Box::new(MovieMetadataHealthCheck::new(pool.clone())),
         Box::new(EpisodeMetadataHealthCheck::new(pool.clone())),
         Box::new(LocalTelevisionIdentityHealthCheck::new(pool.clone())),

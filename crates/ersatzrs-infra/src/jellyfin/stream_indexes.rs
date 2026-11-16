@@ -3,6 +3,26 @@ use super::{JellyfinPlaybackMetadata, MediaStream, MediaStreamKind, RepositoryEr
 use crate::{db::Db, repositories::SqlxResultExt as _};
 use sqlx::Transaction;
 
+// Shared by scan admission and Health. The caller binds `v` to a MediaVersion.
+// This checks stored structure only; native file/source qualification is separate.
+// Extra map entries can describe provider attachments omitted from MediaStream.
+pub(crate) const INVALID_SOURCE_INDEX_MAP: &str = r#"
+    v."ProviderStreamIndexVersion" <> 1
+    OR NOT EXISTS (SELECT 1 FROM "MediaStream" s
+        WHERE s."MediaVersionId"=v."Id" AND s."MediaStreamKind"=1)
+    OR EXISTS (SELECT 1 FROM "MediaStream" s
+        LEFT JOIN "ProviderStreamIndex" m ON m."MediaVersionId"=s."MediaVersionId"
+            AND m."StreamIndex"=s."Index"
+        WHERE s."MediaVersionId"=v."Id" AND s."MediaStreamKind"<>5
+            AND m."StreamIndex" IS NULL)
+    OR EXISTS (SELECT 1 FROM "MediaStream" s
+        WHERE s."MediaVersionId"=v."Id" AND s."MediaStreamKind"<>5
+        GROUP BY s."Index" HAVING COUNT(*)>1)
+    OR EXISTS (SELECT 1 FROM "ProviderStreamIndex" m
+        WHERE m."MediaVersionId"=v."Id"
+            AND (m."StreamIndex">2147483647 OR m."SourceStreamIndex">m."StreamIndex"))
+"#;
+
 pub(super) fn physical_streams(playback: &JellyfinPlaybackMetadata) -> Result<Vec<MediaStream>> {
     let map = playback.source_stream_indexes.as_ref().ok_or_else(|| {
         RepositoryError::Conflict(

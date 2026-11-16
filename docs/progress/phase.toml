@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Row295: stable track identities and atomic map storage proven; next Health and Native/Next physical routing/authority proof'
+current_focus = 'Row295: stable identity storage and localized Health proven; next Native/Next physical routing and authority proof'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -133,7 +133,9 @@ lint. A real pin-collision test disproves direct physical-index persistence;
 ADR0137 keeps provider identities stable and stores a separate physical map.
 Atomic ordinary-scan repair, failed-HTTP/transaction rollback, same/absent ETags
 and legacy migration preserving pins/cached references/disabled choices pass.
-Continue at R295-B Health and qualified physical-map consumer routing; R295-C
+Registered Health and nine-culture diagnostics now pass, with ordinary same-ETag
+repair of incomplete maps and retained legacy audio-migration controls. Continue
+at R295-B qualified physical-map consumer routing; R295-C
 Native/Next/reopen/authority proof remains required. Item2
 consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
