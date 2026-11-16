@@ -1250,6 +1250,12 @@ jobs:
             npm-${{ runner.os }}-
       - name: Install web E2E tools
         run: npm ci
+      # Hosted images lack the system libraries Playwright's Firefox loads for
+      # H.264/AAC (libavcodec), so every real-video Firefox spec failed there.
+      # Self-hosted runners already provide them and keep the plain install.
+      - name: Install browser system libraries
+        if: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') }}
+        run: npx --yes playwright install --with-deps ${{ matrix.project }}
       - name: Stage pinned playback runtimes
         env:
           GH_TOKEN: ${{ github.token }}
