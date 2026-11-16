@@ -9,6 +9,7 @@ pub(super) async fn upsert_jellyfin_movie(
     playback: &JellyfinPlaybackMetadata,
     claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<i64> {
+    let physical_streams = super::stream_indexes::physical_streams(playback)?;
     let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
         pool,
         claim,
@@ -19,7 +20,7 @@ pub(super) async fn upsert_jellyfin_movie(
         library_id,
         &item.path,
         playback.source_declaration.as_ref(),
-        &playback.streams,
+        &physical_streams,
     )
     .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
@@ -37,9 +38,10 @@ pub(super) async fn upsert_jellyfin_movie(
         version_id,
         &item.path,
         playback.source_declaration.as_ref(),
-        &playback.streams,
+        &physical_streams,
     )
     .await?;
+    super::stream_indexes::persist(&mut tx, version_id, playback).await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
     crate::metadata::update_metadata_subtitles(
         &mut tx,
@@ -102,6 +104,7 @@ pub(super) async fn upsert_jellyfin_episode(
     playback: &JellyfinPlaybackMetadata,
     claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> Result<()> {
+    let physical_streams = super::stream_indexes::physical_streams(playback)?;
     let mut teletext = crate::media_server::teletext::MappedTeletextWrite::acquire(
         pool,
         claim,
@@ -112,7 +115,7 @@ pub(super) async fn upsert_jellyfin_episode(
         library_id,
         &item.path,
         playback.source_declaration.as_ref(),
-        &playback.streams,
+        &physical_streams,
     )
     .await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
@@ -130,9 +133,10 @@ pub(super) async fn upsert_jellyfin_episode(
         version_id,
         &item.path,
         playback.source_declaration.as_ref(),
-        &playback.streams,
+        &physical_streams,
     )
     .await?;
+    super::stream_indexes::persist(&mut tx, version_id, playback).await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
     // Port of MediaServerTelevisionLibraryScanner.UpdateSubtitles
     // (ErsatzTV.Scanner/Core/Metadata/MediaServerTelevisionLibraryScanner.cs:832):

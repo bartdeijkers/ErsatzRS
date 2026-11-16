@@ -41480,7 +41480,8 @@ AV stream. Keep source declaration/native-file qualification strict. Existing
 Rust already handled external-last without introducing negative indexes; do
 not import upstream's old whole-list offset behavior. The current red trial
 row295-index-baseline.log reproduces external-first raw2/3/4 versus0/1/2.
-R295-B missing persisted repair and Health: existing Jellyfin movies/episodes
+R295-B persisted storage implemented/proven; Health and physical consumer routing
+remain open: existing Jellyfin movies/episodes
 must be revisited through ordinary claimed scans even with unchanged or absent
 ETags. Preserve old rows/cache and source ownership until successful transactional
 replacement; preserve disabled-library state. Track pending repair truthfully
@@ -41511,10 +41512,54 @@ external IDs is not copied: existing Rust tests already prove those IDs refer
 to separate provider files, not source positions. Source declaration indexes
 are normalized consistently with native stream projection; acquisition still
 requires its unchanged independent native layout/source/owner proof.
-No persisted pin or end-to-end runtime acceptance is inferred from this scoped
-component. Receipt: row295-projection-checkpoint.json. Strict infra all-target
+The original projection-only storage assumption is superseded by the concrete
+pin-collision evidence below. Its index calculation remains verified. No
+end-to-end runtime acceptance is inferred from this scoped component. Receipt: row295-projection-checkpoint.json. Strict infra all-target
 lint passes in row295-projection-clippy-final.log. Formatting, architecture and
 progress checks pass. R295-B/C remain required before this row can close.
+
+2026-11-16 row295 stable-identity/storage checkpoint (ADR0137 Proposed/Partial):
+The initial controlled pin test did not reach its assertion: incomplete schema
+fixtures omitted required DateAdded/Channels fields. Those failures are retained
+as fixture evidence, not product negatives. The corrected controlled trial
+row295-pin-collision-controlled.log reaches the actual selector assertion:
+provider subtitle2 selects Dutch sidecar ID2 before normalization, then English
+embedded ID1 after the earlier physical-index write. This is a real conflict
+with existing exact-version precedence, not permission to change that precedence.
+The accepted arithmetic is retained as a separate provider-to-physical map;
+MediaStream, Subtitle, exact pins, custom selectors and scheduling identities
+keep their original provider track keys. Current10 projection controls pass
+with source declarations using physical indexes and ordinary metadata retaining
+provider identities. Source acquisition still gets physical clones and performs
+its unchanged independent source/native-layout/claim checks.
+Additive migration202611162205 adds ProviderStreamIndex and a MediaVersion
+projection revision. Legacy records remain0 and ordinary claimed movie/episode
+scans bypass ETag equality until successful transactional map publication.
+No pin/track rows or ETags are rewritten by the migration. Library LastScan is
+reset for Jellyfin only; ShouldSyncItems and other provider libraries remain
+unchanged. Physical map rows and revision1 publish in the same existing
+transaction as metadata, subtitles and claimed source state. Invalid or absent
+mapping refuses preparation instead of guessing source indexes.
+Existing15 service/negative-audio-migration controls pass in
+row295-stable-identity-service-controls.log. Three current repair controls in
+row295-storage-qualified.log additionally prove absent-ETag bypass, movie and
+episode rollback on HTTP503 and a mid-transaction map INSERT failure, original
+caption/map retention, successful same-ETag repair/idempotency, and the actual
+pre-upgrade migration preserving saved playlist pins, cached caption references,
+ETags and a disabled Jellyfin library. The migration fixture's initial missing
+required fields and incorrect choice of CollectionItem (which has no exact pin
+columns) are retained failures; the corrected proof uses the real PlaylistItem
+contract from migration202607271400. Core/infra strict all-target Clippy passes
+in row295-storage-clippy.log. No local/Emby/Plex index contract is changed.
+Remaining finite B functionality: registered/localized pending-map Health and
+application of the qualified physical map at Native/Next video/audio/embedded
+routing and mapped-source readers. Bind the map to mutable source authority;
+missing or changed maps must not silently route an old logical selection.
+Remaining C proof: actual selected AV/captions across the agreed source layouts,
+SQLite reopen/restart, source/ownership and failure refusals, required local
+checks and unchanged shared final gates. No map consumption/runtime acceptance,
+accepted disposition, authoritative pin or release/installation is claimed here.
+
 
 
 Remaining functionality: items6–7

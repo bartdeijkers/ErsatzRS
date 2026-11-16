@@ -376,7 +376,34 @@ pub(super) fn project_playback(
     response: JellyfinPlaybackInfoResponse,
 ) -> Option<JellyfinPlaybackMetadata> {
     let mut media_source = response.media_sources.into_iter().next()?;
+    let original_indexes = media_source
+        .media_streams
+        .iter()
+        .map(|stream| stream.index)
+        .collect::<Vec<_>>();
     normalize_source_stream_indexes(&mut media_source.media_streams);
+    let native_indexes = media_source
+        .media_streams
+        .iter()
+        .zip(&original_indexes)
+        .filter(|(stream, _)| !stream.is_external)
+        .map(|(stream, original)| {
+            original
+                .filter(|index| *index >= 0)
+                .zip(stream.index.filter(|index| *index >= 0))
+        })
+        .collect::<Option<Vec<_>>>();
+    let source_stream_indexes = native_indexes.and_then(|indexes| {
+        let count = indexes.len();
+        let map = indexes
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let physical = map
+            .values()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        (count > 0 && map.len() == count && physical.len() == count).then_some(map)
+    });
     let source_declaration = media_source
         .id
         .clone()
@@ -392,6 +419,9 @@ pub(super) fn project_playback(
                     .map(|stream| stream.index),
             )
         });
+    for (stream, original) in media_source.media_streams.iter_mut().zip(original_indexes) {
+        stream.index = original;
+    }
     let video = media_source
         .media_streams
         .iter()
@@ -412,6 +442,7 @@ pub(super) fn project_playback(
 
     Some(JellyfinPlaybackMetadata {
         source_declaration,
+        source_stream_indexes,
         duration: Duration::nanoseconds(media_source.run_time_ticks * 100),
         width,
         height,

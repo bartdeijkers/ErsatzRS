@@ -24,7 +24,7 @@ fn external_stream_positions_map_each_physical_index_without_losing_provider_ids
             .streams
             .iter()
             .filter(|s| s.kind != MediaStreamKind::ExternalSubtitle)
-            .map(|s| s.index)
+            .map(|s| actual.source_stream_indexes.as_ref().unwrap()[&s.index])
             .collect::<Vec<_>>();
         physical.sort_unstable();
         assert_eq!(physical, [0, 1, 2], "external={external:?}");

@@ -296,9 +296,10 @@ release section when tagging a release.
 
 ### Fixed
 
-- Newly scanned Jellyfin media uses physical file indexes for internal tracks
-  when external streams appear before or between them. External subtitle
-  downloads retain their provider indexes and existing language metadata.
+- Jellyfin scan metadata preserves provider track identities separately from
+  physical stream indexes, keeping saved choices and subtitle download indexes
+  stable. Ordinary scans revisit legacy mappings even with unchanged ETags;
+  failed scans retain the previous metadata and cached-subtitle references.
 
 - Successful library and show scans refresh metadata in affected Next channels,
   mirrors and browser previews without rebuilding their schedules. Standalone

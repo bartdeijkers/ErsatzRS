@@ -553,9 +553,18 @@ pub(crate) async fn item_etag_matches(
 ) -> Result<bool> {
     let table = item_table.table_name();
     let (metadata_select, metadata_join) = item_table.metadata_projection();
+    let source_indexes_ready = match item_table {
+        ProviderItemTable::JellyfinMovie => {
+            r#"EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."MovieId"="JellyfinMovie"."Id") AND NOT EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."MovieId"="JellyfinMovie"."Id" AND v."ProviderStreamIndexVersion"<>1)"#
+        }
+        ProviderItemTable::JellyfinEpisode => {
+            r#"EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."EpisodeId"="JellyfinEpisode"."Id") AND NOT EXISTS (SELECT 1 FROM "MediaVersion" v WHERE v."EpisodeId"="JellyfinEpisode"."Id" AND v."ProviderStreamIndexVersion"<>1)"#
+        }
+        ProviderItemTable::EmbyMovie | ProviderItemTable::EmbyEpisode => "1",
+    };
     let sql = format!(
         r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State",
-                  {metadata_select}
+                  {metadata_select}, ({source_indexes_ready}) AS "SourceIndexesReady"
            FROM "{table}"
            INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
            INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
@@ -579,6 +588,7 @@ pub(crate) async fn item_etag_matches(
         .repository()?
         .is_some();
     Ok(super::provider_item_state_allows_etag_skip(state)
+        && row.try_get::<bool, _>("SourceIndexesReady").repository()?
         && has_metadata
         && existing_etag.as_deref() == etag)
 }

@@ -1,4 +1,6 @@
 mod common;
+#[path = "jellyfin_service/stream_index_repair.rs"]
+mod stream_index_repair;
 
 #[path = "jellyfin_service/external_audio_repair.rs"]
 mod external_audio_repair;

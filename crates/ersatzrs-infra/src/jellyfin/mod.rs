@@ -27,6 +27,7 @@ mod client;
 mod models;
 mod persistence;
 mod projection;
+mod stream_indexes;
 mod sync;
 
 pub(crate) use sync::load_active_jellyfin_connection_config;

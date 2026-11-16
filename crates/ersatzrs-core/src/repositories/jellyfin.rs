@@ -120,6 +120,10 @@ pub struct JellyfinCollectionMediaItem {
 pub struct JellyfinPlaybackMetadata {
     /// Provider declaration only; native acquisition must independently qualify it.
     pub source_declaration: Option<super::ProviderMediaSourceDeclaration>,
+    /// Provider track identity to physical file index for the selected source.
+    /// Pins and subtitle download URLs retain the provider identity. This map
+    /// does not certify native bytes or replace source ownership checks.
+    pub source_stream_indexes: Option<std::collections::BTreeMap<i32, i32>>,
     pub duration: Duration,
     pub width: i32,
     pub height: i32,
