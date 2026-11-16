@@ -112,3 +112,25 @@ fn unavailable() -> RepositoryError {
             .into(),
     )
 }
+
+/// Translate inside the caller's writer/read transaction, including readiness.
+/// The caller has already established Jellyfin ownership in that transaction.
+pub(crate) async fn physical_in_transaction(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    version: i64,
+    logical: i32,
+) -> Result<i32> {
+    let invalid = crate::jellyfin::INVALID_SOURCE_INDEX_MAP;
+    let sql = format!(
+        r#"SELECT m."SourceStreamIndex" FROM "MediaVersion" v
+        JOIN "ProviderStreamIndex" m ON m."MediaVersionId"=v."Id"
+        WHERE v."Id"=? AND m."StreamIndex"=? AND NOT ({invalid})"#
+    );
+    sqlx::query_scalar(crate::db::assert_sql_safe(&sql))
+        .bind(version)
+        .bind(logical)
+        .fetch_optional(&mut **tx)
+        .await
+        .repository()?
+        .ok_or_else(unavailable)
+}

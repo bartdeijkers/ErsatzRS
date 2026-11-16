@@ -296,6 +296,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Mapped Jellyfin teletext source scans associate physical observations with
+  the correct saved provider stream, including shifted or colliding indexes.
+  Stored reports require a current complete stream map when read back.
 - Next uses the physical Jellyfin video, audio and embedded-subtitle indexes
   when external streams precede or interrupt the native tracks. Saved choices
   and provider subtitle download identities stay unchanged. Changed or missing

@@ -64,6 +64,13 @@ impl Fixture {
             }
         };
         sqlx::raw_sql(subtypes).execute(&pool).await.unwrap();
+        if provider == MediaSourceKind::Jellyfin {
+            // Current provider fixtures have a successfully published native map.
+            sqlx::raw_sql(r#"INSERT INTO "MediaStream" ("MediaVersionId","Index","MediaStreamKind","Codec","Channels","Default","Forced") VALUES (301,0,1,'h264',0,1,0);
+                UPDATE "MediaVersion" SET "ProviderStreamIndexVersion"=1 WHERE "Id"=301;
+                INSERT INTO "ProviderStreamIndex" SELECT "MediaVersionId","Index","Index" FROM "MediaStream" WHERE "MediaVersionId"=301;"#)
+                .execute(&pool).await.unwrap();
+        }
         let repository = SqliteManagedLibraryOperationRepository(pool.clone());
         let operation = repository
             .enqueue_scan(

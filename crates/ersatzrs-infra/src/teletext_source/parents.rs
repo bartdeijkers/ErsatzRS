@@ -38,10 +38,7 @@ pub(super) async fn validate(
     .await
     .map_err(|_| storage())?
     .ok_or_else(|| invalid("current parent association"))?;
-    if column::<i64>(&row, "Index")? != i64::from(observation.stream_index)
-        || column::<i64>(&row, "MediaStreamKind")? != 3
-        || column::<i64>(&row, "TeletextCodec")? != 1
-    {
+    if column::<i64>(&row, "MediaStreamKind")? != 3 || column::<i64>(&row, "TeletextCodec")? != 1 {
         return Err(invalid("current teletext stream"));
     }
     let owner = single_owner(&row)?;
@@ -79,6 +76,20 @@ pub(super) async fn validate(
     )?;
     if library_kind != source_kind {
         return Err(invalid("library source kind"));
+    }
+    let logical: i32 = column(&row, "Index")?;
+    let physical = if source_kind == MediaSourceKind::Jellyfin {
+        crate::playback::source_indexes::physical_in_transaction(
+            tx,
+            parents.media_version_id,
+            logical,
+        )
+        .await?
+    } else {
+        logical
+    };
+    if physical != observation.stream_index {
+        return Err(invalid("current teletext stream"));
     }
     if let SourceTeletextBinding::Bound(binding) = &observation.binding {
         if binding.media_version_id != parents.media_version_id

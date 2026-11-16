@@ -41647,6 +41647,41 @@ source readers; R295-C retains actual Convert, Native, SQLite reopen/restart and
 remaining qualified-source/owner controls. Prior storage/Health proof stays
 valid. Shared final gates, ledger dispositions and accepted pin are unchanged.
 
+2026-11-17 row295 mapped-source report association component:
+The R295-B mapped scan/report parent association is implemented. Review of the
+actual Jellyfin movie/episode transaction found that acquisition and file
+qualification already receive physical clones, while MappedTeletextWrite looked
+up their results against raw MediaStream.Index. A shifted teletext stream could
+therefore fail the scan or resolve another stream with the same raw number.
+The lookup now joins the transactionally published ProviderStreamIndex for
+Jellyfin and validates the complete revision1 map before associating the exact
+stream/file. The stored observation retains the physical index and source
+revision; MediaStream and exact saved choices retain logical provider IDs.
+SourceTeletext parent validation uses the same map within its existing SQL
+transaction on both replace and load, retaining owner/provider/file/claim checks.
+Local, Plex and Emby keep their existing index contracts.
+The controlled regression constructs logical6->physical4 and another teletext
+logical4->physical2. The former raw query demonstrably picks the wrong row403;
+the production resolver selects row401, and the report roundtrips with physical4.
+A file-backed SQLite close/reopen retains both report and logical parent.
+An unsupported projection revision or missing map entry refuses report loading;
+wrong-parent binding remains rejected. Existing provider layout/declaration,
+source ownership, lease expiry, rollback and report/caption-discovery controls
+remain required and are exercised by the focused suite.
+All47 source-report, discovery and provider-layout controls pass in
+row295-mapped-report-qualified.log. The first run's46/47 result is retained in
+row295-mapped-report-tests.log; its one failure was an older Jellyfin discovery
+fixture without a revision1 map, now qualified explicitly. Strict infra
+all-target Clippy passes in row295-mapped-report-clippy-final.log; formatting,
+architecture and progress checks pass. Evidence receipt:
+tmp/evidence/ucu16-tail-9c6b3dea/row295-mapped-report-checkpoint.json.
+This component does not close all mapped/qualified-source readers: playback
+native-layout correspondence and source-caption selection still need their
+physical-map audit and required real-source integration proof. Native final AV
+routing, background embedded extraction, actual Convert/Native and remaining
+restart/source-authority proof stay open in R295-B/C. No full row, accepted pin,
+platform, consolidated runtime, matched browser or shared final gate is claimed.
+
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local
 component is closed; next is row295 Native and qualified-source physical-map consumption. Row291's local component is complete; item2's consolidated

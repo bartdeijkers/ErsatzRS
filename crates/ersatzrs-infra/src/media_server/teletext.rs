@@ -235,28 +235,18 @@ impl MappedTeletextWrite {
             return self.check_claim(tx, library_id).await;
         };
         for stream in streams {
-            let rows: Vec<(i64, i64)> = sqlx::query_as(
-                r#"SELECT s."Id", f."Id" FROM "MediaStream" s
-                   JOIN "MediaFile" f ON f."MediaVersionId"=s."MediaVersionId"
-                   WHERE s."MediaVersionId"=? AND s."Index"=?
-                     AND s."MediaStreamKind"=3 AND s."Codec"='dvb_teletext'
-                     AND f."Path"=? LIMIT 2"#,
+            let (stream_id, file_id) = report_parents(
+                tx,
+                self.source.provider,
+                version_id,
+                stream.stream_index,
+                &self.provider_path,
             )
-            .bind(version_id)
-            .bind(stream.stream_index)
-            .bind(&self.provider_path)
-            .fetch_all(&mut **tx)
-            .await
-            .repository()?;
-            let [(stream_id, file_id)] = rows.as_slice() else {
-                return Err(conflict(
-                    "mapped teletext requires exact current stream and file",
-                ));
-            };
+            .await?;
             let parents = SourceTeletextParents {
                 media_version_id: version_id,
-                media_stream_id: *stream_id,
-                media_file_id: *file_id,
+                media_stream_id: stream_id,
+                media_file_id: file_id,
             };
             let observation = teletext_source::acquired_observation(
                 self.source.id,
@@ -274,6 +264,50 @@ impl MappedTeletextWrite {
         }
         self.check_claim(tx, library_id).await
     }
+}
+
+// The acquisition uses physical file indexes; MediaStream retains provider IDs.
+// Resolve the association within the same transaction that publishes the map.
+pub(crate) async fn report_parents(
+    tx: &mut Transaction<'_, Db>,
+    provider: RemoteMediaSourceKind,
+    version: i64,
+    physical: i32,
+    path: &str,
+) -> Result<(i64, i64)> {
+    let (join, index) = if provider == RemoteMediaSourceKind::Jellyfin {
+        (
+            r#"JOIN "ProviderStreamIndex" m ON m."MediaVersionId"=s."MediaVersionId" AND m."StreamIndex"=s."Index""#,
+            r#"m."SourceStreamIndex""#,
+        )
+    } else {
+        ("", r#"s."Index""#)
+    };
+    let sql = format!(
+        r#"SELECT s."Id",f."Id",s."Index" FROM "MediaStream" s
+        JOIN "MediaFile" f ON f."MediaVersionId"=s."MediaVersionId" {join}
+        WHERE s."MediaVersionId"=? AND {index}=? AND s."MediaStreamKind"=3
+        AND s."Codec"='dvb_teletext' AND f."Path"=? LIMIT 2"#
+    );
+    let rows: Vec<(i64, i64, i32)> = sqlx::query_as(crate::db::assert_sql_safe(&sql))
+        .bind(version)
+        .bind(physical)
+        .bind(path)
+        .fetch_all(&mut **tx)
+        .await
+        .repository()?;
+    let [(stream, file, logical)] = rows.as_slice() else {
+        return Err(conflict(
+            "mapped teletext requires exact current stream and file",
+        ));
+    };
+    if provider == RemoteMediaSourceKind::Jellyfin
+        && crate::playback::source_indexes::physical_in_transaction(tx, version, *logical).await?
+            != physical
+    {
+        return Err(conflict("mapped teletext stream mapping changed"));
+    }
+    Ok((*stream, *file))
 }
 
 pub(super) fn declaration_matches(

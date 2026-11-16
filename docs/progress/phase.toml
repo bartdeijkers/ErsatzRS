@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Row295: stable identity storage and localized Health proven; next Native/Next physical routing and authority proof'
+current_focus = 'Row295: Next routing and mapped scan/report association proven locally; Native and qualified-source consumption remain open'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -138,7 +138,10 @@ repair of incomplete maps and retained legacy audio-migration controls. Continue
 at R295-B Native and mapped-source physical routing after the Next ordinary
 AV/embedded routing checkpoint. Next keeps logical saved choices, publishes
 physical tracks/hints and invalidates prepared authority when the map changes.
-R295-C Native, actual Convert, reopen and qualified-source proof remain required.
+Mapped scan/report parent association now uses the physical map within its
+transaction; shifted report indexes survive SQLite reopen without changing
+logical saved identities. R295-C Native, actual Convert and remaining
+restart/qualified-source proof remain required.
 Item2 consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
 The accepted Pin table remains unchanged; no new row has a final disposition.
