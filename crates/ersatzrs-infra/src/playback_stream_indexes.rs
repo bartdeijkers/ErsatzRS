@@ -134,3 +134,75 @@ pub(crate) async fn physical_in_transaction(
         .repository()?
         .ok_or_else(unavailable)
 }
+
+/// ADR0137: selectors have finished; only original-file consumers are translated.
+/// Generated, retained and prepared inputs already carry their own indexes.
+pub(crate) fn apply_native_request(
+    map: Option<&StreamIndexes>,
+    original: &str,
+    request: &mut ersatzrs_ffmpeg::PipelineRequest,
+) -> Result<()> {
+    use ersatzrs_ffmpeg::InputKind;
+    if map.is_none() || request.state.retained_stream_timestamps {
+        return Ok(());
+    }
+    let original_video = request
+        .inputs
+        .iter()
+        .any(|i| i.kind == InputKind::Video && i.path == original);
+    let original_audio = request
+        .inputs
+        .iter()
+        .any(|i| i.kind == InputKind::Audio && i.path == original);
+    // Build a replacement first so failure never leaves a partially mapped request.
+    let mut mapped = request.clone();
+    if original_video {
+        if let Some(video) = &mut mapped.source_video_stream {
+            video.index = physical(map, video.index)?;
+        }
+    }
+    if original_audio {
+        let selected = request
+            .inputs
+            .iter()
+            .find(|i| i.kind == InputKind::Audio && i.path == original)
+            .and_then(|i| i.streams.first())
+            .map(|s| s.index);
+        // Match the existing pipeline's automatic fallback before renumbering.
+        let logical = selected
+            .filter(|index| {
+                request
+                    .source_audio_streams
+                    .iter()
+                    .any(|s| s.index == *index)
+            })
+            .or_else(|| request.source_audio_streams.first().map(|s| s.index));
+        for audio in &mut mapped.source_audio_streams {
+            audio.index = physical(map, audio.index)?;
+        }
+        if let Some(logical) = logical {
+            for input in mapped
+                .inputs
+                .iter_mut()
+                .filter(|i| i.kind == InputKind::Audio && i.path == original)
+            {
+                input.streams = vec![ersatzrs_ffmpeg::MediaStream::new(physical(map, logical)?)];
+            }
+        }
+    }
+    for input in mapped
+        .inputs
+        .iter_mut()
+        .filter(|i| i.path == original && i.kind == InputKind::Subtitle)
+    {
+        // Qualified source-page inputs carry an independently observed physical
+        // stream and page identity; they must never be translated twice.
+        for stream in &mut input.streams {
+            if stream.source_teletext_page.is_none() {
+                stream.index = physical(map, stream.index)?;
+            }
+        }
+    }
+    *request = mapped;
+    Ok(())
+}

@@ -41682,6 +41682,41 @@ routing, background embedded extraction, actual Convert/Native and remaining
 restart/source-authority proof stay open in R295-B/C. No full row, accepted pin,
 platform, consolidated runtime, matched browser or shared final gate is claimed.
 
+2026-11-17 row295 Native HLS request boundary checkpoint:
+R295-B Native HLS original-file routing is implemented at the final request
+boundary. The worker captures map authority before loading logical tracks;
+existing pins/selectors and subtitle preference precedence still operate on
+logical provider IDs. Immediately before command construction it revalidates
+the map and translates original video/audio metadata, chosen audio and embedded
+subtitle input indexes. Mapping failure follows the worker's existing command
+refusal/cleanup path. Original-file identity is matched to the active resolved
+path; external JSON, remote-stream and retained/prepared inputs keep their own
+native indexes. Qualified source-page input indexes are already physical and
+are not translated twice. Generated song video, separate caption files and
+unrelated decoration inputs retain their own routing.
+The mapper reproduces the existing pipeline's automatic audio fallback before
+renumbering, preserves exact selection and builds its replacement atomically.
+The HLS builder regression exercises external-first, external-last and
+interleaved layouts and verifies identical final argv selecting physical video0
+and audio2. It also checks automatic first-audio selection, physical embedded
+image index4, standalone prepared caption index0, retained-timestamp bypass
+and atomic refusal for missing native identities. The reviewed snapshot is
+row295_native_hls_physical_tracks. Existing map/revision/pin controls are reused.
+All144 selected HLS and map-selection regressions pass in
+row295-native-hls-regressions.log, including the reviewed snapshot. Strict infra
+all-target Clippy passes in row295-native-hls-clippy-final.log; formatting,
+architecture and progress checks pass. The initial scope error in the check
+trial and the overlong test in the first lint trial are corrected; the current
+implementation uses the active resolved path and a separate test builder.
+Evidence receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-native-hls-checkpoint.json.
+This closes the HLS command-routing implementation/projection proof only.
+MPEG-TS/Direct transport routing, background embedded extraction and the
+remaining mapped/qualified-source readers are still required under R295-B.
+R295-C actual current-candidate Native AV/caption runtime, actual Convert,
+remaining reopen/source-owner and unchanged smoke/TSDuck/final/package/browser/
+platform/CI/delivery gates remain mandatory. The snapshot and builder tests do
+not establish worker runtime acceptance or full Native/row acceptance.
+
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local
 component is closed; next is row295 Native and qualified-source physical-map consumption. Row291's local component is complete; item2's consolidated

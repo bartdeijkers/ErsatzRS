@@ -296,6 +296,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Native HLS routes Jellyfin video, audio and original-file subtitles through
+  the physical stream map after selecting saved tracks. It refuses a mapping
+  changed during preparation and preserves indexes on prepared inputs.
 - Mapped Jellyfin teletext source scans associate physical observations with
   the correct saved provider stream, including shifted or colliding indexes.
   Stored reports require a current complete stream map when read back.
