@@ -3,6 +3,8 @@
 
 #[path = "playback_candidate.rs"]
 mod candidate;
+#[path = "playback_stream_indexes.rs"]
+pub(crate) mod source_indexes;
 #[path = "playback_source_teletext.rs"]
 pub mod source_teletext;
 #[path = "playback_transient.rs"]

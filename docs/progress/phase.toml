@@ -135,9 +135,11 @@ Atomic ordinary-scan repair, failed-HTTP/transaction rollback, same/absent ETags
 and legacy migration preserving pins/cached references/disabled choices pass.
 Registered Health and nine-culture diagnostics now pass, with ordinary same-ETag
 repair of incomplete maps and retained legacy audio-migration controls. Continue
-at R295-B qualified physical-map consumer routing; R295-C
-Native/Next/reopen/authority proof remains required. Item2
-consolidated runtime qualification, functionality6–7 and
+at R295-B Native and mapped-source physical routing after the Next ordinary
+AV/embedded routing checkpoint. Next keeps logical saved choices, publishes
+physical tracks/hints and invalidates prepared authority when the map changes.
+R295-C Native, actual Convert, reopen and qualified-source proof remain required.
+Item2 consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
 The accepted Pin table remains unchanged; no new row has a final disposition.
 Prepare work in isolated branch work/ucu16-tail at mainc5aff430, preserving

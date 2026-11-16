@@ -332,10 +332,9 @@ impl NextHost {
                 .resolve_ready_item(instance, &before.projection.item, now)
                 .await;
         };
-        let stream = u32::try_from(pending.subtitle.stream_index)
-            .map_err(|_| unavailable("subtitle stream is invalid"))?;
+        let stream = pending.physical_stream_index(before.projection.source_indexes.as_ref())?;
         let validate = || async {
-            self.project_preparation_snapshot(
+            Box::pin(self.project_preparation_snapshot(
                 request,
                 instance,
                 item_id,
@@ -343,7 +342,7 @@ impl NextHost {
                 until,
                 audio,
                 include_source_text,
-            )
+            ))
             .await
             .is_ok_and(|current| {
                 &current.identity.descriptor == digest

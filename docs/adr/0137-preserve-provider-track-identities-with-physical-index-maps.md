@@ -7,8 +7,10 @@ Proposed
 ## Implementation
 
 Partial — row295's index calculation, stable identity storage, ordinary scan
-repair and localized Health diagnostics have focused passing evidence. Physical
-consumer routing and Native/Next integration remain in `ucu-16-continuation`.
+repair and localized Health diagnostics have focused passing evidence. Next
+ordinary AV/embedded tracks, probe hints and caption preparation consume the map
+and bind it to mutable source authority. Native and qualified source-reader
+integration remain in `ucu-16-continuation`; the row is not fully accepted.
 
 ## Context
 

@@ -451,6 +451,7 @@ mod tests {
     fn projection(path: &str) -> DeferredProjection {
         let start = Utc::now();
         DeferredProjection {
+            source_indexes: None,
             original_source: protocol::Source::Local {
                 path: path.into(),
                 in_point_ms: Some(6000),

@@ -41480,8 +41480,8 @@ AV stream. Keep source declaration/native-file qualification strict. Existing
 Rust already handled external-last without introducing negative indexes; do
 not import upstream's old whole-list offset behavior. The current red trial
 row295-index-baseline.log reproduces external-first raw2/3/4 versus0/1/2.
-R295-B persisted storage and localized Health implemented/proven; physical consumer
-routing remains open: existing Jellyfin movies/episodes
+R295-B persisted storage, localized Health and ordinary Next physical routing
+implemented/proven; Native and qualified-source readers remain open. Existing Jellyfin movies/episodes
 must be revisited through ordinary claimed scans even with unchanged or absent
 ETags. Preserve old rows/cache and source ownership until successful transactional
 replacement; preserve disabled-library state. Track pending repair truthfully
@@ -41489,10 +41489,11 @@ in Health. Audit/remap or refuse stale exact pins so normalization cannot
 silently retarget a saved track; preserve the distinction between physical
 subtitle indexes and external provider indexes when they overlap. The prior
 negative-index-only migration cannot repair positive shifted raw indexes.
-R295-C missing mandatory integration proof: persisted/restart/idempotency and
-failed-scan controls, before/after/interleaved projection-to-Native/Next selected
+R295-C mandatory integration proof: retain the passing persistence/idempotency,
+failed-scan controls and before/after/interleaved ordinary Next Burn selected
+AV/caption proof. SQLite reopen/restart, Native and actual Convert selected
 AV/caption proof, retained source qualification and applicable strict local
-checks. Reuse unaffected provider/track evidence within its real source scope.
+checks remain required. Reuse unaffected provider/track evidence within its real source scope.
 Stopping condition: A/B implemented or proven covered and all named C controls
 pass; then close this local component before row296. Shared full-window,
 matched-bundle, four-platform, final/CI and ordered delivery gates remain open.
@@ -41500,7 +41501,7 @@ Source map: tmp/evidence/ucu16-tail-9c6b3dea/row295-source-map.json records all7
 upstream path hashes. MySQL migrations are outside the SQLite-only product;
 the two generated Designer files carry EF model metadata, while migration
 bodies request data rescans. No new upstream schema is being ported wholesale.
-Current source changes are limited to projection; no migration or live DB,
+The initial projection checkpoint was limited to projection; no migration or live DB,
 operator install, pin rewrite or accepted ledger disposition has occurred.
 Run6ae579b9-ada6-4d74-945c-d0f694fb0e52 passes10 projection cases. The before/after/interleaved
 matrix also reverses response order; separate gap/negative/missing/duplicate
@@ -41597,9 +41598,58 @@ matched server/browser/runtime/platform or window acceptance is claimed.
 
 
 
+2026-11-17 row295 ordinary Next physical routing checkpoint:
+The Next subset of R295-B is locally Complete: selected video/audio and ordinary
+embedded subtitles use physical indexes at the wire/extraction boundary; saved
+pins, custom selection and provider sidecar downloads keep logical identities.
+Published physical audio is translated back before existing exact-choice
+validation. Persisted hints use the same map. Preparation descriptors, caption
+cache keys and AV authority include its version/owner/revision and full mapping;
+missing, invalid or changed maps refuse publication instead of selecting another
+track. A map read is scoped to one MediaVersion and observes readiness, owner
+and entries together. Qualified-source caption readers remain a separate open
+consumer requirement; this does not claim their completion.
+The existing local-provider independence regression found an overstrict first
+implementation: locally resolved files must remain usable without remote item,
+connection or credential metadata. The final loader keeps the owning library
+and stored map authoritative for local input; remote identity still requires
+its exact provider item. Losing provider ownership while retaining map rows or
+a projection revision is refused, including removal of both subtype records.
+The unchanged provider caption grace, source identity, callback and selector
+controls are included in row295-next-consumer-final.log. Earlier fixture failures
+and the discovered local independence defect remain visible in
+row295-next-consumer-regressions.log and row295-next-provider-fixtures.log.
+Burn/Convert projection tests cover all three external-entry positions, physical
+hints, exact pins, physical callback audio and unchanged sidecar identity. The
+FFmpeg extraction snapshot selects physical0:4 for logical6. Map-only changes
+invalidate descriptors, preparation cache and caption AV authority even without
+DateUpdated or selected-track changes. Missing maps, legacy revision and owner
+loss have explicit refusal controls. Nested source validation and selection futures are boxed at their caption/preview
+call boundaries to keep executor stack use bounded.
+Actual Linux Next/FFmpeg playback uses the retained unpatched6c worker and
+qualified ErsatzRS-ffmpeg2.0.10/n9.0 hashes, verified before each run. Three
+external-first/last/interleaved sessions decode the pinned alternate880Hz audio
+and visible burned embedded captions. Existing negative-audio repair and unknown
+HDR regressions add two sessions; all enforce capacity and owned cleanup.
+All430 ordinary Next regressions pass in row295-next-consumer-final.log.
+After the final future-allocation correction, all89 affected selection,
+caption/cache, descriptor and preview regressions pass again in
+row295-next-bounded-futures-regressions.log. They overlap the430 cases and are
+not additional unique coverage. The three current ignored runtime tests pass
+in row295-next-map-runtime-qualified.log (five decoded sessions). Strict infra
+all-target Clippy passes in row295-next-map-clippy-bounded.log; formatting,
+architecture and progress validation pass. Source hashes and log receipts:
+tmp/evidence/ucu16-tail-9c6b3dea/row295-next-map-checkpoint.json.
+No fresh matched SSR/WASM, browser, Native, platform or consolidated first-party
+runtime qualification is inferred from these infra tests. R295-B still requires
+Native final input routing, background embedded extraction and mapped/qualified
+source readers; R295-C retains actual Convert, Native, SQLite reopen/restart and
+remaining qualified-source/owner controls. Prior storage/Health proof stays
+valid. Shared final gates, ledger dispositions and accepted pin are unchanged.
+
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local
-component is closed; next is row295 Jellyfin source-index mapping and repair/Health. Row291's local component is complete; item2's consolidated
+component is closed; next is row295 Native and qualified-source physical-map consumption. Row291's local component is complete; item2's consolidated
 runtime/package qualification remains in the shared mandatory proof list. Row290's implemented local component remains distinct
 from its required integrated/window acceptance. All provisional ledger mappings
 remain unaccepted;289 rows processed,7 pending and the accepted pin unchanged.

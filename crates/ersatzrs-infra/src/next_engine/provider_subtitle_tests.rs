@@ -76,6 +76,14 @@ async fn captions_fixture(provider: Option<(&'static str, Owner)>) -> DbPool {
             "#).execute(&pool).await.unwrap();
         }
         sqlx::query(insert).execute(&pool).await.unwrap();
+        if insert.contains("Jellyfin") {
+            sqlx::raw_sql(r#"
+                INSERT INTO "JellyfinLibrary" ("Id","ShouldSyncItems") VALUES (1,1);
+                UPDATE "MediaVersion" SET "ProviderStreamIndexVersion"=1 WHERE "Id"=100;
+                INSERT INTO "ProviderStreamIndex" ("MediaVersionId","StreamIndex","SourceStreamIndex")
+                    SELECT "MediaVersionId","Index","Index" FROM "MediaStream" WHERE "MediaVersionId"=100 AND "MediaStreamKind"<>5;
+            "#).execute(&pool).await.unwrap();
+        }
     }
     pool
 }

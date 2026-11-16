@@ -296,6 +296,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Next uses the physical Jellyfin video, audio and embedded-subtitle indexes
+  when external streams precede or interrupt the native tracks. Saved choices
+  and provider subtitle download identities stay unchanged. Changed or missing
+  mappings invalidate prepared playback instead of selecting a different track.
 - Health reports Jellyfin media versions that need stream index repair. An ordinary
   library scan repairs missing maps even when provider metadata is unchanged,
   retaining saved track choices and disabled-library settings.

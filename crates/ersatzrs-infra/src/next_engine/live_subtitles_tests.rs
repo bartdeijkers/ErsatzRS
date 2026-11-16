@@ -13,6 +13,7 @@ fn snapshot(path: &std::path::Path) -> Snapshot {
         producer_remote: None,
         retained_remote: None,
         projection: DeferredProjection {
+            source_indexes: None,
             original_source: protocol::Source::Rtsp {
                 uri: "rtsp://example.test/live".into(),
                 timeout_us: None,

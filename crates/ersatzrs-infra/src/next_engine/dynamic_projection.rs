@@ -227,6 +227,7 @@ pub(crate) async fn fingerprint(
         "path": path, "local": local_revision, "subtitle": subtitle,
         "provider": super::dynamic_provider_identity::identity(pool, media, input).await?,
     });
+    bind_source_indexes(pool, media.media_version_id, projection, &mut binding).await?;
     if let Some(text) = pending.and_then(|pending| pending.source_text.as_ref()) {
         binding
             .as_object_mut()
@@ -279,6 +280,27 @@ pub(crate) async fn fingerprint(
         cache_key: digest(&binding)?,
         av_descriptor: av_authority(&descriptor, caption_origin)?,
     })
+}
+
+async fn bind_source_indexes(
+    pool: &DbPool,
+    version: i64,
+    projection: &selection::DeferredProjection,
+    binding: &mut serde_json::Value,
+) -> Result<()> {
+    crate::playback::source_indexes::ensure_current(
+        pool,
+        version,
+        projection.source_indexes.as_ref(),
+    )
+    .await?;
+    if let Some(indexes) = &projection.source_indexes {
+        binding.as_object_mut().ok_or_else(unavailable)?.insert(
+            "physical_stream_indexes".into(),
+            serde_json::to_value(indexes).map_err(|_| unavailable())?,
+        );
+    }
+    Ok(())
 }
 
 fn av_authority(

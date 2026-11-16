@@ -298,8 +298,8 @@ impl NextHost {
             })
             .map(|(id, context)| (*id, context.request.clone()))
             .ok_or(CaptionError::Unauthorized)?;
-        let snapshot = self
-            .project_session_snapshot(
+        let snapshot = Box::pin(
+            self.project_session_snapshot(
                 &request,
                 instance,
                 grant.item,
@@ -310,9 +310,10 @@ impl NextHost {
                     .map(usize::try_from)
                     .transpose()
                     .map_err(|_| CaptionError::Binding)?,
-            )
-            .await
-            .map_err(|_| CaptionError::Binding)?;
+            ),
+        )
+        .await
+        .map_err(|_| CaptionError::Binding)?;
         if snapshot.identity.av_descriptor != grant.authority
             || snapshot.projection.item.start != grant.start
             || snapshot.projection.item.finish != grant.finish

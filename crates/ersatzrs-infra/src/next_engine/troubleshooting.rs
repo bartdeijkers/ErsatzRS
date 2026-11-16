@@ -502,7 +502,7 @@ impl NextHost {
             let mut context = Context::new(&request);
             context.credits = occurrence.credits.clone();
             let context = std::sync::Arc::new(context);
-            items.push(self.prepare_context(&request, &context, instance).await?);
+            items.push(Box::pin(self.prepare_context(&request, &context, instance)).await?);
             contexts.push(context);
         }
         if Instant::now() >= window.deadline {
@@ -636,7 +636,7 @@ impl NextHost {
         }
         let projection = timeout_at(
             request.deadline,
-            self.prepare_troubleshooting_inner(&request),
+            Box::pin(self.prepare_troubleshooting_inner(&request)),
         )
         .await
         .map_err(|_| unavailable("preparation deadline expired"))??;

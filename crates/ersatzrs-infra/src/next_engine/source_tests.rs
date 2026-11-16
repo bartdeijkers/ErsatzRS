@@ -60,6 +60,20 @@ pub(crate) async fn seed_provider(pool: &DbPool, kind: RemoteMediaSourceKind) {
                 .unwrap();
         }
     }
+    if kind == RemoteMediaSourceKind::Jellyfin {
+        // These fixtures represent a successfully scanned native layout. Pending
+        // or invalid mappings have separate refusal regressions.
+        sqlx::raw_sql(
+            r#"UPDATE "MediaVersion" SET "ProviderStreamIndexVersion"=1 WHERE "MovieId"=10;
+            INSERT INTO "ProviderStreamIndex" ("MediaVersionId","StreamIndex","SourceStreamIndex")
+            SELECT s."MediaVersionId",s."Index",s."Index" FROM "MediaStream" s
+            JOIN "MediaVersion" v ON v."Id"=s."MediaVersionId"
+            WHERE v."MovieId"=10 AND s."MediaStreamKind"!=5;"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
 }
 
 #[tokio::test]

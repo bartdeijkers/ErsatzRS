@@ -143,6 +143,7 @@ pub(crate) async fn persisted(
     .fetch_all(pool)
     .await
     .repository()?;
+    let source_indexes = crate::playback::source_indexes::load(pool, version_id).await?;
     let mut indexes = HashSet::new();
     for row in rows {
         let kind: i64 = row.try_get("MediaStreamKind").repository()?;
@@ -150,6 +151,24 @@ pub(crate) async fn persisted(
             continue;
         }
         let raw_index: i32 = row.try_get("Index").repository()?;
+        let raw_index = if let Some(map) = &source_indexes {
+            let logical = usize::try_from(raw_index).map_err(|_| {
+                ersatzrs_core::repositories::RepositoryError::Conflict(
+                    "invalid Jellyfin stream index".into(),
+                )
+            })?;
+            i32::try_from(crate::playback::source_indexes::physical(
+                Some(map),
+                logical,
+            )?)
+            .map_err(|_| {
+                ersatzrs_core::repositories::RepositoryError::Conflict(
+                    "invalid Jellyfin physical index".into(),
+                )
+            })?
+        } else {
+            raw_index
+        };
         let Some(index) = u32::try_from(raw_index)
             .ok()
             .filter(|index| indexes.insert(*index))
@@ -258,6 +277,8 @@ pub(crate) async fn persisted(
     if hint.video.is_empty() && hint.audio.is_empty() {
         return Ok(None);
     }
+    crate::playback::source_indexes::ensure_current(pool, version_id, source_indexes.as_ref())
+        .await?;
     Ok(Some(hint))
 }
 
