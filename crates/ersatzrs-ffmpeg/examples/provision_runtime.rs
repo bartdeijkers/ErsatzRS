@@ -12,7 +12,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Err("unexpected argument".into());
     }
     let config = ersatzrs_ffmpeg::FfmpegRuntimeManagerConfig::from_env(root);
-    let report = ersatzrs_ffmpeg::resolve_or_acquire_ffmpeg_runtime(&config, None, None).await?;
+    let token = ci_token();
+    let client = ersatzrs_ffmpeg::GitHubFfmpegReleaseClient::default_repository().with_token(token);
+    let report = ersatzrs_ffmpeg::resolve_or_acquire_ffmpeg_runtime_with(
+        &config,
+        None,
+        None,
+        &client,
+        &ersatzrs_ffmpeg::CapabilityRuntimeValidator,
+    )
+    .await?;
     if report.has_errors() {
         return Err("FFmpeg runtime capability validation failed".into());
     }
@@ -33,4 +42,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("FFmpeg SHA-256: {:?}", report.ffmpeg.sha256);
     println!("ffprobe SHA-256: {:?}", report.ffprobe.sha256);
     Ok(())
+}
+
+/// CI hosts share the anonymous GitHub API limit; use the job token if any.
+#[allow(clippy::disallowed_methods)] // reason: CI-only provisioning tool, outside the product configuration layer
+fn ci_token() -> Option<String> {
+    env::var("GH_TOKEN")
+        .or_else(|_| env::var("GITHUB_TOKEN"))
+        .ok()
 }
