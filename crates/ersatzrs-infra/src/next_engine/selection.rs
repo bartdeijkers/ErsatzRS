@@ -834,7 +834,7 @@ fn subtitle_track(
         source.clone()
     } else if crate::playback::subtitle_is_http(&input.path) {
         wire::Source::Http {
-            probe_hint: None,
+            probe_hint: super::probe_hint::text_subtitle(subtitle.codec.as_deref()),
             is_live: None,
             uri: input.path,
             headers: Vec::new(),
@@ -851,7 +851,7 @@ fn subtitle_track(
             path: input.path,
             in_point_ms,
             out_point_ms,
-            probe_hint: None,
+            probe_hint: super::probe_hint::text_subtitle(subtitle.codec.as_deref()),
         }
     };
     Ok(wire::Track {

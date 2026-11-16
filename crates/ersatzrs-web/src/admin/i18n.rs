@@ -1869,9 +1869,13 @@ pub enum TextKey {
     NextOverlayInvalid,
     NextOverlaySchema,
     NextOverlayIncomplete,
+    NextSessionContract,
+    NextSessionContractBrief,
     JavascriptAudioSelectionTitle,
     JavascriptAudioSelectionHealthy,
     JavascriptAudioSelectionFailures,
+    LocalDateAddedRepair,
+    LocalDateAddedRepairBrief,
     AddonListDiskUsageTitle,
     AddonListDiskUsageBrief,
     AddonListDiskUsageUnavailable,
@@ -4574,9 +4578,13 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::NextOverlayInvalid,
     TextKey::NextOverlaySchema,
     TextKey::NextOverlayIncomplete,
+    TextKey::NextSessionContract,
+    TextKey::NextSessionContractBrief,
     TextKey::JavascriptAudioSelectionTitle,
     TextKey::JavascriptAudioSelectionHealthy,
     TextKey::JavascriptAudioSelectionFailures,
+    TextKey::LocalDateAddedRepair,
+    TextKey::LocalDateAddedRepairBrief,
     TextKey::AddonListDiskUsageTitle,
     TextKey::AddonListDiskUsageBrief,
     TextKey::AddonListDiskUsageUnavailable,
@@ -6231,6 +6239,8 @@ fn runtime_health_message(
         ("Next Runtime Availability", "Next configuration overlay validation is incomplete", _) => {
             TextKey::NextOverlayIncomplete
         }
+        ("Next Runtime Availability", "Next runtime session controls could not be verified; enabled Next channels require a qualified runtime with idle timeout and startup buffering support", _) => TextKey::NextSessionContract,
+        ("Next Runtime Availability", "Next runtime session controls are unavailable", _) => TextKey::NextSessionContractBrief,
         _ => return None,
     };
     Some(text(language, key))
@@ -6643,6 +6653,23 @@ fn teletext_configuration_health_message(
     }
 }
 
+fn local_date_added_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+) -> Option<String> {
+    if title != "Search Projection" {
+        return None;
+    }
+    if message == "Local date-added repair needed" {
+        return Some(text(language, TextKey::LocalDateAddedRepairBrief).to_owned());
+    }
+    let count = message
+        .strip_suffix(" local media items have an unset date added. Rescan their libraries to recover file creation dates; unavailable files remain unchanged. Recent-date searches can miss these items until repaired.")?
+        .parse::<usize>().ok()?;
+    Some(text(language, TextKey::LocalDateAddedRepair).replace("{count}", &count.to_string()))
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -6657,6 +6684,9 @@ pub fn health_check_message_text(
     } else {
         message
     };
+    if let Some(localized) = local_date_added_health_message(language, title, displayed_message) {
+        return localized;
+    }
     if let Some(localized) =
         runtime_health_message(language, title, displayed_message, brief_message)
     {
@@ -7975,6 +8005,14 @@ mod tests {
             );
             for (message, key) in [
                 (
+                    "Next runtime session controls could not be verified; enabled Next channels require a qualified runtime with idle timeout and startup buffering support",
+                    TextKey::NextSessionContract,
+                ),
+                (
+                    "Next runtime session controls are unavailable",
+                    TextKey::NextSessionContractBrief,
+                ),
+                (
                     "Next configuration overlay is unavailable or invalid",
                     TextKey::NextOverlayInvalid,
                 ),
@@ -8001,6 +8039,8 @@ mod tests {
                 TextKey::NextOverlayInvalid,
                 TextKey::NextOverlaySchema,
                 TextKey::NextOverlayIncomplete,
+                TextKey::NextSessionContract,
+                TextKey::NextSessionContractBrief,
             ] {
                 assert!(!text(language, key).is_empty());
                 if language != UiLanguage::English {
@@ -8070,6 +8110,36 @@ mod tests {
                 }
             }
             assert!(text(language, TextKey::PreviewStartHelp).contains("UTC"));
+        }
+    }
+
+    #[test]
+    fn row290_date_added_health_is_localized_for_every_language() {
+        let message = "17 local media items have an unset date added. Rescan their libraries to recover file creation dates; unavailable files remain unchanged. Recent-date searches can miss these items until repaired.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let localized = health_check_message_text(language, "Search Projection", message, "");
+            assert_eq!(
+                localized,
+                text(language, TextKey::LocalDateAddedRepair).replace("{count}", "17")
+            );
+            assert!(!localized.contains('{'));
+            assert_eq!(
+                health_check_message_text(
+                    language,
+                    "Search Projection",
+                    "",
+                    "Local date-added repair needed"
+                ),
+                text(language, TextKey::LocalDateAddedRepairBrief)
+            );
+            if language != UiLanguage::English {
+                assert_ne!(localized, message);
+            }
+            assert_eq!(
+                health_check_message_text(language, "Search Projection", "future diagnostic", ""),
+                "future diagnostic"
+            );
         }
     }
 

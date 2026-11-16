@@ -9,6 +9,102 @@ fn channel() -> Channel {
 }
 
 #[tokio::test]
+async fn row292_standalone_text_sources_advertise_the_served_stream_and_format() {
+    let pool = fixture_pool().await;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("captions.srt");
+    tokio::fs::write(
+        &path,
+        "1\n00:00:01,000 --> 00:00:02,000\nSynthetic caption\n",
+    )
+    .await
+    .unwrap();
+    for (codec, expected_codec, format) in [
+        ("subrip", "subrip", "srt"),
+        ("srt", "subrip", "srt"),
+        ("mov_text", "subrip", "srt"),
+        ("ass", "ass", "ass"),
+        ("ssa", "ass", "ass"),
+        ("webvtt", "webvtt", "webvtt"),
+        ("vtt", "webvtt", "webvtt"),
+        ("SUBRIP", "subrip", "srt"),
+    ] {
+        sqlx::query(r#"UPDATE "Subtitle" SET "Codec"=?,"Path"=? WHERE "Id"=2"#)
+            .bind(codec)
+            .bind(path.to_str().unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let projected = project(&pool, &channel(), &item()).await.unwrap();
+        let value = serde_json::to_value(projected.tracks.unwrap().subtitle.unwrap()).unwrap();
+        assert_eq!(
+            value["source"]["probe_hint"]["format_name"], format,
+            "{codec}"
+        );
+        assert_eq!(
+            value["source"]["probe_hint"]["subtitle"][0]["codec"],
+            expected_codec
+        );
+        assert_eq!(
+            value["source"]["probe_hint"]["subtitle"][0]["stream_index"],
+            0
+        );
+        assert_eq!(value["stream_index"], 0);
+    }
+    for codec in [None, Some("smi"), Some("unknown")] {
+        sqlx::query(r#"UPDATE "Subtitle" SET "Codec"=? WHERE "Id"=2"#)
+            .bind(codec)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let projected = project(&pool, &channel(), &item()).await.unwrap();
+        let value = serde_json::to_value(projected.tracks.unwrap().subtitle.unwrap()).unwrap();
+        assert!(value["source"]["probe_hint"].is_null());
+    }
+}
+
+#[tokio::test]
+async fn row292_prepared_caption_hint_describes_written_format_and_retains_seek() {
+    let pool = fixture_pool().await;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("captions.srt");
+    tokio::fs::write(&path, "1\n00:00:01,000 --> 00:00:02,000\nCaption\n")
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "Subtitle" SET "Path"=?,"Codec"='mov_text' WHERE "Id"=2"#)
+        .bind(path.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let projected = project(&pool, &channel(), &item()).await.unwrap();
+    for (extension, codec, format) in [
+        ("srt", "subrip", "srt"),
+        ("ass", "ass", "ass"),
+        ("vtt", "webvtt", "webvtt"),
+        ("unknown", "", ""),
+    ] {
+        let output = root.path().join(format!("prepared.{extension}"));
+        let prepared =
+            crate::next_engine::dynamic_host::install_prepared_track(projected.clone(), &output)
+                .unwrap();
+        let value = serde_json::to_value(prepared.tracks.unwrap().subtitle.unwrap()).unwrap();
+        assert_eq!(value["source"]["in_point_ms"], 1000);
+        assert_eq!(value["source"]["out_point_ms"], 61_000);
+        assert_eq!(value["stream_index"], 0);
+        if codec.is_empty() {
+            assert!(value["source"]["probe_hint"].is_null());
+        } else {
+            assert_eq!(value["source"]["probe_hint"]["subtitle"][0]["codec"], codec);
+            assert_eq!(
+                value["source"]["probe_hint"]["subtitle"][0]["stream_index"],
+                0
+            );
+            assert_eq!(value["source"]["probe_hint"]["format_name"], format);
+        }
+    }
+}
+
+#[tokio::test]
 async fn unavailable_automatic_sidecars_are_omitted_but_exact_pins_fail() {
     let pool = fixture_pool().await;
     let root = tempfile::tempdir().unwrap();

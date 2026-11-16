@@ -255,23 +255,10 @@ impl NextHost {
         let mut items = Vec::with_capacity(media.len());
         for media in media {
             if media.remote_stream_id.is_some() {
-                let mut snapshot = super::super::remote_projection::project_publishable(
-                    &self.pool,
-                    &channel,
-                    &media,
-                    &profile.resolution,
-                    selection::AudioDirective::Select,
-                )
-                .await?;
-                snapshot
-                    .projection
-                    .publish_graphics(&self.media, None, media.item.start)?;
-                items.push(self.defer_item(
-                    channel_id,
-                    media.item.id,
-                    &snapshot.identity.descriptor,
-                    snapshot.projection.item,
-                )?);
+                items.push(
+                    self.project_remote_item(&channel, &media, &profile.resolution)
+                        .await?,
+                );
                 continue;
             }
             let source =
@@ -325,12 +312,15 @@ impl NextHost {
                     &channel,
                 )
                 .await?;
-                projection.item = self.defer_item(
-                    channel_id,
-                    media.item.id,
-                    &identity.descriptor,
-                    projection.item,
-                )?;
+                let descriptor = self
+                    .publish_provider_caption(channel_id, &media, &projection, &identity)
+                    .await?
+                    .unwrap_or_else(|| identity.descriptor.clone());
+                projection.item =
+                    self.defer_item(channel_id, media.item.id, &descriptor, projection.item)?;
+            } else {
+                self.publish_local_caption(&channel, &media, &mut projection, None)
+                    .await?;
             }
             projection.publish_graphics(&self.media, None, media.item.start)?;
             items.push(projection.item);
@@ -338,6 +328,35 @@ impl NextHost {
         let (items, gaps) =
             super::super::fallback::insert_gaps(&self.media, channel_id, start, items)?;
         Ok(ProjectedSchedule { items, gaps })
+    }
+
+    async fn project_remote_item(
+        &self,
+        channel: &Channel,
+        media: &ScheduledMedia,
+        resolution: &ersatzrs_domain::Resolution,
+    ) -> Result<protocol::PlayoutItem> {
+        let mut snapshot = super::super::remote_projection::project_publishable(
+            &self.pool,
+            channel,
+            media,
+            resolution,
+            selection::AudioDirective::Select,
+        )
+        .await?;
+        let descriptor = self
+            .publish_prepared_caption(channel, media, &snapshot, None)
+            .await?
+            .unwrap_or_else(|| snapshot.identity.descriptor.clone());
+        snapshot
+            .projection
+            .publish_graphics(&self.media, None, media.item.start)?;
+        self.defer_item(
+            channel.id,
+            media.item.id,
+            &descriptor,
+            snapshot.projection.item,
+        )
     }
 }
 

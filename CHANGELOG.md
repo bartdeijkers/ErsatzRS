@@ -291,11 +291,28 @@ release section when tagging a release.
 
 ### Fixed
 
+- Successful library and show scans refresh metadata in affected Next channels,
+  mirrors and browser previews without rebuilding their schedules. Standalone
+  text subtitles carry format and stream hints, including prepared caption files,
+  so Next can avoid probing them again before each item. Disappearing
+  automatically selected local sidecar subtitles no longer stop the programme's
+  video and audio. Ordinary Plex, Jellyfin and Emby text sidecars get the same
+  protection, while exact pins and source-owned caption paths keep their checks.
+- Next receives the channel’s Keep Running choice, idle timeout and initial HLS
+  segment count. Counts below three use three; Next caps larger requests at ten.
+  Larger buffers use the configured startup timeout. Keep Running channels stay
+  active; other channels stop after the configured viewer inactivity. Isolated
+  browser previews retain their own idle expiry.
+
 - Custom teletext pages rotate their subpages at the saved element cycle time.
   Timing is frozen when Check creates the draft and stays unchanged during field
   updates. Run Check and publish again to apply it to existing pages. Check
   refuses unsustainable timed-update demand. Page placement keeps the existing
   bounded wait for available transport capacity.
+- Local library rescans recover unset dates added from file creation times, so
+  existing media appears correctly in date-based searches. Existing dates and
+  metadata are retained; unavailable files are left unchanged. Health reports
+  local items that still need this repair.
 - Legacy MPEG-TS playback keeps a short read-ahead buffer across programme
   changes, preventing source-subtitle preparation from interrupting delivery.
 - Removing the last linked custom teletext page preserves its published original.

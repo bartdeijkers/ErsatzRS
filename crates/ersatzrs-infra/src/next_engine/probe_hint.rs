@@ -17,6 +17,28 @@ use super::protocol::{AudioProbeHint, ProbeHint, SubtitleProbeHint, VideoProbeHi
 #[error("Next producer input metadata is incomplete or unsupported")]
 pub struct ProbeHintError;
 
+/// Upstream `SubtitleProbeHint` describes standalone served text, never the
+/// original embedded stream number. Unknown formats retain normal probing.
+pub(super) fn text_subtitle(codec: Option<&str>) -> Option<ProbeHint> {
+    let (codec, format) = match codec?.to_ascii_lowercase().as_str() {
+        "subrip" | "srt" | "mov_text" => ("subrip", "srt"),
+        "ass" | "ssa" => ("ass", "ass"),
+        "webvtt" | "vtt" => ("webvtt", "webvtt"),
+        _ => return None,
+    };
+    Some(ProbeHint {
+        single_use: None,
+        video: Vec::new(),
+        audio: Vec::new(),
+        subtitle: vec![SubtitleProbeHint {
+            codec: codec.into(),
+            stream_index: 0,
+        }],
+        format_name: Some(format.into()),
+        duration_ms: None,
+    })
+}
+
 /// Finite, output-sized video for an audio-only programme. Neither a cover-art
 /// stream nor the original audio seek describes this generated video input.
 pub(super) fn generated_video(

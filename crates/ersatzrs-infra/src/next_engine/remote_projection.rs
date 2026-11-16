@@ -475,14 +475,25 @@ pub(super) async fn project_for_origin(
     let material = fingerprint_material(pool, media, &binding, publication).await?;
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
-    let descriptor = digest(&json!({
+    let descriptor_material = json!({
         "binding":material, "item":media.item, "selection":projection.item,
         "canvas": projection.canvas, "song": projection.song,
         "channel":channel, "resolution":resolution, "profile":profile.profile,
         "audio_script":script, "audio_language":preferences.default_audio_language,
         "subtitle_language":preferences.default_subtitle_language,
         "fallback_subtitle_language":preferences.fallback_subtitle_language,
-    }))?;
+    });
+    let descriptor = digest(&descriptor_material)?;
+    let av_descriptor = if prepared {
+        let mut av = descriptor_material;
+        av["binding"]["subtitles"] = Value::Null;
+        if let Some(tracks) = av["selection"]["tracks"].as_object_mut() {
+            tracks.insert("subtitle".into(), Value::Null);
+        }
+        Some(digest(&av)?)
+    } else {
+        None
+    };
     Ok(Snapshot {
         media: ScheduledMedia {
             item: media.item.clone(),
@@ -494,6 +505,7 @@ pub(super) async fn project_for_origin(
         },
         projection,
         identity: Identity {
+            av_descriptor,
             descriptor,
             cache_key: digest(&material)?,
         },

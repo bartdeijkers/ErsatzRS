@@ -1448,9 +1448,8 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::HlsSegmenterInitialSegmentCount => {
             "Numero Iniziale di Segmenti del Segmentatore HLS"
         }
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Rinvia l'inizio dello streaming fino al numero specificato di segmenti (di 4 secondi) trascodificati; un numero maggiore comporterà una riproduzione iniziale più lenta, ma potenzialmente meno buffering"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Attende i segmenti iniziali di 4 secondi prima della riproduzione. I valori inferiori a 3 usano 3. Valori più alti rallentano l’avvio e possono ridurre il buffering. Next usa al massimo 10 segmenti.",
+
         TextKey::HomeRunning => "Il server IPTV è in esecuzione.",
         TextKey::ReleaseNotes => "Note di rilascio",
         TextKey::FullChangelog => "Registro completo delle modifiche",
@@ -2672,9 +2671,13 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::NextOverlayInvalid => "La configurazione aggiuntiva di Next non è disponibile o non è valida",
         TextKey::NextOverlaySchema => "Le configurazioni aggiuntive di Next richiedono un URI di versione supportato (0.1.0 o 0.1.1). Controlla le impostazioni di copia prima di aggiornare una configurazione precedente.",
         TextKey::NextOverlayIncomplete => "La convalida della configurazione aggiuntiva di Next è incompleta",
+        TextKey::NextSessionContract => "Non è stato possibile verificare i controlli di sessione del motore Next. I canali Next abilitati richiedono un motore qualificato con supporto per il timeout di inattività e il buffer iniziale.",
+        TextKey::NextSessionContractBrief => "I controlli di sessione Next non sono disponibili",
         TextKey::JavascriptAudioSelectionTitle => "Selezione audio JavaScript",
         TextKey::JavascriptAudioSelectionHealthy => "Nessun errore di selezione registrato dall’avvio. Gli script non eseguiti non sono convalidati.",
         TextKey::JavascriptAudioSelectionFailures => "{count} errori di selezione dall’avvio; è stata usata la selezione audio integrata. Controlla scripts/audio-stream-selector e i limiti di ADR 0096. Il contatore si azzera al riavvio.",
+        TextKey::LocalDateAddedRepair => "La data di aggiunta non è impostata per {count} elementi multimediali locali. Scansiona nuovamente le librerie per recuperare le date di creazione dei file; i file non disponibili restano invariati. Questi elementi potrebbero non apparire nelle ricerche di aggiunte recenti finché non vengono riparati.",
+        TextKey::LocalDateAddedRepairBrief => "Date di aggiunta locali da riparare",
         TextKey::AddonListDiskUsageTitle => "Utilizzo del disco delle liste dei componenti aggiuntivi",
         TextKey::AddonListDiskUsageBrief => "Avviso sull’utilizzo del disco delle liste dei componenti aggiuntivi",
         TextKey::AddonListDiskUsageUnavailable => "Impossibile misurare completamente l’utilizzo del disco delle liste dei componenti aggiuntivi. Verifica l’accesso all’archiviazione e ripeti il controllo dello stato.",

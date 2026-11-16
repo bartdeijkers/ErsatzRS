@@ -262,7 +262,17 @@ impl NextHost {
             configuration.version = Some("https://ersatztv.org/channel/version/0.1.4".into());
             configuration.playout.layout = Some(super::publication::indexed::INDEX_VERSION.into());
         } else if !self.legacy_configuration {
-            configuration.version = Some("https://ersatztv.org/channel/version/0.1.3".into());
+            configuration.version = Some("https://ersatztv.org/channel/version/0.1.4".into());
+        }
+        if !self.legacy_configuration {
+            // Browser preview has its own expiring producer, even when the live
+            // channel keeps running (ADR0095).
+            let idle = if request.preview {
+                ersatzrs_domain::ChannelIdleBehavior::StopOnDisconnect
+            } else {
+                channel.idle_behavior
+            };
+            configuration.session = Some(super::session_config::load(&self.pool, idle).await?);
         }
         if let Some(fallback) = configuration
             .fallback
@@ -389,8 +399,13 @@ impl NextHost {
                 )
                 .await
             };
+            let idle_policy = if host.legacy_configuration {
+                super::session::IdlePolicy::Host(request.idle_timeout)
+            } else {
+                super::session::IdlePolicy::Worker
+            };
             let outcome = tokio::select! {
-                outcome = Box::pin(session.run(startup, request.idle_timeout, |deadline| {
+                outcome = Box::pin(session.run_with_policy(startup, idle_policy, |deadline| {
                     host.refresh(&publisher, request.channel_id, &request.replacements, deadline)
                 })) => outcome,
                 never = checkpoints.run(&session) => match never {},

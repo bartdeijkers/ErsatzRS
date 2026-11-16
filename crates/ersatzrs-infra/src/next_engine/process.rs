@@ -178,6 +178,15 @@ impl NextProcess {
         instance: Option<uuid::Uuid>,
         deadline: Instant,
     ) -> Result<Self, ProcessError> {
+        if config.session.is_some() {
+            timeout_at(
+                deadline,
+                super::indexed_runtime::validate_worker_session(executable),
+            )
+            .await
+            .map_err(|_| ProcessError::StartupTimeout)?
+            .map_err(|_| ProcessError::Preparation("worker session contract"))?;
+        }
         let mut command = channel_command(
             executable,
             number,

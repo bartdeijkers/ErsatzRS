@@ -2,6 +2,11 @@
 use super::*;
 use ersatzrs_core::repositories::RemoteMediaSourceKind;
 
+// The real-worker exec barrier is Unix-only; production provider code is portable.
+#[cfg(unix)]
+#[path = "provider_caption_publication_runtime_tests.rs"]
+mod caption_publication;
+
 #[tokio::test]
 #[ignore = "requires official Next and FFmpeg; disposable authenticated provider sidecars"]
 async fn real_next_provider_external_text_burns_and_converts_after_seek() {

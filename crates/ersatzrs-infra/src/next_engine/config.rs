@@ -59,6 +59,7 @@ pub fn channel_config(
 ) -> Result<wire::ChannelConfig, ConfigError> {
     Ok(wire::ChannelConfig {
         version: Some(wire::CHANNEL_VERSION.to_owned()),
+        session: None,
         fallback: Some(wire::Fallback {
             show_error: Some(true),
             duration_seconds: None,

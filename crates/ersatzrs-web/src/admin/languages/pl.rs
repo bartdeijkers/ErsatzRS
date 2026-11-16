@@ -2171,9 +2171,8 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
             "Liczba sekund dalszego transkodowania kanału, gdy żaden klient nie wysyła żądań"
         }
         TextKey::HlsSegmenterInitialSegmentCount => "Początkowa liczba segmentów HLS",
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Opóźnia start strumienia do czasu transkodowania podanej liczby 4-sekundowych segmentów; większa liczba oznacza wolniejszy start, ale może ograniczyć buforowanie"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Czeka na początkowe segmenty po 4 sekundy przed odtwarzaniem. Wartości poniżej 3 używają 3. Większe liczby opóźniają start i mogą ograniczyć buforowanie. Next używa najwyżej 10 segmentów.",
+
         TextKey::HomeRunning => "Serwer IPTV działa.",
         TextKey::ReleaseNotes => "Informacje o wydaniu",
         TextKey::FullChangelog => "Pełna lista zmian",
@@ -3383,9 +3382,13 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::NextOverlayInvalid => "Nakładka konfiguracji Next jest niedostępna lub nieprawidłowa",
         TextKey::NextOverlaySchema => "Nakładki konfiguracji Next wymagają obsługiwanego identyfikatora URI wersji (0.1.0 lub 0.1.1). Sprawdź ustawienia kopiowania przed aktualizacją starszej nakładki.",
         TextKey::NextOverlayIncomplete => "Weryfikacja nakładki konfiguracji Next jest niekompletna",
+        TextKey::NextSessionContract => "Nie można zweryfikować ustawień sesji środowiska Next. Włączone kanały Next wymagają zakwalifikowanego środowiska obsługującego limit bezczynności i bufor początkowy.",
+        TextKey::NextSessionContractBrief => "Ustawienia sesji Next są niedostępne",
         TextKey::JavascriptAudioSelectionTitle => "Wybór dźwięku JavaScript",
         TextKey::JavascriptAudioSelectionHealthy => "Od uruchomienia nie zarejestrowano błędów wyboru. Niewykonane skrypty nie zostały zweryfikowane.",
         TextKey::JavascriptAudioSelectionFailures => "{count} błędów wyboru od uruchomienia; użyto wbudowanego wyboru dźwięku. Sprawdź scripts/audio-stream-selector i limity ADR 0096. Licznik jest zerowany przy ponownym uruchomieniu.",
+        TextKey::LocalDateAddedRepair => "{count} lokalnych elementów multimedialnych nie ma daty dodania. Przeskanuj ponownie ich biblioteki, aby odzyskać daty utworzenia plików; niedostępne pliki pozostaną bez zmian. Do czasu naprawy te elementy mogą nie pojawiać się w wynikach wyszukiwania ostatnio dodanych multimediów.",
+        TextKey::LocalDateAddedRepairBrief => "Lokalne daty dodania wymagają naprawy",
         TextKey::AddonListDiskUsageTitle => "Użycie dysku przez listy dodatków",
         TextKey::AddonListDiskUsageBrief => "Ostrzeżenie o użyciu dysku przez listy dodatków",
         TextKey::AddonListDiskUsageUnavailable => "Nie udało się w pełni zmierzyć użycia dysku przez listy dodatków. Sprawdź dostęp do pamięci masowej i ponów kontrolę stanu.",

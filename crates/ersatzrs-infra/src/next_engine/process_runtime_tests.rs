@@ -10,6 +10,7 @@ use tokio::io::AsyncReadExt;
 
 use crate::next_engine::{host, schedule, selection};
 use crate::playback::PlaybackProfile;
+use std::sync::Arc;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in test runtime locations, never production configuration.
 fn runtime_path(name: &str) -> PathBuf {
@@ -1382,3 +1383,204 @@ mod output_frame_rate_runtime_tests;
 
 #[path = "playout_refresh_runtime_tests.rs"]
 mod playout_refresh_runtime_tests;
+
+struct Row291Runtime<'a> {
+    binary: &'a Path,
+    ffmpeg: &'a Path,
+    ffprobe: &'a Path,
+    clip: &'a Path,
+    root: &'a Path,
+}
+
+#[tokio::test]
+#[ignore = "requires the exact accepted private0.1.4 Next worker; isolated temporary output"]
+async fn real_next_row291_refuses_the_private_index_only_session_contract() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let root = tempfile::tempdir().unwrap();
+    let output = root.path().join("output");
+    std::fs::create_dir(&output).unwrap();
+    let marker = output.join("retain-existing-output");
+    std::fs::write(&marker, b"retained").unwrap();
+    let mut config = super::tests::config();
+    config.session = Some(super::super::protocol::Session::default());
+    let result = NextProcess::start(
+        &binary,
+        "1",
+        &output,
+        &config,
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(ProcessError::Preparation("worker session contract"))
+    ));
+    assert_eq!(std::fs::read(&marker).unwrap(), b"retained");
+    println!("row291 actual accepted worker rejected before output mutation");
+}
+
+#[tokio::test]
+#[ignore = "requires exact selected Next candidate and FFmpeg9; isolated data/state/temp directories"]
+async fn real_next_row291_uses_saved_readiness_and_worker_owned_idle() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(std::io::stderr)
+        .try_init();
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = root.path().join("fixture.mkv");
+    generate_clip(&ffmpeg, &clip).await;
+    let runtime = Row291Runtime {
+        binary: &binary,
+        ffmpeg: &ffmpeg,
+        ffprobe: &ffprobe,
+        clip: &clip,
+        root: root.path(),
+    };
+    for (label, count, ready, keep) in [
+        ("default", None, 3, false),
+        ("four", Some(4), 4, false),
+        ("six", Some(6), 6, false),
+        ("capped", Some(20), 10, true),
+    ] {
+        assert_row291_real_session(&runtime, label, count, ready, keep).await;
+    }
+}
+
+async fn assert_row291_real_session(
+    runtime: &Row291Runtime<'_>,
+    label: &str,
+    count: Option<i32>,
+    ready: usize,
+    keep: bool,
+) {
+    use crate::transcode_capacity::active_transcode_snapshot;
+    let (pool, locker) = prepare_row291_session(runtime, count, keep).await;
+    let host = Arc::new(host::NextHost::new(
+        pool.clone(),
+        locker,
+        runtime.root.join(label).join("playout"),
+    ));
+    let registry = Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
+    let request = host::NextStart {
+        channel_id: 1,
+        preview: false,
+        number: "1".into(),
+        executable: runtime.binary.to_owned(),
+        output: runtime.root.join(label).join("output"),
+        ffmpeg: runtime.ffmpeg.to_owned(),
+        ffprobe: runtime.ffprobe.to_owned(),
+        replacements: Vec::new(),
+        idle_timeout: None,
+        deadline: Instant::now() + Duration::from_mins(1),
+    };
+    let began = Instant::now();
+    let task = host.start(registry.clone(), request.clone()).await.unwrap();
+    let handle = registry.try_get("1").await.unwrap();
+    timeout(Duration::from_mins(1), async {
+        loop {
+            match handle.startup_readiness() {
+                HlsStartupReadiness::Ready => break,
+                HlsStartupReadiness::Failed => panic!("row291 worker failed before readiness"),
+                _ => tokio::time::sleep(Duration::from_millis(10)).await,
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let playlist = handle.trim_playlist().await.unwrap();
+    let segments = playlist
+        .lines()
+        .filter(|line| {
+            !line.starts_with('#')
+                && Path::new(line)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+        })
+        .count();
+    assert!(
+        segments >= ready,
+        "worker published readiness before the configured segment count"
+    );
+    assert_eq!(active_transcode_snapshot(1).active, 1);
+    let ready_ms = began.elapsed().as_millis();
+    if keep {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert!(!task.is_finished(), "Keep Running stopped without viewers");
+        assert!(registry.stop_channel("1").await);
+    } else {
+        timeout(Duration::from_secs(5), async {
+            while registry.try_get("1").await.is_some() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("worker-owned idle expiry did not remove the session");
+    }
+    timeout(Duration::from_secs(5), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!request.output.exists());
+    assert_eq!(active_transcode_snapshot(1).active, 0);
+    assert!(handle.trim_playlist().await.is_none());
+    println!("row291 real-worker case={label} segments={segments} minimum={ready} keep={keep} ready_ms={ready_ms} cleanup=joined");
+    pool.close().await;
+}
+
+async fn prepare_row291_session(
+    runtime: &Row291Runtime<'_>,
+    count: Option<i32>,
+    keep: bool,
+) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
+    use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        video_bitrate: 1000,
+        video_buffer_size: 2000,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..Default::default()
+    };
+    let (pool, locker) = prepare_schedule(runtime.clip, false, &profile).await;
+    // The shared selection fixture names a synthetic subtitle. Supply its real
+    // bytes here so startup can reach the session controls being exercised.
+    let subtitle = runtime.root.join("fixture-nl.srt");
+    std::fs::write(
+        &subtitle,
+        "1\n00:00:00,000 --> 00:01:00,000\n[NL] synthetic timing fixture\n",
+    )
+    .unwrap();
+    sqlx::query(r#"UPDATE "Subtitle" SET "Path"=? WHERE "Id"=2"#)
+        .bind(subtitle.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repositories = crate::repositories::make_repositories(pool.clone());
+    repositories
+        .config
+        .set(ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, "1")
+        .await
+        .unwrap();
+    if let Some(count) = count {
+        repositories
+            .config
+            .set(
+                ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
+                &count.to_string(),
+            )
+            .await
+            .unwrap();
+    }
+    let mut channel = repositories.channel.get_with_profile(1).await.unwrap();
+    channel.idle_behavior = if keep {
+        ersatzrs_domain::ChannelIdleBehavior::KeepRunning
+    } else {
+        ersatzrs_domain::ChannelIdleBehavior::StopOnDisconnect
+    };
+    repositories.channel.upsert(&channel).await.unwrap();
+    (pool, locker)
+}

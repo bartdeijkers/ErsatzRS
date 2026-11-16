@@ -2162,9 +2162,8 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
             "Het aantal seconden dat een kanaal blijft transcoderen wanneer geen enkele client nog verzoeken heeft ontvangen"
         }
         TextKey::HlsSegmenterInitialSegmentCount => "Aanvankelijk aantal HLS-segmenten",
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Stelt de start van de stream uit totdat het opgegeven aantal segmenten van 4 seconden is getranscodeerd; een groter aantal betekent een tragere start maar mogelijk minder buffering"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Wacht met afspelen tot de eerste segmenten van 4 seconden klaarstaan. Waarden onder 3 gebruiken 3. Hogere aantallen starten langzamer en kunnen bufferen verminderen. Next gebruikt maximaal 10.",
+
         TextKey::HomeRunning => "IPTV-server is actief.",
         TextKey::ReleaseNotes => "Release notes",
         TextKey::FullChangelog => "Volledige changelog",
@@ -3380,9 +3379,13 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::NextOverlayInvalid => "Next-configuratieoverlay is niet beschikbaar of ongeldig",
         TextKey::NextOverlaySchema => "Next-configuratieoverlays vereisen een ondersteunde versie-URI (0.1.0 of 0.1.1). Controleer de kopieerinstellingen voordat je een oudere overlay bijwerkt.",
         TextKey::NextOverlayIncomplete => "Validatie van de Next-configuratieoverlay is onvolledig",
+        TextKey::NextSessionContract => "De sessie-instellingen van de Next-runtime konden niet worden geverifieerd. Ingeschakelde Next-kanalen vereisen een gekwalificeerde runtime met ondersteuning voor de inactiviteitstime-out en startbuffer.",
+        TextKey::NextSessionContractBrief => "Next-sessie-instellingen zijn niet beschikbaar",
         TextKey::JavascriptAudioSelectionTitle => "JavaScript-audioselectie",
         TextKey::JavascriptAudioSelectionHealthy => "Sinds het opstarten zijn geen selectorfouten geregistreerd. Nog niet uitgevoerde scripts zijn niet gevalideerd.",
         TextKey::JavascriptAudioSelectionFailures => "{count} selectorfouten sinds het opstarten; de ingebouwde audioselectie is gebruikt. Controleer scripts/audio-stream-selector en de limieten van ADR 0096. De teller wordt bij een herstart gewist.",
+        TextKey::LocalDateAddedRepair => "Bij {count} lokale media-items ontbreekt de toevoegdatum. Scan hun bibliotheken opnieuw om de aanmaakdatums van bestanden over te nemen; onbereikbare bestanden blijven ongewijzigd. Zoekopdrachten naar recent toegevoegde media kunnen deze items missen totdat ze zijn hersteld.",
+        TextKey::LocalDateAddedRepairBrief => "Lokale toevoegdatums moeten worden hersteld",
         TextKey::AddonListDiskUsageTitle => "Schijfgebruik van add-on-lijsten",
         TextKey::AddonListDiskUsageBrief => "Waarschuwing voor schijfgebruik van add-on-lijsten",
         TextKey::AddonListDiskUsageUnavailable => "Het schijfgebruik van add-on-lijsten kon niet volledig worden gemeten. Controleer de toegang tot de opslag en voer de gezondheidscontrole opnieuw uit.",

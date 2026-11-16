@@ -907,6 +907,10 @@ pub(crate) fn build_internal_app(app_state: AppState) -> Router {
             get(iptv::next_media::get_prepared),
         )
         .route(
+            "/ffmpeg/next-caption/{grant}/{signature}",
+            get(iptv::next_media::get_caption),
+        )
+        .route(
             "/ffmpeg/next-source/{instance}/{source}",
             get(iptv::next_source::get_source),
         )

@@ -12,9 +12,22 @@ pub struct ChannelConfig {
     pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<Fallback>,
+    /// Worker-owned readiness and idle policy, supported from upstream schema1.4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<Session>,
     pub playout: PlayoutFolder,
     pub ffmpeg: Ffmpeg,
     pub normalization: Normalization,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct Session {
+    /// Zero keeps the worker running without viewer heartbeat touches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_timeout_seconds: Option<u32>,
+    /// Omit counts at or below the worker default of three; never exceed ten.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ready_segment_count: Option<u8>,
 }
 
 /// Emergency fallback card policy; ordinary subtitle selection is independent.

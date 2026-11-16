@@ -27,6 +27,12 @@ use tokio::{
 const REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_REFRESH_BACKOFF: Duration = Duration::from_secs(30);
 
+#[derive(Clone, Copy)]
+pub(super) enum IdlePolicy {
+    Host(Option<Duration>),
+    Worker,
+}
+
 pub struct NextSession {
     pub(super) started_at: chrono::DateTime<chrono::Utc>,
     number: String,
@@ -39,6 +45,7 @@ pub struct NextSession {
     admission: AtomicI32,
     started: AtomicBool,
     cancel: Notify,
+    demand: Notify,
     refresh: Notify,
     refresh_request: Mutex<PendingRefresh>,
     publication: watch::Sender<PublicationProgress>,
@@ -104,6 +111,7 @@ impl NextSession {
             admission: AtomicI32::new(0),
             started: AtomicBool::new(false),
             cancel: Notify::new(),
+            demand: Notify::new(),
             refresh: Notify::new(),
             refresh_request: Mutex::new(PendingRefresh::default()),
             publication: watch::channel(PublicationProgress::default()).0,
@@ -126,6 +134,21 @@ impl NextSession {
         &self,
         startup: S,
         idle_timeout: Option<Duration>,
+        refresh: F,
+    ) -> Result<SessionExit, SessionError>
+    where
+        S: Future<Output = Result<NextProcess, ProcessError>>,
+        F: FnMut(std::time::Instant) -> R,
+        R: Future<Output = Result<(), RefreshError>>,
+    {
+        self.run_with_policy(startup, IdlePolicy::Host(idle_timeout), refresh)
+            .await
+    }
+
+    pub(super) async fn run_with_policy<S, F, R>(
+        &self,
+        startup: S,
+        idle_policy: IdlePolicy,
         mut refresh: F,
     ) -> Result<SessionExit, SessionError>
     where
@@ -150,7 +173,7 @@ impl NextSession {
             self.state.store(1, Ordering::Release);
             self.touch();
             let outcome = tokio::select! {
-                result = self.monitor(&mut process, idle_timeout) => result,
+                result = self.monitor(&mut process, idle_policy) => result,
                 result = self.run_refreshes(&mut refresh) => result,
             };
             // Block playlist access before stopping the process that owns it.
@@ -293,8 +316,12 @@ impl NextSession {
     async fn monitor(
         &self,
         process: &mut NextProcess,
-        idle: Option<Duration>,
+        policy: IdlePolicy,
     ) -> Result<SessionExit, SessionError> {
+        let idle = match policy {
+            IdlePolicy::Host(timeout) => timeout,
+            IdlePolicy::Worker => None,
+        };
         let mut heartbeat = tokio::time::interval(Duration::from_secs(5));
         heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -320,7 +347,8 @@ impl NextSession {
                     let last_access = *self.last_access.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     if idle.is_some_and(|timeout| last_access.elapsed() >= timeout) { return Ok(SessionExit::Idle); }
                 }
-                _ = heartbeat.tick() => process.touch().await?,
+                _ = heartbeat.tick(), if matches!(policy, IdlePolicy::Host(_)) => process.touch().await?,
+                () = self.demand.notified(), if matches!(policy, IdlePolicy::Worker) => process.touch().await?,
             }
         }
     }
@@ -365,6 +393,7 @@ impl HlsSessionHandle for NextSession {
             .last_access
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Instant::now();
+        self.demand.notify_one();
         if self.state.load(Ordering::Acquire) == 1 {
             *self
                 .last_playback_touch

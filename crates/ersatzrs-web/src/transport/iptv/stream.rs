@@ -229,7 +229,8 @@ async fn serve_transport_stream_with_binding(
     query: &HlsQuery,
     binding: Option<Arc<TeletextOutputBinding>>,
 ) -> Response {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    let started = tokio::time::Instant::now();
+    let deadline = started + Duration::from_secs(20);
     let lookup = tokio::time::timeout_at(
         deadline,
         state.repositories.channel.get_by_number(channel_number),
@@ -247,6 +248,17 @@ async fn serve_transport_stream_with_binding(
         }
     };
 
+    let deadline = match hls::channel_startup_deadline(
+        state,
+        channel.streaming_engine,
+        started.into_std(),
+        deadline.into_std(),
+    )
+    .await
+    {
+        Ok(deadline) => deadline.into(),
+        Err(response) => return response,
+    };
     let mode = channel_transport_stream_mode(query.mode.as_deref(), &channel);
 
     if binding.is_some() && matches!(mode, TransportStreamMode::RedirectToHls) {
@@ -3145,7 +3157,7 @@ async fn serve_segmenter_wrapper_stream(
 
     let settings = tokio::time::timeout_at(startup_deadline, async {
         (
-            hls::load_initial_segment_count(state).await,
+            hls::load_initial_segment_count_for_engine(state, channel.streaming_engine).await,
             hls::load_segmenter_startup_timeout(state).await,
         )
     })

@@ -42,6 +42,7 @@ pub mod runtime;
 pub mod schedule;
 pub mod selection;
 pub mod session;
+mod session_config;
 mod session_source_files;
 pub mod session_transfers;
 pub mod song_background;

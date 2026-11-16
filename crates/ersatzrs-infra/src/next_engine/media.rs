@@ -33,12 +33,17 @@ const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
 #[path = "external_media.rs"]
 mod external;
 
-/// One process-local capability. Its published URLs contain only binding IDs;
+#[path = "caption_source.rs"]
+mod captions;
+pub use captions::{CaptionDocument, CaptionError};
+
+/// Process-local media/caption capabilities. Published URLs contain only bindings;
 /// provider credentials are read when media is opened, never put in the URL.
 /// Deliberately no Debug implementation.
 pub struct MediaRelay {
     address: OnceLock<SocketAddr>,
     capability: Uuid,
+    caption_key: OnceLock<[u8; 32]>,
     client: OnceLock<Option<Client>>,
     plex: OnceLock<Option<PlexConnections>>,
 }
@@ -55,6 +60,7 @@ impl MediaRelay {
         Self {
             address: OnceLock::new(),
             capability: Uuid::new_v4(),
+            caption_key: OnceLock::new(),
             client: OnceLock::new(),
             plex: OnceLock::new(),
         }
@@ -354,7 +360,7 @@ impl MediaRelay {
                 "http://{address}/ffmpeg/next-credits/{channel}/{item}/{media}/{in_point_ms}/{out_point_ms}?ticket={}",
                 self.credits_ticket(channel, item, media, in_point_ms, out_point_ms)
             ),
-            probe_hint: None,
+            probe_hint: super::probe_hint::text_subtitle(Some("ass")),
             is_live: Some(false),
             // libass opens this URL independently of Next and does not forward
             // the source headers. The URL ticket grants credits for one binding.

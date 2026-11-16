@@ -398,6 +398,23 @@ impl NextHost {
             )
             .await
             .map_err(|_| unavailable("preparation deadline expired"))??;
+            if context.subtitle_id.is_none()
+                && context.channel.stream_selector_mode
+                    != ersatzrs_domain::ChannelStreamSelectorMode::Custom
+                && context
+                    .media
+                    .item
+                    .pinned_stream_selection
+                    .is_none_or(|pin| pin.subtitle_stream_index.is_none())
+            {
+                self.publish_local_caption(
+                    &context.channel,
+                    &context.media,
+                    &mut projection,
+                    Some(instance),
+                )
+                .await?;
+            }
             projection.publish_graphics(&self.media, Some(instance), request.media.item.start)?;
             projection.item
         } else {
@@ -414,6 +431,18 @@ impl NextHost {
             )
             .await
             .map_err(|_| unavailable("preparation deadline expired"))??;
+            let descriptor = if context.subtitle_id.is_none() {
+                self.publish_prepared_caption(
+                    &context.channel,
+                    &context.media,
+                    &before,
+                    Some(instance),
+                )
+                .await?
+                .unwrap_or_else(|| before.identity.descriptor.clone())
+            } else {
+                before.identity.descriptor.clone()
+            };
             before.projection.publish_graphics(
                 &self.media,
                 Some(instance),
@@ -422,7 +451,7 @@ impl NextHost {
             self.defer_item(
                 context.channel.id,
                 context.media.item.id,
-                &before.identity.descriptor,
+                &descriptor,
                 before.projection.item,
             )?
         })

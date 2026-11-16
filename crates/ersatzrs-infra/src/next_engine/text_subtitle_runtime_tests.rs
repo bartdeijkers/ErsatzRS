@@ -7,6 +7,12 @@ mod on_demand_runtime_tests;
 #[path = "source_teletext_runtime_tests.rs"]
 mod source_teletext_runtime_tests;
 
+// Unix exec barrier scopes the input-open race without replacing the worker.
+// Required Windows runtime/ownership acceptance remains with the window gate.
+#[cfg(unix)]
+#[path = "caption_publication_runtime_tests.rs"]
+mod caption_publication_runtime_tests;
+
 const CUES: &str = "1\n00:00:00,000 --> 00:00:05,000\nBEFORE SEEK\n\n2\n00:00:05,000 --> 00:00:55,000\nNext text conversion proof\n\n3\n00:00:55,000 --> 00:01:00,000\nAFTER SEEK\n";
 
 async fn generate_text_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
@@ -341,6 +347,10 @@ async fn callback_connection(
                 let mut lines = request.split("\r\n");
                 let target = lines.next().unwrap().strip_prefix("GET ").unwrap()
                     .strip_suffix(" HTTP/1.1").unwrap();
+                if target.starts_with("/ffmpeg/next-caption/") {
+                    callback_caption(&mut socket,&host,target).await;
+                    return;
+                }
                 let headers: Vec<_> = lines.filter_map(|line| line.split_once(':')).collect();
                 let header = |name: &str| headers.iter()
                     .find(|(key, _)| key.eq_ignore_ascii_case(name))
@@ -633,6 +643,12 @@ mod fallback_runtime_tests;
 #[path = "prepared_artifact_runtime_tests.rs"]
 mod prepared_artifact_runtime;
 
+#[path = "transient_caption_runtime_tests.rs"]
+mod transient_caption_runtime;
+
+#[path = "prepared_caption_authority_runtime_tests.rs"]
+mod prepared_caption_controls;
+
 // POSIX-shell fixture add-on; native production code remains platform-neutral.
 #[cfg(unix)]
 #[path = "retained_callback_runtime_tests.rs"]
@@ -665,6 +681,22 @@ async fn configure_competing_text_tracks(
         INSERT INTO "Subtitle" ("MovieMetadataId","SubtitleKind","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","DateAdded","DateUpdated")
         VALUES (20,0,3,'subrip',1,0,0,'nld',0,'2026-09-23','2026-09-23');"#)
         .execute(pool).await.unwrap();
+}
+
+async fn callback_caption(socket: &mut tokio::net::TcpStream, host: &host::NextHost, target: &str) {
+    use tokio::io::AsyncWriteExt as _;
+    let parts: Vec<_> = target
+        .trim_start_matches("/ffmpeg/next-caption/")
+        .split('/')
+        .collect();
+    assert_eq!(parts.len(), 2);
+    let (status, content_type, text) = match host.read_caption(parts[0], parts[1]).await {
+        Ok(document) => ("200 OK", document.content_type, document.text),
+        Err(_) => ("410 Gone", "text/plain", String::new()),
+    };
+    let response=format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{text}",text.len());
+    let _ = socket.write_all(response.as_bytes()).await;
+    let _ = socket.shutdown().await;
 }
 
 async fn write_callback_response(

@@ -11,7 +11,6 @@ use ersatzrs_domain::MediaSourceKind;
 use ersatzrs_infra::db::Db;
 use ersatzrs_infra::ffprobe::teletext_probe::TeletextProbeSnapshot;
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, FfprobeMediaVersion, LocalTeletextAcquisition};
-use ersatzrs_infra::repositories::claim_is_current;
 use ersatzrs_infra::teletext_source::{self, SourceTeletextParents};
 use sqlx::Transaction;
 
@@ -71,33 +70,10 @@ impl LocalTeletextWrite {
         tx: &mut Transaction<'_, Db>,
         library_path_id: i64,
     ) -> Result<()> {
-        let Some(claim) = &self.claim else {
+        if self.claim.is_none() {
             return Ok(());
-        };
-        // Bind the DTO's library to both the actual leaf and actual lease. The
-        // existing gate below owns token/owner/expiry evaluation, including the
-        // parent lease used by publication child scans.
-        let library_matches: bool = sqlx::query_scalar(
-            r#"SELECT EXISTS(SELECT 1 FROM "LibraryPath" p
-               JOIN "ManagedLibraryLease" l ON l."LibraryId"=p."LibraryId"
-               WHERE p."Id"=? AND p."LibraryId"=? AND l."OperationId"=?
-                 AND l."OwnerToken"=? AND l."LeaseOwner"=?)"#,
-        )
-        .bind(library_path_id)
-        .bind(claim.operation.library_id)
-        .bind(
-            claim
-                .operation
-                .parent_operation_id
-                .unwrap_or(claim.operation.id),
-        )
-        .bind(&claim.operation.owner_token)
-        .bind(&claim.lease_owner)
-        .fetch_one(&mut **tx)
-        .await?;
-        if !library_matches || !claim_is_current(tx, claim).await? {
-            return Err(conflict("local scan claim is no longer current"));
         }
+        super::local_scan_claim::check(tx, library_path_id, self.claim.as_ref()).await?;
         if self.report_written
             && !self
                 .source_path

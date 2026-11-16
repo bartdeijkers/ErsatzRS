@@ -21,4 +21,6 @@ pub enum PlayoutProjectionChange {
     Playout(EntityId),
     /// Media-source IDs share the parent `MediaSource` identity across providers.
     MediaSource(EntityId),
+    /// Scanned metadata embedded in generated items, including source mirrors.
+    Library(EntityId),
 }

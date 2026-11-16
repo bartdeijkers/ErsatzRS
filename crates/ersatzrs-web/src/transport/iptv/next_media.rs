@@ -26,6 +26,38 @@ pub async fn get_media(
     serve(&state.next_engine.media, &state.pool, binding, &headers).await
 }
 
+/// Local caption grants need no forwarded headers when libass opens the URL.
+pub async fn get_caption(
+    State(state): State<AppState>,
+    Path((grant, signature)): Path<(String, String)>,
+) -> Response {
+    caption_response(state.next_engine.read_caption(&grant, &signature).await)
+}
+
+fn caption_response(
+    result: Result<
+        ersatzrs_infra::next_engine::media::CaptionDocument,
+        ersatzrs_infra::next_engine::media::CaptionError,
+    >,
+) -> Response {
+    use ersatzrs_infra::next_engine::media::CaptionError;
+    match result {
+        Ok(document) => (
+            [
+                (header::CONTENT_TYPE, document.content_type),
+                (header::CACHE_CONTROL, "no-store"),
+            ],
+            document.text,
+        )
+            .into_response(),
+        Err(CaptionError::Unauthorized) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(CaptionError::Binding) => StatusCode::GONE.into_response(),
+        Err(CaptionError::Source | CaptionError::Deadline) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    }
+}
+
 #[derive(serde::Deserialize)]
 pub struct ExternalMediaTicket {
     #[serde(default)]
@@ -373,6 +405,41 @@ fn relay_response(upstream: reqwest::Response) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn caption_http_response_preserves_unicode_format_and_refuses_cache_or_error_details() {
+        use ersatzrs_infra::next_engine::media::{CaptionDocument, CaptionError};
+        let text = "1\n00:00:01,000 --> 00:00:02,000\nFrançais العربية\n";
+        let response = caption_response(Ok(CaptionDocument {
+            text: text.into(),
+            content_type: "application/x-subrip; charset=utf-8",
+        }));
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "application/x-subrip; charset=utf-8"
+        );
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        assert_eq!(
+            axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap(),
+            text
+        );
+        for (error, expected) in [
+            (CaptionError::Unauthorized, StatusCode::UNAUTHORIZED),
+            (CaptionError::Binding, StatusCode::GONE),
+            (CaptionError::Source, StatusCode::SERVICE_UNAVAILABLE),
+            (CaptionError::Deadline, StatusCode::SERVICE_UNAVAILABLE),
+        ] {
+            let response = caption_response(Err(error));
+            assert_eq!(response.status(), expected);
+            assert!(axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap()
+                .is_empty());
+        }
+    }
 
     #[test]
     fn single_use_capability_is_explicit_and_rejects_ambiguous_headers() {

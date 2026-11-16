@@ -25,7 +25,8 @@ pub async fn channel_numbers(
         | PlayoutProjectionChange::DecoTemplate(id)
         | PlayoutProjectionChange::DecoTemplateGroup(id)
         | PlayoutProjectionChange::Playout(id)
-        | PlayoutProjectionChange::MediaSource(id) => id,
+        | PlayoutProjectionChange::MediaSource(id)
+        | PlayoutProjectionChange::Library(id) => id,
     };
     // New objects cannot have dependents; invalid IDs still reach normal
     // command validation, with no mutation or unnecessary query here.
@@ -94,6 +95,12 @@ fn root_channels(change: PlayoutProjectionChange) -> String {
                JOIN "MediaItem" m ON m."Id"=i."MediaItemId"
                JOIN "LibraryPath" lp ON lp."Id"=m."LibraryPathId"
                JOIN "Library" l ON l."Id"=lp."LibraryId" WHERE l."MediaSourceId"=?1"#
+            .to_owned(),
+        PlayoutProjectionChange::Library(_) => r#"SELECT p."ChannelId" FROM "Playout" p
+               JOIN "PlayoutItem" i ON i."PlayoutId"=p."Id"
+               JOIN "MediaItem" m ON m."Id"=i."MediaItemId"
+               JOIN "LibraryPath" lp ON lp."Id"=m."LibraryPathId"
+               WHERE lp."LibraryId"=?1"#
             .to_owned(),
         PlayoutProjectionChange::All => r#"SELECT "Id" FROM "Channel""#.to_owned(),
     }

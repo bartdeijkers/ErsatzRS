@@ -24,7 +24,7 @@ pub(super) async fn run_isolated_test(test: &str) {
     let root = tempfile::tempdir().unwrap();
     let mut command = Command::new(std::env::current_exe().unwrap());
     command
-        .args(["--exact", test, "--ignored"])
+        .args(["--exact", test, "--ignored", "--nocapture"])
         .env(crate::file_system_layout::APP_DATA_DIR_ENV_VAR, root.path())
         .env(
             crate::file_system_layout::APP_STATE_DIR_ENV_VAR,
@@ -32,7 +32,7 @@ pub(super) async fn run_isolated_test(test: &str) {
         )
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::inherit());
     let mut child = spawn_managed_addon_process(command).unwrap();
     let mut stdout = child.stdout().take().unwrap().take(128 * 1024);
     let observed = timeout(Duration::from_mins(3), async {
@@ -60,6 +60,7 @@ pub(super) async fn run_isolated_test(test: &str) {
         output.contains("1 passed"),
         "artifact fixture was not selected"
     );
+    println!("{output}");
 }
 
 pub(super) async fn publish_fixture(pool: &crate::db::DbPool, clip: &Path) {

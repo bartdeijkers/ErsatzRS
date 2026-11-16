@@ -2182,9 +2182,8 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
             "O número de segundos para continuar transcodificando um canal quando nenhum cliente recebeu novas solicitações"
         }
         TextKey::HlsSegmenterInitialSegmentCount => "Contagem inicial de segmentos HLS",
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Atrasa o início do stream até que a quantidade especificada de segmentos de 4 segundos seja transcodificada; um número maior inicia mais devagar, mas pode reduzir buffering"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Aguarda os segmentos iniciais de 4 segundos antes da reprodução. Valores abaixo de 3 usam 3. Contagens maiores atrasam o início e podem reduzir o buffering. Next usa no máximo 10.",
+
         TextKey::HomeRunning => "O servidor IPTV está em execução.",
         TextKey::ReleaseNotes => "Notas de lançamento",
         TextKey::FullChangelog => "Registro completo de alterações",
@@ -3396,9 +3395,13 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
         TextKey::NextOverlayInvalid => "A sobreposição de configuração do Next está indisponível ou é inválida",
         TextKey::NextOverlaySchema => "As sobreposições de configuração do Next exigem um URI de versão compatível (0.1.0 ou 0.1.1). Revise as configurações de cópia antes de atualizar uma sobreposição antiga.",
         TextKey::NextOverlayIncomplete => "A validação da sobreposição de configuração do Next está incompleta",
+        TextKey::NextSessionContract => "Não foi possível verificar os controles de sessão do ambiente Next. Os canais Next habilitados exigem um ambiente qualificado com suporte ao tempo limite de inatividade e ao buffer inicial.",
+        TextKey::NextSessionContractBrief => "Os controles de sessão do Next estão indisponíveis",
         TextKey::JavascriptAudioSelectionTitle => "Seleção de áudio JavaScript",
         TextKey::JavascriptAudioSelectionHealthy => "Nenhum erro de seleção registrado desde a inicialização. Scripts não executados não foram validados.",
         TextKey::JavascriptAudioSelectionFailures => "{count} erros de seleção desde a inicialização; foi usada a seleção de áudio integrada. Confira scripts/audio-stream-selector e os limites da ADR 0096. O contador é zerado ao reiniciar.",
+        TextKey::LocalDateAddedRepair => "{count} itens de mídia locais estão sem data de adição. Examine novamente suas bibliotecas para recuperar as datas de criação dos arquivos; os arquivos indisponíveis permanecem inalterados. Esses itens podem não aparecer nas buscas por adições recentes até serem reparados.",
+        TextKey::LocalDateAddedRepairBrief => "As datas de adição locais precisam de reparo",
         TextKey::AddonListDiskUsageTitle => "Uso do disco das listas de complementos",
         TextKey::AddonListDiskUsageBrief => "Aviso de uso do disco das listas de complementos",
         TextKey::AddonListDiskUsageUnavailable => "Não foi possível medir completamente o uso do disco das listas de complementos. Verifique o acesso ao armazenamento e repita a verificação de integridade.",

@@ -30,6 +30,15 @@ pub(crate) async fn identity(
         Source::Http { .. } => false,
         _ => return Err(unavailable()),
     };
+    identity_inner(pool, media, local).await
+}
+
+/// Remote caption authority remains provider-bound even when the AV file is local.
+pub(super) async fn caption_identity(pool: &DbPool, media: &ScheduledMedia) -> Result<Value> {
+    identity_inner(pool, media, false).await
+}
+
+async fn identity_inner(pool: &DbPool, media: &ScheduledMedia, local: bool) -> Result<Value> {
     let row = sqlx::query(
         r#"SELECT l."MediaSourceId", f."ProviderMediaSourceId",
             EXISTS(SELECT 1 FROM "LocalLibrary" WHERE "Id"=l."Id") AS "Local",

@@ -5,6 +5,7 @@ fn snapshot(path: &std::path::Path) -> Snapshot {
     let start = Utc::now();
     Snapshot {
         identity: Identity {
+            av_descriptor: None,
             descriptor: "synthetic-publication".into(),
             cache_key: "unused".into(),
         },
@@ -102,11 +103,15 @@ async fn live_caption_cache_binds_content_and_fractional_join_without_second_see
         in_point_ms: Some(0),
         out_point_ms: None,
 
-        probe_hint: None,
+        probe_hint: Some(hint),
     }) = &track.source
     else {
         panic!("rebased source must start at zero");
     };
+    assert_eq!(hint.format_name.as_deref(), Some("srt"));
+    assert_eq!(hint.subtitle.len(), 1);
+    assert_eq!(hint.subtitle[0].stream_index, 0);
+    assert_eq!(hint.subtitle[0].codec, "subrip");
     let content = tokio::fs::read_to_string(artifact).await.unwrap();
     assert!(!content.contains("EXPIRED"));
     assert!(content.contains("00:00:00,000 --> 00:00:01,111\nACTIVE"));

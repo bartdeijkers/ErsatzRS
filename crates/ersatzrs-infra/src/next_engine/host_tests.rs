@@ -47,7 +47,7 @@ async fn indexed_host_binds_live_and_browser_preview_to_the_qualified_layout() {
         assert!(config.playout.layout.is_none());
         assert_eq!(
             config.version.as_deref(),
-            Some("https://ersatztv.org/channel/version/0.1.3")
+            Some("https://ersatztv.org/channel/version/0.1.4")
         );
     }
     pool.close().await;
@@ -562,7 +562,7 @@ async fn output_frame_rate_host_ordinary_and_preview_use_mirror_source_and_reque
                 .ends_with("background.png"));
             assert_eq!(
                 wire["version"],
-                "https://ersatztv.org/channel/version/0.1.3"
+                "https://ersatztv.org/channel/version/0.1.4"
             );
             if normalize {
                 assert_eq!(wire["normalization"]["video"]["frame_rate"], "25");
@@ -628,7 +628,7 @@ async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_ex
             assert!(config.normalization.video.frame_rate.is_none());
             assert_eq!(
                 config.version.as_deref(),
-                Some("https://ersatztv.org/channel/version/0.1.3")
+                Some("https://ersatztv.org/channel/version/0.1.4")
             );
             assert_output_frame_rate_host_preserves_exact_tracks(&host, &mirror, start).await;
             assert_eq!(repos.playout.items_in_range(1,start,finish).await.unwrap(),items_before,
@@ -647,3 +647,118 @@ async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_ex
 
 #[path = "host_tests/cleanup.rs"]
 mod cleanup;
+
+#[tokio::test]
+async fn row291_saved_session_settings_reach_normal_and_preview_worker_config() {
+    use ersatzrs_domain::ChannelIdleBehavior;
+    let (host, mut channel, _) = output_frame_rate_host_fixture().await;
+    let pool = &host.pool;
+    let repositories = crate::repositories::make_repositories(pool.clone());
+    for idle in [
+        ChannelIdleBehavior::StopOnDisconnect,
+        ChannelIdleBehavior::KeepRunning,
+    ] {
+        channel.idle_behavior = idle;
+        repositories.channel.upsert(&channel).await.unwrap();
+        for (count, expected) in [
+            (None, None),
+            (Some(1), None),
+            (Some(2), None),
+            (Some(3), None),
+            (Some(4), Some(4)),
+            (Some(6), Some(6)),
+            (Some(20), Some(10)),
+        ] {
+            for timeout in [None, Some(45)] {
+                save_row291_setting(
+                    pool,
+                    ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
+                    count,
+                )
+                .await;
+                save_row291_setting(
+                    pool,
+                    ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
+                    timeout,
+                )
+                .await;
+                for preview in [false, true] {
+                    let mut start = request(preview);
+                    start.channel_id = channel.id;
+                    let config = host.configuration(&start).await.unwrap();
+                    let json = serde_json::to_value(config).unwrap();
+                    let seconds = if idle == ChannelIdleBehavior::KeepRunning && !preview {
+                        0
+                    } else {
+                        timeout.unwrap_or(60)
+                    };
+                    assert_eq!(json["session"]["idle_timeout_seconds"], seconds);
+                    assert_eq!(
+                        json["session"]["ready_segment_count"].as_i64(),
+                        expected.map(i64::from)
+                    );
+                    if expected.is_none() {
+                        assert!(json["session"].get("ready_segment_count").is_none());
+                    }
+                    assert_eq!(
+                        json["version"],
+                        "https://ersatztv.org/channel/version/0.1.4"
+                    );
+                }
+            }
+        }
+    }
+    pool.close().await;
+}
+
+async fn save_row291_setting(pool: &DbPool, key: &str, value: Option<i32>) {
+    if let Some(value) = value {
+        sqlx::query(
+            r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+            ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value""#,
+        )
+        .bind(key)
+        .bind(value.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+    } else {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key"=?"#)
+            .bind(key)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn row291_invalid_saved_timeout_fails_and_keep_running_does_not_load_it() {
+    use ersatzrs_domain::ChannelIdleBehavior;
+    let (host, _, _) = output_frame_rate_host_fixture().await;
+    save_row291_setting(
+        &host.pool,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
+        Some(-1),
+    )
+    .await;
+    assert!(
+        super::super::session_config::load(&host.pool, ChannelIdleBehavior::StopOnDisconnect)
+            .await
+            .is_err()
+    );
+    let keep = super::super::session_config::load(&host.pool, ChannelIdleBehavior::KeepRunning)
+        .await
+        .unwrap();
+    assert_eq!(keep.idle_timeout_seconds, Some(0));
+    assert_eq!(keep.ready_segment_count, None);
+    sqlx::query(r#"DROP TABLE "ConfigElement""#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    assert!(
+        super::super::session_config::load(&host.pool, ChannelIdleBehavior::StopOnDisconnect)
+            .await
+            .is_err()
+    );
+    host.pool.close().await;
+}

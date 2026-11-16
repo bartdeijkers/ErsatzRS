@@ -58,6 +58,14 @@ impl HealthCheck for NextRuntimeHealthCheck {
                 "Next runtime is available",
             ));
         }
+        if crate::next_engine::manager::validate_published_sessions()
+            .await
+            .is_err()
+        {
+            return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
+                "Next runtime session controls could not be verified; enabled Next channels require a qualified runtime with idle timeout and startup buffering support",
+                "Next runtime session controls are unavailable").with_link("/channels"));
+        }
         let mut invalid = 0;
         for (channel, _) in &channels {
             let profile =

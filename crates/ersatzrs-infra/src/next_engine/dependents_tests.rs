@@ -144,6 +144,9 @@ async fn dependency_matrix_selects_actual_roots_and_active_mirrors_once() {
         ),
         (PlayoutProjectionChange::Playout(1), vec!["1", "6"]),
         (PlayoutProjectionChange::MediaSource(1), vec!["1", "2", "6"]),
+        (PlayoutProjectionChange::Library(1), vec!["1", "2", "6"]),
+        (PlayoutProjectionChange::Library(999), vec![]),
+        (PlayoutProjectionChange::Library(0), vec![]),
         (
             PlayoutProjectionChange::All,
             vec!["1", "2", "3", "4", "6", "7", "8", "9"],
