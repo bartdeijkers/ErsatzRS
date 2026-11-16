@@ -1,5 +1,7 @@
 #[path = "scheduling_repository/block_continuation.rs"]
 mod block_continuation;
+#[path = "scheduling_repository/build_loads.rs"]
+mod build_loads;
 #[path = "scheduling_repository/candidate_overlay_preparation.rs"]
 mod candidate_overlay_preparation;
 #[path = "scheduling_repository/classic_duration.rs"]

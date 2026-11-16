@@ -41398,6 +41398,38 @@ local functionality/applicability and mandatory shaping proof; unchanged
 source/package/platform/window gates remain required. No blanket four-platform
 shaping acceptance, final ledger disposition or pin advancement is inferred.
 
+Row294 finite local completion list (in progress, source fafd9b43):
+R294-A missing mandatory evidence: measure actual SQL loads in Classic, block
+and playlist reference preparation, including duplicated smart sources and
+artist expansion; distinguish bulk state loads already present in ErsatzRS.
+The actual engines consume owned in-memory reference data and do not perform
+repository queries during enumeration. Exact21-path upstream diff/source map
+is retained at tmp/evidence/ucu16-tail-9c6b3dea/row294-source-map.json.
+R294-B conditional missing functionality: only for measured duplicate loads,
+retain successful immutable source material within one build/preparation.
+Never retain membership across builds or share mutable enumerator/override
+state. Preserve the existing SQL order and per-item source identities.
+R294-C missing mandatory evidence: prove reduced query counts, unchanged
+ordered reference/playlist data and independent overrides/cursors, fresh
+membership after a later build, affected production continuation/refresh and
+strict lint. Reuse valid existing continuity proof where source is unchanged.
+Stopping condition: A measured, each demonstrated B corrected or proven covered,
+and C passes; then close this component before row295. Existing shared final
+acceptance remains mandatory. Initial Classic measurement is now verified:
+three schedule items with the same smart source perform3 smart-query lookups,
+1 anchor/state bulk query and1 fill-group/state bulk query,37 total SQL
+statements. Run1b5a23c3-1d6f-4519-84e5-186609866f5a passes the actual SQLite
+trial. Source identity correctly remains one reference-data key. The first
+instrumentation attempt saw0 events because a thread-local subscriber did not
+cover SQLx workers; nextest-process-global capture corrects that fixture and
+retains the original failure. Logs: row294-baseline-loads{,-qualified}.log.
+This demonstrates a specific duplicate smart-load gap without a state-loading
+gap. No production cache has been added yet; block/playlist/artist measurement
+and the remaining B/C items are still open. The final unchanged-count trial
+c47ffc8e-f094-46c8-8630-d1db4ff46eb0 passes after formatting and the test-only clone_into
+lint correction; strict infra scheduling_repository Clippy passes. Final logs:
+row294-baseline-loads-final.log and row294-measurement-clippy-qualified.log.
+
 Remaining functionality: items5–7
 still require individual implementation/applicability proof. Row291's local component is complete; item2's consolidated
 runtime/package qualification remains in the shared mandatory proof list. Row290's implemented local component remains distinct
