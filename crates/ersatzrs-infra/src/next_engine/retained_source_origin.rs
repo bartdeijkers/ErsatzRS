@@ -45,6 +45,7 @@ pub(super) struct RetainedSourceIntent {
     provider: MediaSourceKind,
     provider_identity: Value,
     streams: Vec<Stream>,
+    source_indexes: Option<crate::playback::source_indexes::StreamIndexes>,
 }
 impl RetainedSourceIntent {
     /// Optional caption refusal never prevents an otherwise valid AV publication.
@@ -132,7 +133,9 @@ impl RetainedSourceIntent {
             .as_i64()
             .filter(|value| *value > 0)
             .ok_or_else(unavailable)?;
-        let streams = load_layout(pool, media).await?;
+        let source_indexes =
+            crate::playback::source_indexes::load(pool, media.media_version_id).await?;
+        let streams = load_layout(pool, media, source_indexes.as_ref()).await?;
         if !streams
             .iter()
             .any(|stream| stream.kind == 3 && stream.codec.as_deref() == Some("dvb_teletext"))
@@ -142,7 +145,14 @@ impl RetainedSourceIntent {
         if dynamic_provider_identity::identity(pool, media, source).await? != identity {
             return Err(unavailable());
         }
+        crate::playback::source_indexes::ensure_current(
+            pool,
+            media.media_version_id,
+            source_indexes.as_ref(),
+        )
+        .await?;
         Ok(Some(Self {
+            source_indexes,
             item: media.item.media_item_id,
             version: media.media_version_id,
             file: media.media_file_id,
@@ -154,8 +164,12 @@ impl RetainedSourceIntent {
         }))
     }
     pub(super) fn identity(&self) -> Value {
-        json!({"item":self.item,"version":self.version,"file":self.file,"path":self.path,
-            "provider":self.provider_identity,"streams":self.streams})
+        let mut identity = json!({"item":self.item,"version":self.version,"file":self.file,"path":self.path,
+            "provider":self.provider_identity,"streams":self.streams});
+        if let Some(indexes) = &self.source_indexes {
+            identity["physical_stream_indexes"] = json!(indexes);
+        }
+        identity
     }
     fn matches_media(&self, media: &ScheduledMedia) -> bool {
         self.item == media.item.media_item_id
@@ -229,8 +243,12 @@ impl RetainedOrigin {
         json!({"intent":self.intent.identity(),"source_bytes":self.source.length,"source_sha256":self.source.digest})
     }
 }
-async fn load_layout(pool: &DbPool, media: &ScheduledMedia) -> Result<Vec<Stream>> {
-    let rows:Vec<Stream>=sqlx::query_as(r#"SELECT s."Id" AS id,s."Index" AS "index",s."MediaStreamKind" AS kind,s."Codec" AS codec,
+async fn load_layout(
+    pool: &DbPool,
+    media: &ScheduledMedia,
+    map: Option<&crate::playback::source_indexes::StreamIndexes>,
+) -> Result<Vec<Stream>> {
+    let mut rows:Vec<Stream>=sqlx::query_as(r#"SELECT s."Id" AS id,s."Index" AS "index",s."MediaStreamKind" AS kind,s."Codec" AS codec,
         s."Language" AS language,s."Title" AS title,s."Default" AS "default",s."Forced" AS forced,
         s."Channels" AS channels,s."AttachedPic" AS attached_pic
         FROM "MediaStream" s JOIN "MediaVersion" v ON v."Id"=s."MediaVersionId"
@@ -254,6 +272,13 @@ async fn load_layout(pool: &DbPool, media: &ScheduledMedia) -> Result<Vec<Stream
         })
     {
         return Err(unavailable());
+    }
+    for row in &mut rows {
+        row.index = i32::try_from(crate::playback::source_indexes::physical(
+            map,
+            usize::try_from(row.index).map_err(|_| unavailable())?,
+        )?)
+        .map_err(|_| unavailable())?;
     }
     Ok(rows)
 }

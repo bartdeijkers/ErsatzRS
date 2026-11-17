@@ -1,0 +1,22 @@
+---
+source: crates/ersatzrs-infra/src/interlace_probe.rs
+expression: "reference.unwrap().join(\"\\n\")"
+---
+-hide_banner
+-nostdin
+-ss
+00:00:04.0000000
+-i
+synthetic.mkv
+-map
+0:0
+-vf
+idet
+-frames:v
+200
+-an
+-sn
+-dn
+-f
+null
+-

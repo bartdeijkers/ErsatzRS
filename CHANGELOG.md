@@ -296,6 +296,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Jellyfin source-caption qualification compares physical file indexes while
+  retaining saved subtitle identities. Retained provider sources bind their
+  complete stream map, and interlace sampling probes the selected physical video
+  without replacing the primary stream's cached result with an alternate's.
 - Jellyfin embedded subtitle extraction reads physical stream indexes while
   keeping saved track and cache identities. It uses the owning server's path
   mapping and publishes staged text only while source and subtitle metadata

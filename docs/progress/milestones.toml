@@ -41480,8 +41480,10 @@ AV stream. Keep source declaration/native-file qualification strict. Existing
 Rust already handled external-last without introducing negative indexes; do
 not import upstream's old whole-list offset behavior. The current red trial
 row295-index-baseline.log reproduces external-first raw2/3/4 versus0/1/2.
-R295-B persisted storage, localized Health and ordinary Next physical routing
-implemented/proven; Native and qualified-source readers remain open. Existing Jellyfin movies/episodes
+R295-B implementation is locally Complete: stable identity storage/ordinary
+repair, localized Health, Native/Next request routing, extraction and named
+source-reader boundaries are implemented with scoped passing evidence. Mandatory
+C integration remains open; this is not full row acceptance. Existing Jellyfin movies/episodes
 must be revisited through ordinary claimed scans even with unchanged or absent
 ETags. Preserve old rows/cache and source ownership until successful transactional
 replacement; preserve disabled-library state. Track pending repair truthfully
@@ -41825,6 +41827,58 @@ video enrichment and source-caption readers. R295-C actual current-candidate
 Native AV/caption playback, actual Convert, remaining restart/source-owner proof
 and all unchanged smoke/TSDuck/final/package/browser/platform/CI/delivery gates
 remain mandatory. No final disposition, accepted baseline or window is advanced.
+
+2026-11-17 row295 remaining source-reader implementation component:
+R295-B's named reader boundaries are implemented. RetainedSourceIntent captures
+the current complete map before reading the selected file's native layout,
+converts only its private comparison indexes and retains the original database
+stream IDs. Exact file/owner, codec, complete inventory and audio-selection
+semantics stay mandatory. The full map is bound into Jellyfin retained intent
+identity, including unselected entries; other providers keep the prior identity
+shape. Revalidation detects a changed map before publication/preparation reuse.
+Native/Next rich source-page ranking translates the embedded metadata's logical
+index only for comparison against the physically observed request. Returned
+subtitle metadata keeps its ID and logical index, with existing page-language,
+SDH, ambiguity, role/PID/PSI and ordinary-fallback behavior unchanged. Disabled
+embedded captions and explicit Off retain their early exclusions; an unused
+source path does not require a new map read.
+Native interlace sampling translates its selected input index at the probe
+boundary. The existing cache key/primary-video identity stays logical. Cached
+results and fresh samples revalidate map authority; the final cache CAS now
+checks it inside its writer transaction as well as existing source revision,
+path, duration, file-count and primary-index conditions. Alternate-video samples
+cannot overwrite the primary ratio. File metadata/deadline and managed-process
+cleanup guards stay present. QSV header tracing has no provider-number input;
+its existing type-based/default routing requires no scalar-index translation.
+The three-layout reader regressions prove physical0..4 layout correspondence,
+stable row IDs, full audio-language qualification refusal, unselected-map
+invalidation and physical page3 <-> logical5/3/5 metadata association. The
+actual existing FFmpeg9 idet trial now adds Jellyfin logical2/3 -> physical0/1:
+progressive/interlaced results differ correctly, the primary cache survives an
+alternate sample, and a missing map refuses further cache publication.
+Current consumer run row295-reader-consumer-regressions.log passes519 of520
+cases. Its only failure is the new interlace argv snapshot awaiting review;
+the reviewed physical0:0, seek4s,200-frame idet argv then passes in
+row295-reader-snapshot-qualified.log. This composes520 passing checks without
+repeating unchanged successes. Initial argument-name shadowing caused a compile
+failure and was corrected; no functional negative was hidden. Strict infra
+all-target Clippy passes in row295-reader-clippy-qualified.log. The actual idet
+trial passes in row295-reader-runtime.log on the digest-verified retained
+ErsatzRS-ffmpeg2.0.10/n9.0 runtime. This is Linux reader/probe evidence, not full
+Native/Next selected playback, decoded source-caption or platform acceptance.
+Receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-reader-checkpoint.json.
+R295-A/B implementation stopping conditions are locally met. The finite
+remaining local completion item is R295-C: actual current-candidate selected
+Native AV/captions and actual Next Convert across the agreed source layouts,
+remaining restart/source-owner qualification/refusal proof, applicable strict
+local checks and unchanged smoke/TSDuck acceptance. Reuse the recorded ordinary
+Next Burn, storage, repair/Health, metadata/cache and command-boundary evidence
+where compiled inputs and assumptions remain valid. Any actual integration
+defect reopens its affected component; no acceptance requirement is waived.
+Shared full-window, consolidated first-party runtime, matched SSR/WASM/browser,
+four-platform/final/CI and ordered delivery remain open. No row disposition or
+accepted pin is advanced, and row296 does not start before this row's local C
+stopping condition is met.
 
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local

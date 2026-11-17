@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Row295: extraction bound to physical source and staged cache publication; qualified-source readers and actual playback proof remain open'
+current_focus = 'Row295: A/B implementation and scoped reader/probe evidence complete; finish finite C playback, restart/source-owner and local acceptance proof'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -36,7 +36,8 @@ remains. Checkpoint2f49534d retains rows290–292. The maintainer resumed;
 row293 native Linux shaping proof now confirms existing managed FFmpeg9
 behavior with paired ASS/SRT complex/simple render controls and a font lacking
 U+FEFF. No runtime/filter change is needed. Row294 local query/order/continuity proof is Complete with80 composed
-repository cases and strict all-target lint; row295 Jellyfin source indexes are next;
+repository cases and strict all-target lint; row295 A/B implementation is locally Complete; R295-C playback/restart/source
+qualification remains open;
 all shared window/package/platform/browser/CI acceptance remains mandatory and no ledger disposition/pin is advanced. Direct GitHub recheck
 still ends at row296; no new moving endpoint is selected.
 
@@ -134,18 +135,18 @@ ADR0137 keeps provider identities stable and stores a separate physical map.
 Atomic ordinary-scan repair, failed-HTTP/transaction rollback, same/absent ETags
 and legacy migration preserving pins/cached references/disabled choices pass.
 Registered Health and nine-culture diagnostics now pass, with ordinary same-ETag
-repair of incomplete maps and retained legacy audio-migration controls. Continue
-at R295-B Native and mapped-source physical routing after the Next ordinary
-AV/embedded routing checkpoint. Next keeps logical saved choices, publishes
+repair of incomplete maps and retained legacy audio-migration controls.
+R295-A/B implementation is locally Complete. Next keeps logical saved choices, publishes
 physical tracks/hints and invalidates prepared authority when the map changes.
 Mapped scan/report parent association now uses the physical map within its
 transaction; shifted report indexes survive SQLite reopen without changing
 logical saved identities. Native HLS request mapping now has the physical layout snapshot/control proof;
 MPEG-TS/Direct primary/fallback/hardware retry now use the same boundary.
 Background extraction now retains logical cache identities while staging
-physical-index output behind source/metadata publication guards. Remaining
-qualified-source readers stay open. R295-C actual
-Native/Convert and remaining restart/qualified-source proof remain required.
+physical-index output behind source/metadata publication guards. Qualified-source
+layout/page ranking and physical interlace readers now pass scoped integration/
+probe evidence. Continue at R295-C actual Native/Convert and remaining
+restart/qualified-source proof, preserving the complete existing C requirement set.
 Item2 consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
 The accepted Pin table remains unchanged; no new row has a final disposition.

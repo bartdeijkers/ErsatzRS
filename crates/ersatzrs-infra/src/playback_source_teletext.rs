@@ -125,19 +125,25 @@ pub(crate) async fn select_pending_next_source_subtitle(
         return Ok(None);
     }
     check_qualified_count(candidates.len())?;
-    let rows = load_subtitles_for_media_version(pool, item, version).await?;
     if !use_embedded_subtitles(pool).await? {
         return Ok(None);
     }
+    let indexes = if candidates.is_empty() {
+        None
+    } else {
+        super::source_indexes::load(pool, version).await?
+    };
+    let rows = load_subtitles_for_media_version(pool, item, version).await?;
     let media_server = is_media_server_subtitle_item(pool, item).await?;
     let sources = candidates.iter().collect::<Vec<_>>();
-    let choices = metadata_choices_for_engine(
+    let choices = metadata_choices_with_indexes(
         &rows,
         version,
         StreamingMode::HttpLiveStreamingSegmenter,
         media_server,
         &sources,
         SubtitleSelectionEngine::Next,
+        indexes.as_ref(),
     );
     let selected = select_subtitle_preference_index(
         choices
@@ -147,14 +153,18 @@ pub(crate) async fn select_pending_next_source_subtitle(
         languages,
         mode,
     );
-    Ok(selected.and_then(|index| {
+    let selected = selected.and_then(|index| {
         let choice = &choices[index];
         let candidate = choice.source.map(|index| &candidates[index])?;
         Some(PendingSourcePlaybackSubtitle {
             subtitle: selected_metadata(choice.row, Some(candidate)),
             candidate: candidate.clone(),
         })
-    }))
+    });
+    if !candidates.is_empty() {
+        super::source_indexes::ensure_current(pool, version, indexes.as_ref()).await?;
+    }
+    Ok(selected)
 }
 
 impl NativePlaybackSubtitle {
@@ -197,8 +207,14 @@ pub async fn select_native_playback_subtitle_for_version(
         return Ok(None);
     }
     check_qualified_count(qualified.len())?;
+    let embedded = use_embedded_subtitles(pool).await?;
+    let indexes = if qualified.is_empty() || !embedded {
+        None
+    } else {
+        super::source_indexes::load(pool, media_version_id).await?
+    };
     let mut rows = load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?;
-    if !use_embedded_subtitles(pool).await? {
+    if !embedded {
         rows.retain(|row| row.subtitle_kind != subtitle_kind::EMBEDDED);
     }
     let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
@@ -206,12 +222,14 @@ pub async fn select_native_playback_subtitle_for_version(
         .iter()
         .map(QualifiedSourceCaption::candidate)
         .collect::<Vec<_>>();
-    let choices = metadata_choices(
+    let choices = metadata_choices_with_indexes(
         &rows,
         media_version_id,
         streaming_mode,
         media_server,
         &sources,
+        SubtitleSelectionEngine::Native,
+        indexes.as_ref(),
     );
     let selected = select_subtitle_preference_index(
         choices
@@ -221,7 +239,7 @@ pub async fn select_native_playback_subtitle_for_version(
         preferred_languages,
         subtitle_mode,
     );
-    Ok(selected.map(|index| {
+    let selected = selected.map(|index| {
         let choice = &choices[index];
         let source = choice.source.map(|index| &qualified[index]);
         let subtitle = selected_metadata(choice.row, source.map(QualifiedSourceCaption::candidate));
@@ -229,7 +247,11 @@ pub async fn select_native_playback_subtitle_for_version(
             subtitle,
             source: source.cloned(),
         }
-    }))
+    });
+    if !qualified.is_empty() && embedded {
+        super::source_indexes::ensure_current(pool, media_version_id, indexes.as_ref()).await?;
+    }
+    Ok(selected)
 }
 
 fn check_qualified_count(count: usize) -> Result<()> {
@@ -287,6 +309,7 @@ struct MetadataChoice<'a> {
     language: Option<&'a str>,
 }
 
+#[cfg(test)]
 fn metadata_choices<'a>(
     rows: &'a [PlaybackSubtitle],
     version: i64,
@@ -304,6 +327,7 @@ fn metadata_choices<'a>(
     )
 }
 
+#[cfg(test)]
 fn metadata_choices_for_engine<'a>(
     rows: &'a [PlaybackSubtitle],
     version: i64,
@@ -311,6 +335,18 @@ fn metadata_choices_for_engine<'a>(
     media_server: bool,
     sources: &[&'a SourceTeletextCaptionCandidate],
     engine: SubtitleSelectionEngine,
+) -> Vec<MetadataChoice<'a>> {
+    metadata_choices_with_indexes(rows, version, mode, media_server, sources, engine, None)
+}
+
+fn metadata_choices_with_indexes<'a>(
+    rows: &'a [PlaybackSubtitle],
+    version: i64,
+    mode: StreamingMode,
+    media_server: bool,
+    sources: &[&'a SourceTeletextCaptionCandidate],
+    engine: SubtitleSelectionEngine,
+    indexes: Option<&super::source_indexes::StreamIndexes>,
 ) -> Vec<MetadataChoice<'a>> {
     let mut choices = Vec::new();
     for row in rows {
@@ -326,7 +362,11 @@ fn metadata_choices_for_engine<'a>(
         if source_eligible {
             for (index, source) in sources.iter().enumerate() {
                 if source.request.binding.media_version_id != version
-                    || source.request.stream_index != row.stream_index
+                    || Some(source.request.stream_index)
+                        != usize::try_from(row.stream_index)
+                            .ok()
+                            .and_then(|i| super::source_indexes::physical(indexes, i).ok())
+                            .and_then(|i| i32::try_from(i).ok())
                     || !matches!(source.descriptor_type, 2 | 5)
                     || conflicting_source(source, sources, version)
                     || sources[..index]

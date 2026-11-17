@@ -12,9 +12,11 @@ ordinary AV/embedded tracks, probe hints and caption preparation consume the map
 and bind it to mutable source authority. Native HLS and MPEG-TS/Direct final
 requests use the same physical boundary, including transport fallback/retries.
 Background extraction maps the selected version while retaining logical cache
-keys and guarding staged publication. Qualified source-reader integration and
-actual Native runtime proof remain in `ucu-16-continuation`; the row is not
-fully accepted.
+keys and guarding staged publication. Source-reader layout/ranking and selected
+interlace sampling use physical comparisons while preserving logical metadata
+and cache identities. Scoped boundary/probe proof passes; actual Native/Convert,
+remaining restart/source-owner and shared final acceptance remain in
+`ucu-16-continuation`. The row is not fully accepted.
 
 ## Context
 
