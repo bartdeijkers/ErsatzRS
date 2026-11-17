@@ -18,9 +18,10 @@ and cache identities. Scoped boundary/probe proof and actual Next Convert across
 after SQLite close/reopen pass. Native HLS selected AV/captions and mapped
 finite-source refusal also pass across the three layouts. Retained HTTP source/owner qualification
 and map-bound grant refusal also pass in three actual Next sessions. Both
-current-server smoke gates pass; the required Native/Next TSDuck pair and
-shared final acceptance remain in
-`ucu-16-continuation`. The row is not fully accepted.
+current-server smoke gates and the required Native/Next TSDuck pair pass
+(93/86 checks). R295-A/B/C local stopping conditions are Complete. Shared
+window/source, matching-bundle/browser, required platform/final/CI and delivery
+acceptance remains in `ucu-16-continuation`; the row is not fully accepted.
 
 ## Context
 

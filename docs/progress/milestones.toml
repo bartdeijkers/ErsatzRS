@@ -41483,7 +41483,7 @@ row295-index-baseline.log reproduces external-first raw2/3/4 versus0/1/2.
 R295-B implementation is locally Complete: stable identity storage/ordinary
 repair, localized Health, Native/Next request routing, extraction and named
 source-reader boundaries are implemented with scoped passing evidence. Mandatory
-C integration remains open; this is not full row acceptance. Existing Jellyfin movies/episodes
+C integration is now locally Complete (see2026-11-17 closeout below); this is not full row acceptance. Existing Jellyfin movies/episodes
 must be revisited through ordinary claimed scans even with unchanged or absent
 ETags. Preserve old rows/cache and source ownership until successful transactional
 replacement; preserve disabled-library state. Track pending repair truthfully
@@ -41969,11 +41969,43 @@ claimed until both required transport checks pass. Consolidated first-party
 runtime/private-patch retirement, full-window, matched-bundle/browser, required
 platform/final/CI and ordered delivery gates remain open independently.
 
-Remaining local functionality: item7 (row296) still requires individual implementation/applicability proof. Row295 A/B implementation is locally Complete; its only remaining local mandatory evidence is the Native/Next TSDuck pair. The row294 local
-component is closed; next is completion of the running row295 Native/Next TSDuck pair before local row closure. Row291's local component is complete; item2's consolidated
-runtime/package qualification remains in the shared mandatory proof list. Row290's implemented local component remains distinct
-from its required integrated/window acceptance. All provisional ledger mappings
-remain unaccepted;289 rows processed,7 pending and the accepted pin unchanged.
+
+2026-11-17 row295 local closeout — R295-A/B/C Complete:
+The finite local stopping condition is met. Index projection, stable logical
+identity persistence/ordinary repair, Health, Native/Next routing, extraction,
+source readers and all named local C proof are implemented or verified.
+Reuse the scoped passing component evidence above; no missing local row295
+functionality or mandatory local evidence remains. Reopen only for a concrete
+regression, rather than adding adjacent variants after this stopping condition.
+The final exact-server Native and Next smoke gates pass. Native TSDuck passes
+93 checks and Next TSDuck passes86, both with zero failures and clean known-
+failure-signature log scans. The candidate remains SHA256
+1ee807c70673c529992ef4653e2460133af7c2b7c78a191cdad9bf9fa508d502 throughout
+all four runtime gates. Receipts/logs: row295-playback-closeout.json,
+row295-native-smoke.log, row295-next-smoke.log, row295-native-tsduck.log and
+row295-next-tsduck.log. No full matching web-bundle or platform claim follows
+from these Linux runtime checks. Current producer inputs, retained component
+proof, requirement coverage and limitations are indexed by
+row295-local-closeout.json under tmp/evidence/ucu16-tail-9c6b3dea.
+All nine freshly generated default calibration inputs are hash-verified and
+retained under row295-playback-artifacts/inputs/calibration-clips; their exact
+producer/template/tool and180s/1080p60 configuration are in
+row295-calibration-inputs.json. Only those verified task-owned worktree inputs
+are removed. The isolated runtime root is removed, zero owned media processes
+remain and captured runtime artifacts are retained. The active window worktree
+and unique authorized commits stay available for row296 and ordered delivery.
+This closes the local row component, not its accepted ledger disposition or
+the full continuation milestone. Every unchanged shared first-party runtime/
+private-patch retirement, full-window, matched SSR/WASM/browser, required
+platform/final/CI and ordered delivery gate remains mandatory. The accepted
+pin and296 observed/289 processed/7 pending ledger counts stay unchanged.
+
+Remaining local functionality: item7 (row296) still requires its individual
+implementation/applicability proof. Rows290–295 are Complete within their local
+component scopes; row296 is next. No local row295 proof is outstanding. Item2's
+consolidated runtime/package qualification remains in the shared mandatory
+proof list. All provisional ledger mappings remain unaccepted;289 rows are
+processed,7 are pending and the accepted pin is unchanged.
 Remaining mandatory evidence: affected matched-bundle headed Chromium/Firefox
 Health refresh/recovery (including no-JS), and all
 unchanged source/final/playback/platform/CI and ordered delivery gates above.
@@ -41981,7 +42013,7 @@ No new native Windows or ARM/platform acceptance is inferred from Linux.
 Delivery follows CONTRIBUTING checkpoint delivery; no main integration, push,
 new CI, dependency/application release, operator install or live mutation here.
 Row292 local functionality/proof checkpoint is Complete and committed as2f49534d.
-The maintainer explicitly resumed the goal. Row293's local shaping proof is now
-Complete; next bounded work is row294 collection/state load measurement.
+The maintainer explicitly resumed the goal. Rows293–295 have now met their
+local stopping conditions; next bounded work is row296's exact source audit.
 No accepted ledger disposition or authoritative pin advancement here.
 """

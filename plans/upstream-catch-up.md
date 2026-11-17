@@ -50,8 +50,9 @@ first-parent history exactly, with no additional rows observed. Registration
 and the provisional notes in the ledger are not accepted dispositions.
 
 The finite functionality, mandatory proof and delivery conditions belong to
-milestone `ucu-16-continuation`. Rows290–291 local components are Complete;
-continue with row292 scan-to-Next and subtitle continuity. Reuse valid completed evidence explicitly;
+milestone `ucu-16-continuation`. Rows290–295 local components are Complete;
+continue with row296's exact runtime/config and still-watermark cache source
+audit. No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an
 advance. Preserve Native, international audio/subtitles and completed Phase9,
