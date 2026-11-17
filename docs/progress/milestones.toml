@@ -42589,6 +42589,24 @@ the direct GitHub connector recheck at2026-11-17T09:02:18Z still returns404;
 runtime-release-recheck.json retains that current CI-eligibility observation.
 No unchanged negative runtime/acquisition trial needs repeating.
 
+2026-11-17 publication prerequisite prepared for a maintainer scope decision:
+Existing distribution main is verified as794f5156. The29 locally staged assets
+include the same four qualified worker archives and sidecars, thirteen pinned
+patches, exact upstream archive/provenance, source/preparation manifests,
+preparation script, license, README and SHA256SUMS. All294 replayed source-file
+hashes match the qualified source; no worker is rebuilt or repacked. The extra
+qualified-source manifest closes the explicit original-recipe digest reference.
+Distribution README and release-note proposals are ready; the existing Next
+checkout and remote are unchanged. Canonical proposal and verification:
+tmp/evidence/ucu16-tail-9c6b3dea/row296-runtime-publication/proposal.json and
+verification.json. Source manifests and private application evidence retain
+their tested scopes. The requested new authority would cover the existing
+distribution repository's README commit/push, new fixed tag and exact-asset
+publication, followed by independent public acquisition. Existing Latest
+selection is preserved. Application releases, operator installs and all retained
+deferrals remain outside that proposed scope. No publication is performed;
+the explicit no-new-publication boundary needs a maintainer amendment.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
