@@ -1,11 +1,11 @@
 //! SQL-backed XMLTV guide projection.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::programme::{project_occurrences, ProgrammeGuideItem, ProgrammeOccurrence};
 use ersatzrs_core::xmltv::{
     XmltvBlockBehavior, XmltvGuideItem, XmltvProgramme, XmltvProgrammeContent,
 };
 use ersatzrs_domain::{FillerKind, CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::{Pool, Row};
 
 use crate::db::Db;
@@ -264,9 +264,9 @@ pub(crate) fn materialize_guide_row(
 }
 
 pub(crate) fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
-    chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
-        .or_else(|_| chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S"))
-        .or_else(|_| chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S%.f"))
+    ersatzrs_time::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| ersatzrs_time::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| ersatzrs_time::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S%.f"))
         .ok()
         .map(|ndt| DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
 }

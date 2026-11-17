@@ -22,7 +22,7 @@ async fn image_metadata(pool: &crate::db::DbPool) {
 async fn scheduled_image_keeps_interval_and_supplies_silence() {
     let (pool, locker, channel, start) = schedule::tests::fixture().await;
     image_metadata(&pool).await;
-    let finish = start + chrono::Duration::seconds(60);
+    let finish = start + ersatzrs_time::Duration::seconds(60);
     let read = schedule::read_locked(&pool, &locker, &channel, start, finish)
         .await
         .unwrap()

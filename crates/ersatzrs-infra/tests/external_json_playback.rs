@@ -1,6 +1,5 @@
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{ChannelRepository as _, FfmpegProfileRepository as _};
 use ersatzrs_domain::MediaStreamKind;
 use ersatzrs_infra::graphics_template::{
@@ -18,6 +17,7 @@ use ersatzrs_infra::{
     ffprobe::FfprobeExtractor,
     repositories::make_repositories,
 };
+use ersatzrs_time::Duration;
 use httpmock::prelude::*;
 use serde_json::json;
 use sqlx::Executor as _;
@@ -68,8 +68,8 @@ async fn graphics_scheduled_stop_survives_seek_chunks_and_mirror_offsets() {
     // Match upstream GraphicsCanvasContextTests, including a late chunk and a
     // mirrored occurrence. Chunk length and seek must never move programme Stop.
     for shift in [0, 3600] {
-        context.content_start_time = common::fixed_time() + chrono::Duration::seconds(shift);
-        let finish = context.content_start_time + chrono::Duration::minutes(30);
+        context.content_start_time = common::fixed_time() + ersatzrs_time::Duration::seconds(shift);
+        let finish = context.content_start_time + ersatzrs_time::Duration::minutes(30);
         context.content_finish_time = Some(finish);
         for (seek, duration) in [(0.0, 44.0), (44.0, 44.0), (1760.0, 40.0), (1801.0, 44.0)] {
             context.stream_seek_seconds = seek;
@@ -441,7 +441,7 @@ async fn external_json_relay_binds_parts_and_reads_current_credentials() {
         .await;
     let relay = MediaRelay::new();
     relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
-    let expires = chrono::Utc::now() + Duration::hours(2);
+    let expires = ersatzrs_time::Utc::now() + Duration::hours(2);
     let url = url::Url::parse(&relay.external_source_url(10, part, expires).unwrap()).unwrap();
     let ticket = url
         .query_pairs()

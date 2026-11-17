@@ -121,7 +121,7 @@ async fn troubleshooting_local_sessions_preserve_tracks_and_isolate_canvas_lifet
     let binding = CanvasBinding::new(
         fixture.channel.id,
         &fixture.media,
-        chrono::Utc::now() + chrono::TimeDelta::hours(1),
+        ersatzrs_time::Utc::now() + ersatzrs_time::TimeDelta::hours(1),
     )
     .for_session(sessions[0]);
     let timing = CanvasRequest::parse("0", "1000", "25").unwrap();
@@ -511,15 +511,15 @@ async fn troubleshooting_publishes_one_canvas_for_all_selected_graphics() {
 fn channel_occurrence(
     fixture: &Fixture,
     id: i64,
-    start: chrono::DateTime<chrono::Utc>,
-    finish: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> TroubleshootingChannelOccurrence {
     let mut media = fixture.media.clone();
     media.item.id = id;
     media.item.playout_id = 1;
     media.item.start = start;
     media.item.finish = finish;
-    media.item.in_point = chrono::TimeDelta::seconds(1);
+    media.item.in_point = ersatzrs_time::TimeDelta::seconds(1);
     media.item.out_point = media.item.in_point + (finish - start);
     TroubleshootingChannelOccurrence {
         media,
@@ -532,7 +532,7 @@ fn channel_occurrence(
 async fn channel_manifest(
     fixture: &Fixture,
     occurrences: &[TroubleshootingChannelOccurrence],
-    start: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> (uuid::Uuid, protocol::Playout) {
     let repositories = crate::repositories::make_repositories(fixture.pool.clone());
     for occurrence in occurrences {
@@ -542,7 +542,7 @@ async fn channel_manifest(
             .await
             .unwrap();
     }
-    let finish = start + chrono::TimeDelta::seconds(30);
+    let finish = start + ersatzrs_time::TimeDelta::seconds(30);
     let before = persisted_window_state(&fixture.pool, start, finish).await;
     let prepared = fixture
         .host
@@ -572,8 +572,8 @@ async fn channel_manifest(
 
 pub(super) async fn persisted_window_state(
     pool: &DbPool,
-    start: chrono::DateTime<chrono::Utc>,
-    finish: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> (i64, Vec<ersatzrs_domain::PlayoutItem>) {
     let count = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
         .fetch_one(pool)
@@ -595,26 +595,29 @@ async fn troubleshooting_channel_window_preserves_overlap_and_fills_every_outer_
         .media
         .configure("127.0.0.1:8409".parse().unwrap())
         .unwrap();
-    let start =
-        chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp() - 2 * 86_400, 0).unwrap();
+    let start = ersatzrs_time::DateTime::from_timestamp(
+        ersatzrs_time::Utc::now().timestamp() - 2 * 86_400,
+        0,
+    )
+    .unwrap();
     let occurrences = [
         channel_occurrence(
             &fixture,
             11,
-            start + chrono::TimeDelta::seconds(3),
-            start + chrono::TimeDelta::seconds(8),
+            start + ersatzrs_time::TimeDelta::seconds(3),
+            start + ersatzrs_time::TimeDelta::seconds(8),
         ),
         channel_occurrence(
             &fixture,
             12,
-            start + chrono::TimeDelta::seconds(6),
-            start + chrono::TimeDelta::seconds(9),
+            start + ersatzrs_time::TimeDelta::seconds(6),
+            start + ersatzrs_time::TimeDelta::seconds(9),
         ),
         channel_occurrence(
             &fixture,
             13,
-            start + chrono::TimeDelta::seconds(20),
-            start + chrono::TimeDelta::seconds(25),
+            start + ersatzrs_time::TimeDelta::seconds(20),
+            start + ersatzrs_time::TimeDelta::seconds(25),
         ),
     ];
     let (instance, playout) = channel_manifest(&fixture, &occurrences, start).await;
@@ -657,7 +660,7 @@ async fn troubleshooting_channel_window_preserves_overlap_and_fills_every_outer_
     assert_eq!(empty.items.len(), 1);
     assert_eq!(
         (empty.items[0].start, empty.items[0].finish),
-        (start, start + chrono::TimeDelta::seconds(30))
+        (start, start + ersatzrs_time::TimeDelta::seconds(30))
     );
     fixture
         .host
@@ -675,15 +678,23 @@ async fn troubleshooting_window_second_occurrence_canvas_is_bound_and_revoked() 
         .media
         .configure("127.0.0.1:8409".parse().unwrap())
         .unwrap();
-    let start =
-        chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp() - 2 * 86_400, 0).unwrap();
+    let start = ersatzrs_time::DateTime::from_timestamp(
+        ersatzrs_time::Utc::now().timestamp() - 2 * 86_400,
+        0,
+    )
+    .unwrap();
     let occurrences = [
-        channel_occurrence(&fixture, 11, start, start + chrono::TimeDelta::seconds(10)),
+        channel_occurrence(
+            &fixture,
+            11,
+            start,
+            start + ersatzrs_time::TimeDelta::seconds(10),
+        ),
         channel_occurrence(
             &fixture,
             12,
-            start + chrono::TimeDelta::seconds(10),
-            start + chrono::TimeDelta::seconds(30),
+            start + ersatzrs_time::TimeDelta::seconds(10),
+            start + ersatzrs_time::TimeDelta::seconds(30),
         ),
     ];
     let (first, _) = channel_manifest(&fixture, &occurrences, start).await;
@@ -741,15 +752,17 @@ async fn troubleshooting_window_second_occurrence_canvas_is_bound_and_revoked() 
 
 #[test]
 fn troubleshooting_historical_callback_expiry_is_future_without_removing_expiration() {
-    let now = chrono::Utc::now();
-    let historical = now - chrono::TimeDelta::days(3);
+    let now = ersatzrs_time::Utc::now();
+    let historical = now - ersatzrs_time::TimeDelta::days(3);
     let expiry = callback_expiry(historical).unwrap();
-    assert!(expiry >= now + chrono::TimeDelta::hours(2));
-    assert!(expiry < now + chrono::TimeDelta::hours(2) + chrono::TimeDelta::seconds(2));
-    let future = now + chrono::TimeDelta::hours(4);
+    assert!(expiry >= now + ersatzrs_time::TimeDelta::hours(2));
+    assert!(
+        expiry < now + ersatzrs_time::TimeDelta::hours(2) + ersatzrs_time::TimeDelta::seconds(2)
+    );
+    let future = now + ersatzrs_time::TimeDelta::hours(4);
     assert_eq!(
         callback_expiry(future).unwrap(),
-        future + chrono::TimeDelta::hours(2)
+        future + ersatzrs_time::TimeDelta::hours(2)
     );
 }
 
@@ -775,10 +788,10 @@ async fn troubleshooting_empty_window_fallback_uses_preview_profile_and_requires
         .unwrap();
     fixture.profile.resolution.width = 640;
     fixture.profile.resolution.height = 360;
-    let start = chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+    let start = ersatzrs_time::DateTime::from_timestamp(1_700_000_000, 0).unwrap();
     let (instance, playout) = channel_manifest(&fixture, &[], start).await;
     let item = &playout.items[0];
-    let ticks = |t: chrono::DateTime<chrono::Utc>| {
+    let ticks = |t: ersatzrs_time::DateTime<ersatzrs_time::Utc>| {
         t.timestamp() * 10_000_000 + i64::from(t.timestamp_subsec_nanos() / 100)
     };
     let resolved = fixture
@@ -849,7 +862,7 @@ async fn troubleshooting_generated_credits_keep_timing_through_fresh_track_mater
     context.attach_credits(&mut projection).unwrap();
     let origin =
         super::super::remote_projection::Origin::Troubleshooting(std::sync::Arc::new(context));
-    let now = projection.item.start + chrono::TimeDelta::seconds(2);
+    let now = projection.item.start + ersatzrs_time::TimeDelta::seconds(2);
     assert_replaced_caption_does_not_resurrect_credits(&origin, &mut projection, now);
     let credits = origin.credits_at(&projection, now).unwrap().unwrap();
     let protocol::Source::Local { in_point_ms, .. } = credits.source.as_ref().unwrap() else {
@@ -914,7 +927,7 @@ async fn troubleshooting_generated_credits_keep_timing_through_fresh_track_mater
 fn assert_replaced_caption_does_not_resurrect_credits(
     origin: &super::super::remote_projection::Origin,
     projection: &mut super::super::selection::DeferredProjection,
-    now: chrono::DateTime<chrono::Utc>,
+    now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) {
     // A removed/expired natural Custom caption must not resurrect the Context's
     // generated overlay after natural caption preparation clears its selection.

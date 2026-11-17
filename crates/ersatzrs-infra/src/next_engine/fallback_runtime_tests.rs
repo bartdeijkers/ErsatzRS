@@ -392,13 +392,13 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
         wrong_provider = fixture_provider_connection(&pool, kind, server).await;
     }
     let start = if source == FallbackSource::Leading {
-        chrono::Utc::now() + chrono::Duration::seconds(4)
+        ersatzrs_time::Utc::now() + ersatzrs_time::Duration::seconds(4)
     } else if source == FallbackSource::PinnedOff {
         // Exercise joining at a programme boundary: the opening segment is
         // shorter than the audio/video sampling window used for handoff proof.
-        chrono::Utc::now() - chrono::Duration::milliseconds(5800)
+        ersatzrs_time::Utc::now() - ersatzrs_time::Duration::milliseconds(5800)
     } else {
-        chrono::Utc::now() - chrono::Duration::seconds(2)
+        ersatzrs_time::Utc::now() - ersatzrs_time::Duration::seconds(2)
     };
     let repos = crate::repositories::make_repositories(pool.clone());
     let last_finish = match source {
@@ -415,9 +415,9 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
                 id,
                 playout_id: 1,
                 media_item_id: 10,
-                start: start + chrono::Duration::seconds(begin),
-                finish: start + chrono::Duration::seconds(end),
-                out_point: chrono::Duration::seconds(end - begin),
+                start: start + ersatzrs_time::Duration::seconds(begin),
+                finish: start + ersatzrs_time::Duration::seconds(end),
+                out_point: ersatzrs_time::Duration::seconds(end - begin),
                 preferred_audio_language_code: Some("eng".into()),
                 subtitle_mode: Some(ersatzrs_domain::ChannelSubtitleMode::None),
                 ..Default::default()

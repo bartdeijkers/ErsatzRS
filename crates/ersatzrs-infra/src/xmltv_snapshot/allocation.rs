@@ -5,11 +5,11 @@ use crate::{
     external_json::{ExternalJsonItem, ExternalJsonProgram},
     xmltv_read::GuideReadBudget,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     programme::{ProgrammeGuideItem, ProgrammeOccurrence, ProgrammeSegment},
     xmltv::{XmltvGuideItem, XmltvProgramme, XmltvProgrammeContent},
 };
+use ersatzrs_time::{DateTime, Utc};
 use std::mem::size_of;
 
 #[derive(Default)]

@@ -11,7 +11,7 @@ use std::{
 use sha2::Digest as _;
 use std::fmt::Write as _;
 
-use chrono::{DateTime, Duration, Utc};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::Instant};
 

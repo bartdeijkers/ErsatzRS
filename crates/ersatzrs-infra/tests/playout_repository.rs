@@ -1,12 +1,12 @@
 use ersatzrs_core::repositories::PlayoutPendingWork;
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{
     ChannelRepository, FfmpegProfileRepository, PlayoutCreateAdmin, PlayoutRepository,
     ProgramScheduleRepository,
 };
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::Duration;
 use sqlx::{Executor, Row};
 
 #[tokio::test]

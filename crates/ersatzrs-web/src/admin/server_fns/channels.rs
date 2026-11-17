@@ -86,7 +86,7 @@ pub struct EpgPreviewData {
 impl ChannelWatchData {
     fn from_core(
         state: ersatzrs_core::repositories::ChannelWatchState,
-        now: chrono::DateTime<chrono::Utc>,
+        now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Self {
         let has_current = state
             .programmes
@@ -110,8 +110,8 @@ impl ChannelWatchData {
             ffmpeg_profile_name: state.ffmpeg_profile_name,
             streaming_mode: state.streaming_mode,
             generated_at: now.to_rfc3339(),
-            window_start: (now - chrono::Duration::hours(2)).to_rfc3339(),
-            window_finish: (now + chrono::Duration::hours(24)).to_rfc3339(),
+            window_start: (now - ersatzrs_time::Duration::hours(2)).to_rfc3339(),
+            window_finish: (now + ersatzrs_time::Duration::hours(24)).to_rfc3339(),
             availability,
             programmes: state
                 .programmes
@@ -131,12 +131,12 @@ impl ChannelWatchData {
         }
     }
 
-    fn not_found(id: i64, now: chrono::DateTime<chrono::Utc>) -> Self {
+    fn not_found(id: i64, now: ersatzrs_time::DateTime<ersatzrs_time::Utc>) -> Self {
         Self {
             id,
             generated_at: now.to_rfc3339(),
-            window_start: (now - chrono::Duration::hours(2)).to_rfc3339(),
-            window_finish: (now + chrono::Duration::hours(24)).to_rfc3339(),
+            window_start: (now - ersatzrs_time::Duration::hours(2)).to_rfc3339(),
+            window_finish: (now + ersatzrs_time::Duration::hours(24)).to_rfc3339(),
             availability: ChannelWatchAvailability::NotFound,
             ..Self::default()
         }
@@ -417,7 +417,7 @@ impl ChannelForm {
             playout_offset: if self.playout_offset_hours == 0 {
                 None
             } else {
-                Some(chrono::Duration::hours(i64::from(
+                Some(ersatzrs_time::Duration::hours(i64::from(
                     self.playout_offset_hours,
                 )))
             },
@@ -594,7 +594,7 @@ pub async fn get_channel_watch_data(id: i64) -> Result<ChannelWatchData, ServerF
     use ersatzrs_app::queries::GetChannelWatch;
 
     let state = expect_context::<AppState>();
-    let now = chrono::Utc::now();
+    let now = ersatzrs_time::Utc::now();
     let data = state
         .application
         .get_channel_watch(GetChannelWatch {
@@ -649,7 +649,7 @@ pub async fn get_epg_preview_data() -> Result<EpgPreviewData, ServerFnError> {
     let data = state
         .application
         .get_epg_preview(GetEpgPreview {
-            now: chrono::Utc::now(),
+            now: ersatzrs_time::Utc::now(),
         })
         .await
         .map_err(ServerFnError::new)?;

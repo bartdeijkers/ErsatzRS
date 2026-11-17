@@ -5,7 +5,6 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::time::Duration as StdDuration;
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::metadata_facets::{
     normalize_content_ratings, normalize_facet_values, normalize_language_codes,
     preferred_facet_values, split_embedded_values, union_facet_values,
@@ -27,6 +26,7 @@ use ersatzrs_infra::metadata::{
 use ersatzrs_infra::remote_stream::{
     parse_remote_stream_definition, resolve_remote_stream_for_scan_with_addons, RemoteStreamError,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
@@ -5921,7 +5921,7 @@ broadcasters: [Current Network]
             field_orders: std::collections::BTreeMap::new(),
             version: ersatzrs_domain::MediaVersion {
                 name: "Main".to_owned(),
-                duration: chrono::Duration::seconds(180),
+                duration: ersatzrs_time::Duration::seconds(180),
                 video_scan_kind: ersatzrs_domain::VideoScanKind::Progressive,
                 width: 1920,
                 height: 1080,
@@ -6042,7 +6042,7 @@ create_playlist: true
         let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(package_root)
             .await
             .expect("fixture add-on hash");
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = ersatzrs_time::Utc::now().to_rfc3339();
         sqlx::query(
             r#"INSERT INTO "AddonInstallation" (
                    "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256",
@@ -7457,7 +7457,7 @@ defaults:
             "settings": [],
             "panels": []
         });
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = ersatzrs_time::Utc::now().to_rfc3339();
         let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(&package_root)
             .await
             .expect("hash fixture package");
@@ -7936,7 +7936,7 @@ defaults:
                 field_orders: std::collections::BTreeMap::new(),
                 version: ersatzrs_domain::MediaVersion {
                     name: "Main".to_owned(),
-                    duration: chrono::Duration::seconds(180),
+                    duration: ersatzrs_time::Duration::seconds(180),
                     video_scan_kind: ersatzrs_domain::VideoScanKind::Progressive,
                     width: 1920,
                     height: 1080,
@@ -8239,10 +8239,10 @@ defaults:
             LocalLibraryPath, METADATA_KIND_EMBEDDED, METADATA_KIND_FALLBACK,
             METADATA_KIND_SIDECAR,
         };
-        use chrono::Duration;
         use ersatzrs_domain::{LibraryMediaKind, MediaVersion, VideoScanKind};
         use ersatzrs_infra::db::assert_sql_safe;
         use ersatzrs_infra::ffprobe::FfprobeMediaVersion;
+        use ersatzrs_time::Duration;
         use sqlx::sqlite::SqlitePoolOptions;
         use sqlx::{Executor, Row, SqlitePool};
         use std::path::Path;

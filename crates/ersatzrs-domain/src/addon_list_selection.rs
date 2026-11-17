@@ -1,6 +1,6 @@
 //! Shared value objects for bounded add-on list selection.
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Saved rolling selection; absent settings preserve legacy inclusion.

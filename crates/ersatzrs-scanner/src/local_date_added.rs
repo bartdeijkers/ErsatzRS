@@ -5,9 +5,9 @@ use std::collections::BTreeSet;
 use std::fs::Metadata;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::repositories::ManagedLibraryOperationClaim;
 use ersatzrs_infra::db::{assert_sql_safe, DbPool};
+use ersatzrs_time::{DateTime, Datelike, NaiveDate, NaiveDateTime, Timelike, Utc};
 use sqlx::Row;
 
 const TABLES: [(&str, &str); 6] = [
@@ -237,7 +237,7 @@ mod tests {
         let now = parse_date("2026-01-01T00:00:00Z").unwrap();
         assert_eq!(normalize_creation_date(Some(value), now), Some(value));
         assert_eq!(
-            normalize_creation_date(Some(now + chrono::Duration::days(1)), now),
+            normalize_creation_date(Some(now + ersatzrs_time::Duration::days(1)), now),
             Some(now)
         );
         assert_eq!(normalize_creation_date(None, now), None);

@@ -1,8 +1,8 @@
 //! ADR 0131: immutable daily chunks behind a single atomic visibility boundary.
 use std::{path::Path, time::Instant};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::programme::ProgrammeClock;
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{check_deadline, prepare_with, PreparedPlayout, PublicationError};
 use crate::next_engine::protocol::Playout;

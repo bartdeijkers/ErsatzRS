@@ -114,7 +114,7 @@ impl NativeBackend {
             channel_id = self.context.channel_id,
             generation_id = ?prepared.as_ref().map(|value| value.generation().id),
             original_transition_remaining_ns = boundary.saturating_duration_since(Instant::now()).as_nanos(),
-            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
             "native Base preparation grants no output authority"
         );
         if let Some(attempt) = self

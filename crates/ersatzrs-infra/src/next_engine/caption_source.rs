@@ -5,8 +5,8 @@ use crate::{
     playback::PlaybackSubtitle,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as BASE64, Engine as _};
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{path_replacement::replace_path, repositories::ChannelRepository as _};
+use ersatzrs_time::{DateTime, Utc};
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -284,7 +284,7 @@ impl NextHost {
             expires: media
                 .item
                 .finish
-                .checked_add_signed(chrono::Duration::minutes(1))
+                .checked_add_signed(ersatzrs_time::Duration::minutes(1))
                 .ok_or_else(unavailable)?
                 .timestamp(),
             binding: binding(selected, path).map_err(|_| unavailable())?,

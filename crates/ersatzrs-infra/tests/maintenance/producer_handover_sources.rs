@@ -1,7 +1,7 @@
 //! Real Block/YAML definitions for the shared decoded producer proof.
 
 use super::*;
-use chrono::{DateTime, Timelike as _};
+use ersatzrs_time::{DateTime, Timelike as _};
 
 pub(super) fn callback_listener(next: bool) -> Option<std::net::TcpListener> {
     // Block templates also publish gaps outside this capture's programme

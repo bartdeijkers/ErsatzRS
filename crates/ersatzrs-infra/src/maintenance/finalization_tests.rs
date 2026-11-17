@@ -3,13 +3,13 @@ use crate::{
     next_engine::{host::publication_fixture, publication::PLAYOUT_FILENAME},
     repositories::SqlitePlayoutRepository,
 };
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
     locking::{EntityLocker, PlayoutLockGuard, PlayoutReadGuard},
     repositories::PlayoutRepository,
     scheduling::SchedulingResult,
 };
 use ersatzrs_domain::{Playout, PlayoutAnchor, PlayoutItem};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use std::{
     path::PathBuf,
     sync::atomic::AtomicUsize,

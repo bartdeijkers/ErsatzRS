@@ -6,7 +6,7 @@
 
 use std::{io::Write, path::Path, time::Instant};
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{
     de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor},
     Deserialize, Serialize, Serializer,

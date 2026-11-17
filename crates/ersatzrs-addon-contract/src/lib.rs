@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::Datelike;
+use ersatzrs_time::Datelike;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
@@ -406,15 +406,13 @@ impl AddonMetadataDocument {
         }
         if self
             .year
-            .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
+            .is_some_and(|year| !(1..=ersatzrs_time::Utc::now().year() + 5).contains(&year))
         {
             return invalid("metadata year", "must be valid host metadata");
         }
-        if self
-            .release_date
-            .as_deref()
-            .is_some_and(|value| chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err())
-        {
+        if self.release_date.as_deref().is_some_and(|value| {
+            ersatzrs_time::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err()
+        }) {
             return invalid("metadata release_date", "must use YYYY-MM-DD");
         }
         Ok(())
@@ -1046,11 +1044,12 @@ fn validate_source_update_instants(instants: &[String]) -> Result<(), ContractEr
                 "must contain bounded RFC 3339 UTC instants",
             );
         }
-        let instant =
-            chrono::DateTime::parse_from_rfc3339(value).map_err(|_| ContractError::Invalid {
+        let instant = ersatzrs_time::DateTime::parse_from_rfc3339(value).map_err(|_| {
+            ContractError::Invalid {
                 field: "media list source check source_updated_at",
                 message: "must contain RFC 3339 UTC instants".to_owned(),
-            })?;
+            }
+        })?;
         if instant.offset().local_minus_utc() != 0 || !unique.insert(instant) {
             return invalid(
                 "media list source check source_updated_at",
@@ -2824,19 +2823,18 @@ impl AddonRepositoryIndex {
         if self.repository_name.trim().is_empty() || self.repository_name.len() > 200 {
             return invalid("repository_name", "must be between 1 and 200 characters");
         }
-        let generated_at =
-            chrono::DateTime::parse_from_rfc3339(&self.generated_at).map_err(|_| {
+        let generated_at = ersatzrs_time::DateTime::parse_from_rfc3339(&self.generated_at)
+            .map_err(|_| ContractError::Invalid {
+                field: "generated_at",
+                message: "must be RFC 3339".to_owned(),
+            })?;
+        let expires_at =
+            ersatzrs_time::DateTime::parse_from_rfc3339(&self.expires_at).map_err(|_| {
                 ContractError::Invalid {
-                    field: "generated_at",
+                    field: "expires_at",
                     message: "must be RFC 3339".to_owned(),
                 }
             })?;
-        let expires_at = chrono::DateTime::parse_from_rfc3339(&self.expires_at).map_err(|_| {
-            ContractError::Invalid {
-                field: "expires_at",
-                message: "must be RFC 3339".to_owned(),
-            }
-        })?;
         if expires_at <= generated_at {
             return invalid("expires_at", "must be later than generated_at");
         }
@@ -4074,7 +4072,7 @@ pub fn conform_remote_stream_list_output(
         entry.validate()?;
         if entry
             .year
-            .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
+            .is_some_and(|year| !(1..=ersatzrs_time::Utc::now().year() + 5).contains(&year))
         {
             return invalid("remote stream year", "must be valid host metadata");
         }
@@ -4147,7 +4145,7 @@ pub fn conform_remote_stream_item_output_for_capability(
         }
         if record
             .year
-            .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
+            .is_some_and(|year| !(1..=ersatzrs_time::Utc::now().year() + 5).contains(&year))
         {
             return invalid("remote stream item year", "must be valid host metadata");
         }
@@ -5957,7 +5955,7 @@ name = "Example add-ons"
 
         let too_far_in_future = format!(
             "{{\"id\":\"video:1\",\"url\":\"https://example.test/one\",\"title\":\"One\",\"year\":{}}}\n",
-            chrono::Utc::now().year() + 6
+            ersatzrs_time::Utc::now().year() + 6
         );
         assert!(conform_remote_stream_list_output(too_far_in_future.as_bytes()).is_err());
     }

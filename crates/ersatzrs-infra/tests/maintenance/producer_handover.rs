@@ -301,7 +301,7 @@ async fn capture_handover(
             .lines()
             .find_map(|line| line.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:"))
             .expect("Next publishes the first segment's broadcast clock");
-        chrono::DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f%z")
+        ersatzrs_time::DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f%z")
             .unwrap()
             .with_timezone(&Utc)
     } else {
@@ -378,7 +378,10 @@ async fn replace_source(pool: &SqlitePool, external: Option<&Path>) {
     }
 }
 
-async fn replacement_boundary(pool: &SqlitePool, external: Option<&Path>) -> chrono::DateTime<Utc> {
+async fn replacement_boundary(
+    pool: &SqlitePool,
+    external: Option<&Path>,
+) -> ersatzrs_time::DateTime<Utc> {
     if let Some(path) = external {
         let accepted = ersatzrs_infra::external_json::snapshot::accepted(pool, 88)
             .await
@@ -418,10 +421,10 @@ async fn replacement_boundary(pool: &SqlitePool, external: Option<&Path>) -> chr
         .fetch_one(pool)
         .await
         .unwrap();
-        chrono::DateTime::parse_from_rfc3339(&start)
+        ersatzrs_time::DateTime::parse_from_rfc3339(&start)
             .map(|value| value.with_timezone(&Utc))
             .or_else(|_| {
-                chrono::NaiveDateTime::parse_from_str(&start, "%F %T%.f")
+                ersatzrs_time::NaiveDateTime::parse_from_str(&start, "%F %T%.f")
                     .map(|value| value.and_utc())
             })
             .unwrap()

@@ -1,6 +1,5 @@
 //! Selection is part of the saved draft; publication and artifact ownership stay unchanged.
 
-use chrono::{DateTime, NaiveDate, Utc};
 use ersatzrs_core::{
     addon_list_selection::{
         self, AddonListSelectionItem, AddonListSelectionPolicy, AddonListSelectionPreview,
@@ -8,6 +7,7 @@ use ersatzrs_core::{
     },
     repositories::{RepositoryError, Result},
 };
+use ersatzrs_time::{DateTime, NaiveDate, Utc};
 use sqlx::{Row as _, Transaction};
 
 use crate::{
@@ -220,7 +220,7 @@ pub(crate) async fn queue_missing_facts(pool: &DbPool, list_id: i64) -> Result<(
 pub(crate) async fn reassess_due(pool: &DbPool, now: DateTime<Utc>) -> Result<()> {
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     let id: Option<i64> = sqlx::query_scalar(r#"SELECT "selection"."AddonMediaListId" FROM "AddonMediaListSelection" AS "selection" JOIN "AddonMediaList" AS "list" ON "list"."Id"="selection"."AddonMediaListId" WHERE "selection"."PolicyJson" IS NOT NULL AND "selection"."RefreshPaused"=0 AND ("selection"."EvaluatedAt" IS NULL OR "selection"."EvaluatedAt"<=?) AND "list"."PublicationJournalJson" IS NULL AND NOT EXISTS (SELECT 1 FROM "AddonMediaListImportJob" AS "import" WHERE "import"."AddonMediaListId"="list"."Id" AND "import"."State" IN (0,1,2,4,5)) AND NOT EXISTS (SELECT 1 FROM "AddonMediaListPublicationJob" AS "job" JOIN "ManagedLibraryOperation" AS "operation" ON "operation"."Id"="job"."OperationId" WHERE "job"."AddonMediaListId"="list"."Id" AND "operation"."State" IN (0,1,2)) ORDER BY "selection"."EvaluatedAt", "selection"."AddonMediaListId" LIMIT 1"#)
-        .bind(encode_datetime(now - chrono::Duration::hours(1))).fetch_optional(&mut *tx).await.repository()?;
+        .bind(encode_datetime(now - ersatzrs_time::Duration::hours(1))).fetch_optional(&mut *tx).await.repository()?;
     if let Some(id) = id {
         if apply_in_tx(&mut tx, id, now).await? {
             crate::repositories::addon_media_list::mark_list_ready_tx(&mut tx, id).await?;
@@ -335,7 +335,10 @@ mod tests {
             [(10, false, true), (11, true, true), (20, true, true)]
         );
         let saved = load_state(&pool, 1).await.unwrap();
-        assert_eq!(saved.cutoff_at, Some(now() - chrono::Duration::days(365)));
+        assert_eq!(
+            saved.cutoff_at,
+            Some(now() - ersatzrs_time::Duration::days(365))
+        );
         let repo = SqliteAddonMediaListRepository(pool.clone());
         repo.set_selection_override(1, 10, 7, Some(true))
             .await
@@ -362,9 +365,11 @@ mod tests {
             settings()
         );
         let mut tx = crate::db::begin_write(&restarted).await.unwrap();
-        assert!(!apply_in_tx(&mut tx, 1, now() + chrono::Duration::days(1))
-            .await
-            .unwrap());
+        assert!(
+            !apply_in_tx(&mut tx, 1, now() + ersatzrs_time::Duration::days(1))
+                .await
+                .unwrap()
+        );
         tx.commit().await.unwrap();
         let included: Vec<(i64, bool)> =
             sqlx::query_as(r#"SELECT "Id","Included" FROM "AddonMediaListItem" ORDER BY "Id""#)
@@ -382,7 +387,7 @@ mod tests {
         s.refresh_paused = true;
         save_in_tx(&mut tx, 1, &s, now()).await.unwrap();
         tx.commit().await.unwrap();
-        reassess_due(&pool, now() + chrono::Duration::days(366))
+        reassess_due(&pool, now() + ersatzrs_time::Duration::days(366))
             .await
             .unwrap();
         assert_eq!(
@@ -393,7 +398,7 @@ mod tests {
         s.refresh_paused = false;
         save_in_tx(&mut tx, 1, &s, now()).await.unwrap();
         tx.commit().await.unwrap();
-        reassess_due(&pool, now() + chrono::Duration::days(366))
+        reassess_due(&pool, now() + ersatzrs_time::Duration::days(366))
             .await
             .unwrap();
         let revision: i32 =
@@ -402,7 +407,7 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(revision, 8);
-        reassess_due(&pool, now() + chrono::Duration::days(366))
+        reassess_due(&pool, now() + ersatzrs_time::Duration::days(366))
             .await
             .unwrap();
         assert_eq!(

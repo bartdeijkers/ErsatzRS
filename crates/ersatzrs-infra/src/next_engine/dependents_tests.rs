@@ -63,8 +63,8 @@ async fn fixture() -> Fixture {
             playout_id: 2,
             media_item_id: 10,
             start,
-            finish: start + chrono::Duration::seconds(30),
-            out_point: chrono::Duration::seconds(30),
+            finish: start + ersatzrs_time::Duration::seconds(30),
+            out_point: ersatzrs_time::Duration::seconds(30),
             ..Default::default()
         })
         .await

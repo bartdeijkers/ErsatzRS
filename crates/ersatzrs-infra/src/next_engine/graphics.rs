@@ -1,8 +1,8 @@
 //! Canvas publication separates stable occurrence identity from process credentials.
 
-use chrono::{DateTime, TimeDelta, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{Channel, ChannelWatermarkMode, FFmpegProfileVideoFormat};
+use ersatzrs_time::{DateTime, TimeDelta, Utc};
 use serde::Serialize;
 
 use crate::{

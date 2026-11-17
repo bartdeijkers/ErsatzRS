@@ -338,7 +338,7 @@ async fn prepare_effective_inner(
 
 fn current_qualification(
     captured: &CapturedTeletextGuide,
-    scope_expiry: Option<chrono::DateTime<Utc>>,
+    scope_expiry: Option<ersatzrs_time::DateTime<Utc>>,
     deadline: Instant,
 ) -> Result<TeletextGuideGenerationQualification, TeletextAuthoringError> {
     super::check_deadline(deadline)?;

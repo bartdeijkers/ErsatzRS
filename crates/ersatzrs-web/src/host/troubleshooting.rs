@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Timelike, Utc};
 use ersatzrs_app::{
     AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, PlaybackPreviewLog,
     PlaybackPreviewRequest, PlaybackPreviewStatus,
@@ -38,6 +37,7 @@ use ersatzrs_infra::{
     repositories::Repositories,
     subtitles::rebase_burned_text_subtitle_input,
 };
+use ersatzrs_time::{DateTime, NaiveDateTime, TimeZone, Timelike, Utc};
 use std::path::{Path as FsPath, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
@@ -862,7 +862,7 @@ fn programme_preview_time(
     let last_second = (finish - start).num_seconds().saturating_sub(1).max(0);
     let seconds = seek.clamp(0, last_second);
     start
-        .checked_add_signed(chrono::Duration::seconds(seconds))
+        .checked_add_signed(ersatzrs_time::Duration::seconds(seconds))
         .ok_or_else(|| "invalid preview programme seek".into())
 }
 
@@ -886,12 +886,12 @@ fn parse_preview_start(value: Option<&str>) -> Option<DateTime<Utc>> {
         .or_else(|| {
             NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M")
                 .ok()
-                .map(|parsed| Utc.from_utc_datetime(&parsed))
+                .map(|parsed| Utc.resolve_utc(&parsed))
         })
         .or_else(|| {
             NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S")
                 .ok()
-                .map(|parsed| Utc.from_utc_datetime(&parsed))
+                .map(|parsed| Utc.resolve_utc(&parsed))
         })
 }
 
@@ -904,7 +904,7 @@ fn active_program_duration(active: &stream::ActivePlayoutItem) -> Option<Duratio
 fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
     for format in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
         if let Ok(parsed) = NaiveDateTime::parse_from_str(value, format) {
-            return Some(Utc.from_utc_datetime(&parsed));
+            return Some(Utc.resolve_utc(&parsed));
         }
     }
     None
@@ -1572,8 +1572,8 @@ async fn preview_graphics_overlays(
         .and_then(|stream| stream.square_pixel_frame_size(frame_size))
         .unwrap_or(frame_size);
     let now = Utc::now();
-    let Some(content_start) =
-        chrono::Duration::try_seconds(seek_seconds).and_then(|seek| now.checked_sub_signed(seek))
+    let Some(content_start) = ersatzrs_time::Duration::try_seconds(seek_seconds)
+        .and_then(|seek| now.checked_sub_signed(seek))
     else {
         return PlaybackGraphicsArtifacts::default();
     };
@@ -1596,7 +1596,7 @@ async fn preview_graphics_overlays(
             media_path: media_path.to_owned(),
             channel_start_time: now,
             content_start_time: content_start,
-            content_finish_time: chrono::Duration::from_std(program_duration)
+            content_finish_time: ersatzrs_time::Duration::from_std(program_duration)
                 .ok()
                 .and_then(|duration| now.checked_add_signed(duration)),
             stream_seek_seconds: seconds_i64_as_f64(seek_seconds),
@@ -3146,8 +3146,8 @@ mod tests {
     #[test]
     fn programme_preview_seek_stays_in_the_selected_row() {
         let start = parse_preview_start(Some("2026-10-02T12:00:00Z")).unwrap();
-        let finish = start + chrono::Duration::seconds(60);
-        let at = start + chrono::Duration::seconds(20);
+        let finish = start + ersatzrs_time::Duration::seconds(60);
+        let at = start + ersatzrs_time::Duration::seconds(20);
         let mut query: PlaybackPreviewQuery = PlaybackPreviewRequest::default().into();
         assert_eq!(
             programme_preview_time(&query, start, finish, at).unwrap(),

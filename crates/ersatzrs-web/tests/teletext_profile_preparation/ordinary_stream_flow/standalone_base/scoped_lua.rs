@@ -40,13 +40,16 @@ async fn publish_off(fixture: &Fixture) -> TeletextOverrideInterval {
     assert!(matches!(&interval.state,
         TeletextOverrideState::Off { channel_id: 1, addon_id } if addon_id == ADDON));
     assert_eq!(interval.start, start);
-    assert_eq!(interval.finish - start, chrono::Duration::seconds(8));
+    assert_eq!(interval.finish - start, ersatzrs_time::Duration::seconds(8));
     assert_eq!(result.added_items.len(), 1);
     assert_eq!(result.added_items[0].start, start);
     assert_eq!(result.added_items[0].finish, interval.finish);
     scripted_controls::publish_result(fixture, &result).await;
     let repository = SqlitePlayoutRepository(fixture.state.pool.clone());
-    for when in [start, interval.finish - chrono::Duration::milliseconds(1)] {
+    for when in [
+        start,
+        interval.finish - ersatzrs_time::Duration::milliseconds(1),
+    ] {
         assert_eq!(
             repository
                 .published_teletext_intervals_at(1, when)
@@ -121,7 +124,7 @@ async fn transition(
             .unwrap(),
         std::slice::from_ref(&interval)
     );
-    let tail = interval.finish - chrono::Duration::milliseconds(500);
+    let tail = interval.finish - ersatzrs_time::Duration::milliseconds(500);
     let remaining = tail
         .signed_duration_since(Utc::now())
         .to_std()

@@ -34,13 +34,13 @@ pub(super) enum IdlePolicy {
 }
 
 pub struct NextSession {
-    pub(super) started_at: chrono::DateTime<chrono::Utc>,
+    pub(super) started_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     number: String,
     output: PathBuf,
     deadline: Instant,
     last_access: Mutex<Instant>,
     last_access_utc_ms: AtomicI64,
-    last_playback_touch: Mutex<Option<chrono::DateTime<chrono::Utc>>>,
+    last_playback_touch: Mutex<Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>>,
     state: AtomicU8,
     admission: AtomicI32,
     started: AtomicBool,
@@ -98,7 +98,7 @@ impl NextSession {
     /// completes, including failures. The output directory must be exclusive.
     #[must_use]
     pub fn new(number: String, output: PathBuf, deadline: Instant) -> Self {
-        let started_at = chrono::Utc::now();
+        let started_at = ersatzrs_time::Utc::now();
         Self {
             started_at,
             number,
@@ -353,7 +353,7 @@ impl NextSession {
         }
     }
 
-    pub(super) fn checkpoint_time(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+    pub(super) fn checkpoint_time(&self) -> Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>> {
         *self
             .last_playback_touch
             .lock()
@@ -381,14 +381,16 @@ impl HlsSessionHandle for NextSession {
             channel_number: self.number.clone(),
             state: "next".to_owned(),
             transcoded_until: None,
-            last_access: chrono::DateTime::from_timestamp_millis(
+            last_access: ersatzrs_time::DateTime::from_timestamp_millis(
                 self.last_access_utc_ms.load(Ordering::Relaxed),
             )?,
         })
     }
     fn touch(&self) {
-        self.last_access_utc_ms
-            .store(chrono::Utc::now().timestamp_millis(), Ordering::Relaxed);
+        self.last_access_utc_ms.store(
+            ersatzrs_time::Utc::now().timestamp_millis(),
+            Ordering::Relaxed,
+        );
         *self
             .last_access
             .lock()
@@ -398,7 +400,8 @@ impl HlsSessionHandle for NextSession {
             *self
                 .last_playback_touch
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(chrono::Utc::now());
+                .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                Some(ersatzrs_time::Utc::now());
         }
     }
     fn startup_readiness(&self) -> HlsStartupReadiness {

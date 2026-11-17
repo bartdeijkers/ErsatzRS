@@ -21,7 +21,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use chrono::Utc;
 use ersatzrs_core::metadata_facets::{
     normalize_content_ratings, normalize_language_codes, preferred_facet_values, union_facet_values,
 };
@@ -33,6 +32,7 @@ use ersatzrs_infra::metadata::{
     artwork_kind, replace_artwork, replace_guids, replace_metadata_languages, replace_people,
     replace_strings, update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
+use ersatzrs_time::Utc;
 use sqlx::{Row, Transaction};
 use tracing::{info, warn};
 

@@ -246,7 +246,7 @@ impl MediaRelay {
         &self,
         binding: &super::song_background::SongBinding,
         ticket: &str,
-        now: chrono::DateTime<chrono::Utc>,
+        now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> bool {
         binding.occurrence.expires > now
             && self
@@ -275,7 +275,7 @@ impl MediaRelay {
         &self,
         binding: &super::canvas::CanvasBinding,
         ticket: &str,
-        now: chrono::DateTime<chrono::Utc>,
+        now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> bool {
         binding.expires > now
             && self

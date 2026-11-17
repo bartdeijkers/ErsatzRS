@@ -1,7 +1,6 @@
 //! Bound preserving publication before any producer can select its new future.
 
 use super::{MaintenanceError, Result};
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
     hls::HLS_WORK_AHEAD_BUFFER_SECONDS,
     scheduling::{
@@ -10,6 +9,7 @@ use ersatzrs_core::{
     },
 };
 use ersatzrs_domain::{EntityId, PlayoutScheduleKind};
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 // Native buffer admission uses whole seconds, so 60.999 seconds is admitted.
 // Next selects at at most 60 seconds ahead; an unknown-duration fallback can
@@ -138,7 +138,7 @@ fn invalid_window() -> MaintenanceError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use ersatzrs_time::TimeZone;
 
     #[tokio::test]
     async fn configured_idle_next_mirror_extends_the_recovery_reserve() {

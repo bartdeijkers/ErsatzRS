@@ -1,7 +1,7 @@
 //! Resolve authenticated Next items with version-bound preparation or scoped captions.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_time::{DateTime, Utc};
 use tokio::time::{timeout_at, Instant};
 
 use super::{dynamic_item, dynamic_projection, host::NextHost, protocol};

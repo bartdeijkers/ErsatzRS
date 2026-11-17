@@ -1732,7 +1732,7 @@ fn validate_definition(definition: &RemoteStreamDefinition) -> Result<(), Remote
         validate_duration(duration)?;
     }
     if let Some(release_date) = trimmed(definition.release_date.as_ref()) {
-        chrono::DateTime::parse_from_rfc3339(release_date).map_err(|_| {
+        ersatzrs_time::DateTime::parse_from_rfc3339(release_date).map_err(|_| {
             RemoteStreamError::Definition(
                 "release_date must be an RFC 3339 date and time".to_owned(),
             )

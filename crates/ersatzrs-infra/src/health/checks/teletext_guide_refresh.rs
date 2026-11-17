@@ -2,7 +2,6 @@
 
 use std::fmt::Write as _;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     health::{HealthCheck, HealthCheckResult, HealthCheckStatus, Result},
     repositories::{
@@ -10,6 +9,7 @@ use ersatzrs_core::{
         TeletextGuideRefreshStatus, MAX_TELETEXT_GUIDE_SOURCE_TEXT_BYTES,
     },
 };
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::Row as _;
 
 use crate::{

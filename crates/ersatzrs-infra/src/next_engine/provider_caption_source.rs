@@ -87,7 +87,7 @@ impl NextHost {
             expires: media
                 .item
                 .finish
-                .checked_add_signed(chrono::Duration::minutes(1))
+                .checked_add_signed(ersatzrs_time::Duration::minutes(1))
                 .ok_or_else(unavailable)?
                 .timestamp(),
             binding: provider_binding(&pending.subtitle, &provider).map_err(|_| unavailable())?,

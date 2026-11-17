@@ -171,7 +171,7 @@ mod native {
                 preview_channel.filter(|channel| channels.iter().any(|c| c.id == *channel));
             let preview = state
                 .application
-                .preview_teletext_element(id, preview_channel, chrono::Utc::now())
+                .preview_teletext_element(id, preview_channel, ersatzrs_time::Utc::now())
                 .await
                 .map_err(|_| ())?;
             let page = teletext_element_page(&element).map_err(|_| ())?;

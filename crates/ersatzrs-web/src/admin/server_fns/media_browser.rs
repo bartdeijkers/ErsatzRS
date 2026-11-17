@@ -1381,7 +1381,7 @@ fn season_name(season_number: i64) -> String {
 }
 
 fn short_date(value: Option<&str>) -> String {
-    use chrono::{DateTime, Datelike, NaiveDate, Utc};
+    use ersatzrs_time::{DateTime, Datelike, NaiveDate, Utc};
 
     let Some(value) = value.filter(|v| !v.trim().is_empty()) else {
         return "1-1-0001".to_string();

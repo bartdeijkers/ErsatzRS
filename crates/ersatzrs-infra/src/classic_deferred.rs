@@ -2,10 +2,10 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result, ScheduleDeferredChange};
 use ersatzrs_core::scheduling::SchedulingResult;
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Row, Transaction};
 

@@ -1,8 +1,8 @@
 //! Rebuild derived state from an accepted SQL read before indexed session startup.
 use std::{path::Path, time::Instant};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::programme::ProgrammeClock;
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{
     contract::{MAX_INDEX_BYTES, MAX_TOTAL_BYTES},

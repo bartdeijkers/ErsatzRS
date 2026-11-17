@@ -69,7 +69,6 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{
@@ -127,6 +126,7 @@ use ersatzrs_infra::transcode_capacity::{
     try_reserve_mpeg_ts_wrapper_capacity, ActiveTranscodeReservation, ActiveTranscodeSlot,
     DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
+use ersatzrs_time::{DateTime, NaiveDateTime, Timelike, Utc};
 use sqlx::Row;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(test)]
@@ -9209,7 +9209,7 @@ mod tests {
         let finish = parse_sqlite_utc_timestamp(&active.playout_finish).unwrap();
         let cursor = LegacyWrapperPlaybackCursor::new(
             active.playout_item_id,
-            start + chrono::Duration::seconds(54),
+            start + ersatzrs_time::Duration::seconds(54),
             start,
             finish,
             Duration::from_secs(6),
@@ -10129,7 +10129,8 @@ mod tests {
                 "hls",
                 ersatzrs_infra::transcode_capacity::ActiveTranscodeKind::HlsWorkAhead,
                 Arc::new(std::sync::atomic::AtomicI64::new(
-                    (chrono::Utc::now() - chrono::Duration::seconds(10)).timestamp_millis(),
+                    (ersatzrs_time::Utc::now() - ersatzrs_time::Duration::seconds(10))
+                        .timestamp_millis(),
                 )),
                 ersatzrs_infra::transcode_capacity::ActiveTranscodeReclaimHandle::new(
                     Arc::clone(&notify),

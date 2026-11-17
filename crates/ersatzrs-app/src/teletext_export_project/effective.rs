@@ -6,7 +6,7 @@
 //! import retains its saved scope under a fresh operation deadline; publication
 //! additionally requires the current effective scope to remain eligible.
 
-use chrono::{DateTime, FixedOffset};
+use ersatzrs_time::{DateTime, FixedOffset};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 

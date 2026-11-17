@@ -248,12 +248,12 @@ async fn dynamic(
 ) {
     let parts = binding.split('/').collect::<Vec<_>>();
     assert_eq!(parts.len(), 4);
-    let now = chrono::DateTime::parse_from_rfc3339(one(headers, "x-etv-now"))
+    let now = ersatzrs_time::DateTime::parse_from_rfc3339(one(headers, "x-etv-now"))
         .unwrap()
-        .with_timezone(&chrono::Utc);
-    let until = chrono::DateTime::parse_from_rfc3339(one(headers, "x-etv-until"))
+        .with_timezone(&ersatzrs_time::Utc);
+    let until = ersatzrs_time::DateTime::parse_from_rfc3339(one(headers, "x-etv-until"))
         .unwrap()
-        .with_timezone(&chrono::Utc);
+        .with_timezone(&ersatzrs_time::Utc);
     let item = host
         .resolve_dynamic(
             parts[0].parse().unwrap(),

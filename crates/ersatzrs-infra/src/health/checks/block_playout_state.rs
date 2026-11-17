@@ -24,7 +24,7 @@ struct Anchor {
     #[serde(default, alias = "cooldown")]
     smart_shuffle: SchedulingSmartShuffleState,
     #[serde(default)]
-    history_start: Option<chrono::DateTime<chrono::Utc>>,
+    history_start: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
 }
 
 fn ready(start: &str, context: Option<&str>, details: Option<&str>) -> bool {

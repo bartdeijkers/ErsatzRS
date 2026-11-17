@@ -3,12 +3,12 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     path_replacement::{replace_path, PathPlatform, PathReplacement},
     repositories::{MediaSourceRepository as _, RemoteMediaSourceKind},
 };
 use ersatzrs_domain::MediaVersion;
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::Row;
 use tokio::{sync::oneshot, time::Instant};
 

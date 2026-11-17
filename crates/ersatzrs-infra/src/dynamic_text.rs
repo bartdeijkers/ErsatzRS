@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use ersatzrs_time::{DateTime, SecondsFormat, Utc};
 use minijinja::{Environment, UndefinedBehavior};
 use serde_json::{json, Map, Number, Value};
 use tokio::sync::oneshot;
@@ -186,7 +186,7 @@ impl DynamicTextController {
                     _ = interval.tick() => {
                         let elapsed = playback_offset_seconds + started_at.elapsed().as_secs_f64();
                         let now = broadcast_start_time
-                            .and_then(|start| chrono::Duration::from_std(started_at.elapsed()).ok().and_then(|elapsed| start.checked_add_signed(elapsed)))
+                            .and_then(|start| ersatzrs_time::Duration::from_std(started_at.elapsed()).ok().and_then(|elapsed| start.checked_add_signed(elapsed)))
                             .unwrap_or_else(Utc::now);
                         if let Some(refresh) = &metadata_refresh {
                             if Instant::now() >= next_metadata_refresh {
@@ -383,7 +383,7 @@ fn atomic_replace_if_changed(path: &Path, bytes: &[u8]) -> Result<bool, DynamicT
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Datelike as _, TimeZone as _};
+    use ersatzrs_time::{Datelike as _, TimeZone as _};
     use serde_json::json;
 
     use super::*;

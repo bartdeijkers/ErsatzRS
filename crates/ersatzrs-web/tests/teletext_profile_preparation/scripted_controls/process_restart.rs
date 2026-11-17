@@ -6,7 +6,6 @@ use super::{
     assert_no_publication_or_invocation, build, continue_after_reopen::Configuration,
     publish_result, seed_publication_inputs, Fixture, ADDON,
 };
-use chrono::{DateTime, Duration, TimeZone as _, Utc};
 use ersatzrs_core::{
     repositories::PlayoutRepository as _,
     scheduling::{
@@ -19,6 +18,7 @@ use ersatzrs_domain::{
     TeletextProfileValue,
 };
 use ersatzrs_infra::repositories::{SqlitePlayoutRepository, SqliteSchedulingContentRepository};
+use ersatzrs_time::{DateTime, Duration, TimeZone as _, Utc};
 use ersatzrs_web::host::state::AppState;
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, path::Path, sync::Arc};

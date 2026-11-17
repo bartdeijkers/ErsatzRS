@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{Channel, EntityId};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::Result;

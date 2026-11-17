@@ -37,7 +37,7 @@ async fn scan_fixture() -> (crate::host::state::AppState, tempfile::TempDir) {
     .execute(&state.pool)
     .await
     .unwrap();
-    let now = chrono::Utc::now();
+    let now = ersatzrs_time::Utc::now();
     for id in 1..=3 {
         state
             .repositories
@@ -47,8 +47,8 @@ async fn scan_fixture() -> (crate::host::state::AppState, tempfile::TempDir) {
                 playout_id: id,
                 media_item_id: if id == 3 { 11 } else { 10 },
                 start: now,
-                finish: now + chrono::Duration::minutes(1),
-                out_point: chrono::Duration::minutes(1),
+                finish: now + ersatzrs_time::Duration::minutes(1),
+                out_point: ersatzrs_time::Duration::minutes(1),
                 ..Default::default()
             })
             .await
@@ -71,8 +71,8 @@ async fn row292_successful_scan_notifies_only_next_dependents_and_mirrors() {
             workers.push(worker);
         }
     }
-    let start = chrono::Utc::now() - chrono::Duration::hours(1);
-    let finish = start + chrono::Duration::hours(2);
+    let start = ersatzrs_time::Utc::now() - ersatzrs_time::Duration::hours(1);
+    let finish = start + ersatzrs_time::Duration::hours(2);
     let before = state
         .repositories
         .playout

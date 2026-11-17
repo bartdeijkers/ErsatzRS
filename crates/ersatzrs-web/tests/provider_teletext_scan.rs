@@ -1,7 +1,6 @@
 //! Real host-managed provider scan must bind native source teletext independently.
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
 use ersatzrs_app::ScanRuntime;
 use ersatzrs_core::repositories::{ManagedLibraryOperationRepository, ManagedLibraryScanSpec};
 use ersatzrs_domain::{
@@ -11,6 +10,7 @@ use ersatzrs_domain::{
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, LocalMediaProbe, LocalProbeCleanupScope};
 use ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository;
 use ersatzrs_infra::teletext_source;
+use ersatzrs_time::Utc;
 use ersatzrs_web::host::scanning::NativeScanRuntime;
 use sha2::{Digest as _, Sha256};
 use sqlx::SqlitePool;

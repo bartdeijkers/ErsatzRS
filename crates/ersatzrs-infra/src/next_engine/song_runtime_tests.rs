@@ -183,17 +183,18 @@ async fn run(silent: bool) {
         .upsert(&channel)
         .await
         .unwrap();
-    let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
-    let second_start = start + chrono::Duration::seconds(6);
-    let finish = second_start + chrono::Duration::seconds(2);
+    let start =
+        ersatzrs_time::DateTime::from_timestamp(ersatzrs_time::Utc::now().timestamp(), 0).unwrap();
+    let second_start = start + ersatzrs_time::Duration::seconds(6);
+    let finish = second_start + ersatzrs_time::Duration::seconds(2);
     let item = PlayoutItem {
         id: 1,
         playout_id: 1,
         media_item_id: 10,
         start,
         finish: second_start,
-        in_point: chrono::Duration::seconds(6),
-        out_point: chrono::Duration::seconds(12),
+        in_point: ersatzrs_time::Duration::seconds(6),
+        out_point: ersatzrs_time::Duration::seconds(12),
         ..Default::default()
     };
     crate::repositories::make_repositories(pool.clone())
@@ -401,8 +402,8 @@ async fn run(silent: bool) {
 async fn video_handoff(
     ffmpeg: &Path,
     root: &Path,
-    start: chrono::DateTime<chrono::Utc>,
-    finish: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> wire::PlayoutItem {
     let path = root.join("handoff.mkv");
     let mut command = Command::new(ffmpeg);
@@ -448,7 +449,7 @@ async fn video_handoff(
         media_item_id: 10,
         start,
         finish,
-        out_point: chrono::Duration::seconds(2),
+        out_point: ersatzrs_time::Duration::seconds(2),
         ..Default::default()
     };
     selection::project_item(

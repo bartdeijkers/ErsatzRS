@@ -487,11 +487,11 @@ mod unix {
     ) {
         sqlx::query(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (?, ?, 30, 1)"#)
             .bind(channel_id).bind(channel_id).execute(&fixture.pool).await.unwrap();
-        let now = chrono::Utc::now();
+        let now = ersatzrs_time::Utc::now();
         sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State", "CandidateSnapshot") VALUES (?, ?, ?, ?, ?, ?)"#)
             .bind(channel_id).bind(&fixture.manifest.id)
-            .bind(crate::repositories::common::encode_datetime(now - chrono::Duration::minutes(1)))
-            .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::minutes(10)))
+            .bind(crate::repositories::common::encode_datetime(now - ersatzrs_time::Duration::minutes(1)))
+            .bind(crate::repositories::common::encode_datetime(now + ersatzrs_time::Duration::minutes(10)))
             .bind(i32::from(candidate.is_some())).bind(candidate.map(effective_candidate_json))
             .execute(&fixture.pool).await.unwrap();
     }
@@ -502,7 +502,7 @@ mod unix {
     ) -> Arc<TeletextEffectiveChannelSelectionSnapshot> {
         Arc::new(saved(
             crate::repositories::SqliteTeletextProfileRepository(fixture.pool.clone())
-                .effective_channel_snapshot(channel, chrono::Utc::now())
+                .effective_channel_snapshot(channel, ersatzrs_time::Utc::now())
                 .await
                 .unwrap(),
         ))
@@ -637,7 +637,7 @@ mod unix {
                         r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=? WHERE "PlayoutId"=1"#,
                     )
                     .bind(crate::repositories::common::encode_datetime(
-                        chrono::Utc::now() + chrono::Duration::minutes(1),
+                        ersatzrs_time::Utc::now() + ersatzrs_time::Duration::minutes(1),
                     ))
                     .execute(&fixture.pool)
                     .await
@@ -791,7 +791,7 @@ mod unix {
                     install_effective_interval(&fixture, 1, None).await;
                     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Start" = ?"#)
                         .bind(crate::repositories::common::encode_datetime(
-                            chrono::Utc::now() + chrono::Duration::minutes(1),
+                            ersatzrs_time::Utc::now() + ersatzrs_time::Duration::minutes(1),
                         ))
                         .execute(&fixture.pool)
                         .await
@@ -812,10 +812,10 @@ mod unix {
             .execute(&fixture.pool).await.unwrap().last_insert_rowid();
         sqlx::query(r#"INSERT INTO "ChannelTeletextBinding" ("ChannelId", "AddonId", "ProfileId", "Enabled", "Revision") VALUES (1, 'org.example.other-off', ?, 0, 1)"#)
             .bind(profile).execute(&fixture.pool).await.unwrap();
-        let now = chrono::Utc::now();
+        let now = ersatzrs_time::Utc::now();
         sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State") VALUES (1, 'org.example.other-off', ?, ?, 0)"#)
-            .bind(crate::repositories::common::encode_datetime(now - chrono::Duration::minutes(1)))
-            .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::minutes(20)))
+            .bind(crate::repositories::common::encode_datetime(now - ersatzrs_time::Duration::minutes(1)))
+            .bind(crate::repositories::common::encode_datetime(now + ersatzrs_time::Duration::minutes(20)))
             .execute(&fixture.pool).await.unwrap();
     }
 
@@ -825,7 +825,7 @@ mod unix {
         let _ = fixture.profile_selections(false).await;
         let selection = effective_snapshot(&fixture, 1).await;
         let mut expired = (*selection).clone();
-        expired.valid_until = Some(chrono::Utc::now());
+        expired.valid_until = Some(ersatzrs_time::Utc::now());
         assert!(matches!(
             effective_fence(
                 &expired,
@@ -834,7 +834,8 @@ mod unix {
             Err(TeletextInvocationError::TimedOut)
         ));
         let mut short = (*selection).clone();
-        short.valid_until = Some(chrono::Utc::now() + chrono::Duration::milliseconds(100));
+        short.valid_until =
+            Some(ersatzrs_time::Utc::now() + ersatzrs_time::Duration::milliseconds(100));
         let original = std::time::Instant::now() + Duration::from_millis(20);
         assert!(effective_fence(&short, original).unwrap().deadline <= Instant::from_std(original));
         let horizon =

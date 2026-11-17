@@ -287,20 +287,21 @@ fn dynamic_headers(
 ) -> Option<(
     &str,
     uuid::Uuid,
-    chrono::DateTime<chrono::Utc>,
-    chrono::DateTime<chrono::Utc>,
+    ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 )> {
     if headers.get_all("x-etv-until").iter().count() != 1 {
         return None;
     }
     let number = headers.get("x-etv-channel")?.to_str().ok()?;
     let instance = uuid::Uuid::parse_str(headers.get(SESSION_HEADER)?.to_str().ok()?).ok()?;
-    let now = chrono::DateTime::parse_from_rfc3339(headers.get("x-etv-now")?.to_str().ok()?)
+    let now = ersatzrs_time::DateTime::parse_from_rfc3339(headers.get("x-etv-now")?.to_str().ok()?)
         .ok()?
-        .with_timezone(&chrono::Utc);
-    let until = chrono::DateTime::parse_from_rfc3339(headers.get("x-etv-until")?.to_str().ok()?)
-        .ok()?
-        .with_timezone(&chrono::Utc);
+        .with_timezone(&ersatzrs_time::Utc);
+    let until =
+        ersatzrs_time::DateTime::parse_from_rfc3339(headers.get("x-etv-until")?.to_str().ok()?)
+            .ok()?
+            .with_timezone(&ersatzrs_time::Utc);
     (until > now).then_some((number, instance, now, until))
 }
 

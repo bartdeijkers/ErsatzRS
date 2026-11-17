@@ -106,7 +106,7 @@ pub(super) async fn publish_fixture(pool: &crate::db::DbPool, clip: &Path) {
             1,
             1,
             0,
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
             &[],
             &AddonMediaListRevisionArtifacts {
                 ids: vec![1],

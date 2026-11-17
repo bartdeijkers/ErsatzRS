@@ -46,8 +46,8 @@ async fn playback(fixture: &Fixture) -> Playback {
                 .playout
                 .items_in_range(
                     id,
-                    now - chrono::Duration::days(1),
-                    now + chrono::Duration::days(1),
+                    now - ersatzrs_time::Duration::days(1),
+                    now + ersatzrs_time::Duration::days(1),
                 )
                 .await
                 .unwrap(),

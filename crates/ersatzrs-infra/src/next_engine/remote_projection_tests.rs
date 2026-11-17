@@ -68,7 +68,7 @@ async fn live_transport_has_no_seek_and_stream_metadata_changes_identity() {
             channel.id,
             1,
             start,
-            start + chrono::Duration::seconds(60),
+            start + ersatzrs_time::Duration::seconds(60),
             Some(2),
         )
         .await
@@ -109,7 +109,7 @@ async fn live_transport_has_no_seek_and_stream_metadata_changes_identity() {
             channel.id,
             1,
             start,
-            start + chrono::Duration::seconds(60),
+            start + ersatzrs_time::Duration::seconds(60),
             Some(2),
         )
         .await
@@ -159,8 +159,8 @@ async fn projected_song_uses_bound_remote_owner_and_refuses_detached_version() {
             playout_id: 1,
             media_item_id: 11,
             start,
-            finish: start + chrono::Duration::seconds(60),
-            out_point: chrono::Duration::seconds(60),
+            finish: start + ersatzrs_time::Duration::seconds(60),
+            out_point: ersatzrs_time::Duration::seconds(60),
             ..Default::default()
         },
     )
@@ -222,7 +222,7 @@ async fn callback_snapshot_preserves_audio_and_releases_schedule_lock() {
         channel.id,
         1,
         start,
-        start + chrono::Duration::seconds(60),
+        start + ersatzrs_time::Duration::seconds(60),
         Some(2),
     )
     .await
@@ -246,7 +246,7 @@ async fn callback_snapshot_preserves_audio_and_releases_schedule_lock() {
         channel.id,
         1,
         start,
-        start + chrono::Duration::seconds(60),
+        start + ersatzrs_time::Duration::seconds(60),
         Some(2),
     )
     .await
@@ -262,7 +262,7 @@ async fn callback_snapshot_preserves_audio_and_releases_schedule_lock() {
         channel.id,
         1,
         start,
-        start + chrono::Duration::seconds(60),
+        start + ersatzrs_time::Duration::seconds(60),
         Some(2),
     )
     .await
@@ -284,7 +284,7 @@ async fn callback_refuses_unknown_source_liveness_and_raw_scripts() {
             channel.id,
             1,
             start,
-            start + chrono::Duration::seconds(60),
+            start + ersatzrs_time::Duration::seconds(60),
             Some(2)
         )
         .await
@@ -301,7 +301,7 @@ async fn live_subtitle_guard_preserves_images_and_distinguishes_text_limitations
         channel.id,
         1,
         start,
-        start + chrono::Duration::seconds(60),
+        start + ersatzrs_time::Duration::seconds(60),
         Some(2),
     )
     .await

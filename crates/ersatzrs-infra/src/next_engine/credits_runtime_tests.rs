@@ -27,9 +27,9 @@ pub(super) async fn configure_credits(pool: &crate::db::DbPool, convert: bool) {
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::seconds(5);
-    item.out_point = chrono::Duration::seconds(55);
-    item.finish = item.start + chrono::Duration::seconds(50);
+    item.in_point = ersatzrs_time::Duration::seconds(5);
+    item.out_point = ersatzrs_time::Duration::seconds(55);
+    item.finish = item.start + ersatzrs_time::Duration::seconds(50);
     crate::repositories::make_repositories(pool.clone())
         .playout
         .upsert_item(&item)

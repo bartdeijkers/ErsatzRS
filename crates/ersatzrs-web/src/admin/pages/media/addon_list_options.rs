@@ -172,7 +172,7 @@ pub fn editor_view(editor: crate::admin::server_fns::addon_list_options::OptionE
 #[cfg(feature = "ssr")]
 pub(crate) fn access_next_attempt(
     status: &ersatzrs_app::ports::AddonItemAccessRead,
-) -> Option<chrono::DateTime<chrono::Utc>> {
+) -> Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>> {
     use ersatzrs_app::ports::AddonItemAccessState as State;
     matches!(status.state, State::Queued | State::Waiting)
         .then_some(status.next_eligible_at)
@@ -529,9 +529,9 @@ mod tests {
     #[test]
     fn access_active_native_form_has_owned_cancel_and_retry_time() {
         use ersatzrs_app::ports::{AddonItemAccessRead, AddonItemAccessState};
-        let now = chrono::DateTime::parse_from_rfc3339("2026-09-06T12:00:00Z")
+        let now = ersatzrs_time::DateTime::parse_from_rfc3339("2026-09-06T12:00:00Z")
             .unwrap()
-            .with_timezone(&chrono::Utc);
+            .with_timezone(&ersatzrs_time::Utc);
         let status = AddonItemAccessRead {
             job_id: 42,
             state: AddonItemAccessState::Waiting,
@@ -557,9 +557,9 @@ mod tests {
     #[test]
     fn finished_access_checks_never_announce_a_next_attempt() {
         use ersatzrs_app::ports::{AddonItemAccessRead, AddonItemAccessState as State};
-        let retained = chrono::DateTime::parse_from_rfc3339("2026-09-18T07:00:58Z")
+        let retained = ersatzrs_time::DateTime::parse_from_rfc3339("2026-09-18T07:00:58Z")
             .unwrap()
-            .with_timezone(&chrono::Utc);
+            .with_timezone(&ersatzrs_time::Utc);
         for state in [
             State::Complete,
             State::Failed,

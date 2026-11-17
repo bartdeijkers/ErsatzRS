@@ -4,7 +4,6 @@ use crate::{
     db::{Db, DbPool},
     repositories::{common::encode_datetime, SqlxResultExt as _},
 };
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_addon_contract::{
     validate_tool_version, AddonCapability, AddonMediaListOptionValues,
     MediaListAccessCheckOutcome, MediaListAccessCheckRequest, MAX_MEDIA_LIST_IMPORT_REQUEST_BYTES,
@@ -12,6 +11,7 @@ use ersatzrs_addon_contract::{
 use ersatzrs_core::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan;
 use ersatzrs_core::repositories::{AddonMediaListOptionSchemaRef, RepositoryError, Result};
 use ersatzrs_domain::RemoteStreamLiveness;
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use sqlx::Row;

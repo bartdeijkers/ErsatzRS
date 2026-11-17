@@ -58,7 +58,7 @@ class DomainSelection(unittest.TestCase):
                     self.assertIn("watermark-preview", selection["general_specs"])
                 self.assertTrue(domains.select([path], added_paths=[path])["everything"])
         for path in ("crates/ersatzrs-domain/src/lib.rs", "crates/ersatzrs-core/src/locking.rs",
-                     "crates/ersatzrs-core/src/teletext/deleted.rs",
+                     "crates/ersatzrs-core/src/teletext/deleted.rs", "crates/ersatzrs-time/src/lib.rs",
                      ".github/workflows/ci-fast.yml", ".github/workflows/full-verification.yml"):
             self.assertTrue(domains.select([path])["everything"])
         mixed = domains.select(["crates/ersatzrs-core/src/repositories/watermark.rs", "Cargo.lock"])

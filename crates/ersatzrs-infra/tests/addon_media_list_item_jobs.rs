@@ -2,11 +2,11 @@ mod common;
 
 use std::fmt::Write as _;
 
-use chrono::Duration;
 use ersatzrs_addon_contract::{AddonCapability, MediaListAccessCheckOutcome};
 use ersatzrs_infra::{
     addon_media_list_item_jobs::*, addon_media_list_options::load_draft_item_options,
 };
+use ersatzrs_time::Duration;
 use sha2::{Digest as _, Sha256};
 use sqlx::Executor as _;
 
@@ -64,7 +64,7 @@ async fn fixture() -> (
     (pool.clone(), AddonMediaListItemJobQueue::new(pool), input)
 }
 
-fn success(now: chrono::DateTime<chrono::Utc>) -> ItemOperationCompletion {
+fn success(now: ersatzrs_time::DateTime<ersatzrs_time::Utc>) -> ItemOperationCompletion {
     ItemOperationCompletion::Access {
         outcome: MediaListAccessCheckOutcome::Accessible,
         expires_at: now + Duration::minutes(10),

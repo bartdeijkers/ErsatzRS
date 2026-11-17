@@ -179,10 +179,10 @@ async fn pin_provider_choice(
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::zero();
-    item.out_point = chrono::Duration::seconds(if convert { 55 } else { 60 });
+    item.in_point = ersatzrs_time::Duration::zero();
+    item.out_point = ersatzrs_time::Duration::seconds(if convert { 55 } else { 60 });
     if convert {
-        item.in_point = chrono::Duration::seconds(5);
+        item.in_point = ersatzrs_time::Duration::seconds(5);
         sqlx::query(r#"UPDATE "Channel" SET "NextEngineTextSubtitleMode"=1 WHERE "Id"=1"#)
             .execute(pool)
             .await

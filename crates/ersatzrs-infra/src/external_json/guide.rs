@@ -1,12 +1,12 @@
 //! RefreshChannelDataHandler.CollectExternalJsonItems guide projection.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
     programme::ProgrammeGuideItem,
     repositories::ArtworkReference,
     xmltv::{IconSizeHint, XmltvGuideItem, XmltvItemKind, XmltvProgrammeContent},
 };
 use ersatzrs_domain::{ArtworkKind, FillerKind};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Row;
 
 use crate::{db::DbPool, repositories::common::try_decode_signed_duration_text};

@@ -149,8 +149,8 @@ async fn interval(
     let now = Utc::now();
     sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId","AddonId","Start","Finish","State","CandidateSnapshot") VALUES (?,?,?,?,?,?)"#)
         .bind(200 + channel).bind(addon)
-        .bind(crate::repositories::common::encode_datetime(now - chrono::Duration::minutes(1)))
-        .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::minutes(10)))
+        .bind(crate::repositories::common::encode_datetime(now - ersatzrs_time::Duration::minutes(1)))
+        .bind(crate::repositories::common::encode_datetime(now + ersatzrs_time::Duration::minutes(10)))
         .bind(i32::from(candidate.is_some())).bind(candidate.map(candidate_bytes))
         .execute(&base.repo.0).await.unwrap();
 }
@@ -611,7 +611,7 @@ async fn scope_and_profile_drift_or_original_expiry_never_fall_back_to_base_or_r
 #[tokio::test]
 async fn original_half_open_expiry_remains_a_fence_for_retained_accepted_metadata() {
     let mut fixture = Fixture::new(false).await;
-    let finish = Utc::now() + chrono::Duration::seconds(1);
+    let finish = Utc::now() + ersatzrs_time::Duration::seconds(1);
     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=?"#)
         .bind(crate::repositories::common::encode_datetime(finish))
         .execute(&fixture.base.repo.0)
@@ -974,7 +974,7 @@ async fn change_valid_scope(fixture: &Fixture, mode: u8) {
         0 => {
             sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=?"#)
                 .bind(crate::repositories::common::encode_datetime(
-                    Utc::now() + chrono::Duration::minutes(15),
+                    Utc::now() + ersatzrs_time::Duration::minutes(15),
                 ))
                 .execute(&fixture.base.repo.0)
                 .await
@@ -1170,7 +1170,7 @@ async fn original_scope_streaming_comparison_rejects_loss_duplicates_and_wrong_s
         test_scope(scope)
     );
     assert!(!matches(duplicate.as_bytes(), scope));
-    let offset = chrono::FixedOffset::east_opt(3600).unwrap();
+    let offset = ersatzrs_time::FixedOffset::east_opt(3600).unwrap();
     let mut alias = original.clone();
     alias["effective_selection"]["valid_until"] =
         serde_json::json!(scope.valid_until.unwrap().with_timezone(&offset));
@@ -1274,7 +1274,7 @@ async fn published_effective_host_membership_survives_link_edits_but_new_publica
             // Host-only comparison must not change exact Lua origins or their expiry.
             sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=? WHERE "AddonId"=?"#)
                 .bind(crate::repositories::common::encode_datetime(
-                    Utc::now() + chrono::Duration::minutes(9),
+                    Utc::now() + ersatzrs_time::Duration::minutes(9),
                 ))
                 .bind(FIRST)
                 .execute(&fixture.base.repo.0)

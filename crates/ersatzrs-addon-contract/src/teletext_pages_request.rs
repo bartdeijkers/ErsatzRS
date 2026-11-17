@@ -8,7 +8,7 @@
 
 use std::io::{self, Write};
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::MAX_TELETEXT_PAGES_GENERATION_BYTES;
@@ -266,11 +266,11 @@ where
     Option::<T>::deserialize(deserializer)
 }
 
-// Chrono's optional serde feature is not needed: use explicit RFC3339 instants,
+// Use an explicit four-digit UTC RFC3339 boundary to
 // normalize supplied offsets to UTC, and preserve subsecond precision. Both
 // directions require a four-digit UTC year so successful output parses back.
 mod utc_instant {
-    use chrono::{DateTime, Datelike, SecondsFormat, Utc};
+    use ersatzrs_time::{DateTime, Datelike, SecondsFormat, Utc};
     use serde::{de::Error as _, ser::Error as _, Deserialize, Deserializer, Serializer};
 
     pub(super) fn serialize<S>(instant: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>

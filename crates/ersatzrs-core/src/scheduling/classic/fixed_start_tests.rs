@@ -1,5 +1,5 @@
-use chrono::{NaiveDate, TimeZone};
 use ersatzrs_domain::{Playout, PlayoutMode, PlayoutScheduleKind};
+use ersatzrs_time::{NaiveDate, TimeZone};
 
 use super::*;
 

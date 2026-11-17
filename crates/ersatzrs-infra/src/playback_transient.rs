@@ -8,9 +8,9 @@ use super::{
     PlaybackAudioStream, PlaybackSubtitle, StreamSelector, SubtitleSelectionEngine,
 };
 use crate::{db::DbPool, ffmpeg_config::use_embedded_subtitles, metadata::subtitle_kind};
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::Result;
 use ersatzrs_domain::{Channel, ChannelSubtitleMode, MediaStream, MediaStreamKind, StreamingMode};
+use ersatzrs_time::{DateTime, Utc};
 
 /// Eligibility rules for the selected playback engine and source kind.
 #[derive(Clone, Copy)]
@@ -191,7 +191,7 @@ pub(super) fn subtitle_is_playable(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone as _;
+    use ersatzrs_time::TimeZone as _;
 
     fn tracks() -> TransientPlaybackTracks {
         TransientPlaybackTracks::from_streams(&[

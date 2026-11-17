@@ -78,8 +78,8 @@ release section when tagging a release.
 
 ### Changed
 
-- Use Jiff for developer-tool timestamps and bind application-owned SQLite
-  dates explicitly, preserving existing stored formats without the SQLx chrono feature.
+- Replace chrono with Jiff for application clocks and elapsed time. Existing
+  database dates, schedules and add-on time formats remain readable.
 
 - Publish the qualified session/cache-capable Next runtime with exact source,
   provenance and checksums; verify anonymous Linux/Windows acquisition and

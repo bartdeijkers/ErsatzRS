@@ -72,7 +72,7 @@ async fn install_producer(pool: &crate::db::DbPool, root: &Path) -> String {
                 schema_digest: digest.clone(),
             },
             definition_json,
-            created_at: chrono::Utc::now(),
+            created_at: ersatzrs_time::Utc::now(),
         })
         .await
         .unwrap();
@@ -115,7 +115,7 @@ pub(super) async fn publish_retained(
             1,
             2,
             0,
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
             &files,
             &AddonMediaListRevisionArtifacts {
                 ids: vec![2],
@@ -129,8 +129,8 @@ pub(super) async fn publish_retained(
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::seconds(8);
-    item.out_point = chrono::Duration::seconds(24);
+    item.in_point = ersatzrs_time::Duration::seconds(8);
+    item.out_point = ersatzrs_time::Duration::seconds(24);
     item.finish = item.start + item.out_point - item.in_point;
     crate::repositories::make_repositories(pool.clone())
         .playout

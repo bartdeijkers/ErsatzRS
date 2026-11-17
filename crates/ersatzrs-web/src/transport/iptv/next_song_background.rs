@@ -56,7 +56,7 @@ async fn serve(
     };
     if !host
         .media
-        .authorized_song(&binding, ticket, chrono::Utc::now())
+        .authorized_song(&binding, ticket, ersatzrs_time::Utc::now())
     {
         return StatusCode::UNAUTHORIZED.into_response();
     }
@@ -125,7 +125,7 @@ mod tests {
     }
 
     fn binding() -> SongBinding {
-        let start = chrono::Utc::now();
+        let start = ersatzrs_time::Utc::now();
         SongBinding {
             occurrence: CanvasBinding {
                 session: Some(uuid::Uuid::new_v4()),
@@ -138,10 +138,10 @@ mod tests {
                 version: 4,
                 file: 5,
                 start,
-                finish: start + chrono::TimeDelta::seconds(30),
+                finish: start + ersatzrs_time::TimeDelta::seconds(30),
                 in_point_ms: 0,
                 out_point_ms: 30_000,
-                expires: start + chrono::TimeDelta::minutes(5),
+                expires: start + ersatzrs_time::TimeDelta::minutes(5),
             },
             width: 320,
             height: 180,

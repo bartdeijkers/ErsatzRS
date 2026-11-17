@@ -7,9 +7,9 @@ use crate::{
     external_json::snapshot::{checked_accepted_on, AcceptedSnapshotBudget},
     xmltv_read::{GuideReadBudget, Read},
 };
-use chrono::Duration;
 use ersatzrs_core::{programme::ProgrammeGuideItem, xmltv::XmltvGuideItem};
 use ersatzrs_domain::{FillerKind, PlayoutScheduleKind};
+use ersatzrs_time::Duration;
 use sqlx::Row;
 
 const ITEM_SQL: &str = r#"SELECT

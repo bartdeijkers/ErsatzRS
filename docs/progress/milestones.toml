@@ -42691,6 +42691,17 @@ civil-time prototype preserves extreme wire years, offset normalization, leap
 seconds and nanoseconds. It is a feasibility check, separate from integrated
 wire acceptance. Receipts are under row296-runtime-publication/ci/.
 
+The source migration is implemented across the workspace. ADR 0138 records
+the shared Jiff-backed UTC, civil and signed elapsed types, the retained
+wire/SQLite bytes and the add-on source packaging boundary. The resolved
+all-feature, all-target graph contains no chrono dependency. Cargo deny
+passes unchanged. A differential comparison with the former date library
+passes for civil, offset, fractional and elapsed time cases. Local native
+workspace all-target type checking, time-crate Clippy, architecture lint
+and 43 CI domain-selection cases pass. Retain the migration receipts under
+row296-runtime-publication/ci/. Complete the affected runtime and matched
+web evidence, then apply the unchanged full CI and ordered delivery gates.
+
 Historical full CI44128505670 and corrected PR CI44129875773 are terminal.
 The corrected PR passed commit lint, Clippy, main Rust tests, Level 1.5 and both
 selected Chromium suites. Cargo deny and Next engine failed. Retain original

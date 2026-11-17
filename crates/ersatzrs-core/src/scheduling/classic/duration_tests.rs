@@ -1,8 +1,8 @@
 //! Duration-discard contracts from upstream e51ac60c (UCU-16 row287).
 use super::tests::{filler_preset, schedule_item};
 use super::*;
-use chrono::TimeZone;
 use ersatzrs_domain::{Playout, PlayoutMode, PlayoutScheduleKind};
+use ersatzrs_time::TimeZone;
 
 fn request(durations: &[i64], attempts: i32, tail_mode: TailMode) -> SchedulingRequest {
     let duration = ProgramScheduleItem {

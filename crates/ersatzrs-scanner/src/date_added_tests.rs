@@ -1,6 +1,6 @@
 //! Persisted row290 oracle: an ordinary local scan repairs an unset date only.
 
-use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
+use ersatzrs_time::{DateTime, NaiveDateTime, Timelike, Utc};
 use sqlx::{Executor, Row};
 
 struct Fixture {
@@ -408,7 +408,7 @@ async fn row290_stale_or_wrong_library_claim_cannot_repair_dates() {
             .is_err()
     );
     let replacement = repository
-        .claim_next(Utc::now() + chrono::Duration::seconds(91))
+        .claim_next(Utc::now() + ersatzrs_time::Duration::seconds(91))
         .await
         .unwrap()
         .unwrap();

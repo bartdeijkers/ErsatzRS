@@ -62,9 +62,9 @@ async fn configure(pool: &crate::db::DbPool, off: bool) {
         let mut item = selection::tests::item();
         item.id = 1;
         item.playout_id = 1;
-        item.in_point = chrono::Duration::seconds(6);
-        item.out_point = chrono::Duration::seconds(30);
-        item.finish = item.start + chrono::Duration::seconds(24);
+        item.in_point = ersatzrs_time::Duration::seconds(6);
+        item.out_point = ersatzrs_time::Duration::seconds(30);
+        item.finish = item.start + ersatzrs_time::Duration::seconds(24);
         item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
             media_version_id: 100,
             video_stream_index: 0,

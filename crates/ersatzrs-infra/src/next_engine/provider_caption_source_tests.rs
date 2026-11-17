@@ -26,7 +26,7 @@ impl ProviderFixture {
             audio: Some(2),
             number: &self.request.number,
             instance: self.instance,
-            now: grant.start + chrono::Duration::seconds(1),
+            now: grant.start + ersatzrs_time::Duration::seconds(1),
             until: grant.finish,
         }
     }
@@ -435,7 +435,7 @@ async fn repeated_grant(f: &ProviderFixture) -> Grant {
         .decode_caption(&f.inner.encoded, &f.inner.signature)
         .unwrap();
     let start = first.finish;
-    let finish = start + chrono::Duration::minutes(1);
+    let finish = start + ersatzrs_time::Duration::minutes(1);
     let snapshot = Box::pin(f.inner.host.project_session_snapshot(
         &f.request().await,
         f.instance,

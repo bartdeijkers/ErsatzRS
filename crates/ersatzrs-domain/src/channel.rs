@@ -1,4 +1,4 @@
-use chrono::Duration;
+use ersatzrs_time::Duration;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

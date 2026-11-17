@@ -142,9 +142,9 @@ async fn set_case(fixture: &Fixture, mode: i64, out_ms: i64) {
     item.id = 1;
     item.playout_id = 1;
     item.start = fixture.start;
-    item.finish = item.start + chrono::Duration::seconds(20);
-    item.in_point = chrono::Duration::zero();
-    item.out_point = chrono::Duration::milliseconds(out_ms);
+    item.finish = item.start + ersatzrs_time::Duration::seconds(20);
+    item.in_point = ersatzrs_time::Duration::zero();
+    item.out_point = ersatzrs_time::Duration::milliseconds(out_ms);
     crate::repositories::make_repositories(fixture.pool.clone())
         .playout
         .upsert_item(&item)

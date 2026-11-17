@@ -177,7 +177,7 @@ async fn retained_source_with_format(
     source
 }
 
-async fn next_schedule(state: &AppState, item: i64) -> chrono::DateTime<Utc> {
+async fn next_schedule(state: &AppState, item: i64) -> ersatzrs_time::DateTime<Utc> {
     let mut channel = state.repositories.channel.get_by_number("1").await.unwrap();
     channel.streaming_engine = StreamingEngine::Next;
     channel.streaming_mode = StreamingMode::HttpLiveStreamingSegmenter;
@@ -191,11 +191,11 @@ async fn next_schedule(state: &AppState, item: i64) -> chrono::DateTime<Utc> {
         .execute(r#"UPDATE "Playout" SET "ScheduleKind"=1,"ScheduleFile"=NULL WHERE "Id"=1;"#)
         .await
         .unwrap();
-    let start = Utc::now() - chrono::Duration::milliseconds(100);
+    let start = Utc::now() - ersatzrs_time::Duration::milliseconds(100);
     sqlx::query(r#"INSERT INTO "PlayoutItem" ("PlayoutId","MediaItemId","Start","Finish","InPoint","OutPoint",
         "DisableWatermarks","FillerKind","GuideGroup") VALUES (1,?,?,?,'00:00:02','00:00:09.200',0,0,0)"#)
         .bind(item).bind(encode_sql_datetime(start))
-        .bind(encode_sql_datetime(start+chrono::Duration::milliseconds(7200)))
+        .bind(encode_sql_datetime(start+ersatzrs_time::Duration::milliseconds(7200)))
         .execute(&state.pool).await.unwrap();
     start
 }

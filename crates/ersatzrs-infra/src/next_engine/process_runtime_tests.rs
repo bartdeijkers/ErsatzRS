@@ -108,8 +108,9 @@ async fn real_next_troubleshooting_finishes_with_reports_and_selected_tracks() {
     .await
     .unwrap();
     tokio::fs::create_dir(&playout).await.unwrap();
-    let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
-    let finish = start + chrono::Duration::seconds(10);
+    let start =
+        ersatzrs_time::DateTime::from_timestamp(ersatzrs_time::Utc::now().timestamp(), 0).unwrap();
+    let finish = start + ersatzrs_time::Duration::seconds(10);
     let item = super::super::protocol::Playout {
         version: super::super::protocol::PLAYOUT_VERSION.to_owned(),
         items: vec![
@@ -198,8 +199,8 @@ async fn prepare_troubleshooting_fixture(
     clip: &Path,
     subtitle: &Path,
     ffmpeg: &Path,
-    start: chrono::DateTime<chrono::Utc>,
-    finish: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> super::super::protocol::PlayoutItem {
     use ersatzrs_core::repositories::ChannelRepository as _;
     let (pool, locker) = prepare_schedule(clip, false, &FFmpegProfile::default()).await;
@@ -222,8 +223,8 @@ async fn prepare_troubleshooting_fixture(
         ersatzrs_domain::PlayoutItem {
             start,
             finish,
-            in_point: chrono::Duration::seconds(5),
-            out_point: chrono::Duration::seconds(15),
+            in_point: ersatzrs_time::Duration::seconds(5),
+            out_point: ersatzrs_time::Duration::seconds(15),
             ..selection::tests::item()
         },
     )
@@ -298,8 +299,8 @@ async fn prepare_schedule_with_pool(
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::zero();
-    item.out_point = chrono::Duration::seconds(60);
+    item.in_point = ersatzrs_time::Duration::zero();
+    item.out_point = ersatzrs_time::Duration::seconds(60);
     if muted {
         item.pinned_stream_selection = Some(PinnedStreamSelection {
             media_version_id: 100,

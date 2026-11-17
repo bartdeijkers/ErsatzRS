@@ -2,7 +2,6 @@ mod editor;
 mod editor_artwork;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListAdminSortDirection,
     AddonMediaListAdminSortField, AddonMediaListArtwork, AddonMediaListArtworkRole,
@@ -22,6 +21,7 @@ use ersatzrs_domain::{
     AddonMediaListPublicationFilesystemTransition, AddonMediaListPublicationOutcome,
     AddonMediaListRefreshCadence, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
+use ersatzrs_time::{DateTime, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::{Pool, Row, Transaction};
 use std::fmt::Write as _;
@@ -72,7 +72,8 @@ pub async fn project_one_pending_detail_batch(
     pool: &Pool<crate::db::Db>,
 ) -> Result<Option<(EntityId, EntityId)>> {
     let cutoff = crate::repositories::common::encode_datetime(
-        chrono::Utc::now() - chrono::Duration::seconds(DETAIL_PROJECTION_BATCH_SECONDS),
+        ersatzrs_time::Utc::now()
+            - ersatzrs_time::Duration::seconds(DETAIL_PROJECTION_BATCH_SECONDS),
     );
     let row = sqlx::query(
         r#"SELECT "list"."Id", "list"."RequestedPresentationKind",
@@ -1355,7 +1356,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     "replacement must be an available Local video version".to_owned(),
                 ));
             }
-            let now = chrono::Utc::now().to_rfc3339();
+            let now = ersatzrs_time::Utc::now().to_rfc3339();
             let updated = sqlx::query(
                 r#"UPDATE "AddonMediaListItemReplacement"
                    SET "MediaItemId" = ?, "MediaVersionId" = ?, "UpdatedAt" = ?
@@ -1634,7 +1635,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         }
         ensure_current_publication_claim(&self.0, id, fence, false).await?;
         if published_revision == target_published_revision {
-            let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+            let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
             let retained = sqlx::query(
                 r#"UPDATE "AddonMediaList" SET "ReviewState" = ?
                    WHERE "Id" = ? AND "PublicationJournalJson" = ?
@@ -2014,7 +2015,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .map_err(|error| publication_fs_repository_error(&error))?;
         ensure_current_publication_claim(&self.0, id, fence, true).await?;
 
-        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
         let terminal_review_state = match outcome {
             AddonMediaListPublicationOutcome::Published => AddonMediaListReviewState::Published,
             AddonMediaListPublicationOutcome::RestoredAfterFailure => journal.previous_review_state,
@@ -2683,7 +2684,7 @@ async fn ensure_current_publication_claim(
     fence: PublicationClaimFence<'_>,
     require_journal: bool,
 ) -> Result<()> {
-    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
     let current = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(*)
            FROM "AddonMediaListPublicationJob" AS "job"
@@ -2897,7 +2898,7 @@ async fn commit_staged_publication_impl(
     .execute(&mut *commit)
     .await
     .repository()?;
-    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
     let updated = if let (Some(fence), Some(target_published_revision)) =
         (fence, target_published_revision)
     {
@@ -2973,7 +2974,7 @@ async fn commit_staged_publication_impl(
             "the staged add-on media-list publication changed before commit".to_owned(),
         ));
     }
-    let detail_now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let detail_now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
     sqlx::query(
         r#"UPDATE "AddonMediaListDetailJob"
            SET "State" = ?, "RequestedAt" = COALESCE("RequestedAt", ?),
@@ -3080,7 +3081,7 @@ async fn restore_staged_publication_impl(
         .repository()?;
     }
     let updated = if let Some(fence) = fence {
-        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
         sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "ReviewState" = 3, "ReviewError" = ?,
@@ -3489,7 +3490,7 @@ async fn stage_publication_impl(
             )
             .bind(&journal_json)
             .bind(crate::repositories::common::encode_datetime(
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             ))
             .bind(id)
             .bind(fence.saved_revision)
@@ -3500,7 +3501,7 @@ async fn stage_publication_impl(
             .bind(fence.owner_token)
             .bind(fence.lease_owner)
             .bind(crate::repositories::common::encode_datetime(
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             ))
             .execute(&mut *tx)
             .await
@@ -3515,7 +3516,7 @@ async fn stage_publication_impl(
             )
             .bind(&journal_json)
             .bind(crate::repositories::common::encode_datetime(
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             ))
             .bind(id)
             .execute(&mut *tx)
@@ -6799,7 +6800,7 @@ async fn replace_projected_metadata_relations(
                 }
             },
             path: projected_artwork_path(nfo_path, &candidate.url),
-            date_added: chrono::Utc::now(),
+            date_added: ersatzrs_time::Utc::now(),
         })
         .collect::<Vec<_>>();
     append_missing_thumbnail(
@@ -6834,7 +6835,7 @@ fn append_missing_thumbnail(artwork: &mut Vec<ArtworkRef>, path: Option<String>)
     artwork.push(ArtworkRef {
         kind: artwork_kind::THUMBNAIL,
         path,
-        date_added: chrono::Utc::now(),
+        date_added: ersatzrs_time::Utc::now(),
     });
 }
 
@@ -7013,7 +7014,7 @@ impl SqliteAddonMediaListRepository {
             }
         }
 
-        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         for row in &rows {
             let item_id: EntityId = row.try_get("Id").repository()?;
@@ -8154,7 +8155,7 @@ async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: Entit
     .await
     .repository()?
     .ok_or_else(|| RepositoryError::Conflict("managed library path is unavailable".to_owned()))?;
-    let now_text = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let now_text = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
 
     let artist_id = if let Some(artist_id) = sqlx::query_scalar::<_, EntityId>(
@@ -8668,7 +8669,7 @@ async fn apply_flat_projection(
     .await
     .repository()?
     .ok_or_else(|| RepositoryError::Conflict("managed library path is unavailable".to_owned()))?;
-    let now_text = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let now_text = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
 
     for input in projected {
@@ -8975,7 +8976,7 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
     .await
     .repository()?
     .ok_or_else(|| RepositoryError::Conflict("managed library path is unavailable".to_owned()))?;
-    let now = chrono::Utc::now();
+    let now = ersatzrs_time::Utc::now();
     let now_text = crate::repositories::common::encode_datetime(now);
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     let show_id = if let Some(show_id) = sqlx::query_scalar::<_, EntityId>(
@@ -9538,7 +9539,11 @@ mod tests {
         assert_eq!(repository.prepare_publication_media(1, 0).await.unwrap(), 1);
         let queue = AddonMediaListItemJobQueue::new(pool);
         let job = queue
-            .claim_kind(chrono::Utc::now(), 90, ItemOperationKind::IntervalMetadata)
+            .claim_kind(
+                ersatzrs_time::Utc::now(),
+                90,
+                ItemOperationKind::IntervalMetadata,
+            )
             .await
             .unwrap()
             .unwrap();
@@ -9553,7 +9558,7 @@ mod tests {
             .complete(
                 &job,
                 ItemOperationCompletion::IntervalPlan { plan: plan.clone() },
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             )
             .await
             .unwrap();
@@ -9604,7 +9609,7 @@ mod tests {
                 1,
                 1,
                 1,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &[],
                 &AddonMediaListRevisionArtifacts {
                     streaming_plans: [("item".into(), plan.clone())].into(),

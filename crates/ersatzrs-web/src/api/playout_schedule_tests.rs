@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
-    use chrono::{Duration, TimeZone, Utc};
     use ersatzrs_app::commands::{CreatePlayout, SavePlayoutScheduleFile};
     use ersatzrs_core::{
         repositories::{ChannelRepository, FfmpegProfileRepository},
@@ -11,6 +10,7 @@ mod tests {
         },
     };
     use ersatzrs_domain::{Channel, FFmpegProfile, Playout};
+    use ersatzrs_time::{Duration, TimeZone, Utc};
 
     async fn fixture() -> (
         AppState,

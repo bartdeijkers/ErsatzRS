@@ -2,12 +2,12 @@
 
 use std::time::{Duration as StdDuration, Instant};
 
-use chrono::{Duration, TimeZone as _};
 use ersatzrs_domain::{
     TeletextChannelSelectionSnapshot, TeletextDeclaredServiceBudget, TeletextPageNumber,
     TeletextProfileValue, TeletextResourceIdentity, TeletextResourceUpdateCounter,
     TeletextSecretReferenceKind, TeletextSelectionSnapshot, TeletextServiceBudget, TeletextSubcode,
 };
+use ersatzrs_time::{Duration, TimeZone as _};
 use serde_json::{json, Value};
 
 use super::super::{TeletextDesignDocumentInput, TeletextSavedResourceUpdate};

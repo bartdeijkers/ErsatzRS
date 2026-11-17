@@ -1,6 +1,6 @@
 //! Session-owned retained-range preparation, followed by fresh track mapping.
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_time::{DateTime, Utc};
 use tokio::{sync::oneshot, time::Instant};
 
 use super::{

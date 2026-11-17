@@ -1,6 +1,6 @@
 use super::*;
-use chrono::{Duration, Utc};
 use ersatzrs_domain::{ChannelSubtitleMode, PinnedStreamSelection};
+use ersatzrs_time::{Duration, Utc};
 use serde_json::Value;
 
 pub(crate) async fn fixture_pool() -> DbPool {

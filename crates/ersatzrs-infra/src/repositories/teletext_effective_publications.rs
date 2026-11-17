@@ -1,7 +1,6 @@
 //! Separate pending pointers for exact published Scripted scopes, not output.
 
 use super::*;
-use chrono::Utc;
 use ersatzrs_core::repositories::{
     TeletextEffectivePublicationRequestSave, TeletextProfileRejection,
 };
@@ -10,6 +9,7 @@ use ersatzrs_domain::{
     TeletextEffectiveChannelSelectionSnapshot as Selection, MAX_TELETEXT_OVERRIDE_COMMANDS,
     TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
+use ersatzrs_time::Utc;
 
 pub(in crate::repositories) fn valid_scope(selection: &Selection) -> bool {
     selection.channel_id > 0

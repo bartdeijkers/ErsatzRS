@@ -91,6 +91,7 @@ COPY crates/ersatzrs-launcher/Cargo.toml crates/ersatzrs-launcher/Cargo.toml
 COPY crates/ersatzrs-platform/Cargo.toml crates/ersatzrs-platform/Cargo.toml
 COPY crates/ersatzrs-scanner/Cargo.toml crates/ersatzrs-scanner/Cargo.toml
 COPY crates/ersatzrs-scheduler/Cargo.toml crates/ersatzrs-scheduler/Cargo.toml
+COPY crates/ersatzrs-time/Cargo.toml crates/ersatzrs-time/Cargo.toml
 COPY crates/ersatzrs-web/Cargo.toml crates/ersatzrs-web/Cargo.toml
 COPY xtask/Cargo.toml xtask/Cargo.toml
 RUN set -eux; \
@@ -104,6 +105,7 @@ RUN set -eux; \
         crates/ersatzrs-infra \
         crates/ersatzrs-platform \
         crates/ersatzrs-scheduler \
+        crates/ersatzrs-time \
         xtask; \
     do \
         mkdir -p "$crate/src"; \

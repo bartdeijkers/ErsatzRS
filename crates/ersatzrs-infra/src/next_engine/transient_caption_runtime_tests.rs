@@ -61,15 +61,16 @@ async fn preview_case(root: &Path, clip: &Path, prepared: bool, convert: bool, r
         .await
         .unwrap()
         .unwrap();
-    let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
+    let start =
+        ersatzrs_time::DateTime::from_timestamp(ersatzrs_time::Utc::now().timestamp(), 0).unwrap();
     let media = schedule::bind_media(
         &pool,
         ersatzrs_domain::PlayoutItem {
             id: 0,
             start,
-            finish: start + chrono::Duration::seconds(12),
-            in_point: chrono::Duration::seconds(5),
-            out_point: chrono::Duration::seconds(17),
+            finish: start + ersatzrs_time::Duration::seconds(12),
+            in_point: ersatzrs_time::Duration::seconds(5),
+            out_point: ersatzrs_time::Duration::seconds(17),
             ..selection::tests::item()
         },
     )

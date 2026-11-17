@@ -265,7 +265,7 @@ impl AddonRuntime for NativeAddonRuntime {
             let state = match status.state {
                 0 if status
                     .next_eligible_at
-                    .is_some_and(|next| next > chrono::Utc::now()) =>
+                    .is_some_and(|next| next > ersatzrs_time::Utc::now()) =>
                 {
                     AddonItemAccessState::Waiting
                 }
@@ -354,7 +354,7 @@ impl AddonRuntime for NativeAddonRuntime {
                 schema_digest,
             },
             definition_json,
-            created_at: chrono::Utc::now(),
+            created_at: ersatzrs_time::Utc::now(),
         }))
     }
 

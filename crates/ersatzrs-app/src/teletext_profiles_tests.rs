@@ -7,8 +7,8 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::{TimeZone as _, Utc};
 use ersatzrs_domain::{TeletextInstallationSnapshot, TeletextProfileSetting, TeletextProfileValue};
+use ersatzrs_time::{TimeZone as _, Utc};
 use serde_json::json;
 
 use super::*;

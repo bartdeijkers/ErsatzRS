@@ -15,7 +15,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
 };
 
-use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_domain::{
     ChannelSubtitleMode, CollectionEnumeratorState, EntityId, FillWithGroupMode, FillerKind,
     FillerMode, FixedStartTimeBehavior, GuideMode, MultipleMode, PinnedStreamSelection,
@@ -23,6 +22,7 @@ use ersatzrs_domain::{
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleItem,
     StartType, TailMode,
 };
+use ersatzrs_time::{DateTime, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -3998,10 +3998,10 @@ impl DirectContentResolver for SchedulingReferenceData {
 mod tests {
     use std::collections::BTreeMap;
 
-    use chrono::{TimeZone, Utc};
     use ersatzrs_domain::{
         ChannelSubtitleMode, CollectionType, Playout, PlayoutMode, PlayoutScheduleKind,
     };
+    use ersatzrs_time::{TimeZone, Utc};
     use insta::assert_json_snapshot;
 
     use super::*;

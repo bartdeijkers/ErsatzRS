@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+ersatzrs-time.workspace = true
 ersatzrs-app = { path = "../ersatzrs-app", version = "1.2.0" }
 ersatzrs-core = { path = "../ersatzrs-core", version = "1.2.0" }
 ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "1.2.0" }

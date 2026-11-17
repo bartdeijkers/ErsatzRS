@@ -287,12 +287,11 @@ pub(in crate::admin::server_fns::media_browser) async fn playlist_preview_refere
 ) -> Result<
     (
         ersatzrs_core::scheduling::SchedulingReferenceData,
-        chrono::Duration,
+        ersatzrs_time::Duration,
         usize,
     ),
     ServerFnError,
 > {
-    use chrono::Duration;
     use ersatzrs_core::scheduling::{
         classic_schedule_item_key, SchedulingCollectionKey, SchedulingPlaylistItem,
         SchedulingReferenceData,
@@ -301,6 +300,7 @@ pub(in crate::admin::server_fns::media_browser) async fn playlist_preview_refere
         CollectionType, FixedStartTimeBehavior, PlaybackOrder, PlayoutMode, ProgramScheduleItem,
         StartType,
     };
+    use ersatzrs_time::Duration;
     use std::collections::BTreeMap;
 
     let mut playlist_items = Vec::new();
@@ -489,7 +489,7 @@ pub(in crate::admin::server_fns::media_browser) fn collection_type_name(
 pub(in crate::admin::server_fns::media_browser) struct PreviewMediaItem {
     id: i64,
     title: String,
-    duration: chrono::Duration,
+    duration: ersatzrs_time::Duration,
 }
 
 #[cfg(all(test, feature = "ssr"))]
@@ -661,7 +661,7 @@ pub(in crate::admin::server_fns::media_browser) async fn load_preview_media_item
     pool: &ersatzrs_infra::db::DbPool,
     ids: Vec<i64>,
 ) -> Result<Vec<PreviewMediaItem>, ServerFnError> {
-    use chrono::Duration;
+    use ersatzrs_time::Duration;
     use sqlx::Row;
 
     let mut result = Vec::new();
@@ -725,7 +725,7 @@ pub(in crate::admin::server_fns::media_browser) async fn load_preview_media_item
 #[cfg(test)]
 pub(in crate::admin::server_fns::media_browser) fn parse_hhmmss_duration(
     value: &str,
-) -> Option<chrono::Duration> {
+) -> Option<ersatzrs_time::Duration> {
     let mut parts = value.split(':');
     let hours = parts.next()?.parse::<i64>().ok()?;
     let minutes = parts.next()?.parse::<i64>().ok()?;
@@ -733,13 +733,13 @@ pub(in crate::admin::server_fns::media_browser) fn parse_hhmmss_duration(
         .next()
         .and_then(|part| part.split('.').next())
         .and_then(|part| part.parse::<i64>().ok())?;
-    Some(chrono::Duration::seconds(
+    Some(ersatzrs_time::Duration::seconds(
         hours * 3600 + minutes * 60 + seconds,
     ))
 }
 
 pub(in crate::admin::server_fns::media_browser) fn format_duration(
-    duration: chrono::Duration,
+    duration: ersatzrs_time::Duration,
 ) -> String {
     let seconds = duration.num_seconds().max(0);
     format!(

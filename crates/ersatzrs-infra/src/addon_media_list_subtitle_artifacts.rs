@@ -1,7 +1,6 @@
 //! Bounded manual sidecars, using the existing artifact reservation lifecycle.
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract::{
     subtitle_logical_language, validate_requested_subtitle_languages,
     AddonMediaListOptionOperation, MediaListSubtitleArtifact, MediaListSubtitleFormat,
@@ -11,6 +10,7 @@ use ersatzrs_core::repositories::{
     AddonMediaListLifecycleRepository as _, RepositoryError, Result,
 };
 use ersatzrs_domain::{MediaPlaybackTimeline, RemoteStreamLiveness};
+use ersatzrs_time::{DateTime, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::Row as _;
 use tokio::io::AsyncReadExt as _;

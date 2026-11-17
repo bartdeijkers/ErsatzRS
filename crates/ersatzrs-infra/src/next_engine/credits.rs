@@ -164,9 +164,9 @@ fn unavailable(message: &str) -> RepositoryError {
 mod tests {
     use super::*;
     use crate::next_engine::{host, protocol::Source, schedule};
-    use chrono::Duration;
     use ersatzrs_core::repositories::PlayoutRepository;
     use ersatzrs_domain::{Resolution, StreamingEngine};
+    use ersatzrs_time::Duration;
     use std::{path::PathBuf, sync::Arc};
 
     async fn fixture() -> (
@@ -342,7 +342,7 @@ mod tests {
         host.dynamic_contexts.lock().await.insert(
             instance,
             host::DynamicContext {
-                started_at: chrono::Utc::now(),
+                started_at: ersatzrs_time::Utc::now(),
                 request: host::NextStart {
                     channel_id: channel.id,
                     preview: false,

@@ -5,9 +5,9 @@ use crate::{
         common::encode_datetime, SqliteSchedulingContentRepository, SqlxResultExt as _,
     },
 };
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{EntityId, PlayoutScheduleKind, ScanPlayoutRefreshReason};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Row;
 use std::collections::BTreeMap;
 

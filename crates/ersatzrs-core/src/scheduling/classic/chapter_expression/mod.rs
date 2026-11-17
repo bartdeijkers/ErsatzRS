@@ -12,8 +12,8 @@ mod tests;
 mod value;
 
 use crate::scheduling::SchedulingFillerPreset;
-use chrono::Duration;
 use ersatzrs_domain::{EntityId, MediaChapter};
+use ersatzrs_time::Duration;
 use pest::Parser;
 use pest_derive::Parser;
 use value::Value;

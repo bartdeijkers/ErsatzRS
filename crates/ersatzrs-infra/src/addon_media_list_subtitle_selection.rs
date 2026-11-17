@@ -188,7 +188,7 @@ pub(crate) async fn subtitle_requirements(
                         .try_get::<Option<String>, _>("LeaseExpiresAt")
                         .repository()?
                         .and_then(|value| decode_datetime("subtitle lease", &value).ok())
-                        .is_some_and(|expires| expires > chrono::Utc::now());
+                        .is_some_and(|expires| expires > ersatzrs_time::Utc::now());
                 continue;
             }
             if job

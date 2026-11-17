@@ -1017,7 +1017,7 @@ mod tests {
             seed_id: 7,
             snapshot_id: Some(42),
             revision: 6,
-            captured_at: chrono::DateTime::from_timestamp(1_800_000_000, 0).unwrap(),
+            captured_at: ersatzrs_time::DateTime::from_timestamp(1_800_000_000, 0).unwrap(),
             stale: false,
         };
         observation
@@ -2471,7 +2471,7 @@ mod tests {
                 observations.outputs.clear();
                 observations.last_field_failure = Some(TeletextCustomFieldFailure {
                     pages: vec![150],
-                    at: chrono::DateTime::from_timestamp(1_800_000_000, 0).unwrap(),
+                    at: ersatzrs_time::DateTime::from_timestamp(1_800_000_000, 0).unwrap(),
                 });
                 let html = output_status::view(&data).to_html();
                 assert!(

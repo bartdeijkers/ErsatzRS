@@ -1,6 +1,6 @@
 use super::*;
-use chrono::Utc;
 use ersatzrs_core::repositories::PlayoutRepository as _;
+use ersatzrs_time::Utc;
 use std::sync::Arc;
 
 struct Fixture {
@@ -152,8 +152,8 @@ async fn troubleshooting_remote_callback_rejects_changed_source_and_foreign_sess
 async fn prepare_remote_window(
     fixture: &Fixture,
     occurrences: &[TroubleshootingChannelOccurrence],
-    at: chrono::DateTime<Utc>,
-    finish: chrono::DateTime<Utc>,
+    at: ersatzrs_time::DateTime<Utc>,
+    finish: ersatzrs_time::DateTime<Utc>,
 ) -> (uuid::Uuid, protocol::Playout) {
     let deadline = Instant::now() + std::time::Duration::from_secs(10);
     let start = super::super::host::NextStart {
@@ -191,17 +191,20 @@ async fn prepare_remote_window(
 #[tokio::test]
 async fn troubleshooting_window_remote_second_member_preserves_identity_and_revocation() {
     let fixture = Fixture::new().await;
-    let at =
-        chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp() - 2 * 86_400, 0).unwrap();
+    let at = ersatzrs_time::DateTime::from_timestamp(
+        ersatzrs_time::Utc::now().timestamp() - 2 * 86_400,
+        0,
+    )
+    .unwrap();
     let mut occurrences = Vec::new();
     for (id, offset, length) in [(41, 0, 10), (42, 10, 20)] {
         let mut media = fixture.media.clone();
         media.item.id = id;
         media.item.playout_id = 1;
-        media.item.start = at + chrono::TimeDelta::seconds(offset);
-        media.item.finish = media.item.start + chrono::TimeDelta::seconds(length);
-        media.item.in_point = chrono::TimeDelta::seconds(1);
-        media.item.out_point = chrono::TimeDelta::seconds(1 + length);
+        media.item.start = at + ersatzrs_time::TimeDelta::seconds(offset);
+        media.item.finish = media.item.start + ersatzrs_time::TimeDelta::seconds(length);
+        media.item.in_point = ersatzrs_time::TimeDelta::seconds(1);
+        media.item.out_point = ersatzrs_time::TimeDelta::seconds(1 + length);
         crate::repositories::make_repositories(fixture.host.pool.clone())
             .playout
             .upsert_item(&media.item)
@@ -214,7 +217,7 @@ async fn troubleshooting_window_remote_second_member_preserves_identity_and_revo
             credits: None,
         });
     }
-    let finish = at + chrono::TimeDelta::seconds(30);
+    let finish = at + ersatzrs_time::TimeDelta::seconds(30);
     let before = super::tests::persisted_window_state(&fixture.host.pool, at, finish).await;
     let (instance, playout) = prepare_remote_window(&fixture, &occurrences, at, finish).await;
     assert_eq!(
@@ -308,12 +311,12 @@ async fn live_credit_window(fixture: &mut Fixture, uri: &str) -> (uuid::Uuid, St
     fixture.channel.subtitle_mode = ersatzrs_domain::ChannelSubtitleMode::Default;
     fixture.channel.music_video_credits_mode =
         ersatzrs_domain::ChannelMusicVideoCreditsMode::GenerateSubtitles;
-    let at = Utc::now() - chrono::Duration::days(2);
+    let at = Utc::now() - ersatzrs_time::Duration::days(2);
     fixture.media.item.playout_id = 1;
     fixture.media.item.start = at;
-    fixture.media.item.finish = at + chrono::Duration::seconds(30);
-    fixture.media.item.in_point = chrono::TimeDelta::zero();
-    fixture.media.item.out_point = chrono::TimeDelta::seconds(30);
+    fixture.media.item.finish = at + ersatzrs_time::Duration::seconds(30);
+    fixture.media.item.in_point = ersatzrs_time::TimeDelta::zero();
+    fixture.media.item.out_point = ersatzrs_time::TimeDelta::seconds(30);
     fixture.media.item.pinned_stream_selection = None;
     crate::repositories::make_repositories(fixture.host.pool.clone())
         .playout
@@ -388,7 +391,7 @@ async fn troubleshooting_live_http_and_rtsp_credits_rebase_join_without_changing
     for uri in ["https://example.test/live", "rtsp://example.test/live"] {
         let mut fixture = Fixture::new().await;
         let (instance, digest) = Box::pin(live_credit_window(&mut fixture, uri)).await;
-        let joined = fixture.media.item.start + chrono::Duration::seconds(2);
+        let joined = fixture.media.item.start + ersatzrs_time::Duration::seconds(2);
         let resolved = fixture
             .host
             .resolve_dynamic(

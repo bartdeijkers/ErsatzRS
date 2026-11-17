@@ -1,7 +1,6 @@
 //! Durable refresh lineage, worker leases and separate immutable runtime output.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     RepositoryError, Result, TeletextGenerationMutation as M, TeletextGenerationRejection as R,
     TeletextGuideGenerationCheck, TeletextGuideGenerationQualification,
@@ -16,6 +15,7 @@ use ersatzrs_core::repositories::{
     TELETEXT_GUIDE_RUNTIME_SNAPSHOT_VERSION,
 };
 use ersatzrs_domain::{EntityId, TeletextAcceptedGeneration, TeletextPublicationRequest};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::{Row as _, Transaction};
 use std::{fmt::Write as _, time::Instant};

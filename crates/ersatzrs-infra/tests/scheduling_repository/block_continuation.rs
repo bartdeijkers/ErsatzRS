@@ -6,7 +6,10 @@ use ersatzrs_core::scheduling::{
     SchedulingResult,
 };
 
-async fn reference(pool: &SqlitePool, now: chrono::DateTime<Utc>) -> SchedulingReferenceData {
+async fn reference(
+    pool: &SqlitePool,
+    now: ersatzrs_time::DateTime<Utc>,
+) -> SchedulingReferenceData {
     make_repositories(pool.clone())
         .scheduling
         .block_reference_data(900, now, 1, Duration::zero())
@@ -14,7 +17,11 @@ async fn reference(pool: &SqlitePool, now: chrono::DateTime<Utc>) -> SchedulingR
         .unwrap()
 }
 
-async fn preserving_build(pool: &SqlitePool, now: chrono::DateTime<Utc>, mode: PlayoutBuildMode) {
+async fn preserving_build(
+    pool: &SqlitePool,
+    now: ersatzrs_time::DateTime<Utc>,
+    mode: PlayoutBuildMode,
+) {
     ersatzrs_infra::maintenance::run_requested_playout_build(
         pool,
         &ersatzrs_core::locking::EntityLocker::new(),
@@ -325,8 +332,8 @@ async fn database(url: &str, order: &str) -> SqlitePool {
 
 async fn build(
     pool: &SqlitePool,
-    start: chrono::DateTime<Utc>,
-    finish: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
+    finish: ersatzrs_time::DateTime<Utc>,
 ) -> (Playout, SchedulingResult) {
     let repos = make_repositories(pool.clone());
     let playout = repos.playout.get_with_anchor(900).await.unwrap();
@@ -564,8 +571,8 @@ async fn row187_rebuild(
 
 async fn row187_candidate(
     pool: &SqlitePool,
-    start: chrono::DateTime<Utc>,
-    clock: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
+    clock: ersatzrs_time::DateTime<Utc>,
     mode: PlayoutBuildMode,
     preservation: PlayoutPreservation,
 ) -> (Playout, SchedulingResult) {
@@ -590,7 +597,7 @@ async fn row187_candidate(
 
 async fn row187_reference(
     pool: &SqlitePool,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
 ) -> SchedulingReferenceData {
     make_repositories(pool.clone())
         .scheduling
@@ -629,8 +636,8 @@ async fn row187_database(url: &str, preserving: bool) -> SqlitePool {
 async fn row187_inject_history(
     pool: &SqlitePool,
     before: &SchedulingReferenceData,
-    clock: chrono::DateTime<Utc>,
-    boundary: chrono::DateTime<Utc>,
+    clock: ersatzrs_time::DateTime<Utc>,
+    boundary: ersatzrs_time::DateTime<Utc>,
     malformed: bool,
 ) {
     let stale = before
@@ -674,8 +681,8 @@ async fn row187_copy_history(
     pool: &SqlitePool,
     source_id: i64,
     id: i64,
-    when: chrono::DateTime<Utc>,
-    finish: chrono::DateTime<Utc>,
+    when: ersatzrs_time::DateTime<Utc>,
+    finish: ersatzrs_time::DateTime<Utc>,
 ) {
     sqlx::query(r#"INSERT INTO "PlayoutHistory" ("Id", "PlayoutId", "BlockId", "PlaybackOrder", "Key", "ChildKey", "When", "Finish", "Index", "Seed", "Details", "IsCurrentChild") SELECT ?, "PlayoutId", "BlockId", "PlaybackOrder", "Key", "ChildKey", ?, ?, "Index", "Seed", "Details", "IsCurrentChild" FROM "PlayoutHistory" WHERE "Id"=?"#)
         .bind(id)
@@ -690,7 +697,7 @@ async fn row187_assert_retained(
     before: &SchedulingReferenceData,
     after: &SchedulingReferenceData,
     consumed: &ersatzrs_domain::PlayoutHistory,
-    boundary: chrono::DateTime<Utc>,
+    boundary: ersatzrs_time::DateTime<Utc>,
     seed: i32,
 ) {
     assert!(!after

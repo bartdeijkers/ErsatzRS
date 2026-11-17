@@ -22,10 +22,10 @@ async fn current_schedule(pool: &crate::db::DbPool) -> DateTime<Utc> {
     let start = DateTime::from_timestamp(Utc::now().timestamp(), 0).unwrap();
     for (id, offset) in [(1, 0), (2, 60)] {
         sqlx::query(r#"UPDATE "PlayoutItem" SET "Start"=?, "Finish"=?, "GuideStart"=?, "GuideFinish"=?, "InPoint"='00:00:01', "OutPoint"='00:01:01' WHERE "Id"=?"#)
-            .bind(encode_datetime(start + chrono::Duration::seconds(offset)))
-            .bind(encode_datetime(start + chrono::Duration::seconds(offset + 60)))
-            .bind(encode_datetime(start + chrono::Duration::seconds(offset)))
-            .bind(encode_datetime(start + chrono::Duration::seconds(offset + 60)))
+            .bind(encode_datetime(start + ersatzrs_time::Duration::seconds(offset)))
+            .bind(encode_datetime(start + ersatzrs_time::Duration::seconds(offset + 60)))
+            .bind(encode_datetime(start + ersatzrs_time::Duration::seconds(offset)))
+            .bind(encode_datetime(start + ersatzrs_time::Duration::seconds(offset + 60)))
             .bind(id)
             .execute(pool).await.unwrap();
     }
@@ -65,7 +65,7 @@ async fn fixture_for(channel_id: i64) -> Fixture {
         &locker,
         &channel,
         start,
-        start + chrono::Duration::minutes(2),
+        start + ersatzrs_time::Duration::minutes(2),
     )
     .await
     .unwrap()

@@ -161,10 +161,10 @@ async fn prepare_provider(
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.start = chrono::Utc::now() - chrono::Duration::milliseconds(100);
-    item.in_point = chrono::Duration::milliseconds(2000);
-    item.out_point = chrono::Duration::milliseconds(9200);
-    item.finish = item.start + chrono::Duration::milliseconds(7200);
+    item.start = ersatzrs_time::Utc::now() - ersatzrs_time::Duration::milliseconds(100);
+    item.in_point = ersatzrs_time::Duration::milliseconds(2000);
+    item.out_point = ersatzrs_time::Duration::milliseconds(9200);
+    item.finish = item.start + ersatzrs_time::Duration::milliseconds(7200);
     if mode == Mode::Off {
         item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
             media_version_id: 100,

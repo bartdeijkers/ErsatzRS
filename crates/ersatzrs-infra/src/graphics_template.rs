@@ -14,8 +14,8 @@ pub(crate) use external::media as external_media;
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_time::{DateTime, Utc};
 use serde_json::{Map, Number, Value};
 use sqlx::Row;
 
@@ -116,7 +116,7 @@ async fn programme_variables(
             pool,
             context.channel_id,
             start,
-            finish + chrono::Duration::days(1),
+            finish + ersatzrs_time::Duration::days(1),
         )
         .await
         .repository()?
@@ -728,9 +728,9 @@ fn duration_value(total_seconds: f64) -> Value {
     Value::Object(value)
 }
 
-fn duration_millis(total_seconds: f64) -> chrono::Duration {
+fn duration_millis(total_seconds: f64) -> ersatzrs_time::Duration {
     let millis = (total_seconds * 1000.0).round();
-    chrono::Duration::milliseconds(millis.to_string().parse::<i64>().unwrap_or_default())
+    ersatzrs_time::Duration::milliseconds(millis.to_string().parse::<i64>().unwrap_or_default())
 }
 
 fn number_value(value: f64) -> Value {

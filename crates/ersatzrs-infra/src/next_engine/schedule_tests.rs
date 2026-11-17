@@ -1,8 +1,8 @@
 use super::*;
-use chrono::{Duration, TimeZone};
 use ersatzrs_core::locking::PlayoutLockGuard;
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
 use ersatzrs_domain::{ChannelPlayoutSource, FFmpegProfile, PinnedStreamSelection};
+use ersatzrs_time::{Duration, TimeZone};
 
 pub(crate) async fn fixture() -> (DbPool, EntityLocker, Channel, DateTime<Utc>) {
     let pool = super::super::selection::tests::fixture_pool().await;

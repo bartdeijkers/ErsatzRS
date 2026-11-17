@@ -2,7 +2,6 @@
 
 use std::fmt::Write as _;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     locking::EntityLocker,
     repositories::{
@@ -10,6 +9,7 @@ use ersatzrs_core::{
     },
 };
 use ersatzrs_domain::{Channel, RemoteStreamLiveness, Resolution, StreamingEngine};
+use ersatzrs_time::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest as _, Sha256};
@@ -49,7 +49,7 @@ impl Origin {
     pub(super) fn credits_at(
         &self,
         projection: &selection::DeferredProjection,
-        now: chrono::DateTime<chrono::Utc>,
+        now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<Option<protocol::Track>> {
         match self {
             Self::Troubleshooting(context) => context.credits_at(projection, now),

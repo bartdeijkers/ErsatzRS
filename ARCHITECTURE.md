@@ -7,6 +7,7 @@ boundaries explicit.
 
 ```text
 crates/
+  ersatzrs-time/      Jiff-backed time values and compatibility codecs
   ersatzrs-addon-contract/ versioned package, runtime, and NDJSON wire DTOs
   ersatzrs-domain/    entities, enums, value objects
   ersatzrs-core/      business logic, scheduling traits, repository traits
@@ -31,23 +32,26 @@ Direct workspace dependencies are:
 
 | Crate | Direct ErsatzRS dependencies |
 |---|---|
-| `ersatzrs-addon-contract` | none |
-| `ersatzrs-domain` | none |
-| `ersatzrs-core` | `ersatzrs-domain` |
+| `ersatzrs-time` | none |
+| `ersatzrs-addon-contract` | `ersatzrs-time` |
+| `ersatzrs-domain` | `ersatzrs-time` |
+| `ersatzrs-core` | `ersatzrs-domain`, `ersatzrs-time` |
 | `ersatzrs-hwprobe` | none |
 | `ersatzrs-platform` | none |
 | `ersatzrs-ffmpeg` | `ersatzrs-domain`, `ersatzrs-hwprobe` |
-| `ersatzrs-infra` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg` |
-| `ersatzrs-app` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain` |
-| `ersatzrs-scanner` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
-| `ersatzrs-scheduler` | `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
-| `ersatzrs-web` | `ersatzrs-addon-contract`, `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-platform`, `ersatzrs-scanner`, `ersatzrs-scheduler` |
+| `ersatzrs-infra` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-time` |
+| `ersatzrs-app` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-time` |
+| `ersatzrs-scanner` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-time` |
+| `ersatzrs-scheduler` | `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-time` |
+| `ersatzrs-web` | `ersatzrs-addon-contract`, `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-platform`, `ersatzrs-scanner`, `ersatzrs-scheduler`, `ersatzrs-time` |
 | `ersatzrs-healthcheck`, `ersatzrs-launcher` | none |
 | `xtask` | `ersatzrs-addon-contract` |
 
 Rules:
 
-- `ersatzrs-domain` depends on no other ErsatzRS crate.
+- `ersatzrs-time` supplies Jiff-backed time values and existing wire encodings
+  without application, storage or add-on dependencies (ADR 0138).
+- `ersatzrs-domain` depends only on the shared time values.
 - `ersatzrs-addon-contract` is dependency-light and owns only versioned public
   add-on data contracts. It does not load packages or depend on application,
   storage, web, scanner, or FFmpeg crates.

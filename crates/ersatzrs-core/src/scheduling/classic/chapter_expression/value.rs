@@ -1,5 +1,5 @@
 use super::{profile, temporal, ExpressionError, Result};
-use chrono::{Duration, NaiveDateTime};
+use ersatzrs_time::{Duration, NaiveDateTime};
 use std::cmp::Ordering;
 
 #[derive(Clone, Debug, PartialEq)]

@@ -411,7 +411,7 @@ async fn start_item(
     sqlx::query(r#"INSERT INTO "PlayoutItem" ("PlayoutId","MediaItemId","Start","Finish","InPoint","OutPoint",
         "DisableWatermarks","FillerKind","GuideGroup") VALUES (1,?,?,?,'00:00:00','00:00:12',0,0,0)"#)
         .bind(item).bind(super::super::encode_sql_datetime(now))
-        .bind(super::super::encode_sql_datetime(now+chrono::Duration::seconds(12)))
+        .bind(super::super::encode_sql_datetime(now+ersatzrs_time::Duration::seconds(12)))
         .execute(&state.pool).await.unwrap();
 }
 

@@ -1,7 +1,7 @@
 use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckResult, HealthCheckStatus, Pool, Result,
 };
-use chrono::{Datelike, Timelike};
+use ersatzrs_time::{Datelike, Timelike};
 use sqlx::Row;
 
 use crate::repositories::common::decode_datetime;

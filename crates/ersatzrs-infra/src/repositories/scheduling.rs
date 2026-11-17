@@ -14,7 +14,6 @@ use std::{
 
 use crate::db::DbRow;
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
 use ersatzrs_core::repositories::{
     AdminSearchEnrichment, AdminSearchKind, AdminSearchRepository, ProgramScheduleRepository,
     RepositoryError, Result,
@@ -41,6 +40,7 @@ use ersatzrs_domain::{
     PlayoutScheduleKind, ProgramScheduleAlternate, ProgramScheduleItem, RemoteStreamLiveness,
     CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
+use ersatzrs_time::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
 use sqlx::{Pool, Row};
 
 use super::common::{
@@ -4528,11 +4528,11 @@ fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|parsed| parsed.with_timezone(&Utc))
         .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
+            ersatzrs_time::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
                 .map(|parsed| parsed.and_utc())
         })
         .or_else(|_| {
-            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+            ersatzrs_time::NaiveDate::parse_from_str(value, "%Y-%m-%d")
                 .map(|parsed| parsed.and_hms_opt(0, 0, 0).unwrap().and_utc())
         })
         .map_err(|source| decode_message(kind, &source.to_string()))

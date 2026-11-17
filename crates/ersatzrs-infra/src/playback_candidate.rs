@@ -1,8 +1,8 @@
 //! Snapshot overlay inputs through the candidate's own SQL connection.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::Result;
 use ersatzrs_domain::{Channel, StreamingMode};
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{
     active_template_deco_id_from_connection, load_playback_watermark_context,

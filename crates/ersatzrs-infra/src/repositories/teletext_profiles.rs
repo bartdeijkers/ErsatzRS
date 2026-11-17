@@ -1,7 +1,6 @@
 //! Atomic ADR 0122 configuration foundation; no package or page activation.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     ChannelTeletextBindingSave, RepositoryError, Result, TeletextProfileMutation as M,
     TeletextProfileRejection as R, TeletextProfileRepository, TeletextProfileSave,
@@ -15,6 +14,7 @@ use ersatzrs_domain::{
     TeletextProfileSetting, TeletextProfileValue, TeletextScriptedBaseSelection,
     TeletextSecretReferenceKind, TeletextSelectionSnapshot, MAX_TELETEXT_PAGE_RECORDS,
 };
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::{Row as _, Transaction};
 
 use super::SqlxResultExt as _;

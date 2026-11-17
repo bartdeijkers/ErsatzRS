@@ -2,11 +2,11 @@ use super::super::{
     async_trait, Db, HealthCheck, HealthCheckError, HealthCheckResult, HealthCheckStatus, Pool,
     Result, Row,
 };
-use chrono::{Duration, Utc};
 use ersatzrs_core::scheduling::{
     audit_classic_refresh_checkpoint, validate_classic_timeline, PlayoutPreservation,
 };
 use ersatzrs_domain::PlayoutScheduleKind;
+use ersatzrs_time::{Duration, Utc};
 
 use crate::maintenance::classic_runtime_state_is_complete;
 use crate::repositories::common::decode_enum_column;

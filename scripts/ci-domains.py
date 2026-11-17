@@ -46,7 +46,7 @@ EVERYTHING = (
     ".github/workflows/full-verification.yml", ".github/workflows/release.yml", ".github/actions/*", "scripts/ci-*", "scripts/e2e/*", "scripts/release/*", "scripts/calibration/*",
     "run.sh", "run.ps1", "run.cmd", "assets/*", "migrations/*",
     # Foundation crates every other crate builds on.
-    "crates/ersatzrs-domain/*", "crates/ersatzrs-core/*",
+    "crates/ersatzrs-domain/*", "crates/ersatzrs-core/*", "crates/ersatzrs-time/*",
     # Schema changes affect every repository and page.
     "crates/*/migrations/*",
 )

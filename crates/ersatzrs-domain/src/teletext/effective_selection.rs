@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{TeletextOverrideInterval, TeletextOverrideState, TeletextSelectionSnapshot};
 use crate::EntityId;
@@ -160,7 +160,7 @@ mod tests {
         TeletextInstallationSnapshot, TeletextPageContract, TeletextProfileCandidateSnapshot,
         TeletextProfileSetting, TeletextProfileValue,
     };
-    use chrono::{Duration, TimeZone as _};
+    use ersatzrs_time::{Duration, TimeZone as _};
 
     #[test]
     fn effective_selection_debug_redacts_every_base_and_scripted_payload() {

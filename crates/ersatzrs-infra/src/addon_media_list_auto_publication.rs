@@ -2,12 +2,12 @@
 //! The existing import worker advances one bounded list-owned assessment;
 //! actual publication continues through the managed-library coordinator.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListAutoPublicationHold, AddonMediaListAutoPublicationHoldReason as Reason,
     AddonMediaListPublicationBlockerKind, AddonMediaListRepository, RepositoryError, Result,
 };
 use ersatzrs_domain::{AddonMediaListPublicationEnqueueTrigger, EntityId};
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::{Row, Transaction};
 
 use crate::db::{Db, DbPool};
@@ -258,7 +258,7 @@ async fn hold_in_tx(tx: &mut Transaction<'_, Db>, list_id: EntityId, reason: Rea
         )
         .bind(if retry { "ready" } else { "held" })
         .bind(&reason)
-        .bind(retry.then(|| encode_datetime(Utc::now() + chrono::Duration::seconds(delay))))
+        .bind(retry.then(|| encode_datetime(Utc::now() + ersatzrs_time::Duration::seconds(delay))))
         .bind(list_id)
         .execute(&mut **tx)
         .await
@@ -375,8 +375,8 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
            ORDER BY COALESCE("LastAssessedAt", "RecordedAt"), "AddonMediaListId" LIMIT 1"#,
     )
     .bind(encode_datetime(now))
-    .bind(encode_datetime(now - chrono::Duration::seconds(120)))
-    .bind(encode_datetime(now - chrono::Duration::seconds(30)))
+    .bind(encode_datetime(now - ersatzrs_time::Duration::seconds(120)))
+    .bind(encode_datetime(now - ersatzrs_time::Duration::seconds(30)))
     .fetch_optional(pool)
     .await
     .repository()?;
@@ -874,13 +874,17 @@ mod tests {
             !process_one(&pool, now).await.unwrap(),
             "wait for a quiet detail batch"
         );
-        assert!(process_one(&pool, now + chrono::Duration::seconds(31))
-            .await
-            .unwrap());
+        assert!(
+            process_one(&pool, now + ersatzrs_time::Duration::seconds(31))
+                .await
+                .unwrap()
+        );
         assert_eq!(state(&pool).await, "queued");
-        assert!(!process_one(&pool, now + chrono::Duration::seconds(32))
-            .await
-            .unwrap());
+        assert!(
+            !process_one(&pool, now + ersatzrs_time::Duration::seconds(32))
+                .await
+                .unwrap()
+        );
         let jobs: i64 =
             sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListPublicationJob""#)
                 .fetch_one(&pool)
@@ -999,20 +1003,24 @@ mod tests {
         .unwrap();
         assert!(!process_one(&pool, now).await.unwrap());
         assert_eq!(state(&pool).await, "ready");
-        assert!(!process_one(&pool, now + chrono::Duration::seconds(29))
-            .await
-            .unwrap());
+        assert!(
+            !process_one(&pool, now + ersatzrs_time::Duration::seconds(29))
+                .await
+                .unwrap()
+        );
         // A stream of newer details extends quiet time, but not first-pending time.
         sqlx::query(
             r#"UPDATE "AddonMediaList" SET "DraftRevision"=3,"DetailProjectionPendingAt"=?"#,
         )
-        .bind(encode_datetime(now + chrono::Duration::seconds(115)))
+        .bind(encode_datetime(now + ersatzrs_time::Duration::seconds(115)))
         .execute(&pool)
         .await
         .unwrap();
-        assert!(process_one(&pool, now + chrono::Duration::seconds(120))
-            .await
-            .unwrap());
+        assert!(
+            process_one(&pool, now + ersatzrs_time::Duration::seconds(120))
+                .await
+                .unwrap()
+        );
         assert_eq!(state(&pool).await, "queued");
         let revision: i32 =
             sqlx::query_scalar(r#"SELECT "SavedRevision" FROM "AddonMediaListPublicationJob""#)

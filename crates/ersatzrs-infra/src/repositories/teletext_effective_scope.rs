@@ -1,13 +1,13 @@
 //! Compare one bounded immutable original with its exact supplied scope.
 //! This is association, not native qualification or fresh current authority.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     TeletextEffectiveBindingSnapshot as Binding,
     TeletextEffectiveChannelSelectionSnapshot as Selection, TeletextInstallationSnapshot,
     TeletextOverrideState, TeletextProfileSetting, TeletextProfileValue,
     TeletextSecretReferenceKind,
 };
+use ersatzrs_time::{DateTime, Utc};
 use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde_json::{json, Map, Value};
 use std::fmt;

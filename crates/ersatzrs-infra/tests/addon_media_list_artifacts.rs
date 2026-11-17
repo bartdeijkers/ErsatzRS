@@ -2,11 +2,11 @@ mod common;
 
 use std::fmt::Write as _;
 
-use chrono::Duration;
 use ersatzrs_addon_contract::AddonCapability;
 use ersatzrs_infra::{
     addon_media_list_item_jobs::*, addon_media_list_options::load_draft_item_options,
 };
+use ersatzrs_time::Duration;
 use sha2::{Digest as _, Sha256};
 use sqlx::Executor as _;
 

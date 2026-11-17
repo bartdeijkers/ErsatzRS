@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1"
-chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+ersatzrs-time.workspace = true
 jiff.workspace = true
 icu_collator = "=2.2.1"
 icu_casemap = { version = "=2.2.0", default-features = false, features = ["compiled_data"] }

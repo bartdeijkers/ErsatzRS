@@ -274,7 +274,7 @@ async fn classify_requirements(
                         .try_get::<Option<String>, _>("LeaseExpiresAt")
                         .repository()?
                         .and_then(|value| decode_datetime("preparation lease", &value).ok())
-                        .is_some_and(|expires| expires > chrono::Utc::now());
+                        .is_some_and(|expires| expires > ersatzrs_time::Utc::now());
                 continue;
             }
             let artifact_id: Option<i64> = job.try_get("ArtifactId").repository()?;
@@ -805,7 +805,7 @@ mod tests {
                 &mut tx,
                 1,
                 ersatzrs_domain::AddonMediaListDeliveryMode::DownloadAheadNewVideos,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             )
             .await
             .unwrap();

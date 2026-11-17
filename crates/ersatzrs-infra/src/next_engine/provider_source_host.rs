@@ -13,11 +13,11 @@ use crate::{
     remote_stream::RemoteStreamError,
     repositories::{make_repositories, SqliteConfigRepository},
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     locking::TeletextWorkGuard,
     repositories::{ChannelRepository as _, ConfigRepository as _, RepositoryError, Result},
 };
+use ersatzrs_time::{DateTime, Utc};
 use std::sync::Arc;
 use tokio::time::Instant;
 

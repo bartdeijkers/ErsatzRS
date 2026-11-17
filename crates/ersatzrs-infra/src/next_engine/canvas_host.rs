@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{ChannelRepository as _, RepositoryError, Result};
 use ersatzrs_domain::{Channel, StreamingEngine};
+use ersatzrs_time::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{

@@ -9,7 +9,6 @@ use super::super::{
 };
 use super::live_client as cold;
 use super::{export, import, original, stable_state};
-use chrono::{DateTime, Utc};
 use ersatzrs_app::teletext_design_documents::decode_teletext_effective_design_documents;
 use ersatzrs_core::{
     repositories::PlayoutRepository as _,
@@ -19,6 +18,7 @@ use ersatzrs_core::{
     },
 };
 use ersatzrs_domain::{TeletextDesignRevision, TeletextOverrideState};
+use ersatzrs_time::{DateTime, Utc};
 use ersatzrs_web::host::{
     teletext_authoring::{prepare_static_teletext_design, TeletextAuthoringIdentity},
     teletext_effective_generations::AcceptedEffectiveTeletextOutputCandidate,
@@ -110,7 +110,7 @@ async fn schedule(
     assert_eq!(playout.channel_id, channel);
     playout.schedule_file = Some(path.to_str().unwrap().to_owned());
     let start = previous.map_or_else(
-        || truncate_to_persisted_precision(Utc::now() - chrono::Duration::seconds(1)),
+        || truncate_to_persisted_precision(Utc::now() - ersatzrs_time::Duration::seconds(1)),
         |result| result.anchor.as_ref().unwrap().next_start,
     );
     if let Some(previous) = previous {
@@ -119,7 +119,7 @@ async fn schedule(
     let request = SchedulingRequest {
         playout,
         start,
-        finish: start + chrono::Duration::minutes(5),
+        finish: start + ersatzrs_time::Duration::minutes(5),
         mode: if previous.is_some() {
             PlayoutBuildMode::Continue
         } else {
@@ -128,7 +128,10 @@ async fn schedule(
         reference_data: SchedulingReferenceData {
             media_by_key: BTreeMap::from([(
                 "clip".to_owned(),
-                vec![SchedulingMediaItem::new(71, chrono::Duration::seconds(60))],
+                vec![SchedulingMediaItem::new(
+                    71,
+                    ersatzrs_time::Duration::seconds(60),
+                )],
             )]),
             existing_items: previous.map_or_else(Vec::new, |result| result.added_items.clone()),
             existing_history: previous.map_or_else(Vec::new, |result| result.added_history.clone()),
@@ -209,7 +212,7 @@ async fn bases(fixture: AuthoringFixture) -> Base {
         assert!(no_commands
             .added_items
             .iter()
-            .all(|item| item.finish - item.start == chrono::Duration::seconds(60)));
+            .all(|item| item.finish - item.start == ersatzrs_time::Duration::seconds(60)));
         cold::publish(&fixture, base_original(&fixture, channel).await).await;
     }
     let accepted = [
@@ -237,7 +240,7 @@ async fn on_for(base: &Base, seconds: u8) -> Scoped {
     assert_eq!(short.added_items.len(), 1);
     assert_eq!(
         short.added_items[0].finish - short.added_items[0].start,
-        chrono::Duration::seconds(i64::from(seconds))
+        ersatzrs_time::Duration::seconds(i64::from(seconds))
     );
     assert_eq!(short.teletext_intervals.len(), 1);
     let interval = &short.teletext_intervals[0];
@@ -249,7 +252,7 @@ async fn on_for(base: &Base, seconds: u8) -> Scoped {
     assert!(tail
         .added_items
         .iter()
-        .all(|item| item.finish - item.start == chrono::Duration::seconds(60)));
+        .all(|item| item.finish - item.start == ersatzrs_time::Duration::seconds(60)));
     assert!(
         ersatzrs_infra::repositories::SqlitePlayoutRepository(fixture.state.pool.clone())
             .published_teletext_intervals_at(1, interval.finish)

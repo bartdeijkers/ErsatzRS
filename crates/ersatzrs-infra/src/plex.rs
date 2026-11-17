@@ -2,9 +2,9 @@ use crate::db::DbPool;
 use crate::repositories::common::decode_enum_column;
 use crate::repositories::common::upsert_sql;
 use crate::repositories::SqlxResultExt as _;
-use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{ManagedLibraryOperationClaim, RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
+use ersatzrs_time::{DateTime, Duration, TimeZone, Utc};
 use reqwest::{
     header::{HeaderValue, ACCEPT},
     Client, Url,

@@ -6,9 +6,12 @@ Accepted 2026-11-17.
 
 ## Implementation
 
-Partial — the developer tooling uses Jiff and the SQLite boundary no longer
-needs SQLx's chrono feature. The remaining migration is tracked in
-`ucu16-jiff-migration`.
+Partial
+
+The workspace, developer tooling and add-on validation use Jiff. SQLite
+binds and reads retain the repository's existing text encodings. The
+migration and integrated evidence are tracked under `ucu16-jiff-migration`
+and the UCU-16 continuation milestone.
 
 ## Context
 
@@ -23,6 +26,19 @@ Use Jiff for date and time operations. Start with the version already pinned by
 Classic and the programme clock. Keep SQLite text encodings explicit at the
 repository boundary. Preserve the current EF-compatible UTC text and deliberate
 RFC 3339 encodings by column, including field precision and null handling.
+
+The dependency-light `ersatzrs-time` crate is shared by the domain model and
+the standalone add-on protocol. It keeps timestamps compact and ordered by UTC.
+Jiff owns civil calendar calculations, local offset resolution and signed elapsed
+arithmetic. The shared codec preserves the established seconds/nanoseconds tuple,
+fraction grouping, leap-second notation and extended sentinel years. Gregorian
+cycles preserve dates beyond Jiff's civil range. Those dates remain useful for
+sentinels and storage and are subject to Jiff's range when resolving named zones.
+
+The add-on contract retains its independent version and Git distribution
+under ADR 0066. Cargo can verify both local source packages together without
+publishing them to a registry:
+`cargo package -p ersatzrs-time -p ersatzrs-addon-contract`.
 
 Use signed elapsed durations for playback and fixed intervals. Resolve recurring
 local schedule times with civil dates and the existing choice of time-zone

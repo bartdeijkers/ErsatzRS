@@ -5,12 +5,12 @@ use crate::{
     db::DbPool,
     repositories::{common::encode_datetime, SqliteAddonMediaListRepository, SqlxResultExt as _},
 };
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_addon_contract::{
     AddonMediaListOptionOperation, MediaListPrepareRequest, MediaListPrepareResult,
 };
 use ersatzrs_core::repositories::{AddonMediaListLifecycleRepository, RepositoryError, Result};
 use ersatzrs_domain::RemoteStreamLiveness;
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::Row;
 use std::{

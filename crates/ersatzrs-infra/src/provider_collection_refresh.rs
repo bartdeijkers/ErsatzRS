@@ -3,9 +3,9 @@
 
 use std::collections::BTreeSet;
 
-use chrono::Utc;
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{EntityId, ScanPlayoutRefreshReason};
+use ersatzrs_time::Utc;
 use sqlx::{Row, Transaction};
 
 use crate::{

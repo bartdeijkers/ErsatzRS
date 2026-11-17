@@ -315,15 +315,17 @@ async fn run_addon_media_list_imports(
             _ = interval.tick() => {}
         }
         let work = async {
-            let refreshed = refresh_coordinator.process_one(chrono::Utc::now()).await?;
+            let refreshed = refresh_coordinator
+                .process_one(ersatzrs_time::Utc::now())
+                .await?;
             let probed = source_probes
-                .process_one_source_probe(chrono::Utc::now())
+                .process_one_source_probe(ersatzrs_time::Utc::now())
                 .await?;
             let imported = coordinator.process_one_import_page().await?;
             let detailed = coordinator.process_one_detail().await?;
             let auto_published = ersatzrs_infra::addon_media_list_auto_publication::process_one(
                 &pool,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             )
             .await?;
             let projected =
@@ -377,7 +379,7 @@ async fn run_addon_tool_maintenance(pool: DbPool, shutdown: CancellationToken) {
             _ = interval.tick() => {}
         }
         if coordinator
-            .schedule_startup(chrono::Utc::now())
+            .schedule_startup(ersatzrs_time::Utc::now())
             .await
             .is_err()
         {
@@ -385,7 +387,7 @@ async fn run_addon_tool_maintenance(pool: DbPool, shutdown: CancellationToken) {
             continue;
         }
         let (cancel, cancellation) = tokio::sync::oneshot::channel();
-        let work = coordinator.process_one(chrono::Utc::now(), cancellation);
+        let work = coordinator.process_one(ersatzrs_time::Utc::now(), cancellation);
         tokio::pin!(work);
         tokio::select! {
             () = shutdown.cancelled() => {
@@ -548,7 +550,7 @@ async fn run_addon_media_list_maintenance(
         }
 
         let coordinator = AddonMediaListRefreshCoordinator::new(pool.clone());
-        if let Err(error) = coordinator.admit_due(chrono::Utc::now()).await {
+        if let Err(error) = coordinator.admit_due(ersatzrs_time::Utc::now()).await {
             tracing::warn!(error = %error, "failed to admit due add-on media-list refreshes");
         }
 

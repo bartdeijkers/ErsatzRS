@@ -1,9 +1,9 @@
 //! Save branding and track edits without invalidating Classic enumerators.
 
 use super::*;
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, ScheduleDeferredChange};
 use ersatzrs_domain::PlayoutScheduleKind;
+use ersatzrs_time::{DateTime, Utc};
 
 use crate::repositories::common::decode_datetime;
 

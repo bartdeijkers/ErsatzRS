@@ -1,0 +1,20 @@
+[package]
+name = "ersatzrs-time"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Jiff-backed time values and compatibility codecs for ErsatzRS"
+publish = false
+
+[dependencies]
+jiff = { workspace = true, features = ["js"] }
+serde = "1"
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

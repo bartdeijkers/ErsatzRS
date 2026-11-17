@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     AddonMediaListArtifactKind, AddonMediaListArtifactState, AddonMediaListAvailabilityReason,
     AddonMediaListContentKind, AddonMediaListImportMode, AddonMediaListImportPurpose,
@@ -12,6 +11,7 @@ use ersatzrs_domain::{
     AddonToolMaintenanceRollback, AddonToolMaintenanceState, AddonToolMaintenanceTrigger,
     AddonToolMaintenanceValidation, EntityId, RemoteStreamLiveness,
 };
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::Result;

@@ -20,20 +20,25 @@ pub(crate) use publication::AppliedHostPlayout;
 #[cfg(test)]
 pub(crate) async fn publication_fixture(
     root: &std::path::Path,
-) -> (Arc<NextHost>, DbPool, EntityLocker, chrono::DateTime<Utc>) {
+) -> (
+    Arc<NextHost>,
+    DbPool,
+    EntityLocker,
+    ersatzrs_time::DateTime<Utc>,
+) {
     let (host, start) = publication::tests::fixture(root).await;
     (host.clone(), host.pool.clone(), host.locker.clone(), start)
 }
 pub use publication::PreparedHostPlayout;
 use publication::ProjectedSchedule;
 
-use chrono::Utc;
 use ersatzrs_core::{
     hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry},
     locking::EntityLocker,
     path_replacement::PathReplacement,
     repositories::{ChannelRepository, RepositoryError},
 };
+use ersatzrs_time::Utc;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, time::Instant};
 
@@ -79,7 +84,7 @@ struct SessionCompletion {
 
 /// One exact Next process instance; normal playback and preview never share it.
 pub(super) struct DynamicContext {
-    pub started_at: chrono::DateTime<Utc>,
+    pub started_at: ersatzrs_time::DateTime<Utc>,
     pub request: NextStart,
     pub troubleshooting: Option<Arc<super::troubleshooting::Session>>,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
@@ -91,7 +96,7 @@ pub(super) struct DynamicContext {
 fn retain_dynamic_context(
     contexts: &mut HashMap<uuid::Uuid, DynamicContext>,
     request: &NextStart,
-    started_at: chrono::DateTime<Utc>,
+    started_at: ersatzrs_time::DateTime<Utc>,
 ) -> uuid::Uuid {
     let instance = uuid::Uuid::new_v4();
     contexts.insert(
@@ -569,12 +574,12 @@ impl NextHost {
         deadline: std::time::Instant,
     ) -> std::result::Result<(), RefreshError> {
         loop {
-            let finish =
-                chrono::DateTime::from_timestamp(253_402_300_799, 0).ok_or(RefreshError::Read)?;
+            let finish = ersatzrs_time::DateTime::from_timestamp(253_402_300_799, 0)
+                .ok_or(RefreshError::Read)?;
             let now = Utc::now();
             // Callback bounds are 100 ns ticks; preserve every representable
             // bit of the publication boundary without moving it into the future.
-            let start = chrono::DateTime::from_timestamp(
+            let start = ersatzrs_time::DateTime::from_timestamp(
                 now.timestamp(),
                 now.timestamp_subsec_nanos() / 100 * 100,
             )

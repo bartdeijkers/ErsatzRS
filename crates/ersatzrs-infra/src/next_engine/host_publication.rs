@@ -15,9 +15,9 @@ use crate::{
     playback::load_channel_playback_profile,
     repositories::PendingPlayoutBuild,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{path_replacement::PathReplacement, repositories::Result};
 use ersatzrs_domain::Channel;
+use ersatzrs_time::{DateTime, Utc};
 use std::{collections::BTreeMap, ops::Range, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 

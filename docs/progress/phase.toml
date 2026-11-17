@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Migrate chrono to Jiff before UCU-16 qualification and ordered delivery'
+current_focus = 'Verify the Jiff migration and complete UCU-16 qualification and ordered delivery'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -142,12 +142,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-The maintainer selected Jiff to resolve the chrono maintenance advisory.
-ADR 0138 and milestone ucu-16-continuation track the complete migration and
-shared gates. Finish the remaining model, clock and wire boundaries, verify
-that chrono is absent from the feature graph, and run the unchanged exact-source
-qualification. Preserve the independent Next engine failures from PR165 for
-bounded diagnosis and close the seven ordered dispositions only after proof.
+The workspace now uses Jiff. The all-feature, all-target graph has no chrono
+dependency and Cargo deny passes. ADR 0138 and milestone ucu-16-continuation
+retain the migration evidence and remaining qualification. Run the affected
+runtime and matched web checks before the unchanged exact-source qualification.
+Preserve the independent Next engine failures from PR165 for bounded diagnosis
+and close the seven ordered dispositions only after proof.
 Approved29-asset publication and actual anonymous Linux/Windows cold/cache
 acquisition are Complete; retain row296-runtime-publication/checkpoint.json.
 Four private

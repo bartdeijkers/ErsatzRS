@@ -1,6 +1,6 @@
 //! JSON exchanged with `ersatztv-channel`, not a second scheduling model.
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.7";

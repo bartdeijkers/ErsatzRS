@@ -1,7 +1,6 @@
 //! Narrow transactional configuration port for ADR 0122.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextChannelSelectionSnapshot,
     TeletextEffectiveChannelSelectionSnapshot, TeletextInstallationRead,
@@ -9,6 +8,7 @@ use ersatzrs_domain::{
     TeletextProfileRead, TeletextProfileSetting, TeletextScriptedBaseSelection,
     TeletextSelectionSnapshot,
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{RepositoryError, Result};
 

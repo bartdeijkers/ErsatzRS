@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, NaiveDateTime, Timelike, Utc};
+use ersatzrs_time::{DateTime, Datelike, Duration, NaiveDateTime, Timelike, Utc};
 use jiff::{civil, tz::AmbiguousOffset, tz::TimeZone, Timestamp};
 
 use super::SchedulingError;

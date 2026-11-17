@@ -1,7 +1,7 @@
 //! Occurrence identity for the private canvas callback. Mutable graphics are
 //! intentionally excluded: removing graphics must yield transparent frames.
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::super::schedule::ScheduledMedia;
@@ -122,8 +122,8 @@ impl CanvasBinding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeDelta;
     use ersatzrs_domain::PlayoutItem;
+    use ersatzrs_time::TimeDelta;
 
     fn media() -> ScheduledMedia {
         let start = DateTime::from_timestamp(1_000, 0).unwrap();

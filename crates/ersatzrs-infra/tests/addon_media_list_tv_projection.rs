@@ -9,7 +9,6 @@ mod common;
 
 use std::{collections::BTreeSet, fs, path::Path, path::PathBuf};
 
-use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListNfoMetadata,
     AddonMediaListNfoPerson, AddonMediaListPublicationContinuation,
@@ -24,6 +23,7 @@ use ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer;
 use ersatzrs_infra::repositories::{
     make_repositories, project_one_pending_detail_batch, Repositories,
 };
+use ersatzrs_time::{Duration, Utc};
 use sqlx::{Executor, SqlitePool};
 use tempfile::TempDir;
 

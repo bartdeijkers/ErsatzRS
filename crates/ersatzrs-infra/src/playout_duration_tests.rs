@@ -1,8 +1,8 @@
-use chrono::Duration;
 use ersatzrs_core::{
     repositories::TroubleshootingRepository as _, scheduling::SchedulingCollectionKey,
 };
 use ersatzrs_domain::CollectionType;
+use ersatzrs_time::Duration;
 
 use crate::{
     db::DbPool,
@@ -12,7 +12,7 @@ use crate::{
 pub(crate) async fn image_fixture() -> (
     DbPool,
     ersatzrs_domain::Channel,
-    chrono::DateTime<chrono::Utc>,
+    ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) {
     let (pool, _, channel, start) = crate::next_engine::schedule::tests::fixture().await;
     sqlx::raw_sql(r#"

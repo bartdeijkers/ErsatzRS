@@ -38,10 +38,10 @@ use crate::repositories::SqlxResultExt as _;
 
 use std::path::{Path, PathBuf};
 
-use chrono::{Duration, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::Result;
 use ersatzrs_ffmpeg::{ffmpeg_path, InputFile, InputKind, SubtitleMethod, SubtitleTextFormat};
+use ersatzrs_time::{Duration, Utc};
 use md5::{Digest, Md5};
 use sqlx::{Pool, Row};
 use tokio::process::Command;

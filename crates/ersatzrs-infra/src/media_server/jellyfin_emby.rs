@@ -4,12 +4,12 @@
 //! provider-owned. This module contains only the normalized persistence and
 //! pagination contracts that are identical for both adapters.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{ProviderMediaSourceDeclaration, RepositoryError, Result};
 use ersatzrs_domain::{
     DolbyVisionMetadataState, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink,
     VideoScanKind,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::{Row, Transaction};
 
 use crate::db::DbPool;

@@ -37,7 +37,7 @@ async fn guide_maintenance_health_separates_review_from_serving_caps_and_bounds_
     let review = health.check_at(at).await.unwrap();
     assert_eq!(review.status, HealthCheckStatus::Warning);
     assert!(review.message.contains("fresh=1") && review.message.contains("needs-review=1"));
-    let loss = at + ChronoDuration::seconds(1);
+    let loss = at + ElapsedDuration::seconds(1);
     assert_eq!(port.changed(seed.id, loss).await.unwrap(), M::Accepted(()));
     let stale = health.check_at(loss).await.unwrap();
     assert!(stale.message.contains("stale=1") && stale.message.contains("needs-review=1"));
@@ -75,7 +75,7 @@ async fn guide_maintenance_health_separates_review_from_serving_caps_and_bounds_
 async fn add_bounded_health_origins(
     repo: &SqliteTeletextGenerationRepository,
     seed_id: i64,
-    at: chrono::DateTime<Utc>,
+    at: ersatzrs_time::DateTime<Utc>,
 ) {
     // Schema-valid synthetic maintenance rows prove bounded reporting only;
     // they are not native qualification, runtime adoption or stream authority.
@@ -101,7 +101,7 @@ async fn add_bounded_health_origins(
         WHERE g."Id" BETWEEN 1001 AND 1256"#).bind(seed_id).execute(&repo.0).await.unwrap();
     sqlx::query(r#"INSERT INTO "TeletextGuideRefreshCurrent" ("ChannelId","Role","SeedId","Revision","NextDueAt","LastSuccessAt")
         SELECT "ChannelId",1,"Id",1,?,? FROM "TeletextGuideRefreshSeed" WHERE "GenerationId" BETWEEN 1001 AND 1256"#)
-        .bind((at+ChronoDuration::minutes(5)).to_rfc3339()).bind(at.to_rfc3339()).execute(&repo.0).await.unwrap();
+        .bind((at+ElapsedDuration::minutes(5)).to_rfc3339()).bind(at.to_rfc3339()).execute(&repo.0).await.unwrap();
 }
 
 async fn check_legacy_base_authorization() {

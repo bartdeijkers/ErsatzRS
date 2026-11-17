@@ -356,15 +356,15 @@ pub fn programme_title(
 }
 
 pub fn programme_time(value: &str) -> String {
-    programme_time_in_timezone(value, &chrono::Local)
+    programme_time_in_timezone(value, &ersatzrs_time::Local)
 }
 
 fn programme_time_in_timezone<Tz>(value: &str, timezone: &Tz) -> String
 where
-    Tz: chrono::TimeZone,
+    Tz: ersatzrs_time::TimeZone,
     Tz::Offset: std::fmt::Display,
 {
-    chrono::DateTime::parse_from_rfc3339(value).map_or_else(
+    ersatzrs_time::DateTime::parse_from_rfc3339(value).map_or_else(
         |_| value.to_owned(),
         |parsed| parsed.with_timezone(timezone).format("%H:%M").to_string(),
     )
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn programme_times_are_rendered_in_the_selected_local_offset() {
-        let timezone = chrono::FixedOffset::east_opt(2 * 60 * 60).unwrap();
+        let timezone = ersatzrs_time::FixedOffset::east_opt(2 * 60 * 60).unwrap();
 
         assert_eq!(
             programme_time_in_timezone("2026-07-26T10:15:00+00:00", &timezone),

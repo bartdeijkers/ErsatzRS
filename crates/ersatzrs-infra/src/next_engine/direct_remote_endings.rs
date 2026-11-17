@@ -50,9 +50,9 @@ async fn real_next_rtsp_handoff_preserves_tracks_and_stops_padded_audio_at_video
 async fn run(ffmpeg: &Path, uri: &str, finite: &Path, root: &Path) -> Result<(), String> {
     let playout = root.join("playout");
     tokio::fs::create_dir(&playout).await.unwrap();
-    let start = chrono::Utc::now();
-    let handoff = start + chrono::Duration::seconds(12);
-    let finish = handoff + chrono::Duration::seconds(6);
+    let start = ersatzrs_time::Utc::now();
+    let handoff = start + ersatzrs_time::Duration::seconds(12);
+    let finish = handoff + ersatzrs_time::Duration::seconds(6);
     let schedule = serde_json::json!({
         "version": wire::PLAYOUT_VERSION,
         "items": [
@@ -133,7 +133,7 @@ fn check_playlist(body: &str) {
         .lines()
         .filter_map(|line| line.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:"))
     {
-        let current = chrono::DateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.f%z")
+        let current = ersatzrs_time::DateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S%.f%z")
             .expect("Next programme timestamp");
         assert!(previous.is_none_or(|previous| current > previous));
         previous = Some(current);

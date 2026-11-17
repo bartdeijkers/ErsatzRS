@@ -78,9 +78,9 @@ async fn configure_text_tracks(pool: &crate::db::DbPool, embedded: bool, convert
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::seconds(5);
-    item.out_point = chrono::Duration::seconds(55);
-    item.finish = item.start + chrono::Duration::seconds(50);
+    item.in_point = ersatzrs_time::Duration::seconds(5);
+    item.out_point = ersatzrs_time::Duration::seconds(55);
+    item.finish = item.start + ersatzrs_time::Duration::seconds(50);
     if off || embedded {
         item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
             media_version_id: 100,
@@ -391,8 +391,8 @@ async fn callback_connection(
                     if let Some(binding) = target.strip_prefix("/ffmpeg/next-fallback/") {
                         let parts: Vec<_> = binding.split('/').collect();
                         assert_eq!(parts.len(), 3);
-                        let now = chrono::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap()).unwrap().with_timezone(&chrono::Utc);
-                        let until = chrono::DateTime::parse_from_rfc3339(header("x-etv-until").unwrap()).unwrap().with_timezone(&chrono::Utc);
+                        let now = ersatzrs_time::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap()).unwrap().with_timezone(&ersatzrs_time::Utc);
+                        let until = ersatzrs_time::DateTime::parse_from_rfc3339(header("x-etv-until").unwrap()).unwrap().with_timezone(&ersatzrs_time::Utc);
                         let item = host.resolve_fallback(parts[0].parse().unwrap(), parts[1].parse().unwrap(), parts[2].parse().unwrap(),
                             header("x-etv-channel").unwrap(), uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER).unwrap()).unwrap(),
                             header("x-etv-dynamic-id").unwrap(), now, until).await.expect("production fallback callback");
@@ -408,10 +408,10 @@ async fn callback_connection(
                     })
                         .split('/').collect();
                     assert_eq!(parts.len(), 4);
-                    let now = chrono::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap())
-                        .unwrap().with_timezone(&chrono::Utc);
-                    let until = chrono::DateTime::parse_from_rfc3339(header("x-etv-until").unwrap())
-                        .unwrap().with_timezone(&chrono::Utc);
+                    let now = ersatzrs_time::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap())
+                        .unwrap().with_timezone(&ersatzrs_time::Utc);
+                    let until = ersatzrs_time::DateTime::parse_from_rfc3339(header("x-etv-until").unwrap())
+                        .unwrap().with_timezone(&ersatzrs_time::Utc);
                     match host.resolve_dynamic(parts[0].parse().unwrap(), parts[1].parse().unwrap(),
                         parts[2], if parts[3] == "off" { None } else { Some(parts[3].parse().unwrap()) }, header("x-etv-channel").unwrap(),
                         uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER)

@@ -387,7 +387,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         list_id: EntityId,
         revision: i32,
         source_draft_revision: i32,
-        completed_at: chrono::DateTime<chrono::Utc>,
+        completed_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<()> {
         let completed_at = decode_datetime(
             "AddonMediaListRevision.CompletedAt",
@@ -494,7 +494,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         storage_relative_path: &str,
         sha256: &str,
         byte_length: u64,
-        created_at: chrono::DateTime<chrono::Utc>,
+        created_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<AddonMediaListRevisionFileBlob> {
         validate_revision_relative_path(storage_relative_path)?;
         if sha256.trim().is_empty() {
@@ -556,7 +556,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         list_id: EntityId,
         revision: i32,
         source_draft_revision: i32,
-        completed_at: chrono::DateTime<chrono::Utc>,
+        completed_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         files: &[AddonMediaListRevisionFile],
         artifacts: &AddonMediaListRevisionArtifacts,
     ) -> Result<AddonMediaListRevisionSnapshot> {
@@ -765,7 +765,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn reset_impact(
         &self,
         list_id: EntityId,
-        as_of: chrono::DateTime<chrono::Utc>,
+        as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<AddonMediaListResetImpact> {
         calculate_reset_impact(&self.0, list_id, as_of).await
     }
@@ -773,14 +773,14 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn prune_unpinned_revisions(
         &self,
         list_id: EntityId,
-        as_of: chrono::DateTime<chrono::Utc>,
+        as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<Vec<i32>> {
         prune_unpinned_revision_rows(&self.0, list_id, as_of).await
     }
 
     async fn prune_all_unpinned_revisions(
         &self,
-        as_of: chrono::DateTime<chrono::Utc>,
+        as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<u64> {
         let list_ids = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT DISTINCT "AddonMediaListId" FROM "AddonMediaListRevision"
@@ -804,7 +804,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn artifact_reference_pins(
         &self,
         artifact_id: EntityId,
-        as_of: chrono::DateTime<chrono::Utc>,
+        as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<AddonMediaListReferencePins> {
         artifact_reference_pins(&self.0, artifact_id, as_of).await
     }
@@ -812,7 +812,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn revision_file_blob_reference_pins(
         &self,
         blob_id: EntityId,
-        as_of: chrono::DateTime<chrono::Utc>,
+        as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<AddonMediaListReferencePins> {
         revision_file_blob_reference_pins(&self.0, blob_id, as_of).await
     }
@@ -839,7 +839,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         generation: i32,
         sha256: &str,
         entry_count: u64,
-        promoted_at: chrono::DateTime<chrono::Utc>,
+        promoted_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<AddonMediaListImportCheckpoint> {
         let entry_count = encode_i64("add-on media-list checkpoint entry count", entry_count)?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
@@ -947,7 +947,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         &self,
         lifecycle: &AddonMediaListImportLifecycle,
         expected_lease_owner: &str,
-        active_at: chrono::DateTime<chrono::Utc>,
+        active_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let list_id = sqlx::query_scalar::<_, EntityId>(
@@ -1091,7 +1091,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn save_lifecycle_job(
         &self,
         job: &AddonMediaListLifecycleJob,
-        expected_updated_at: chrono::DateTime<chrono::Utc>,
+        expected_updated_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let stored = sqlx::query(
@@ -1234,7 +1234,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         &self,
         item_id: EntityId,
         expected_generation: i32,
-        confirmed_at: chrono::DateTime<chrono::Utc>,
+        confirmed_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
@@ -1361,7 +1361,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         cache_key: &str,
         kind: ersatzrs_domain::AddonMediaListArtifactKind,
         reserved_bytes: u64,
-        created_at: chrono::DateTime<chrono::Utc>,
+        created_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<AddonMediaListArtifact> {
         let reserved_bytes = encode_i64("artifact reserved bytes", reserved_bytes)?;
         let created_at_text = encode_datetime(created_at);
@@ -1439,7 +1439,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn save_artifact(
         &self,
         artifact: &AddonMediaListArtifact,
-        expected_updated_at: chrono::DateTime<chrono::Utc>,
+        expected_updated_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
@@ -1597,7 +1597,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         addon_id: &str,
         tool_key: &str,
         trigger: ersatzrs_domain::AddonToolMaintenanceTrigger,
-        created_at: chrono::DateTime<chrono::Utc>,
+        created_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<AddonToolMaintenanceAttempt> {
         let created_at_text = encode_datetime(created_at);
         let result = sqlx::query(
@@ -1642,7 +1642,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn save_tool_maintenance_attempt(
         &self,
         attempt: &AddonToolMaintenanceAttempt,
-        expected_updated_at: chrono::DateTime<chrono::Utc>,
+        expected_updated_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
@@ -1706,7 +1706,7 @@ pub(crate) async fn capture_current_revision_snapshot(
     list_id: EntityId,
     revision: i32,
     source_draft_revision: i32,
-    completed_at: chrono::DateTime<chrono::Utc>,
+    completed_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     files: &[AddonMediaListRevisionFile],
     artifact_ids: &[EntityId],
 ) -> Result<AddonMediaListRevisionSnapshot> {
@@ -3216,7 +3216,7 @@ fn draft_publication_item_changed(
 async fn calculate_reset_impact(
     pool: &sqlx::Pool<crate::db::Db>,
     list_id: EntityId,
-    as_of: chrono::DateTime<chrono::Utc>,
+    as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> Result<AddonMediaListResetImpact> {
     let list = sqlx::query(
         r#"SELECT "DraftRevision", "PublishedRevision", "PlaylistId"
@@ -3401,7 +3401,7 @@ async fn active_or_future_playout_count(
 async fn prune_unpinned_revision_rows(
     pool: &sqlx::Pool<crate::db::Db>,
     list_id: EntityId,
-    as_of: chrono::DateTime<chrono::Utc>,
+    as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> Result<Vec<i32>> {
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     if list_has_active_work_in_tx(&mut tx, list_id).await? {
@@ -3506,7 +3506,7 @@ async fn revision_has_active_playout_pin_in_tx(
 async fn artifact_reference_pins(
     pool: &sqlx::Pool<crate::db::Db>,
     artifact_id: EntityId,
-    as_of: chrono::DateTime<chrono::Utc>,
+    as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> Result<AddonMediaListReferencePins> {
     let row = sqlx::query(
         r#"SELECT "artifact"."AddonMediaListId", "artifact"."AddonMediaListItemId",
@@ -3567,7 +3567,7 @@ async fn artifact_reference_pins(
 async fn revision_file_blob_reference_pins(
     pool: &sqlx::Pool<crate::db::Db>,
     blob_id: EntityId,
-    as_of: chrono::DateTime<chrono::Utc>,
+    as_of: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> Result<AddonMediaListReferencePins> {
     let list_id: EntityId = sqlx::query_scalar(
         r#"SELECT "AddonMediaListId" FROM "AddonMediaListRevisionFileBlob" WHERE "Id" = ?"#,
@@ -4114,7 +4114,7 @@ fn tombstones_are_identical(
 fn decode_required_datetime(
     kind: &'static str,
     value: impl AsRef<str>,
-) -> Result<chrono::DateTime<chrono::Utc>> {
+) -> Result<ersatzrs_time::DateTime<ersatzrs_time::Utc>> {
     decode_datetime(kind, value.as_ref())
 }
 
@@ -4181,7 +4181,7 @@ impl SqliteAddonMediaListRepository {
                 schema_digest: sha256_hex(definition_json.as_bytes()),
             },
             definition_json,
-            created_at: chrono::Utc::now(),
+            created_at: ersatzrs_time::Utc::now(),
         };
         match register_option_schema_in_tx(tx, &schema).await {
             // Keep imports usable after an incompatible package schema update.

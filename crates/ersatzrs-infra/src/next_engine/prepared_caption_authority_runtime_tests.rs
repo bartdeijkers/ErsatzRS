@@ -30,7 +30,7 @@ pub(super) async fn verify(
         audio: Some(2),
         number: &request.number,
         instance,
-        now: item.start + chrono::Duration::seconds(1),
+        now: item.start + ersatzrs_time::Duration::seconds(1),
         until: item.finish,
     };
     let ready = resolve(host, callback).await.unwrap();

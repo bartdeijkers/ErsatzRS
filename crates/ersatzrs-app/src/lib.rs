@@ -533,7 +533,7 @@ impl ApplicationServices {
         Ok(self
             .ports
             .managed_library_operations()
-            .prune_publication_history(chrono::Utc::now())
+            .prune_publication_history(ersatzrs_time::Utc::now())
             .await?)
     }
 
@@ -542,7 +542,7 @@ impl ApplicationServices {
         Ok(self
             .ports
             .addon_media_list_lifecycle()
-            .prune_all_unpinned_revisions(chrono::Utc::now())
+            .prune_all_unpinned_revisions(ersatzrs_time::Utc::now())
             .await?)
     }
 
@@ -3430,7 +3430,7 @@ impl ApplicationServices {
     ) -> Result<Option<ersatzrs_core::repositories::ManagedLibraryOperationClaim>> {
         self.ports
             .managed_library_operations()
-            .claim_next(chrono::Utc::now())
+            .claim_next(ersatzrs_time::Utc::now())
             .await
             .map_err(Into::into)
     }
@@ -3442,7 +3442,7 @@ impl ApplicationServices {
     ) -> Result<bool> {
         self.ports
             .managed_library_operations()
-            .heartbeat(claim, chrono::Utc::now())
+            .heartbeat(claim, ersatzrs_time::Utc::now())
             .await
             .map_err(Into::into)
     }
@@ -3523,7 +3523,7 @@ impl ApplicationServices {
     ) -> Result<Option<ersatzrs_core::repositories::ManagedLibraryOperationClaim>> {
         self.ports
             .managed_library_operations()
-            .claim_operation(operation_id, chrono::Utc::now())
+            .claim_operation(operation_id, ersatzrs_time::Utc::now())
             .await
             .map_err(Into::into)
     }
@@ -3707,7 +3707,7 @@ async fn execute_managed_library_operation(
                                 generation: job.generation,
                                 owner_token: claim.operation.owner_token.clone(),
                                 lease_owner: claim.lease_owner.clone(),
-                                active_at: chrono::Utc::now(),
+                                active_at: ersatzrs_time::Utc::now(),
                             },
                         )
                         .await;
@@ -4347,7 +4347,8 @@ async fn schedule_publication_retry(
         (operation + u64::from(attempt)) % u64::try_from(jitter_window + 1).unwrap_or(2),
     )
     .unwrap_or(0);
-    let next = chrono::Utc::now() + chrono::Duration::seconds((base + jitter).min(60));
+    let next =
+        ersatzrs_time::Utc::now() + ersatzrs_time::Duration::seconds((base + jitter).min(60));
     match application
         .ports
         .managed_library_operations()

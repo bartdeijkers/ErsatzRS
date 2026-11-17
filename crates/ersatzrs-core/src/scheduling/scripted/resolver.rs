@@ -148,8 +148,8 @@ mod tests {
     use crate::scheduling::{
         SchedulingCollectionKey, SchedulingReferenceData, SchedulingSmartShuffleState,
     };
-    use chrono::{Duration, TimeZone, Utc};
     use ersatzrs_domain::{PlaybackOrder, RemoteStreamLiveness};
+    use ersatzrs_time::{Duration, TimeZone, Utc};
     use std::sync::Arc;
 
     #[derive(Debug)]

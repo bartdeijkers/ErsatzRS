@@ -45,7 +45,7 @@ async fn filler_admin_create_update_absence_and_checked_delete_are_typed() {
         name: "bumper".to_owned(),
         filler_kind: FillerKind::PreRoll,
         filler_mode: FillerMode::Duration,
-        duration: Some(chrono::Duration::seconds(15)),
+        duration: Some(ersatzrs_time::Duration::seconds(15)),
         ..FillerPreset::default()
     };
     let id = repos.filler.save_admin(&preset).await.unwrap();
@@ -59,7 +59,7 @@ async fn filler_admin_create_update_absence_and_checked_delete_are_typed() {
             .unwrap()
             .unwrap()
             .duration,
-        Some(chrono::Duration::seconds(15))
+        Some(ersatzrs_time::Duration::seconds(15))
     );
 
     preset.id = id;

@@ -6,7 +6,6 @@ use std::{
     time::Instant,
 };
 
-use chrono::{DateTime, Utc};
 use ersatzrs_app::{
     teletext_channel_documents::ChannelTeletextDocumentError,
     teletext_generations::TeletextGenerationStoreError,
@@ -34,6 +33,7 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextComposedMainEncodingError, TeletextEncodingError, TeletextMainCompositionSource,
     TeletextNativeDefaultPageEncodingFailure, TeletextNormalizedMainProgramFailure, TeletextRaster,
 };
+use ersatzrs_time::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
 use super::teletext_channel_documents::{
