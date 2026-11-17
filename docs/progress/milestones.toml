@@ -41880,9 +41880,33 @@ four-platform/final/CI and ordered delivery remain open. No row disposition or
 accepted pin is advanced, and row296 does not start before this row's local C
 stopping condition is met.
 
+
+2026-11-17 R295-C Next Convert/reopen component Complete within Linux scope:
+The actual production Next host now passes the external-first, external-last
+and interleaved ordinary-scan matrix with Convert, using a file-backed SQLite
+database closed and reopened before host creation. The complete persisted map
+is unchanged after reopen; original logical pins drive actual selected Dutch
+880Hz audio and timed WebVTT captions repeated consistently across adjacent
+segments. Decoded video remains free of burned glyphs. Capacity admission,
+duplicate-session refusal and owned shutdown retain the existing host assertions.
+Run0b3a99c3-5e6f-4c89-8fd9-4d07ba3a33e5 passes the three-layout grouped test in
+row295-next-convert-runtime.log. The shared assertion refactor also passes the
+three existing Burn/legacy-audio/unknown-HDR tests (five sessions) in
+row295-next-burn-control.log. After splitting fixture setup to satisfy the
+function-size lint, final run38986024-7a20-4850-ac1e-cd3b1a599bec passes all four
+runtime controls (eight sessions) in row295-next-convert-qualified-runtime.log.
+Strict infra all-target lint passes in row295-next-convert-clippy-qualified.log; formatting,
+architecture and progress checks pass. The reproducer verifies unchanged worker,
+FFmpeg and ffprobe hashes before execution; receipt row295-next-convert-checkpoint.json.
+This closes actual ordinary Next Convert and its map/pin SQLite-reopen proof.
+Actual Native selected AV/captions, remaining qualified-source/owner controls
+and unchanged smoke/TSDuck acceptance remain in C; full-window, consolidated
+first-party runtime, matched-bundle/browser, platform/final/CI and ordered delivery
+remain open. No row disposition or accepted pin advances.
+
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local
-component is closed; next is row295 Native and qualified-source physical-map consumption. Row291's local component is complete; item2's consolidated
+component is closed; next is row295 Native selected playback and remaining qualified-source/owner proof. Row291's local component is complete; item2's consolidated
 runtime/package qualification remains in the shared mandatory proof list. Row290's implemented local component remains distinct
 from its required integrated/window acceptance. All provisional ledger mappings
 remain unaccepted;289 rows processed,7 pending and the accepted pin unchanged.

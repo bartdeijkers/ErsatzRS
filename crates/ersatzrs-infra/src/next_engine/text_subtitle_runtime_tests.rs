@@ -572,7 +572,7 @@ async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool, sett
     }
 }
 
-async fn assert_text_playlist(
+pub(super) async fn assert_text_playlist(
     output: &Path,
     playlist: &str,
     converted: bool,

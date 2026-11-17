@@ -7,13 +7,13 @@ use sqlx::SqlitePool;
 #[tokio::test]
 #[ignore = "requires exact Next/FFmpeg9; repaired Jellyfin metadata and decoded playback"]
 async fn real_next_repaired_jellyfin_audio_preserves_selected_tracks() {
-    repaired_provider_playback(false, [0, 1, 2, 3], &[]).await;
+    repaired_provider_playback(false, [0, 1, 2, 3], &[], false).await;
 }
 
 #[tokio::test]
 #[ignore = "requires exact Next/FFmpeg9; unknown provider HDR and real frame metadata"]
 async fn real_next_unknown_provider_hdr_keeps_frame_probe_and_selected_tracks() {
-    repaired_provider_playback(true, [0, 1, 2, 3], &[]).await;
+    repaired_provider_playback(true, [0, 1, 2, 3], &[], false).await;
 }
 
 #[tokio::test]
@@ -24,11 +24,23 @@ async fn row295_real_next_maps_external_first_last_and_interleaved_tracks() {
         ([0, 1, 2, 3], [4, 5]),
         ([0, 2, 3, 5], [1, 4]),
     ] {
-        repaired_provider_playback(false, logical, &external).await;
+        repaired_provider_playback(false, logical, &external, false).await;
     }
 }
 
-async fn repaired_provider_playback(hdr: bool, logical: [i32; 4], external: &[i32]) {
+#[tokio::test]
+#[ignore = "requires exact Next/FFmpeg9; row295 Convert after persisted SQLite restart"]
+async fn row295_real_next_convert_preserves_mapped_tracks_after_restart() {
+    for (logical, external) in [
+        ([2, 3, 4, 5], [0, 1]),
+        ([0, 1, 2, 3], [4, 5]),
+        ([0, 2, 3, 5], [1, 4]),
+    ] {
+        repaired_provider_playback(false, logical, &external, true).await;
+    }
+}
+
+async fn repaired_provider_playback(hdr: bool, logical: [i32; 4], external: &[i32], convert: bool) {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .with_test_writer()
@@ -42,7 +54,11 @@ async fn repaired_provider_playback(hdr: bool, logical: [i32; 4], external: &[i3
     let clip = text_subtitle_runtime_tests::generate_text_clip_with_cues(
         &ffmpeg,
         &root,
-        "1\n00:00:00,000 --> 00:01:00,000\nNext subtitle proof\n",
+        if convert {
+            "1\n00:00:05,000 --> 00:00:55,000\nNext text conversion proof\n"
+        } else {
+            "1\n00:00:00,000 --> 00:01:00,000\nNext subtitle proof\n"
+        },
     )
     .await;
     let clip = if hdr {
@@ -59,7 +75,20 @@ async fn repaired_provider_playback(hdr: bool, logical: [i32; 4], external: &[i3
         audio_channels: 1,
         ..Default::default()
     };
-    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+    let database = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(root.join("provider.sqlite"))
+        .create_if_missing(true);
+    let (pool, locker) = if convert {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(database.clone())
+            .await
+            .unwrap();
+        let pool = selection::tests::seed_fixture_pool(pool).await;
+        prepare_schedule_with_pool(pool, &clip, false, &profile).await
+    } else {
+        prepare_schedule(&clip, false, &profile).await
+    };
     sqlx::raw_sql(r#"
         DELETE FROM "Subtitle";
         DELETE FROM "MediaFile" WHERE "Id"=2;
@@ -75,34 +104,17 @@ async fn repaired_provider_playback(hdr: bool, logical: [i32; 4], external: &[i3
         .fetch_one(&pool)
         .await
         .unwrap();
-    let hint = crate::next_engine::probe_hint::persisted(&pool, version)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(hint.video[0].has_hdr10_metadata, None);
-    assert_eq!(
-        hint.video[0].color_transfer.as_deref(),
-        hdr.then_some("smpte2084")
-    );
-    let mut item = selection::tests::item();
-    item.id = 1;
-    item.playout_id = 1;
-    item.in_point = chrono::Duration::zero();
-    item.out_point = chrono::Duration::seconds(60);
-    item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
-        media_version_id: version,
-        video_stream_index: logical[0],
-        audio_stream_index: Some(logical[2]),
-        subtitle_stream_index: Some(logical[3]),
-    });
-    crate::repositories::make_repositories(pool.clone())
-        .playout
-        .upsert_item(&item)
-        .await
-        .unwrap();
+    pin_provider_choice(&pool, version, hdr, logical, convert).await;
+    let (pool, locker) = if convert {
+        let pool = reopen_provider_pool(pool, version, database).await;
+        drop(locker);
+        (pool, ersatzrs_core::locking::EntityLocker::default())
+    } else {
+        (pool, locker)
+    };
     let host = std::sync::Arc::new(host::NextHost::new(pool, locker, root.join("playout")));
     let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
-    assert_next_session(
+    assert_next_session_with_text_mode(
         &host,
         host::NextStart {
             channel_id: 1,
@@ -117,9 +129,76 @@ async fn repaired_provider_playback(hdr: bool, logical: [i32; 4], external: &[i3
             deadline: Instant::now() + Duration::from_secs(30),
         },
         false,
+        convert,
     )
     .await;
     callback.stop().await;
+}
+
+async fn reopen_provider_pool(
+    pool: SqlitePool,
+    version: i64,
+    database: sqlx::sqlite::SqliteConnectOptions,
+) -> SqlitePool {
+    let before = crate::playback::source_indexes::load(&pool, version)
+        .await
+        .unwrap();
+    assert!(before.is_some());
+    pool.close().await;
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(database.create_if_missing(false))
+        .await
+        .unwrap();
+    let after = crate::playback::source_indexes::load(&pool, version)
+        .await
+        .unwrap();
+    assert!(
+        before == after,
+        "source identity map must survive SQLite reopen"
+    );
+    pool
+}
+
+async fn pin_provider_choice(
+    pool: &SqlitePool,
+    version: i64,
+    hdr: bool,
+    logical: [i32; 4],
+    convert: bool,
+) {
+    let hint = crate::next_engine::probe_hint::persisted(pool, version)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(hint.video[0].has_hdr10_metadata, None);
+    assert_eq!(
+        hint.video[0].color_transfer.as_deref(),
+        hdr.then_some("smpte2084")
+    );
+    let mut item = selection::tests::item();
+    item.id = 1;
+    item.playout_id = 1;
+    item.in_point = chrono::Duration::zero();
+    item.out_point = chrono::Duration::seconds(if convert { 55 } else { 60 });
+    if convert {
+        item.in_point = chrono::Duration::seconds(5);
+        sqlx::query(r#"UPDATE "Channel" SET "NextEngineTextSubtitleMode"=1 WHERE "Id"=1"#)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+    item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
+        media_version_id: version,
+        video_stream_index: logical[0],
+        audio_stream_index: Some(logical[2]),
+        subtitle_stream_index: Some(logical[3]),
+    });
+    crate::repositories::make_repositories(pool.clone())
+        .playout
+        .upsert_item(&item)
+        .await
+        .unwrap();
 }
 
 async fn repair_with_ordinary_scans(

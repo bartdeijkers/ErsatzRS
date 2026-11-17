@@ -36,8 +36,8 @@ remains. Checkpoint2f49534d retains rows290–292. The maintainer resumed;
 row293 native Linux shaping proof now confirms existing managed FFmpeg9
 behavior with paired ASS/SRT complex/simple render controls and a font lacking
 U+FEFF. No runtime/filter change is needed. Row294 local query/order/continuity proof is Complete with80 composed
-repository cases and strict all-target lint; row295 A/B implementation is locally Complete; R295-C playback/restart/source
-qualification remains open;
+repository cases and strict all-target lint; row295 A/B implementation is locally Complete; R295-C actual Next Convert and SQLite map/pin reopen proof is Complete; Native playback and remaining source
+qualification remain open;
 all shared window/package/platform/browser/CI acceptance remains mandatory and no ledger disposition/pin is advanced. Direct GitHub recheck
 still ends at row296; no new moving endpoint is selected.
 
@@ -145,8 +145,8 @@ MPEG-TS/Direct primary/fallback/hardware retry now use the same boundary.
 Background extraction now retains logical cache identities while staging
 physical-index output behind source/metadata publication guards. Qualified-source
 layout/page ranking and physical interlace readers now pass scoped integration/
-probe evidence. Continue at R295-C actual Native/Convert and remaining
-restart/qualified-source proof, preserving the complete existing C requirement set.
+probe evidence. Actual Next Convert across all three layouts now passes after SQLite close/reopen. Continue at R295-C actual Native playback and remaining
+qualified-source/owner proof, preserving the complete existing C requirement set.
 Item2 consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.
 The accepted Pin table remains unchanged; no new row has a final disposition.

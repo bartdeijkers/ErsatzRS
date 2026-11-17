@@ -863,6 +863,15 @@ async fn assert_next_session(
     request: host::NextStart,
     muted: bool,
 ) {
+    assert_next_session_with_text_mode(host, request, muted, false).await;
+}
+
+async fn assert_next_session_with_text_mode(
+    host: &std::sync::Arc<host::NextHost>,
+    request: host::NextStart,
+    muted: bool,
+    convert: bool,
+) {
     use crate::transcode_capacity::{
         active_transcode_snapshot, try_reserve_active_transcode, ActiveTranscodeSlot,
     };
@@ -912,14 +921,30 @@ async fn assert_next_session(
         .start(registry.clone(), request.clone())
         .await
         .is_none());
-    assert_audio_and_subtitle(
-        &request.ffmpeg,
-        &request.ffprobe,
-        &request.output.join(segment),
-        muted,
-        "aac",
-    )
-    .await;
+    if convert {
+        let converted_segment = text_subtitle_runtime_tests::assert_text_playlist(
+            &request.output,
+            &playlist,
+            true,
+            false,
+        )
+        .await;
+        text_subtitle_runtime_tests::assert_text_video_and_audio(
+            &request.ffmpeg,
+            &converted_segment,
+            false,
+        )
+        .await;
+    } else {
+        assert_audio_and_subtitle(
+            &request.ffmpeg,
+            &request.ffprobe,
+            &request.output.join(segment),
+            muted,
+            "aac",
+        )
+        .await;
+    }
     assert!(registry.stop_channel("1").await);
     task.await.unwrap();
     assert_eq!(active_transcode_snapshot(1).active, 0);
