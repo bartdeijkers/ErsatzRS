@@ -576,7 +576,7 @@ mod published_host_tests {
                 }
                 "channel" => invalid.channel_id += 1,
                 "expired" => {
-                    invalid.valid_until = Some(Utc::now() - ersatzrs_time::Duration::seconds(1))
+                    invalid.valid_until = Some(Utc::now() - ersatzrs_time::Duration::seconds(1));
                 }
                 _ => unreachable!(),
             }

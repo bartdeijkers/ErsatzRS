@@ -3034,7 +3034,7 @@ fn parse_playout_utc(value: &str) -> Result<DateTime<Utc>> {
         .map(|value| value.with_timezone(&Utc))
         .or_else(|_| {
             ersatzrs_time::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
-                .map(|value| value.and_utc())
+                .map(ersatzrs_time::NaiveDateTime::and_utc)
         })
         .map_err(|error| ApplicationError::InvalidData {
             kind: "playout timestamp",

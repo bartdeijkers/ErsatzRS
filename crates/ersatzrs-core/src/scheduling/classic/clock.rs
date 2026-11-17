@@ -96,7 +96,7 @@ impl ClassicClock {
         };
         local
             .checked_sub_signed(Duration::seconds(i64::from(offset.seconds())))
-            .map(|value| value.and_utc())
+            .map(NaiveDateTime::and_utc)
             .ok_or_else(invalid_clock)
     }
 }

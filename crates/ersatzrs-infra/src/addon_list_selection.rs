@@ -128,7 +128,7 @@ fn release_date(value: &str) -> Option<DateTime<Utc>> {
             NaiveDate::parse_from_str(value, "%Y-%m-%d")
                 .ok()?
                 .and_hms_opt(0, 0, 0)
-                .map(|t| t.and_utc())
+                .map(ersatzrs_time::NaiveDateTime::and_utc)
         })
 }
 

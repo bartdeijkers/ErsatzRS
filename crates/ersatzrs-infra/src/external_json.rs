@@ -138,7 +138,7 @@ fn parse(bytes: &[u8]) -> Result<Option<ExternalJsonSchedule>, ExternalJsonError
     let mut start = DateTime::parse_from_rfc3339(text)
         .map(|value| value.with_timezone(&Utc))
         .or_else(|_| {
-            NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").map(|value| value.and_utc())
+            NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").map(NaiveDateTime::and_utc)
         })
         .or_else(|_| crate::repositories::common::decode_datetime("external JSON start", text))
         .map_err(|_| ExternalJsonError::StartTime)?;

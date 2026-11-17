@@ -425,7 +425,7 @@ async fn replacement_boundary(
             .map(|value| value.with_timezone(&Utc))
             .or_else(|_| {
                 ersatzrs_time::NaiveDateTime::parse_from_str(&start, "%F %T%.f")
-                    .map(|value| value.and_utc())
+                    .map(ersatzrs_time::NaiveDateTime::and_utc)
             })
             .unwrap()
     }
