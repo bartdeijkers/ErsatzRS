@@ -3,7 +3,7 @@
   "upstream_revision": "6c9e0cf733f6439cc4f2a5f8ad763b3a31518797",
   "source_archive_sha256": "8055f456ab1b0c092cbdd0bba9b28348d82afb67df068b970e2921a8ea6e0c11",
   "source_lock_sha256": "519da3f562660e08cf2dda1bd84c5d243631bcb88c0fe6309b51073fe8875b45",
-  "patched_lock_sha256": "061ba2cff6e7bb0cab8d074798e3d73a1ff7d55c36d35a25b571e856090a5794",
+  "patched_lock_sha256": "a7436ca2765ea81dfb5a32798215eb173023091ff7f9122ca93a53b35c110dc2",
   "distribution_version": "0.2.5-6c9e0cf-ersatzrs.1",
   "rust_toolchain": "1.99.0",
   "adr": "0130;0131;0135",
@@ -128,6 +128,14 @@
       "prior_review_revision": "c5cb065f9f35dbbcb7c05845f0f92c70f576a480",
       "prior_unpatched_regression": "The initial full policy rejects missing private-package license metadata and unversioned path dependencies. Exact upstream root MIT license is preserved, path versions match existing025 and lock unchanged; final full policy passes.",
       "unpatched_regression": "Every upstream Cargo manifest affected by this patch is byte-identical to025 and retains missing MIT/path-version metadata. Keep the correction; current full policy and package acceptance remain pending."
+    },
+    {
+      "file": "0013-refresh-worker-security-dependencies.patch",
+      "sha256": "13caf53f11de01d765ef681fdc6425625481f599b62b6b997270b4598c5dcecc",
+      "upstream_review_revision": "6c9e0cf733f6439cc4f2a5f8ad763b3a31518797",
+      "retire_when": "Retire when the adopted upstream passes the same full advisory/yanked, license, bans and sources policy and XMLTV/HTTP compatibility checks without these dependency updates. Preserve the checks.",
+      "unpatched_regression": "Exact6c plus the unchanged retained12-patch candidate fails RUSTSEC-2026-0194/0195 on quick-xml0.40.0 and RUSTSEC-2026-0383 on webpki-root-certs1.0.7. This isolated minus0013 control passes licenses/bans/sources. The minimal two-package review passes the same full policy without new ignores or unrelated Windows graph changes.",
+      "evidence": "docs/progress/milestones.toml ucu-16-continuation; tmp/evidence/ucu16-tail-9c6b3dea/row296-advisory-baseline.json and row296-worker-policy-minimal.log"
     }
   ],
   "windows_companions_sha256": {

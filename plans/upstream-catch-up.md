@@ -53,8 +53,9 @@ The finite functionality, mandatory proof and delivery conditions belong to
 milestone `ucu-16-continuation`. Rows290–295 local components are Complete;
 Row296 configuration/admission and actual fixed-worker cache/lifecycle proof
 are locally Complete. Item2/R296-C now has a locally verified consolidated
-source candidate. Continue with retained runtime controls, serial software and
-four-target package/runtime qualification before unchanged shared acceptance. No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
+source candidate. Serial software and current dependency policy now pass.
+Continue with retained runtime controls and four-target package/runtime
+qualification before unchanged shared acceptance. No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an
 advance. Preserve Native, international audio/subtitles and completed Phase9,

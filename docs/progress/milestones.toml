@@ -42176,6 +42176,55 @@ final/CI and ordered delivery. Local source preparation is a completed component
 not consolidated runtime acceptance or an accepted row disposition. Native,
 FFmpeg9 and every approved platform/hardware deferral remain unchanged.
 
+2026-11-17 R296-C serial software and current dependency-policy gates Complete:
+The actual fixed6c software suite contains662 cases, including the two upstream
+pre-scaled/full-image comparisons. All662 pass serially in675.115s with zero
+skips/retries and the exact qualified FFmpeg2.0.10 tools; no global filter hiding
+is enabled. Original recipe, source/fixture inventory, test executable, tool
+hashes, nextest run and raw results are retained by row296-software-inputs.json
+and row296-software.log. This closes the existing serial software obligation;
+it does not establish hardware, platform packages or application/window acceptance.
+The unchanged full dependency policy initially refuses three advisories in the
+12-patch candidate: quick-xml0.40.0 (RUSTSEC-2026-0194/0195) and bundled
+webpki-root-certs1.0.7 (RUSTSEC-2026-0383). Licenses, bans and sources pass.
+This isolated minus0013 negative is retained. Patch0013 updates only the XML
+workspace requirement to0.41.0 and the two exact lock entries to0.41.0/1.0.10.
+No advisory ignore or policy allowance is added. Cargo's unrelated Windows
+edge-resolution changes are excluded; every other package record, checksum,
+version and dependency edge remains exact. The new prepared lock is a7436ca2;
+original upstream lock519da3f5 and every prior patch/retirement requirement stay.
+The corrected13-patch source cleanly replays all294 files. The final full policy
+passes advisories/yanked, licenses, bans and sources against current fetched
+public advisory metadata. Context7's quota and docs.rs availability prevent that
+documentation path; checksum-verified quick-xml0.41 package source and official
+RustSec remediation settle the actual API/version boundary. Existing XMLTV
+entity/child/display-name controls and a focused generator Unicode/escaping/
+exclusive-retention-boundary regression pass within nine affected helper tests.
+No XMLTV production logic is changed. Final whole-source workspace/all-feature/
+all-target strict Clippy and formatting pass.
+The running software input is kept immutable while the separate security copy
+is reviewed. FFmpeg/pipeline/core/playout source and fixtures remain byte-identical.
+Normalized Linux normal/build/dev dependency AND feature graphs match exactly
+before/after the minimal update, so all662 passing cases remain valid. The same
+check proves Linux worker compiled inputs unchanged; rebuilding its exact current
+source yields the byte-identical original executable. Existing425 source-contract
+and seven indexed/preview/cache session results remain valid within their Linux
+scope. Changed XML helpers have the separate nine-case proof; the Windows trust
+input still requires native Windows package/runtime qualification and is not
+inferred from Linux. Producer/input/replay/policy/negative identities and evidence
+reuse are indexed by row296-security-software-checkpoint.json under the existing
+continuation proof root. None of the original12 corrections is retired;0013 has
+its own unchanged-gate upstream retirement condition. The accepted production
+recipe/downloads, baseline, row dispositions, operator state and Native/FFmpeg9
+behavior remain untouched.
+Next bounded R296-C work: finish the retained actual runtime retirement controls
+and the four required source packages/companions plus native Linux/Windows and
+ARM emulation acceptance. Then complete every unchanged integrated application/
+window, matched-browser, transport/playback/final/CI and ordered-delivery gate.
+Do not rerun these completed software/policy components without relevant source,
+compiled-input or advisory changes. Current native ARM/macOS/hardware deferrals
+retain their explicit scopes.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.

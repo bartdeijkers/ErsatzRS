@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Security
 
+- Update the local Next source candidate to quick-xml 0.41.0 and
+  webpki-root-certs 1.0.10, resolving its XML-parser and bundled-certificate
+  advisories before runtime qualification.
+
 - Update the release-notes HTML sanitizer to Ammonia 4.2.5 to address
   RUSTSEC-2026-0533 (mutation XSS with embedded SVG and MathML).
 - rustix is updated to 1.1.6 (RUSTSEC-2026-0486): 1.1.5 could mark unwritten

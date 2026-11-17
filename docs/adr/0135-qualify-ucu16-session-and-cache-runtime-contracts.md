@@ -23,9 +23,11 @@ fallback, animation/fade/canvas preservation and bounded process cleanup within
 its local Linux scope. Cache-path diagnostic redaction is also corrected.
 A separate reviewed exact6c source recipe now preserves the indexed extension
 with schema0.1.6 and upstream session/cache fields; local indexed/preview/cache
-integration passes. Retained runtime retirement controls, serial software,
-required packages and integrated acceptance remain open in the continuation
-milestone. The accepted production recipe is unchanged.
+integration passes. Serial software and current full dependency policy also
+pass; an additional scoped security patch updates the two demonstrated XML/root-
+certificate dependencies while retaining unrelated inputs and all12 corrections.
+Retained runtime retirement controls, required packages and integrated acceptance
+remain open in the continuation milestone. The accepted production recipe is unchanged.
 
 ## Context
 
