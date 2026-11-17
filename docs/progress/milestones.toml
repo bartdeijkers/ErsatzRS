@@ -42664,6 +42664,40 @@ open. Pending question records that approval boundary. Other policy checks and
 all unchanged platform/functional gates remain mandatory. The seven ordered
 row-review preparations are retained without ledger or baseline mutation.
 
+2026-11-17 maintainer decision: replace chrono with Jiff (ADR 0138).
+This supersedes the earlier request for an advisory policy decision. Keep the
+current dependency policy. Finite migration work before UCU-16 CI:
+1. Remove the SQLx chrono feature and replace its typed binds/reads with the
+   existing SQLite formats. Migrate independent xtask UTC clock usage to Jiff.
+2. Migrate shared UTC and civil time, including signed elapsed durations and
+   the call sites in scheduling, playout, providers, scanner, web and add-ons.
+   Preserve exact UTC and offset text, leap/fraction precision, SQL ordering,
+   saved date sentinels and existing .NET daylight-saving disambiguation.
+   The add-on wire tests require UTC 0000 through the final day of 9999, beyond
+   the upper bound of Jiff Timestamp. Prove that boundary with a civil type.
+3. Prove zero direct and transitive chrono dependencies in the resolved graph
+   and current Cargo deny. Repeat affected scheduling, database reopen, wire,
+   Native/Next media and matched web checks on the migrated source. Then pass
+   all original exact-source UCU-16 qualification and ordered delivery gates.
+
+The SQLite feature component is verified. Workspace all-target type checking
+and strict Clippy pass. All 12 targeted Plex inventory and teletext refresh,
+lease, recovery and health tests pass (nextest
+ba28f5bb-0f73-4980-974d-fe1cc560f3be). The initial HTTP mock failure was a
+sandbox loopback denial and passes with the same test and loopback access.
+Ten xtask runtime-audit and Clippy-ledger tests also pass. The all-feature
+all-target graph has no SQLx chrono edge. A standalone Jiff
+civil-time prototype preserves extreme wire years, offset normalization, leap
+seconds and nanoseconds. It is a feasibility check, separate from integrated
+wire acceptance. Receipts are under row296-runtime-publication/ci/.
+
+Historical full CI44128505670 and corrected PR CI44129875773 are terminal.
+The corrected PR passed commit lint, Clippy, main Rust tests, Level 1.5 and both
+selected Chromium suites. Cargo deny and Next engine failed. Retain original
+producer and test scope. Next engine logs include schema expectations and
+runtime cases to diagnose during qualification. The full run had an independent
+artifact-build failure. No passing full CI or accepted disposition is inferred.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.

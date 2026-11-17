@@ -412,12 +412,19 @@ async fn replacement_boundary(pool: &SqlitePool, external: Option<&Path>) -> chr
         );
         seam
     } else {
-        sqlx::query_scalar(
+        let start: String = sqlx::query_scalar(
             "SELECT MIN(Start) FROM PlayoutItem WHERE PlayoutId=88 AND MediaItemId=101",
         )
         .fetch_one(pool)
         .await
-        .unwrap()
+        .unwrap();
+        chrono::DateTime::parse_from_rfc3339(&start)
+            .map(|value| value.with_timezone(&Utc))
+            .or_else(|_| {
+                chrono::NaiveDateTime::parse_from_str(&start, "%F %T%.f")
+                    .map(|value| value.and_utc())
+            })
+            .unwrap()
     }
 }
 

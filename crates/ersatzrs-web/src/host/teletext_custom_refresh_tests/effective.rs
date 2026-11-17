@@ -96,8 +96,8 @@ async fn seed(state: &crate::host::state::AppState) {
     sqlx::query(r#"INSERT INTO "ChannelTeletextBinding" ("ChannelId","AddonId","ProfileId","Enabled","Revision") VALUES (999,'a.fixture.off',?,0,1)"#)
         .bind(profile).execute(&state.pool).await.unwrap();
     sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId","AddonId","Start","Finish","State") VALUES (999,'a.fixture.off',?,?,0)"#)
-        .bind((Utc::now()-chrono::Duration::minutes(1)).naive_utc())
-        .bind((Utc::now()+chrono::Duration::minutes(10)).naive_utc())
+        .bind((Utc::now()-chrono::Duration::minutes(1)).naive_utc().format("%F %T%.f").to_string())
+        .bind((Utc::now()+chrono::Duration::minutes(10)).naive_utc().format("%F %T%.f").to_string())
         .execute(&state.pool).await.unwrap();
 }
 

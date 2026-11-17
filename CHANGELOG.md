@@ -78,6 +78,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Use Jiff for developer-tool timestamps and bind application-owned SQLite
+  dates explicitly, preserving existing stored formats without the SQLx chrono feature.
+
 - Publish the qualified session/cache-capable Next runtime with exact source,
   provenance and checksums; verify anonymous Linux/Windows acquisition and
   managed restart while preserving the previous Latest release. Application

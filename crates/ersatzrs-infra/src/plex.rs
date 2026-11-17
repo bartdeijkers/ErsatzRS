@@ -738,7 +738,7 @@ async fn reconcile_plex_sources(
         .iter()
         .map(|server| server.client_identifier.as_str())
         .collect();
-    let now = Utc::now();
+    let now = Utc::now().to_rfc3339();
     for (id, identifier) in existing_sources {
         if !identifier
             .as_deref()
@@ -749,7 +749,7 @@ async fn reconcile_plex_sources(
                    SET "MissingSince" = COALESCE("MissingSince", ?)
                    WHERE "Id" = ?"#,
             )
-            .bind(now)
+            .bind(&now)
             .bind(id)
             .execute(&mut **tx)
             .await

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'UCU-16 PR165/full CI started; correct commit metadata and resolve chrono maintenance advisory policy'
+current_focus = 'Migrate chrono to Jiff before UCU-16 qualification and ordered delivery'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -142,16 +142,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-PR165 candidate d07cd5ea has eligible full CI44128505670 in progress.
-Its small CI and full commit-lint job expose unsupported checkpoint scopes;
-local message-only correction passes unchanged commitlint and preserves all trees.
-Cargo deny also exposes informational unmaintained chrono RUSTSEC-2026-0543;
-no patched version exists. An exact-ID temporary exception is prepared, not
-applied, pending the maintainer decision. Do not waive this current-policy gate
-or begin a project-wide migration without that decision. Preserve original
-artifacts/producers and failed run; qualify the corrected candidate fully.
-Next bounded UCU-16 work: run eligible full CI on the coherent integrated
-application candidate, then complete ordered row dispositions and delivery.
+The maintainer selected Jiff to resolve the chrono maintenance advisory.
+ADR 0138 and milestone ucu-16-continuation track the complete migration and
+shared gates. Finish the remaining model, clock and wire boundaries, verify
+that chrono is absent from the feature graph, and run the unchanged exact-source
+qualification. Preserve the independent Next engine failures from PR165 for
+bounded diagnosis and close the seven ordered dispositions only after proof.
 Approved29-asset publication and actual anonymous Linux/Windows cold/cache
 acquisition are Complete; retain row296-runtime-publication/checkpoint.json.
 Four private

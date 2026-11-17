@@ -33,12 +33,13 @@ license = "Zlib"
 repository = "https://github.com/bartdeijkers/ErsatzRS"
 
 # Shared SQLite-only sqlx dependency. The union of all crate features
-# (runtime-tokio, sqlite, migrate, chrono, uuid, macros) is declared here so
+# (runtime-tokio, sqlite, migrate, uuid, macros) is declared here so
 # cargo compiles sqlx once with one feature set. Per-crate Cargo.toml files use
 # `sqlx = { workspace = true }`.
 [workspace.dependencies]
+jiff = "=0.2.40"
 quick-xml = { version = "0.42", features = ["serialize"] }
-sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "migrate", "chrono", "uuid", "macros"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "migrate", "uuid", "macros"] }
 
 [profile.release]
 opt-level = 3

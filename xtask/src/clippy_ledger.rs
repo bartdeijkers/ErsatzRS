@@ -218,7 +218,10 @@ fn run_inner(opts: &Opts) -> Result<()> {
     }
 
     let workspace = Path::new(".");
-    let today = chrono::Utc::now().date_naive().to_string();
+    let today = jiff::tz::Offset::UTC
+        .to_datetime(jiff::Timestamp::now())
+        .date()
+        .to_string();
     let ledger = build_ledger(workspace, &today)?;
 
     match opts.mode {

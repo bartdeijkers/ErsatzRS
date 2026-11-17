@@ -101,7 +101,7 @@ async fn add_bounded_health_origins(
         WHERE g."Id" BETWEEN 1001 AND 1256"#).bind(seed_id).execute(&repo.0).await.unwrap();
     sqlx::query(r#"INSERT INTO "TeletextGuideRefreshCurrent" ("ChannelId","Role","SeedId","Revision","NextDueAt","LastSuccessAt")
         SELECT "ChannelId",1,"Id",1,?,? FROM "TeletextGuideRefreshSeed" WHERE "GenerationId" BETWEEN 1001 AND 1256"#)
-        .bind(at+ChronoDuration::minutes(5)).bind(at).execute(&repo.0).await.unwrap();
+        .bind((at+ChronoDuration::minutes(5)).to_rfc3339()).bind(at.to_rfc3339()).execute(&repo.0).await.unwrap();
 }
 
 async fn check_legacy_base_authorization() {
