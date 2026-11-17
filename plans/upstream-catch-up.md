@@ -66,10 +66,12 @@ candidate cases and eight actual C5 compatibility cases pass in headed Chromium
 and Firefox, including localized Refresh/recovery, both themes and no-JS. The
 initial seeded-channel fixture failure remains recorded. Milestone evidence owns
 the composed results and exact matched snapshot; backend scan proof is reused.
-Next close the integrated application final gates and current-candidate
-Native/Next smoke/TSDuck, then required application packages/platform and eligible
-full CI/ordered delivery. No bare-worker package/runtime or affected Health
-browser item remains in the finite list.
+The integrated local-final and current-candidate Linux Native/Next playback/
+transport package is now Complete. Its composed8714-case workspace proof,
+original environment/fixture failures, preserved HDR assertions and93/86 TSDuck
+checks belong to milestone evidence. Next qualify required application packages/
+platform, then eligible full CI and ordered delivery. No bare-worker, affected
+Health/browser or local-final/playback item remains in the finite list.
 No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Worker/runtime and matched Health browser gates Complete; finish integrated application final gates'
+current_focus = 'Local-final/playback and worker/browser gates Complete; qualify four application platforms'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -40,8 +40,11 @@ repository cases and strict all-target lint; row295 A/B/C local implementation/p
 Matched Health/browser proof is now Complete:18 candidate and8 actual C5 cases
 pass in headed Chromium/Firefox, English/Dutch, both themes and JS/no-JS.
 The initial seeded-channel fixture failure and exact matched snapshot remain.
-Next close integrated application final gates and current-candidate Native/Next
-smoke/TSDuck, then application packages/platform, full CI and ordered delivery.
+Integrated local-final and current-candidate Linux Native/Next playback gates
+are now Complete:8714 composed workspace cases, strict lint/policy, canonical
+doctest component and93/86 TSDuck checks. Original environment/fixture failures
+remain recorded; the HDR migration fixture keeps its own unchanged assertions.
+Next close four application packages/platform, full CI and ordered delivery.
 All unchanged acceptance remains mandatory; no ledger disposition/pin advances. Direct GitHub recheck
 still ends at row296; no new moving endpoint is selected.
 
@@ -119,6 +122,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Next bounded UCU-16 work: qualify the four required application packages and
+native Linux/Windows plus ARM-emulated runtime, then eligible full CI and ordered
+delivery. Local-final and current-candidate Linux playback/transport proof is
+Complete, alongside worker P1/P2/P3 and matched Health/browser components.
+Milestone ucu-16-continuation owns exact producer identities and composed proof;
+reuse completed evidence within those explicit unchanged-input scopes.
 Current UCU-16 continuation: exact input/order proof is complete through fixed
 row2969c6b3dea. Row290 local metadata repair and Health/i18n component has47
 integrated focused passes plus composed326 scanner/Health passes. Strict local

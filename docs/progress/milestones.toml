@@ -42419,6 +42419,57 @@ packages/platform acceptance and eligible full CI/ordered delivery. Worker-only
 platform proof remains distinct. No acceptance requirement, accepted pin,
 distribution, row disposition, runtime installation or publication changes.
 
+2026-11-17 native Linux integrated local-final/playback component Complete:
+The full default workspace selection executes8714 cases across124 binaries;
+the568 standard ignored cases retain their separate required/deferred scopes.
+The original canonical wrapper exits100 with8705 passes and nine failures.
+Six managed-runtime cases incorrectly inherit this proof runner's explicit
+FFmpeg overrides; two default-layout cases expect the .ersatzrs basename.
+Both are corrected in the isolated test environment, without product changes.
+The ninth failure is an old HDR-migration fixture applying later migrations
+while asserting the HDR repair leaves scan dates alone. ADR0137's later Jellyfin
+index repair intentionally invalidates those dates. Limit the HDR fixture to
+its own migration boundary, preserving every ETag/stream/disabled-choice/date
+and rollback assertion. Its two cases pass; the separate Jellyfin migration
+control also passes in the broad selection. No production migration is changed.
+Ten targeted cases pass: eight environment controls and both HDR-fixture users.
+Replace the original affected passed rollback case as well as all nine failures;
+8704 unchanged successes plus ten final successes cover exactly8714 distinct
+current cases. Retain the original negative; do not claim a single-pass green
+initial wrapper. No automatic retry or missing case is hidden. The canonical
+doctest-only component exits0 across eleven crate doc targets, with zero
+runnable examples. Case identities and exact composition are machine-checked.
+Strict workspace/all-target Clippy and formatting pass before and after the
+test-only correction. Full workspace dependency policy passes advisories, bans,
+licenses and sources against the unchanged policy; existing approved exceptions
+retain their original boundaries. Parity progress, architecture and hydration
+checks pass with31 existing suppressions. Its documented skips only reuse the
+separately completed workspace Clippy/format/test components; no gate is waived.
+
+The retained matched server68570299 is produced at14f646bb; product Rust,
+Cargo, migrations and assets remain unchanged at b250a0fe plus this test-only
+fixture correction. Reuse that exact snapshot, never the overwritten ordinary
+Cargo server. Actual source-package Linux worker97399b21 and qualified FFmpeg9
+tools pass both current Native/Next smoke gates. Four delivered Next outputs
+decode selected880Hz audio,35 subtitle pixels and the retained blue programme.
+The unchanged TSDuck gate passes93 Native and86 Next checks with zero failures;
+no transport threshold or runtime-failure signature is relaxed. This is native
+Linux functional/transport proof, not application-package or other-platform proof.
+All owned hosts/workers are closed and the temporary calibration copy is removed.
+The124 current test executables are inventoried before required build-cache
+cleanup (about81GiB); the exact matched server/site, qualified worker packages, tool, source,
+logs, metrics, original failures and case/retention identities remain outside
+that configured target. No other worktree or target is cleaned.
+Canonical receipts under tmp/evidence/ucu16-tail-9c6b3dea/row296-app-final/:
+local-final-checkpoint.json, unit-integration-cases.json, test-artifacts.json,
+playback-checkpoint.json, dependency-policy.json and cache-clean.json.
+This closes the integrated local-final and current-candidate Linux playback/
+transport items. Next qualify the four required application source/packages and
+native Linux/Windows plus ARM emulation, then eligible full CI and ordered
+dispositions/delivery. Worker-only P1/P2/P3 and this local proof do not replace
+those application gates. Managed runtime adoption, accepted distributions/pin,
+row dispositions, operator state and publication remain unchanged.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
@@ -42427,18 +42478,19 @@ are Complete. Its unchanged integrated application/window acceptance remains
 in the shared mandatory list; no private patch is retired. All provisional
 ledger mappings remain unaccepted;289 rows are
 processed,7 are pending and the accepted pin is unchanged.
-Remaining mandatory evidence: unchanged integrated application source/final,
-current-candidate playback/transport, required application packages/platform,
-eligible full CI and ordered delivery gates above. The affected matched-bundle
-headed Chromium/Firefox Health refresh/recovery/no-JS component is Complete.
+Remaining mandatory evidence: required application source/packages/platform,
+eligible full CI and ordered delivery gates above. The integrated local-final,
+current-candidate Linux playback/transport and affected matched-bundle headed
+Chromium/Firefox Health refresh/recovery/no-JS components are Complete within
+their explicit source, artifact and evidence-reuse boundaries.
 No new native Windows or ARM/platform acceptance is inferred from Linux.
 Delivery follows CONTRIBUTING checkpoint delivery; no main integration, push,
 new CI, dependency/application release, operator install or live mutation here.
 Row292 local functionality/proof checkpoint is Complete and committed as2f49534d.
 The maintainer explicitly resumed the goal. Rows293–295 have now met their
 local stopping conditions, and R296-A/B now meets its local stopping conditions.
-Next bounded work is the integrated application final gates and current-candidate
-Native/Next smoke/TSDuck; completed R296-C worker/package and browser components
+Next bounded work is the four required application packages and platform runtime
+proof; completed R296-C worker/package, browser and local-final/playback components
 are reused within their verified source/input boundaries.
 No accepted ledger disposition or authoritative pin advancement here.
 """
