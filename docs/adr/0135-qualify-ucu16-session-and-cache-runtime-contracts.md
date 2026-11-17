@@ -42,6 +42,16 @@ The continuation milestone retains exact artifact identities, source-scoped
 evidence reuse, original failures and required public-acquisition/full-CI/
 ordered-delivery gates. No public or main/operator adoption is inferred.
 
+Maintainer amendment 2026-11-17: explicitly authorize the prepared existing
+ErsatzRS-next README commit/push, new fixed next-0.2.5-6c9e0cf-ersatzrs.1 tag
+and exact29-asset publication. Preserve the previous Latest selection. This
+narrow exception supersedes the continuation's no-new-publication exclusion
+for this qualified worker distribution only. Application releases, operator
+installation, live data and existing platform/hardware deferrals are unchanged.
+Publication and actual anonymous Linux/Windows cold/cache acquisition are now
+Complete; the continuation milestone retains the exact proof. Full integrated
+CI, ordered acceptance and application delivery remain separate requirements.
+
 ## Context
 
 The maintainer resumes the upstream catch-up goal through fixed ErsatzTV

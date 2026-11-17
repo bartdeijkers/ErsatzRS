@@ -40993,7 +40993,10 @@ build/package/emulation; native ARM, macOS and unavailable hardware retain
 approved deferrals. Preserve international audio/subtitles and all completed
 Phase9, Classic and custom-page acceptance. Keep original negative evidence.
 Advance the authoritative pin only after each intervening row has an accepted
-disposition and required proof. No new release/publication, operator install,
+disposition and required proof. Maintainer amendment2026-11-17 explicitly authorizes only the prepared existing
+ErsatzRS-next README commit/push, new fixed next-0.2.5-6c9e0cf-ersatzrs.1 tag
+and exact29-asset publication, retaining current Latest. Other application/
+Docker releases/publication, operator install,
 live-data repair, unrelated CI implementation or paid/macOS provisioning.
 Prepare coherent isolated checkpoints; main integration follows the single-owner
 checkpoint procedure and existing commit/push/merge/CI authorization boundaries.
@@ -42577,7 +42580,8 @@ row296-app-platform/integration-main/inputs.json, runtime-tests.log,
 clippy-result.json, actionlint-compatible.log and host-lock-tests.log under
 the same canonical evidence root. No main mutation, push, CI or publication.
 
-External prerequisite: direct release lookup at2026-11-17T06:49:59Z returns
+Historical prerequisite (closed by the approved publication below): direct
+release lookup at2026-11-17T06:49:59Z returns
 HTTP404 for next-0.2.5-6c9e0cf-ersatzrs.1. No public/default automatic acquisition
 proof is possible for that proposed release yet. Private bundled qualification
 can continue independently. Closure requires the exact qualified archives at
@@ -42607,6 +42611,29 @@ selection is preserved. Application releases, operator installs and all retained
 deferrals remain outside that proposed scope. No publication is performed;
 the explicit no-new-publication boundary needs a maintainer amendment.
 
+2026-11-17 approved publication/public-acquisition component Complete:
+The maintainer explicitly approves the prepared narrow publication amendment.
+Existing distribution main794f5156 advances by README-only commitb2ed3a37;
+the new fixed next-0.2.5-6c9e0cf-ersatzrs.1 tag targets that exact commit.
+All29 approved assets pass GitHub server size/digest checks before publication
+and independent anonymous public-download size/SHA256 checks afterward.
+The four qualified archives are neither rebuilt nor repacked. Source replay,
+provenance, licenses and original recipe remain exact. Existing Latest remains
+next-0.2.5-c5cb065-ersatzrs.1. No previously published bytes or tags change.
+Actual native Linux and Windows application hosts at their retained ece7813c
+producer scope start with fresh owned state, no bundled worker and no override.
+Both select Downloaded with published_pin_verified=true, reach healthz200,
+then select Managed on restart with all payload hashes and cache file ages
+unchanged. Credential environment references are removed in the proof hosts;
+no authentication header or credential value is used for asset acquisition.
+Owned hosts stop; the disposable Windows extraction/state is removed. This
+closes the prior release-404 prerequisite and required public managed acquisition.
+Original404 and draft-tag lookup failures remain historical evidence. Canonical
+proof: tmp/evidence/ucu16-tail-9c6b3dea/row296-runtime-publication/checkpoint.json,
+draft-verification.json, public-verification.json, linux-managed/receipt.json
+and windows-managed/receipt.json. Full integrated CI and ordered delivery remain;
+no other acceptance or platform/hardware deferral is changed.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
@@ -42615,20 +42642,21 @@ are Complete. Its unchanged integrated application/window acceptance remains
 in the shared mandatory list; no private patch is retired. All provisional
 ledger mappings remain unaccepted;289 rows are
 processed,7 are pending and the accepted pin is unchanged.
-Remaining mandatory evidence: public runtime acquisition, eligible full CI and
-ordered delivery gates above. Required private application source/packages/
+Remaining mandatory evidence: eligible exact integrated full CI and ordered
+delivery gates above. Public runtime acquisition is Complete as recorded above. Required private application source/packages/
 platform proof is Complete within P4. The integrated local-final,
 current-candidate Linux playback/transport and affected matched-bundle headed
 Chromium/Firefox Health refresh/recovery/no-JS components are Complete within
 their explicit source, artifact and evidence-reuse boundaries.
 No new native Windows or ARM/platform acceptance is inferred from Linux.
-Delivery follows CONTRIBUTING checkpoint delivery; no main integration, push,
-new CI, dependency/application release, operator install or live mutation here.
+Delivery follows CONTRIBUTING checkpoint delivery and existing application
+commit/push/CI authority. No application release, operator install or live
+mutation is performed by the runtime publication checkpoint.
 Row292 local functionality/proof checkpoint is Complete and committed as2f49534d.
 The maintainer explicitly resumed the goal. Rows293–295 have now met their
 local stopping conditions, and R296-A/B now meets its local stopping conditions.
-Next resolve the recorded public-acquisition prerequisite before eligible full
-CI and ordered delivery; completed R296-C worker/package, P4 application/platform,
+Next run eligible full CI and ordered delivery; completed public acquisition,
+R296-C worker/package, P4 application/platform,
 browser and local-final/playback components
 are reused within their verified source/input boundaries.
 No accepted ledger disposition or authoritative pin advancement here.

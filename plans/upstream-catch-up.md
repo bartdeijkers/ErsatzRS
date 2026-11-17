@@ -69,14 +69,18 @@ the composed results and exact matched snapshot; backend scan proof is reused.
 The integrated local-final and current-candidate Linux Native/Next playback/
 transport package is now Complete. Its composed8714-case workspace proof,
 original environment/fixture failures, preserved HDR assertions and93/86 TSDuck
-checks belong to milestone evidence. Next qualify required application packages/
-platform, then eligible full CI and ordered delivery. No bare-worker, affected
+checks belong to milestone evidence. Four private application packages/platform proofs are now Complete within
+their exact ece7813c scope. The approved Next distribution publication and
+actual anonymous native Linux/Windows cold/cache acquisition are Complete;
+next run eligible exact integrated full CI, then ordered delivery. No bare-worker, affected
 Health/browser or local-final/playback item remains in the finite list.
 No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an
 advance. Preserve Native, international audio/subtitles and completed Phase9,
-UCU-00–16 and current custom-page deliveries. No release or live installation.
+UCU-00–16 and current custom-page deliveries. The explicit2026-11-17 amendment
+authorizes the exact qualified Next distribution only, retaining Latest;
+no application/Docker release or live installation.
 
 #### Row290 source map and local repair package
 

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Application package/platform proof Complete; resolve public runtime acquisition prerequisite'
+current_focus = 'Public Next runtime acquisition Complete; qualify integrated UCU-16 candidate in full CI'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -57,11 +57,14 @@ Current main3f729d9e's CI provisioning fix is integrated on the isolated branch:
 15 runtime cases, strict affected lint, workflow lint and four queue/host tests
 pass. Product-default anonymous acquisition and qualified P4 input paths are
 unchanged; P4 retains its actual producer scope. Exact integrated full CI is due.
-The proposed runtime release was absent at the last direct observation
-(HTTP404); public acquisition requires separately authorized publication or an
-explicit maintainer decision before adoption. Independent private qualification
-is now Complete within P4. Next resolve public acquisition,
-then full CI and ordered delivery. All unchanged acceptance remains mandatory;
+Maintainer amendment2026-11-17 authorizes the exact prepared Next distribution
+README commit/push, fixed tag and29-asset publication, retaining Latest. The
+release is now public at distribution commitb2ed3a37. All29 anonymous downloads
+match the approved bytes; no archive was rebuilt or repacked. Actual native
+Linux/Windows hosts without bundled Next or override pass cold Downloaded and
+unchanged Managed restart with verified payloads. Public acquisition is Complete;
+eligible exact integrated full CI and ordered delivery remain.
+All unchanged acceptance remains mandatory;
 no ledger disposition advances. Direct GitHub recheck
 still ends at row296; no new moving endpoint is selected.
 
@@ -139,10 +142,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Next bounded UCU-16 work: resolve the recorded public runtime-acquisition
-prerequisite before eligible full CI and ordered delivery.
-The29-asset exact Next publication proposal is prepared and source-replay
-verified; publication/its distribution Git steps need a scope amendment.
+Next bounded UCU-16 work: run eligible full CI on the coherent integrated
+application candidate, then complete ordered row dispositions and delivery.
+Approved29-asset publication and actual anonymous Linux/Windows cold/cache
+acquisition are Complete; retain row296-runtime-publication/checkpoint.json.
 Four private
 application archives/platform proof are Complete at exactece7813c, including
 native Linux/Windows and ARM-emulated package startup, real Linux/Windows

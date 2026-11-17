@@ -78,6 +78,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Publish the qualified session/cache-capable Next runtime with exact source,
+  provenance and checksums; verify anonymous Linux/Windows acquisition and
+  managed restart while preserving the previous Latest release. Application
+  integration still requires its full CI and ordered catch-up acceptance.
 - Prepare the qualified session/cache-capable Next runtime for application
   qualification, preserving indexed playout and existing caption/audio safeguards.
 
