@@ -30,6 +30,11 @@ pub(super) enum Declaration {
     Exact,
     SelectedPathMismatch,
     NativeIndexMismatch,
+    #[allow(
+        dead_code,
+        reason = "Constructed by the public Native runtime proof, which shares this provider fixture"
+    )]
+    ExternalPositions([i32; 2]),
 }
 
 pub(super) struct Provider {
@@ -121,7 +126,7 @@ fn streams(
     provider: MediaSourceKind,
     declaration: Declaration,
 ) -> Vec<Value> {
-    source
+    let mut streams: Vec<Value> = source
         .media
         .streams
         .iter()
@@ -132,6 +137,14 @@ fn streams(
                 } else {
                     stream.index
                 };
+            let index = if let Declaration::ExternalPositions(positions) = declaration {
+                assert_eq!(provider, MediaSourceKind::Jellyfin);
+                positions.into_iter().fold(index, |index, external| {
+                    index + i32::from(external <= index)
+                })
+            } else {
+                index
+            };
             if provider == MediaSourceKind::Plex {
                 json!({
                     "id":1000+stream.index,"index":index,"streamType":match stream.kind {
@@ -152,7 +165,16 @@ fn streams(
                 })
             }
         })
-        .collect()
+        .collect();
+    if let Declaration::ExternalPositions(positions) = declaration {
+        streams.extend(positions.map(|index| {
+            json!({
+                "Index":index,"Type":"Audio","Codec":"aac","IsExternal":true
+            })
+        }));
+        streams.reverse();
+    }
+    streams
 }
 
 #[derive(Clone)]

@@ -196,6 +196,25 @@ async fn scan_caption_owner(
     ffprobe: &str,
     owner: MediaSourceKind,
 ) -> (i64, i64, Option<mapped_provider_fixture::Provider>) {
+    scan_caption_owner_with_declaration(
+        state,
+        library,
+        source,
+        ffprobe,
+        owner,
+        mapped_provider_fixture::Declaration::Exact,
+    )
+    .await
+}
+
+async fn scan_caption_owner_with_declaration(
+    state: &AppState,
+    library: &Path,
+    source: &Path,
+    ffprobe: &str,
+    owner: MediaSourceKind,
+    declaration: mapped_provider_fixture::Declaration,
+) -> (i64, i64, Option<mapped_provider_fixture::Provider>) {
     if owner == MediaSourceKind::Local {
         let (item, version) = scan_source(state, library, ffprobe).await;
         return (item, version, None);
@@ -206,7 +225,7 @@ async fn scan_caption_owner(
         .await
         .unwrap();
     let provider = if owner == MediaSourceKind::Jellyfin {
-        mapped_provider_fixture::Provider::start(&probe).await
+        mapped_provider_fixture::Provider::with_declaration(&probe, declaration).await
     } else {
         mapped_provider_fixture::Provider::for_action(
             &probe,

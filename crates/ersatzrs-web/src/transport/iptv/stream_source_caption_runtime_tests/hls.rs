@@ -90,18 +90,50 @@ pub(super) async fn verify(tools: &[String; 3], bytes: &[u8], expected: &[Vec<u8
 
 async fn run() {
     let tools = initialize_source_caption_runtime().await;
+    run_layout(
+        &tools,
+        MediaSourceKind::Local,
+        mapped_provider_fixture::Declaration::Exact,
+    )
+    .await;
+}
+
+async fn run_layout(
+    tools: &[String; 3],
+    owner: MediaSourceKind,
+    declaration: mapped_provider_fixture::Declaration,
+) {
     let root = tempfile::tempdir().unwrap().keep();
     println!(
         "public native HLS source-caption evidence: {}",
         root.display()
     );
     let library = root.join("library");
-    let source = local_source(&tools[0], &library).await;
-    let expected = calibration(&tools, &source, &root).await;
+    let mut source = local_source(&tools[0], &library).await;
+    if owner != MediaSourceKind::Local {
+        let mapped = library.join("movie.ts");
+        tokio::fs::rename(&source, &mapped).await.unwrap();
+        source = mapped;
+    }
+    let expected = calibration(tools, &source, &root).await;
     let unused_provider = Server::start(Router::new()).await;
     let state = application(&root, &unused_provider).await;
-    let (item, _) = scan_source(&state, &library, &tools[1]).await;
+    let (item, version, provider) = Box::pin(scan_caption_owner_with_declaration(
+        &state,
+        &library,
+        &source,
+        &tools[1],
+        owner,
+        declaration,
+    ))
+    .await;
     software_profile(&state).await;
+    if owner != MediaSourceKind::Local {
+        Box::pin(late_source_rejection_uses_actual_receipt(
+            &state, &source, item, version, owner,
+        ))
+        .await;
+    }
     assert_eq!(
         state
             .repositories
@@ -147,7 +179,7 @@ async fn run() {
             .expect("native HLS capture assertion")
             .expect("bounded native HLS response");
         verify(
-            &tools,
+            tools,
             &bytes,
             &expected,
             subtitle_mode != ChannelSubtitleMode::None,
@@ -158,15 +190,7 @@ async fn run() {
             bytes.len() / 188
         );
     }
-    finish_caption_owner(
-        &state,
-        None,
-        MediaSourceKind::Local,
-        public,
-        internal,
-        unused_provider,
-    )
-    .await;
+    finish_caption_owner(&state, provider, owner, public, internal, unused_provider).await;
 }
 
 #[test]
@@ -180,6 +204,33 @@ fn normal_public_native_hls_preserves_source_captions_off_and_alternate_audio() 
         .build()
         .unwrap()
         .block_on(Box::pin(run()));
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        0
+    );
+}
+
+#[test]
+#[ignore = "requires pinned FFmpeg/ffprobe9+libzvbi/libx264, TSDuck, loopback and fresh isolated app-data; row295 genuine mapped Jellyfin Native HLS"]
+fn row295_public_native_hls_maps_provider_layouts_and_preserves_source_captions() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let tools = initialize_source_caption_runtime().await;
+            for positions in [[0, 1], [4, 5], [1, 4]] {
+                Box::pin(run_layout(
+                    &tools,
+                    MediaSourceKind::Jellyfin,
+                    mapped_provider_fixture::Declaration::ExternalPositions(positions),
+                ))
+                .await;
+            }
+        });
     assert_eq!(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0

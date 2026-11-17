@@ -15,8 +15,9 @@ Background extraction maps the selected version while retaining logical cache
 keys and guarding staged publication. Source-reader layout/ranking and selected
 interlace sampling use physical comparisons while preserving logical metadata
 and cache identities. Scoped boundary/probe proof and actual Next Convert across the three layouts
-after SQLite close/reopen pass; actual Native, remaining qualified-source/owner
-and shared final acceptance remain in
+after SQLite close/reopen pass. Native HLS selected AV/captions and mapped
+finite-source refusal also pass across the three layouts. Remaining retained-source/owner
+qualification, current-server smoke/TSDuck and shared final acceptance remain in
 `ucu-16-continuation`. The row is not fully accepted.
 
 ## Context
