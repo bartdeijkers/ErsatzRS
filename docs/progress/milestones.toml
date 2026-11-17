@@ -42267,6 +42267,66 @@ cache components are unchanged and retained. This closes the named positive
 Linux runtime proof, not source-package/native-Windows/ARM or full-window acceptance.
 Next bounded item: four required source packages/companions with native Linux/
 Windows and ARM emulation, including MPP companion/no-device/channel fallback.
+The retained package/runtime completion list is:
+P1. Build and independently inventory all four required archives from the exact
+294-file source and13-patch recipe with Rust1.99.0. Preserve license/companion
+hashes and source/lock/patch/compiler provenance, and the Linux GLIBC ceiling.
+P2. Exercise independently extracted Linux x64/ARM64/ARMv7 packages through
+their existing decoded AV/caption and indexed ownership controls. Retain actual
+ARM64 private-companion/no-device/whole-channel software fallback proof; ARM
+execution remains emulation. Prove the new cache path within this platform
+package scope without repeating the completed Linux variant matrix.
+P3. Exercise the independently extracted native Windows package with the
+existing software and available CUDA H264/HEVC selected-track/caption controls,
+current cache behavior, truthful schema/description and bounded cleanup.
+Stopping condition: P1/P2/P3 pass with exact producer/input identities. No native
+ARM, unavailable hardware or macOS claim is added. The existing shared final
+gates below remain separate and mandatory.
+Current build preflight: the previously installed Docker Desktop was stopped;
+it is started once and the three original Linux builder image identities are
+verified locally. No new image/toolchain is installed. Native Windows Rust1.99
+and its MSVC target are present, with264.5GiB free on the system volume. The
+first source build runs offline in its qualified image, using the prepared
+source's default target directory and two compilation jobs. Original source,
+lock, recipe and patch hashes are checked before/after each build.
+
+2026-11-17 R296-C P1 four-source-package component Complete:
+All four exact6c/13-patch archives are built with Rust1.99.0 from the same
+294-file prepared source, original archive8055f456, locka7436ca2 and recipe
+12059881. The three original pinned Linux builders run offline, unprivileged,
+without capabilities/network, with two jobs and the source default target.
+Linux x64/ARM64 require GLIBC2.28 and ARMv7 requires2.34; all remain below the
+unchanged2.36 ceiling.
+Native Windows uses the installed1.99/MSVC target and its resolved source-default
+target directory. Missing Windows dependencies are fetched against the locked
+source; no version is resolved anew. A script-file execution refusal is retained;
+native Cargo commands run without changing that policy. An initial temporary
+command substitution error stops before compilation; its corrected native build
+passes in304.328s. Neither failure is treated as product or runtime proof.
+The existing packager produces the four private archives. Independent fresh
+extraction verifies exact inventories, every payload/companion/license checksum,
+complete source/patch/lock/compiler provenance and actual ELF/PE architecture,
+including ARMv7 hard-float. The Windows VPL and ARM64 private MPP companions
+retain their exact reviewed hashes and notices; MPP source/build-recipe ownership
+remains pinned. Source/lock/patch bytes are rechecked after every build.
+Archive SHA prefixes: linux-x64 b6aef853, linux-arm64 ecf16345, linux-arm dd23603f,
+win-x64 170c6d17. Full hashes, payload inventories, provenance and independent
+extracted locations are in row296-platform/source-packages-verified.json under
+the existing continuation proof root. Build commands/logs and original failures
+are retained beside it. No owned Linux build container or native compiler
+remains; the fresh Windows compiler temporary namespace is safely removed after
+artifact verification. Shared caches and the active source/evidence are retained.
+All four previously qualified FFmpeg2.0.10 archives are reused only after matching
+their accepted archive and executable hashes; their fresh extractions and tool
+identities are row296-platform/ffmpeg/inputs.json. Existing software/source/policy
+and Linux positive runtime results remain scoped and valid; no broad rerun merely
+to obtain another green result. P1 proves packages, not actual package playback.
+Next bounded work is P2/P3: use these independently extracted worker/FFmpeg
+archives for the unchanged native Linux/Windows and ARM-emulated runtime,
+MPP fallback, indexed ownership and current cache obligations. The original
+runtime image identities and independent decoder are available. No accepted
+distribution, baseline/pin, ledger disposition, publication, install or live-data
+mutation occurs. Native ARM/macOS/unavailable-hardware limitations remain.
 Every unchanged integrated application, matched SSR/WASM/browser, transport/
 playback/final/CI and ordered-delivery gate remains mandatory. Original private
 patch retirement conditions and native ARM/macOS/hardware deferrals remain.

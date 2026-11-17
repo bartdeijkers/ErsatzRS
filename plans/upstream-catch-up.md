@@ -56,8 +56,11 @@ are locally Complete. Item2/R296-C now has a locally verified consolidated
 source candidate. Serial software and current dependency policy now pass.
 The21 retained infra and three public-route runtime controls now pass. A concrete
 Jellyfin projection regression is corrected without changing the strict physical
-oracles: fresh source metadata survives logical-to-physical selection. Continue
-with four-target package/runtime qualification before unchanged shared acceptance.
+oracles: fresh source metadata survives logical-to-physical selection. P1 now
+verifies all four source archives, including independent extraction/provenance,
+actual architecture and pinned companions. Continue with the retained native
+Linux/Windows and ARM-emulated package runtime gates P2/P3 before unchanged shared
+acceptance.
 No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an
