@@ -76,7 +76,7 @@ fn lease_clock_uses_only_the_original_remaining_operation_allowance() {
     let now = Utc::now();
     let deadline = Instant::now() + Duration::from_secs(30);
     let first = wall_deadline(now, deadline).unwrap();
-    assert!(first <= now + chrono::Duration::seconds(30));
+    assert!(first <= now + ersatzrs_time::Duration::seconds(30));
     let expired = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
     assert!(wall_deadline(now, expired).is_none());
 }
@@ -221,7 +221,7 @@ fn effective_selection() -> ersatzrs_domain::TeletextEffectiveChannelSelectionSn
     use ersatzrs_domain::{
         TeletextOverrideInterval, TeletextOverrideState, TeletextPublishedOverride,
     };
-    let until = Utc::now() + chrono::Duration::minutes(10);
+    let until = Utc::now() + ersatzrs_time::Duration::minutes(10);
     ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot {
         channel_id: 1,
         bindings: vec![
@@ -229,7 +229,7 @@ fn effective_selection() -> ersatzrs_domain::TeletextEffectiveChannelSelectionSn
             TeletextEffectiveBindingSnapshot::Scripted(TeletextPublishedOverride {
                 playout_id: 10,
                 interval: TeletextOverrideInterval {
-                    start: Utc::now() - chrono::Duration::minutes(1),
+                    start: Utc::now() - ersatzrs_time::Duration::minutes(1),
                     finish: until,
                     state: TeletextOverrideState::Off {
                         channel_id: 1,

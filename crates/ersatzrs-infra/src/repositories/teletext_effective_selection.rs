@@ -8,12 +8,12 @@ use crate::repositories::{
     playout::teletext_intervals,
     SqlxResultExt as _,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     EntityId, TeletextEffectiveBindingSnapshot as Binding,
     TeletextEffectiveChannelSelectionSnapshot, MAX_TELETEXT_OVERRIDE_COMMANDS,
     MAX_TELETEXT_PAGE_RECORDS,
 };
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::{Row as _, Transaction};
 use std::collections::BTreeMap;
 

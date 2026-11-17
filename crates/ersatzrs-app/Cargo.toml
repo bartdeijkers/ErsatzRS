@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+ersatzrs-time.workspace = true
 dunce = "1"
 ersatzrs-addon-contract = { path = "../ersatzrs-addon-contract", version = "0.4.0" }
 ersatzrs-core = { path = "../ersatzrs-core", version = "1.2.0" }

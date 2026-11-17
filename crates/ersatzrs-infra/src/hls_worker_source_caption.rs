@@ -28,7 +28,7 @@ pub(super) struct AutomaticCaptionRequest<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct CaptionOccurrence {
     playout_item: i64,
-    start: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     item: i64,
     version: i64,
     file: Option<i64>,

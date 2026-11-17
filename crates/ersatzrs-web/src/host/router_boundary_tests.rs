@@ -20,7 +20,7 @@ async fn hdhr_routes_are_absent_with_jwt_even_when_credentials_are_supplied() {
     state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
     let token = jsonwebtoken::encode(
         &jsonwebtoken::Header::default(),
-        &serde_json::json!({ "exp": chrono::Utc::now().timestamp() + 60 }),
+        &serde_json::json!({ "exp": ersatzrs_time::Utc::now().timestamp() + 60 }),
         &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
     )
     .unwrap();
@@ -374,7 +374,7 @@ async fn artwork_routes_keep_management_and_iptv_admission_separate() {
     let streaming = super::build_streaming_app(state.clone());
     let token = jsonwebtoken::encode(
         &jsonwebtoken::Header::default(),
-        &serde_json::json!({ "exp": chrono::Utc::now().timestamp() + 60 }),
+        &serde_json::json!({ "exp": ersatzrs_time::Utc::now().timestamp() + 60 }),
         &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
     )
     .unwrap();

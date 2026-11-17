@@ -765,17 +765,17 @@ fn format_clock_duration(seconds: u64) -> String {
 }
 
 fn elapsed_between(started_at: &str, ended_at: Option<&str>) -> Option<String> {
-    let started = chrono::DateTime::parse_from_rfc3339(started_at).ok()?;
+    let started = ersatzrs_time::DateTime::parse_from_rfc3339(started_at).ok()?;
     let ended = ended_at.map_or_else(
-        || Some(chrono::Utc::now()),
+        || Some(ersatzrs_time::Utc::now()),
         |value| {
-            chrono::DateTime::parse_from_rfc3339(value)
+            ersatzrs_time::DateTime::parse_from_rfc3339(value)
                 .ok()
-                .map(|value| value.with_timezone(&chrono::Utc))
+                .map(|value| value.with_timezone(&ersatzrs_time::Utc))
         },
     )?;
     let seconds = u64::try_from(
-        (ended - started.with_timezone(&chrono::Utc))
+        (ended - started.with_timezone(&ersatzrs_time::Utc))
             .num_seconds()
             .max(0),
     )
@@ -789,7 +789,7 @@ fn elapsed_from(started_at: &str) -> Option<String> {
 }
 
 fn format_progress_timestamp(value: &str) -> Option<String> {
-    chrono::DateTime::parse_from_rfc3339(value)
+    ersatzrs_time::DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|timestamp| timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string())
 }
@@ -2324,10 +2324,10 @@ fn DeliveryModeSelect(
     supports_download: Signal<bool>,
 ) -> impl IntoView {
     let cutoff = cutoff_at.unwrap_or_default();
-    let cutoff_label = chrono::DateTime::parse_from_rfc3339(&cutoff)
+    let cutoff_label = ersatzrs_time::DateTime::parse_from_rfc3339(&cutoff)
         .ok()
         .and_then(|timestamp| {
-            format_progress_timestamp(&timestamp.with_timezone(&chrono::Utc).to_rfc3339())
+            format_progress_timestamp(&timestamp.with_timezone(&ersatzrs_time::Utc).to_rfc3339())
         })
         .unwrap_or_else(|| cutoff.clone());
     let has_cutoff =
@@ -3570,10 +3570,10 @@ fn episode_numbering_preview_assignments(
     assignments
 }
 
-fn parse_first_aired(value: Option<&str>) -> Option<chrono::NaiveDate> {
+fn parse_first_aired(value: Option<&str>) -> Option<ersatzrs_time::NaiveDate> {
     let value = value?.trim();
     let date = value.get(..10).unwrap_or(value);
-    chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
+    ersatzrs_time::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
 }
 
 /// Order numbering candidates oldest first. Providers such as channel upload

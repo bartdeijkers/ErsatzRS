@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::Result;
+use ersatzrs_time::{Duration, Utc};
 use tokio::sync::oneshot;
 
 use crate::{

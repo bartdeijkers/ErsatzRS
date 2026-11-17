@@ -2,8 +2,8 @@ use super::{
     ClassicContext, EntityId, FillerKind, FillerMode, PlayoutItem, ProgramScheduleItem,
     SchedulingMediaItem,
 };
-use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_domain::MediaChapter;
+use ersatzrs_time::{DateTime, Duration, Timelike, Utc};
 use std::collections::VecDeque;
 
 impl ClassicContext {

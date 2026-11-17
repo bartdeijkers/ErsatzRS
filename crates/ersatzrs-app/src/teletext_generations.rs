@@ -343,7 +343,7 @@ fn check_guide_admission(
 ) -> Result<(), TeletextPublicationValidationError> {
     check_effective_deadline(deadline)?;
     qualification
-        .validate_current(chrono::Utc::now())
+        .validate_current(ersatzrs_time::Utc::now())
         .map_err(|_| TeletextPublicationValidationError::Association)
 }
 

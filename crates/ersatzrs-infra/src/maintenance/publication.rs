@@ -2,12 +2,12 @@
 
 use super::{PlayoutExecution, Result, PLAYOUT_PUBLICATION_OPERATION};
 use crate::repositories::SqlitePlayoutRepository;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
     repositories::RepositoryError,
     scheduling::{SchedulingError, SchedulingResult},
 };
 use ersatzrs_domain::Playout;
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 #[path = "finalization.rs"]
 mod finalization;

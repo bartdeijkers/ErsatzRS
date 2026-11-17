@@ -1,7 +1,7 @@
 use super::tests::{filler_preset, schedule_item};
 use super::*;
-use chrono::TimeZone;
 use ersatzrs_domain::{Playout, PlayoutMode, PlayoutScheduleKind};
+use ersatzrs_time::TimeZone;
 
 fn context() -> (ClassicContext, ProgramScheduleItem) {
     let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();

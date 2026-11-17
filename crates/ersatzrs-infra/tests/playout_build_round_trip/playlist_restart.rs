@@ -8,7 +8,7 @@ use ersatzrs_domain::{
 };
 use std::{collections::BTreeMap, fmt::Write as _};
 
-fn block_fixture(start: chrono::DateTime<Utc>) -> SchedulingReferenceData {
+fn block_fixture(start: ersatzrs_time::DateTime<Utc>) -> SchedulingReferenceData {
     let mut reference = SchedulingReferenceData::default();
     let children = (0..3)
         .map(|child| SchedulingPlaylistItem {

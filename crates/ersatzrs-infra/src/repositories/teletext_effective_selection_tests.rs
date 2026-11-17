@@ -1,11 +1,11 @@
 //! Exact read-only origin fences, not invocation or native generation acceptance.
 
 use super::*;
-use chrono::{DateTime, Duration, TimeZone as _, Utc};
 use ersatzrs_domain::{
     TeletextEffectiveBindingSnapshot as Binding, TeletextEffectiveChannelSelectionSnapshot,
     MAX_TELETEXT_OVERRIDE_COMMANDS,
 };
+use ersatzrs_time::{DateTime, Duration, TimeZone as _, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 
 fn at(minute: i64) -> DateTime<Utc> {

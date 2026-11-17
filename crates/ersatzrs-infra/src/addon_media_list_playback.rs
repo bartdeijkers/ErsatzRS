@@ -455,7 +455,7 @@ pub(crate) mod tests {
                 1,
                 1,
                 0,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &[],
                 &AddonMediaListRevisionArtifacts {
                     ids: vec![1],
@@ -587,7 +587,7 @@ pub(crate) mod tests {
                 1,
                 2,
                 0,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &[],
                 &AddonMediaListRevisionArtifacts {
                     streaming_plans: std::collections::BTreeMap::from([("item".into(), plan)]),
@@ -740,7 +740,7 @@ pub(crate) mod tests {
                 2,
                 1,
                 0,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &[],
                 &AddonMediaListRevisionArtifacts {
                     ids: vec![2],

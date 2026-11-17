@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt};
 
-use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
 use ersatzrs_domain::{normalize_sub_kind_token, AddonMediaListContentKind, ContentKind};
+use ersatzrs_time::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SearchQueryValidationError {

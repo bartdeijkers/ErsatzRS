@@ -126,7 +126,7 @@ fn fresh_interlaced_field_order_survives_without_sql_or_guesses() {
 fn ordinary_producer_preserves_detected_container_codecs_and_subtitles_without_duration() {
     let mut probe = metadata();
     probe.format_name = Some("matroska,webm".into());
-    probe.version.duration = chrono::Duration::seconds(999);
+    probe.version.duration = ersatzrs_time::Duration::seconds(999);
     probe.streams[0].codec = Some("hevc".into());
     probe.streams[1].codec = Some("aac".into());
     probe.streams.push(MediaStream {

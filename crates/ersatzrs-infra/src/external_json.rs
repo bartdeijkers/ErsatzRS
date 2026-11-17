@@ -3,7 +3,7 @@
 
 use std::{path::Path, time::Duration as StdDuration};
 
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use ersatzrs_time::{DateTime, Duration, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt as _;
 

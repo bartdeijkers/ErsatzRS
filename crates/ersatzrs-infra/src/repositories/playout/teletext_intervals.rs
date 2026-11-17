@@ -3,7 +3,6 @@
 use super::{decode_datetime, encode_datetime, EntityId, RepositoryError, Result, Transaction};
 use crate::db::Db;
 use crate::repositories::{teletext_profiles, SqlxResultExt as _};
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::TeletextProfileMutation as M;
 use ersatzrs_core::scheduling::{truncate_to_persisted_precision, SchedulingResult};
 use ersatzrs_domain::{
@@ -11,6 +10,7 @@ use ersatzrs_domain::{
     TeletextPublishedOverride, MAX_TELETEXT_OVERRIDE_COMMANDS,
     MAX_TELETEXT_OVERRIDE_SNAPSHOT_BYTES,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Row as _;
 use std::collections::BTreeSet;
 

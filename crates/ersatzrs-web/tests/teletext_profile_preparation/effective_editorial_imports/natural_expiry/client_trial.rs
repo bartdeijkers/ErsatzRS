@@ -6,7 +6,6 @@ use super::super::super::{
     editorial_imports::live_updates::{live_tcp as shared, Capture},
 };
 use super::{base_wire, bases, cold, on_for, recover_base, retained, Base, Scoped};
-use chrono::Utc;
 use ersatzrs_app::teletext_design_documents::decode_teletext_effective_design_documents;
 use ersatzrs_core::repositories::{
     TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
@@ -14,6 +13,7 @@ use ersatzrs_core::repositories::{
     TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::{TeletextAcceptedGeneration, TeletextEffectiveBindingSnapshot};
+use ersatzrs_time::Utc;
 use futures_util::FutureExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

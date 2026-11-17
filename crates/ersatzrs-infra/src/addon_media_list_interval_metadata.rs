@@ -1,6 +1,5 @@
 //! Metadata-only interval work on the ordinary host coordinator, without file admission.
 
-use chrono::{Duration, Utc};
 use ersatzrs_addon_contract::{
     AddonMediaListOptionOperation, MediaListIntervalMetadataOutcome,
     MediaListIntervalMetadataRequest,
@@ -10,6 +9,7 @@ use ersatzrs_core::{
     repositories::{RepositoryError, Result},
 };
 use ersatzrs_domain::RemoteStreamLiveness;
+use ersatzrs_time::{Duration, Utc};
 use tokio::sync::oneshot;
 
 use crate::{

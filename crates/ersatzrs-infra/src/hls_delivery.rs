@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

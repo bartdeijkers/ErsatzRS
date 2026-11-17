@@ -400,7 +400,7 @@ fn wire_boundary_does_not_claim_semantic_validation() {
     let mut supplied = request();
     supplied.locale.clear();
     supplied.timezone = "not-an-IANA-zone".to_owned();
-    supplied.window.finish = supplied.window.start - chrono::Duration::hours(1);
+    supplied.window.finish = supplied.window.start - ersatzrs_time::Duration::hours(1);
     supplied.channels[0].id = -1;
     supplied.channels[0].context.current = Some(TeletextProgrammeReferenceWire {
         playout_id: -1,

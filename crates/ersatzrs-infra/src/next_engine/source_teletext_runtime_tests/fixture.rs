@@ -360,7 +360,7 @@ pub(super) async fn acquire_and_store_observed(
         .unwrap()
         .unwrap();
     let claim = repository
-        .claim_operation(operation.id, chrono::Utc::now())
+        .claim_operation(operation.id, ersatzrs_time::Utc::now())
         .await
         .unwrap()
         .unwrap();

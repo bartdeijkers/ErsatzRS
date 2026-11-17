@@ -7,8 +7,8 @@ use ersatzrs_core::{
 pub(super) async fn build(
     pool: &SqlitePool,
     playout: Playout,
-    start: chrono::DateTime<Utc>,
-    finish: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
+    finish: ersatzrs_time::DateTime<Utc>,
     mode: PlayoutBuildMode,
 ) -> SchedulingResult {
     let repos = make_repositories(pool.clone());

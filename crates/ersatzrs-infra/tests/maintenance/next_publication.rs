@@ -12,7 +12,7 @@ use tokio::sync::Notify;
 
 struct PublishingHandle {
     publisher: ChannelPublisher,
-    start: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
     entered: Notify,
     release: Notify,
     fail: AtomicBool,
@@ -76,7 +76,7 @@ impl HlsSessionHandle for PublishingHandle {
     }
 }
 
-async fn fixture() -> (SqlitePool, EntityLocker, chrono::DateTime<Utc>) {
+async fn fixture() -> (SqlitePool, EntityLocker, ersatzrs_time::DateTime<Utc>) {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
     common::seed_profile_and_channel(&repos, 1).await;

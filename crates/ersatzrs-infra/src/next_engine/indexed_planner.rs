@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, io::Write};
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::programme::ProgrammeClock;
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 

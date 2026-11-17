@@ -1,12 +1,12 @@
 //! Short locked snapshots and stable identities for demand-time preparation.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     locking::EntityLocker,
     path_replacement::PathReplacement,
     repositories::{ChannelRepository, RepositoryError, Result},
 };
 use ersatzrs_domain::StreamingEngine;
+use ersatzrs_time::{DateTime, Utc};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::Row;

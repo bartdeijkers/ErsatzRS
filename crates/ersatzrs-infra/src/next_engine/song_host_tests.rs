@@ -1,9 +1,9 @@
 //! Real finite song producers and exact callback-context lifecycle.
 
 use super::*;
-use chrono::{TimeDelta, Utc};
 use ersatzrs_core::repositories::{ChannelRepository as _, FfmpegProfileRepository as _};
 use ersatzrs_domain::{Channel, ChannelPlayoutSource, FFmpegProfile, StreamingEngine};
+use ersatzrs_time::{TimeDelta, Utc};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,

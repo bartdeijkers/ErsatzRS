@@ -1,4 +1,4 @@
-use chrono::Timelike;
+use ersatzrs_time::Timelike;
 use leptos::html;
 use leptos::prelude::*;
 
@@ -287,8 +287,8 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
     }
 }
 
-fn parse_time(value: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
-    chrono::DateTime::parse_from_rfc3339(value).ok()
+fn parse_time(value: &str) -> Option<ersatzrs_time::DateTime<ersatzrs_time::FixedOffset>> {
+    ersatzrs_time::DateTime::parse_from_rfc3339(value).ok()
 }
 
 fn window_minutes(snapshot: &GuideSnapshot) -> i64 {
@@ -322,11 +322,11 @@ fn visible_time_in_timezone<Tz>(
     timezone: &Tz,
 ) -> String
 where
-    Tz: chrono::TimeZone,
+    Tz: ersatzrs_time::TimeZone,
     Tz::Offset: std::fmt::Display,
 {
     parse_time(&snapshot.window_start).map_or_else(String::new, |start| {
-        (start + chrono::Duration::minutes(offset_minutes))
+        (start + ersatzrs_time::Duration::minutes(offset_minutes))
             .with_timezone(timezone)
             .format("%H:%M")
             .to_string()
@@ -334,7 +334,7 @@ where
 }
 
 fn hour_ticks(snapshot: &GuideSnapshot, zoom_percent: i64) -> Vec<(i64, String)> {
-    hour_ticks_in_timezone(snapshot, zoom_percent, &chrono::Local)
+    hour_ticks_in_timezone(snapshot, zoom_percent, &ersatzrs_time::Local)
 }
 
 fn hour_ticks_in_timezone<Tz>(
@@ -343,7 +343,7 @@ fn hour_ticks_in_timezone<Tz>(
     timezone: &Tz,
 ) -> Vec<(i64, String)>
 where
-    Tz: chrono::TimeZone,
+    Tz: ersatzrs_time::TimeZone,
     Tz::Offset: std::fmt::Display,
 {
     let Some(start) = parse_time(&snapshot.window_start) else {
@@ -356,7 +356,7 @@ where
         .map(|minute| {
             (
                 scaled_minutes(minute, zoom_percent),
-                (start + chrono::Duration::minutes(minute))
+                (start + ersatzrs_time::Duration::minutes(minute))
                     .with_timezone(timezone)
                     .format("%H:%M")
                     .to_string(),
@@ -546,7 +546,7 @@ mod tests {
     fn hour_ticks_and_now_line_use_loaded_window() {
         let data = snapshot();
         assert_eq!(
-            hour_ticks_in_timezone(&data, DEFAULT_ZOOM_PERCENT, &chrono::Utc)[0],
+            hour_ticks_in_timezone(&data, DEFAULT_ZOOM_PERCENT, &ersatzrs_time::Utc)[0],
             (360, "09:00".to_owned())
         );
         assert_eq!(now_line_left_pixels(&data, DEFAULT_ZOOM_PERCENT), 720);
@@ -555,7 +555,7 @@ mod tests {
     #[test]
     fn visible_window_and_ruler_use_local_time_including_fractional_offsets() {
         let data = snapshot();
-        let timezone = chrono::FixedOffset::east_opt(5 * 60 * 60 + 30 * 60).unwrap();
+        let timezone = ersatzrs_time::FixedOffset::east_opt(5 * 60 * 60 + 30 * 60).unwrap();
 
         assert_eq!(visible_time_in_timezone(&data, 60, &timezone), "14:30");
         assert_eq!(

@@ -146,7 +146,7 @@ impl TeletextLiveOutputIntent {
                 deadline.into_std(),
             )
             .await;
-        (confirmed && prepared.fields_current_at(chrono::Utc::now())).then_some(prepared)
+        (confirmed && prepared.fields_current_at(ersatzrs_time::Utc::now())).then_some(prepared)
     }
 }
 

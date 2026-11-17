@@ -1435,7 +1435,7 @@ fn validate_filler_preset(form: &FillerPresetAdminForm) -> crate::Result<()> {
 
 fn filler_preset_from_admin(form: FillerPresetAdminForm) -> crate::Result<FillerPreset> {
     let duration = (form.filler_mode == 1).then(|| {
-        chrono::Duration::seconds(i64::from(
+        ersatzrs_time::Duration::seconds(i64::from(
             ((form.duration_hours.clamp(0, 24) * 3600)
                 + (form.duration_minutes.clamp(0, 59) * 60)
                 + form.duration_seconds.clamp(0, 59))
@@ -5205,7 +5205,7 @@ pub async fn confirm_addon_media_list_removal(
         .confirm_item_tombstone(
             command.item_id,
             command.expected_generation,
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
         )
         .await?;
     Ok(())
@@ -5227,7 +5227,7 @@ pub async fn recover_addon_media_list_publication(
             command.job_id,
             command.generation,
             command.action,
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
         )
         .await
         .map_err(Into::into)
@@ -5938,7 +5938,7 @@ fn validate_channel_mirror_source(
     }
 
     if form.playout_offset.is_some_and(|offset| {
-        offset < chrono::Duration::hours(-12) || offset > chrono::Duration::hours(12)
+        offset < ersatzrs_time::Duration::hours(-12) || offset > ersatzrs_time::Duration::hours(12)
     }) {
         errors.push(ChannelValidationError::new(
             "playout_offset",
@@ -7565,7 +7565,7 @@ mod tests {
                 attempt_count: 0,
                 next_eligible_at: None,
             };
-            let now = chrono::Utc::now();
+            let now = ersatzrs_time::Utc::now();
             let queued = AddonMediaListReconcileEnqueue {
                 job: ersatzrs_core::repositories::AddonMediaListLifecycleJob {
                     id: operation_id,
@@ -7626,7 +7626,7 @@ mod tests {
 
         async fn claim_next(
             &self,
-            _now: chrono::DateTime<chrono::Utc>,
+            _now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<Option<ManagedLibraryOperationClaim>> {
             unreachable!("claiming is not used by command tests")
         }
@@ -7634,7 +7634,7 @@ mod tests {
         async fn claim_operation(
             &self,
             _operation_id: EntityId,
-            _now: chrono::DateTime<chrono::Utc>,
+            _now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<Option<ManagedLibraryOperationClaim>> {
             unreachable!("claiming is not used by command tests")
         }
@@ -7642,7 +7642,7 @@ mod tests {
         async fn heartbeat(
             &self,
             _claim: &ManagedLibraryOperationClaim,
-            _now: chrono::DateTime<chrono::Utc>,
+            _now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<bool> {
             unreachable!("heartbeat is not used by command tests")
         }
@@ -7657,7 +7657,7 @@ mod tests {
         async fn publication_status(
             &self,
             _list_id: EntityId,
-            _now: chrono::DateTime<chrono::Utc>,
+            _now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<Option<AddonMediaListPublicationStatus>> {
             Ok(None)
         }
@@ -7665,7 +7665,7 @@ mod tests {
         async fn publication_history(
             &self,
             list_id: EntityId,
-            _now: chrono::DateTime<chrono::Utc>,
+            _now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationHistory> {
             Ok(AddonMediaListPublicationHistory {
                 list_id,
@@ -7675,7 +7675,7 @@ mod tests {
 
         async fn prune_publication_history(
             &self,
-            _now: chrono::DateTime<chrono::Utc>,
+            _now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<u64> {
             Ok(0)
         }
@@ -7686,7 +7686,7 @@ mod tests {
             _job_id: EntityId,
             _generation: i32,
             _action: AddonMediaListRecoveryAction,
-            _now: chrono::DateTime<chrono::Utc>,
+            _now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationStatus> {
             unreachable!("publication recovery is not used by existing command tests")
         }
@@ -7741,7 +7741,7 @@ mod tests {
             _claim: &ManagedLibraryOperationClaim,
             _diagnostic: &str,
             _cause: Option<AddonMediaListPublicationFailureCause>,
-            _next_eligible_at: chrono::DateTime<chrono::Utc>,
+            _next_eligible_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
         ) -> ersatzrs_core::repositories::Result<bool> {
             unreachable!("retry is not used by command tests")
         }
@@ -10649,7 +10649,7 @@ mod tests {
                 streaming_mode: 5,
                 playout_source: 1,
                 mirror_source_channel_id: Some(2),
-                playout_offset: Some(chrono::Duration::hours(1)),
+                playout_offset: Some(ersatzrs_time::Duration::hours(1)),
                 is_enabled: true,
                 show_in_epg: true,
                 ..ChannelEditorForm::default()

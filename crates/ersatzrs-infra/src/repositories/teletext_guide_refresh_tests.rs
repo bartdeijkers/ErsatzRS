@@ -1,7 +1,6 @@
 //! Bounded durable-refresh ownership; native editorial proof remains a host gate.
 
 use super::*;
-use chrono::Duration as ChronoDuration;
 use ersatzrs_core::repositories::{
     TeletextGuideRefreshCandidate, TeletextGuideRefreshClaim, TeletextGuideRefreshCurrent,
     TeletextGuideRefreshFailure, TeletextGuideRefreshOutputCheck as OutputCheck,
@@ -9,6 +8,7 @@ use ersatzrs_core::repositories::{
     TeletextGuideRefreshRole, TeletextGuideRefreshSelection, TeletextGuideRefreshStatus,
     TeletextGuideRuntimeSnapshotSave,
 };
+use ersatzrs_time::Duration as ElapsedDuration;
 use sha2::{Digest as _, Sha256};
 use std::fmt::Write as _;
 
@@ -22,13 +22,13 @@ async fn base_current(port: &dyn TeletextGuideRefreshRepository) -> TeletextGuid
 async fn claim_at(
     port: &dyn TeletextGuideRefreshRepository,
     seed_id: i64,
-    at: chrono::DateTime<Utc>,
+    at: ersatzrs_time::DateTime<Utc>,
 ) -> TeletextGuideRefreshClaim {
     claimed(
         port.claim(
             seed_id,
             at,
-            at + ChronoDuration::seconds(5),
+            at + ElapsedDuration::seconds(5),
             &check(),
             MAXIMUM,
         )
@@ -65,7 +65,7 @@ fn claimed(value: M<Option<TeletextGuideRefreshClaim>>) -> TeletextGuideRefreshC
 
 async fn candidate_at(
     fixture: &Fixture,
-    at: chrono::DateTime<Utc>,
+    at: ersatzrs_time::DateTime<Utc>,
 ) -> TeletextGuideRefreshCandidate {
     let document = b"synthetic opaque validated native snapshot envelope".to_vec();
     let mut digest = String::with_capacity(64);
@@ -104,17 +104,17 @@ async fn unchanged_manual(repo: &SqliteTeletextGenerationRepository) -> Vec<Vec<
 async fn check_restarted_lease(
     fixture: &Fixture,
     first: &TeletextGuideRefreshClaim,
-    now: chrono::DateTime<Utc>,
-    first_loss: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
+    first_loss: ersatzrs_time::DateTime<Utc>,
 ) {
     let reopened = SqliteTeletextGenerationRepository(
         open(&fixture.root.path().join("requests.sqlite")).await,
     );
     let again = reopened.guide_refresh().unwrap();
-    let renewed = now + ChronoDuration::seconds(2);
+    let renewed = now + ElapsedDuration::seconds(2);
     assert_eq!(
         again
-            .heartbeat(first, renewed, now + ChronoDuration::seconds(7), &check())
+            .heartbeat(first, renewed, now + ElapsedDuration::seconds(7), &check())
             .await
             .unwrap(),
         M::Accepted(())
@@ -123,8 +123,8 @@ async fn check_restarted_lease(
         again
             .claim(
                 first.seed.id,
-                now + ChronoDuration::seconds(6),
-                now + ChronoDuration::seconds(8),
+                now + ElapsedDuration::seconds(6),
+                now + ElapsedDuration::seconds(8),
                 &check(),
                 MAXIMUM
             )
@@ -132,13 +132,13 @@ async fn check_restarted_lease(
             .unwrap(),
         M::Accepted(None)
     );
-    let later = now + ChronoDuration::seconds(8);
+    let later = now + ElapsedDuration::seconds(8);
     let second = claimed(
         again
             .claim(
                 first.seed.id,
                 later,
-                later + ChronoDuration::seconds(5),
+                later + ElapsedDuration::seconds(5),
                 &check(),
                 MAXIMUM,
             )
@@ -148,7 +148,7 @@ async fn check_restarted_lease(
     assert_ne!(first.lease_owner, second.lease_owner);
     assert_eq!(
         again
-            .heartbeat(first, later, later + ChronoDuration::seconds(5), &check())
+            .heartbeat(first, later, later + ElapsedDuration::seconds(5), &check())
             .await
             .unwrap(),
         M::Rejected(R::GenerationConflict)
@@ -169,7 +169,7 @@ async fn check_restarted_lease(
             .fail(
                 first,
                 later,
-                later + ChronoDuration::minutes(1),
+                later + ElapsedDuration::minutes(1),
                 TeletextGuideRefreshFailure::SourceUnavailable
             )
             .await
@@ -198,12 +198,12 @@ async fn refresh_seed_cadence_coalescing_and_restart_lease_are_durable() {
     // A near role edge wins over both the debounce and normal cadence.
     assert_eq!(
         super::super::super::refresh::changed_due(
-            capture + ChronoDuration::seconds(1),
+            capture + ElapsedDuration::seconds(1),
             capture,
-            capture + ChronoDuration::seconds(30)
+            capture + ElapsedDuration::seconds(30)
         )
         .unwrap(),
-        capture + ChronoDuration::seconds(30)
+        capture + ElapsedDuration::seconds(30)
     );
     assert_eq!(
         current.seed.generation,
@@ -214,20 +214,20 @@ async fn refresh_seed_cadence_coalescing_and_restart_lease_are_durable() {
     );
     assert_eq!(
         current.next_due_at,
-        (capture + ChronoDuration::minutes(5)).min(save.qualification.valid_until)
+        (capture + ElapsedDuration::minutes(5)).min(save.qualification.valid_until)
     );
     assert!(port.due(capture, 1).await.unwrap().is_empty());
     assert!(port.due(capture, 0).await.is_err());
     assert!(port.due(capture, 257).await.is_err());
     assert_eq!(
-        port.changed(current.seed.id, capture + ChronoDuration::seconds(10))
+        port.changed(current.seed.id, capture + ElapsedDuration::seconds(10))
             .await
             .unwrap(),
         M::Accepted(())
     );
     let changed = base_current(port).await;
-    assert_eq!(changed.next_due_at, capture + ChronoDuration::seconds(70));
-    let first_loss = capture + ChronoDuration::seconds(10);
+    assert_eq!(changed.next_due_at, capture + ElapsedDuration::seconds(70));
+    let first_loss = capture + ElapsedDuration::seconds(10);
     assert_eq!(
         changed.status(first_loss),
         TeletextGuideRefreshStatus::Stale
@@ -235,13 +235,13 @@ async fn refresh_seed_cadence_coalescing_and_restart_lease_are_durable() {
     assert_eq!(changed.first_failure_at, Some(first_loss));
     let dirty_revision = changed.revision;
     assert_eq!(
-        port.changed(current.seed.id, capture + ChronoDuration::seconds(280))
+        port.changed(current.seed.id, capture + ElapsedDuration::seconds(280))
             .await
             .unwrap(),
         M::Accepted(())
     );
     let changed = base_current(port).await;
-    assert_eq!(changed.next_due_at, capture + ChronoDuration::seconds(70));
+    assert_eq!(changed.next_due_at, capture + ElapsedDuration::seconds(70));
     assert_eq!(changed.first_failure_at, Some(first_loss));
     assert_eq!(changed.revision, dirty_revision);
     let now = changed.next_due_at;
@@ -251,7 +251,7 @@ async fn refresh_seed_cadence_coalescing_and_restart_lease_are_durable() {
         port.claim(
             current.seed.id,
             now,
-            now + ChronoDuration::seconds(5),
+            now + ElapsedDuration::seconds(5),
             &check(),
             MAXIMUM
         )
@@ -299,7 +299,7 @@ async fn refresh_success_after_seed_role_expiry_retains_manual_bytes_and_reopens
     let (fixture, repo, save) = seeded().await;
     let port = repo.guide_refresh().unwrap();
     let seed = base_current(port).await.seed;
-    let now = save.qualification.valid_until + ChronoDuration::seconds(1);
+    let now = save.qualification.valid_until + ElapsedDuration::seconds(1);
     let claim = claim_at(port, seed.id, now).await;
     let candidate = candidate_at(&fixture, now).await;
     assert!(candidate.snapshot.qualification.valid_until > seed.qualification.valid_until);
@@ -356,7 +356,7 @@ async fn refresh_success_after_seed_role_expiry_retains_manual_bytes_and_reopens
         port.fail(
             &retry,
             failure_at,
-            failure_at + ChronoDuration::minutes(1),
+            failure_at + ElapsedDuration::minutes(1),
             TeletextGuideRefreshFailure::PreparationFailed
         )
         .await
@@ -372,7 +372,7 @@ async fn refresh_success_after_seed_role_expiry_retains_manual_bytes_and_reopens
             .saved
             .qualification
             .valid_until
-            .min(failure_at + ChronoDuration::minutes(15))
+            .min(failure_at + ElapsedDuration::minutes(15))
     );
     assert!(reopened
         .guide_refresh()
@@ -388,15 +388,15 @@ async fn refresh_failed_retries_never_renew_stale_deadline_and_review_or_revoke_
     let (fixture, repo, save) = seeded().await;
     let port = repo.guide_refresh().unwrap();
     let seed = base_current(port).await.seed;
-    let now = save.qualification.source.captured_at + ChronoDuration::minutes(5);
+    let now = save.qualification.source.captured_at + ElapsedDuration::minutes(5);
     let claim = claim_at(port, seed.id, now).await;
-    let failed_at = now + ChronoDuration::seconds(6);
+    let failed_at = now + ElapsedDuration::seconds(6);
     let working = base_current(port).await;
     assert!(working.refreshing);
     assert_ne!(working.status(now), TeletextGuideRefreshStatus::Fresh);
     assert_eq!(working.first_failure_at, None);
     assert_eq!(working.failure, None);
-    let next = now + ChronoDuration::minutes(1);
+    let next = now + ElapsedDuration::minutes(1);
     assert_eq!(
         port.fail(
             &claim,
@@ -412,7 +412,7 @@ async fn refresh_failed_retries_never_renew_stale_deadline_and_review_or_revoke_
     assert_eq!(current.first_failure_at, Some(failed_at));
     assert_eq!(
         current.available_until(),
-        (failed_at + ChronoDuration::minutes(15)).min(seed.qualification.valid_until)
+        (failed_at + ElapsedDuration::minutes(15)).min(seed.qualification.valid_until)
     );
     assert_eq!(
         current.status(failed_at),
@@ -427,7 +427,7 @@ async fn refresh_failed_retries_never_renew_stale_deadline_and_review_or_revoke_
         port.fail(
             &second,
             next,
-            next + ChronoDuration::minutes(1),
+            next + ElapsedDuration::minutes(1),
             TeletextGuideRefreshFailure::PreparationFailed
         )
         .await
@@ -440,13 +440,13 @@ async fn refresh_failed_retries_never_renew_stale_deadline_and_review_or_revoke_
         current.status(current.available_until()),
         TeletextGuideRefreshStatus::Unavailable
     );
-    let third_at = next + ChronoDuration::minutes(1);
+    let third_at = next + ElapsedDuration::minutes(1);
     let third = claim_at(port, seed.id, third_at).await;
     assert_eq!(
         port.fail(
             &third,
             third_at,
-            third_at + ChronoDuration::minutes(1),
+            third_at + ElapsedDuration::minutes(1),
             TeletextGuideRefreshFailure::NeedsReview
         )
         .await
@@ -454,7 +454,7 @@ async fn refresh_failed_retries_never_renew_stale_deadline_and_review_or_revoke_
         M::Accepted(())
     );
     assert!(port
-        .due(third_at + ChronoDuration::minutes(5), 1)
+        .due(third_at + ElapsedDuration::minutes(5), 1)
         .await
         .unwrap()
         .is_empty());
@@ -492,7 +492,7 @@ async fn refresh_stale_owner_source_selection_budget_and_manual_head_cannot_prom
     let (fixture, repo, save) = seeded().await;
     let port = repo.guide_refresh().unwrap();
     let seed = base_current(port).await.seed;
-    let now = save.qualification.source.captured_at + ChronoDuration::minutes(5);
+    let now = save.qualification.source.captured_at + ElapsedDuration::minutes(5);
     let claim = claim_at(port, seed.id, now).await;
     let candidate = candidate_at(&fixture, now).await;
     let before = unchanged_manual(&repo).await;
@@ -549,7 +549,7 @@ async fn refresh_stale_owner_source_selection_budget_and_manual_head_cannot_prom
             .unwrap(),
         M::Rejected(R::GenerationConflict)
     );
-    let next = now + ChronoDuration::minutes(1);
+    let next = now + ElapsedDuration::minutes(1);
     let second = claim_at(port, seed.id, next).await;
     let candidate = candidate_at(&fixture, next).await;
     sqlx::query(r#"UPDATE "TeletextDesign" SET "Revision"="Revision"+1 WHERE "Id"=?"#)
@@ -668,7 +668,7 @@ async fn refresh_effective_scope_end_cannot_be_extended_by_new_source_or_runtime
     };
     assert!(runtime.saved.qualification.valid_until <= scope_until);
     assert_eq!(unchanged_manual(&repo).await, before);
-    let later = scope_until + ChronoDuration::seconds(1);
+    let later = scope_until + ElapsedDuration::seconds(1);
     let second = claim_at(port, current.seed.id, later).await;
     let mut expired = candidate_at(&fixture.base, later).await;
     expired.selection = TeletextGuideRefreshSelection::Effective(fixture.save.selection.clone());
@@ -699,7 +699,7 @@ async fn refresh_effective_scope_end_cannot_be_extended_by_new_source_or_runtime
 fn output_confirmation(
     current: &ersatzrs_core::repositories::TeletextGuideRefreshCurrentMetadata,
     selection: TeletextGuideRefreshSelection,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
 ) -> OutputConfirmation {
     OutputConfirmation {
         seed: current.seed.clone(),
@@ -719,7 +719,7 @@ async fn check_fresh_output(
     repo: &SqliteTeletextGenerationRepository,
     fixture: &Fixture,
     metadata: &ersatzrs_core::repositories::TeletextGuideRefreshCurrentMetadata,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
 ) {
     let port = repo.guide_refresh().unwrap();
     let expected = output_confirmation(
@@ -773,7 +773,7 @@ async fn check_fresh_output(
 async fn check_stale_output(
     repo: &SqliteTeletextGenerationRepository,
     fixture: &Fixture,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
 ) {
     let port = repo.guide_refresh().unwrap();
     let metadata = port
@@ -802,7 +802,7 @@ async fn check_stale_output(
         M::Accepted(())
     );
     let mut wrong = expected.clone();
-    wrong.available_until += ChronoDuration::seconds(1);
+    wrong.available_until += ElapsedDuration::seconds(1);
     assert_eq!(
         port.confirm_output(&wrong, now, &check, MAXIMUM)
             .await
@@ -830,7 +830,7 @@ async fn check_new_pending_preserves_old_read(
     fixture: &Fixture,
     claim: &TeletextGuideRefreshClaim,
     candidate: &TeletextGuideRefreshCandidate,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
     status: TeletextGuideRefreshStatus,
 ) {
     let source = qualification(fixture).await.source;
@@ -1029,7 +1029,7 @@ async fn check_draft_alone_keeps_fresh_until_source_loss() {
         &repo,
         &fixture,
         initial.seed.id,
-        now + ChronoDuration::seconds(1),
+        now + ElapsedDuration::seconds(1),
     )
     .await;
 }
@@ -1038,7 +1038,7 @@ async fn check_source_loss_during_review(
     repo: &SqliteTeletextGenerationRepository,
     fixture: &Fixture,
     seed_id: i64,
-    loss: chrono::DateTime<Utc>,
+    loss: ersatzrs_time::DateTime<Utc>,
 ) {
     let port = repo.guide_refresh().unwrap();
     sqlx::query("UPDATE Channel SET Name='Source changed during manual review' WHERE Id=2")
@@ -1055,7 +1055,7 @@ async fn check_source_loss_during_review(
     assert_eq!(changed.first_failure_at, Some(loss));
     assert_eq!(changed.status(loss), TeletextGuideRefreshStatus::Stale);
     assert!(port
-        .due(loss + ChronoDuration::minutes(5), 1)
+        .due(loss + ElapsedDuration::minutes(5), 1)
         .await
         .unwrap()
         .is_empty());
@@ -1154,7 +1154,7 @@ async fn effective_guide_settlement_and_reopened_output_keep_published_host_memb
             M::Rejected(R::Publication(P::SelectionChanged))
         );
         assert_eq!(
-            port.changed(current.seed.id, now + ChronoDuration::seconds(1))
+            port.changed(current.seed.id, now + ElapsedDuration::seconds(1))
                 .await
                 .unwrap(),
             M::Accepted(())

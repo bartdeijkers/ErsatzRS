@@ -2,13 +2,13 @@
 
 use super::*;
 use crate::repositories::{common::encode_enum, SqlitePlayoutRepository};
-use chrono::{DateTime, Duration, TimeZone as _, Utc};
 use ersatzrs_core::repositories::PlayoutRepository as _;
 use ersatzrs_core::scheduling::{SchedulingResult, SchedulingSmartShuffleState};
 use ersatzrs_domain::{
     FillerKind, Playout, PlayoutAnchor, PlayoutItem, PlayoutScheduleKind,
     PlayoutScriptedCheckpoint, TeletextOverrideInterval, TeletextOverrideState,
 };
+use ersatzrs_time::{DateTime, Duration, TimeZone as _, Utc};
 
 fn at(minute: i64) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap() + Duration::minutes(minute)

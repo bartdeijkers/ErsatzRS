@@ -103,7 +103,7 @@ pub struct RemoteSourceAdminRow {
     pub id: EntityId,
     pub name: String,
     pub address: String,
-    pub missing_since: Option<chrono::DateTime<chrono::Utc>>,
+    pub missing_since: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

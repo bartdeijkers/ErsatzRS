@@ -6,7 +6,6 @@ use crate::{
         GuideSnapshotSource,
     },
 };
-use chrono::{Duration, TimeZone as _, Utc};
 use ersatzrs_core::{
     programme::{ProgrammeOccurrence, ProgrammeSegment},
     repositories::ArtworkReference,
@@ -16,6 +15,7 @@ use ersatzrs_core::{
     },
 };
 use ersatzrs_domain::{ArtworkKind, ChannelPlayoutSource, PlayoutScheduleKind};
+use ersatzrs_time::{Duration, TimeZone as _, Utc};
 use sha2::{Digest as _, Sha256};
 
 type Change = fn(&mut GuideSnapshot);

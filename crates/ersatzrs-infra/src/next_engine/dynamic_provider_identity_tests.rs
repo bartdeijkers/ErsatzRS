@@ -275,7 +275,7 @@ async fn caption_snapshot(
     pool: &DbPool,
     locker: &ersatzrs_core::locking::EntityLocker,
     relay: &super::super::media::MediaRelay,
-    start: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> super::super::dynamic_projection::Snapshot {
     super::super::dynamic_projection::project_snapshot(
         pool,
@@ -284,7 +284,7 @@ async fn caption_snapshot(
         1,
         1,
         start,
-        start + chrono::Duration::seconds(60),
+        start + ersatzrs_time::Duration::seconds(60),
         &[],
         Some(1),
     )
@@ -302,7 +302,7 @@ async fn cached_caption(
             key,
             "srt",
             text,
-            chrono::Utc::now() + chrono::Duration::minutes(5),
+            ersatzrs_time::Utc::now() + ersatzrs_time::Duration::minutes(5),
             tokio::time::Instant::now() + std::time::Duration::from_secs(10),
             || async { true },
         )
@@ -394,7 +394,7 @@ async fn selected_remote_variant_invalidates_embedded_text_cache_hits_and_staged
         assert_private_source_wire(&before.projection.item, "source-a");
         let root = tempfile::tempdir().unwrap();
         let cache = BurnCache::new(root.path().to_owned());
-        let expiry = chrono::Utc::now() + chrono::Duration::minutes(5);
+        let expiry = ersatzrs_time::Utc::now() + ersatzrs_time::Duration::minutes(5);
         let deadline = Instant::now() + std::time::Duration::from_secs(10);
         let first = cached_caption(&cache, &before.identity.cache_key, "source-a captions").await;
 

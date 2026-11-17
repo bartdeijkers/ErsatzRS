@@ -275,7 +275,7 @@ async fn configure_remote(
     address: &str,
 ) -> (
     Option<mapped_provider_fixture::Provider>,
-    chrono::DateTime<Utc>,
+    ersatzrs_time::DateTime<Utc>,
 ) {
     let (item, _, provider) = Box::pin(scan_caption_owner(
         state,
@@ -363,11 +363,11 @@ async fn run_with_format(
 async fn apply_fixed_interval(
     state: &mut AppState,
     root: &Path,
-    start: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
     seek: u64,
 ) {
     assert!(matches!(seek, 2_143 | 2_164));
-    let clock = start + chrono::Duration::milliseconds(i64::try_from(seek - 2_000).unwrap());
+    let clock = start + ersatzrs_time::Duration::milliseconds(i64::try_from(seek - 2_000).unwrap());
     let overlays = root.join("overlays");
     tokio::fs::create_dir(&overlays).await.unwrap();
     tokio::fs::write(

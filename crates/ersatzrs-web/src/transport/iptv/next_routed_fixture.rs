@@ -59,7 +59,7 @@ pub(super) async fn seed(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
     .execute(pool)
     .await
     .unwrap();
-    let start = chrono::Utc::now() - chrono::Duration::seconds(2);
+    let start = ersatzrs_time::Utc::now() - ersatzrs_time::Duration::seconds(2);
     repos
         .playout
         .upsert_item(&PlayoutItem {
@@ -69,9 +69,9 @@ pub(super) async fn seed(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
             start,
             // Keep the finite source alive through the admitted 30s startup
             // window so these fixtures prove explicit Stop, rather than EOF.
-            finish: start + chrono::Duration::seconds(54),
-            in_point: chrono::Duration::seconds(6),
-            out_point: chrono::Duration::seconds(60),
+            finish: start + ersatzrs_time::Duration::seconds(54),
+            in_point: ersatzrs_time::Duration::seconds(6),
+            out_point: ersatzrs_time::Duration::seconds(60),
             ..Default::default()
         })
         .await
@@ -130,7 +130,7 @@ async fn install_with_script(pool: &ersatzrs_infra::db::DbPool, root: &Path, con
         .unwrap();
     sqlx::query(r#"INSERT INTO "AddonInstallation" ("AddonId","Version","Enabled","PackageSha256","ContentSha256","ManifestJson","InstallPath","InstalledAt","UpdatedAt") VALUES ('org.ersatzrs.addon.fixture','1.0.0',1,?,?,?,?,?,?)"#)
         .bind("a".repeat(64)).bind(hash).bind(manifest.to_string()).bind(package.to_str().unwrap())
-        .bind(chrono::Utc::now().to_rfc3339()).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.unwrap();
+        .bind(ersatzrs_time::Utc::now().to_rfc3339()).bind(ersatzrs_time::Utc::now().to_rfc3339()).execute(pool).await.unwrap();
 }
 
 pub(super) async fn generate(ffmpeg: &Path, root: &Path) {

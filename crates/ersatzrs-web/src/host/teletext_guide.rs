@@ -5,7 +5,6 @@
 
 use std::{fmt, num::NonZeroU8, time::Instant};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_app::{
     teletext_guide::{
         build_request_for_schema, SuppliedTeletextGuideContext, TeletextGuideChannel,
@@ -26,6 +25,7 @@ use ersatzrs_infra::{
         GUIDE_SNAPSHOT_DIGEST_VERSION,
     },
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use super::teletext_channel_documents::{
     prepare_channel_teletext_document_candidate, ChannelTeletextDocumentEncodingError,

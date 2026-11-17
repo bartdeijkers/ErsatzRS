@@ -121,7 +121,7 @@ async fn preparation_recovery_failure(
         )"#,
         )
         .bind(crate::repositories::common::encode_datetime(
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
         ))
         .fetch_one(pool)
         .await
@@ -827,7 +827,7 @@ const LIFECYCLE_FOUNDATION_HEALTH_SQL: &str = r#"WITH "CompleteRevisionSnapshot"
                    AS "ToolFailedOutcome""#;
 
 async fn lifecycle_foundation_health(pool: &Pool<Db>) -> Result<LifecycleFoundationHealth> {
-    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
     let row = sqlx::query(LIFECYCLE_FOUNDATION_HEALTH_SQL)
         .bind(&now)
         .bind(&now)
@@ -932,7 +932,8 @@ async fn import_failures(pool: &Pool<Db>) -> Result<Vec<(i64, String)>> {
     .fetch_all(pool)
     .await
     .map_err(sqlx_error)?;
-    let threshold = chrono::Utc::now() - chrono::Duration::minutes(STUCK_IMPORT_MINUTES);
+    let threshold =
+        ersatzrs_time::Utc::now() - ersatzrs_time::Duration::minutes(STUCK_IMPORT_MINUTES);
     let mut failures = Vec::new();
     for row in rows {
         let list_id = row.try_get::<i64, _>("ListId").map_err(sqlx_error)?;
@@ -993,7 +994,7 @@ async fn import_failures(pool: &Pool<Db>) -> Result<Vec<(i64, String)>> {
 
 async fn detail_worker_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
     let threshold = crate::repositories::common::encode_datetime(
-        chrono::Utc::now() - chrono::Duration::minutes(STUCK_IMPORT_MINUTES),
+        ersatzrs_time::Utc::now() - ersatzrs_time::Duration::minutes(STUCK_IMPORT_MINUTES),
     );
     let rows = sqlx::query(
         r#"SELECT "list"."Name", "item"."DisplayTitle"
@@ -1008,7 +1009,7 @@ async fn detail_worker_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
     )
     .bind(&threshold)
     .bind(crate::repositories::common::encode_datetime(
-        chrono::Utc::now(),
+        ersatzrs_time::Utc::now(),
     ))
     .fetch_all(pool)
     .await
@@ -1362,7 +1363,7 @@ const PUBLICATION_COORDINATOR_HEALTH_SQL: &str = r#"SELECT "job"."OperationId" A
            ORDER BY "job"."UpdatedAt" DESC, "job"."Id" DESC"#;
 
 async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCoordinatorHealth> {
-    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
     let rows = sqlx::query(PUBLICATION_COORDINATOR_HEALTH_SQL)
         .bind(&now)
         .bind(crate::repositories::common::encode_enum(

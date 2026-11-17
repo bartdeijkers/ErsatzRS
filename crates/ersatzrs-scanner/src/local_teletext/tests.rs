@@ -1,10 +1,10 @@
 use ersatzrs_domain::{SourceTeletextBinding, SourceTeletextObservation};
 
-use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{ManagedLibraryOperationRepository, ManagedLibraryScanSpec};
 use ersatzrs_domain::ManagedLibraryOperationKind;
 use ersatzrs_infra::db::{begin_write, DbPool};
 use ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository;
+use ersatzrs_time::{Duration, Utc};
 use sqlx::{sqlite::SqlitePoolOptions, Executor as _};
 
 use super::*;

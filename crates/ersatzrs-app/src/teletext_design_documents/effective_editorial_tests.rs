@@ -169,7 +169,7 @@ fn effective_editorial_retains_expired_mixed_origins_exact_sources_and_original_
     original.extend_from_slice(b"\r\n \t");
     assert_preserved_original(&original);
     let restored = decode_teletext_effective_design_documents(&original, budget()).unwrap();
-    assert!(restored.selection().valid_until.unwrap() < chrono::Utc::now());
+    assert!(restored.selection().valid_until.unwrap() < ersatzrs_time::Utc::now());
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 
 use crate::scheduling::{PlayoutBuildMode, SchedulingError, SchedulingRequest};
 

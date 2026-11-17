@@ -81,7 +81,7 @@ async fn future_timeline(pool: &SqlitePool, now: DateTime<Utc>) -> Vec<PlaylistT
         .await
         .into_iter()
         .filter(|row| {
-            chrono::NaiveDateTime::parse_from_str(&row.1, "%Y-%m-%d %H:%M:%S%.f")
+            ersatzrs_time::NaiveDateTime::parse_from_str(&row.1, "%Y-%m-%d %H:%M:%S%.f")
                 .unwrap()
                 .and_utc()
                 >= now

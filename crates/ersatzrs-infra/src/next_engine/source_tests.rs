@@ -1,7 +1,7 @@
 use super::*;
 use crate::next_engine::schedule;
-use chrono::Duration;
 use ersatzrs_core::repositories::PathReplacementAdmin;
+use ersatzrs_time::Duration;
 use serde_json::Value;
 
 // Dynamic fixture table names come only from the closed provider enum.

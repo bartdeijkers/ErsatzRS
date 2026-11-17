@@ -94,7 +94,7 @@ async fn block_future_boundary_preserves_generated_items_after_reload() {
     }
 }
 
-fn reference_data(now: chrono::DateTime<Utc>, delay: Duration) -> SchedulingReferenceData {
+fn reference_data(now: ersatzrs_time::DateTime<Utc>, delay: Duration) -> SchedulingReferenceData {
     let mut media = SchedulingMediaItem::new(1, Duration::minutes(30));
     media.preferred_audio_language_code = Some("nld".to_owned());
     media.preferred_subtitle_language_code = Some("eng".to_owned());

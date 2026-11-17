@@ -1,9 +1,9 @@
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{BlockRepository, TemplateItemAdmin, TemplateRepository};
 use ersatzrs_domain::{Block, Template};
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::Duration;
 use sqlx::Executor;
 
 #[tokio::test]

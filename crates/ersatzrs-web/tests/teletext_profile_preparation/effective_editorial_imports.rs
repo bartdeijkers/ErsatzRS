@@ -5,7 +5,6 @@ use super::{
     authoring::AuthoringFixture, authoring_metadata, channel_documents, designs, editorial_imports,
     effective_authoring, scripted_controls, Fixture, ADDON,
 };
-use chrono::{DateTime, Timelike as _, Utc};
 use ersatzrs_app::{
     teletext_design_documents::decode_teletext_effective_design_documents,
     teletext_export_project::{write_teletext_export_sidecar, TeletextExportEffectiveOrigin},
@@ -14,6 +13,7 @@ use ersatzrs_core::repositories::{TeletextDesignMutation, TeletextProfileSave};
 use ersatzrs_domain::{TeletextDesignRevision, TeletextPageContract};
 use ersatzrs_ffmpeg::teletext::TeletextRaster;
 use ersatzrs_infra::addons::calculate_addon_content_sha256;
+use ersatzrs_time::{DateTime, Timelike as _, Utc};
 use ersatzrs_web::host::{
     teletext_authoring::{
         preview_original_teletext_design, publish_static_teletext_generation,
@@ -627,7 +627,7 @@ async fn short_lua(fixture: &AuthoringFixture) -> DateTime<Utc> {
         &script,
         1,
         true,
-        (Utc::now() - chrono::Duration::seconds(1))
+        (Utc::now() - ersatzrs_time::Duration::seconds(1))
             .with_nanosecond(0)
             .unwrap(),
     )
@@ -640,7 +640,7 @@ async fn short_lua(fixture: &AuthoringFixture) -> DateTime<Utc> {
     );
     assert_eq!(
         result.added_items[0].finish - result.added_items[0].start,
-        chrono::Duration::seconds(12)
+        ersatzrs_time::Duration::seconds(12)
     );
     scripted_controls::publish_result(&fixture.fixture, &result).await;
     result.teletext_intervals[0].finish

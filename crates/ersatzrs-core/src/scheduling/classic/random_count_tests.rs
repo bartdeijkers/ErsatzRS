@@ -1,8 +1,8 @@
 //! Seeded Random Count is a persisted sequence, rather than one constant per preset.
 use super::tests::{filler_preset, schedule_item};
 use super::*;
-use chrono::TimeZone;
 use ersatzrs_domain::{Playout, PlayoutMode, PlayoutScheduleKind};
+use ersatzrs_time::TimeZone;
 
 fn request() -> SchedulingRequest {
     let item = ProgramScheduleItem {

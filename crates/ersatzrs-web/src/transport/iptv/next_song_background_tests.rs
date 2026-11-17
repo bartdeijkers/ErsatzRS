@@ -128,14 +128,14 @@ impl Fixture {
         // A saved preview profile deliberately differs from the persisted one.
         profile.resolution.width = 160;
         profile.resolution.height = 96;
-        let start = chrono::Utc::now();
+        let start = ersatzrs_time::Utc::now();
         let media = schedule::bind_media(
             &self.state.pool,
             PlayoutItem {
                 media_item_id: 10,
                 start,
-                finish: start + chrono::TimeDelta::minutes(1),
-                out_point: chrono::TimeDelta::minutes(1),
+                finish: start + ersatzrs_time::TimeDelta::minutes(1),
+                out_point: ersatzrs_time::TimeDelta::minutes(1),
                 ..Default::default()
             },
         )

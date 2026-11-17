@@ -19,7 +19,7 @@ pub(super) async fn prepare(base: &Base) -> Scoped {
     assert_eq!(interval.finish, off.added_items[0].finish);
     assert_eq!(
         interval.finish - interval.start,
-        chrono::Duration::seconds(35)
+        ersatzrs_time::Duration::seconds(35)
     );
     let tail = schedule(fixture, 1, "add_count('clip',4)", Some(&off)).await;
     assert!(tail.teletext_intervals.is_empty());

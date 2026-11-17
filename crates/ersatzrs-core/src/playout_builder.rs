@@ -14,10 +14,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::Duration;
 use ersatzrs_domain::{
     EntityId, FillerKind, PlayoutItem, PlayoutMode, PlayoutScheduleKind, RemoteStreamLiveness,
 };
+use ersatzrs_time::Duration;
 
 use crate::scheduling::{
     classic_schedule_item_key, BlockSchedulingEngine, ClassicSchedulingEngine,
@@ -504,11 +504,11 @@ fn min_positive_duration(left: Duration, right: Duration) -> Duration {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Utc};
     use ersatzrs_domain::{
         FillerKind, FillerMode, Playout, PlayoutGap, PlayoutMode, PlayoutScheduleKind,
         ProgramScheduleItem, RemoteStreamLiveness,
     };
+    use ersatzrs_time::{Duration, Utc};
 
     use super::*;
     use crate::scheduling::{

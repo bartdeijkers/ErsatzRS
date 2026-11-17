@@ -11,7 +11,6 @@ mod yaml_preservation;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::maintenance::{ScheduledLibraryScanRequester, ScheduledScanRequestOutcome};
@@ -28,6 +27,7 @@ use ersatzrs_infra::maintenance::{
     run_requested_playout_build,
 };
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
+use ersatzrs_time::{Duration, TimeZone, Utc};
 use sqlx::{Executor, Row, SqlitePool};
 
 #[derive(Default)]
@@ -1288,7 +1288,7 @@ async fn maintenance_reads_scanner_refresh_interval_from_config() {
 
     assert_eq!(
         load_library_refresh_interval(&pool).await.unwrap(),
-        chrono::Duration::hours(6)
+        ersatzrs_time::Duration::hours(6)
     );
 }
 

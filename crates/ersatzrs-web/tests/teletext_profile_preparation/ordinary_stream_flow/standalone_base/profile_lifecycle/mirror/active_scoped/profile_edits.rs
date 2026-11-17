@@ -123,7 +123,7 @@ pub(super) async fn transition(trial: &Trial, root: &Path, origin: &live_tcp::Or
     let invalidated = hold_off(origin, &trial.base[0]).await;
     reject_stale(trial, &scoped, false).await;
 
-    let remaining = (interval.finish - chrono::Duration::milliseconds(700))
+    let remaining = (interval.finish - ersatzrs_time::Duration::milliseconds(700))
         .signed_duration_since(Utc::now())
         .to_std()
         .expect("profile edit and stale rejection leave original interval active");

@@ -108,7 +108,7 @@ impl Fixture {
                 "1",
                 self.instance,
                 now,
-                now + chrono::Duration::seconds(10),
+                now + ersatzrs_time::Duration::seconds(10),
             )
             .await
             .err()
@@ -162,7 +162,7 @@ impl Fixture {
                     media_file_id: 1,
                     publication: "synthetic".into(),
                     start: now,
-                    finish: now + chrono::Duration::seconds(10),
+                    finish: now + ersatzrs_time::Duration::seconds(10),
                 },
                 Instant::now() + Duration::from_secs(5),
                 Instant::now() + Duration::from_secs(10),

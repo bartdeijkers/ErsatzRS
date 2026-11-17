@@ -3,7 +3,6 @@
 
 use std::{fmt::Write as _, time::Instant};
 
-use chrono::Utc;
 use ersatzrs_addon_contract::TeletextPagesRequest;
 use ersatzrs_app::{
     teletext_design_documents::{TeletextDesignDocumentBudget, TeletextSavedGuideInputs},
@@ -22,6 +21,7 @@ use ersatzrs_infra::{
     db::DbPool,
     xmltv::{GuideExpansionLimits, GuideReadBudget, GuideReadLimits, GuideSnapshotDigestLimits},
 };
+use ersatzrs_time::Utc;
 use sha2::{Digest as _, Sha256};
 
 use super::{
@@ -150,7 +150,7 @@ pub(super) fn qualify(
     captured: &CapturedTeletextGuide,
     source: &TeletextGuideSourceFence,
     inputs: Option<&TeletextSavedGuideInputs>,
-    scope_expiry: Option<chrono::DateTime<Utc>>,
+    scope_expiry: Option<ersatzrs_time::DateTime<Utc>>,
     deadline: Instant,
 ) -> Result<TeletextGuideGenerationQualification, NativeTeletextGenerationError> {
     check_deadline(deadline)?;

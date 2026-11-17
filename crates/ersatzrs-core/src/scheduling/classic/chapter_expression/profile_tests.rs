@@ -7,7 +7,7 @@ use super::{
     value::Value,
     ExpressionError,
 };
-use chrono::Duration;
+use ersatzrs_time::Duration;
 
 #[test]
 fn deterministic_profile_is_independent_of_host_culture() {

@@ -16,7 +16,6 @@ use axum::{
     response::Response,
     Router,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_infra::{
     db::{DatabaseBackend, DatabaseSchemaStatus},
     transcode_capacity::{
@@ -24,6 +23,7 @@ use ersatzrs_infra::{
         reset_active_transcode_state_for_tests,
     },
 };
+use ersatzrs_time::{DateTime, Utc};
 use futures_util::{FutureExt as _, StreamExt as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -788,7 +788,7 @@ fn sample(now: DateTime<Utc>) -> Value {
         "addon_id":ADDON,"profile_id":index+1,"profile_revision":2,"theme_rgb4":if index==0 {[15,0,0]}else{[0,0,15]},
         "generation_id":index+10,"request_id":index+20,"design_id":index+30,"design_revision":if index==0 {3}else{1},
         "scoped_role":2,"original_design_id":index+30,"original_revision":1,"original_digest":"a".repeat(64),
-        "root_receipt_id":index+40,"root_receipt_digest":"b".repeat(64),"original_valid_until":(now+chrono::Duration::seconds(240)).to_rfc3339(),
+        "root_receipt_id":index+40,"root_receipt_digest":"b".repeat(64),"original_valid_until":(now+ersatzrs_time::Duration::seconds(240)).to_rfc3339(),
         "expected_pages":[200,201],"subcode":0,"expected_navigation":[200,201,200],
         "edited_q_page":if index==0 {Some(200)}else{None},"edited_r_page":if index==0 {Some(200)}else{None},
         "edited_q_cell":{"row":2,"column":8},"edited_r_cell":{"row":3,"column":8},"url":null})).collect::<Vec<_>>();
@@ -888,15 +888,24 @@ fn scoped_legacy_handoff_accepts_short_future_scope_and_clamps_to_earliest_origi
     let now = Utc::now();
     let instant = Instant::now();
     let mut value = sample(now);
-    value["ready_template"]["channels"][0]["original_valid_until"] =
-        (now + chrono::Duration::seconds(15)).to_rfc3339().into();
-    value["ready_template"]["channels"][1]["original_valid_until"] =
-        (now + chrono::Duration::seconds(10)).to_rfc3339().into();
+    value["ready_template"]["channels"][0]["original_valid_until"] = (now
+        + ersatzrs_time::Duration::seconds(15))
+    .to_rfc3339()
+    .into();
+    value["ready_template"]["channels"][1]["original_valid_until"] = (now
+        + ersatzrs_time::Duration::seconds(10))
+    .to_rfc3339()
+    .into();
     assert!(checked(value.clone(), now));
     let handoff: Handoff = serde_json::from_value(value).unwrap();
     assert_eq!(
         completion_deadline(&handoff, now, instant).unwrap(),
         instant + Duration::from_secs(10)
     );
-    assert!(completion_deadline(&handoff, now + chrono::Duration::seconds(10), instant).is_err());
+    assert!(completion_deadline(
+        &handoff,
+        now + ersatzrs_time::Duration::seconds(10),
+        instant
+    )
+    .is_err());
 }

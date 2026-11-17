@@ -2,7 +2,6 @@
 
 use std::fmt::Write as _;
 
-use chrono::{Duration, Utc};
 use ersatzrs_addon_contract::{
     AddonMediaListRecord, MediaListArchiveDescriptor, MediaListDiscoveryPage,
     MediaListDiscoveryV2Page, MediaListEnrichOutcomeKind, MediaListImportMode as WireImportMode,
@@ -18,6 +17,7 @@ use ersatzrs_domain::{
     AddonMediaListImportPurpose, AddonMediaListImportState, AddonMediaListIncrementalStrategy,
     AddonMediaListLifecyclePhase, AddonMediaListPresentationKind, EntityId,
 };
+use ersatzrs_time::{Duration, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::Row as _;
 use url::Url;

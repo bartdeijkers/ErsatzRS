@@ -1,6 +1,6 @@
 //! Closed Gregorian date/time literal profile from ADR 0098.
 use super::{value::Value, ExpressionError, Result};
-use chrono::{Duration, NaiveDate};
+use ersatzrs_time::{Duration, NaiveDate};
 
 const TICKS_PER_SECOND: u64 = 10_000_000;
 

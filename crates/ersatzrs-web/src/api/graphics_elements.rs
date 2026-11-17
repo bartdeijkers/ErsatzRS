@@ -141,12 +141,12 @@ async fn process(
             .get("preview_time")
             .filter(|v| !v.trim().is_empty())
             .map(|value| {
-                chrono::DateTime::parse_from_rfc3339(value)
-                    .map(|time| time.with_timezone(&chrono::Utc))
+                ersatzrs_time::DateTime::parse_from_rfc3339(value)
+                    .map(|time| time.with_timezone(&ersatzrs_time::Utc))
                     .map_err(|_| invalid())
             })
             .transpose()?
-            .unwrap_or_else(chrono::Utc::now),
+            .unwrap_or_else(ersatzrs_time::Utc::now),
         seek_seconds: fields
             .get("preview_seek")
             .filter(|v| !v.trim().is_empty())

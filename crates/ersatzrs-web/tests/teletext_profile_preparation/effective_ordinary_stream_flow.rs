@@ -161,7 +161,7 @@ async fn build_and_publish(
     let request = SchedulingRequest {
         playout,
         start,
-        finish: start + chrono::Duration::minutes(5),
+        finish: start + ersatzrs_time::Duration::minutes(5),
         mode: if previous.is_some() {
             PlayoutBuildMode::Continue
         } else {
@@ -170,7 +170,10 @@ async fn build_and_publish(
         reference_data: SchedulingReferenceData {
             media_by_key: BTreeMap::from([(
                 "clip".to_owned(),
-                vec![SchedulingMediaItem::new(71, chrono::Duration::seconds(12))],
+                vec![SchedulingMediaItem::new(
+                    71,
+                    ersatzrs_time::Duration::seconds(12),
+                )],
             )]),
             existing_items: previous.map_or_else(Vec::new, |value| value.added_items.clone()),
             existing_history: previous.map_or_else(Vec::new, |value| value.added_history.clone()),
@@ -195,7 +198,7 @@ async fn build_and_publish(
     assert!(result
         .added_items
         .iter()
-        .all(|item| item.finish - item.start == chrono::Duration::seconds(12)));
+        .all(|item| item.finish - item.start == ersatzrs_time::Duration::seconds(12)));
     scripted_controls::publish_result(fixture, &result).await;
     result
 }
@@ -207,7 +210,7 @@ async fn capture_pair(fixture: &Fixture) -> [Vec<u8>; 2] {
         .bind(Utc::now().to_rfc3339())
         .fetch_optional(&fixture.state.pool).await.unwrap();
     if let Some(start) = start {
-        let start = chrono::NaiveDateTime::parse_from_str(&start, "%Y-%m-%d %H:%M:%S%.f")
+        let start = ersatzrs_time::NaiveDateTime::parse_from_str(&start, "%Y-%m-%d %H:%M:%S%.f")
             .unwrap()
             .and_utc();
         let wait = (start - Utc::now()).to_std().unwrap_or_default();

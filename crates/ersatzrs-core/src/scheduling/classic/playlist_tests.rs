@@ -1,7 +1,7 @@
 use super::*;
 use crate::scheduling::{SchedulingCollectionKey, SchedulingPlaylistItem};
-use chrono::TimeZone;
 use ersatzrs_domain::{CollectionType, Playout, PlayoutMode};
+use ersatzrs_time::TimeZone;
 
 fn fixture(shuffle: bool) -> (ProgramScheduleItem, SchedulingReferenceData) {
     let item = ProgramScheduleItem {

@@ -1,6 +1,5 @@
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{
     ChannelRepository, FfmpegProfileRepository, PlayoutRepository, ProgramScheduleRepository,
     ScheduleAdminForm, ScheduleItemAdmin,
@@ -11,6 +10,7 @@ use ersatzrs_domain::{
     PlayoutMode, ProgramScheduleAlternate, ProgramScheduleItem, TailMode,
 };
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::Duration;
 use sqlx::{Executor, Row};
 
 #[tokio::test]

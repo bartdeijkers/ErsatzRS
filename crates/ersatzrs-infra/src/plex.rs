@@ -2,9 +2,9 @@ use crate::db::DbPool;
 use crate::repositories::common::decode_enum_column;
 use crate::repositories::common::upsert_sql;
 use crate::repositories::SqlxResultExt as _;
-use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{ManagedLibraryOperationClaim, RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
+use ersatzrs_time::{DateTime, Duration, TimeZone, Utc};
 use reqwest::{
     header::{HeaderValue, ACCEPT},
     Client, Url,
@@ -738,7 +738,7 @@ async fn reconcile_plex_sources(
         .iter()
         .map(|server| server.client_identifier.as_str())
         .collect();
-    let now = Utc::now();
+    let now = Utc::now().to_rfc3339();
     for (id, identifier) in existing_sources {
         if !identifier
             .as_deref()
@@ -749,7 +749,7 @@ async fn reconcile_plex_sources(
                    SET "MissingSince" = COALESCE("MissingSince", ?)
                    WHERE "Id" = ?"#,
             )
-            .bind(now)
+            .bind(&now)
             .bind(id)
             .execute(&mut **tx)
             .await

@@ -378,7 +378,10 @@ mod tests {
         );
         assert_eq!(audio[0].language.as_deref(), Some("jpn"));
         assert!(audio[1].default);
-        assert_eq!(probe.version.duration, chrono::Duration::seconds(900));
+        assert_eq!(
+            probe.version.duration,
+            ersatzrs_time::Duration::seconds(900)
+        );
     }
 
     #[test]

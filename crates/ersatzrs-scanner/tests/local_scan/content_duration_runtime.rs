@@ -5,7 +5,6 @@
 //! Optional `ERSATZRS_ROW194_PROOF_DIR` exports synthetic evidence.
 
 use super::*;
-use chrono::{Duration, Utc};
 use ersatzrs_core::{
     hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry},
     locking::EntityLocker,
@@ -29,6 +28,7 @@ use ersatzrs_infra::{
     repositories::make_repositories,
     transcode_capacity::active_transcode_snapshot,
 };
+use ersatzrs_time::{Duration, Utc};
 use futures_util::FutureExt;
 use serde_json::{json, Value};
 use std::{panic::AssertUnwindSafe, sync::Arc, time::Duration as StdDuration};
@@ -569,9 +569,12 @@ async fn snapshot_native(folder: &Path, capture: &Path, worker: &HlsSessionWorke
                     for name in body.lines() {
                         if let Some(value) = name.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:") {
                             at = Some(
-                                chrono::DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f%z")
-                                    .unwrap()
-                                    .timestamp_millis(),
+                                ersatzrs_time::DateTime::parse_from_str(
+                                    value,
+                                    "%Y-%m-%dT%H:%M:%S%.f%z",
+                                )
+                                .unwrap()
+                                .timestamp_millis(),
                             );
                         }
                         if name.starts_with('#') || name.is_empty() {
@@ -672,9 +675,10 @@ async fn native(
         .lines()
         .find_map(|line| line.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:"))
         .expect("captured first programme clock");
-    let first_clock = chrono::DateTime::parse_from_str(first_clock, "%Y-%m-%dT%H:%M:%S%.f%z")
-        .unwrap()
-        .timestamp_millis();
+    let first_clock =
+        ersatzrs_time::DateTime::parse_from_str(first_clock, "%Y-%m-%dT%H:%M:%S%.f%z")
+            .unwrap()
+            .timestamp_millis();
     tokio::fs::write(root.join("native-schedule.json"),serde_json::to_vec_pretty(&json!({"blue_start":timeline[0].item.start,"blue_finish":timeline[0].item.finish,"red_start":timeline[1].item.start,"join_ms":join_ms,"captured_first_clock_ms":first_clock,"producer_started_ms":started.timestamp_millis(),"registry_released":true,"capacity_restored":true,"output_removed":true})).unwrap()).await.unwrap();
     eprintln!("native owned cleanup complete; join={join_ms}ms, captured first clock={first_clock}, producer clock={}",started.timestamp_millis());
     assert_eq!(

@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use chrono::{DateTime, TimeDelta, Utc};
 use ersatzrs_addon_contract::{
     AddonManifest, ToolUpdateDiagnosticCode, ToolUpdateOutcome, ToolUpdateResult,
     CAPABILITY_TOOL_UPDATE_V1,
@@ -12,6 +11,7 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
     AddonToolMaintenanceOutcome, AddonToolMaintenanceState, AddonToolMaintenanceTrigger,
 };
+use ersatzrs_time::{DateTime, TimeDelta, Utc};
 use sqlx::Row as _;
 use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;

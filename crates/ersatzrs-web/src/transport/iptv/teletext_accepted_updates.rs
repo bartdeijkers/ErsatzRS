@@ -237,7 +237,7 @@ fn trace_native_candidate(
         guide_valid_until = ?guide.map(|value| value.available_until),
         next_transition_remaining_ns = ?candidate.next_transition().map(|next| next.saturating_duration_since(now).as_nanos()),
         next_transition_overdue_ns = ?candidate.next_transition().and_then(|next| now.checked_duration_since(next)).map(|elapsed| elapsed.as_nanos()),
-        observed_utc = %chrono::Utc::now().to_rfc3339(),
+        observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
         "teletext monitor observed a sealed candidate"
     );
 }
@@ -610,7 +610,7 @@ impl UpdateBackend for NativeBackend {
         deadline: Instant,
     ) -> Result<bool, ReadFailure> {
         Ok(self.confirm_selected(&candidate.selected, deadline).await?
-            && candidate.fields_current_at(chrono::Utc::now()))
+            && candidate.fields_current_at(ersatzrs_time::Utc::now()))
     }
 
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure> {
@@ -738,7 +738,7 @@ impl<C, I: Clone> MonitorState<C, I> {
         tracing::debug!(
             target: "ersatzrs_web::transport::iptv::teletext_provenance",
             event = "monitor_proposal", sequence, action = "withdraw",
-            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
             "teletext monitor proposed withdrawal"
         );
         self.proposal = Some((sequence, None));
@@ -785,7 +785,7 @@ impl<C, I: Clone> MonitorState<C, I> {
             channel_id = identity.request.channel_id,
             generation_id = identity.id, request_id = identity.request.id,
             design_id = identity.request.design_id, revision = identity.request.revision,
-            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
             "teletext monitor proposed a recovered generation"
         );
         self.proposal = Some((sequence, Some(identity.clone())));
@@ -1086,7 +1086,7 @@ async fn run_monitor<B: UpdateBackend>(
                 generation_id = ?state.cached.as_ref().map(|candidate| B::identity(candidate).id),
                 design_id = ?state.cached.as_ref().map(|candidate| B::identity(candidate).request.design_id),
                 revision = ?state.cached.as_ref().map(|candidate| B::identity(candidate).request.revision),
-                observed_utc = %chrono::Utc::now().to_rfc3339(),
+                observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
                 "teletext monitor reached its original transition boundary"
             );
             // Withdraw first; a blocked read cannot extend the previous scope.
@@ -1458,7 +1458,7 @@ mod tests {
                     seed_id: 1,
                     snapshot_id: Some(i64::try_from(snapshot).unwrap()),
                     revision: candidate.guide_revision,
-                    captured_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+                    captured_at: ersatzrs_time::DateTime::from_timestamp(0, 0).unwrap(),
                     stale: candidate.guide_stale,
                 }
             });

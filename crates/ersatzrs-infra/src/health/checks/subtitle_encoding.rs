@@ -47,10 +47,10 @@ impl HealthCheck for SubtitleEncodingHealthCheck {
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
-        let now = chrono::Utc::now();
+        let now = ersatzrs_time::Utc::now();
         let rows = sqlx::query(QUERY)
             .bind(now.to_rfc3339())
-            .bind((now + chrono::Duration::days(1)).to_rfc3339())
+            .bind((now + ersatzrs_time::Duration::days(1)).to_rfc3339())
             .fetch_all(&self.pool)
             .await
             .map_err(sqlx_error)?;
@@ -144,8 +144,8 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        let now = chrono::Utc::now();
-        sqlx::query(r#"INSERT INTO "PlayoutItem" ("Id","PlayoutId","MediaItemId","DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint","OutPoint","Start") VALUES (1,1,1,0,0,?,0,'00:00:00','00:01:00',?)"#).bind((now+chrono::Duration::minutes(1)).to_rfc3339()).bind(now.to_rfc3339()).execute(&pool).await.unwrap();
+        let now = ersatzrs_time::Utc::now();
+        sqlx::query(r#"INSERT INTO "PlayoutItem" ("Id","PlayoutId","MediaItemId","DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint","OutPoint","Start") VALUES (1,1,1,0,0,?,0,'00:00:00','00:01:00',?)"#).bind((now+ersatzrs_time::Duration::minutes(1)).to_rfc3339()).bind(now.to_rfc3339()).execute(&pool).await.unwrap();
         sqlx::query(r#"INSERT INTO "Subtitle" ("MovieMetadataId","SubtitleKind","StreamIndex","Codec","Path","Default","Forced","DateAdded","DateUpdated") VALUES (1,1,0,'subrip',?,0,0,'2026-01-01','2026-01-01')"#).bind(path.to_str().unwrap()).execute(&pool).await.unwrap();
         let result = check.check().await.unwrap();
         assert_eq!(result.status, HealthCheckStatus::Warning);

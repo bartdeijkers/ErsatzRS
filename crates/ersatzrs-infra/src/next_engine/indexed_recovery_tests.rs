@@ -4,7 +4,7 @@ use super::super::{
     READER_LOCK_FILENAME,
 };
 use super::*;
-use chrono::Duration;
+use ersatzrs_time::Duration;
 use std::fs::File;
 
 #[test]

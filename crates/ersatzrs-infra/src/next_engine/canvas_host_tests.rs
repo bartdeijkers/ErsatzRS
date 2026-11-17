@@ -1,6 +1,6 @@
 use super::*;
-use chrono::TimeDelta;
 use ersatzrs_domain::ChannelPlayoutSource;
+use ersatzrs_time::TimeDelta;
 
 async fn fixture() -> (NextHost, Uuid, CanvasBinding, tempfile::TempDir) {
     let (pool, locker, mut channel, start) = schedule::tests::fixture().await;

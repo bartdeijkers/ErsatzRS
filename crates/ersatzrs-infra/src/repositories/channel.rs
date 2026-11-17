@@ -1,7 +1,6 @@
 use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     ChannelAdminListRow, ChannelEditorForm, ChannelEditorOptions, ChannelEditorState,
     ChannelLogoForm, ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult,
@@ -10,6 +9,7 @@ use ersatzrs_core::repositories::{
     ChannelWatchProgramme, ChannelWatchState, EpgPreviewChannelState, Result,
 };
 use ersatzrs_domain::{Channel, EntityId};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::{Pool, Row};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;

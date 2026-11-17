@@ -1,6 +1,6 @@
 //! Preserve source timing when Next resolves a demand-time item callback.
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 
 use super::protocol::{PlayoutItem, Source};
 

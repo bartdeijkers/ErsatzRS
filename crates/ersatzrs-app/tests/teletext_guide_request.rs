@@ -1,10 +1,10 @@
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_addon_contract::TeletextPagesRequest;
 use ersatzrs_app::teletext_guide::{
     build_request, SuppliedTeletextGuideContext, TeletextGuideChannel, TeletextGuideRequestError,
 };
 use ersatzrs_core::programme::{ProgrammeOccurrence, ProgrammeSegment};
 use ersatzrs_core::xmltv::{XmltvProgramme, XmltvProgrammeContent};
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 fn instant(value: &str) -> DateTime<Utc> {
     value.parse().unwrap()

@@ -33,7 +33,7 @@ pub struct TroubleshootingPreview<'a> {
     /// None uses channel preferences; zero explicitly disables subtitles.
     pub subtitle_id: Option<i64>,
     /// Channel preview selection time; None uses the explicit media-preview overlays.
-    pub selection_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub selection_time: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
     pub watermark_ids: &'a [i64],
     pub graphics_ids: &'a [i64],
     pub replacements: &'a [PathReplacement],
@@ -50,7 +50,7 @@ pub(super) struct Context {
     pub channel: Channel,
     pub profile: PlaybackProfile,
     pub subtitle_id: Option<i64>,
-    selection_time: Option<chrono::DateTime<chrono::Utc>>,
+    selection_time: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
     watermark_ids: Vec<i64>,
     graphics_ids: Vec<i64>,
     pub diagnostics: Option<super::diagnostics::SelectionLog>,
@@ -101,7 +101,7 @@ impl Context {
     pub(super) fn credits_at(
         &self,
         projection: &DeferredProjection,
-        now: chrono::DateTime<chrono::Utc>,
+        now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<Option<protocol::Track>> {
         if self.credits.is_none()
             || self.subtitle_id.is_some()
@@ -140,13 +140,14 @@ impl Context {
         &self,
         pool: &crate::db::DbPool,
     ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
-        self.graphics_at(pool, chrono::TimeDelta::zero()).await
+        self.graphics_at(pool, ersatzrs_time::TimeDelta::zero())
+            .await
     }
 
     pub(super) async fn graphics_at(
         &self,
         pool: &crate::db::DbPool,
-        offset: chrono::TimeDelta,
+        offset: ersatzrs_time::TimeDelta,
     ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
         if let Some(source_time) = self.source_time(offset)? {
             if self.fallback_gap.is_some() {
@@ -169,13 +170,14 @@ impl Context {
         &self,
         pool: &crate::db::DbPool,
     ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
-        self.watermarks_at(pool, chrono::TimeDelta::zero()).await
+        self.watermarks_at(pool, ersatzrs_time::TimeDelta::zero())
+            .await
     }
 
     pub(super) async fn watermarks_at(
         &self,
         pool: &crate::db::DbPool,
-        offset: chrono::TimeDelta,
+        offset: ersatzrs_time::TimeDelta,
     ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
         if let Some(source_time) = self.source_time(offset)? {
             if self.fallback_gap.is_some() {
@@ -207,8 +209,8 @@ impl Context {
 
     fn source_time(
         &self,
-        offset: chrono::TimeDelta,
-    ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+        offset: ersatzrs_time::TimeDelta,
+    ) -> Result<Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>> {
         self.selection_time
             .map(|at| {
                 let at = at
@@ -243,7 +245,7 @@ impl Session {
     pub(super) fn occurrence(
         &self,
         item: i64,
-        at: chrono::DateTime<chrono::Utc>,
+        at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<std::sync::Arc<Context>> {
         let mut matching = self.occurrences.iter().filter(|context| {
             context.media.item.id == item
@@ -316,8 +318,8 @@ pub struct TroubleshootingChannelWindow<'a> {
     pub channel: &'a Channel,
     pub profile: &'a PlaybackProfile,
     pub occurrences: &'a [TroubleshootingChannelOccurrence],
-    pub start: chrono::DateTime<chrono::Utc>,
-    pub finish: chrono::DateTime<chrono::Utc>,
+    pub start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    pub finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     pub replacements: &'a [PathReplacement],
     pub ffmpeg: &'a Path,
     pub deadline: Instant,
@@ -326,11 +328,11 @@ pub struct TroubleshootingChannelWindow<'a> {
 
 /// Historical tickets remain live for two hours without weakening session checks.
 pub(super) fn callback_expiry(
-    finish: chrono::DateTime<chrono::Utc>,
-) -> Result<chrono::DateTime<chrono::Utc>> {
+    finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+) -> Result<ersatzrs_time::DateTime<ersatzrs_time::Utc>> {
     finish
-        .max(chrono::Utc::now())
-        .checked_add_signed(chrono::TimeDelta::hours(2))
+        .max(ersatzrs_time::Utc::now())
+        .checked_add_signed(ersatzrs_time::TimeDelta::hours(2))
         .ok_or_else(|| unavailable("callback expiry overflow"))
 }
 
@@ -373,7 +375,7 @@ impl NextHost {
         self.dynamic_contexts.lock().await.insert(
             instance,
             super::host::DynamicContext {
-                started_at: chrono::Utc::now(),
+                started_at: ersatzrs_time::Utc::now(),
                 request: start,
                 troubleshooting: Some(std::sync::Arc::new(Session::single(context))),
                 transfers: std::sync::Arc::default(),
@@ -437,7 +439,7 @@ impl NextHost {
         window: TroubleshootingChannelWindow<'_>,
         start: super::host::NextStart,
     ) -> Result<(uuid::Uuid, protocol::Playout)> {
-        if window.finish - window.start != chrono::TimeDelta::seconds(30)
+        if window.finish - window.start != ersatzrs_time::TimeDelta::seconds(30)
             || start.channel_id != window.channel.id
             || start.number != window.channel.number
         {
@@ -498,7 +500,7 @@ impl NextHost {
         self.dynamic_contexts.lock().await.insert(
             instance,
             super::host::DynamicContext {
-                started_at: chrono::Utc::now(),
+                started_at: ersatzrs_time::Utc::now(),
                 request: start,
                 troubleshooting: Some(std::sync::Arc::new(context)),
                 transfers: std::sync::Arc::default(),
@@ -523,12 +525,12 @@ impl NextHost {
     pub async fn troubleshooting_channel_window(
         &self,
         channel: &Channel,
-        at: chrono::DateTime<chrono::Utc>,
+        at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<Vec<ScheduledMedia>> {
-        let at = chrono::DateTime::from_timestamp(at.timestamp(), 0)
+        let at = ersatzrs_time::DateTime::from_timestamp(at.timestamp(), 0)
             .ok_or_else(|| unavailable("invalid preview start"))?;
         let finish = at
-            .checked_add_signed(chrono::TimeDelta::seconds(30))
+            .checked_add_signed(ersatzrs_time::TimeDelta::seconds(30))
             .ok_or_else(|| unavailable("invalid preview finish"))?;
         let locked = super::schedule::read_locked(&self.pool, &self.locker, channel, at, finish)
             .await?
@@ -576,10 +578,10 @@ impl NextHost {
     pub async fn troubleshooting_channel_media(
         &self,
         channel: &Channel,
-        at: chrono::DateTime<chrono::Utc>,
+        at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<Option<ScheduledMedia>> {
         let until = at
-            .checked_add_signed(chrono::Duration::milliseconds(1))
+            .checked_add_signed(ersatzrs_time::Duration::milliseconds(1))
             .ok_or_else(|| unavailable("invalid preview start"))?;
         let locked = super::schedule::read_locked(&self.pool, &self.locker, channel, at, until)
             .await?
@@ -645,7 +647,7 @@ impl NextHost {
                         && current.identity.cache_key == before.identity.cache_key
                 })
         };
-        let expires = before.projection.item.finish.max(chrono::Utc::now());
+        let expires = before.projection.item.finish.max(ersatzrs_time::Utc::now());
         let prepared = if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR
         {
             self.burn_cache

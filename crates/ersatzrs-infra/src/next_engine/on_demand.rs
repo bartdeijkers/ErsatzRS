@@ -6,8 +6,8 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::locking::{EntityLocker, PlayoutLockGuard};
+use ersatzrs_time::{DateTime, Utc};
 use tokio::time::{interval_at, timeout, Instant, MissedTickBehavior};
 
 use super::{process::ProcessError, session::NextSession};
@@ -111,7 +111,7 @@ impl Checkpoints {
             .parse::<i64>()
             .ok()
             .filter(|seconds| *seconds >= 0)
-            .and_then(chrono::Duration::try_seconds)
+            .and_then(ersatzrs_time::Duration::try_seconds)
             .ok_or_else(|| sqlx::Error::Protocol("invalid on-demand checkpoint interval".into()))?;
         let cutoff = touch
             .checked_sub_signed(seconds)

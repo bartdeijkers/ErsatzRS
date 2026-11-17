@@ -109,16 +109,16 @@ async fn real_next_intermittent_watermark_joins_wall_cycle_and_preserves_fade_au
         .get_with_profile(1)
         .await
         .unwrap();
-    let minute = chrono::DateTime::parse_from_rfc3339("2026-09-23T12:00:00Z")
+    let minute = ersatzrs_time::DateTime::parse_from_rfc3339("2026-09-23T12:00:00Z")
         .unwrap()
-        .with_timezone(&chrono::Utc);
+        .with_timezone(&ersatzrs_time::Utc);
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.start = minute - chrono::Duration::seconds(10);
-    item.finish = minute + chrono::Duration::seconds(40);
-    item.in_point = chrono::Duration::seconds(5);
-    item.out_point = chrono::Duration::seconds(55);
+    item.start = minute - ersatzrs_time::Duration::seconds(10);
+    item.finish = minute + ersatzrs_time::Duration::seconds(40);
+    item.in_point = ersatzrs_time::Duration::seconds(5);
+    item.out_point = ersatzrs_time::Duration::seconds(55);
     let mut projected = selection::project_item(
         &pool,
         &channel,
@@ -163,7 +163,7 @@ async fn real_next_intermittent_watermark_joins_wall_cycle_and_preserves_fade_au
     )
     .unwrap();
     for (second, expected) in [(1, "visible"), (11, "fade"), (20, "hidden")] {
-        config.playout.virtual_start = Some(minute + chrono::Duration::seconds(second));
+        config.playout.virtual_start = Some(minute + ersatzrs_time::Duration::seconds(second));
         let output = root.path().join(format!("output-{second}"));
         let mut process = NextProcess::start(
             &binary,

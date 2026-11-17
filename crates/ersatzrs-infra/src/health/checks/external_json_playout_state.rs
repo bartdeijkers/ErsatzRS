@@ -32,7 +32,7 @@ impl HealthCheck for ExternalJsonPlayoutStateHealthCheck {
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_error)?;
-        let now = chrono::Utc::now();
+        let now = ersatzrs_time::Utc::now();
         let mut messages = Vec::new();
         let mut severity = 0;
         for row in rows {

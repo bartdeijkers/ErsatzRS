@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc};
 
-use chrono::{DateTime, Datelike, Duration, NaiveTime, TimeZone, Timelike, Utc};
 use ersatzrs_domain::{ChannelPlayoutMode, EntityId, FillerKind, PlaybackOrder, PlayoutAnchor};
+use ersatzrs_time::{DateTime, Datelike, Duration, NaiveTime, TimeZone, Timelike, Utc};
 use mlua::{Lua, Table};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -1150,7 +1150,7 @@ fn next_n_minute_boundary(now: DateTime<Utc>, n: i64) -> DateTime<Utc> {
 fn pad_until_target(now: DateTime<Utc>, target_time: NaiveTime, tomorrow: bool) -> DateTime<Utc> {
     let day = now.date_naive();
     let naive_target = day.and_time(target_time);
-    let target_utc = Utc.from_utc_datetime(&naive_target);
+    let target_utc = Utc.resolve_utc(&naive_target);
     if now.time() > target_time {
         if tomorrow {
             target_utc + Duration::days(1)
@@ -1171,8 +1171,8 @@ fn lua_error(error: mlua::Error) -> SchedulingError {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
     use ersatzrs_domain::Playout;
+    use ersatzrs_time::Duration;
 
     use super::*;
     use crate::scheduling::{SchedulingMediaItem, SchedulingReferenceData};

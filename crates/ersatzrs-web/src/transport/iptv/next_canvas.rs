@@ -56,7 +56,7 @@ async fn serve(
     };
     if !host
         .media
-        .authorized_canvas(&binding, ticket, chrono::Utc::now())
+        .authorized_canvas(&binding, ticket, ersatzrs_time::Utc::now())
     {
         return StatusCode::UNAUTHORIZED.into_response();
     }
@@ -132,7 +132,7 @@ mod tests {
         host.media
             .configure("127.0.0.1:8409".parse().unwrap())
             .unwrap();
-        let start = chrono::Utc::now();
+        let start = ersatzrs_time::Utc::now();
         let binding = CanvasBinding {
             playout_start: None,
             region: None,
@@ -144,10 +144,10 @@ mod tests {
             version: 4,
             file: 5,
             start,
-            finish: start + chrono::TimeDelta::minutes(1),
+            finish: start + ersatzrs_time::TimeDelta::minutes(1),
             in_point_ms: 0,
             out_point_ms: 60_000,
-            expires: start + chrono::TimeDelta::minutes(2),
+            expires: start + ersatzrs_time::TimeDelta::minutes(2),
         };
         let Source::Http {
             headers: signed, ..

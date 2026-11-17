@@ -5,8 +5,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutPreservation};
+use ersatzrs_time::{DateTime, Utc};
 
 use super::ExternalJsonSchedule;
 
@@ -187,7 +187,7 @@ pub(super) fn validate(schedule: &ExternalJsonSchedule) -> Result<(), Adaptation
     if schedule.items.iter().any(|item| {
         item.program.duration <= 0
             || item.finish.signed_duration_since(item.start)
-                != chrono::Duration::milliseconds(i64::from(item.program.duration))
+                != ersatzrs_time::Duration::milliseconds(i64::from(item.program.duration))
     }) || schedule
         .items
         .windows(2)

@@ -5,7 +5,6 @@
 //! provider-neutral source-change check. Incremental archive and reconciliation
 //! semantics remain owned by AMM-L-02 through AMM-L-05.
 
-use chrono::{DateTime, Months, TimeDelta, Utc};
 use ersatzrs_addon_contract::{
     MediaListSourceCheckOutcome as WireSourceCheckOutcome, MAX_MEDIA_LIST_SOURCE_UPDATE_INSTANTS,
 };
@@ -14,6 +13,7 @@ use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListRefreshCadence,
     AddonMediaListRefreshState, AddonMediaListSourceCheckOutcome, EntityId,
 };
+use ersatzrs_time::{DateTime, Months, TimeDelta, Utc};
 use sqlx::Row as _;
 use url::Url;
 use uuid::Uuid;
@@ -1005,7 +1005,7 @@ fn ensure_fenced(rows_affected: u64) -> Result<()> {
 
 /// Return the next fixed-cadence instant anchored to a successful refresh.
 ///
-/// Month and year addition uses Chrono's checked calendar arithmetic, which
+/// Month and year addition uses checked Gregorian calendar arithmetic, which
 /// clamps an invalid target day to the last day of the target month.
 #[must_use]
 pub fn next_fixed_refresh_at(
@@ -1164,10 +1164,10 @@ pub(crate) async fn record_refresh_success_tx(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeDelta, TimeZone as _, Utc};
     #[cfg(unix)]
     use ersatzrs_domain::AddonMediaListSourceCheckOutcome;
     use ersatzrs_domain::{AddonMediaListRefreshCadence, AddonMediaListRefreshState, EntityId};
+    use ersatzrs_time::{TimeDelta, TimeZone as _, Utc};
     use sqlx::Row as _;
 
     use super::{
@@ -1343,27 +1343,27 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
         assert_eq!(
             next_adaptive_check_at(&[], now, 0),
-            now + chrono::TimeDelta::days(1)
+            now + ersatzrs_time::TimeDelta::days(1)
         );
         assert_eq!(
             next_adaptive_check_at(&[], now, 6),
-            now + chrono::TimeDelta::hours(24)
+            now + ersatzrs_time::TimeDelta::hours(24)
         );
         assert_eq!(
             failure_retry_at(now, 1, None),
-            now + chrono::TimeDelta::minutes(5)
+            now + ersatzrs_time::TimeDelta::minutes(5)
         );
         assert_eq!(
             failure_retry_at(now, 9, None),
-            now + chrono::TimeDelta::hours(1)
+            now + ersatzrs_time::TimeDelta::hours(1)
         );
         assert_eq!(
             failure_retry_at(now, 5, None),
-            now + chrono::TimeDelta::hours(1)
+            now + ersatzrs_time::TimeDelta::hours(1)
         );
         assert_eq!(
             failure_retry_at(now, 1, Some(1_800)),
-            now + chrono::TimeDelta::minutes(30)
+            now + ersatzrs_time::TimeDelta::minutes(30)
         );
     }
 
@@ -1605,7 +1605,7 @@ mod tests {
         );
         assert_eq!(
             row.get::<Option<String>, _>("NextRefreshAt").as_deref(),
-            Some(encode_datetime(now + chrono::TimeDelta::days(1)).as_str())
+            Some(encode_datetime(now + ersatzrs_time::TimeDelta::days(1)).as_str())
         );
     }
 
@@ -1729,7 +1729,7 @@ esac
                 .await
                 .unwrap();
         let second = decode_datetime("adaptive next due", &next_due).unwrap()
-            + chrono::TimeDelta::seconds(1);
+            + ersatzrs_time::TimeDelta::seconds(1);
         assert_eq!(coordinator.admit_due(second).await.unwrap(), 1);
         assert!(coordinator.process_one(second).await.unwrap());
         let unchanged = sqlx::query(
@@ -1829,7 +1829,7 @@ printf '%s\n' '{"outcome":"transient_failure","code":"provider-rate-limited","re
         .fetch_one(&pool)
         .await
         .unwrap();
-        let expected_retry = encode_datetime(now + chrono::TimeDelta::minutes(30));
+        let expected_retry = encode_datetime(now + ersatzrs_time::TimeDelta::minutes(30));
         assert_eq!(
             row.get::<i32, _>("State"),
             encode_enum(AddonMediaListRefreshState::WaitingToRetry)
@@ -1991,8 +1991,8 @@ printf '%s\n' '{"outcome":"transient_failure","code":"provider-rate-limited","re
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        let later =
-            decode_datetime("candidate next due", &due).unwrap() + chrono::TimeDelta::seconds(1);
+        let later = decode_datetime("candidate next due", &due).unwrap()
+            + ersatzrs_time::TimeDelta::seconds(1);
         assert_eq!(coordinator.admit_due(later).await.unwrap(), 1);
         assert!(coordinator.process_one(later).await.unwrap());
         let changed: (i32, String) = sqlx::query_as(

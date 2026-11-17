@@ -3,7 +3,6 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
 use ersatzrs_core::hls::{
     HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry, HlsStartupReadiness,
 };
@@ -23,6 +22,7 @@ use ersatzrs_infra::{
         ActiveTranscodeReservation, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
     },
 };
+use ersatzrs_time::{DateTime, NaiveDateTime, Utc};
 use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -1846,7 +1846,7 @@ mod tests {
         let start = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z").unwrap();
         let mut playlist = String::from("#EXTM3U\n");
         for index in 0..4 {
-            let time = start + chrono::Duration::seconds(index * 4);
+            let time = start + ersatzrs_time::Duration::seconds(index * 4);
             let uri = format!("live{index:06}.ts");
             write!(
                 playlist,
@@ -2732,7 +2732,7 @@ mod tests {
         use tower::ServiceExt;
         let token = jsonwebtoken::encode(
             &jsonwebtoken::Header::default(),
-            &serde_json::json!({ "exp": chrono::Utc::now().timestamp() + 60 }),
+            &serde_json::json!({ "exp": ersatzrs_time::Utc::now().timestamp() + 60 }),
             &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
         )
         .unwrap();

@@ -3,7 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
 use ersatzrs_core::repositories::{ManagedLibraryOperationRepository, ManagedLibraryScanSpec};
 use ersatzrs_domain::{
     ManagedLibraryOperationKind, MediaSourceKind, SourceTeletextBinding, SourceTeletextDescriptors,
@@ -14,6 +13,7 @@ use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionC
 use ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository;
 use ersatzrs_infra::teletext_source;
 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
+use ersatzrs_time::Utc;
 use sqlx::{sqlite::SqlitePoolOptions, Executor as _, SqlitePool};
 
 #[path = "local_teletext/missing_source.rs"]

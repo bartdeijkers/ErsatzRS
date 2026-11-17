@@ -144,7 +144,7 @@ pub struct AddonMediaListAutoPublicationHold {
     pub reason: ersatzrs_domain::AddonMediaListAutoPublicationHoldReason,
     pub draft_revision: i32,
     pub published_revision: i32,
-    pub recorded_at: chrono::DateTime<chrono::Utc>,
+    pub recorded_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 }
 
 /// One persisted provider item and its optional local replacement.

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{LibraryMediaKind, MediaChapter, MediaStream};
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 use super::Result;
 

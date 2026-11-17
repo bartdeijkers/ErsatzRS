@@ -169,7 +169,6 @@ fn lifecycle_artifact_binds_body_and_authored_seed_even_with_identical_header_fa
 }
 
 fn guide_qualification() -> ersatzrs_core::repositories::TeletextGuideGenerationQualification {
-    use chrono::TimeZone as _;
     use ersatzrs_core::{
         programme::ProgrammeClock,
         repositories::{
@@ -177,8 +176,9 @@ fn guide_qualification() -> ersatzrs_core::repositories::TeletextGuideGeneration
             TELETEXT_GUIDE_SOURCE_FENCE_VERSION,
         },
     };
+    use ersatzrs_time::TimeZone as _;
     use std::num::NonZeroU8;
-    let captured = chrono::Utc
+    let captured = ersatzrs_time::Utc
         .with_ymd_and_hms(2026, 10, 28, 12, 0, 0)
         .unwrap();
     let (start, finish) = ProgrammeClock::named("UTC")
@@ -240,9 +240,9 @@ fn guide_artifact_binds_immutable_source_role_expiry_and_native_lifecycle() {
     let mut changed_order = qualification.clone();
     changed_order.source.channel_ids.reverse();
     let mut changed_capture = qualification.clone();
-    changed_capture.source.captured_at += chrono::Duration::nanoseconds(1);
+    changed_capture.source.captured_at += ersatzrs_time::Duration::nanoseconds(1);
     let mut changed_expiry = qualification.clone();
-    changed_expiry.valid_until -= chrono::Duration::nanoseconds(1);
+    changed_expiry.valid_until -= ersatzrs_time::Duration::nanoseconds(1);
     for changed in [
         changed_source,
         changed_order,

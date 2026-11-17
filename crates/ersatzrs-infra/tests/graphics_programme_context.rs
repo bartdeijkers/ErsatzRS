@@ -1,6 +1,5 @@
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{
     ChannelRepository, GraphicsRepository, GraphicsTextPreviewRequest, PlayoutRepository,
 };
@@ -8,6 +7,7 @@ use ersatzrs_domain::{
     ChannelPlayoutSource, FillerKind, PlayoutItemGraphicsElement, TextGraphicsRenderer,
 };
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::Duration;
 use sqlx::Executor as _;
 
 async fn fixture() -> ersatzrs_infra::db::DbPool {

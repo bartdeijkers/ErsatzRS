@@ -141,7 +141,7 @@ pub(crate) async fn load_context(
     let pinned: Option<i64> = row.try_get("MediaVersionId").repository()?;
     let media = load_media(pool, media_id, pinned).await?;
     let rate: Option<String> = media.try_get("RFrameRate").repository()?;
-    let seconds = |duration: chrono::Duration| duration.as_seconds_f64();
+    let seconds = |duration: ersatzrs_time::Duration| duration.as_seconds_f64();
     Ok(GraphicsTemplateContext {
         channel_id: channel.id,
         channel_number: channel.number,

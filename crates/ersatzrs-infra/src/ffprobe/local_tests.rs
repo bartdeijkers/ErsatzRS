@@ -514,7 +514,7 @@ mod unix {
         .await
         .expect("concurrent pipe draining must not deadlock")
         .unwrap();
-        assert_eq!(result.version.duration, chrono::Duration::seconds(1));
+        assert_eq!(result.version.duration, ersatzrs_time::Duration::seconds(1));
     }
 
     // Linux subreaper state is process-global, so this regression runs in a

@@ -272,7 +272,7 @@ fn ordered_source_metadata_must_match_the_same_parsed_common_requests() {
     changed.channel_ids[1] = 19;
     cases.push(changed);
     let mut changed = original.clone();
-    changed.captured_at += chrono::Duration::seconds(1);
+    changed.captured_at += ersatzrs_time::Duration::seconds(1);
     cases.push(changed);
     let mut changed = original.clone();
     changed.locale = "en".into();

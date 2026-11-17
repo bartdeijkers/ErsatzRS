@@ -3,8 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor, PlayoutItem};
+use ersatzrs_time::{DateTime, Datelike, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::{

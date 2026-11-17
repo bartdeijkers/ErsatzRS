@@ -6,13 +6,13 @@ use crate::repositories::common::{decode_datetime, decode_enum_column, encode_en
 use crate::repositories::{
     SqlitePlayoutRepository, SqliteTeletextGenerationRepository, SqliteTeletextProfileRepository,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     PlayoutRepository as _, TeletextGenerationMutation, TeletextGenerationRepository as _,
     TeletextProfileMutation, TeletextProfileRepository as _,
 };
 use ersatzrs_core::scheduling::validate_scripted_checkpoint;
 use ersatzrs_domain::{PlayoutScheduleKind, PlayoutScriptedCheckpoint, TeletextOverrideState};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{de::IgnoredAny, Deserialize, Deserializer};
 use std::{
     collections::BTreeMap,

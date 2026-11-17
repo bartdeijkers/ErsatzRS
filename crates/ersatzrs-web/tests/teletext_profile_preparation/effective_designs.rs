@@ -523,7 +523,7 @@ async fn effective_off_member_and_unaffected_base_preserve_exact_producer_map_an
 async fn effective_original_expiry_remains_historical_and_base_publication_cannot_consume_v2() {
     let (mut fixture, _, day, _) = installed(true).await;
     let start = ersatzrs_core::scheduling::truncate_to_persisted_precision(
-        Utc::now() - chrono::Duration::seconds(55),
+        Utc::now() - ersatzrs_time::Duration::seconds(55),
     );
     let result=scripted_controls::build_at(&fixture,
         &format!("assert(teletext_profile('{ADDON}', {}).ok)\nassert(teletext_enabled('{ADDON}', true).ok)\nadd_count('clip',1)",day.id),1,true,start).await.unwrap();

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 /// Default playout build/reset cadence used by `ErsatzTV` background work.
 pub const PLAYOUT_BUILD_INTERVAL: Duration = Duration::minutes(30);

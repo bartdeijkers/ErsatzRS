@@ -1,7 +1,6 @@
 //! Versioned, bounded fingerprint of the exact compared semantic context.
 //! Framed fields stream directly to SHA-256; no source text is copied or logged.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
     programme::{ProgrammeOccurrence, ProgrammeSegment},
     repositories::ArtworkReference,
@@ -11,6 +10,7 @@ use ersatzrs_core::{
     },
 };
 use ersatzrs_domain::{ArtworkKind, ChannelPlayoutSource, PlayoutScheduleKind};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sha2::{Digest as _, Sha256};
 
 use super::{

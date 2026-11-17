@@ -1,7 +1,10 @@
 use super::*;
 use ersatzrs_core::scheduling::{PlayoutPreservation, SchedulingReferenceData};
 
-async fn reference(pool: &SqlitePool, now: chrono::DateTime<Utc>) -> SchedulingReferenceData {
+async fn reference(
+    pool: &SqlitePool,
+    now: ersatzrs_time::DateTime<Utc>,
+) -> SchedulingReferenceData {
     make_repositories(pool.clone())
         .scheduling
         .classic_reference_data(88, now, Duration::zero())
@@ -9,7 +12,7 @@ async fn reference(pool: &SqlitePool, now: chrono::DateTime<Utc>) -> SchedulingR
         .unwrap()
 }
 
-async fn initial_window(url: &str, start: chrono::DateTime<Utc>) -> SqlitePool {
+async fn initial_window(url: &str, start: ersatzrs_time::DateTime<Utc>) -> SqlitePool {
     let pool = ersatzrs_infra::db::init(url).await.unwrap();
     pool.execute(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, '1920x1080', 1920, 1080)"#).await.unwrap();
     let repos = make_repositories(pool.clone());

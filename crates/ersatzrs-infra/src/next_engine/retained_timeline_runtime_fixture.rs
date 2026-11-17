@@ -97,7 +97,7 @@ pub(super) async fn subtitles(
             &format!("blobs/{hash}"),
             &hash,
             u64::try_from(mapped.len()).unwrap(),
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
         )
         .await
         .unwrap();

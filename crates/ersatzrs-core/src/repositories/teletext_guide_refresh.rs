@@ -1,11 +1,11 @@
 //! Explicitly authorized guide refresh; manual originals remain immutable.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
     EntityId, TeletextAcceptedGeneration, TeletextChannelSelectionSnapshot,
     TeletextEffectiveChannelSelectionSnapshot,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 use super::{
     Result, TeletextGenerationMutation, TeletextGuideGenerationCheck,

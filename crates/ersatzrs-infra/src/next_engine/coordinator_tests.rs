@@ -1,9 +1,9 @@
 use super::*;
-use chrono::Duration;
 use ersatzrs_core::{
     locking::PlayoutLockGuard,
     repositories::{PlayoutRepository, RepositoryError},
 };
+use ersatzrs_time::Duration;
 use tokio::sync::oneshot;
 
 #[path = "indexed_coordinator_tests.rs"]

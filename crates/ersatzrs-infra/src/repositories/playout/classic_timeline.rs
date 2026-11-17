@@ -8,7 +8,7 @@ pub(super) async fn validate_publication(
     tx: &mut sqlx::Transaction<'_, Db>,
     playout_id: EntityId,
     result: &SchedulingResult,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<()> {
     if result
         .added_items
@@ -32,7 +32,7 @@ pub(super) async fn validate_publication(
     let cutoff = result
         .remove_before
         .or(result.retain_through.filter(|_| result.clear_items))
-        .map(|time| time - offset.max(chrono::Duration::zero()));
+        .map(|time| time - offset.max(ersatzrs_time::Duration::zero()));
     let mut retained = Vec::new();
     for row in rows {
         let id: i64 = row.try_get("Id").repository()?;

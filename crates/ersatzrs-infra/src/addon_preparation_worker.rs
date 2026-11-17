@@ -255,7 +255,7 @@ impl WorkerSession {
             .recover_exact_after_cleanup(root, attempt)
             .await?;
         AddonMediaListItemJobQueue::new(self.pool.clone())
-            .recover_interrupted_after_cleanup(attempt, chrono::Utc::now())
+            .recover_interrupted_after_cleanup(attempt, ersatzrs_time::Utc::now())
             .await
     }
 }
@@ -348,7 +348,7 @@ async fn recovery_required_on(connection: &mut sqlx::SqliteConnection) -> Result
             .bind(attempt.generation)
             .bind(&attempt.lease_owner)
             .bind(crate::repositories::common::encode_datetime(
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             ))
             .fetch_one(connection)
             .await
@@ -526,7 +526,7 @@ mod tests {
         let job = coordinator
             .queue
             .claim_kind(
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 90,
                 crate::addon_media_list_item_jobs::ItemOperationKind::Preparation,
             )
@@ -599,7 +599,7 @@ mod tests {
         replacement.reconcile(&root, &attempt).await.unwrap();
         let queue = AddonMediaListItemJobQueue::new(pool.clone());
         let status = queue
-            .status(job.id, chrono::Utc::now())
+            .status(job.id, ersatzrs_time::Utc::now())
             .await
             .unwrap()
             .unwrap();
@@ -644,7 +644,7 @@ mod tests {
             .await
             .unwrap();
             queue
-                .recover_interrupted_after_cleanup(&attempt, chrono::Utc::now())
+                .recover_interrupted_after_cleanup(&attempt, ersatzrs_time::Utc::now())
                 .await
                 .unwrap();
             let row: (i32, i32, String) = sqlx::query_as(
@@ -663,7 +663,7 @@ mod tests {
             .await
             .unwrap();
         queue
-            .recover_interrupted_after_cleanup(&attempt, chrono::Utc::now())
+            .recover_interrupted_after_cleanup(&attempt, ersatzrs_time::Utc::now())
             .await
             .unwrap();
         let row: (i32, i32, String) = sqlx::query_as(
@@ -819,7 +819,7 @@ mod tests {
             );
             let status = coordinator
                 .queue
-                .status(job_id, chrono::Utc::now())
+                .status(job_id, ersatzrs_time::Utc::now())
                 .await
                 .unwrap()
                 .unwrap();

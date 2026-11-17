@@ -11,7 +11,6 @@ use std::{
 };
 
 use axum::{routing::get, Router};
-use chrono::Utc;
 use ersatzrs_addon_contract::AddonManifest;
 use ersatzrs_app::teletext_guide::SuppliedTeletextGuideContext;
 use ersatzrs_core::repositories::{
@@ -26,6 +25,7 @@ use ersatzrs_infra::transcode_capacity::{
     active_transcode_snapshot, active_transcode_test_guard_for_tests, load_active_transcode_limit,
     reset_active_transcode_state_for_tests, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
+use ersatzrs_time::Utc;
 use futures_util::StreamExt as _;
 use serde_json::{json, Value};
 use sqlx::Executor as _;

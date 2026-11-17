@@ -752,7 +752,7 @@ fn playback_channel_seek_fields() -> impl IntoView {
                 aria-describedby="preview-start-help" aria-errormessage="preview-start-error"
                 data-preview-start data-message-required=tr(TextKey::PreviewStartRequired)
                 data-message-invalid=tr(TextKey::PreviewStartInvalid)
-                value=chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()/>
+                value=ersatzrs_time::Utc::now().format("%Y-%m-%dT%H:%M").to_string()/>
             <small id="preview-start-help" data-preview-time-help>{tr(TextKey::PreviewStartHelp)}</small>
             <small id="preview-start-error" data-preview-time-error role="alert" hidden></small>
         </label>

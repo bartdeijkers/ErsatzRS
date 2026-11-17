@@ -8,7 +8,7 @@ use super::{RepositoryError, Result};
 pub struct GraphicsTextPreviewRequest {
     pub channel_id: EntityId,
     pub element_id: Option<EntityId>,
-    pub render_time: chrono::DateTime<chrono::Utc>,
+    pub render_time: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     pub template: String,
     pub renderer: ersatzrs_domain::TextGraphicsRenderer,
     pub epg_entries: usize,
@@ -30,7 +30,7 @@ pub struct GraphicsRenderPreviewRequest {
     pub element: GraphicsElement,
     pub channel_id: Option<EntityId>,
     pub seek_seconds: f64,
-    pub render_time: chrono::DateTime<chrono::Utc>,
+    pub render_time: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     pub width: u32,
     pub height: u32,
     /// Explicit preview overrides, separate from persisted attachment variables.

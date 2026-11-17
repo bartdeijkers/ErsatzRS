@@ -1,6 +1,6 @@
 //! Bounded reads used by the existing producer-owned dynamic text controller.
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::Row;
 
@@ -60,7 +60,7 @@ impl DynamicTextVariables for GraphicsMetadataRefresh {
                         .map_err(|error| error.to_string())?
                         .unwrap_or_default()
                 } else {
-                    chrono::Duration::zero()
+                    ersatzrs_time::Duration::zero()
                 };
                 let timestamp = |column| -> Result<DateTime<Utc>, String> {
                     let value: String = row.try_get(column).map_err(|error| error.to_string())?;

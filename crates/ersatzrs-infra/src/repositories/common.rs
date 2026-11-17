@@ -1,6 +1,5 @@
 use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaListArtifactKind, AddonMediaListArtifactState, AddonMediaListAvailabilityReason,
@@ -30,6 +29,7 @@ use ersatzrs_domain::{
     StreamingEngine, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
     WatermarkLocation, WatermarkSize,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
 use std::fmt::Write as _;
@@ -186,11 +186,11 @@ pub fn decode_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>>
     DateTime::parse_from_rfc3339(value)
         .map(|parsed| parsed.with_timezone(&Utc))
         .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
+            ersatzrs_time::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
                 .map(|parsed| parsed.and_utc())
         })
         .or_else(|_| {
-            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+            ersatzrs_time::NaiveDate::parse_from_str(value, "%Y-%m-%d")
                 .map(|parsed| parsed.and_hms_opt(0, 0, 0).unwrap().and_utc())
         })
         .map_err(|source| decode_message(kind, &source.to_string()))
@@ -1081,8 +1081,8 @@ mod tests {
         map_data_access_error, not_found, try_decode_duration_text,
         try_decode_signed_duration_text,
     };
-    use chrono::Duration;
     use ersatzrs_core::repositories::RepositoryError;
+    use ersatzrs_time::Duration;
 
     #[test]
     fn sqlx_mapping_preserves_decode_unavailable_and_not_found_categories() {

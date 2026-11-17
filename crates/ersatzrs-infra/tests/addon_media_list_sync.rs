@@ -1331,7 +1331,10 @@ async fn automatic_refresh_skips_lists_owned_by_disabled_addons() {
     .unwrap();
 
     let refresh = AddonMediaListRefreshCoordinator::new(pool.clone());
-    assert_eq!(refresh.admit_due(chrono::Utc::now()).await.unwrap(), 0);
+    assert_eq!(
+        refresh.admit_due(ersatzrs_time::Utc::now()).await.unwrap(),
+        0
+    );
 
     let last_error: Option<String> =
         sqlx::query_scalar(r#"SELECT "LastError" FROM "AddonMediaList" WHERE "Id" = 60"#)

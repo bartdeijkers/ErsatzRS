@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::PlayoutItem;
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{SchedulingError, SchedulingReferenceData};
 
@@ -107,7 +107,7 @@ fn resolve_programme_finish(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Duration, TimeZone};
+    use ersatzrs_time::{Duration, TimeZone};
 
     #[test]
     fn prefetch_horizon_preserves_long_gap_or_unfilled_guide_interval() {

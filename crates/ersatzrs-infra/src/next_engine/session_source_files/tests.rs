@@ -5,7 +5,7 @@ use std::io::Write as _;
 use tokio::io::AsyncReadExt as _;
 
 fn binding(id: i64) -> TransferBinding {
-    let start = chrono::Utc::now();
+    let start = ersatzrs_time::Utc::now();
     TransferBinding {
         media_item_id: 1,
         playout_item_id: id,
@@ -13,7 +13,7 @@ fn binding(id: i64) -> TransferBinding {
         media_file_id: 3,
         publication: "exact-publication".into(),
         start,
-        finish: start + chrono::Duration::seconds(10),
+        finish: start + ersatzrs_time::Duration::seconds(10),
     }
 }
 

@@ -1,6 +1,5 @@
 use std::{future::Future, sync::Arc};
 
-use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::locking::{EntityLocker, PlayoutLockGuard};
 use ersatzrs_core::maintenance::{
@@ -18,6 +17,7 @@ use ersatzrs_core::scheduling::{
 use ersatzrs_domain::{
     ChannelPlayoutMode, EntityId, PlayoutBuildStatus, PlayoutScheduleKind, StreamingEngine,
 };
+use ersatzrs_time::{DateTime, Duration, NaiveTime, TimeZone, Utc};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
@@ -1642,13 +1642,9 @@ fn daily_rebuild_due(value: Option<&str>, now: DateTime<Utc>) -> bool {
     let Some(rebuild_time) = parse_daily_rebuild_time(value) else {
         return false;
     };
-    let local_now = chrono::Local::now();
+    let local_now = ersatzrs_time::Local::now();
     let target_naive = local_now.date_naive().and_time(rebuild_time);
-    let Some(target_local) = local_now
-        .timezone()
-        .from_local_datetime(&target_naive)
-        .single()
-    else {
+    let Some(target_local) = local_now.timezone().resolve_local(&target_naive).single() else {
         return false;
     };
     let target = target_local.with_timezone(&Utc);

@@ -11,8 +11,8 @@ use std::sync::{
     Arc, Mutex, MutexGuard, Weak,
 };
 
-use chrono::{DateTime, Utc};
 use ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation;
+use ersatzrs_time::{DateTime, Utc};
 use tokio::sync::Notify;
 use tokio::time::Instant;
 use uuid::Uuid;
@@ -521,9 +521,9 @@ mod tests {
         let start = "2026-11-13T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
         LegacyWrapperPlaybackCursor::new(
             41,
-            start + chrono::Duration::seconds(54),
+            start + ersatzrs_time::Duration::seconds(54),
             start,
-            start + chrono::Duration::seconds(60),
+            start + ersatzrs_time::Duration::seconds(60),
             Duration::from_secs(6),
         )
         .unwrap()
@@ -626,7 +626,7 @@ mod tests {
             (0, cursor.selected_at, Duration::from_secs(6)),
             (
                 41,
-                cursor.start - chrono::Duration::seconds(1),
+                cursor.start - ersatzrs_time::Duration::seconds(1),
                 Duration::from_secs(61),
             ),
             (41, cursor.finish, Duration::ZERO),

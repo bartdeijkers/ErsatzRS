@@ -29,7 +29,7 @@ pub(super) async fn publish(
         |profile| format!("assert(teletext_profile('{ADDON}', {}).ok)\nassert(teletext_enabled('{ADDON}', true).ok)", profile.id),
     );
     let start = ersatzrs_core::scheduling::truncate_to_persisted_precision(
-        Utc::now() - chrono::Duration::seconds(1),
+        Utc::now() - ersatzrs_time::Duration::seconds(1),
     );
     let result = scripted_controls::build_at(
         fixture,
@@ -46,7 +46,7 @@ pub(super) async fn publish(
     assert_eq!(interval.finish, result.added_items[0].finish);
     assert_eq!(
         interval.finish - interval.start,
-        chrono::Duration::minutes(1)
+        ersatzrs_time::Duration::minutes(1)
     );
     scripted_controls::publish_result(fixture, &result).await;
     interval

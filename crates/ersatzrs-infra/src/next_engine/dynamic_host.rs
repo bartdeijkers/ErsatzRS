@@ -1,7 +1,7 @@
 //! Resolve an authenticated Next item only after bounded, version-bound Burn preparation.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_time::{DateTime, Utc};
 use tokio::time::{timeout_at, Instant};
 
 use super::{dynamic_item, dynamic_projection, host::NextHost, protocol};

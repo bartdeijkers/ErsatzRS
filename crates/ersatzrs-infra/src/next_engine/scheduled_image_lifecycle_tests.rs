@@ -43,9 +43,10 @@ async fn run(http: bool, webp_loop_count: Option<u16>) {
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let root = tempfile::tempdir().unwrap();
     let (pool, locker, animation) = prepare_animation(&ffmpeg, root.path(), webp_loop_count).await;
-    let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
-    let second_start = start + chrono::Duration::seconds(6);
-    let finish = second_start + chrono::Duration::seconds(2);
+    let start =
+        ersatzrs_time::DateTime::from_timestamp(ersatzrs_time::Utc::now().timestamp(), 0).unwrap();
+    let second_start = start + ersatzrs_time::Duration::seconds(6);
+    let finish = second_start + ersatzrs_time::Duration::seconds(2);
     let (pool2, _) = prepare_image(&ffmpeg, root.path(), "webp").await;
     let mut first = project(&pool, &animation, start, second_start, 500).await;
     let mut second = project(
@@ -287,15 +288,15 @@ async fn serve_image(
 async fn project(
     pool: &crate::db::DbPool,
     path: &Path,
-    start: chrono::DateTime<chrono::Utc>,
-    finish: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     seek_ms: i64,
 ) -> crate::next_engine::protocol::PlayoutItem {
     let item = ersatzrs_domain::PlayoutItem {
         start,
         finish,
-        in_point: chrono::Duration::milliseconds(seek_ms),
-        out_point: chrono::Duration::milliseconds(seek_ms) + (finish - start),
+        in_point: ersatzrs_time::Duration::milliseconds(seek_ms),
+        out_point: ersatzrs_time::Duration::milliseconds(seek_ms) + (finish - start),
         ..selection::tests::item()
     };
     let channel = crate::repositories::make_repositories(pool.clone())

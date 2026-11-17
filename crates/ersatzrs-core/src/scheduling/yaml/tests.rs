@@ -440,7 +440,7 @@ fn yaml_schedule_sequence_repeat_uses_integer_repeat() {
 
 #[test]
 fn yaml_scheduled_playout_continue_matches_uninterrupted_future() {
-    use chrono::{Local, TimeZone};
+    use ersatzrs_time::{Local, TimeZone};
 
     let local_time = |day, hour, minute| {
         Local
@@ -789,7 +789,7 @@ playout:
 
 #[test]
 fn yaml_pad_until_uses_local_clock() {
-    use chrono::{Local, TimeZone};
+    use ersatzrs_time::{Local, TimeZone};
     let yaml = r#"
 playout:
   - pad_until: "10:10"
@@ -820,7 +820,7 @@ playout:
 
 #[test]
 fn yaml_wait_until_uses_local_clock() {
-    use chrono::{Local, TimeZone};
+    use ersatzrs_time::{Local, TimeZone};
     let yaml = r#"
 playout:
   - wait_until: "10:30"

@@ -31,16 +31,19 @@ async fn real_next_on_demand_resume_keeps_viewer_position_audio_and_subtitles() 
     let (task, session) = start(&host, &registry, &output).await;
     assert_color(&ffmpeg, &output, session.as_ref(), false).await;
     tokio::time::sleep(Duration::from_secs(12)).await;
-    let touched_before = chrono::Utc::now();
+    let touched_before = ersatzrs_time::Utc::now();
     session.touch();
-    let touched_after = chrono::Utc::now();
+    let touched_after = ersatzrs_time::Utc::now();
     assert!(registry.stop_channel("1").await);
     task.await.unwrap();
     let saved = checkpoint(&pool).await;
     assert!(
-        saved >= touched_before - chrono::Duration::seconds(1) - chrono::Duration::microseconds(1)
+        saved
+            >= touched_before
+                - ersatzrs_time::Duration::seconds(1)
+                - ersatzrs_time::Duration::microseconds(1)
     );
-    assert!(saved <= touched_after - chrono::Duration::seconds(1));
+    assert!(saved <= touched_after - ersatzrs_time::Duration::seconds(1));
     // Time without viewers must not count as watched time.
     tokio::time::sleep(Duration::from_secs(2)).await;
     assert_eq!(checkpoint(&pool).await, saved);
@@ -96,10 +99,10 @@ async fn seed_on_demand(pool: &crate::db::DbPool) {
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.start -= chrono::Duration::hours(1);
-    item.finish = item.start + chrono::Duration::seconds(60);
-    item.in_point = chrono::Duration::zero();
-    item.out_point = chrono::Duration::seconds(60);
+    item.start -= ersatzrs_time::Duration::hours(1);
+    item.finish = item.start + ersatzrs_time::Duration::seconds(60);
+    item.in_point = ersatzrs_time::Duration::zero();
+    item.out_point = ersatzrs_time::Duration::seconds(60);
     crate::repositories::make_repositories(pool.clone())
         .playout
         .upsert_item(&item)
@@ -107,7 +110,7 @@ async fn seed_on_demand(pool: &crate::db::DbPool) {
         .unwrap();
 }
 
-async fn checkpoint(pool: &crate::db::DbPool) -> chrono::DateTime<chrono::Utc> {
+async fn checkpoint(pool: &crate::db::DbPool) -> ersatzrs_time::DateTime<ersatzrs_time::Utc> {
     let value: String =
         sqlx::query_scalar(r#"SELECT "OnDemandCheckpoint" FROM "Playout" WHERE "Id"=1"#)
             .fetch_one(pool)

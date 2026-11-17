@@ -70,6 +70,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Replace chrono with Jiff for application clocks and elapsed time. Existing
+  database dates, schedules and add-on time formats remain readable.
+
 - Custom-page checks use the add-on page ranges selected by the active
   Lua/Scripted interval. Published pages, their field bindings and their absence
   remain stable during On/Off intervals when elements or links change. Guide and

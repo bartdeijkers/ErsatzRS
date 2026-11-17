@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, NaiveTime, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListLifecycleRepository,
     AddonMediaListRepository, AdminSearchKind, AdminSearchRepository, AdminSearchSnapshot,
@@ -34,6 +33,7 @@ use ersatzrs_domain::{
     CollectionType, EntityId, FixedStartTimeBehavior, PlaybackOrder, Playout, PlayoutMode,
     PlayoutScheduleKind, ProgramScheduleItem, StartType, WatermarkLocation, WatermarkSize,
 };
+use ersatzrs_time::{DateTime, Duration, NaiveTime, Utc};
 
 use crate::commands::{
     BlockItemAdminForm, DecoAdminForm, DecoBreakContentAdminForm, FfmpegProfileAdminForm,
@@ -2187,7 +2187,7 @@ pub struct GetChannelWatch {
     /// Channel identifier from the admin route.
     pub channel_id: EntityId,
     /// UTC instant used to select current and upcoming programming.
-    pub now: chrono::DateTime<chrono::Utc>,
+    pub now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     /// Guide horizon in minutes.
     pub horizon_minutes: i64,
     /// Historical context before `now`, in minutes.
@@ -2198,15 +2198,15 @@ pub struct GetChannelWatch {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GetEpgPreview {
     /// UTC instant that anchors the two-hour history and 24-hour future window.
-    pub now: chrono::DateTime<chrono::Utc>,
+    pub now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 }
 
 /// Storage-neutral aggregate projection for the global admin EPG.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EpgPreviewData {
-    pub generated_at: chrono::DateTime<chrono::Utc>,
-    pub window_start: chrono::DateTime<chrono::Utc>,
-    pub window_finish: chrono::DateTime<chrono::Utc>,
+    pub generated_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    pub window_start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    pub window_finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     pub channels: Vec<EpgPreviewChannel>,
 }
 
@@ -2286,8 +2286,8 @@ pub async fn get_channel_watch(
         .get_watch_state(
             query.channel_id,
             query.now,
-            query.now - chrono::Duration::minutes(query.history_minutes),
-            query.now + chrono::Duration::minutes(query.horizon_minutes),
+            query.now - ersatzrs_time::Duration::minutes(query.history_minutes),
+            query.now + ersatzrs_time::Duration::minutes(query.horizon_minutes),
         )
         .await
         .map_err(Into::into)
@@ -2300,8 +2300,8 @@ pub async fn get_epg_preview(
     repository: &dyn ChannelRepository,
     runtime: &dyn ChannelRuntime,
 ) -> Result<EpgPreviewData> {
-    let window_start = query.now - chrono::Duration::hours(2);
-    let window_finish = query.now + chrono::Duration::hours(24);
+    let window_start = query.now - ersatzrs_time::Duration::hours(2);
+    let window_finish = query.now + ersatzrs_time::Duration::hours(24);
     let active = runtime
         .active_channel_numbers()
         .await
@@ -2332,7 +2332,6 @@ pub async fn get_epg_preview(
 #[cfg(test)]
 mod epg_preview_query_tests {
     use async_trait::async_trait;
-    use chrono::{TimeZone as _, Utc};
     use ersatzrs_core::repositories::{
         ChannelAdminListRow, ChannelEditorForm, ChannelEditorState, ChannelNumberRow,
         ChannelNumberSaveResult, ChannelNumberUpdate, ChannelRepository, ChannelSaveResult,
@@ -2340,6 +2339,7 @@ mod epg_preview_query_tests {
         EpgPreviewChannelState, RepositoryError, Result as RepositoryResult,
     };
     use ersatzrs_domain::{Channel, EntityId};
+    use ersatzrs_time::{TimeZone as _, Utc};
 
     use super::{
         get_channel_watch, get_epg_preview, ApplicationError, GetChannelWatch, GetEpgPreview,
@@ -2403,17 +2403,17 @@ mod epg_preview_query_tests {
         async fn get_watch_state(
             &self,
             _id: EntityId,
-            _now: chrono::DateTime<Utc>,
-            _start: chrono::DateTime<Utc>,
-            _finish: chrono::DateTime<Utc>,
+            _now: ersatzrs_time::DateTime<Utc>,
+            _start: ersatzrs_time::DateTime<Utc>,
+            _finish: ersatzrs_time::DateTime<Utc>,
         ) -> RepositoryResult<Option<ChannelWatchState>> {
             unimplemented!()
         }
         async fn list_epg_preview_states(
             &self,
-            _now: chrono::DateTime<Utc>,
-            _start: chrono::DateTime<Utc>,
-            _finish: chrono::DateTime<Utc>,
+            _now: ersatzrs_time::DateTime<Utc>,
+            _start: ersatzrs_time::DateTime<Utc>,
+            _finish: ersatzrs_time::DateTime<Utc>,
         ) -> RepositoryResult<Vec<EpgPreviewChannelState>> {
             if self.fail {
                 Err(RepositoryError::unavailable(
@@ -2513,8 +2513,8 @@ mod epg_preview_query_tests {
         .await
         .expect("aggregate EPG");
 
-        assert_eq!(data.window_start, now - chrono::Duration::hours(2));
-        assert_eq!(data.window_finish, now + chrono::Duration::hours(24));
+        assert_eq!(data.window_start, now - ersatzrs_time::Duration::hours(2));
+        assert_eq!(data.window_finish, now + ersatzrs_time::Duration::hours(24));
         assert!(data.channels[0].is_active);
     }
 
@@ -3033,7 +3033,7 @@ fn parse_playout_utc(value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|value| value.with_timezone(&Utc))
         .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
+            ersatzrs_time::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
                 .map(|value| value.and_utc())
         })
         .map_err(|error| ApplicationError::InvalidData {
@@ -3043,9 +3043,9 @@ fn parse_playout_utc(value: &str) -> Result<DateTime<Utc>> {
 }
 
 fn format_playout_local(value: &str) -> Result<String> {
-    use chrono::TimeZone as _;
+    use ersatzrs_time::TimeZone as _;
     let utc = parse_playout_utc(value)?;
-    let local = chrono::Local
+    let local = ersatzrs_time::Local
         .timestamp_opt(utc.timestamp(), utc.timestamp_subsec_nanos())
         .single()
         .ok_or_else(|| ApplicationError::InvalidData {
@@ -3731,7 +3731,6 @@ mod block_preview_tests {
     use std::sync::Mutex;
 
     use async_trait::async_trait;
-    use chrono::{Duration, TimeZone};
     use ersatzrs_core::playout_builder::PlayoutBuilder;
     use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
     use ersatzrs_core::scheduling::{
@@ -3739,6 +3738,7 @@ mod block_preview_tests {
         SchedulingReferenceData, SchedulingResult,
     };
     use ersatzrs_domain::{BlockStopScheduling, CollectionType, PlaybackOrder, PlayoutItem};
+    use ersatzrs_time::{Duration, TimeZone};
 
     use super::*;
 

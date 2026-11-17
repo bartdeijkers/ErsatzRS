@@ -31,10 +31,10 @@ pub(super) async fn seed_guide(fixture: &Fixture) {
             playout_id: 20,
             media_item_id: 20,
             guide_group: 7,
-            start: at + chrono::Duration::minutes(offset),
-            finish: at + chrono::Duration::minutes(offset + 10),
-            in_point: chrono::Duration::minutes(source),
-            out_point: chrono::Duration::minutes(source + 10),
+            start: at + ersatzrs_time::Duration::minutes(offset),
+            finish: at + ersatzrs_time::Duration::minutes(offset + 10),
+            in_point: ersatzrs_time::Duration::minutes(source),
+            out_point: ersatzrs_time::Duration::minutes(source + 10),
             ..PlayoutItem::default()
         };
         repositories.playout.upsert_item(&item).await.unwrap();

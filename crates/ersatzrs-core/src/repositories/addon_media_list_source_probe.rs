@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::Result;

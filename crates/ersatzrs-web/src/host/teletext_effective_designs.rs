@@ -522,7 +522,7 @@ async fn reload_effective_original_before(
     }
     let boundary = parts.selection.valid_until.ok_or_else(context_error)?;
     let now = Instant::now();
-    let remaining = (boundary - chrono::Utc::now())
+    let remaining = (boundary - ersatzrs_time::Utc::now())
         .to_std()
         .map_err(|_| NativeTeletextDesignError::TimedOut)?;
     let deadline = deadline

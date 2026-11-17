@@ -5,9 +5,9 @@
 //! run is the field width. `%` is identical in every Latin G0 national
 //! option, unlike `{`, `}` or `#`, so markers survive any character set.
 
-use chrono::{DateTime, Local, Utc};
 use ersatzrs_core::repositories::ChannelWatchProgramme;
 use ersatzrs_domain::{TeletextElementBinding, TeletextElementBindingSource};
+use ersatzrs_time::{DateTime, Local, Utc};
 
 use super::model::ElementPage;
 
