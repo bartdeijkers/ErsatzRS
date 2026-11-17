@@ -956,6 +956,10 @@ async fn assert_next_session_with_text_mode(
 #[tokio::test]
 #[ignore = "requires qualified indexed Next and FFmpeg9; simultaneous normal/browser preview"]
 async fn real_next_indexed_normal_and_browser_preview_preserve_tracks_and_owned_shutdown() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_ansi(false)
+        .try_init();
     let root = tempfile::tempdir().unwrap();
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let clip = root.path().join("fixture.mkv");
@@ -989,6 +993,7 @@ async fn real_next_indexed_normal_and_browser_preview_preserve_tracks_and_owned_
         ersatzrs_core::programme::ProgrammeClock::named("UTC").unwrap(),
         permit,
     ));
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     assert_preview_sessions(
         &host,
         host::NextStart {
@@ -1014,6 +1019,7 @@ async fn real_next_indexed_normal_and_browser_preview_preserve_tracks_and_owned_
             .audio_format,
         FFmpegProfileAudioFormat::Ac3
     );
+    callbacks.stop().await;
     pool.close().await;
 }
 

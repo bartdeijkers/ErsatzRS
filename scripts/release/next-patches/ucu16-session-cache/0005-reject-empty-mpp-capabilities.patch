@@ -1,0 +1,17 @@
+--- a/crates/ffpipeline/src/capabilities/rkmpp/probe.rs
++++ b/crates/ffpipeline/src/capabilities/rkmpp/probe.rs
+@@ -46,6 +46,14 @@
+             }
+         }
+ 
++        // An empty hardware wrapper still selects RGA filters. Reject it so
++        // channel configuration uses the existing whole-channel software path.
++        if supported_decoders.is_empty() && supported_encoders.is_empty() {
++            return Err(FFPipelineError::RkmppCapabilitiesError(
++                "MPP exposes no initialized hardware codecs".to_owned(),
++            ));
++        }
++
+         Ok(RkmppCapabilities {
+             supported_decoders,
+             supported_encoders,

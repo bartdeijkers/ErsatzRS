@@ -1,0 +1,120 @@
+Preserve subtitle burn source clock. FFmpeg pipeline context rebased for upstream025 selected embedded subtitle index; existing regression expectations unchanged, with the new required fixture field set to zero.
+
+diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video_filter.rs
+--- a/crates/ffpipeline/src/video_filter.rs
++++ b/crates/ffpipeline/src/video_filter.rs
+@@ -655,10 +655,11 @@
+         }
+ 
+         if self.seek > Duration::ZERO {
++            // Borrow source-clock coordinates only while rendering captions.
++            // Restore the same tick offset after rendering, preserving AV timing.
++            let shift = format!("round({}/TB)", self.seek.as_secs_f64());
+             Some(format!(
+-                "setpts=PTS+{}/TB,subtitles={},setpts=PTS-STARTPTS",
+-                self.seek.as_secs_f64(),
+-                filter_args,
++                "setpts=PTS+{shift},subtitles={filter_args},setpts=PTS-{shift}"
+             ))
+         } else {
+             Some(format!("subtitles={}", filter_args))
+@@ -1072,6 +1073,99 @@
+     use time::{Date, Month, Time, UtcOffset};
+ 
+     use super::*;
++    #[test]
++    fn text_subtitle_seek_borrows_and_restores_the_same_rounded_tick_offset() {
++        for (seek, expected) in [
++            (Duration::ZERO, "subtitles=captions.srt"),
++            (
++                Duration::from_micros(1),
++                "setpts=PTS+round(0.000001/TB),subtitles=captions.srt,setpts=PTS-round(0.000001/TB)",
++            ),
++            (
++                Duration::from_millis(2_143),
++                "setpts=PTS+round(2.143/TB),subtitles=captions.srt,setpts=PTS-round(2.143/TB)",
++            ),
++            (
++                Duration::from_millis(12_345),
++                "setpts=PTS+round(12.345/TB),subtitles=captions.srt,setpts=PTS-round(12.345/TB)",
++            ),
++        ] {
++            let filter = SubtitlesFilter {
++                subtitle_index: 0,
++                path: "captions.srt".to_owned(),
++                seek,
++                fonts_folder: None,
++                force_style: None,
++            };
++            assert_eq!(filter.as_arg().as_deref(), Some(expected), "{seek:?}");
++        }
++    }
++
++    #[test]
++    fn text_subtitle_clock_preserves_escaped_path_fonts_and_style_context() {
++        let path = "captions/[episode],part;s's.srt";
++        let fonts = "fonts/[family],alt";
++        let style = "FontName=Example's,FontSize=24";
++        for (fonts_folder, force_style, expected_args) in [
++            (None, None, r"captions/\[episode\]\,part\;s\\\'s.srt"),
++            (
++                Some(fonts),
++                None,
++                r"captions/\[episode\]\,part\;s\\\'s.srt:fontsdir=fonts/\[family\]\,alt",
++            ),
++            (
++                None,
++                Some(style),
++                r"captions/\[episode\]\,part\;s\\\'s.srt:force_style=FontName=Example\\\'s\,FontSize=24",
++            ),
++            (
++                Some(fonts),
++                Some(style),
++                r"captions/\[episode\]\,part\;s\\\'s.srt:fontsdir=fonts/\[family\]\,alt:force_style=FontName=Example\\\'s\,FontSize=24",
++            ),
++        ] {
++            for seek in [Duration::ZERO, Duration::from_millis(2_143)] {
++                let filter = SubtitlesFilter {
++                    subtitle_index: 0,
++                    path: path.to_owned(),
++                    seek,
++                    fonts_folder: fonts_folder.map(str::to_owned),
++                    force_style: force_style.map(str::to_owned),
++                };
++                let expected = if seek.is_zero() {
++                    format!("subtitles={expected_args}")
++                } else {
++                    format!(
++                        "setpts=PTS+round(2.143/TB),subtitles={expected_args},setpts=PTS-round(2.143/TB)"
++                    )
++                };
++                let state = crop_state(640, 480, None);
++                let evaluated = filter.evaluate(&state, &FfmpegInfo::default()).unwrap();
++                assert_eq!(evaluated.as_arg().as_deref(), Some(expected.as_str()));
++                assert_eq!(filter.path, path);
++                assert_eq!(filter.seek, seek);
++                assert_eq!(filter.fonts_folder.as_deref(), fonts_folder);
++                assert_eq!(filter.force_style.as_deref(), force_style);
++            }
++        }
++    }
++
++    #[test]
++    fn absent_text_subtitle_keeps_the_existing_no_filter_boundary() {
++        for seek in [Duration::ZERO, Duration::from_millis(2_143)] {
++            let filter = SubtitlesFilter {
++                subtitle_index: 0,
++                path: String::new(),
++                seek,
++                fonts_folder: Some("fonts".to_owned()),
++                force_style: Some("FontSize=24".to_owned()),
++            };
++            let state = crop_state(640, 480, None);
++            assert!(filter.evaluate(&state, &FfmpegInfo::default()).is_none());
++        }
++    }
++
++
+ 
+     #[test]
+     fn subtitles_filter_selects_stream_after_the_first() {

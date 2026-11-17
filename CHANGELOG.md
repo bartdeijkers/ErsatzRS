@@ -74,6 +74,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Prepare a separate source recipe for the session/cache-capable Next worker,
+  retaining indexed playout and existing runtime corrections. Production
+  runtime selection awaits qualification.
+
 - Classic and block builds reuse smart-collection results within each build,
   including playlist children. Artist searches load video memberships together.
   Source order, independent playback choices and fresh membership on the next

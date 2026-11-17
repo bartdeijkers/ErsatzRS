@@ -21,8 +21,11 @@ Focused configuration, refusal, legacy and preview controls pass. R296-B now
 proves actual fixed-worker reuse, invalidation, retention, original-image
 fallback, animation/fade/canvas preservation and bounded process cleanup within
 its local Linux scope. Cache-path diagnostic redaction is also corrected.
-Patch retirement, the consolidated indexed/cache successor, required packages
-and integrated acceptance remain open in the continuation milestone.
+A separate reviewed exact6c source recipe now preserves the indexed extension
+with schema0.1.6 and upstream session/cache fields; local indexed/preview/cache
+integration passes. Retained runtime retirement controls, serial software,
+required packages and integrated acceptance remain open in the continuation
+milestone. The accepted production recipe is unchanged.
 
 ## Context
 

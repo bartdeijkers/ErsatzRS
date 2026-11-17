@@ -42117,6 +42117,65 @@ first-party package, full-window, matched-browser, required platform/final/CI
 and ordered-delivery obligation remain unchanged. Native code, routes, profiles,
 accepted runtime manifests, ledger dispositions and baseline are untouched.
 
+2026-11-17 R296-C consolidated source candidate prepared and locally exercised:
+The separate recipe scripts/release/next-patches/ucu16-session-cache/manifest.json
+pins exact6c/archive8055f456, Rust1.99.0, unchanged original lock519da3f5 and
+prepared lock061ba2cf. It retains all12 existing corrections and every unchanged
+retire_when requirement. No accepted production recipe, download, package pin
+or runtime installation changes. Per-patch review is row296-retirement-review.json.
+The original archive's289 regular files match before instrumentation. Only the
+unchanged previously accepted test functions are appended inside cfg(test).
+Eight actual unpatched-source cases yield six required failures and two passing
+controls: RTSP shortest buffering, static/animated WebP, selected-audio metadata
+and text-Burn clock corrections remain necessary. Original/prepared lock and all
+worker Cargo manifests, MPP binding/probe, single-use/frame-cut contract sources
+and the copied-caption seek method are byte-identical to the prior reviewed
+negative inputs within their explicit scopes. Retained actual025 negatives are
+reused only for those unchanged controls; they do not establish current native
+hardware, physical playback or full policy acceptance. No patch is retired.
+Existing patches1–8/10/12 initially apply;9 and11 need source-context rebases.
+Patch9 preserves upstream LocalInputSource and still-image boundary/filter APIs;
+patch11 preserves SessionConfig/CacheConfig and advances its additive indexed
+schema to0.1.6. Final patch10 changes only import wrapping. Rust schema generators
+produce the actual channel and describe files; Session/Cache fields remain.
+Strict clean replay reproduces all294 prepared source files. Initial replay
+passes; the first formatting-only patch regeneration strips required trailing
+context whitespace and is correctly refused as corrupt. Its log is retained;
+regeneration preserves that context and the final strict replay passes without
+fuzzy application. Both recipes and file inventories remain in the proof root.
+Chosen worker/channel/playout/core and describe/dynamic/schema tests pass425/425
+with one separately ignored test not claimed as run. An initial sandbox run
+stops on12 socket-bind refusals and leaves378 unexecuted; the permitted recovery
+uses no-fail-fast and executes the entire selected set. This is source/contract
+proof, not the remaining serial software or platform suite. Full source-workspace
+all-feature/all-target strict Clippy passes. Final equivalent import/blank-line
+formatting passes; the source unit/lint evidence is reused for those nonsemantic
+edits, and the final worker is rebuilt from the exact replayed files. Existing
+source-identity and package-recipe tests pass10/10 and9/9 respectively.
+A42MB strip-debug copy has identical describe output and stays within the actual
+bounded admission limit; original/transformed hashes and exact final producer
+inventory are retained in row296-consolidated-binary.json. Its channel schema is
+0.1.6 and the accepted indexed layout is advertised. Actual local source-candidate
+cache proof passes five saved-host sessions, including reuse, invalidation,
+retention, original-image fallback and selected Dutch audio/Burn. The existing
+simultaneous indexed normal/browser-preview regression initially fails playout
+publication because its older fixture omitted the current caption-relay server.
+The retained diagnostic trial identifies publication refusal. Adding the same
+owned callback server already used by other runtime fixtures makes that unchanged
+AV/codec/caption/capacity/independent-shutdown oracle pass for both sessions.
+Only the test fixture and warning diagnostics change; no application production
+code or accepted behavior is weakened. The composed local runtime result is two
+passing top-level tests across seven sessions; the mixed-outcome initial run is
+not labeled green. Current source, producer, replay and gate identities belong to
+row296-consolidated-checkpoint.json in the existing continuation proof root.
+Remaining R296-C work stays finite and mandatory: current dependency-policy and
+all retained runtime retirement controls, serial software acceptance, all four
+required packages/companions and native Linux/Windows plus ARM emulation proof;
+then unchanged integrated application/window, matched-browser, playback/transport,
+final/CI and ordered delivery. Local source preparation is a completed component,
+not consolidated runtime acceptance or an accepted row disposition. Native,
+FFmpeg9 and every approved platform/hardware deferral remain unchanged.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
