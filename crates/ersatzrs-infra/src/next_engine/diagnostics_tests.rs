@@ -189,3 +189,45 @@ async fn finish_and_drop_cancel_readers_that_never_reach_eof() {
     .await
     .unwrap();
 }
+
+#[test]
+fn row296_configured_cache_roots_with_spaces_are_fully_redacted() {
+    let profile = crate::playback::PlaybackProfile {
+        profile: ersatzrs_domain::FFmpegProfile {
+            audio_format: ersatzrs_domain::FFmpegProfileAudioFormat::Aac,
+            video_format: ersatzrs_domain::FFmpegProfileVideoFormat::H264,
+            ..Default::default()
+        },
+        resolution: ersatzrs_domain::Resolution {
+            width: 320,
+            height: 180,
+            ..Default::default()
+        },
+    };
+    for folder in [
+        "/fixture/watermark private cache/next",
+        r"X:\fixture\watermark private cache\next",
+    ] {
+        let mut config = super::super::config::channel_config(
+            &profile,
+            ersatzrs_domain::NextEngineTextSubtitleMode::Burn,
+            Path::new("playout"),
+            Path::new("ffmpeg"),
+            Path::new("ffprobe"),
+        )
+        .unwrap();
+        super::super::config::configure_shared_cache(&mut config, Path::new(folder)).unwrap();
+        let command = Command::new("fixture-worker");
+        let diagnostics = Diagnostics::new(&command, &config, Path::new("output"));
+        record(&format!("[time WARN next::worker] create {folder}/still-images/.frame.tmp: cache unavailable"), &diagnostics.tail, &diagnostics.redactions);
+        let text = diagnostics.text();
+        assert!(
+            !text.contains("watermark") && !text.contains("private cache"),
+            "configured cache fragments must be redacted: {text}"
+        );
+        assert!(
+            text.contains("cache unavailable"),
+            "preserve the useful diagnostic"
+        );
+    }
+}

@@ -96,6 +96,7 @@ impl Diagnostics {
             output.to_string_lossy().into_owned(),
         ];
         values.extend(config.ffmpeg.reports_folder.clone());
+        values.extend(config.cache.as_ref().and_then(|cache| cache.folder.clone()));
         values.extend(config.normalization.subtitle.fonts_folder.clone());
         values.retain(|value| value.contains('/') || value.contains('\\'));
         if let Some(value) = command

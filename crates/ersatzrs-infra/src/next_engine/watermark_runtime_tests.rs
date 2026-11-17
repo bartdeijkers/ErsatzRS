@@ -470,3 +470,6 @@ fn overlay_profile() -> FFmpegProfile {
         ..Default::default()
     }
 }
+
+#[path = "still_cache_runtime_tests.rs"]
+mod still_cache_runtime_tests;

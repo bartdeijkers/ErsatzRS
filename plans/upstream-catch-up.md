@@ -51,9 +51,9 @@ and the provisional notes in the ledger are not accepted dispositions.
 
 The finite functionality, mandatory proof and delivery conditions belong to
 milestone `ucu-16-continuation`. Rows290–295 local components are Complete;
-Row296 source audit and configuration/admission are locally Complete; continue
-with its fixed-worker still-watermark reuse/lifecycle proof and unchanged
-consolidated runtime qualification. No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
+Row296 configuration/admission and actual fixed-worker cache/lifecycle proof
+are locally Complete. Continue with item2/R296-C consolidated indexed/cache
+runtime and unchanged first-party package/private-patch retirement qualification. No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an
 advance. Preserve Native, international audio/subtitles and completed Phase9,

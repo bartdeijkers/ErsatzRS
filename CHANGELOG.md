@@ -300,6 +300,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep Next watermark-cache paths out of troubleshooting diagnostics, including
+  directory names containing spaces.
+
 - Jellyfin source-caption qualification compares physical file indexes while
   retaining saved subtitle identities. Retained provider sources bind their
   complete stream map, and interlace sampling probes the selected physical video

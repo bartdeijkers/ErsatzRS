@@ -42063,11 +42063,65 @@ window/platform/final/CI/ordered delivery gate remain required. No native FFmpeg
 pipeline, accepted distribution, ledger disposition, baseline or live data is
 changed. Reopen this completed component only for a demonstrated regression.
 
-Remaining local functionality: item7 (row296) still requires its individual
-implementation/applicability proof. Rows290–295 are Complete within their local
-component scopes; row296 is next. No local row295 proof is outstanding. Item2's
-consolidated runtime/package qualification remains in the shared mandatory
-proof list. All provisional ledger mappings remain unaccepted;289 rows are
+2026-11-17 R296-B local cache/runtime/safety component Complete:
+Exact unpatched6c and retained qualified FFmpeg9 pass the application-owned
+cache boundary on Linux x64. Five saved-host runs use a3200x1600 synthetic
+logo: cold rendering creates one small raw frame; another channel and source
+pathname with identical bytes retain the same frame content and creation time,
+while last-use time advances. Changing the source at the same path creates a
+second frame and visibly changes red to green. Changing scale/opacity creates
+a third frame and visibly changes size/alpha. Stopping every session removes
+its output while preserving the shared cache. A deliberately unusable cache
+namespace falls back to the original large image with correct selected880Hz
+Dutch audio and burned captions. Actual sweeping removes a31-day-unused raw
+frame and a2-hour abandoned temporary file, retaining recent raw/temp files,
+unrelated files and an old raw file outside the owned still-images subfolder.
+Separate isolated actual-worker trials prove that an animated GIF advances
+from red to green without creating a baked frame. The unchanged passing
+periodic test now enables caching: visible/fading/hidden phases and a permanent
+layer share one baked prefix while preserving audio and Burn. A real FFmpeg
+prescale barrier proves cancellation and a5s host startup deadline both join
+cleanup and terminate the descendant before readiness. The worker's own30s
+render deadline terminates the hung prescaler, becomes Ready through original-
+image fallback, and preserves the decoded overlay, selected audio and captions.
+All registry entries and session outputs are released. Three existing actual
+watermark regressions retain local/HTTP logos, ordering, size, dynamic Burn,
+Convert/off and DisableWatermarks; the production HTTP canvas regression also
+passes its three template/dynamic/disabled cases. These compose eight passing
+top-level tests and24 actual worker sessions, not24 separate test functions.
+The first combined run had two successes and a fresh-cache fixture precondition
+failure because its tests shared application data. Both new test packages now
+reuse the existing isolated-child owner. The final three-test run passes;
+retain the mixed-outcome run and reuse its unchanged passing periodic case.
+The extended lifecycle case supersedes its earlier two-case success. No product
+failure or full-run pass is inferred from that fixture failure.
+A concrete affected diagnostic invariant was found during review: the new
+cache.folder was omitted from explicit full-path redactions, so generic word
+redaction retained the middle of a directory containing spaces. The qualified
+negative reproduces that leak; an earlier invalid default-codec fixture is
+retained separately and proves nothing. Adding this one folder to the existing
+redaction list makes all eight diagnostic tests pass, including synthetic Unix
+and Windows path cases. The only production-code change in this B checkpoint
+is that diagnostic redaction; runtime behavior proof remains valid. Later test
+edits only express identical durations in larger units and fix documentation.
+Verification records are row296-cache-checkpoint.json, the named runtime/log
+receipts and row296-cache-cleanup.json under the existing continuation proof
+root. Independent OS inspection finds zero task-owned worker/media/prescaler
+processes. Isolated final child roots are removed; scoped initial synthetic
+cache artifacts remain hash-inventoried as evidence. Final strict infra
+all-target lint passes after the diagnostic correction and equivalent test
+cleanup; the initial documentation/duration lint failures are retained. This
+closes R296-B within its explicit local Linux x64/unpatched-worker scope.
+R296-C and every existing consolidated indexed-runtime/private-patch retirement,
+first-party package, full-window, matched-browser, required platform/final/CI
+and ordered-delivery obligation remain unchanged. Native code, routes, profiles,
+accepted runtime manifests, ledger dispositions and baseline are untouched.
+
+Remaining individual-row functionality/proof: rows290–296 are Complete within
+their explicit local component scopes. R296-A/B closes row296 configuration
+and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
+Item2/R296-C consolidated indexed/cache runtime and first-party package/private-
+patch retirement qualification remains in the unchanged shared mandatory list. All provisional ledger mappings remain unaccepted;289 rows are
 processed,7 are pending and the accepted pin is unchanged.
 Remaining mandatory evidence: affected matched-bundle headed Chromium/Firefox
 Health refresh/recovery (including no-JS), and all
@@ -42077,6 +42131,8 @@ Delivery follows CONTRIBUTING checkpoint delivery; no main integration, push,
 new CI, dependency/application release, operator install or live mutation here.
 Row292 local functionality/proof checkpoint is Complete and committed as2f49534d.
 The maintainer explicitly resumed the goal. Rows293–295 have now met their
-local stopping conditions; next bounded work is row296's exact source audit.
+local stopping conditions, and R296-A/B now meets its local stopping conditions.
+Next bounded work is the consolidated indexed/cache runtime qualification in
+item2/R296-C.
 No accepted ledger disposition or authoritative pin advancement here.
 """

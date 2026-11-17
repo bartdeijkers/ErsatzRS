@@ -17,10 +17,12 @@ and runtime manifest remain unchanged. R296-A now carries the application-owned
 shared cache into saved normal/preview and standalone previews, selecting plain
 schema0.1.5 or indexed0.1.6. Matching process admission and Health refuse an
 unsuitable schema; explicit legacy configurations retain their omitted cache.
-Focused configuration, refusal, legacy and preview controls pass. Actual cache
-behavior, patch retirement, the consolidated indexed/cache successor, required
-packages and integrated acceptance remain open
-in the continuation milestone.
+Focused configuration, refusal, legacy and preview controls pass. R296-B now
+proves actual fixed-worker reuse, invalidation, retention, original-image
+fallback, animation/fade/canvas preservation and bounded process cleanup within
+its local Linux scope. Cache-path diagnostic redaction is also corrected.
+Patch retirement, the consolidated indexed/cache successor, required packages
+and integrated acceptance remain open in the continuation milestone.
 
 ## Context
 
@@ -82,8 +84,8 @@ root and explicit30 unused-day retention. The worker owns its still-images
 subfolder; conversion does not create/delete files, and session output cleanup
 must not discard the shared cache. Preserve Native's existing image/dynamic
 filters and drawvg, as well as animated/media/canvas and time-dependent layers.
-Actual fixed-worker reuse, invalidation, fallback and bounded lifecycle proof
-remain R296-B before accepting the new runtime. Explicit legacy configuration
+Require actual fixed-worker reuse, invalidation, fallback and bounded lifecycle
+proof in R296-B before accepting the new runtime. Explicit legacy configuration
 keeps its original schema and omitted cache/session extension.
 
 Qualify the actual four required packages and application/runtime boundaries

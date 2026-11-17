@@ -162,6 +162,7 @@ async fn real_next_intermittent_watermark_joins_wall_cycle_and_preserves_fade_au
         &ffprobe,
     )
     .unwrap();
+    config::configure_shared_cache(&mut config, &root.path().join("cache")).unwrap();
     for (second, expected) in [(1, "visible"), (11, "fade"), (20, "hidden")] {
         config.playout.virtual_start = Some(minute + chrono::Duration::seconds(second));
         let output = root.path().join(format!("output-{second}"));
@@ -194,4 +195,11 @@ async fn real_next_intermittent_watermark_joins_wall_cycle_and_preserves_fade_au
             _ => assert!(red < 25, "wall-second 20.5 must be hidden, red={red}"),
         }
     }
+    let frames =
+        super::still_cache_runtime_tests::rendered_frames(&root.path().join("cache/still-images"));
+    assert_eq!(
+        frames.len(),
+        1,
+        "periodic phases and permanent placement share a baked prefix"
+    );
 }
