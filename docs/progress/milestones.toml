@@ -41937,9 +41937,40 @@ Native/Next smoke/TSDuck proof before local row closure; all shared full-window,
 consolidated-runtime, browser, platform/final/CI and delivery gates stay open.
 No new row disposition, accepted pin, live mutation or remote delivery occurs.
 
-Remaining functionality: items6–7
-still require individual implementation/applicability proof. The row294 local
-component is closed; next is row295 remaining retained-source/owner qualification and current-server smoke/TSDuck proof. Row291's local component is complete; item2's consolidated
+
+2026-11-17 R295-C retained HTTP source/owner component Complete within Linux scope:
+Runfd34a98c-2f86-4db7-8ebb-5ab8922a0ee1 passes three actual Next retained-source
+sessions for logical2/3/4/5,0/1/2/3 and0/2/3/5 over the same physical file
+layout. Each acquires exactly one complete authenticated HTTP response, with
+zero ordinary media callbacks and no durable SourceTeletextMetadata readiness.
+Actual retained-source callbacks serve AV and independently qualified page889
+captions on the same source clock; copied AV and the original9.2s outpoint pass
+the existing decoded oracle. A changed physical map revokes both describe/open
+access to the existing source grant; restoring it permits the remaining
+playback. A presentation-only edit retains the grant, while changing the exact
+source file path revokes it. Every case confirms bounded stop, empty source
+storage and zero active source work. Receipt: row295-retained-source-qualified.json,
+with per-case provider-source-proof.json records and exact source/tool digests.
+Strict infra all-target lint passes in row295-retained-clippy.log; formatting,
+architecture, progress and staged lint-policy checks pass. Existing storage,
+repair/Health, extraction, readers, Native and ordinary Next evidence remains
+valid within its recorded scope. The shared physical-map loader's later change
+only generalized its executor and exposed the owning source ID; its SQL and
+Native conversion/refusal behavior are unchanged from the retained controls.
+The actual current server builds with SHA256
+1ee807c70673c529992ef4653e2460133af7c2b7c78a191cdad9bf9fa508d502.
+Native and Next smoke pass on that exact server in row295-native-smoke.log and
+row295-next-smoke.log, including Next selected AV/captions, reconnects, preview
+and owned idle cleanup. The remaining local C list is only Native TSDuck and
+Next TSDuck on this same candidate. They are running in the existing bounded
+gate; clip generation is not transport acceptance. Current step state and exact
+commands are retained in row295-playback-closeout.json. No row closure is
+claimed until both required transport checks pass. Consolidated first-party
+runtime/private-patch retirement, full-window, matched-bundle/browser, required
+platform/final/CI and ordered delivery gates remain open independently.
+
+Remaining local functionality: item7 (row296) still requires individual implementation/applicability proof. Row295 A/B implementation is locally Complete; its only remaining local mandatory evidence is the Native/Next TSDuck pair. The row294 local
+component is closed; next is completion of the running row295 Native/Next TSDuck pair before local row closure. Row291's local component is complete; item2's consolidated
 runtime/package qualification remains in the shared mandatory proof list. Row290's implemented local component remains distinct
 from its required integrated/window acceptance. All provisional ledger mappings
 remain unaccepted;289 rows processed,7 pending and the accepted pin unchanged.

@@ -339,6 +339,7 @@ async fn check_presentation_edit(
         .await
         .presentation_edit_keeps_grant
         .push(described && opened);
+    check_physical_map_edit(host, instance, source).await;
     let original: String = sqlx::query_scalar(r#"SELECT "Path" FROM "MediaFile" WHERE "Id"=1"#)
         .fetch_one(&host.pool)
         .await
@@ -372,4 +373,23 @@ async fn send(
         let _ = socket.write_all(body).await;
     }
     let _ = socket.shutdown().await;
+}
+
+async fn check_physical_map_edit(host: &host::NextHost, instance: uuid::Uuid, source: uuid::Uuid) {
+    let changed = sqlx::query(r#"UPDATE "ProviderStreamIndex" SET "SourceStreamIndex"="SourceStreamIndex"+10 WHERE "MediaVersionId"=100"#)
+        .execute(&host.pool).await.unwrap();
+    if changed.rows_affected() == 0 {
+        return;
+    }
+    let denied = host.retained_source_length(instance, source).await.is_err()
+        && host
+            .open_retained_source(instance, source, 0, 188)
+            .await
+            .is_err();
+    sqlx::query(r#"UPDATE "ProviderStreamIndex" SET "SourceStreamIndex"="SourceStreamIndex"-10 WHERE "MediaVersionId"=100"#)
+        .execute(&host.pool).await.unwrap();
+    assert!(
+        denied,
+        "changed physical map must revoke the exact retained-source grant"
+    );
 }

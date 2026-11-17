@@ -16,8 +16,10 @@ keys and guarding staged publication. Source-reader layout/ranking and selected
 interlace sampling use physical comparisons while preserving logical metadata
 and cache identities. Scoped boundary/probe proof and actual Next Convert across the three layouts
 after SQLite close/reopen pass. Native HLS selected AV/captions and mapped
-finite-source refusal also pass across the three layouts. Remaining retained-source/owner
-qualification, current-server smoke/TSDuck and shared final acceptance remain in
+finite-source refusal also pass across the three layouts. Retained HTTP source/owner qualification
+and map-bound grant refusal also pass in three actual Next sessions. Both
+current-server smoke gates pass; the required Native/Next TSDuck pair and
+shared final acceptance remain in
 `ucu-16-continuation`. The row is not fully accepted.
 
 ## Context
