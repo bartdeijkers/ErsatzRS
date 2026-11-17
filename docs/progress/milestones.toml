@@ -42380,22 +42380,65 @@ playback/final/CI and ordered-delivery gate remains mandatory. Original private
 patch retirement conditions and native ARM/macOS/hardware deferrals remain.
 No accepted runtime, production pin, ledger disposition or remote delivery changes.
 
+2026-11-17 matched web/affected Health browser package Complete:
+One cargo-leptos0.3.6 build on Rust1.97.1 produces the matched current server
+and hydration assets from14f646bb, with no compiled-source working diff.
+Server SHA25668570299a78c7f7806e303526eecdd43bb2b5369f363977db367a6f11de03d1f;
+hash-files remains false. The actual bundle gate resolves both JS/WASM URLs.
+Headed Chromium and Firefox on owned Xvfb displays prove eighteen candidate
+cases: eight local DateAdded/Jellyfin-index Health cases, eight actual Next
+session/cache Health cases and two existing responsive Next-version cases.
+English/Dutch, both themes, hydrated/no-JS, actual Refresh POST200/303,
+persisted warning/Pass transitions, no page/console errors and mobile overflow
+controls pass. The disabled Jellyfin library and stored streams remain intact.
+Backend rescan/repair proof is reused; browser fixtures reproduce its persisted
+effects and do not independently prove scanning or channel-editor actions.
+The actual source-package worker97399b21 is admitted for enabled Next channels.
+Eight separate headed C5 worker e5e5a160 compatibility cases correctly show the
+localized session refusal, recovery with the unsupported channel disabled and
+refusal again when re-enabled. This never treats disabling as a worker upgrade.
+The original two browser failures/six skipped cases are retained: the seeded
+host had another enabled Next channel, so Health correctly stayed Fail after
+only the synthetic channel was disabled. Isolate that seeded channel and restore
+its exact enabled choice afterwards; no product change or assertion weakening.
+The final eight Next cases pass on each actual executable, without retries or
+skips. Reuse the ten unchanged metadata/navigation successes from the original
+eighteen-case run; do not count the repeated candidate Next cases twice.
+App/worker/tool/site bytes are checked before/after and every actual runtime
+copy matches the same server/site inventory. One complete matched snapshot,
+all four database/log states, screenshots, initial failures, final source and
+retention mapping are preserved. No task-owned host remains; only verified
+duplicate temporary payloads are removed. Exact build flags, worker describe,
+producer/tool/source hashes, results and proof inventory are retained under
+tmp/evidence/ucu16-tail-9c6b3dea/row296-app/ and browser-checkpoint.json.
+This removes the affected matched-bundle headed Health/no-JS proof item from
+the finite mandatory list. No browser/Health implementation remains for this
+package. Next close the unchanged integrated application final gates and
+current-candidate Native/Next smoke/TSDuck, followed by required application
+packages/platform acceptance and eligible full CI/ordered delivery. Worker-only
+platform proof remains distinct. No acceptance requirement, accepted pin,
+distribution, row disposition, runtime installation or publication changes.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
-Item2/R296-C consolidated indexed/cache runtime and first-party package/private-
-patch retirement qualification remains in the unchanged shared mandatory list. All provisional ledger mappings remain unaccepted;289 rows are
+Item2/R296-C worker source/software/runtime and four worker-package components
+are Complete. Its unchanged integrated application/window acceptance remains
+in the shared mandatory list; no private patch is retired. All provisional
+ledger mappings remain unaccepted;289 rows are
 processed,7 are pending and the accepted pin is unchanged.
-Remaining mandatory evidence: affected matched-bundle headed Chromium/Firefox
-Health refresh/recovery (including no-JS), and all
-unchanged source/final/playback/platform/CI and ordered delivery gates above.
+Remaining mandatory evidence: unchanged integrated application source/final,
+current-candidate playback/transport, required application packages/platform,
+eligible full CI and ordered delivery gates above. The affected matched-bundle
+headed Chromium/Firefox Health refresh/recovery/no-JS component is Complete.
 No new native Windows or ARM/platform acceptance is inferred from Linux.
 Delivery follows CONTRIBUTING checkpoint delivery; no main integration, push,
 new CI, dependency/application release, operator install or live mutation here.
 Row292 local functionality/proof checkpoint is Complete and committed as2f49534d.
 The maintainer explicitly resumed the goal. Rows293–295 have now met their
 local stopping conditions, and R296-A/B now meets its local stopping conditions.
-Next bounded work is the consolidated indexed/cache runtime qualification in
-item2/R296-C.
+Next bounded work is the integrated application final gates and current-candidate
+Native/Next smoke/TSDuck; completed R296-C worker/package and browser components
+are reused within their verified source/input boundaries.
 No accepted ledger disposition or authoritative pin advancement here.
 """

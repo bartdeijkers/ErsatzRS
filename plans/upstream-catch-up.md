@@ -61,8 +61,15 @@ verifies all four source archives, including independent extraction/provenance,
 actual architecture and pinned companions. P2/P3 now pass14 actual package
 sessions across native Linux/Windows and ARM emulation, including available
 Windows CUDA, actual MPP no-device whole-channel fallback and cold/warm cache.
-Continue with the unchanged integrated application/window acceptance and delivery
-gates; no bare-worker package/runtime item remains in P1/P2/P3.
+The affected matched-bundle Health/browser package is also Complete: eighteen
+candidate cases and eight actual C5 compatibility cases pass in headed Chromium
+and Firefox, including localized Refresh/recovery, both themes and no-JS. The
+initial seeded-channel fixture failure remains recorded. Milestone evidence owns
+the composed results and exact matched snapshot; backend scan proof is reused.
+Next close the integrated application final gates and current-candidate
+Native/Next smoke/TSDuck, then required application packages/platform and eligible
+full CI/ordered delivery. No bare-worker package/runtime or affected Health
+browser item remains in the finite list.
 No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an

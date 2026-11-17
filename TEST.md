@@ -509,6 +509,16 @@ Run `dependent-group-selections.spec.ts` for Deco and Playout Templates group
 changes. It verifies cleared child IDs, replacement save/reload persistence and
 retained date filters in Chromium and Firefox, using the wrapper's isolated database.
 
+Run `upstream-tail-health.spec.ts` for local date-added/Jellyfin index warnings
+and the actual selected Next executable's session/cache Health contract. It checks persisted
+Refresh results and recovery in English/Dutch, both themes and JS/no-JS. Set
+`ERSATZRS_E2E_NEXT_SESSION_CACHE=true` for an independently qualified modern
+candidate; the default expects the accepted C5 runtime's session refusal.
+Run the Next cases against both actual executables for that compatibility claim.
+Disabling the synthetic unsupported channel proves Health recovery, not a worker
+upgrade. Backend scan tests separately own actual creation-time backfill and
+provider routing repair; the browser fixtures reproduce their persisted effects.
+
 Scripted admin parity checks live under `tests/e2e/`. CI runs the full
 configured Playwright suite by default through:
 
