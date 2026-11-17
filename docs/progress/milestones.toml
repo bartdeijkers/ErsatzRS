@@ -42723,6 +42723,16 @@ producer and test scope. Next engine logs include schema expectations and
 runtime cases to diagnose during qualification. The full run had an independent
 artifact-build failure. No passing full CI or accepted disposition is inferred.
 
+The earlier Next engine gate had three ordinary-host cadence cases expecting
+channel schema 0.1.3. Row296's ordinary cache-owning host emits 0.1.5. The test
+fixture now asserts that exact schema and reaches its existing media oracles.
+All three cases pass with the fixed 6c9e0cf worker and FFmpeg 2.0.10
+(nextest 3c19abfb-273d-4d82-87cb-d2248ce0843c): disabled passthrough,
+integer copy and handoff, and rational mirror with burned subtitles. The
+original failure and focused Next proof are retained under
+row296-runtime-publication/ci/next-gate-recovery/cadence/. The remaining
+Next engine CI cases and exact integrated full CI stay open.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
