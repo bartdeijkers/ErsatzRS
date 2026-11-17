@@ -539,5 +539,5 @@ id = 'ucu16-jiff-migration'
 adr = '0138'
 description = 'Remove unmaintained chrono from the application dependency graph while preserving persisted, scheduling and wire time contracts.'
 discovered = '2026-11-17'
-evidence = 'Maintainer selected Jiff after the existing Cargo deny gate reported RUSTSEC-2026-0543. ADR 0138 and milestone ucu-16-continuation retain the finite migration, compatibility proofs and unchanged dependency and delivery gates.'
-resolved = false
+evidence = 'ADR 0138 is implemented at source50403405. The locked all-feature/all-target graph has no chrono dependency and Cargo deny passes unchanged. Compatibility, database reopen, Classic continuity, packaged add-on source, matched headed browsers, Native/Next smoke and 93/86 transport controls pass in the recorded local scope. Milestone ucu-16-continuation retains the exact evidence and the required integrated CI and ordered delivery.'
+resolved = true

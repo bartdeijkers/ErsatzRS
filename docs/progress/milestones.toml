@@ -42698,9 +42698,23 @@ all-feature, all-target graph contains no chrono dependency. Cargo deny
 passes unchanged. A differential comparison with the former date library
 passes for civil, offset, fractional and elapsed time cases. Local native
 workspace all-target type checking, time-crate Clippy, architecture lint
-and 43 CI domain-selection cases pass. Retain the migration receipts under
-row296-runtime-publication/ci/. Complete the affected runtime and matched
-web evidence, then apply the unchanged full CI and ordered delivery gates.
+and 43 CI domain-selection cases pass. The affected eight-crate nextest
+selection ran 4,968 cases: 4,965 passed directly, the two standard-directory
+cases pass with the corrected isolated .ersatzrs basename, and the final
+time-crate run (63fa709b-aea3-4d15-8463-a130d6d5a79b) passes all three
+standalone tests after the historical offset display fix. Both source
+archives assemble, and the extracted contract binaries and examples build
+against the exact extracted time archive. The original Cargo temporary
+registry failure is retained.
+Migration proof is Complete within its local scope at source50403405. The
+matching server and WASM assets pass the bundle gate and four headed
+Chromium/Firefox cases for the global EPG and Classic deferred save, including
+hydrated and no-JS forms. Both Native and actual Next smoke pass. The transport
+gates pass 93 Native and 86 Next checks with the existing thresholds and exact
+qualified FFmpeg and worker inputs. Owned playback processes are gone.
+The receipts are under row296-runtime-publication/ci/jiff-qualified/. The
+current dependency policy is satisfied locally. Exact integrated full CI and
+the ordered UCU-16 dispositions remain required.
 
 Historical full CI44128505670 and corrected PR CI44129875773 are terminal.
 The corrected PR passed commit lint, Clippy, main Rust tests, Level 1.5 and both

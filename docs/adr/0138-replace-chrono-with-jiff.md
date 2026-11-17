@@ -6,7 +6,7 @@ Accepted 2026-11-17.
 
 ## Implementation
 
-Partial
+Implemented
 
 The workspace, developer tooling and add-on validation use Jiff. SQLite
 binds and reads retain the repository's existing text encodings. The
@@ -36,9 +36,13 @@ cycles preserve dates beyond Jiff's civil range. Those dates remain useful for
 sentinels and storage and are subject to Jiff's range when resolving named zones.
 
 The add-on contract retains its independent version and Git distribution
-under ADR 0066. Cargo can verify both local source packages together without
-publishing them to a registry:
-`cargo package -p ersatzrs-time -p ersatzrs-addon-contract`.
+under ADR 0066. Assemble local source archives with
+`cargo package --offline --no-verify --exclude-lockfile -p ersatzrs-time -p ersatzrs-addon-contract`.
+Cargo 1.97.1's temporary registry fails to verify the private time dependency.
+Extract both archives outside the workspace and use
+`patch.crates-io.ersatzrs-time.path` to point Cargo at the extracted time
+crate. Build the extracted contract's binaries and examples to verify the
+archives without publishing either crate.
 
 Use signed elapsed durations for playback and fixed intervals. Resolve recurring
 local schedule times with civil dates and the existing choice of time-zone
