@@ -58,9 +58,11 @@ The21 retained infra and three public-route runtime controls now pass. A concret
 Jellyfin projection regression is corrected without changing the strict physical
 oracles: fresh source metadata survives logical-to-physical selection. P1 now
 verifies all four source archives, including independent extraction/provenance,
-actual architecture and pinned companions. Continue with the retained native
-Linux/Windows and ARM-emulated package runtime gates P2/P3 before unchanged shared
-acceptance.
+actual architecture and pinned companions. P2/P3 now pass14 actual package
+sessions across native Linux/Windows and ARM emulation, including available
+Windows CUDA, actual MPP no-device whole-channel fallback and cold/warm cache.
+Continue with the unchanged integrated application/window acceptance and delivery
+gates; no bare-worker package/runtime item remains in P1/P2/P3.
 No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
 retain the unchanged local, platform, provenance and final gate requirements.
 The accepted Pin table stays unchanged until ordered acceptance permits an
