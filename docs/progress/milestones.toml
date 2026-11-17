@@ -42751,8 +42751,16 @@ readiness/idle settings, success and failure reports, MPEG-2 and H.264 scale
 behavior, and source-relative watermark coordinates. The fixture change retains
 the original admission, language, output, clock and cleanup assertions.
 Record the serial reproduction and six-case recovery under
-row296-runtime-publication/ci/next-gate-recovery/. Six subtitle runtime
-regressions from the former Next gate and exact integrated full CI stay open.
+row296-runtime-publication/ci/next-gate-recovery/.
+
+The cached-font fixture now binds the same caption listener. The on-demand
+fixture refreshes viewer demand throughout its existing 12-second viewing
+interval, so the worker-owned one-second idle timeout applies to genuine
+viewer absence. Both real Next tests pass (nextest
+c67a13bd-0b07-4b4b-bba5-5717b902f424), including libass font selection,
+preserved resume position and decoded audio/captions. Retain the two-case
+receipt under next-gate-recovery/font-and-resume/. Four provider subtitle
+cases and exact integrated full CI stay open.
 
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration

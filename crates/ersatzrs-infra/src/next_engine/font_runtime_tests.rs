@@ -39,6 +39,7 @@ async fn fixture_child_font() {
         locker,
         root.path().join("playout"),
     ));
+    let mut callback = callback_listener(host.clone()).await;
     let output = root.path().join("output");
     let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
     let task = host
@@ -77,6 +78,7 @@ async fn fixture_child_font() {
         .await
         .unwrap()
         .unwrap();
+    callback.stop().await;
     assert!(
         observed.is_ok(),
         "libass did not select the cached Sen font"

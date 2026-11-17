@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-11-17","summary":"Recovered the real Next font-cache and on-demand resume fixtures. Four provider subtitle cases and exact integrated CI remain."}
 {"agent":"Codex","date":"2026-11-17","summary":"Recovered six real Next tests by providing their production local-caption callback. QSV fallback, row291 readiness and idle, reports, scale and watermark proof pass. Six subtitle runtime cases and integrated CI remain."}
 {"agent":"Codex","date":"2026-11-17","summary":"Recovered the row291 refusal gate with the verified archived 0.1.4 worker. The real fixture passes and CI staging was checked against the live public asset. Remaining Next and integrated CI gates stay open."}
 {"agent":"Codex","date":"2026-11-17","summary":"Recovered all three real Next cadence regressions with the ordinary cache schema assertion and the fixed worker. Integrated CI and the remaining Next gate failures stay open."}
