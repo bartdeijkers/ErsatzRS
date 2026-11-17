@@ -1275,7 +1275,7 @@ jobs:
           PR_GENERAL_FILTER: ${{ needs.preflight.outputs.general_filter }}
           PR_TELETEXT_FILTER: ${{ needs.preflight.outputs.teletext_filter }}
           # RUST_LOG also reaches the pinned Next child; preserve its DEBUG diagnostics.
-          RUST_LOG: warn,ersatzrs_web=info,ersatzrs_infra::next_engine::diagnostics=debug,ersatztv_channel=debug,ersatztv_core=debug,ersatztv_playout=debug,ffpipeline=debug,ffmpeg=debug
+          RUST_LOG: warn,ersatzrs_web=info,ersatzrs_web::transport::iptv::teletext_provenance=debug,ersatzrs_infra::next_engine::diagnostics=debug,ersatztv_channel=debug,ersatztv_core=debug,ersatztv_playout=debug,ffpipeline=debug,ffmpeg=debug
         run: |
           export ErsatzRS_FFMPEG__PATH="$FFMPEG_PATH"
           export ErsatzRS_FFPROBE__PATH="$FFPROBE_PATH"
