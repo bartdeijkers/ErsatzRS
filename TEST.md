@@ -512,12 +512,16 @@ retained date filters in Chromium and Firefox, using the wrapper's isolated data
 Run `upstream-tail-health.spec.ts` for local date-added/Jellyfin index warnings
 and the actual selected Next executable's session/cache Health contract. It checks persisted
 Refresh results and recovery in English/Dutch, both themes and JS/no-JS. Set
-`ERSATZRS_E2E_NEXT_SESSION_CACHE=true` for an independently qualified modern
-candidate; the default expects the accepted C5 runtime's session refusal.
+`ERSATZRS_E2E_NEXT_SESSION_CACHE=false` for the actual C5 session-refusal control;
+the default expects the application's qualified modern runtime candidate.
 Run the Next cases against both actual executables for that compatibility claim.
 Disabling the synthetic unsupported channel proves Health recovery, not a worker
 upgrade. Backend scan tests separately own actual creation-time backfill and
 provider routing repair; the browser fixtures reproduce their persisted effects.
+The wrapper exports `E2E_APP_DATA_DIR` alongside the state/database roots for
+the owned per-channel overlay fixture. Modern-runtime cases reject a future
+schema, show the localized validated range, then recover after a supported
+indexed overlay is written; the prior file is restored after the case.
 
 Scripted admin parity checks live under `tests/e2e/`. CI runs the full
 configured Playwright suite by default through:

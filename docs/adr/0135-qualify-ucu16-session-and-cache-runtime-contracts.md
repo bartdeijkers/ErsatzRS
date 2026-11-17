@@ -27,7 +27,17 @@ integration passes. Serial software and current full dependency policy also
 pass; an additional scoped security patch updates the two demonstrated XML/root-
 certificate dependencies while retaining unrelated inputs and all12 corrections.
 Retained runtime retirement controls, required packages and integrated acceptance
-remain open in the continuation milestone. The accepted production recipe is unchanged.
+remain open in the continuation milestone. The four worker packages and their
+native Linux/Windows and ARM-emulated runtime controls are now qualified. The
+isolated application candidate proposes their exact source/patch/archive/payload
+pin for actual bundled application qualification. The C5 recipe remains archived;
+both deferred macOS package identities are retained exactly. This is a private
+source proposal, not main integration, publication or managed/operator adoption.
+Health derives the overlay-schema ceiling from the selected runtime's existing
+validated session contract:0.1.5 for plain and0.1.6 for indexed. It retains
+invalid/future-schema refusal and localizes current and historical supported
+ranges in all nine cultures. Application-package/browser verification remains
+in the continuation milestone; backend checks alone do not establish it.
 
 ## Context
 

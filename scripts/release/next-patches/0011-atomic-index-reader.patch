@@ -1,26 +1,23 @@
+Rebase the accepted ADR0131 reader onto exact6c; use additive schema0.1.6 and preserve upstream session/cache config. JSON schemas regenerated from actual Rust generators.
+
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index f54aaafa..a3804550 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+@@ -7,6 +7,7 @@
  
  ## [Unreleased]
- 
-+### Added
-+- Optional `playout.layout: "ersatzrs.playout-index.v1"` reads bounded, hash-verified daily files through one atomic index and shared reader lease. Ordinary folder loading remains the default; invalid indexes never fall back to directory scanning. `describe.contract.playout_layouts` advertises the reader contract (channel config schema `0.1.4`).
-+
- ## [0.2.5] - 2026-11-06
  ### Added
- - `ersatztv-channel describe` prints a JSON document describing the binary; its schema is `schema/describe.json` and it includes:
++- Optional `playout.layout: "ersatzrs.playout-index.v1"` uses the accepted atomic index, immutable hashed day files and reader lease. Channel schema `0.1.6` adds the reader while retaining session/cache fields; invalid indexes do not fall back to folder scanning.
+ - `session.idle_timeout_seconds` in `channel.json`: seconds without a `.heartbeat` touch before the channel stops (default 90); `0` keeps the channel running without viewers (channel config schema `0.1.4`)
+ - `session.ready_segment_count` in `channel.json`: segments the playlist must hold before `.ready` is written, from 1 to 10 (default 3)
+ - `cache.folder` and `cache.max_unused_days` in `channel.json`: where rendered still-image graphics are kept (default an `ersatztv-next` folder in the system temp folder) and how many days an unused one is kept (default 30) (channel config schema `0.1.5`)
 diff --git a/Cargo.lock b/Cargo.lock
-index 1f704ee5..72881253 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -160,6 +160,15 @@ version = "2.11.1"
- source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -161,6 +161,15 @@
  checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
  
-+[[package]]
+ [[package]]
 +name = "block-buffer"
 +version = "0.12.1"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -29,26 +26,29 @@ index 1f704ee5..72881253 100644
 + "hybrid-array",
 +]
 +
- [[package]]
++[[package]]
  name = "bumpalo"
  version = "3.20.2"
-@@ -272,6 +281,12 @@ dependencies = [
-  "memchr",
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -273,6 +282,12 @@
  ]
  
-+[[package]]
+ [[package]]
 +name = "const-oid"
 +version = "0.10.2"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 +
- [[package]]
++[[package]]
  name = "convert_case"
  version = "0.10.0"
-@@ -306,6 +321,15 @@ dependencies = [
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -304,6 +319,15 @@
+ checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+ dependencies = [
   "libc",
- ]
- 
++]
++
 +[[package]]
 +name = "crypto-common"
 +version = "0.2.2"
@@ -56,15 +56,15 @@ index 1f704ee5..72881253 100644
 +checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
 +dependencies = [
 + "hybrid-array",
-+]
-+
- [[package]]
- name = "deranged"
- version = "0.5.8"
-@@ -339,6 +363,17 @@ dependencies = [
-  "unicode-xid",
  ]
  
+ [[package]]
+@@ -337,6 +361,17 @@
+  "rustc_version",
+  "syn",
+  "unicode-xid",
++]
++
 +[[package]]
 +name = "digest"
 +version = "0.11.3"
@@ -74,12 +74,10 @@ index 1f704ee5..72881253 100644
 + "block-buffer",
 + "const-oid",
 + "crypto-common",
-+]
-+
+ ]
+ 
  [[package]]
- name = "displaydoc"
- version = "0.2.6"
-@@ -454,6 +489,7 @@ dependencies = [
+@@ -454,6 +489,7 @@
   "serde",
   "serde_json",
   "serde_path_to_error",
@@ -87,7 +85,7 @@ index 1f704ee5..72881253 100644
   "simple-expand-tilde",
   "tempfile",
   "thiserror",
-@@ -483,9 +519,11 @@ name = "ersatztv-playout"
+@@ -483,9 +519,11 @@
  version = "0.2.5"
  dependencies = [
   "ersatztv-core",
@@ -99,10 +97,11 @@ index 1f704ee5..72881253 100644
   "tempfile",
   "thiserror",
   "time",
-@@ -765,6 +803,15 @@ version = "1.0.3"
+@@ -764,6 +802,15 @@
+ version = "1.0.3"
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
- 
++
 +[[package]]
 +name = "hybrid-array"
 +version = "0.4.15"
@@ -111,15 +110,13 @@ index 1f704ee5..72881253 100644
 +dependencies = [
 + "typenum",
 +]
-+
+ 
  [[package]]
  name = "hyper"
- version = "1.9.0"
-@@ -1918,6 +1965,17 @@ dependencies = [
-  "serde",
+@@ -1919,6 +1966,17 @@
  ]
  
-+[[package]]
+ [[package]]
 +name = "sha2"
 +version = "0.11.1"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -130,27 +127,27 @@ index 1f704ee5..72881253 100644
 + "digest",
 +]
 +
- [[package]]
++[[package]]
  name = "sharded-slab"
  version = "0.1.7"
-@@ -2375,6 +2433,12 @@ version = "0.2.5"
  source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -2376,6 +2434,12 @@
  checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
  
-+[[package]]
+ [[package]]
 +name = "typenum"
 +version = "1.20.1"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 +
- [[package]]
++[[package]]
  name = "unicase"
  version = "2.9.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
 diff --git a/Cargo.toml b/Cargo.toml
-index fc7a61be..f6c31250 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -56,6 +56,7 @@ rstest = "0.26.1"
+@@ -56,6 +56,7 @@
  schemars = "1.2"
  serde = { version = "1", features = ["derive"] }
  serde_json = "1"
@@ -159,10 +156,9 @@ index fc7a61be..f6c31250 100644
  simple-expand-tilde = "0.5.3"
  strum = { version = "0.28", features = ["derive"] }
 diff --git a/crates/ersatztv-channel/Cargo.toml b/crates/ersatztv-channel/Cargo.toml
-index 15446437..1a42a1c4 100644
 --- a/crates/ersatztv-channel/Cargo.toml
 +++ b/crates/ersatztv-channel/Cargo.toml
-@@ -36,3 +36,6 @@ path = "src/bin/gen_channel_config_schema.rs"
+@@ -36,3 +36,6 @@
  [[bin]]
  name = "gen-describe-schema"
  path = "src/bin/gen_describe_schema.rs"
@@ -170,19 +166,18 @@ index 15446437..1a42a1c4 100644
 +[dev-dependencies]
 +sha2 = { workspace = true }
 diff --git a/crates/ersatztv-channel/src/config.rs b/crates/ersatztv-channel/src/config.rs
-index 26ee7c49..1c7a67e7 100644
 --- a/crates/ersatztv-channel/src/config.rs
 +++ b/crates/ersatztv-channel/src/config.rs
 @@ -14,7 +14,7 @@
  
  pub const SUPPORTED_SCHEMA: SchemaVersion = SchemaVersion {
      breaking: 1,
--    compatible: 3,
-+    compatible: 4,
+-    compatible: 5,
++    compatible: 6,
  };
  pub const SCHEMA: VersionedSchema =
      VersionedSchema::new("https://ersatztv.org/channel/version/", SUPPORTED_SCHEMA);
-@@ -58,8 +58,22 @@ pub struct ChannelConfig {
+@@ -69,8 +69,22 @@
      number: String,
  }
  
@@ -205,7 +200,7 @@ index 26ee7c49..1c7a67e7 100644
      /// Folder of playout files, named `{start}_{finish}.json`.
      pub folder: String,
      /// Play the playout as if the channel started at this time instead of now. RFC 3339, e.g.
-@@ -879,6 +893,7 @@ pub async fn from_sources_over(
+@@ -947,6 +961,7 @@
  
              ersatztv_core::resolve_relative_paths(&mut v, &relative_to, PATH_FIELDS);
  
@@ -213,7 +208,7 @@ index 26ee7c49..1c7a67e7 100644
              ersatztv_core::deep_merge(&mut config_value, v);
          }
  
-@@ -977,6 +992,28 @@ fn deserialize_filter_option<'de, D: Deserializer<'de>>(d: D) -> Result<Option<S
+@@ -1053,6 +1068,28 @@
      }
  }
  
@@ -242,7 +237,7 @@ index 26ee7c49..1c7a67e7 100644
  fn deserialize_optional_path<'de, D: Deserializer<'de>>(d: D) -> Result<Option<PathBuf>, D::Error> {
      Ok(Option::<PathBuf>::deserialize(d)?.filter(|p| !p.as_os_str().is_empty()))
  }
-@@ -1046,6 +1083,46 @@ async fn versioned_overlay_merges() {
+@@ -1122,6 +1159,46 @@
          assert_eq!(config.version, Some(SCHEMA.uri()));
      }
  
@@ -289,7 +284,7 @@ index 26ee7c49..1c7a67e7 100644
      /// Before 0.1.0, `"format": null` in an overlay meant copy. It must not load as transcode now.
      #[tokio::test]
      async fn unversioned_overlay_is_rejected() {
-@@ -1305,3 +1382,32 @@ async fn a_config_file_that_cannot_be_read_is_named() {
+@@ -1406,3 +1483,32 @@
          );
      }
  }
@@ -323,10 +318,9 @@ index 26ee7c49..1c7a67e7 100644
 +    }
 +}
 diff --git a/crates/ersatztv-channel/src/describe.rs b/crates/ersatztv-channel/src/describe.rs
-index d04f6371..38238d01 100644
 --- a/crates/ersatztv-channel/src/describe.rs
 +++ b/crates/ersatztv-channel/src/describe.rs
-@@ -60,6 +60,9 @@ pub struct Contract {
+@@ -60,6 +60,9 @@
      /// Headers sent on every dynamic source request. `DynamicSource` in the playout schema
      /// defines them.
      pub dynamic_callback_headers: Vec<String>,
@@ -336,7 +330,7 @@ index d04f6371..38238d01 100644
  }
  
  #[derive(Serialize, Deserialize, Debug, JsonSchema, PartialEq)]
-@@ -135,6 +138,7 @@ pub fn new() -> Self {
+@@ -135,6 +138,7 @@
                  segment_seconds: SEGMENT_SECONDS,
                  keyframe_seconds: KEYFRAME_INTERVAL_SECONDS,
                  dynamic_callback_headers: CALLBACK_HEADERS.map(String::from).to_vec(),
@@ -345,7 +339,6 @@ index d04f6371..38238d01 100644
              schema_capability: SchemaCapability {
                  video_formats: enum_values::<VideoFormat>(),
 diff --git a/crates/ersatztv-channel/src/error.rs b/crates/ersatztv-channel/src/error.rs
-index 1bdcabf5..89370230 100644
 --- a/crates/ersatztv-channel/src/error.rs
 +++ b/crates/ersatztv-channel/src/error.rs
 @@ -8,6 +8,9 @@
@@ -359,7 +352,6 @@ index 1bdcabf5..89370230 100644
      ChannelConfigFailure(String),
  
 diff --git a/crates/ersatztv-channel/src/playout_loader.rs b/crates/ersatztv-channel/src/playout_loader.rs
-index d80fe18e..bbfdbdf9 100644
 --- a/crates/ersatztv-channel/src/playout_loader.rs
 +++ b/crates/ersatztv-channel/src/playout_loader.rs
 @@ -1,7 +1,7 @@
@@ -371,7 +363,7 @@ index d80fe18e..bbfdbdf9 100644
  use ersatztv_channel::error::{ChannelError, IoContext};
  use ersatztv_playout::playout::{
      ItemIssueKind, LoadedItem, PlayoutItem, PlayoutLoadResult, parse_playout_filename,
-@@ -35,15 +35,24 @@ pub async fn get_current_item(
+@@ -35,15 +35,24 @@
                  .to_string_lossy()
          );
  
@@ -405,7 +397,7 @@ index d80fe18e..bbfdbdf9 100644
  
          // find current item
          match playout_result
-@@ -62,15 +71,19 @@ pub async fn get_current_item(
+@@ -62,15 +71,19 @@
          }
      }
  
@@ -430,7 +422,7 @@ index d80fe18e..bbfdbdf9 100644
          let key = (path.to_owned(), modified);
          let first_report = {
              let mut reported = self.reported_file.lock().unwrap_or_else(|e| e.into_inner());
-@@ -121,6 +134,28 @@ pub async fn has_remaining(&self, now: &OffsetDateTime) -> Result<bool, ChannelE
+@@ -121,6 +134,28 @@
          }
      }
  
@@ -459,7 +451,7 @@ index d80fe18e..bbfdbdf9 100644
      async fn playout_file_for_time(&self, now: &OffsetDateTime) -> Result<String, ChannelError> {
          // resolve the link once; it can be swapped before the file is read
          let folder = tokio::fs::canonicalize(self.channel_config.expanded_playout_folder())
-@@ -185,7 +220,7 @@ async fn loader(folder: &Path, items: Vec<PlayoutItem>) -> PlayoutLoader {
+@@ -185,7 +220,7 @@
          json_loader(folder, start, finish, playout).await
      }
  
@@ -468,7 +460,7 @@ index d80fe18e..bbfdbdf9 100644
          folder: &Path,
          start: OffsetDateTime,
          finish: OffsetDateTime,
-@@ -468,3 +503,94 @@ async fn item_with_a_bad_probe_hint_plays_without_hints() {
+@@ -468,3 +503,94 @@
          assert!(item.source.unwrap().probe_hint().is_none());
      }
  }
@@ -564,10 +556,9 @@ index d80fe18e..bbfdbdf9 100644
 +    }
 +}
 diff --git a/crates/ersatztv-playout/Cargo.toml b/crates/ersatztv-playout/Cargo.toml
-index b11968e8..7b14de3b 100644
 --- a/crates/ersatztv-playout/Cargo.toml
 +++ b/crates/ersatztv-playout/Cargo.toml
-@@ -7,6 +7,7 @@ edition = "2024"
+@@ -7,6 +7,7 @@
  [dependencies]
  ersatztv-core = { workspace = true }
  serde = { workspace = true }
@@ -575,7 +566,7 @@ index b11968e8..7b14de3b 100644
  serde_json = { workspace = true, features = ["raw_value"] }
  serde_path_to_error = { workspace = true }
  thiserror = { workspace = true }
-@@ -15,3 +16,6 @@ tokio = { workspace = true }
+@@ -15,3 +16,6 @@
  
  [dev-dependencies]
  tempfile = { workspace = true }
@@ -584,7 +575,6 @@ index b11968e8..7b14de3b 100644
 +libc = { workspace = true }
 diff --git a/crates/ersatztv-playout/src/indexed.rs b/crates/ersatztv-playout/src/indexed.rs
 new file mode 100644
-index 00000000..d9840593
 --- /dev/null
 +++ b/crates/ersatztv-playout/src/indexed.rs
 @@ -0,0 +1,201 @@
@@ -791,7 +781,6 @@ index 00000000..d9840593
 +mod tests;
 diff --git a/crates/ersatztv-playout/src/indexed/tests.rs b/crates/ersatztv-playout/src/indexed/tests.rs
 new file mode 100644
-index 00000000..076ecda0
 --- /dev/null
 +++ b/crates/ersatztv-playout/src/indexed/tests.rs
 @@ -0,0 +1,344 @@
@@ -1140,7 +1129,6 @@ index 00000000..076ecda0
 +    }
 +}
 diff --git a/crates/ersatztv-playout/src/lib.rs b/crates/ersatztv-playout/src/lib.rs
-index 03332bf5..c02d03e0 100644
 --- a/crates/ersatztv-playout/src/lib.rs
 +++ b/crates/ersatztv-playout/src/lib.rs
 @@ -1,3 +1,4 @@
@@ -1149,41 +1137,48 @@ index 03332bf5..c02d03e0 100644
  pub mod playout;
  pub mod template;
 diff --git a/crates/ersatztv-playout/src/playout.rs b/crates/ersatztv-playout/src/playout.rs
-index 89173fe2..6c548945 100644
 --- a/crates/ersatztv-playout/src/playout.rs
 +++ b/crates/ersatztv-playout/src/playout.rs
-@@ -490,6 +490,18 @@ pub fn valid_items(&self) -> impl Iterator<Item = &PlayoutItem> {
+@@ -490,17 +490,6 @@
  
  /// Only envelope errors (read, JSON, version, `items`) fail the whole file.
  pub async fn from_file(path: &str) -> Result<PlayoutLoadResult, PlayoutError> {
-+    let contents = tokio::fs::read_to_string(path).await.map_err(|e| {
-+        if e.kind() == std::io::ErrorKind::NotFound {
-+            PlayoutError::PlayoutJsonDoesNotExist
-+        } else {
-+            PlayoutError::PlayoutJsonLoadError(e.to_string())
-+        }
-+    })?;
+-    #[derive(Deserialize)]
+-    struct PlayoutVersion {
+-        version: String,
+-    }
+-
+-    #[derive(Deserialize)]
+-    struct PlayoutEnvelope<'a> {
+-        #[serde(borrow)]
+-        items: Vec<&'a serde_json::value::RawValue>,
+-    }
+-
+     let contents = tokio::fs::read_to_string(path).await.map_err(|e| {
+         if e.kind() == std::io::ErrorKind::NotFound {
+             PlayoutError::PlayoutJsonDoesNotExist
+@@ -508,13 +497,28 @@
+             PlayoutError::PlayoutJsonLoadError(e.to_string())
+         }
+     })?;
+-
+-    let version_only: PlayoutVersion = serde_json::from_str(&contents)
 +    from_str(&contents)
 +}
 +
 +/// Parse a single already-read playout document with the ordinary item policy.
 +pub fn from_str(contents: &str) -> Result<PlayoutLoadResult, PlayoutError> {
-     #[derive(Deserialize)]
-     struct PlayoutVersion {
-         version: String,
-@@ -501,20 +513,12 @@ struct PlayoutEnvelope<'a> {
-         items: Vec<&'a serde_json::value::RawValue>,
-     }
- 
--    let contents = tokio::fs::read_to_string(path).await.map_err(|e| {
--        if e.kind() == std::io::ErrorKind::NotFound {
--            PlayoutError::PlayoutJsonDoesNotExist
--        } else {
--            PlayoutError::PlayoutJsonLoadError(e.to_string())
--        }
--    })?;
--
--    let version_only: PlayoutVersion = serde_json::from_str(&contents)
++    #[derive(Deserialize)]
++    struct PlayoutVersion {
++        version: String,
++    }
++
++    #[derive(Deserialize)]
++    struct PlayoutEnvelope<'a> {
++        #[serde(borrow)]
++        items: Vec<&'a serde_json::value::RawValue>,
++    }
++
 +    let version_only: PlayoutVersion = serde_json::from_str(contents)
          .map_err(|e| PlayoutError::PlayoutJsonLoadError(e.to_string()))?;
  
@@ -1195,39 +1190,36 @@ index 89173fe2..6c548945 100644
  
      let mut items = Vec::with_capacity(envelope.items.len());
 diff --git a/examples/channel.json b/examples/channel.json
-index 2ad9f6ff..15fd6919 100644
 --- a/examples/channel.json
 +++ b/examples/channel.json
 @@ -1,5 +1,5 @@
  {
--  "version": "https://ersatztv.org/channel/version/0.1.3",
-+  "version": "https://ersatztv.org/channel/version/0.1.4",
+-  "version": "https://ersatztv.org/channel/version/0.1.5",
++  "version": "https://ersatztv.org/channel/version/0.1.6",
    "playout": {
      "folder": "./playout"
    },
 diff --git a/examples/channel_copy.json b/examples/channel_copy.json
-index ef765cc7..cd59b853 100644
 --- a/examples/channel_copy.json
 +++ b/examples/channel_copy.json
 @@ -1,5 +1,5 @@
  {
--  "version": "https://ersatztv.org/channel/version/0.1.3",
-+  "version": "https://ersatztv.org/channel/version/0.1.4",
+-  "version": "https://ersatztv.org/channel/version/0.1.5",
++  "version": "https://ersatztv.org/channel/version/0.1.6",
    "playout": {
      "folder": "./playout"
    },
 diff --git a/schema/channel_config.json b/schema/channel_config.json
-index 672c36d3..ac26b7b6 100644
 --- a/schema/channel_config.json
 +++ b/schema/channel_config.json
 @@ -1,5 +1,5 @@
  {
--  "$id": "https://ersatztv.org/channel/version/0.1.3",
-+  "$id": "https://ersatztv.org/channel/version/0.1.4",
+-  "$id": "https://ersatztv.org/channel/version/0.1.5",
++  "$id": "https://ersatztv.org/channel/version/0.1.6",
    "$schema": "https://json-schema.org/draft/2020-12/schema",
    "title": "ChannelConfig",
    "description": "Settings for one channel: where its playout is, which ffmpeg to use, and the output format.\nA relative path in any of these settings is relative to the file that sets it.",
-@@ -406,6 +406,11 @@
+@@ -437,6 +437,11 @@
            "description": "Folder of playout files, named `{start}_{finish}.json`.",
            "type": "string"
          },
@@ -1239,10 +1231,12 @@ index 672c36d3..ac26b7b6 100644
          "virtual_start": {
            "description": "Play the playout as if the channel started at this time instead of now. RFC 3339, e.g.\n`2026-04-13T00:24:21.527-05:00`. For testing.",
            "type": [
-@@ -419,6 +424,20 @@
+@@ -448,6 +453,20 @@
+       },
+       "required": [
          "folder"
-       ]
-     },
++      ]
++    },
 +    "PlayoutLayout": {
 +      "oneOf": [
 +        {
@@ -1255,13 +1249,10 @@ index 672c36d3..ac26b7b6 100644
 +          "type": "string",
 +          "const": "ersatzrs.playout-index.v1"
 +        }
-+      ]
-+    },
+       ]
+     },
      "ScaleOptions": {
-       "type": "object",
-       "properties": {
 diff --git a/schema/describe.json b/schema/describe.json
-index d4f221ba..b45aac03 100644
 --- a/schema/describe.json
 +++ b/schema/describe.json
 @@ -158,6 +158,13 @@

@@ -6694,6 +6694,29 @@ fn local_date_added_health_message(
     Some(text(language, TextKey::LocalDateAddedRepair).replace("{count}", &count.to_string()))
 }
 
+fn next_overlay_schema_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+) -> Option<String> {
+    if title != "Next Runtime Availability" {
+        return None;
+    }
+    let versions = message
+        .strip_prefix("Next configuration overlay needs a supported version URI (")?
+        .strip_suffix("); review copy settings before upgrading an older overlay")?;
+    // Retain the actual range in older persisted snapshots as well as the
+    // selected plain/indexed runtime's current diagnostic.
+    let range = match versions {
+        "0.1.0 or 0.1.1" => "0.1.0–0.1.1",
+        "0.1.0 through 0.1.4" => "0.1.0–0.1.4",
+        "0.1.0 through 0.1.5" => "0.1.0–0.1.5",
+        "0.1.0 through 0.1.6" => "0.1.0–0.1.6",
+        _ => return None,
+    };
+    Some(text(language, TextKey::NextOverlaySchema).replace("{versions}", range))
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -6714,6 +6737,10 @@ pub fn health_check_message_text(
         return localized;
     }
     if let Some(localized) = local_date_added_health_message(language, title, displayed_message) {
+        return localized;
+    }
+    if let Some(localized) = next_overlay_schema_health_message(language, title, displayed_message)
+    {
         return localized;
     }
     if let Some(localized) =
@@ -8054,13 +8081,14 @@ mod tests {
                     TextKey::NextOverlayIncomplete,
                 ),
             ] {
+                let expected = text(language, key).replace("{versions}", "0.1.0–0.1.1");
                 assert_eq!(
                     health_check_message_text(language, title, message, message),
-                    text(language, key)
+                    expected
                 );
                 assert_eq!(
                     health_check_message_text(language, title, "", message),
-                    text(language, key)
+                    expected
                 );
             }
             for key in [
@@ -8076,6 +8104,41 @@ mod tests {
                     assert_ne!(text(language, key), text(UiLanguage::English, key));
                 }
             }
+        }
+    }
+
+    #[test]
+    fn next_overlay_schema_ranges_keep_current_and_historical_diagnostics_localized() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for (wire_range, display_range) in [
+                ("0.1.0 or 0.1.1", "0.1.0–0.1.1"),
+                ("0.1.0 through 0.1.4", "0.1.0–0.1.4"),
+                ("0.1.0 through 0.1.5", "0.1.0–0.1.5"),
+                ("0.1.0 through 0.1.6", "0.1.0–0.1.6"),
+            ] {
+                let message = format!("Next configuration overlay needs a supported version URI ({wire_range}); review copy settings before upgrading an older overlay");
+                let expected =
+                    text(language, TextKey::NextOverlaySchema).replace("{versions}", display_range);
+                for (full, brief) in [(&*message, ""), ("", &*message)] {
+                    let localized = health_check_message_text(
+                        language,
+                        "Next Runtime Availability",
+                        full,
+                        brief,
+                    );
+                    assert_eq!(localized, expected);
+                    assert!(!localized.contains('{'));
+                    if language != UiLanguage::English {
+                        assert_ne!(localized, message);
+                    }
+                }
+            }
+            let future = "Next configuration overlay needs a supported version URI (0.1.0 through 0.1.99); review copy settings before upgrading an older overlay";
+            assert_eq!(
+                health_check_message_text(language, "Next Runtime Availability", future, ""),
+                future
+            );
         }
     }
 

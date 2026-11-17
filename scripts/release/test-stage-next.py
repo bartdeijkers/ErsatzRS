@@ -72,7 +72,10 @@ class AcceptedSourceTests(unittest.TestCase):
         self.assertEqual(module.PATCHED_DISTRIBUTION_VERSION, manifest['distribution_version'])
         self.assertEqual(module.PINNED_PATCHES,
                          [{key: item[key] for key in ('file', 'sha256')} for item in manifest['patches']])
+        self.assertRegex(module.PINNED_HASHES['LICENSE'], r'^[0-9a-f]{64}$')
         for rid in module.PLATFORMS:
+            self.assertEqual(manifest['runtime_packages'][rid]['payload_sha256']['LICENSE'],
+                             module.PINNED_HASHES['LICENSE'])
             suffix = '.zip' if rid == 'win-x64' else '.tar.gz'
             version, _, _ = module.distribution_for(rid)
             name = f'ersatzrs-next-{version}-{rid}{suffix}'

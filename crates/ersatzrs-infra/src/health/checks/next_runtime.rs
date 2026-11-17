@@ -58,14 +58,12 @@ impl HealthCheck for NextRuntimeHealthCheck {
                 "Next runtime is available",
             ));
         }
-        if crate::next_engine::manager::validate_published_sessions()
-            .await
-            .is_err()
-        {
+        let Ok(overlay_schema) = crate::next_engine::manager::validate_published_sessions().await
+        else {
             return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
-                "Next runtime session controls could not be verified; enabled Next channels require a qualified runtime with idle timeout and startup buffering support",
-                "Next runtime session controls are unavailable").with_link("/channels"));
-        }
+                    "Next runtime session controls could not be verified; enabled Next channels require a qualified runtime with idle timeout and startup buffering support",
+                    "Next runtime session controls are unavailable").with_link("/channels"));
+        };
         let mut invalid = 0;
         for (channel, _) in &channels {
             let profile =
@@ -83,25 +81,28 @@ impl HealthCheck for NextRuntimeHealthCheck {
         }
         let checked = tokio::time::timeout(
             OVERLAY_CHECK_TIMEOUT,
-            overlays_available(&self.overlays, &channels),
+            overlays_available(&self.overlays, &channels, overlay_schema),
         )
         .await;
         let (status, message) = match checked {
             Ok(Ok(())) => return Ok(HealthCheckResult::pass(self.title())),
             Ok(Err(OverlayCheckError::Invalid)) => (
                 HealthCheckStatus::Fail,
-                "Next configuration overlay is unavailable or invalid",
+                "Next configuration overlay is unavailable or invalid".to_owned(),
             ),
             Ok(Err(OverlayCheckError::Schema)) => (
                 HealthCheckStatus::Fail,
-                "Next configuration overlay needs a supported version URI (0.1.0 through 0.1.4); review copy settings before upgrading an older overlay",
+                format!("Next configuration overlay needs a supported version URI (0.1.0 through 0.1.{overlay_schema}); review copy settings before upgrading an older overlay"),
             ),
             Ok(Err(OverlayCheckError::Incomplete)) | Err(_) => (
                 HealthCheckStatus::Warning,
-                "Next configuration overlay validation is incomplete",
+                "Next configuration overlay validation is incomplete".to_owned(),
             ),
         };
-        Ok(HealthCheckResult::new(self.title(), status, message, message).with_link("/channels"))
+        Ok(
+            HealthCheckResult::new(self.title(), status, message.clone(), message)
+                .with_link("/channels"),
+        )
     }
 }
 
@@ -123,8 +124,9 @@ impl From<io::Error> for OverlayCheckError {
 async fn overlays_available(
     folder: &Path,
     channels: &[(i64, String)],
+    compatible: u32,
 ) -> std::result::Result<(), OverlayCheckError> {
-    check_overlay(&folder.join("default.json")).await?;
+    check_overlay(&folder.join("default.json"), compatible).await?;
     for (_, number) in channels {
         if number.is_empty()
             || number.matches('.').count() > 1
@@ -134,12 +136,12 @@ async fn overlays_available(
         {
             return Err(OverlayCheckError::Invalid);
         }
-        check_overlay(&folder.join(format!("{number}.json"))).await?;
+        check_overlay(&folder.join(format!("{number}.json")), compatible).await?;
     }
     Ok(())
 }
 
-async fn check_overlay(path: &Path) -> std::result::Result<(), OverlayCheckError> {
+async fn check_overlay(path: &Path, compatible: u32) -> std::result::Result<(), OverlayCheckError> {
     let metadata = match tokio::fs::metadata(path).await {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -178,7 +180,7 @@ async fn check_overlay(path: &Path) -> std::result::Result<(), OverlayCheckError
                 compatible.parse::<u32>().ok()?,
             ))
         });
-    if !version.is_some_and(|(breaking, compatible)| breaking == 1 && compatible <= 4) {
+    if !version.is_some_and(|(breaking, revision)| breaking == 1 && revision <= compatible) {
         return Err(OverlayCheckError::Schema);
     }
     Ok(())
@@ -255,25 +257,47 @@ mod tests {
     async fn overlays_require_the_pinned_runtimes_compatible_schema() {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("default.json");
-        for version in ["0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.01.01"] {
+        for version in [
+            "0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5", "0.1.6", "0.01.01",
+        ] {
             let value = serde_json::json!({
                 "version": format!("https://ersatztv.org/channel/version/{version}")
             });
             std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
-            check_overlay(&path).await.unwrap();
+            check_overlay(&path, 6).await.unwrap();
         }
+        // A plain worker validates schema0.1.5; the indexed extension must
+        // not be inferred for it from another worker's accepted package.
+        std::fs::write(
+            &path,
+            br#"{"version":"https://ersatztv.org/channel/version/0.1.5"}"#,
+        )
+        .unwrap();
+        check_overlay(&path, 5).await.unwrap();
+        std::fs::write(
+            &path,
+            br#"{"version":"https://ersatztv.org/channel/version/0.1.6"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            check_overlay(&path, 5).await,
+            Err(OverlayCheckError::Schema)
+        );
         for value in [
             serde_json::json!({}),
             serde_json::json!({"version": null}),
             serde_json::json!({"version": 1}),
             serde_json::json!({"version": "https://ersatztv.org/channel/version/0.0.5"}),
-            serde_json::json!({"version": "https://ersatztv.org/channel/version/0.1.5"}),
+            serde_json::json!({"version": "https://ersatztv.org/channel/version/0.1.7"}),
             serde_json::json!({"version": "https://ersatztv.org/channel/version/0.2.0"}),
             serde_json::json!({"version": "https://ersatztv.org/channel/version/1.1.0"}),
             serde_json::json!({"normalization": {"video": {"format": null}}}),
         ] {
             std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
-            assert_eq!(check_overlay(&path).await, Err(OverlayCheckError::Schema));
+            assert_eq!(
+                check_overlay(&path, 6).await,
+                Err(OverlayCheckError::Schema)
+            );
         }
     }
 
@@ -281,7 +305,7 @@ mod tests {
     async fn active_overlays_are_checked_without_inspecting_other_channels() {
         let folder = tempfile::tempdir().unwrap();
         let channels = vec![(42, "12.3".to_owned())];
-        overlays_available(&folder.path().join("missing"), &channels)
+        overlays_available(&folder.path().join("missing"), &channels, 6)
             .await
             .unwrap();
         std::fs::write(folder.path().join("42.json"), b"not JSON").unwrap();
@@ -296,14 +320,20 @@ mod tests {
             br#"{"version":"https://ersatztv.org/channel/version/0.1.0","normalization":{"video":{"width":1280}}}"#,
         )
         .unwrap();
-        overlays_available(folder.path(), &channels).await.unwrap();
+        overlays_available(folder.path(), &channels, 6)
+            .await
+            .unwrap();
         for invalid in [b"not JSON".as_slice(), b"[]", b"null"] {
             std::fs::write(folder.path().join("12.3.json"), invalid).unwrap();
-            assert!(overlays_available(folder.path(), &channels).await.is_err());
+            assert!(overlays_available(folder.path(), &channels, 6)
+                .await
+                .is_err());
         }
         std::fs::remove_file(folder.path().join("12.3.json")).unwrap();
         std::fs::write(folder.path().join("default.json"), b"not JSON").unwrap();
-        assert!(overlays_available(folder.path(), &channels).await.is_err());
+        assert!(overlays_available(folder.path(), &channels, 6)
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -360,17 +390,19 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("default.json");
         std::fs::create_dir(&path).unwrap();
-        assert!(check_overlay(&path).await.is_err());
+        assert!(check_overlay(&path, 6).await.is_err());
         std::fs::remove_dir(&path).unwrap();
         let file = std::fs::File::create(&path).unwrap();
         file.set_len(MAX_OVERLAY_BYTES + 1).unwrap();
         drop(file);
         assert_eq!(
-            check_overlay(&path).await,
+            check_overlay(&path, 6).await,
             Err(OverlayCheckError::Incomplete)
         );
         let channels = vec![(1, "../outside".to_owned())];
         std::fs::remove_file(&path).unwrap();
-        assert!(overlays_available(folder.path(), &channels).await.is_err());
+        assert!(overlays_available(folder.path(), &channels, 6)
+            .await
+            .is_err());
     }
 }

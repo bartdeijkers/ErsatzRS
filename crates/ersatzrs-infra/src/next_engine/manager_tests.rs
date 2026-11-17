@@ -979,11 +979,12 @@ async fn row296_health_rejects_a_cached_legacy_index_for_modern_cache_sessions()
             split_bundle: false,
             indexed_reader: Some(reader),
         };
-        assert_eq!(
-            validate_selected_sessions(&selected).await.is_ok(),
-            revision == 6
-        );
+        let validated = validate_selected_sessions(&selected).await;
+        assert_eq!(validated.is_ok(), revision == 6);
+        if let Ok(compatible) = validated {
+            assert_eq!(compatible, 6);
+        }
         selected.indexed_reader = None;
-        assert!(validate_selected_sessions(&selected).await.is_ok());
+        assert_eq!(validate_selected_sessions(&selected).await, Ok(5));
     }
 }

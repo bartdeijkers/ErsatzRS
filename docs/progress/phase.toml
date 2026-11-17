@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Local-final/playback and worker/browser gates Complete; qualify four application platforms'
+current_focus = 'Qualify four application packages from the private runtime-pin proposal'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -44,8 +44,15 @@ Integrated local-final and current-candidate Linux Native/Next playback gates
 are now Complete:8714 composed workspace cases, strict lint/policy, canonical
 doctest component and93/86 TSDuck checks. Original environment/fixture failures
 remain recorded; the HDR migration fixture keeps its own unchanged assertions.
-Next close four application packages/platform, full CI and ordered delivery.
-All unchanged acceptance remains mandatory; no ledger disposition/pin advances. Direct GitHub recheck
+The isolated application branch now proposes the qualified6c runtime pin for
+four application-package tests; accepted main/operator pins remain unchanged.
+Health overlay compatibility and localized ranges pass48 focused cases across
+infra/web before freezing that application source. The proposed runtime release is absent
+(HTTP404); public acquisition requires separately authorized publication or an
+explicit maintainer decision before adoption. Continue independent private
+application qualification. Next close four application packages/platform,
+full CI and ordered delivery. All unchanged acceptance remains mandatory;
+no ledger disposition advances. Direct GitHub recheck
 still ends at row296; no new moving endpoint is selected.
 
 UCU-16 rows286–289 are Complete within their unchanged required boundary.

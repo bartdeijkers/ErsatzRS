@@ -1,11 +1,15 @@
 import { expect, Locator, Page, test } from '@playwright/test';
 import { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { waitForHydration } from './hydration';
 
 const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
+const applicationDataPath = process.env.E2E_APP_DATA_DIR ?? process.env.ERSATZRS_APP_DATA_DIR;
 // An independent expectation, never inferred from Health or worker describe.
-// The accepted C5 distribution lacks the modern session/cache contract.
-const modernRuntime = process.env.ERSATZRS_E2E_NEXT_SESSION_CACHE === 'true';
+// The application candidate pins the modern contract. An explicit false value
+// retains the actual C5 compatibility/refusal control without inferring capability.
+const modernRuntime = (process.env.ERSATZRS_E2E_NEXT_SESSION_CACHE ?? 'true') === 'true';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -135,6 +139,11 @@ for (const javaScriptEnabled of [true, false]) {
       const database = new DatabaseSync(databasePath!);
       database.exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON;');
       const id = 7_296_100;
+      if (modernRuntime) expect(applicationDataPath, 'Requires the disposable application-data root.').toBeTruthy();
+      const overlayFolder = applicationDataPath ? join(applicationDataPath, 'next', 'channel-config-overlays') : undefined;
+      const overlay = overlayFolder ? join(overlayFolder, `${id}.json`) : undefined;
+      const originalOverlay = overlay && existsSync(overlay) ? readFileSync(overlay) : undefined;
+      let overlayTouched = false;
       const otherEnabled = database.prepare('SELECT "Id" FROM "Channel" WHERE "StreamingEngine"=1 AND "IsEnabled"=1 AND "Id"<>?')
         .all(id) as { Id: number }[];
       const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 390, height: 844 } });
@@ -144,6 +153,11 @@ for (const javaScriptEnabled of [true, false]) {
       };
       try {
         clean();
+        if (modernRuntime) {
+          mkdirSync(overlayFolder!, { recursive: true });
+          rmSync(overlay!, { force: true });
+          overlayTouched = true;
+        }
         // The host seeds another enabled Next channel. Isolate this proof's
         // channel, then restore those exact choices before leaving the fixture.
         for (const channel of otherEnabled) {
@@ -175,6 +189,20 @@ for (const javaScriptEnabled of [true, false]) {
           if (!modernRuntime) await expect(row).toContainText(unavailable);
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true);
           await row.screenshot({ path: testInfo.outputPath(`next-session-${language}.png`) });
+          if (modernRuntime) {
+            writeFileSync(overlay!, JSON.stringify({ version: 'https://ersatztv.org/channel/version/0.1.7' }));
+            await refresh(page, javaScriptEnabled, button);
+            await visibleStatus(row, failStatus);
+            await expect(row).toContainText(language === 'nl' ? 'ondersteunde versie-URI' : 'supported version URI');
+            await expect(row).toContainText('0.1.0–0.1.6');
+            expect(stored(database, 'Next Runtime Availability')?.status).toBe('Fail');
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true);
+            await row.screenshot({ path: testInfo.outputPath(`next-overlay-${language}.png`) });
+            writeFileSync(overlay!, JSON.stringify({ version: 'https://ersatztv.org/channel/version/0.1.6' }));
+            await refresh(page, javaScriptEnabled, button);
+            await visibleStatus(row, passStatus);
+            expect(stored(database, 'Next Runtime Availability')?.status).toBe('Pass');
+          }
           // Disabling an unsupported channel is a real recovery action, not
           // evidence that the older executable gained modern capabilities.
           database.prepare('UPDATE "Channel" SET "IsEnabled"=0 WHERE "Id"=?').run(id);
@@ -191,6 +219,10 @@ for (const javaScriptEnabled of [true, false]) {
         expect(errors).toEqual([]);
       } finally {
         clean();
+        if (overlayTouched) {
+          if (originalOverlay) writeFileSync(overlay!, originalOverlay);
+          else rmSync(overlay!, { force: true });
+        }
         for (const channel of otherEnabled) {
           database.prepare('UPDATE "Channel" SET "IsEnabled"=1 WHERE "Id"=?').run(channel.Id);
         }

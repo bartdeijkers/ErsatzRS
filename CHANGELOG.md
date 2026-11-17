@@ -78,9 +78,8 @@ release section when tagging a release.
 
 ### Changed
 
-- Prepare a separate source recipe for the session/cache-capable Next worker,
-  retaining indexed playout and existing runtime corrections. Production
-  runtime selection awaits qualification.
+- Prepare the qualified session/cache-capable Next runtime for application
+  qualification, preserving indexed playout and existing caption/audio safeguards.
 
 - Classic and block builds reuse smart-collection results within each build,
   including playlist children. Artist searches load video memberships together.
@@ -307,6 +306,10 @@ release section when tagging a release.
   logs showed US dates and playouts ISO/UTC times.
 
 ### Fixed
+
+- Health checks accept Next overlay schemas supported by the selected plain or
+  indexed runtime, reject newer schemas, and translate the supported range in
+  all admin languages, including older saved diagnostics.
 
 - Preserve freshly probed framerate, aspect ratio and codec details when
   mapping Jellyfin stream choices for Next playback; provider metadata must

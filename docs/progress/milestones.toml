@@ -42470,6 +42470,53 @@ dispositions/delivery. Worker-only P1/P2/P3 and this local proof do not replace
 those application gates. Managed runtime adoption, accepted distributions/pin,
 row dispositions, operator state and publication remain unchanged.
 
+2026-11-17 P4 application source proposal (acceptance remains open):
+The isolated branch proposes the already-qualified6c worker source/patch and
+four archive/payload pins for actual bundled application qualification. All13
+corrections remain; compiled worker inputs match the separately qualified
+recipe. The archived C5 recipe and both deferred macOS package identities are
+preserved. This is not accepted main/operator adoption or a ledger advancement.
+The existing unmodified strict staging function verifies all four real source
+archives, payloads, toolchain, licenses and companions. A later human-readable
+retirement-note correction changes no staging or compiled input. Stage-time
+and current manifests are retained separately. Existing package tests retain
+same-length tamper rejection and actual install/relocation controls.
+Application Health still capped overlays at0.1.4 although the qualified plain
+session contract accepts0.1.5 and indexed accepts0.1.6. Its schema diagnostic
+also missed the translation router. Derive the ceiling from the existing
+validated selected-runtime contract; retain invalid, future, non-file, size,
+timeout and unrelated-channel guards. Current and historical ranges route
+through all nine language files. All48 focused infra/web cases now pass,
+including selected-runtime qualification and current/historical diagnostics.
+The actual matched-package browser verification of
+invalid0.1.7 to valid0.1.6 recovery remains in P4, not claimed by unit tests.
+Canonical current preparation evidence:
+tmp/evidence/ucu16-tail-9c6b3dea/row296-app-platform/manifest-proposal.json,
+strict-staging.json, manager-tests.log, manager-tests-recovery.log and
+overlay-health-tests.log. The29 staging and10 source-review cases pass; nine
+unchanged source-package recipe controls remain valid. The original manager
+run has19 passes and two fixture/metadata failures; the two corrected cases
+pass separately. The changed Health manager case also passes in the final48.
+No original failure is hidden and no worker source/runtime proof is replaced.
+The initial affected Clippy run finds one manual-let-else style issue. Its
+mechanical correction preserves the tested return/error paths; reuse the48
+behavioral cases. Retain the original lint result beside the final result.
+Final strict infra/web all-target Clippy passes, with no new lint exemptions.
+Formatting, architecture, hydration (31 existing suppressions), progress and
+staged diff/allow-policy checks pass. This closes only the P4 source-preparation
+checkpoint. Its machine-readable scope and case list are retained in
+row296-app-platform/source-checkpoint.json under the same evidence root.
+
+External prerequisite: direct release lookup at2026-11-17T06:49:59Z returns
+HTTP404 for next-0.2.5-6c9e0cf-ersatzrs.1. No public/default automatic acquisition
+proof is possible for that proposed release yet. Private bundled qualification
+can continue independently. Closure requires the exact qualified archives at
+the pinned release URLs and verified anonymous acquisition, or an explicit
+maintainer scope decision. Publication remains excluded and requires separate
+authorization; do not merge/adopt a default pin with unavailable downloads.
+The exact response is retained in runtime-release-observation.json in the same
+evidence directory. No unchanged negative acquisition trial needs repeating.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
