@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Public Next runtime acquisition Complete; qualify integrated UCU-16 candidate in full CI'
+current_focus = 'UCU-16 PR165/full CI started; correct commit metadata and resolve chrono maintenance advisory policy'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -142,6 +142,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+PR165 candidate d07cd5ea has eligible full CI44128505670 in progress.
+Its small CI and full commit-lint job expose unsupported checkpoint scopes;
+local message-only correction passes unchanged commitlint and preserves all trees.
+Cargo deny also exposes informational unmaintained chrono RUSTSEC-2026-0543;
+no patched version exists. An exact-ID temporary exception is prepared, not
+applied, pending the maintainer decision. Do not waive this current-policy gate
+or begin a project-wide migration without that decision. Preserve original
+artifacts/producers and failed run; qualify the corrected candidate fully.
 Next bounded UCU-16 work: run eligible full CI on the coherent integrated
 application candidate, then complete ordered row dispositions and delivery.
 Approved29-asset publication and actual anonymous Linux/Windows cold/cache

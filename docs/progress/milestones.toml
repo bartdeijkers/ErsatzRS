@@ -42634,6 +42634,36 @@ draft-verification.json, public-verification.json, linux-managed/receipt.json
 and windows-managed/receipt.json. Full integrated CI and ordered delivery remain;
 no other acceptance or platform/hardware deferral is changed.
 
+2026-11-17 integrated candidate CI checkpoint and concrete blockers:
+Application source checkpointd07cd5ea is pushed as PR165; eligible full run
+44128505670 and PR run44128511807 test that exact candidate. The completed
+small run44128454621 fails commit lint and the current dependency policy;
+it is not accepted as full proof. Preserve all original job logs in
+row296-runtime-publication/ci/. The full run also reproduces commit lint failure.
+Fifteen earlier checkpoint subjects use scopes outside the existing allowlist;
+one body line exceeds100 characters. Correct only commit metadata, preserving
+every tree and retaining original history in a verified Git bundle. The complete
+corrected history passes the unchanged local commitlint configuration. Existing
+application/worker artifacts retain their actual original producer identities;
+the correction never relabels them or changes compiled inputs. Source/tree and
+old/new commit maps are in scope-correction.json and body-correction.json.
+This demonstrated broken candidate may be superseded by its corrective checkpoint
+under CONTRIBUTING; no queued/slow run alone justifies branch advancement.
+Current RustSec now reports RUSTSEC-2026-0543: informational unmaintained chrono,
+all versions, no patched release. The direct RustSec record and upstream
+maintainer confirmation are checked; this is a maintenance advisory, not a
+claimed concrete vulnerability. Actual graph includes workspace and SQLx
+consumers;539 Rust files reference chrono. Original passing dependency evidence
+retains its tested advisory-database scope and cannot close this newly observed
+current-policy failure. No dependency check is weakened and no chrono migration
+starts. A reviewable exact-ID temporary exception is prepared in
+ci/proposed-deny.toml but is not applied. External decision prerequisite:
+maintainer authorizes that named temporary exception with visible migration debt,
+or requests a separately scoped complete migration; otherwise Cargo deny remains
+open. Pending question records that approval boundary. Other policy checks and
+all unchanged platform/functional gates remain mandatory. The seven ordered
+row-review preparations are retained without ledger or baseline mutation.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
