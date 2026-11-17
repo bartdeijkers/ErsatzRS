@@ -959,10 +959,11 @@ jobs:
       - name: Stage Next and validated FFmpeg runtime
         env:
           GH_TOKEN: ${{ github.token }}
+          NEXT_CASE_SET: ${{ inputs.next_case_set || 'all' }}
         run: |
           # Retain every reviewed archive for inventory and real acquisition/health tests.
           python3 - <<'PYCODE' | tee ci-artifacts/next-engine/next-runtime.log
-          import importlib.util, os, pathlib, shutil
+          import hashlib, importlib.util, os, pathlib, shutil
           spec = importlib.util.spec_from_file_location('stage_next', 'scripts/release/stage-next.py')
           stage = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(stage)
@@ -980,6 +981,26 @@ jobs:
               env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_ARCHIVE={packages / asset}\n')
               env.write(f'ERSATZRS_NEXT_TEST_PACKAGE_MANIFEST={manifest}\n')
               env.write(f'NEXT_CANDIDATE_PACKAGES={packages}\n')
+          if os.environ['NEXT_CASE_SET'] == 'all':
+              # The row291 refusal fixture needs the original 0.1.4 session contract.
+              version = '0.2.5-c5cb065-ersatzrs.1'
+              root = f'ersatzrs-next-{version}-linux-x64'
+              url = f'https://github.com/{stage.DISTRIBUTION_REPOSITORY}/releases/download/next-{version}/{root}.tar.gz'
+              archive = stage.download(url, stage.MAX_ARCHIVE)
+              archive_hash = '244933ffd4120156f5882519d0d1b75e6fb92d8bef803cb22735ac71647dcf6a'
+              if hashlib.sha256(archive).hexdigest() != archive_hash:
+                  raise ValueError('Legacy Next fixture archive SHA-256 mismatch')
+              binary = stage.read_binaries(archive, 'linux-x64', root)['ersatztv-channel']
+              binary_hash = 'e5e5a160f980b33b7b57b2b3f539ef2323a25cffbc5ed6c1e7b5f789554e2823'
+              if hashlib.sha256(binary).hexdigest() != binary_hash:
+                  raise ValueError('Legacy Next fixture executable SHA-256 mismatch')
+              legacy = pathlib.Path(os.environ['TMPDIR']) / 'next-legacy' / 'ersatztv-channel'
+              legacy.parent.mkdir()
+              legacy.write_bytes(binary)
+              legacy.chmod(0o755)
+              with open(os.environ['GITHUB_ENV'], 'a') as env:
+                  env.write(f'ERSATZRS_NEXT_TEST_LEGACY_BIN={legacy}\n')
+              print(f'Staged legacy Next {version} for the row291 refusal fixture: sha256:{binary_hash}')
           PYCODE
           cp "$TMPDIR/next/origin.json" ci-artifacts/next-engine/next-origin.json
           sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/next-engine/next-sha256.txt

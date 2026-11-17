@@ -1435,9 +1435,9 @@ struct Row291Runtime<'a> {
 }
 
 #[tokio::test]
-#[ignore = "requires the exact accepted private0.1.4 Next worker; isolated temporary output"]
+#[ignore = "requires the accepted 0.1.4 worker in ERSATZRS_NEXT_TEST_LEGACY_BIN"]
 async fn real_next_row291_refuses_the_private_index_only_session_contract() {
-    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_LEGACY_BIN");
     let root = tempfile::tempdir().unwrap();
     let output = root.path().join("output");
     std::fs::create_dir(&output).unwrap();

@@ -42730,8 +42730,17 @@ All three cases pass with the fixed 6c9e0cf worker and FFmpeg 2.0.10
 (nextest 3c19abfb-273d-4d82-87cb-d2248ce0843c): disabled passthrough,
 integer copy and handoff, and rational mirror with burned subtitles. The
 original failure and focused Next proof are retained under
-row296-runtime-publication/ci/next-gate-recovery/cadence/. The remaining
-Next engine CI cases and exact integrated full CI stay open.
+row296-runtime-publication/ci/next-gate-recovery/cadence/.
+
+The row291 refusal gate was also sent the current 0.1.6 worker although it
+asserts rejection of the actual 0.1.4 contract before output mutation. The
+dedicated CI input stages the previous C5 Linux release, verifying its archive
+and executable hashes. The unchanged refusal and marker checks pass against it
+(nextest 56174210-9147-493c-b422-08b7335ed359). The new CI staging block passes
+against the retained archive and the live public asset. Actionlint passes with
+the existing documented queue-key exclusion. Retain the original wrong-worker
+run and the focused receipts under row296-runtime-publication/ci/next-gate-recovery/.
+Remaining Next cases and exact integrated full CI stay open.
 
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
