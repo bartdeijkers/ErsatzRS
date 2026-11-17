@@ -36,8 +36,11 @@ source proposal, not main integration, publication or managed/operator adoption.
 Health derives the overlay-schema ceiling from the selected runtime's existing
 validated session contract:0.1.5 for plain and0.1.6 for indexed. It retains
 invalid/future-schema refusal and localizes current and historical supported
-ranges in all nine cultures. Application-package/browser verification remains
-in the continuation milestone; backend checks alone do not establish it.
+ranges in all nine cultures. Four private application-package/platform proofs
+and affected matched-browser verification are now Complete at sourceece7813c.
+The continuation milestone retains exact artifact identities, source-scoped
+evidence reuse, original failures and required public-acquisition/full-CI/
+ordered-delivery gates. No public or main/operator adoption is inferred.
 
 ## Context
 
