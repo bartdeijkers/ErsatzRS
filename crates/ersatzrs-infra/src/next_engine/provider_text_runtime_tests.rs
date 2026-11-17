@@ -235,6 +235,16 @@ pub(super) async fn provider_text_pool(
         .execute(&pool)
         .await
         .unwrap();
+    for sql in [
+        r#"UPDATE "MediaFile" SET "Path"='server-only/bilingual.mkv' WHERE "Id"=1"#,
+        r#"INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Title","Default","Forced","MediaVersionId")
+        VALUES (4,'subrip',3,'eng',0,'English',1,0,100)"#,
+        r#"INSERT INTO "Subtitle" ("MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","DateAdded","DateUpdated")
+        VALUES (20,0,'English',4,'subrip',1,0,0,'eng',0,'2026-09-23','2026-09-23')"#,
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+    // Seed Jellyfin's mapping after all streams in the bilingual fixture exist.
     crate::next_engine::source::tests::seed_provider(&pool, kind).await;
     if kind == RemoteMediaSourceKind::Plex {
         sqlx::query(r#"INSERT INTO "PlexMovie" ("Id") VALUES (10)"#)
@@ -250,15 +260,6 @@ pub(super) async fn provider_text_pool(
     .fetch_one(&pool)
     .await
     .unwrap());
-    for sql in [
-        r#"UPDATE "MediaFile" SET "Path"='server-only/bilingual.mkv' WHERE "Id"=1"#,
-        r#"INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Title","Default","Forced","MediaVersionId")
-        VALUES (4,'subrip',3,'eng',0,'English',1,0,100)"#,
-        r#"INSERT INTO "Subtitle" ("MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","DateAdded","DateUpdated")
-        VALUES (20,0,'English',4,'subrip',1,0,0,'eng',0,'2026-09-23','2026-09-23')"#,
-    ] {
-        sqlx::query(sql).execute(&pool).await.unwrap();
-    }
     (pool, locker)
 }
 

@@ -42759,8 +42759,19 @@ interval, so the worker-owned one-second idle timeout applies to genuine
 viewer absence. Both real Next tests pass (nextest
 c67a13bd-0b07-4b4b-bba5-5717b902f424), including libass font selection,
 preserved resume position and decoded audio/captions. Retain the two-case
-receipt under next-gate-recovery/font-and-resume/. Four provider subtitle
-cases and exact integrated full CI stay open.
+receipt under next-gate-recovery/font-and-resume/.
+
+The provider fixture seeded Jellyfin's physical map before adding the final
+English stream of its bilingual source. The production projector correctly
+refused that incomplete mapping. The existing provider helper now runs after
+all fixture streams exist. The attempted duplicate-map insert and its
+constraint failures are retained. All four real-provider cases pass after
+the fixture order correction (nextest b774a215-7309-4d5d-9cc7-92cef02b9826):
+provider fallback/handoff, authenticated embedded and external text after seek,
+and row292 scanned-away captions with decoded programme and selected audio
+preserved. The exact runtime inputs and original assertions are retained under
+next-gate-recovery/jellyfin-final-streams/. The 16 earlier Next CI failures
+have passing local recovery evidence. Exact integrated full CI remains due.
 
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
