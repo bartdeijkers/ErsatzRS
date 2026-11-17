@@ -42225,6 +42225,53 @@ Do not rerun these completed software/policy components without relevant source,
 compiled-input or advisory changes. Current native ARM/macOS/hardware deferrals
 retain their explicit scopes.
 
+2026-11-17 R296-C retained Linux runtime controls Complete within this scope:
+The finite21 infra and three public-route tests pass with the same qualified
+FFmpeg9 tools and exact6c plus13-patch worker c7adddb8. The21 tests cover the
+ten retained compatibility controls, RTSP EOF/handoff, copied-caption original
+outpoint, still/animated image seek/repeat/handoff and indexed Refresh continuity.
+Reuse the16 initially passing controls. Four older fixtures lacked the current
+caption listener; their owned listeners now start and join explicitly. The fifth
+expected a local ordinary caption path. It now reads the actual live session
+relay before revocation and keeps the exact complete-text/cue/AV/outpoint checks.
+All five corrected controls pass; the affected HLS/provider/preview control is
+also rerun after the production correction below. Original failures remain.
+Both unchanged public M2TS Burn controls initially fail whole-TS equality. Their
+actual commands use GOP48 and an extra SAR filter instead of the retained GOP50
+reference. This demonstrates a row295 integration regression: preparing logical
+Jellyfin choices overwrites freshly probed physical metadata with incomplete
+provider metadata, losing framerate/SAR/codec observations. Keep an existing
+physical source hint and synthesize the persisted hint only when absent; logical
+selection, physical mapping and final source/map authority fences remain intact.
+The new three-layout regression and existing selection/probe controls compose
+51 passing tests. Three initial environment failures attempted the read-only
+default selector folder; only those three rerun with fresh owned data/state/temp
+namespaces, and pass. No operator files are modified. The third public control
+also had an obsolete local-caption expectation; it now verifies the actual
+session relay's complete response equals the independently verified sidecar,
+retaining original AV/caption interval, payload/clock and cleanup assertions.
+After correction all three public controls pass. The two original seek2164/
+seek2143 Burn oracles keep their encoder/profile, literal frame/caption boundaries
+and strict comparisons unchanged: all six full baseline/debug/tap TS reconstructions
+equal public output byte-for-byte. Both grants return410 after stop; work and
+capacity are zero and retained storage contains only its budget lock. The grouped
+one-shot Off/Convert/Burn delivery keeps its coded payload/alternate-audio,
+caption timing, single-consumer and joined cleanup checks. The fixed argv unit
+control also passes. No clock tolerance, profile change or weakened assertion.
+Strict affected infra/web all-target Clippy and formatting pass. Independent OS
+inventory finds no owned worker/FFmpeg/ffprobe/MediaMTX process. Exact inputs,
+source/test and raw-evidence hashes, original negatives and composed reuse are
+indexed by row296-runtime-checkpoint.json in the existing continuation proof root.
+The worker recipe/source/binary and completed425 source,662 software, policy and
+cache components are unchanged and retained. This closes the named positive
+Linux runtime proof, not source-package/native-Windows/ARM or full-window acceptance.
+Next bounded item: four required source packages/companions with native Linux/
+Windows and ARM emulation, including MPP companion/no-device/channel fallback.
+Every unchanged integrated application, matched SSR/WASM/browser, transport/
+playback/final/CI and ordered-delivery gate remains mandatory. Original private
+patch retirement conditions and native ARM/macOS/hardware deferrals remain.
+No accepted runtime, production pin, ledger disposition or remote delivery changes.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.

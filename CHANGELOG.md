@@ -308,6 +308,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve freshly probed framerate, aspect ratio and codec details when
+  mapping Jellyfin stream choices for Next playback; provider metadata must
+  not replace observations from the retained source.
+
 - Keep Next watermark-cache paths out of troubleshooting diagnostics, including
   directory names containing spaces.
 

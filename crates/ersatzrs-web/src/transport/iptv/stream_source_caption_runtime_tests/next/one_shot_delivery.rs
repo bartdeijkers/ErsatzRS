@@ -97,16 +97,32 @@ fn selected(
         assert_eq!(*out_point_ms, Some(9200));
         let subtitle = tracks.subtitle.as_ref().unwrap();
         assert_eq!(subtitle.stream_index, Some(0));
-        let Some(Source::Local {
-            path,
-            in_point_ms: seek,
-            out_point_ms: end,
-            ..
-        }) = &subtitle.source
-        else {
-            panic!("prepared captions must use the independently verified sidecar");
+        let (seek, end) = match subtitle.source.as_ref().unwrap() {
+            Source::Local {
+                path,
+                in_point_ms,
+                out_point_ms,
+                ..
+            } => {
+                assert_eq!(Path::new(path), sidecar);
+                (in_point_ms, out_point_ms)
+            }
+            Source::Http {
+                uri,
+                is_live: Some(false),
+                reconnect: Some(false),
+                in_point_ms,
+                out_point_ms,
+                ..
+            } => {
+                let uri = reqwest::Url::parse(uri).unwrap();
+                assert_eq!(uri.scheme(), "http");
+                assert_eq!(uri.host_str(), Some("127.0.0.1"));
+                assert!(uri.path().starts_with("/ffmpeg/next-caption/"));
+                (in_point_ms, out_point_ms)
+            }
+            _ => panic!("prepared captions require the verified sidecar or its session relay"),
         };
-        assert_eq!(Path::new(path), sidecar);
         assert_eq!(seek, in_point_ms);
         assert_eq!(end, out_point_ms);
         return Some((seek.unwrap(), end.unwrap()));
@@ -156,6 +172,25 @@ struct Delivery {
 }
 
 impl Delivery {
+    async fn verify_relay_caption(&self, uri: String) {
+        let text = self
+            .client
+            .get(uri)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(
+            text,
+            tokio::fs::read_to_string(&self.sidecar).await.unwrap(),
+            "the actual live session relay must serve the independently verified complete sidecar"
+        );
+    }
+
     async fn check(self) {
         let cues = if self.policy.convert() {
             timeout(
@@ -181,7 +216,18 @@ impl Delivery {
             &self.sidecar,
             !matches!(self.policy, Policy::Off),
         );
+        let caption_uri = callbacks[0]
+            .tracks
+            .as_ref()
+            .and_then(|tracks| tracks.subtitle.as_ref())
+            .and_then(|track| match &track.source {
+                Some(Source::Http { uri, .. }) => Some(uri.clone()),
+                _ => None,
+            });
         drop(callbacks);
+        if let Some(uri) = caption_uri {
+            self.verify_relay_caption(uri).await;
+        }
         let bytes = tokio::fs::read(self.root.join("captured.ts"))
             .await
             .unwrap();

@@ -456,6 +456,7 @@ async fn real_next_copy_profiles_preserve_audio_and_burn_subtitle_fallback() {
             locker,
             root.path().join("playout"),
         ));
+        let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
         assert_next_session(
             &host,
             host::NextStart {
@@ -473,6 +474,7 @@ async fn real_next_copy_profiles_preserve_audio_and_burn_subtitle_fallback() {
             false,
         )
         .await;
+        callbacks.stop().await;
     }
 }
 
@@ -512,6 +514,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
     for muted in [false, true] {
         let (pool, locker) = prepare_schedule(&clip, muted, &profile.profile).await;
         let host = std::sync::Arc::new(host::NextHost::new(pool, locker, playout.clone()));
+        let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
         let request = host::NextStart {
             channel_id: 1,
             preview: false,
@@ -525,6 +528,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
             deadline: Instant::now() + Duration::from_secs(30),
         };
         assert_next_session(&host, request, muted).await;
+        callbacks.stop().await;
     }
     assert_media_server_sessions(
         &binary,
@@ -545,6 +549,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
         .await
         .unwrap();
     let host = std::sync::Arc::new(host::NextHost::new(pool.clone(), locker, playout));
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     assert_preview_sessions(
         &host,
         host::NextStart {
@@ -570,6 +575,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
             .audio_format,
         FFmpegProfileAudioFormat::Ac3
     );
+    callbacks.stop().await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1162,6 +1168,7 @@ async fn fixture_child_javascript_audio() {
         locker,
         root.path().join("playout"),
     ));
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     assert_next_session(
         &host,
         host::NextStart {
@@ -1179,6 +1186,7 @@ async fn fixture_child_javascript_audio() {
         false,
     )
     .await;
+    callbacks.stop().await;
 }
 
 #[path = "image_subtitle_runtime_tests.rs"]
@@ -1252,6 +1260,7 @@ async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tra
         host::NextHost::new(pool, locker, root.path().join("playout"))
             .with_config_overlays(overlays.clone()),
     );
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     let request = host::NextStart {
         channel_id: 1,
         preview: false,
@@ -1276,6 +1285,7 @@ async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tra
         request.deadline = Instant::now() + Duration::from_secs(30);
         assert_overlay_session(&host, request, expected_width).await;
     }
+    callbacks.stop().await;
 
     // The engine owns parsing/merging; malformed JSON must fail before readiness
     // and the adapter must return only after its managed child has been reaped.

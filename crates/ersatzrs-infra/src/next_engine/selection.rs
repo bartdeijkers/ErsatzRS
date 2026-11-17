@@ -442,10 +442,14 @@ async fn prepare_source_indexes(
         );
     }
     if indexes.is_some() {
-        let hint = super::probe_hint::persisted(pool, version).await?;
         match source {
             wire::Source::Local { probe_hint, .. } | wire::Source::Http { probe_hint, .. } => {
-                *probe_hint = hint;
+                // Resolved file hints already use physical indexes. A retained
+                // source carries fresher timing/SAR/codec observations than the
+                // provider catalog; mapping choices must not replace those.
+                if probe_hint.is_none() {
+                    *probe_hint = super::probe_hint::persisted(pool, version).await?;
+                }
             }
             _ => {
                 return Err(invalid(

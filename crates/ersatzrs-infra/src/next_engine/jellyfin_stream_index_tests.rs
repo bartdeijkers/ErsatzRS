@@ -150,6 +150,65 @@ async fn row295_next_pins_route_physical_tracks_and_hints_for_all_external_posit
 }
 
 #[tokio::test]
+async fn mapped_choices_preserve_fresh_physical_source_observations() {
+    for logical in [[2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [0, 2, 3, 5, 6]] {
+        let pool = fixture_pool().await;
+        qualify(&pool, logical).await;
+        let mut hint = crate::next_engine::probe_hint::persisted(&pool, 100)
+            .await
+            .unwrap()
+            .unwrap();
+        hint.video[0].frame_rate = Some("25/1".into());
+        hint.video[0].sample_aspect_ratio = Some("1:1".into());
+        hint.video[0].profile = Some("High".into());
+        hint.duration_ms = Some(20_559);
+        let expected = serde_json::to_value(&hint).unwrap();
+        let source = wire::Source::Http {
+            uri: "http://127.0.0.1:1/ffmpeg/next-source/retained-fixture".into(),
+            probe_hint: Some(hint),
+            is_live: Some(false),
+            headers: Vec::new(),
+            user_agent: None,
+            keep_alive: Some(true),
+            reconnect: Some(false),
+            reconnect_delay_max: None,
+            timeout_us: Some(5_000_000),
+            in_point_ms: None,
+            out_point_ms: None,
+        };
+        let mut pinned = item();
+        pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+            media_version_id: 100,
+            video_stream_index: logical[0],
+            audio_stream_index: Some(logical[2]),
+            subtitle_stream_index: None,
+        });
+        let projected = project_deferred_item(
+            &pool,
+            &Channel::default(),
+            &pinned,
+            100,
+            source,
+            &resolution(),
+        )
+        .await
+        .unwrap();
+        let tracks = projected.item.tracks.as_ref().unwrap();
+        for (track, index) in [
+            (tracks.video.as_ref().unwrap(), 0),
+            (tracks.audio.as_ref().unwrap(), 2),
+        ] {
+            assert_eq!(track.stream_index, Some(index));
+            let wire::Source::Http { probe_hint, .. } = track.source.as_ref().unwrap() else {
+                panic!("retained HTTP source must be preserved");
+            };
+            assert_eq!(serde_json::to_value(probe_hint).unwrap(), expected);
+        }
+        pool.close().await;
+    }
+}
+
+#[tokio::test]
 async fn row295_next_refuses_pending_missing_and_changed_mapping_authority() {
     let pool = fixture_pool().await;
     qualify(&pool, [2, 3, 4, 5, 6]).await;
