@@ -304,6 +304,10 @@ async fn prepare_inner(
         FsPath::new(&runtime.ffmpeg.path),
         FsPath::new(&runtime.ffprobe.path),
     )?;
+    config::configure_shared_cache(
+        &mut configuration,
+        &ersatzrs_infra::file_system_layout::next_cache_folder(),
+    )?;
     configuration.playout.virtual_start = Some(selected.playback_start);
     configuration.ffmpeg.reports_folder = Some(
         working
@@ -604,6 +608,10 @@ async fn prepare_channel_window(
         manifest.path(),
         FsPath::new(&runtime.ffmpeg.path),
         FsPath::new(&runtime.ffprobe.path),
+    )?;
+    config::configure_shared_cache(
+        &mut configuration,
+        &ersatzrs_infra::file_system_layout::next_cache_folder(),
     )?;
     configuration.normalization.video.frame_rate = config::troubleshooting_channel_frame_rate(
         &state.pool,

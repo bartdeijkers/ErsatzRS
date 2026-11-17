@@ -16,6 +16,44 @@ pub(super) fn request(preview: bool) -> NextStart {
 }
 
 #[tokio::test]
+async fn row296_modern_hosts_share_owned_cache_with_the_matching_schema() {
+    let root = tempfile::tempdir().unwrap();
+    let (ordinary, channel, _) = output_frame_rate_host_fixture().await;
+    let pool = ordinary.pool.clone();
+    let indexed = NextHost::new_indexed(
+        pool.clone(),
+        ordinary.locker.clone(),
+        root.path().join("indexed"),
+        ersatzrs_core::programme::ProgrammeClock::named("UTC").unwrap(),
+        super::super::indexed_runtime::IndexedReaderPermit::fixture(),
+    );
+    let expected = crate::file_system_layout::app_data_folder()
+        .join("cache")
+        .join("next");
+    for (host, version) in [
+        (&ordinary, "https://ersatztv.org/channel/version/0.1.5"),
+        (&indexed, "https://ersatztv.org/channel/version/0.1.6"),
+    ] {
+        for preview in [false, true] {
+            let mut start = request(preview);
+            start.channel_id = channel.id;
+            let config = host.configuration(&start).await.unwrap();
+            let value = serde_json::to_value(&config).unwrap();
+            assert_eq!(
+                value.pointer("/cache/folder"),
+                Some(&serde_json::json!(expected))
+            );
+            assert_eq!(
+                value.pointer("/cache/max_unused_days"),
+                Some(&serde_json::json!(30))
+            );
+            assert_eq!(config.version.as_deref(), Some(version));
+        }
+    }
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn indexed_host_binds_live_and_browser_preview_to_the_qualified_layout() {
     let root = tempfile::tempdir().unwrap();
     let (ordinary, channel, _) = output_frame_rate_host_fixture().await;
@@ -33,7 +71,7 @@ async fn indexed_host_binds_live_and_browser_preview_to_the_qualified_layout() {
         let config = indexed.configuration(&start).await.unwrap();
         assert_eq!(
             config.version.as_deref(),
-            Some("https://ersatztv.org/channel/version/0.1.4")
+            Some("https://ersatztv.org/channel/version/0.1.6")
         );
         assert_eq!(
             config.playout.layout.as_deref(),
@@ -47,7 +85,7 @@ async fn indexed_host_binds_live_and_browser_preview_to_the_qualified_layout() {
         assert!(config.playout.layout.is_none());
         assert_eq!(
             config.version.as_deref(),
-            Some("https://ersatztv.org/channel/version/0.1.4")
+            Some("https://ersatztv.org/channel/version/0.1.5")
         );
     }
     pool.close().await;
@@ -72,6 +110,7 @@ async fn legacy_host_preserves_live_and_preview_schema_without_background_extens
             Some("https://ersatztv.org/channel/version/0.1.2")
         );
         assert!(config.playout.layout.is_none());
+        assert!(config.cache.is_none());
         assert!(config.fallback.unwrap().background_image.is_none());
         assert_eq!(PathBuf::from(config.playout.folder), root.path().join("2"));
     }
@@ -562,7 +601,7 @@ async fn output_frame_rate_host_ordinary_and_preview_use_mirror_source_and_reque
                 .ends_with("background.png"));
             assert_eq!(
                 wire["version"],
-                "https://ersatztv.org/channel/version/0.1.4"
+                "https://ersatztv.org/channel/version/0.1.5"
             );
             if normalize {
                 assert_eq!(wire["normalization"]["video"]["frame_rate"], "25");
@@ -628,7 +667,7 @@ async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_ex
             assert!(config.normalization.video.frame_rate.is_none());
             assert_eq!(
                 config.version.as_deref(),
-                Some("https://ersatztv.org/channel/version/0.1.4")
+                Some("https://ersatztv.org/channel/version/0.1.5")
             );
             assert_output_frame_rate_host_preserves_exact_tracks(&host, &mirror, start).await;
             assert_eq!(repos.playout.items_in_range(1,start,finish).await.unwrap(),items_before,
@@ -702,7 +741,7 @@ async fn row291_saved_session_settings_reach_normal_and_preview_worker_config() 
                     }
                     assert_eq!(
                         json["version"],
-                        "https://ersatztv.org/channel/version/0.1.4"
+                        "https://ersatztv.org/channel/version/0.1.5"
                     );
                 }
             }

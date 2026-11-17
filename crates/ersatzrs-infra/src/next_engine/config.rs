@@ -60,6 +60,7 @@ pub fn channel_config(
     Ok(wire::ChannelConfig {
         version: Some(wire::CHANNEL_VERSION.to_owned()),
         session: None,
+        cache: None,
         fallback: Some(wire::Fallback {
             show_error: Some(true),
             duration_seconds: None,
@@ -89,6 +90,34 @@ pub fn channel_config(
             },
         },
     })
+}
+
+/// Select the actual cache schema and one application-owned shared directory.
+///
+/// The worker manages only its `still-images` subfolder and expires unused
+/// entries after thirty days. This conversion never creates or removes files.
+/// Explicit legacy configurations keep the base factory's omitted cache.
+///
+/// # Errors
+/// Rejects an empty or non-UTF-8 folder before changing the configuration.
+pub fn configure_shared_cache(
+    configuration: &mut wire::ChannelConfig,
+    folder: &Path,
+) -> Result<(), ConfigError> {
+    let folder = runtime_path(folder)?;
+    configuration.cache = Some(wire::Cache {
+        folder: Some(folder),
+        max_unused_days: std::num::NonZeroU32::new(30),
+    });
+    configuration.version = Some(
+        if configuration.playout.layout.is_some() {
+            wire::CHANNEL_INDEXED_VERSION
+        } else {
+            wire::CHANNEL_CACHE_VERSION
+        }
+        .to_owned(),
+    );
+    Ok(())
 }
 
 fn audio(profile: &FFmpegProfile) -> Result<wire::Audio, ConfigError> {

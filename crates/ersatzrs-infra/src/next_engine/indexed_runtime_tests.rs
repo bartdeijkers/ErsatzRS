@@ -117,6 +117,24 @@ fn row291_session_contract_rejects_the_private_index_only_schema_collision() {
     }
 }
 
+#[test]
+fn row296_plain_cache_and_modern_indexed_schema_are_distinct_from_legacy() {
+    for revision in [4, 5, 6] {
+        let mut input = description();
+        input["contract"]["channel_config_schema"] = serde_json::json!({
+            "uri":format!("https://ersatztv.org/channel/version/0.1.{revision}"),
+            "breaking":1,"compatible":revision
+        });
+        let bytes = serde_json::to_vec(&input).unwrap();
+        assert!(
+            validate(&bytes).is_ok(),
+            "explicit legacy reader remains supported"
+        );
+        assert_eq!(validate_session(&bytes).is_ok(), revision >= 5);
+        assert_eq!(validate_indexed_session(&bytes).is_ok(), revision >= 6);
+    }
+}
+
 #[tokio::test]
 async fn indexed_identity_is_bounded_and_refuses_missing_or_nonregular_inputs() {
     let folder = tempfile::tempdir().unwrap();
@@ -153,24 +171,8 @@ mod processes {
         );
     }
 
-    #[tokio::test]
-    async fn row291_session_guard_preserves_output_and_never_launches_an_old_worker() {
-        let folder = tempfile::tempdir().unwrap();
-        let binary = folder.path().join("next");
-        let marker = folder.path().join("worker-must-not-run");
-        let json = description().to_string();
-        write(
-            &binary,
-            &format!(
-                "if [ \"$1\" = describe ]; then printf '%s' '{json}'; else touch '{}'; fi",
-                marker.display()
-            ),
-        );
-        let output = folder.path().join("output");
-        std::fs::create_dir(&output).unwrap();
-        let retained = output.join("retained");
-        std::fs::write(&retained, b"existing output").unwrap();
-        let mut config = super::super::super::config::channel_config(
+    fn plain_config() -> super::super::super::protocol::ChannelConfig {
+        let config = super::super::super::config::channel_config(
             &crate::playback::PlaybackProfile {
                 profile: ersatzrs_domain::FFmpegProfile {
                     video_format: ersatzrs_domain::FFmpegProfileVideoFormat::H264,
@@ -189,6 +191,27 @@ mod processes {
             Path::new("ffprobe"),
         )
         .unwrap();
+        config
+    }
+
+    #[tokio::test]
+    async fn row291_session_guard_preserves_output_and_never_launches_an_old_worker() {
+        let folder = tempfile::tempdir().unwrap();
+        let binary = folder.path().join("next");
+        let marker = folder.path().join("worker-must-not-run");
+        let json = description().to_string();
+        write(
+            &binary,
+            &format!(
+                "if [ \"$1\" = describe ]; then printf '%s' '{json}'; else touch '{}'; fi",
+                marker.display()
+            ),
+        );
+        let output = folder.path().join("output");
+        std::fs::create_dir(&output).unwrap();
+        let retained = output.join("retained");
+        std::fs::write(&retained, b"existing output").unwrap();
+        let mut config = plain_config();
         config.session = Some(super::super::super::protocol::Session::default());
         let result = super::super::super::process::NextProcess::start(
             &binary,
@@ -206,6 +229,65 @@ mod processes {
         ));
         assert_eq!(std::fs::read(&retained).unwrap(), b"existing output");
         assert!(!marker.exists());
+    }
+
+    #[tokio::test]
+    async fn row296_cache_guard_refuses_unsupported_live_and_finite_before_mutation() {
+        for indexed in [false, true] {
+            for finite in [false, true] {
+                let root = tempfile::tempdir().unwrap();
+                let binary = root.path().join("next");
+                let marker = root.path().join("must-not-run");
+                let mut description = description();
+                let revision = if indexed { 5 } else { 4 };
+                description["contract"]["channel_config_schema"] = serde_json::json!({
+                    "uri":format!("https://ersatztv.org/channel/version/0.1.{revision}"),
+                    "breaking":1,"compatible":revision
+                });
+                write(
+                    &binary,
+                    &format!(
+                        "if [ \"$1\" = describe ]; then printf '%s' '{}'; else touch '{}'; fi",
+                        description,
+                        marker.display()
+                    ),
+                );
+                let output = root.path().join("output");
+                std::fs::create_dir(&output).unwrap();
+                let retained = output.join("retained");
+                std::fs::write(&retained, b"existing").unwrap();
+                let mut config = plain_config();
+                if indexed {
+                    config.playout.layout =
+                        Some(super::super::super::publication::indexed::INDEX_VERSION.into());
+                }
+                super::super::super::config::configure_shared_cache(
+                    &mut config,
+                    Path::new("owned/cache"),
+                )
+                .unwrap();
+                let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+                let result = if finite {
+                    super::super::super::process::NextProcess::start_troubleshooting(
+                        &binary, "1", &output, &config, None, deadline,
+                    )
+                    .await
+                } else {
+                    super::super::super::process::NextProcess::start(
+                        &binary, "1", &output, &config, deadline,
+                    )
+                    .await
+                };
+                assert!(matches!(
+                    result,
+                    Err(super::super::super::process::ProcessError::Preparation(
+                        "worker session contract"
+                    ))
+                ));
+                assert_eq!(std::fs::read(retained).unwrap(), b"existing");
+                assert!(!marker.exists());
+            }
+        }
     }
 
     #[tokio::test]

@@ -13,6 +13,27 @@ use crate::addons::{spawn_managed_addon_process, ManagedAddonChild};
 
 use super::protocol::ChannelConfig;
 
+async fn authorize_configuration(
+    executable: &Path,
+    config: &ChannelConfig,
+    deadline: Instant,
+) -> Result<(), ProcessError> {
+    if config.session.is_none() && config.cache.is_none() {
+        return Ok(());
+    }
+    let check = async {
+        if config.playout.layout.is_some() {
+            super::indexed_runtime::validate_worker_indexed_session(executable).await
+        } else {
+            super::indexed_runtime::validate_worker_session(executable).await
+        }
+    };
+    timeout_at(deadline, check)
+        .await
+        .map_err(|_| ProcessError::StartupTimeout)?
+        .map_err(|_| ProcessError::Preparation("worker session contract"))
+}
+
 const MAX_CONFIG_BYTES: usize = 256 * 1024;
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -95,6 +116,7 @@ impl NextProcess {
         instance: Option<uuid::Uuid>,
         deadline: Instant,
     ) -> Result<Self, ProcessError> {
+        authorize_configuration(executable, config, deadline).await?;
         let mut command = troubleshooting_command(
             executable,
             number,
@@ -178,15 +200,7 @@ impl NextProcess {
         instance: Option<uuid::Uuid>,
         deadline: Instant,
     ) -> Result<Self, ProcessError> {
-        if config.session.is_some() {
-            timeout_at(
-                deadline,
-                super::indexed_runtime::validate_worker_session(executable),
-            )
-            .await
-            .map_err(|_| ProcessError::StartupTimeout)?
-            .map_err(|_| ProcessError::Preparation("worker session contract"))?;
-        }
+        authorize_configuration(executable, config, deadline).await?;
         let mut command = channel_command(
             executable,
             number,

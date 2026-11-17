@@ -27,6 +27,10 @@ release section when tagging a release.
 
 ### Added
 
+- Modern Next sessions and finite previews use an application-owned shared
+  still-watermark cache, with schema checks before process startup. The indexed
+  extension requires its distinct schema; explicit older configurations remain available.
+
 - A new **Teletext elements** page (`/teletext-elements`) keeps a library of
   custom teletext pages. Upload a TTI, T42, EP1 or HTT file (for example from
   QTeletextMaker), see a Level 1 preview with subpages, change name, page

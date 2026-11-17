@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.7";
 pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.2";
+pub const CHANNEL_CACHE_VERSION: &str = "https://ersatztv.org/channel/version/0.1.5";
+pub const CHANNEL_INDEXED_VERSION: &str = "https://ersatztv.org/channel/version/0.1.6";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
@@ -15,9 +17,21 @@ pub struct ChannelConfig {
     /// Worker-owned readiness and idle policy, supported from upstream schema1.4.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<Session>,
+    /// Shared worker-rendered still frames; absent preserves explicit older readers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<Cache>,
     pub playout: PlayoutFolder,
     pub ffmpeg: Ffmpeg,
     pub normalization: Normalization,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct Cache {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// Matches the worker's positive retention setting; zero is not a supported disable switch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_unused_days: Option<std::num::NonZeroU32>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]

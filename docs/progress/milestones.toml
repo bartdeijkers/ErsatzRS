@@ -42000,6 +42000,69 @@ private-patch retirement, full-window, matched SSR/WASM/browser, required
 platform/final/CI and ordered delivery gate remains mandatory. The accepted
 pin and296 observed/289 processed/7 pending ledger counts stay unchanged.
 
+
+2026-11-17 row296 exact source audit and finite local package list:
+Exact9c6b3dea changes six legacy paths and pins worker6c9e0cf7. The worker's
+still-image optimization is already in that fixed source; this does not prove
+that accepted Next025 or current application configuration covers it. Legacy
+adds channel schema0.1.5 and cache.folder under application-data/cache/next.
+The fixed worker pre-renders the optimized still-image prefix to keyed raw
+frames; animated/media/canvas and time-dependent behavior stay separate. It
+uses the still-images subfolder,30 unused-day default,30s render/fetch defaults
+and original-image fallback on refusal. Current Rust omits Cache and emits
+modern0.1.4; saved live/preview and standalone configuration entrypoints are
+named in row296-source-map.json. Native has its own working image/dynamic/drawvg
+paths and must not be replaced by this worker-specific optimization.
+R296-A: complete schema0.1.5 cache ownership for modern complete-file channels
+and0.1.6 for the ADR0135 indexed extension, preserving explicit older-reader
+compatibility. Carry one application-owned shared cache root into saved normal,
+browser preview and standalone preview configurations. Match runtime admission
+and Health to the emitted schema before output mutation. Stopping condition:
+focused config/legacy/admission/Health regressions and strict affected checks pass.
+R296-B: prove the actual fixed-worker cold/warm still-image reuse and key
+invalidation, source/render semantics, bounded retention/operation/whole-process
+lifecycle and original-image failure path, preserving selected AV/captions,
+Native, animations, ordered graphics and canvas behavior. Reuse valid existing
+watermark/track proof; do not investigate extra variants without a named gap.
+R296-C retains the existing consolidated first-party/indexed successor,
+independent private-patch retirement and full-window/platform/final/ordered
+acceptance. It is not replaced by a local config or unpatched-worker pass.
+No accepted runtime distribution, ledger disposition or pin is changed.
+
+
+2026-11-17 R296-A configuration/admission component Complete:
+The valid baseline row296-config-baseline.log fails because cache.folder is
+absent on a real saved-host configuration. Modern normal and browser-preview
+hosts now emit one shared application-owned cache/next folder, explicit30
+unused-day retention and schema0.1.5 for complete-file or0.1.6 for indexed
+playouts. Both standalone media/channel preview preparation entrypoints use the
+same conversion. The legacy base factory and explicit legacy host omit Cache;
+zero/negative retention settings are rejected by the actual positive wire type.
+No schema label is treated as proof by itself: bounded executable-bound
+admission checks the actual matching descriptor before output mutation for both
+live and finite cache sessions. Modern indexed admission requires0.1.6 and the
+existing indexed playout contract; the older reader permit remains available
+for explicit legacy configurations. Health uses the same5/6 choice based on the
+selected reader, instead of reporting a cached legacy index as modern support.
+Verification:91 composed passing cases, comprising66 distinct infra config,
+legacy, process/refusal, manager and Health controls plus25 existing web preview
+preparation/track/pin/seek/window/credits/ownership regressions. Initial infra
+run passes65 cases; the separate Health routing test adds one. The final portable
+path-join test replaces its earlier single-host version without rerunning the
+unchanged successes. Source/log/run identities are in row296-config-checkpoint.json.
+Strict infra/web all-target lint passes. The final infra-only lint confirms the
+portable test update; web code and its compiled inputs are unchanged from the
+combined lint. A mistaken first web-module filter selected zero tests; that
+exit4 is retained and does not count as passing evidence. The corrected module
+passes25/25. Formatting, architecture, progress and staged lint policy pass.
+This is configuration and admission evidence only. It closes R296-A's stopping
+condition, not actual cache efficiency/lifecycle or indexed runtime acceptance.
+R296-B's fixed-worker cold/warm reuse, invalidation, image/graphics/fallback and
+bounded lifecycle proof is next; R296-C and every shared source/private-patch,
+window/platform/final/CI/ordered delivery gate remain required. No native FFmpeg
+pipeline, accepted distribution, ledger disposition, baseline or live data is
+changed. Reopen this completed component only for a demonstrated regression.
+
 Remaining local functionality: item7 (row296) still requires its individual
 implementation/applicability proof. Rows290–295 are Complete within their local
 component scopes; row296 is next. No local row295 proof is outstanding. Item2's

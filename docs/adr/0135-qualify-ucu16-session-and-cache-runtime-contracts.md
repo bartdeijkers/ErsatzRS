@@ -13,8 +13,13 @@ Partial — row291 persisted session settings, worker-owned idle handling,
 demand-driven heartbeat, bounded consumer waits and runtime admission are
 implemented locally. Actual accepted025 fails the idle protocol control;
 unpatched exact6c passes the four local session cases. The accepted distribution
-and runtime manifest remain unchanged. Patch retirement, the consolidated
-indexed/cache successor, required packages and integrated acceptance remain open
+and runtime manifest remain unchanged. R296-A now carries the application-owned
+shared cache into saved normal/preview and standalone previews, selecting plain
+schema0.1.5 or indexed0.1.6. Matching process admission and Health refuse an
+unsuitable schema; explicit legacy configurations retain their omitted cache.
+Focused configuration, refusal, legacy and preview controls pass. Actual cache
+behavior, patch retirement, the consolidated indexed/cache successor, required
+packages and integrated acceptance remain open
 in the continuation milestone.
 
 ## Context
@@ -71,6 +76,15 @@ Stop On Disconnect policy even when the separate live channel keeps running;
 finite standalone previews retain their completion/deadline ownership. Do not
 keep an idle worker alive with a periodic
 synthetic viewer heartbeat. Existing Native behavior and stored choices remain.
+
+For cache-capable configuration, use the shared application-data/cache/next
+root and explicit30 unused-day retention. The worker owns its still-images
+subfolder; conversion does not create/delete files, and session output cleanup
+must not discard the shared cache. Preserve Native's existing image/dynamic
+filters and drawvg, as well as animated/media/canvas and time-dependent layers.
+Actual fixed-worker reuse, invalidation, fallback and bounded lifecycle proof
+remain R296-B before accepting the new runtime. Explicit legacy configuration
+keeps its original schema and omitted cache/session extension.
 
 Qualify the actual four required packages and application/runtime boundaries
 before selecting an accepted successor. Preserve exact source/archive/lock,

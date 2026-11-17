@@ -948,3 +948,42 @@ async fn managed_next_indexed_cache_rechecks_identity_and_does_not_cache_failed_
         NextRuntimeError::Identity
     );
 }
+
+// Actual descriptor probes verify the Health admission choice without global startup state.
+#[cfg(unix)]
+#[tokio::test]
+async fn row296_health_rejects_a_cached_legacy_index_for_modern_cache_sessions() {
+    use std::os::unix::fs::PermissionsExt;
+    for revision in [5, 6] {
+        let root = tempfile::tempdir().unwrap();
+        let binary = root.path().join("next");
+        let mut description = crate::next_engine::indexed_runtime::tests::description();
+        description["contract"]["channel_config_schema"] = serde_json::json!({
+            "uri":format!("https://ersatztv.org/channel/version/0.1.{revision}"),
+            "breaking":1,"compatible":revision
+        });
+        std::fs::write(&binary, format!("#!/bin/sh\nprintf '%s' '{description}'\n")).unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let reader = super::super::indexed_runtime::IndexedReaderPermit::qualify(&binary, None)
+            .await
+            .unwrap();
+        let mut selected = NextRuntimeAcquisition {
+            binary,
+            source: NextRuntimeSource::Override,
+            rid: ersatzrs_ffmpeg::runtime::current_ersatzrs_ffmpeg_rid()
+                .unwrap()
+                .into(),
+            version: "synthetic".into(),
+            published_pin_verified: false,
+            folder: root.path().into(),
+            split_bundle: false,
+            indexed_reader: Some(reader),
+        };
+        assert_eq!(
+            validate_selected_sessions(&selected).await.is_ok(),
+            revision == 6
+        );
+        selected.indexed_reader = None;
+        assert!(validate_selected_sessions(&selected).await.is_ok());
+    }
+}

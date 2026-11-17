@@ -261,10 +261,13 @@ impl NextHost {
         if self.indexed.is_some() {
             configuration.version = Some("https://ersatztv.org/channel/version/0.1.4".into());
             configuration.playout.layout = Some(super::publication::indexed::INDEX_VERSION.into());
-        } else if !self.legacy_configuration {
-            configuration.version = Some("https://ersatztv.org/channel/version/0.1.4".into());
         }
         if !self.legacy_configuration {
+            config::configure_shared_cache(
+                &mut configuration,
+                &crate::file_system_layout::next_cache_folder(),
+            )
+            .map_err(|_| ProcessError::Preparation("cache configuration"))?;
             // Browser preview has its own expiring producer, even when the live
             // channel keeps running (ADR0095).
             let idle = if request.preview {

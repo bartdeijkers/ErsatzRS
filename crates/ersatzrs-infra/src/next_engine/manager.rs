@@ -890,9 +890,18 @@ pub(crate) async fn validate_published_sessions() -> Result<(), NextRuntimeError
     let Some(accepted) = accepted else {
         return Ok(());
     };
-    super::indexed_runtime::validate_worker_session(&accepted.binary)
-        .await
-        .map_err(indexed_runtime_error)
+    validate_selected_sessions(&accepted).await
+}
+
+async fn validate_selected_sessions(
+    accepted: &NextRuntimeAcquisition,
+) -> Result<(), NextRuntimeError> {
+    let result = if accepted.indexed_reader.is_some() {
+        super::indexed_runtime::validate_worker_indexed_session(&accepted.binary).await
+    } else {
+        super::indexed_runtime::validate_worker_session(&accepted.binary).await
+    };
+    result.map_err(indexed_runtime_error)
 }
 
 async fn validate_selected(accepted: &NextRuntimeAcquisition) -> Result<(), NextRuntimeError> {

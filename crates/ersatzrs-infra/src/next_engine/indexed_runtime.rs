@@ -136,6 +136,26 @@ fn validate_session(output: &[u8]) -> Result<(), IndexedRuntimeError> {
     Ok(())
 }
 
+fn validate_indexed_session(output: &[u8]) -> Result<(), IndexedRuntimeError> {
+    validate(output)?;
+    if !description(output)?
+        .contract
+        .channel_config_schema
+        .supports("channel", 1, 6)
+    {
+        return Err(IndexedRuntimeError::Contract);
+    }
+    Ok(())
+}
+
+pub(crate) async fn validate_worker_indexed_session(
+    binary: &Path,
+) -> Result<(), IndexedRuntimeError> {
+    probe_contract(binary, TIMEOUT, None, validate_indexed_session)
+        .await
+        .map(|_| ())
+}
+
 pub(crate) async fn validate_worker_session(binary: &Path) -> Result<(), IndexedRuntimeError> {
     probe_contract(binary, TIMEOUT, None, validate_session)
         .await
