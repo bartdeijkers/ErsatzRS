@@ -131,13 +131,13 @@ fn parse_date(value: &str) -> Option<DateTime<Utc>> {
         .or_else(|| {
             NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
                 .ok()
-                .map(|d| d.and_utc())
+                .map(NaiveDateTime::and_utc)
         })
         .or_else(|| {
             NaiveDate::parse_from_str(value, "%Y-%m-%d")
                 .ok()?
                 .and_hms_opt(0, 0, 0)
-                .map(|d| d.and_utc())
+                .map(NaiveDateTime::and_utc)
         })
 }
 

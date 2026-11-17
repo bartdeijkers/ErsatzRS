@@ -42771,7 +42771,17 @@ provider fallback/handoff, authenticated embedded and external text after seek,
 and row292 scanned-away captions with decoded programme and selected audio
 preserved. The exact runtime inputs and original assertions are retained under
 next-gate-recovery/jellyfin-final-streams/. The 16 earlier Next CI failures
-have passing local recovery evidence. Exact integrated full CI remains due.
+have passing local recovery evidence. Full CI44193407717, Next job
+134451623441, reproduces exactly that 16-case set (539 other cases passed).
+The local pass/run/log mapping is machine-checked by case name in
+next-gate-recovery/full-44193407717-next-failure-recovery.json.
+Exact integrated full CI remains due.
+
+Strict CI lint on the Jiff migration identified redundant UTC method closures.
+The row290 scanner's two corresponding conversions now call the same method
+directly. All six row290 unit and scanner regressions pass, including sentinel
+precision, all six metadata kinds, claim fencing and scan/search continuity
+(nextest e97c667a-8a2d-43f8-8e02-04344c671481; jiff-scanner-lint/nextest.log).
 
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
