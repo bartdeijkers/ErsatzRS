@@ -1505,6 +1505,7 @@ async fn assert_row291_real_session(
         locker,
         runtime.root.join(label).join("playout"),
     ));
+    let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     let registry = Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
     let request = host::NextStart {
         channel_id: 1,
@@ -1568,6 +1569,7 @@ async fn assert_row291_real_session(
     assert!(!request.output.exists());
     assert_eq!(active_transcode_snapshot(1).active, 0);
     assert!(handle.trim_playlist().await.is_none());
+    callback.stop().await;
     println!("row291 real-worker case={label} segments={segments} minimum={ready} keep={keep} ready_ms={ready_ms} cleanup=joined");
     pool.close().await;
 }
