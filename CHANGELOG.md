@@ -358,6 +358,11 @@ release section when tagging a release.
   active; other channels stop after the configured viewer inactivity. Isolated
   browser previews retain their own idle expiry.
 
+- The weekly full CI run no longer fails for environment reasons on the
+  GitHub-hosted runners it uses while the self-hosted runners are offline at
+  night. Firefox there now gets the system video libraries it needs to play the
+  H.264/AAC previews, and CI downloads the pinned FFmpeg runtime with the job
+  token instead of hitting the shared anonymous GitHub API rate limit.
 - Custom teletext pages rotate their subpages at the saved element cycle time.
   Timing is frozen when Check creates the draft and stays unchanged during field
   updates. Run Check and publish again to apply it to existing pages. Check

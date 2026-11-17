@@ -42551,6 +42551,32 @@ This closes P4 private application build/package/platform and affected-browser
 proof. It does not establish public acquisition, eligible full CI, ordered row
 acceptance, main/operator adoption, application publication or native ARM.
 
+2026-11-17 current-main CI provisioning integration Complete within scope:
+Refresh confirms fixed remote main3f729d9e. Integrate its two existing commits
+on the isolated branch; only CHANGELOG conflicts, and both complete entries
+are retained. The existing CI example opts into a job-token reference for
+GitHub release metadata; the product constructor still sets None and the
+asset-download method is unchanged. No credential value is read or recorded.
+The hosted-browser dependency step retains the existing self-hosted queue,
+matrix and host lock. All15 focused FFmpeg runtime cases pass, including
+default/blank-client handling, override precedence, cold/cache/update and
+checksum/architecture controls. Strict affected all-target Clippy compiles the
+provisioning example and passes. Formatting and the four existing queue/host
+regressions pass. Actionlint1.7.12 uses only BUILD.md's existing queue-schema
+diagnostic exclusion; all other diagnostics stay fatal. The initial sandbox
+launcher and unchanged queue-key rejection are not product regressions.
+Cargo/dependency/toolchain, Next source/patch/payload identities, UI/islands,
+playback pipeline and scheduling/source-authority code are unchanged. P4 keeps
+its exact ece7813c producer/artifact scope: its explicit FFmpeg inputs bypass
+metadata acquisition, and product-default anonymous behavior is preserved.
+Do not relabel those packages as artifacts produced by the merge. The required
+full CI must test/build the eventual exact integrated candidate, including the
+actual hosted provisioning/browser environment. Local focused proof does not
+claim that remote acceptance. Evidence:
+row296-app-platform/integration-main/inputs.json, runtime-tests.log,
+clippy-result.json, actionlint-compatible.log and host-lock-tests.log under
+the same canonical evidence root. No main mutation, push, CI or publication.
+
 External prerequisite: direct release lookup at2026-11-17T06:49:59Z returns
 HTTP404 for next-0.2.5-6c9e0cf-ersatzrs.1. No public/default automatic acquisition
 proof is possible for that proposed release yet. Private bundled qualification

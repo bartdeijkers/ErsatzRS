@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use flate2::read::GzDecoder;
-use reqwest::header::{ACCEPT, USER_AGENT};
+use reqwest::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -194,6 +194,7 @@ impl FfmpegRuntimeValidator for CapabilityRuntimeValidator {
 pub struct GitHubFfmpegReleaseClient {
     client: reqwest::Client,
     repository: String,
+    token: Option<String>,
 }
 
 impl GitHubFfmpegReleaseClient {
@@ -209,7 +210,18 @@ impl GitHubFfmpegReleaseClient {
         Self {
             client: reqwest::Client::new(),
             repository: repository.into(),
+            token: None,
         }
+    }
+
+    /// Authenticate release metadata requests with a GitHub token.
+    ///
+    /// Anonymous GitHub API requests share a small per-IP rate limit, which
+    /// shared CI hosts exhaust. Asset downloads stay anonymous.
+    #[must_use]
+    pub fn with_token(mut self, token: Option<String>) -> Self {
+        self.token = token.filter(|token| !token.trim().is_empty());
+        self
     }
 }
 
@@ -251,14 +263,15 @@ impl GitHubFfmpegReleaseClient {
         &self,
         url: &str,
     ) -> Result<FfmpegReleaseMetadata, FfmpegRuntimeManagerError> {
-        let response = self
+        let mut request = self
             .client
             .get(url)
             .header(USER_AGENT, USER_AGENT_VALUE)
-            .header(ACCEPT, "application/vnd.github+json")
-            .send()
-            .await?
-            .error_for_status()?;
+            .header(ACCEPT, "application/vnd.github+json");
+        if let Some(token) = &self.token {
+            request = request.header(AUTHORIZATION, format!("Bearer {token}"));
+        }
+        let response = request.send().await?.error_for_status()?;
         let release: GitHubReleaseResponse = response.json().await?;
         Ok(release.into())
     }
@@ -1162,6 +1175,16 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
+
+    #[test]
+    fn github_client_ignores_blank_tokens() {
+        let anonymous = GitHubFfmpegReleaseClient::default_repository();
+        assert!(anonymous.token.is_none());
+        let blank = GitHubFfmpegReleaseClient::default_repository().with_token(Some("  ".into()));
+        assert!(blank.token.is_none());
+        let token = GitHubFfmpegReleaseClient::default_repository().with_token(Some("ci".into()));
+        assert_eq!(token.token.as_deref(), Some("ci"));
+    }
 
     #[derive(Clone)]
     struct FakeClient {
