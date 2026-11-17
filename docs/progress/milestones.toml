@@ -41759,6 +41759,73 @@ remaining reopen/source-owner and all unchanged smoke/TSDuck/final/package/
 browser/platform/CI/delivery gates remain mandatory. Builder and snapshot proof
 alone does not establish complete Native playback or row295 acceptance.
 
+2026-11-17 row295 embedded extraction component:
+R295-B background extraction is locally Complete within selected-source/cache
+scope. It binds the existing head-file selection to one
+MediaVersion/File before projecting indexes. Jellyfin candidates reuse the
+existing version-aware subtitle filter (codec, language, title and flags),
+then translate only the FFmpeg source index through the captured physical map.
+Subtitle.StreamIndex and relative cache keys remain logical. The owning
+Jellyfin server supplies its path replacements; unrelated servers cannot
+redirect the input. Other provider index contracts remain unchanged, with
+host-platform path conventions supplied by the existing guarded helper.
+FFmpeg writes into a temporary directory under the existing cache lease.
+Publication rechecks the selected file/path, complete version/owner/source map
+and current owning path replacements inside the writer transaction. Each row
+must still have the captured subtitle ID/index/codec/revision, embedded kind
+and media-item owner before its staged file is renamed and metadata updated.
+Changed or missing source/map authority refuses publication; changed subtitle
+state remains pending. Process failure and stale work retain prior cache files.
+Final review identified one introduced batch failure path: a repair-pending
+Jellyfin item must not prevent later valid items from extracting. Source/map
+conflicts now log a per-item refusal and continue the existing batch; ordinary
+database/cache failures retain their error handling. The actual FFmpeg trial
+includes a missing-map item followed by a valid item and asserts pending/done
+metadata separately. This correction belongs to the same extraction safety
+package and does not add another queue or background-work system.
+The same map loader now accepts the existing SQLx executor interface so the
+write fence reads within its transaction, avoiding an independent pool read.
+No new job system, provider API, cache identity or version-selection policy is
+introduced. Font attachment extraction keeps its existing attachment-type
+ordinal; external subtitle/audio positions do not change that type ordinal.
+The source review includes the exact upstream ExtractEmbeddedSubtitlesHandlerBase
+at1a566770 and existing Rust extraction/provider/playback boundaries. Mandatory
+proof covers physical2 extraction for logical4/2/3, retained logical cache keys,
+current publication, stale map/file/path/metadata/owner/kind refusal, a missing
+map and real FFmpeg failure. The owning milestone retains the unchanged overall
+C list; this component does not claim Native video/audio playback acceptance.
+The current87-case trial row295-extraction-qualified.log passes85 cases; two
+new path fixtures failed because the shared replacement helper requires a
+containing directory, not a file prefix. After reading that helper, the fixture
+uses synthetic/clip.mkv under a genuine synthetic directory mapping and asserts
+that the unrelated global mapping would redirect it. The final four-case run
+row295-extraction-final-guards.log passes all three new guards/snapshot cases
+plus the actual FFmpeg matrix. After the batch-continuation correction,
+row295-extraction-batch-guards.log passes those same four cases with the added
+actual pending-item -> valid-item batch proof; it supersedes only the changed
+batch part, retaining all earlier scoped evidence. This composes87 passing ordinary cases without
+rerunning unaffected successes. The first72-case run additionally retained
+five sandbox socket-bind failures and the expected new-snapshot refusal;
+localhost-access rerun covers those failures. All histories remain in the logs.
+The reviewed snapshot selects physical0:2 for logical4/2/3 and preserves each
+original cache key. The real FFmpeg9 test generates a synthetic MKV and extracts
+the expected caption in all three layouts; a real failed input open preserves
+previous text and pending metadata. The four existing public extract-show
+controls also pass in row295-extraction-legacy-runtime.log, including actual
+ordinary local extraction and both configuration gates. Reproducers verify the
+retained qualified ErsatzRS-ffmpeg2.0.10/n9.0 binary SHA before running, with
+isolated data/state/cache paths. This is Linux extraction evidence, not Native
+video/audio playback, a new runtime qualification or platform acceptance.
+Strict infra all-target Clippy passes on the final batch correction in
+row295-extraction-batch-clippy-final.log. Format, architecture and progress
+checks pass; receipts retain final source and log identities. Evidence receipt:
+tmp/evidence/ucu16-tail-9c6b3dea/row295-extraction-checkpoint.json.
+Remaining R295-B functionality is the named mapped/qualified-source native-layout,
+video enrichment and source-caption readers. R295-C actual current-candidate
+Native AV/caption playback, actual Convert, remaining restart/source-owner proof
+and all unchanged smoke/TSDuck/final/package/browser/platform/CI/delivery gates
+remain mandatory. No final disposition, accepted baseline or window is advanced.
+
 Remaining functionality: items6–7
 still require individual implementation/applicability proof. The row294 local
 component is closed; next is row295 Native and qualified-source physical-map consumption. Row291's local component is complete; item2's consolidated

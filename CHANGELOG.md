@@ -296,6 +296,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Jellyfin embedded subtitle extraction reads physical stream indexes while
+  keeping saved track and cache identities. It uses the owning server's path
+  mapping and publishes staged text only while source and subtitle metadata
+  remain current. Failed extraction retains the previous cached text.
 - Native HLS, MPEG-TS and Direct playback route Jellyfin video, audio and
   original-file subtitles through the physical stream map after selecting saved
   tracks. Preparation, subtitle fallback and hardware retries validate that map;

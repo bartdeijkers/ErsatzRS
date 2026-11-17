@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Row295: Native HLS/MPEG-TS/Direct command routing implemented; extraction, qualified-source consumers and actual playback proof remain open'
+current_focus = 'Row295: extraction bound to physical source and staged cache publication; qualified-source readers and actual playback proof remain open'
 
 summary = '''
 Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
@@ -142,7 +142,9 @@ Mapped scan/report parent association now uses the physical map within its
 transaction; shifted report indexes survive SQLite reopen without changing
 logical saved identities. Native HLS request mapping now has the physical layout snapshot/control proof;
 MPEG-TS/Direct primary/fallback/hardware retry now use the same boundary.
-Background extraction and remaining qualified-source readers stay open. R295-C actual
+Background extraction now retains logical cache identities while staging
+physical-index output behind source/metadata publication guards. Remaining
+qualified-source readers stay open. R295-C actual
 Native/Convert and remaining restart/qualified-source proof remain required.
 Item2 consolidated runtime qualification, functionality6–7 and
 the unchanged mandatory gates belong to milestone ucu-16-continuation.

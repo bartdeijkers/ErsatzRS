@@ -19,7 +19,10 @@ pub(crate) struct StreamIndexes {
     indexes: BTreeMap<i32, i32>,
 }
 
-pub(crate) async fn load(pool: &DbPool, version: i64) -> Result<Option<StreamIndexes>> {
+pub(crate) async fn load<'e, E>(pool: E, version: i64) -> Result<Option<StreamIndexes>>
+where
+    E: sqlx::Executor<'e, Database = crate::db::Db>,
+{
     // One SQLite statement observes map, owner, revision and readiness together.
     // Reads are scoped to one version; no whole-library projection is allocated.
     let invalid_map = crate::jellyfin::INVALID_SOURCE_INDEX_MAP;
@@ -250,5 +253,11 @@ impl NativeStreamIndexMap {
         request: &mut ersatzrs_ffmpeg::PipelineRequest,
     ) -> Result<()> {
         apply_native_request(self.indexes.as_ref(), original, request)
+    }
+}
+
+impl StreamIndexes {
+    pub(crate) fn source_id(&self) -> i64 {
+        self.source
     }
 }
