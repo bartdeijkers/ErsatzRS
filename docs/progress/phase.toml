@@ -2,79 +2,20 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support (Complete)'
-current_focus = 'Complete exact-source UCU-16 qualification and ordered delivery'
+current_focus = 'Maintain accepted Phase 9 and the fixed upstream baseline'
 
 summary = '''
-Current UCU-16 delivery checkpoint. The standalone Jiff migration reached
-origin/main at7dfbf348 through PR167. Full run44213461124 and protected PR
-run44240132857 passed. PR165 candidate485bbf81 includes that exact main
-commit and matches the refreshed four-platform producer outside progress
-records. The full CI run44268846381 passes with eight verified results reused
-from44240611155 and seven fresh gates. Milestone ucu-16-continuation owns
-exact source, evidence and remaining protected delivery gates.
+UCU-16 continuation rows290–296 are accepted. The ledger contains296
+processed rows and zero pending in the fixed scope. Jiff is on main through
+PR167 and the qualified continuation source reached main through PR165.
+Milestone ucu-16-continuation owns the exact full and Ready CI, four private
+platform packages, playback, current runtime acquisition and original
+failures. The authoritative Pin table owns the new accepted baseline.
 
-The 2026-11-16 continuation selected UCU-16 rows290–296 through
-fixed9c6b3dea. Direct GitHub verification confirms exactly seven commits after
-the accepted boundary. Milestone ucu-16-continuation owns the finite list;
-296 rows are observed,289 processed and7 pending. Prior Classic286–289 and
-custom-page/Phase9 deliveries remain accepted. No behavior is proven by
-registration alone. Row290 local DateAdded repair, Health and nine-culture
-messages now pass persisted/search/restart/claim controls and strict affected
-lint. Row291 saved settings, demand/idle ownership and runtime admission now
-pass92 focused and109 request regressions plus actual old/new worker controls.
-Its local component is Complete; consolidated runtime and window acceptance
-stay open. Row292 scan notifications and text probe hints pass82 composed
-controls plus two real-worker text regressions (seven cases). Row292 remains
-open for disappearing captions after publication: the actual missing-sidecar
-startup failure is reproduced and retained. ADR0136's local caption relay now
-passes eight actual-worker Burn/Convert AV cases and nine grant/HTTP regressions;
-seven existing real text cases and strict affected lint also pass. Ordinary
-provider captions retain AV after missing IDs/paths with signed AV authority.
-Ordinary prepared captions, the optional source-intent sidecar boundary and
-automatic private previews are now implemented and locally verified. The current
-117-test combined trial includes62 actual Next cases, strict identity/auth/pin,
-artifact/source/session and replacement-ID refusals, Native provider controls,
-generated-credit/explicit-choice preservation and cache reuse. Strict affected
-lint passes. The maintainer requests a finite
-row292 reassessment, preservation of stronger existing ErsatzRS behavior, reuse
-of passing evidence and a pause after this row. Milestone ucu-16-continuation
-records completed R292-C/D/E: Native/Next smoke and93/86 TSDuck checks pass on
-the exact current server. No row292 functionality or mandatory local proof
-remains. Checkpoint2f49534d retains rows290–292. The maintainer resumed;
-row293 native Linux shaping proof now confirms existing managed FFmpeg9
-behavior with paired ASS/SRT complex/simple render controls and a font lacking
-U+FEFF. No runtime/filter change is needed. Row294 local query/order/continuity proof is Complete with80 composed
-repository cases and strict all-target lint; row295 A/B/C local implementation/proof is Complete after mapped Native/Next selected playback, SQLite reopen, retained-source grant fencing, exact-server Native/Next smoke and93/86 passing TSDuck checks. No local row295 functionality or mandatory local proof remains. Row296 configuration/admission passes91 composed controls; R296-B actual cache reuse/invalidation, animations, fades, canvas, fallback and process/retention bounds now pass eight runtime tests across24 worker sessions, eight diagnostics regressions and strict affected lint. R296-A/B local stopping conditions are Complete; the separate exact6c/0.1.6 source candidate now passes425 source/contract tests, strict source lint, exact294-file replay and seven local runtime sessions. The662-case serial software suite and current full dependency-policy gate now pass after the minimal13th security patch and nine XML-helper checks. The21 retained infra and three public-route controls now pass after preserving fresh Jellyfin physical-source metadata; both strict M2TS clock oracles and complete relay responses remain exact. P1/P2/P3 are now Complete within four-worker-package scope: four independent source archives and14 decoded native Linux/Windows/ARM-emulated sessions preserve selected AV/captions, actual Windows CUDA, MPP no-device whole-channel fallback and cold/warm cache. P4 private application/platform proof is now also Complete within its exact source scope; public acquisition, full CI and delivery remain;
-The earlier matched Health/browser component is Complete within its retained
-source/artifact scope:18 candidate and8 actual C5 cases
-pass in headed Chromium/Firefox, English/Dutch, both themes and JS/no-JS.
-The initial seeded-channel fixture failure and exact matched snapshot remain.
-Integrated local-final and current-candidate Linux Native/Next playback gates
-are now Complete:8714 composed workspace cases, strict lint/policy, canonical
-doctest component and93/86 TSDuck checks. Original environment/fixture failures
-remain recorded; the HDR migration fixture keeps its own unchanged assertions.
-The isolated application branch now proposes the qualified6c runtime pin for
-four application-package tests; accepted main/operator pins remain unchanged.
-Health overlay compatibility and localized ranges pass48 focused cases across
-infra/web. Four exact-source application archives and their independent
-native Linux/Windows and ARM-emulated startup/bundle proof are Complete at
-ece7813c; actual Linux/Windows Native/Next playback, native Edge and ten current
-headed Health/version cases pass. Unchanged evidence retains its original
-scope; helper retention/cleanup failures and recovery remain recorded.
-Current main3f729d9e's CI provisioning fix is integrated on the isolated branch:
-15 runtime cases, strict affected lint, workflow lint and four queue/host tests
-pass. Product-default anonymous acquisition and qualified P4 input paths are
-unchanged; P4 retains its actual producer scope. Exact integrated full CI is due.
-Maintainer amendment2026-11-17 authorizes the exact prepared Next distribution
-README commit/push, fixed tag and29-asset publication, retaining Latest. The
-release is now public at distribution commitb2ed3a37. All29 anonymous downloads
-match the approved bytes; no archive was rebuilt or repacked. Actual native
-Linux/Windows hosts without bundled Next or override pass cold Downloaded and
-unchanged Managed restart with verified payloads. Public acquisition is Complete;
-eligible exact integrated full CI and ordered delivery remain.
-All unchanged acceptance remains mandatory;
-no ledger disposition advances. Direct GitHub recheck
-still ends at row296; no new moving endpoint is selected.
+The 2026-11-16 continuation selected exactly seven additional upstream
+commits. The owning milestone retains the local checkpoints, original failed
+cases, approved Next asset publication, preserved international tracks and
+final integrated evidence. Its earlier provisional scope remains historical.
 
 UCU-16 rows286–289 are Complete within their unchanged required boundary.
 Source PR149 is merged as0686b390 after current PR CI43380390588 passes all13
@@ -150,16 +91,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Finish exact combined qualification of PR165 with the existing full CI gates.
-Preserve the original inventory fixture failure from run44240611155 and
-reuse only successful checks whose source and relevant inputs still match.
-Verify both artifact digests and the result provenance before the protected
-ready check. The four qualified private packages, actual Native and Next
-playback, headed browsers, transport/continuity/Health and the approved
-public runtime acquisition retain the scopes in milestone ucu-16-continuation.
-After the qualified source delivery, record the seven reviewed dispositions
-in order and advance the authoritative pin to the fixed terminal. Complete
-that documentation checkpoint through the single-owner delivery procedure.
+Preserve the completed UCU-16, Classic, Phase 9 and custom-page acceptance.
+Use the authoritative Pin table for ordinary gap discovery. Post-pin rows
+require a new maintainer catch-up selection. Retain the existing open and
+deferred work in its owning parity and milestone records.
 
 Retained earlier handoffs and independent workstream notes follow. Their
 completed outcomes remain valid; earlier exclusions predate this new task.

@@ -4,6 +4,11 @@ rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra`, `crates/ersatzr
 status     = 'Deferred'
 adr        = ['0003', '0014', '0063', '0064']
 summary    = '''
+UCU-16 row293 is Covered by the existing managed FFmpeg9 runtime. Paired
+complex/simple ASS and SRT render controls and the independent glyph control
+prove Arabic shaping. Milestone ucu-16-continuation owns the exact runtime
+and retained evidence.
+
 UCU-09 closeout corrected hardware graph probe child cleanup on timeout and
 cancellation. A regression failed before the fix and passes with child-exit
 verification; all 19 hardware graph tests pass. UCU-09 owns the evidence.

@@ -1,16 +1,13 @@
 # Upstream ErsatzTV catch-up
 
-## Accepted catch-up and current continuation (2026-11-16)
+## Accepted catch-up through row 296 (2026-11-18)
 
-UCU-00–16 are Complete within their accepted scopes. UCU-16 closes rows286–289
-through the fixed terminal `c41969b3bba66f14bf1d0be9e041b52218f65871`.
-The accepted baseline is owned only by docs/automation/parity-baseline.md.
-The maintainer resumes the goal on2026-11-16 for newly registered UCU-16
-rows290–296 and requests a direct upstream check. That check confirms exactly
-seven first-parent commits after the accepted boundary, through fixed
-`9c6b3deaca1feb0639134b880e8dd5eed225ee6d`. Milestone
-`ucu-16-continuation` owns this active continuation. The completed Classic
-window286–289 remains accepted; no later moving tip is selected.
+UCU-00–16 and the UCU-16 continuation are Complete within their accepted
+scopes. The seven continuation rows close in order through the fixed
+`9c6b3deaca1feb0639134b880e8dd5eed225ee6d` boundary. The
+[authoritative Pin table](../docs/automation/parity-baseline.md) owns the
+accepted baseline. Milestone `ucu-16-continuation` owns the exact qualification,
+source and delivery evidence. The accepted Classic window remains rows286–289.
 
 Milestone `ucu-16` owns the finite acceptance list, source 237008bd, all four
 required private package/runtime scopes, canonical local gates and full
@@ -33,54 +30,27 @@ of non-applicability. Earlier accepted UCU windows and Phase9 stay closed.
 | UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Complete; advisory debt remains unverified |
 | UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Complete; Native retained |
 | UCU-16 | 286–289 | `c41969b3bba66f14bf1d0be9e041b52218f65871` | Complete; Native retained |
-| UCU-16 continuation | 290–296 | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` | In progress; seven provisional rows |
+| UCU-16 continuation | 290–296 | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` | Complete |
 
-The current ledger has **296 observed, 289 processed and 7 pending rows**.
-The accepted windows through row289 retain zero pending rows. Every processed
-row has its own disposition; approved Deferred rows
-remain explicitly unverified. The source-map notes below retain their original
-component scope and historical pre-acceptance wording. The terminal ledger and
-owning milestones carry final acceptance, required proof and preserved failures.
+The ledger has **296 observed and processed rows, with zero pending in scope**.
+Each row has an individual disposition. Approved Deferred rows retain their
+recorded scope. The source maps below preserve the original checkpoints.
 
-### Current continuation (2026-11-16)
+### Accepted UCU-16 continuation (2026-11-18)
 
-Process rows290–296 in order against their exact source commits. Current live
-ErsatzTV main ends at row296; the seven registered SHA/subject pairs match the
-first-parent history exactly, with no additional rows observed. Registration
-and the provisional notes in the ledger are not accepted dispositions.
+PR165 delivered exact source tree `a8151363726cfac1b082174377bcca69f1d7c694`
+on `main` at `24c1fe6e`. Full recovery CI `44268846381` and protected Ready CI
+`44271486531` pass. Milestone `ucu-16-continuation` retains the original
+failure, the successful unchanged source-run checks, the independently
+verified artifacts and the full four-platform and playback proof. Native Linux
+and Windows passed playback with their private packages. ARM64 and ARMv7
+passed build, package and QEMU software execution. Native ARM, macOS and
+unavailable hardware retain their approved deferrals.
 
-The finite functionality, mandatory proof and delivery conditions belong to
-milestone `ucu-16-continuation`. Rows290–295 local components are Complete;
-Row296 configuration/admission and actual fixed-worker cache/lifecycle proof
-are locally Complete. Item2/R296-C now has a locally verified consolidated
-source candidate. Serial software and current dependency policy now pass.
-The21 retained infra and three public-route runtime controls now pass. A concrete
-Jellyfin projection regression is corrected without changing the strict physical
-oracles: fresh source metadata survives logical-to-physical selection. P1 now
-verifies all four source archives, including independent extraction/provenance,
-actual architecture and pinned companions. P2/P3 now pass14 actual package
-sessions across native Linux/Windows and ARM emulation, including available
-Windows CUDA, actual MPP no-device whole-channel fallback and cold/warm cache.
-The affected matched-bundle Health/browser package is also Complete: eighteen
-candidate cases and eight actual C5 compatibility cases pass in headed Chromium
-and Firefox, including localized Refresh/recovery, both themes and no-JS. The
-initial seeded-channel fixture failure remains recorded. Milestone evidence owns
-the composed results and exact matched snapshot; backend scan proof is reused.
-The integrated local-final and current-candidate Linux Native/Next playback/
-transport package is now Complete. Its composed8714-case workspace proof,
-original environment/fixture failures, preserved HDR assertions and93/86 TSDuck
-checks belong to milestone evidence. Four private application packages/platform proofs are now Complete within
-their exact ece7813c scope. The approved Next distribution publication and
-actual anonymous native Linux/Windows cold/cache acquisition are Complete;
-next run eligible exact integrated full CI, then ordered delivery. No bare-worker, affected
-Health/browser or local-final/playback item remains in the finite list.
-No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
-retain the unchanged local, platform, provenance and final gate requirements.
-The accepted Pin table stays unchanged until ordered acceptance permits an
-advance. Preserve Native, international audio/subtitles and completed Phase9,
-UCU-00–16 and current custom-page deliveries. The explicit2026-11-17 amendment
-authorizes the exact qualified Next distribution only, retaining Latest;
-no application/Docker release or live installation.
+The qualified Next release remains pinned to the exact approved asset set.
+Linux and Windows verify anonymous cold acquisition and unchanged managed
+restart. Native remains selectable alongside Next. The local checkpoints
+below describe their evidence as it was gathered before this delivery.
 
 #### Row290 source map and local repair package
 
@@ -7104,10 +7074,10 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 287 | `e51ac60c` | fix: classic schedule discard to fill (#3137) | Port | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Saved discard budgets reach the scheduler. Exact40/40/40/15-minute fixtures, bounded skips/reset/exhaustion, tails/fallback, following-item transition and rejected cursor/filler rollback pass, including production SQLite restart/Continue/Refresh. Required four-platform and final proof is owned by milestone ucu-16. |
 | 288 | `a143968e` | fix: classic schedule bug fixes (#3138) | Port | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Actual show/music-video-artist/song-album-artist/movie/other-video groups use distinct complete keys and independent persisted anchors. Custom shrink/empty resume, ungroupable fallback, duplicate membership, all supported orders, Continue/Refresh and unsafe-checkpoint refusal pass. Milestone ucu-16 owns required final/platform proof. |
 | 289 | `c41969b3` | fix: classic filler expression and random count (#3139) | Adapt (ADR 0098) | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Chapter filtering preserves source values; seeded Random Count advances across persisted restart/Continue/Refresh with rollback and Health guards. Approved option2 rejects unknown parameters and preserves whole content/padding without internal breaks on invalid expressions, with redacted preset diagnostics. Required four-platform/final proof passes; existing YAML chapter-expression debt remains separate. |
-| 290 | `84caf129` | fix: local library date added (#3140) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending required window qualification. All seven exact upstream paths are audited. Existing six fallback insert paths stamp the current date. The missing existing-item repair now uses file creation time on rescan with scope/lease guards, preserves valid metadata and international tracks, and updates SQL-backed date search. Persisted repeat/reopen, six kinds, greater-than64 batches, missing/pathless/future/Unix controls and localized Health pass with strict lint. Source map above and milestone ucu-16-continuation own evidence and retained failures; platform/browser/final acceptance is still open. |
-| 291 | `46a334c4` | feat: send idle and ready config values to next (#3141) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending consolidated runtime/window qualification. All seven exact source paths are audited. Persisted idle/Keep Running and readiness omission/cap reach the real host; the worker owns idle and only viewer demand touches heartbeat. Preview retains expiry, Native/legacy behavior remains, and Next wrapper/startup budgets match the capped buffer. Bounded executable admission rejects the accepted private schema0.1.4 collision before output mutation; Health is localized in nine cultures.92 focused and109 request regressions, strict lint and actual old/new worker controls pass. Unpatched6c session proof includes fallback and is not decoded-media, patch-retirement or platform acceptance. ADR0135 and milestone ucu-16-continuation own remaining qualification. |
-| 292 | `6bbb38d8` | fix: sync next playout after library scan (#3142) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending required window qualification. All ten exact upstream paths are audited. Successful scans refresh dependent Next live/preview/mirror projections without a schedule reset; known standalone/prepared text hints match the served stream. Scoped grants preserve AV when automatic text sidecars disappear, including ordinary local/provider/prepared and private-preview publication, while retaining source/publication/session/pin authority, owned preparation and cache reuse. The finite R292-A–E local functionality/proof list is closed:117 current regressions include62 actual Next cases and Native provider controls; current Native/Next smoke and93/86 TSDuck checks pass. Checkpoint2f49534d closed the row; the maintainer subsequently resumed the goal. Shared source/runtime/matched-bundle/browser/four-platform/CI and ordered delivery acceptance remains mandatory. Baseline and final dispositions stay unchanged. |
-| 293 | `d1e6d52e` | build: ffmpeg 8.1.2-41c82b12-develop (#3143) |  |  |  | ucu-16-continuation; local component Complete, reviewed Covered by existing managed ErsatzRS-ffmpeg2.0.10/n9.0. All five upstream paths audited. Actual ASS and SRT default subtitles renders equal matching explicit complex-shaping references; simple controls differ and show the lam-alef box with FreeMono Bold lacking U+FEFF. Exact binary/font/frame hashes and reproducer are retained in row293-shaping-proof.json; owning milestone records scope and proof. No filter/runtime downgrade or application change is needed. Shared four-platform/window qualification and final disposition remain pending; baseline unchanged. |
-| 294 | `fafd9b43` | perf: optimize playout builds (#3144) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending shared qualification. All21 upstream paths mapped. Actual SQL trials identify duplicate smart loads; build-lifetime immutable material reduces Classic/preview/block loads3/3/4 to1, preserves existing bulk enumerator-state loads and copies before independent overrides/cursors. Artist memberships use one batched query, retaining hit/video order and stable deduplication.80 composed repository controls cover new membership, independent Japanese/Dutch choices, pins and existing continuation/restart/refresh; strict infra all-target lint, format, architecture and progress pass. Source/negative/recovery evidence is in row294-local-checkpoint.json and the owning milestone. Shared runtime/final/platform/CI gates remain mandatory; baseline unchanged. |
-| 295 | `1a566770` | fix: jellyfin external stream order (#3145) |  |  |  | ucu-16-continuation; local A/B/C Complete, final disposition pending shared acceptance. ADR0137 preserves saved provider track/pin/download identities in a separate selected-version physical map. Atomic ordinary-scan repair, same/absent ETags, failed HTTP/map rollback, migration/Health and nine-culture diagnostics pass. Actual Native HLS and Next Convert cover all three mapped layouts with SQLite reopen, source/owner grant fencing and preserved alternate audio/captions. Fresh probe timing/SAR/codec hints survive physical mapping. Strict seek2164/2143 byte oracles, Native/Next smoke and93/86 TSDuck pass; private four-platform application proof is Complete within the owning milestone. Public acquisition, eligible full CI and ordered delivery remain; no live repair, accepted disposition or baseline move. |
-| 296 | `9c6b3dea` | chore: update next (#3146) |  |  |  | ucu-16-continuation; local R296-A/B and consolidated R296-C worker/application components Complete; final disposition pending shared acceptance. Qualified fixed6c schema0.1.6 retains all13 corrections and indexed/selected-track/caption safety.425 source/contract and662 software cases, unchanged dependency policy, actual cache reuse/invalidation/fallback/lifecycle and four real worker packages/14 runtime sessions pass. Four private application archives at ece7813c pass exact inventories, native Linux/Windows plus ARM-emulated startup/bundled runtime/assets, native Edge and Linux/Windows Native/Next playback. Health uses validated overlay ceilings and all nine cultures; ten affected current headed cases pass with scoped prior-proof reuse. Milestone ucu-16-continuation owns exact artifacts, original failures and public acquisition/full-CI/ordered-delivery prerequisites. Native remains supported; no public/main/operator adoption or baseline advancement. |
+| 290 | `84caf129` | fix: local library date added (#3140) | Port | scanner | `2f49534d, b7ed5cbe` | ucu-16-continuation. Accepted 2026-11-18. Ordinary rescans restore unset creation dates within the library and claim boundary. SQLite reopen, search, repeated scans, missing files, metadata and international tracks are covered. |
+| 291 | `46a334c4` | feat: send idle and ready config values to next (#3141) | Adapt (ADR 0135) | mpeg-ts-channel-streaming | `2f49534d, 81468d07` | ucu-16-continuation. Accepted 2026-11-18. Saved readiness and idle settings reach Next, including omission, capped buffering and viewer-owned demand. The actual archived worker is refused before publication. Native playback and preview expiry remain supported. |
+| 292 | `6bbb38d8` | fix: sync next playout after library scan (#3142) | Adapt (ADR 0136) | playout-rebuild-on-impacting-changes | `2f49534d, 5451f767` | ucu-16-continuation. Accepted 2026-11-18. Successful scans refresh dependent Next projections without resetting scheduling. Stale sidecars preserve decoded AV and selected audio through local, provider and prepared sources. Source, session and publication authority remain fenced. |
+| 293 | `d1e6d52e` | build: ffmpeg 8.1.2-41c82b12-develop (#3143) | Covered | ffmpeg-9-performance-and-support | `7477ccc0` | ucu-16-continuation. Accepted 2026-11-18. The supported FFmpeg 9 runtime already renders complex Arabic ASS and SRT shaping. Paired complex and simple renders and independent glyph controls establish coverage. |
+| 294 | `fafd9b43` | perf: optimize playout builds (#3144) | Port | classic-scheduling | `096ac73d` | ucu-16-continuation. Accepted 2026-11-18. Classic, next preview and block builds share immutable smart-source results within a build. Batched artist membership preserves hit order, independent playout choices and refresh continuity. |
+| 295 | `1a566770` | fix: jellyfin external stream order (#3145) | Adapt (ADR 0137) | scanner | `8e99a05f, a1a5e30a, b006a45e` | ucu-16-continuation. Accepted 2026-11-18. A separate physical map preserves logical Jellyfin track IDs, stored paths and pins across rescans and SQLite reopen. Real Native and Next playback verifies external-first, external-last and interleaved layouts with international tracks. |
+| 296 | `9c6b3dea` | chore: update next (#3146) | Adapt (ADR 0135) | upstream-baseline-catch-up | `1b6c88d0, a0288bba, 93c97b42` | ucu-16-continuation. Accepted 2026-11-18. The fixed Next successor retains all thirteen corrections and the indexed, selected-track and caption safeguards. Four qualified packages, exact public assets and native Linux and Windows cold and cached acquisition verify the managed pin. |

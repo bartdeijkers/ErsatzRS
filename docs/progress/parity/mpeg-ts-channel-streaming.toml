@@ -2,16 +2,16 @@ feature    = 'MPEG-TS channel streaming'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (ts branch), `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatzrs-infra/src/playback.rs`, `crates/ersatzrs-ffmpeg`'
 status     = 'In progress'
-adr        = []
+adr        = ['0135']
 summary    = '''
-Ported: `/iptv/channel/{number}.ts` resolves the active PlayoutItem through
-`MediaVersion`/`MediaFile`, applies provider path replacements, selects
-persisted subtitles with playout-item overrides falling back to channel
-language/mode preferences, expands ISO aliases (`nl`/`nld`/`dut`, etc.),
-honors `ffmpeg.use_embedded_subtitles`, requires extracted text embedded
-subtitles outside HLS-direct, and streams MPEG-TS from FFmpeg with
-`kill_on_drop` cleanup. Text subtitles burn through FFmpeg `subtitles=` with
-the extracted font cache; image subtitles are scaled/padded and centered.
+Row291 accepts saved Next readiness and viewer-owned idle under ADR0135.
+Milestone ucu-16-continuation owns the real-worker proof.
+
+The TS route resolves the playout file and provider path mapping. Saved item
+overrides precede channel language and mode choices with ISO aliases. Embedded
+subtitle configuration and extracted text govern non-HLS-direct playback. The
+FFmpeg child cleans up with `kill_on_drop`. Text burns with cached fonts and
+image subtitles scale, pad and center.
 
 Both ErsatzTV `.ts` behaviors are ported. Empty/mixed `.ts` mode resolves the
 channel streaming setting, HLS-configured channels redirect to `.m3u8`,

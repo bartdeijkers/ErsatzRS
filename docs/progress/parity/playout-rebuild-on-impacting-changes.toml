@@ -2,16 +2,16 @@ feature    = 'Playout rebuild on impacting changes'
 etv_source = '`ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` (RefreshPlayout/ResetPlayout), `ErsatzTV.Application/ProgramSchedules/Commands/*Handler.cs` (BuildPlayout Refresh), `ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`, `ErsatzTV/Pages/Playouts.razor`'
 rs_target  = '`crates/ersatzrs-core/src/scheduling/classic/mod.rs`, `crates/ersatzrs-core/src/scheduling/{yaml.rs,scripted.rs}`, `crates/ersatzrs-infra/src/maintenance.rs`, `crates/ersatzrs-web/src/admin/server_fns/{channels.rs,schedules.rs,playouts.rs,media_browser.rs}`'
 status     = 'In progress'
-adr        = ['0020', '0110']
+adr        = ['0020', '0110', '0136']
 summary    = '''
-ADR 0020 rebuilds impacted playouts so existing items can adopt changed
-subtitle/audio preferences, watermarks/graphics/deco, filler and resolved media.
-Playback reads each item's captured settings before falling back to the channel.
-Channel edits enqueue no playout build, matching ErsatzTV's
-`UpdateChannelHandler`; explicit per-playout and Reset All requests are queued
-reliably and expose queued/building activity to the admin UI. The classic engine now consumes
-`request.mode`, so classic `Refresh` clears and rebuilds the window the way
-ErsatzTV `RefreshPlayout` does.
+Row292 accepts scan-triggered Next refresh and missing-caption AV continuity
+under ADR0136. Milestone ucu-16-continuation owns the runtime proof.
+
+ADR0020 rebuilds impacted playouts for changed tracks, watermarks and graphics,
+filler and media. Playback prefers captured item settings. Channel edits do not
+enqueue a build, matching ErsatzTV. Per-playout and Reset All requests queue with
+progress visible in the admin UI. Classic `Refresh` clears and rebuilds its
+window through `request.mode`.
 
 Classic continuity was completed by crf-01 on 2026-08-24.
 Content-triggered Refresh now requires and restores a complete production
