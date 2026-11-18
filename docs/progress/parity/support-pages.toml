@@ -4,6 +4,8 @@ rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-we
 status     = 'In progress'
 adr        = ['0013', '0076', '0089', '0095', '0107', '0132']
 summary    = '''
+Row 304 allows playback archive downloads with only logs.txt, outcome.txt or ffmpeg_stderr.log after a Next startup failure.
+
 ADR 0132 adds bounded read-only preflight of upcoming local native subtitle
 encodings, with all-culture Health messages and existing refresh/SSR behavior.
 Milestone subtitle-encoding owns its finite verification and incident evidence.

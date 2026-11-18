@@ -314,6 +314,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Playback troubleshooting can download logs when Next fails before FFmpeg starts.
+
 - Health checks accept Next overlay schemas supported by the selected plain or
   indexed runtime, reject newer schemas, and translate the supported range in
   all admin languages, including older saved diagnostics.

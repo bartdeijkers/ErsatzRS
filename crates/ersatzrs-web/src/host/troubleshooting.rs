@@ -2171,7 +2171,7 @@ async fn build_troubleshooting_archive_from(folder: &FsPath) -> ApiResult<Option
             directories.push(entry.path());
         }
     }
-    let mut has_ffmpeg_report = false;
+    let mut has_results = false;
     for directory in directories {
         let mut entries = tokio::fs::read_dir(directory).await?;
         while let Some(entry) = entries.next_entry().await? {
@@ -2182,9 +2182,8 @@ async fn build_troubleshooting_archive_from(folder: &FsPath) -> ApiResult<Option
             let Some(name) = name.to_str() else {
                 continue;
             };
-            if is_archive_member(name) {
-                let lower = name.to_ascii_lowercase();
-                has_ffmpeg_report |= lower.starts_with("ffmpeg-") || lower.contains("ffreport");
+            let lower = name.to_ascii_lowercase();
+            if is_archive_member(&lower) {
                 // Report names can repeat across Native/Next folders. Their
                 // relative paths preserve both contents and unique ZIP entries.
                 let path = entry.path();
@@ -2196,27 +2195,31 @@ async fn build_troubleshooting_archive_from(folder: &FsPath) -> ApiResult<Option
                 else {
                     continue;
                 };
+                has_results |= is_troubleshooting_result(&lower);
                 files.push((parts.join("/"), tokio::fs::read(path).await?));
             }
         }
     }
-    if !has_ffmpeg_report {
+    if !has_results {
         return Ok(None);
     }
     Ok(Some(build_store_zip(files)?))
 }
 
-fn is_archive_member(file_name: &str) -> bool {
-    let lower = file_name.to_ascii_lowercase();
+fn is_troubleshooting_result(lower: &str) -> bool {
     lower.starts_with("ffmpeg-")
-        || lower == "logs.txt"
-        || FsPath::new(&lower)
+        || lower.contains("ffreport")
+        || matches!(lower, "logs.txt" | "outcome.txt" | "ffmpeg_stderr.log")
+}
+
+fn is_archive_member(lower: &str) -> bool {
+    is_troubleshooting_result(lower)
+        || FsPath::new(lower)
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
         || lower.contains("capabilities")
         || lower.contains("stream-selector")
         || lower.contains("music-video-credits")
-        || lower.contains("ffreport")
         || lower.contains("outcome")
 }
 
@@ -2853,7 +2856,7 @@ mod tests {
         assert!(is_archive_member("media_info.json"));
         assert!(is_archive_member("capabilities_qsv.txt"));
         assert!(is_archive_member("stream-selector.yml"));
-        assert!(is_archive_member("FFREPORT.log"));
+        assert!(is_archive_member("ffreport.log"));
         assert!(is_archive_member("playback-outcome.txt"));
         assert!(is_archive_member("music-video-credits.ass"));
         assert!(is_archive_member("music-video-credits-template.sbntxt"));
@@ -2904,6 +2907,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn troubleshooting_archive_retains_next_failure_before_ffmpeg_starts() {
+        let root = tempfile::tempdir().unwrap();
+        let dossier = root.path().join("next");
+        tokio::fs::create_dir(&dossier).await.unwrap();
+        tokio::fs::write(dossier.join("channel.json"), "{}")
+            .await
+            .unwrap();
+        assert!(build_troubleshooting_archive_from(root.path())
+            .await
+            .unwrap()
+            .is_none());
+
+        for member in ["logs.txt", "next/outcome.txt", "next/FFmpeg_stderr.log"] {
+            let path = root.path().join(member);
+            tokio::fs::write(&path, "Next failed before starting FFmpeg")
+                .await
+                .unwrap();
+            let bytes = build_troubleshooting_archive_from(root.path())
+                .await
+                .unwrap()
+                .unwrap();
+            let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+            assert!(archive.by_name(member).is_ok());
+            tokio::fs::remove_file(path).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
     async fn troubleshooting_archive_collects_next_reports_one_level_deep() {
         let root = tempfile::tempdir().unwrap();
         let report_dir = root.path().join("next-report");
@@ -2923,10 +2954,6 @@ mod tests {
         ] {
             tokio::fs::write(path, bytes).await.unwrap();
         }
-        assert!(build_troubleshooting_archive_from(root.path())
-            .await
-            .unwrap()
-            .is_none());
         tokio::fs::write(report_dir.join("FFREPORT.log"), "next-report")
             .await
             .unwrap();
