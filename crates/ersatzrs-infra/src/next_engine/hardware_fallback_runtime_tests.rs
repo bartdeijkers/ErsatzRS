@@ -44,6 +44,7 @@ async fn real_next_qsv_without_intel_device_preserves_software_playback_and_prof
         locker,
         root.join("playout"),
     ));
+    let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     assert_next_session(
         &host,
         host::NextStart {
@@ -61,6 +62,7 @@ async fn real_next_qsv_without_intel_device_preserves_software_playback_and_prof
         false,
     )
     .await;
+    callback.stop().await;
     let stored = crate::repositories::make_repositories(pool)
         .ffmpeg_profile
         .get(1)

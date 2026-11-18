@@ -3,6 +3,9 @@ use ersatzrs_core::hls::HlsSessionHandle;
 use ersatzrs_infra::hls::InMemoryHlsSessionRegistry;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[path = "scan_projection_tests.rs"]
+mod scan_projection_tests;
+
 struct Worker {
     number: String,
     updates: AtomicUsize,

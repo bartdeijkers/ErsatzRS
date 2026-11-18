@@ -107,6 +107,7 @@ async fn fixture_child_reports() {
                 .unwrap();
         }
         let host = std::sync::Arc::new(host::NextHost::new(pool, locker, data.join("playout")));
+        let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
         let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
         let request = host::NextStart {
             channel_id: 1,
@@ -149,6 +150,7 @@ async fn fixture_child_reports() {
             .await
             .unwrap()
             .unwrap();
+        callback.stop().await;
         assert_eq!(
             observed,
             Ok(true),

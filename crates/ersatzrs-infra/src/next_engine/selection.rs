@@ -5,6 +5,7 @@ use ersatzrs_domain::{Channel, ChannelStreamSelectorMode, PlayoutItem, Resolutio
 
 use crate::db::DbPool;
 use crate::ffmpeg_config::{playback_language_preferences, PlaybackLanguagePreferences};
+use crate::playback::source_indexes;
 use crate::playback::{
     load_next_source_video_stream_by_index, load_source_audio_streams,
     select_custom_playback_streams_with_subtitle_candidates, select_next_pinned_playback_subtitle,
@@ -25,6 +26,7 @@ mod availability;
 pub(crate) struct DeferredProjection {
     pub item: wire::PlayoutItem,
     pub original_source: wire::Source,
+    pub source_indexes: Option<source_indexes::StreamIndexes>,
     pub canvas: Option<Box<super::graphics::CanvasProjection>>,
     pub song: Option<Box<super::song_background::SongProjection>>,
     pub pending_burn: Option<PendingBurn>,
@@ -91,7 +93,7 @@ pub(crate) async fn project_troubleshooting_item_with_audio(
     request: TroubleshootingSelection<'_>,
     audio: AudioDirective,
 ) -> Result<DeferredProjection> {
-    project_deferred_item_selected(
+    Box::pin(project_deferred_item_selected(
         pool,
         request.channel,
         request.item,
@@ -105,7 +107,7 @@ pub(crate) async fn project_troubleshooting_item_with_audio(
             source_pending: request.source_pending,
             source_text: None,
         },
-    )
+    ))
     .await
 }
 
@@ -198,7 +200,7 @@ pub(crate) async fn project_deferred_item_with_audio(
     resolution: &Resolution,
     audio: AudioDirective,
 ) -> Result<DeferredProjection> {
-    project_deferred_item_selected(
+    Box::pin(project_deferred_item_selected(
         pool,
         channel,
         item,
@@ -212,7 +214,7 @@ pub(crate) async fn project_deferred_item_with_audio(
             source_pending: false,
             source_text: None,
         },
-    )
+    ))
     .await
 }
 
@@ -229,7 +231,7 @@ pub(super) async fn project_retained_scheduled_item(
     let source_text =
         super::source_teletext::pending_from_retained(pool, channel, media, &source, origin)
             .await?;
-    project_deferred_item_selected(
+    Box::pin(project_deferred_item_selected(
         pool,
         channel,
         &media.item,
@@ -243,7 +245,7 @@ pub(super) async fn project_retained_scheduled_item(
             source_pending: false,
             source_text,
         },
-    )
+    ))
     .await
 }
 
@@ -324,6 +326,9 @@ async fn project_deferred_item_selected(
             .pinned_stream_selection
             .as_ref()
             .is_some_and(|pin| pin.subtitle_stream_index.is_some());
+    let mut directives = directives;
+    let source_indexes =
+        prepare_source_indexes(pool, media_version_id, &mut source, &mut directives).await?;
     let selected =
         select_projection_tracks(pool, channel, item, media_version_id, directives).await?;
     let song = if selected.generated_video && is_song(pool, item.media_item_id).await? {
@@ -350,16 +355,10 @@ async fn project_deferred_item_selected(
             stream_index: Some(0),
         }
     } else {
-        wire::Track {
-            source: Some(source.clone()),
-            stream_index: selected.video.map(index_u32).transpose()?,
-        }
+        physical_track(&source, selected.video, source_indexes.as_ref())?
     };
     let audio = match selected.audio {
-        Some(index) => wire::Track {
-            source: Some(source.clone()),
-            stream_index: Some(index_u32(index)?),
-        },
+        Some(index) => physical_track(&source, Some(index), source_indexes.as_ref())?,
         None => silent_audio(duration_ms),
     };
     let mut selected_subtitle = selected.subtitle;
@@ -372,7 +371,8 @@ async fn project_deferred_item_selected(
         source_pending,
     )
     .await?;
-    let (subtitle, pending_burn) = if let Some(text) = selected.source_text {
+    let source_text = selected.source_text.is_some();
+    let (mut subtitle, pending_burn) = if let Some(text) = selected.source_text {
         project_source_text_subtitle(text, selected_subtitle.as_ref(), &source)?
     } else {
         project_deferred_subtitle(
@@ -383,8 +383,16 @@ async fn project_deferred_item_selected(
             item,
         )?
     };
+    map_embedded_subtitle(
+        &mut subtitle,
+        selected_subtitle.as_ref(),
+        source_text,
+        source_indexes.as_ref(),
+    )?;
+    source_indexes::ensure_current(pool, media_version_id, source_indexes.as_ref()).await?;
     Ok(DeferredProjection {
         original_source: source,
+        source_indexes,
         canvas: None,
         song,
         pending_burn,
@@ -403,6 +411,72 @@ async fn project_deferred_item_selected(
             }),
         },
     })
+}
+
+fn physical_track(
+    source: &wire::Source,
+    logical: Option<usize>,
+    indexes: Option<&source_indexes::StreamIndexes>,
+) -> Result<wire::Track> {
+    Ok(wire::Track {
+        source: Some(source.clone()),
+        stream_index: logical
+            .map(|index| source_indexes::physical(indexes, index).and_then(index_u32))
+            .transpose()?,
+    })
+}
+
+/// Keep provider identities in selectors; translate only the published file input.
+async fn prepare_source_indexes(
+    pool: &DbPool,
+    version: i64,
+    source: &mut wire::Source,
+    directives: &mut SelectionDirectives,
+) -> Result<Option<source_indexes::StreamIndexes>> {
+    let indexes = source_indexes::load(pool, version).await?;
+    if let AudioDirective::Published(audio) = directives.audio {
+        directives.audio = AudioDirective::Published(
+            audio
+                .map(|index| source_indexes::logical(indexes.as_ref(), index))
+                .transpose()?,
+        );
+    }
+    if indexes.is_some() {
+        match source {
+            wire::Source::Local { probe_hint, .. } | wire::Source::Http { probe_hint, .. } => {
+                // Resolved file hints already use physical indexes. A retained
+                // source carries fresher timing/SAR/codec observations than the
+                // provider catalog; mapping choices must not replace those.
+                if probe_hint.is_none() {
+                    *probe_hint = super::probe_hint::persisted(pool, version).await?;
+                }
+            }
+            _ => {
+                return Err(invalid(
+                    "Jellyfin physical tracks require their original media source",
+                ))
+            }
+        }
+    }
+    Ok(indexes)
+}
+
+fn map_embedded_subtitle(
+    track: &mut Option<wire::Track>,
+    selected: Option<&PlaybackSubtitle>,
+    source_text: bool,
+    indexes: Option<&source_indexes::StreamIndexes>,
+) -> Result<()> {
+    // Keep selected/pending metadata logical for provider fetches, exact pins and
+    // cache identity. Only a track reading the original file is mapped.
+    if !source_text
+        && selected.is_some_and(|s| s.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED)
+    {
+        if let Some(index) = track.as_mut().and_then(|t| t.stream_index.as_mut()) {
+            *index = index_u32(source_indexes::physical(indexes, *index as usize)?)?;
+        }
+    }
+    Ok(())
 }
 
 // UCU-15 row280: equal IDs let Next reuse subtitle and copy state. Unsaved
@@ -834,7 +908,7 @@ fn subtitle_track(
         source.clone()
     } else if crate::playback::subtitle_is_http(&input.path) {
         wire::Source::Http {
-            probe_hint: None,
+            probe_hint: super::probe_hint::text_subtitle(subtitle.codec.as_deref()),
             is_live: None,
             uri: input.path,
             headers: Vec::new(),
@@ -851,7 +925,7 @@ fn subtitle_track(
             path: input.path,
             in_point_ms,
             out_point_ms,
-            probe_hint: None,
+            probe_hint: super::probe_hint::text_subtitle(subtitle.codec.as_deref()),
         }
     };
     Ok(wire::Track {
@@ -1037,6 +1111,24 @@ fn apply_item_seek(source: &mut wire::Source, item: &PlayoutItem) -> Result<()> 
         }
     }
     Ok(())
+}
+
+impl PendingBurn {
+    pub(super) fn physical_stream_index(
+        &self,
+        indexes: Option<&source_indexes::StreamIndexes>,
+    ) -> Result<u32> {
+        let stream = usize::try_from(self.subtitle.stream_index)
+            .map_err(|_| invalid("subtitle stream is invalid"))?;
+        let stream = if self.subtitle.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED
+            && self.source_text.is_none()
+        {
+            source_indexes::physical(indexes, stream)?
+        } else {
+            stream
+        };
+        index_u32(stream)
+    }
 }
 
 #[cfg(test)]

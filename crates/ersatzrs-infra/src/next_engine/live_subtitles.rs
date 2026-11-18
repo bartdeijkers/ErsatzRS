@@ -228,7 +228,7 @@ async fn rebase_track(
             path: artifact.to_str().ok_or_else(unavailable)?.to_owned(),
             in_point_ms: Some(0),
             out_point_ms: None,
-            probe_hint: None,
+            probe_hint: super::probe_hint::text_subtitle(Some(extension)),
         }),
     }))
 }

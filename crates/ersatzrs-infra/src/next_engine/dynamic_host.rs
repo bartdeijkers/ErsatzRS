@@ -1,4 +1,4 @@
-//! Resolve an authenticated Next item only after bounded, version-bound Burn preparation.
+//! Resolve authenticated Next items with version-bound preparation or scoped captions.
 
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_time::{DateTime, Utc};
@@ -218,6 +218,12 @@ impl NextHost {
         support: SourceRuntimeSupport,
         deadline: Instant,
     ) -> Result<protocol::PlayoutItem> {
+        if let Some(item) = self
+            .resolve_caption_publication_with_source_support(&callback, support.video_cut, deadline)
+            .await?
+        {
+            return Ok(item);
+        }
         let video_cut = support.video_cut;
         let DynamicItemRequest {
             channel_id,
@@ -326,10 +332,9 @@ impl NextHost {
                 .resolve_ready_item(instance, &before.projection.item, now)
                 .await;
         };
-        let stream = u32::try_from(pending.subtitle.stream_index)
-            .map_err(|_| unavailable("subtitle stream is invalid"))?;
+        let stream = pending.physical_stream_index(before.projection.source_indexes.as_ref())?;
         let validate = || async {
-            self.project_preparation_snapshot(
+            Box::pin(self.project_preparation_snapshot(
                 request,
                 instance,
                 item_id,
@@ -337,7 +342,7 @@ impl NextHost {
                 until,
                 audio,
                 include_source_text,
-            )
+            ))
             .await
             .is_ok_and(|current| {
                 &current.identity.descriptor == digest
@@ -569,7 +574,7 @@ impl NextHost {
         Ok(item)
     }
 
-    async fn resolve_ready_item(
+    pub(super) async fn resolve_ready_item(
         &self,
         instance: uuid::Uuid,
         item: &protocol::PlayoutItem,
@@ -615,7 +620,9 @@ pub(super) fn install_prepared_track(
         in_point_ms,
         out_point_ms,
 
-        probe_hint: None,
+        probe_hint: super::probe_hint::text_subtitle(
+            prepared.extension().and_then(|value| value.to_str()),
+        ),
     });
     track.stream_index = Some(0);
     Ok(item)

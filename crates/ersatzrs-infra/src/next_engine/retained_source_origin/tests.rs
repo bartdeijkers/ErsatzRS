@@ -256,3 +256,84 @@ fn qualification_requires_full_native_layout_and_selected_audio_semantics() {
         assert!(validate_layout(&stored, &changed).is_err());
     }
 }
+
+#[tokio::test]
+async fn row295_retained_layout_uses_physical_indexes_and_keeps_provider_identity() {
+    for logical in [[2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [0, 2, 3, 5, 6]] {
+        let (pool, media) = source::tests::fixture(RemoteMediaSourceKind::Jellyfin).await;
+        selected_id(&pool, "selected-a").await;
+        sqlx::query(r#"DELETE FROM "ProviderStreamIndex" WHERE "MediaVersionId"=100"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        for (physical, raw) in logical.into_iter().enumerate() {
+            sqlx::query(r#"UPDATE "MediaStream" SET "Index"=? WHERE "Id"=?"#)
+                .bind(raw)
+                .bind(i64::try_from(physical + 1).unwrap())
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(r#"INSERT INTO "ProviderStreamIndex" VALUES (100,?,?)"#)
+                .bind(raw)
+                .bind(i32::try_from(physical).unwrap())
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        sqlx::query(r#"UPDATE "MediaStream" SET "Codec"='dvb_teletext' WHERE "Id"=4"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let resolved = source::resolve(&pool, &media, &[]).await.unwrap();
+        let intent = RetainedSourceIntent::load(&pool, &enabled_channel(), &media, &resolved)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            intent.streams.iter().map(|s| s.index).collect::<Vec<_>>(),
+            [0, 1, 2, 3, 4]
+        );
+        assert_eq!(intent.streams[3].id, 4);
+        let mut probe = native();
+        probe.streams = intent
+            .streams
+            .iter()
+            .map(|s| MediaStream {
+                index: s.index,
+                kind: match s.kind {
+                    1 => MediaStreamKind::Video,
+                    2 => MediaStreamKind::Audio,
+                    _ => MediaStreamKind::Subtitle,
+                },
+                codec: s.codec.clone(),
+                language: s.language.clone(),
+                title: s.title.clone(),
+                default: s.default,
+                forced: s.forced,
+                channels: s.channels,
+                attached_pic: s.attached_pic,
+                ..Default::default()
+            })
+            .collect();
+        assert!(validate_layout(&intent.streams, &probe).is_ok());
+        probe.streams[1].language = Some("fra".into());
+        assert!(
+            validate_layout(&intent.streams, &probe).is_err(),
+            "physical routing preserves complete audio qualification"
+        );
+        let before = intent.identity();
+        sqlx::query(r#"INSERT INTO "ProviderStreamIndex" VALUES (100,8,7)"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let changed = RetainedSourceIntent::load(&pool, &enabled_channel(), &media, &resolved)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            before,
+            changed.identity(),
+            "even unselected map state fences retained source authority"
+        );
+    }
+}

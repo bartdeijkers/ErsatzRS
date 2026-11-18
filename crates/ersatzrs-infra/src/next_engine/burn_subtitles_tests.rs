@@ -237,3 +237,39 @@ async fn real_ffmpeg_extraction_deadline_closes_http_and_never_commits_cache() {
         "failed extraction must leave no artifact, completion record or temporary file"
     );
 }
+
+#[tokio::test]
+async fn row295_jellyfin_embedded_caption_extraction_uses_physical_map() {
+    let pool = super::super::selection::tests::fixture_pool().await;
+    super::super::selection::tests::jellyfin_stream_indexes::qualify(&pool, [2, 3, 4, 5, 6]).await;
+    let map = crate::playback::source_indexes::load(&pool, 100)
+        .await
+        .unwrap();
+    let physical = crate::playback::source_indexes::physical(map.as_ref(), 6).unwrap();
+    let args = arguments(
+        &local(),
+        u32::try_from(physical).unwrap(),
+        "subrip",
+        Path::new("synthetic/pending.tmp"),
+    )
+    .unwrap();
+    insta::assert_snapshot!(strings(args).join("\n"), @r#"
+    -nostdin
+    -hide_banner
+    -loglevel
+    error
+    -y
+    -copyts
+    -i
+    synthetic/source.mkv
+    -map
+    0:4
+    -c:s
+    srt
+    -f
+    srt
+    -fs
+    33554433
+    synthetic/pending.tmp
+    "#);
+}

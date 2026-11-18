@@ -695,3 +695,33 @@ fn output_frame_rate_unknown_source_sentinel_is_ranked_but_never_emitted() {
         "other malformed metadata must retain the existing error contract"
     );
 }
+
+#[test]
+fn row296_cache_is_optional_typed_and_selects_the_real_schema() {
+    let mut config = config(&profile()).unwrap();
+    assert!(serde_json::to_value(&config)
+        .unwrap()
+        .get("cache")
+        .is_none());
+    let before = serde_json::to_value(&config).unwrap();
+    assert_eq!(
+        configure_shared_cache(&mut config, Path::new("")),
+        Err(ConfigError::RuntimePath)
+    );
+    assert_eq!(serde_json::to_value(&config).unwrap(), before);
+    configure_shared_cache(&mut config, Path::new("owned/next-cache")).unwrap();
+    assert_eq!(config.version.as_deref(), Some(wire::CHANNEL_CACHE_VERSION));
+    assert_eq!(
+        serde_json::to_value(&config).unwrap()["cache"],
+        json!({"folder":"owned/next-cache","max_unused_days":30})
+    );
+    config.playout.layout = Some(super::super::publication::indexed::INDEX_VERSION.into());
+    configure_shared_cache(&mut config, Path::new("owned/next-cache")).unwrap();
+    assert_eq!(
+        config.version.as_deref(),
+        Some(wire::CHANNEL_INDEXED_VERSION)
+    );
+    assert!(serde_json::from_value::<wire::Cache>(json!({"max_unused_days":0})).is_err());
+    assert!(serde_json::from_value::<wire::Cache>(json!({"max_unused_days":-1})).is_err());
+    assert!(serde_json::from_value::<wire::Cache>(json!({})).is_ok());
+}

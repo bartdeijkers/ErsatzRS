@@ -387,7 +387,7 @@ fn assert_configuration(
 ) {
     assert_eq!(
         configuration.version.as_deref(),
-        Some("https://ersatztv.org/channel/version/0.1.3")
+        Some("https://ersatztv.org/channel/version/0.1.5")
     );
     assert_eq!(
         configuration.normalization.video.frame_rate.as_deref(),

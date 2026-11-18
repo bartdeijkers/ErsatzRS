@@ -205,6 +205,12 @@ pub fn streams_cache_folder() -> PathBuf {
     app_data_folder().join("cache").join("streams")
 }
 
+/// Shared Next still-image cache; worker-owned files stay under `still-images`.
+#[must_use]
+pub fn next_cache_folder() -> PathBuf {
+    app_data_folder().join("cache").join("next")
+}
+
 /// `<AppDataFolder>/cache/transcode` — root of HLS transcode sessions.
 /// Mirrors `FileSystemLayout.TranscodeFolder`.
 #[must_use]

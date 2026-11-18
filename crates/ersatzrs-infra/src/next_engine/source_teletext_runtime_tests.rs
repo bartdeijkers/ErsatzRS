@@ -278,10 +278,46 @@ async fn run_case(
         .await
         .unwrap();
     let observed = capture(&registry, &output, &proof, case.captions).await;
+    // Ordinary captions now use the authenticated relay. Read its complete
+    // response while the owning session is alive, before revoking its ticket.
+    let relayed = if observed.is_ok() && !case.callback_required && case.caption_track_required {
+        let first = static_published_item(root).await;
+        let caption = first.tracks.unwrap().subtitle.unwrap();
+        if let crate::next_engine::protocol::Source::Http { uri, .. } = caption.source.unwrap() {
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(5))
+                .build()
+                .unwrap();
+            Some(
+                async {
+                    client
+                        .get(uri)
+                        .send()
+                        .await?
+                        .error_for_status()?
+                        .text()
+                        .await
+                }
+                .await,
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     registry.stop_channel("1").await;
     task.await.unwrap();
     callback.stop().await;
     assert!(!output.exists(), "actual Next output cleanup must complete");
+    if let Some(text) = relayed {
+        let text = text.expect("actual session-bound caption response");
+        assert!(text.len() <= 128 * 1024, "synthetic caption response bound");
+        tokio::fs::write(proof.join("relayed-caption.srt"), text)
+            .await
+            .unwrap();
+    }
     let callbacks = callbacks.lock().await;
     tokio::fs::write(
         proof.join("callbacks.json"),
@@ -354,11 +390,23 @@ async fn check_programme_output(
     assert_eq!(clock::timing(caption), (seek, end));
     assert_eq!(end, Some(u64::try_from(case.end_ms).unwrap()));
     assert!(seek.unwrap() >= u64::try_from(case.start_ms).unwrap());
-    let crate::next_engine::protocol::Source::Local { path, .. } = caption.source.as_ref().unwrap()
-    else {
-        panic!("complete owned local sidecar required")
+    let path = match caption.source.as_ref().unwrap() {
+        crate::next_engine::protocol::Source::Local { path, .. } => PathBuf::from(path),
+        crate::next_engine::protocol::Source::Http {
+            uri,
+            is_live: Some(false),
+            reconnect: Some(false),
+            ..
+        } => {
+            let uri = reqwest::Url::parse(uri).unwrap();
+            assert_eq!(uri.scheme(), "http");
+            assert_eq!(uri.host_str(), Some("127.0.0.1"));
+            assert!(uri.path().starts_with("/ffmpeg/next-caption/"));
+            proof.join("relayed-caption.srt")
+        }
+        _ => panic!("complete owned local sidecar or session-bound caption relay required"),
     };
-    let text = tokio::fs::read_to_string(path).await.unwrap();
+    let text = tokio::fs::read_to_string(&path).await.unwrap();
     assert!(text.contains("NEDERLANDSE PAGINA 889 FINAL"));
     assert!(!text.contains("ENGLISH PAGE 888"));
     assert!(!cues.iter().any(|body| body.contains("ENGLISH PAGE 888")));
@@ -372,7 +420,7 @@ async fn check_programme_output(
         proof,
     )
     .await;
-    PathBuf::from(path)
+    path
 }
 
 async fn static_published_item(root: &Path) -> crate::next_engine::protocol::PlayoutItem {

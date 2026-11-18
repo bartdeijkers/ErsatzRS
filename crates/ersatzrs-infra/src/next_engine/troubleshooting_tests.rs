@@ -2,6 +2,9 @@ use super::*;
 use crate::{db::DbPool, next_engine::schedule};
 use ersatzrs_core::repositories::PlayoutRepository as _;
 
+#[path = "troubleshooting_caption_tests.rs"]
+mod captions;
+
 struct Fixture {
     root: tempfile::TempDir,
     pool: DbPool,

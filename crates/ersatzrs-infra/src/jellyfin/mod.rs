@@ -27,8 +27,10 @@ mod client;
 mod models;
 mod persistence;
 mod projection;
+mod stream_indexes;
 mod sync;
 
+pub(crate) use stream_indexes::INVALID_SOURCE_INDEX_MAP;
 pub(crate) use sync::load_active_jellyfin_connection_config;
 
 pub use client::{

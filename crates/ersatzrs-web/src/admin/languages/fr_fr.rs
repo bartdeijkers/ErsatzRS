@@ -1440,9 +1440,8 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
             "Le nombre de secondes pendant lesquelles continuer à transcoder une chaîne alors qu'aucune requête client n'a été reçue"
         }
         TextKey::HlsSegmenterInitialSegmentCount => "Nombre de segments initiaux du segmenteur HLS",
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Retarde le démarrage du flux jusqu'à ce que le nombre indiqué de segments (de 4 secondes) ait été transcodé ; une valeur plus élevée ralentit le démarrage initial mais peut réduire les mises en mémoire tampon"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Attend les premiers segments de 4 secondes avant la lecture. Les valeurs inférieures à 3 utilisent 3. Un nombre plus élevé ralentit le démarrage et peut réduire les interruptions. Next utilise au maximum 10 segments.",
+
         TextKey::HomeRunning => "Le serveur IPTV est en cours d'exécution.",
         TextKey::ReleaseNotes => "Notes de version",
         TextKey::FullChangelog => "Journal complet des modifications",
@@ -2672,11 +2671,18 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
         TextKey::TeletextDecoderBitmapFailed => "Le décodage des images télétexte en couleur a échoué. Sélectionnez un moteur FFmpeg 9 compatible.",
         TextKey::NextRuntimeAvailability => "Disponibilité du moteur Next",
         TextKey::NextOverlayInvalid => "La surcharge de configuration Next est indisponible ou invalide",
-        TextKey::NextOverlaySchema => "Les surcharges de configuration Next nécessitent une URI de version prise en charge (0.1.0 ou 0.1.1). Vérifiez les paramètres de copie avant de mettre à jour une ancienne surcharge.",
+        TextKey::NextOverlaySchema => "Les surcharges de configuration Next nécessitent une URI de version prise en charge ({versions}). Vérifiez les paramètres de copie avant de mettre à jour une ancienne surcharge.",
         TextKey::NextOverlayIncomplete => "La validation de la surcharge de configuration Next est incomplète",
+        TextKey::NextSessionContract => "Les paramètres de session du moteur Next n’ont pas pu être vérifiés. Les chaînes Next activées nécessitent un moteur qualifié prenant en charge le délai d’inactivité et la mise en mémoire tampon au démarrage.",
+        TextKey::NextSessionContractBrief => "Les paramètres de session Next sont indisponibles",
         TextKey::JavascriptAudioSelectionTitle => "Sélection audio JavaScript",
         TextKey::JavascriptAudioSelectionHealthy => "Aucune erreur de sélection enregistrée depuis le démarrage. Les scripts non exécutés ne sont pas validés.",
         TextKey::JavascriptAudioSelectionFailures => "{count} erreurs de sélection depuis le démarrage ; la sélection audio intégrée a été utilisée. Vérifiez scripts/audio-stream-selector et les limites ADR 0096. Le compteur est remis à zéro au redémarrage.",
+        TextKey::JellyfinStreamIndexesTitle => "Indices des flux Jellyfin",
+        TextKey::JellyfinStreamIndexesRepairBrief => "Réparation des indices des flux Jellyfin nécessaire",
+        TextKey::JellyfinStreamIndexesRepair => "Les indices des flux de {count} versions de médias Jellyfin doivent être réparés. Analysez à nouveau leurs bibliothèques pour corriger la sélection des pistes audio, vidéo et de sous-titres intégrés. Les choix de pistes enregistrés sont conservés. Les bibliothèques désactivées le restent ; activez leur analyse uniquement si vous le souhaitez.",
+        TextKey::LocalDateAddedRepair => "La date d’ajout de {count} médias locaux est manquante. Analysez à nouveau leurs bibliothèques pour récupérer les dates de création des fichiers ; les fichiers indisponibles restent inchangés. Ces médias peuvent manquer dans les recherches d’ajouts récents jusqu’à leur réparation.",
+        TextKey::LocalDateAddedRepairBrief => "Dates d’ajout locales à réparer",
         TextKey::AddonListDiskUsageTitle => "Utilisation du disque des listes d’extensions",
         TextKey::AddonListDiskUsageBrief => "Avertissement d’utilisation du disque des listes d’extensions",
         TextKey::AddonListDiskUsageUnavailable => "L’utilisation du disque des listes d’extensions n’a pas pu être mesurée complètement. Vérifiez l’accès au stockage et relancez le contrôle de santé.",

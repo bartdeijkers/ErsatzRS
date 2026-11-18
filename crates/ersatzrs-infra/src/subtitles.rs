@@ -14,6 +14,9 @@
 //!     streaming-proxy URLs for Plex/Jellyfin/Emby. ErsatzRS feeds ffmpeg the
 //!     `MediaFile."Path"` with path-replacements applied, mirroring
 //!     `crates/ersatzrs-web/src/transport/iptv/stream.rs` `load_path_replacements`.
+//!     ADR0137 binds Jellyfin extraction to the selected version and its owning
+//!     server's mapping; saved subtitle/cache identities stay logical. Outputs
+//!     are staged until current source and subtitle state allow publication.
 //!   * **ffmpeg path**: resolved via `ersatzrs_ffmpeg::ffmpeg_path` (the shared
 //!     locator: DB config / next-to-exe / `PATH`), mirroring ErsatzTV's
 //!     `FFmpegLocator`.
@@ -1028,6 +1031,8 @@ pub async fn rebase_burned_text_subtitle_input(
 struct SubtitleToExtract {
     id: i64,
     stream_index: i32,
+    physical_index: i32,
+    updated: String,
     codec: String,
     relative_output: PathBuf,
 }
@@ -1065,18 +1070,21 @@ const METADATA_SUBTITLE_JOINS: &[MetadataSubtitleJoin] = &[
 /// Build the ffmpeg subtitle-extraction argv (port of the `ArgumentsBuilder`
 /// block in `ExtractSubtitles`): `-nostdin -hide_banner -i <input>` then per
 /// subtitle `-map 0:<idx> -c:s <copy|text> <fullOutputPath>`.
-fn build_subtitle_args(input_path: &str, subtitles: &[SubtitleToExtract]) -> Vec<String> {
+fn build_subtitle_args(
+    input_path: &str,
+    subtitles: &[SubtitleToExtract],
+    cache: &Path,
+) -> Vec<String> {
     let mut args = vec![
         "-nostdin".to_owned(),
         "-hide_banner".to_owned(),
         "-i".to_owned(),
         input_path.to_owned(),
     ];
-    let cache = subtitle_cache_folder();
     for sub in subtitles {
         let full = cache.join(&sub.relative_output);
         args.push("-map".to_owned());
-        args.push(format!("0:{}", sub.stream_index));
+        args.push(format!("0:{}", sub.physical_index));
         args.push("-c:s".to_owned());
         args.push(subtitle_codec_arg(&sub.codec).to_owned());
         args.push(full.to_string_lossy().into_owned());
@@ -1135,40 +1143,9 @@ async fn load_path_replacements(pool: &Pool<Db>) -> Result<Vec<PathReplacement>>
     Ok(replacements)
 }
 
-/// Resolve the media item's head-version `MediaFile."Path"`, with path-replacements
-/// applied (target platform Unix, matching `stream.rs`).
-async fn resolve_input_path(
-    pool: &Pool<Db>,
-    media_item_id: i64,
-    replacements: &[PathReplacement],
-) -> Result<Option<String>> {
-    let row = sqlx::query(
-        r#"SELECT mf."Path" AS "Path"
-           FROM "MediaVersion" mv
-           JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
-           WHERE COALESCE(
-                     mv."EpisodeId", mv."MovieId", mv."MusicVideoId", mv."OtherVideoId"
-                 ) = ?
-             AND mf."Path" IS NOT NULL
-           ORDER BY mv."Id" ASC, mf."Id" ASC
-           LIMIT 1"#,
-    )
-    .bind(media_item_id)
-    .fetch_optional(pool)
-    .await
-    .repository()?;
-
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let path: String = row.try_get("Path").repository()?;
-    let resolved = if replacements.is_empty() {
-        path
-    } else {
-        replace_path(replacements, &path, PathPlatform::Unix)
-    };
-    Ok(Some(resolved))
-}
+#[path = "subtitles_extraction_input.rs"]
+mod extraction_input;
+use extraction_input::{resolve_input_path, ExtractionInput};
 
 /// Episode IDs under `show_id` that have an embedded text `Subtitle` needing
 /// extraction. Ports the SQL in `ExtractAll` (handler lines 75-85) AND the
@@ -1303,8 +1280,8 @@ async fn media_item_ids_with_text_subtitles(
 ///
 /// # Errors
 ///
-/// Returns an error only when a database query fails; ffmpeg spawn/exit
-/// failures are logged and do not abort the run.
+/// Returns database/cache failures. Changed source/map authority and `FFmpeg`
+/// failures retain cache and pending metadata without blocking later items.
 pub async fn extract_embedded_show_subtitles(pool: &Pool<Db>, show_id: i64) -> Result<()> {
     extract_embedded_episode_subtitles(pool, episode_ids_with_text_subtitles(pool, show_id).await?)
         .await
@@ -1316,8 +1293,8 @@ pub async fn extract_embedded_show_subtitles(pool: &Pool<Db>, show_id: i64) -> R
 ///
 /// # Errors
 ///
-/// Returns an error only when a database query fails; ffmpeg spawn/exit
-/// failures are logged and do not abort the run.
+/// Returns database/cache failures. Changed source/map authority and `FFmpeg`
+/// failures retain cache and pending metadata without blocking later items.
 pub async fn extract_embedded_playout_subtitles(pool: &Pool<Db>, playout_id: i64) -> Result<()> {
     extract_embedded_media_item_subtitles(
         pool,
@@ -1349,18 +1326,31 @@ async fn extract_embedded_media_item_subtitles(
 
     let replacements = load_path_replacements(pool).await?;
     for media_item_id in media_item_ids {
-        let Some(input_path) = resolve_input_path(pool, media_item_id, &replacements).await? else {
-            tracing::debug!(
-                media_item_id,
-                "no media path for media item; skipping extraction"
-            );
-            continue;
-        };
-        extract_subtitles(pool, media_item_id, &input_path, &ffmpeg_path).await?;
-        extract_fonts(pool, media_item_id, &input_path, &ffmpeg_path).await?;
+        match extract_media_item(pool, media_item_id, &replacements, &ffmpeg_path).await {
+            Err(ersatzrs_core::repositories::RepositoryError::Conflict(error)) => {
+                tracing::warn!(media_item_id,%error,"subtitle source unavailable; retaining cache and continuing batch");
+            }
+            result => result?,
+        }
     }
-
     Ok(())
+}
+
+async fn extract_media_item(
+    pool: &Pool<Db>,
+    media_item_id: i64,
+    replacements: &[PathReplacement],
+    ffmpeg_path: &str,
+) -> Result<()> {
+    let Some(input) = resolve_input_path(pool, media_item_id, replacements).await? else {
+        tracing::debug!(
+            media_item_id,
+            "no media path for media item; skipping extraction"
+        );
+        return Ok(());
+    };
+    extract_subtitles(pool, media_item_id, &input, ffmpeg_path).await?;
+    extract_fonts(pool, media_item_id, &input.path, ffmpeg_path).await
 }
 
 /// Load extraction candidates against the cache root, independent of process cwd.
@@ -1377,7 +1367,7 @@ async fn subtitles_to_extract(
         let sql = format!(
             r#"SELECT SUB."Id" AS "Id", SUB."StreamIndex" AS "StreamIndex",
                       SUB."Codec" AS "Codec", SUB."IsExtracted" AS "IsExtracted",
-                      SUB."Path" AS "Path"
+                      SUB."Path" AS "Path", SUB."DateUpdated" AS "DateUpdated"
                FROM "Subtitle" SUB
                INNER JOIN "{metadata_table}" M ON M."Id" = SUB."{subtitle_column}"
                WHERE M."{owner_column}" = ?
@@ -1424,6 +1414,8 @@ async fn subtitles_to_extract(
         to_extract.push(SubtitleToExtract {
             id,
             stream_index,
+            physical_index: stream_index,
+            updated: row.try_get("DateUpdated").repository()?,
             codec,
             relative_output,
         });
@@ -1436,73 +1428,99 @@ async fn subtitles_to_extract(
 async fn extract_subtitles(
     pool: &Pool<Db>,
     media_item_id: i64,
-    input_path: &str,
+    input: &ExtractionInput,
     ffmpeg_path: &str,
 ) -> Result<()> {
     let cache = subtitle_cache_folder();
-    let to_extract = subtitles_to_extract(pool, media_item_id, &cache).await?;
-
-    if to_extract.is_empty() {
+    let mut candidates = subtitles_to_extract(pool, media_item_id, &cache).await?;
+    if candidates.is_empty() {
         return Ok(());
     }
+    input.map_candidates(pool, &mut candidates).await?;
     let Some(_lease) = extraction_cache_lease(&cache).await else {
         return Ok(());
     };
-
-    // Ensure output directories exist and delete any stale output.
-    for sub in &to_extract {
-        let full = cache.join(&sub.relative_output);
-        if let Some(parent) = full.parent() {
-            if let Err(error) = tokio::fs::create_dir_all(parent).await {
-                tracing::error!(%error, "failed to create subtitle cache directory");
-                return Ok(());
-            }
-        }
-        if full.exists() {
-            let _ = tokio::fs::remove_file(&full).await;
+    let staged = tempfile::tempdir_in(&cache).map_err(|_| extraction_cache_unavailable())?;
+    for sub in &candidates {
+        if let Some(parent) = staged.path().join(&sub.relative_output).parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|_| extraction_cache_unavailable())?;
         }
     }
-
-    let args = build_subtitle_args(input_path, &to_extract);
+    let args = build_subtitle_args(&input.path, &candidates, staged.path());
     let output = match Command::new(ffmpeg_path).args(&args).output().await {
         Ok(output) => output,
         Err(error) => {
-            tracing::error!(%error, media_item_id, "failed to spawn ffmpeg for subtitle extraction");
+            tracing::error!(%error,media_item_id,"failed to spawn ffmpeg for subtitle extraction");
             return Ok(());
         }
     };
-
-    if output.status.success() {
-        let mut extracted = 0;
-        for sub in &to_extract {
-            if !matches!(
-                subtitle_cache_nul::strip_or_delete(&cache.join(&sub.relative_output)).await,
-                StripResult::Unchanged | StripResult::Stripped
-            ) {
-                continue;
-            }
-            sqlx::query(r#"UPDATE "Subtitle" SET "IsExtracted" = 1, "Path" = ? WHERE "Id" = ?"#)
-                .bind(sub.relative_output.to_string_lossy().into_owned())
-                .bind(sub.id)
-                .execute(pool)
-                .await
-                .repository()?;
-            extracted += 1;
-        }
-        tracing::debug!(
-            media_item_id,
-            count = extracted,
-            "successfully extracted subtitles"
-        );
-    } else {
-        tracing::error!(
-            media_item_id,
-            stderr = %String::from_utf8_lossy(&output.stderr),
-            "failed to extract subtitles"
-        );
+    if !output.status.success() {
+        tracing::error!(media_item_id,stderr = %String::from_utf8_lossy(&output.stderr), "failed to extract subtitles");
+        return Ok(());
     }
+    publish_extracted(pool, input, &cache, staged.path(), &candidates).await
+}
 
+async fn publish_extracted(
+    pool: &Pool<Db>,
+    input: &ExtractionInput,
+    cache: &Path,
+    staged: &Path,
+    candidates: &[SubtitleToExtract],
+) -> Result<()> {
+    let mut ready = Vec::new();
+    for sub in candidates {
+        if matches!(
+            subtitle_cache_nul::strip_or_delete(&staged.join(&sub.relative_output)).await,
+            StripResult::Unchanged | StripResult::Stripped
+        ) {
+            ready.push(sub);
+        }
+    }
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    input.validate(&mut tx).await?;
+    for sub in ready {
+        let current: bool=sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "Subtitle" s
+            LEFT JOIN "MovieMetadata" m ON m."Id"=s."MovieMetadataId"
+            LEFT JOIN "EpisodeMetadata" e ON e."Id"=s."EpisodeMetadataId"
+            LEFT JOIN "MusicVideoMetadata" v ON v."Id"=s."MusicVideoMetadataId"
+            LEFT JOIN "OtherVideoMetadata" o ON o."Id"=s."OtherVideoMetadataId"
+            WHERE s."Id"=? AND s."StreamIndex"=? AND s."Codec"=? AND s."DateUpdated"=?
+            AND s."SubtitleKind"=0 AND COALESCE(m."MovieId",e."EpisodeId",v."MusicVideoId",o."OtherVideoId")=?)"#)
+            .bind(sub.id).bind(sub.stream_index).bind(&sub.codec).bind(&sub.updated).bind(input.item).fetch_one(&mut *tx).await.repository()?;
+        if !current {
+            continue;
+        }
+        let full = cache.join(&sub.relative_output);
+        if let Some(parent) = full.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|_| extraction_cache_unavailable())?;
+        }
+        if tokio::fs::rename(staged.join(&sub.relative_output), &full)
+            .await
+            .is_err()
+        {
+            continue;
+        }
+        sqlx::query(r#"UPDATE "Subtitle" SET "IsExtracted"=1,"Path"=? WHERE "Id"=?"#)
+            .bind(sub.relative_output.to_string_lossy().as_ref())
+            .bind(sub.id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+    }
+    tx.commit().await.repository()?;
     Ok(())
+}
+
+fn extraction_cache_unavailable() -> ersatzrs_core::repositories::RepositoryError {
+    ersatzrs_core::repositories::RepositoryError::unavailable(
+        "subtitle extraction cache",
+        "cache storage unavailable",
+    )
 }
 
 async fn extraction_cache_lease(cache: &Path) -> Option<std::fs::File> {
@@ -1820,17 +1838,21 @@ mod tests {
             SubtitleToExtract {
                 id: 1,
                 stream_index: 2,
+                physical_index: 2,
+                updated: String::new(),
                 codec: "subrip".to_owned(),
                 relative_output: Path::new("ab").join("cd").join("AABBCC.srt"),
             },
             SubtitleToExtract {
                 id: 2,
                 stream_index: 3,
+                physical_index: 3,
+                updated: String::new(),
                 codec: "mov_text".to_owned(),
                 relative_output: Path::new("ef").join("01").join("DDEEFF.srt"),
             },
         ];
-        let args = build_subtitle_args("/srv/media/show/s01e01.mkv", &subs);
+        let args = build_subtitle_args("/srv/media/show/s01e01.mkv", &subs, &cache);
 
         let out1 = cache.join("ab").join("cd").join("AABBCC.srt");
         let out2 = cache.join("ef").join("01").join("DDEEFF.srt");

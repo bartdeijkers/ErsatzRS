@@ -1419,9 +1419,8 @@ TextKey::NonPlayableItems => "Non-playable items",
             "The number of seconds to continue transcoding a channel while no requests have been received from any client"
         }
         TextKey::HlsSegmenterInitialSegmentCount => "HLS Segmenter Initial Segment Count",
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Delays stream start until the specified number of (4-second) segments have been transcoded; a larger number will mean slower initial playback, but potentially less buffering"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Waits for the initial 4-second segments before playback. Values below 3 use 3. Higher counts start more slowly and can reduce buffering. Next uses at most 10.",
+
         TextKey::HomeRunning => "IPTV server is running.",
         TextKey::ReleaseNotes => "Release notes",
         TextKey::FullChangelog => "Full changelog",
@@ -2617,11 +2616,18 @@ TextKey::NonPlayableItems => "Non-playable items",
         TextKey::TeletextDecoderBitmapFailed => "Teletext colour bitmap decoding failed. Select a compatible FFmpeg 9 runtime.",
         TextKey::NextRuntimeAvailability => "Next runtime availability",
         TextKey::NextOverlayInvalid => "Next configuration overlay is unavailable or invalid",
-        TextKey::NextOverlaySchema => "Next configuration overlays require a supported version URI (0.1.0 or 0.1.1). Review copy settings before upgrading an older overlay.",
+        TextKey::NextOverlaySchema => "Next configuration overlays require a supported version URI ({versions}). Review copy settings before upgrading an older overlay.",
         TextKey::NextOverlayIncomplete => "Next configuration overlay validation is incomplete",
+        TextKey::NextSessionContract => "Next runtime session controls could not be verified; enabled Next channels require a qualified runtime with idle timeout and startup buffering support",
+        TextKey::NextSessionContractBrief => "Next runtime session controls are unavailable",
         TextKey::JavascriptAudioSelectionTitle => "JavaScript audio selection",
         TextKey::JavascriptAudioSelectionHealthy => "No selector failures recorded since startup. Scripts that have not run are not validated.",
         TextKey::JavascriptAudioSelectionFailures => "{count} selector failures since startup; playback used built-in selection. Check scripts/audio-stream-selector and the ADR 0096 limits. The counter resets on restart.",
+        TextKey::JellyfinStreamIndexesTitle => "Jellyfin stream indexes",
+        TextKey::JellyfinStreamIndexesRepairBrief => "Jellyfin stream index repair needed",
+        TextKey::JellyfinStreamIndexesRepair => "{count} Jellyfin media versions need stream index repair. Rescan their libraries to repair audio, video and embedded subtitle routing. Saved track choices are retained. Disabled libraries remain disabled; enable scanning only if wanted.",
+        TextKey::LocalDateAddedRepair => "{count} local media items have an unset date added. Rescan their libraries to recover file creation dates; unavailable files remain unchanged. Recent-date searches can miss these items until repaired.",
+        TextKey::LocalDateAddedRepairBrief => "Local date-added repair needed",
         TextKey::AddonListDiskUsageTitle => "Add-on list disk usage",
         TextKey::AddonListDiskUsageBrief => "Add-on list disk usage warning",
         TextKey::AddonListDiskUsageUnavailable => "Add-on list disk usage could not be measured completely. Check storage access and retry the health check.",

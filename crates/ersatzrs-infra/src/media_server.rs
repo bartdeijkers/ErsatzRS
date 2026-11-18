@@ -112,9 +112,9 @@ pub(crate) struct ProviderVariantCandidate {
 /// Platform whose separator conventions the running host uses, for resolving
 /// a replaced local path before the existence check.
 #[cfg(windows)]
-const HOST_PLATFORM: PathPlatform = PathPlatform::Windows;
+pub(crate) const HOST_PLATFORM: PathPlatform = PathPlatform::Windows;
 #[cfg(not(windows))]
-const HOST_PLATFORM: PathPlatform = PathPlatform::Unix;
+pub(crate) const HOST_PLATFORM: PathPlatform = PathPlatform::Unix;
 
 /// Flag media-server items whose server-side id is no longer present in the
 /// just-completed scan as `MediaItemState::FileNotFound` (`State = 1`).

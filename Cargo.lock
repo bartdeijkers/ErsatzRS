@@ -1181,6 +1181,7 @@ dependencies = [
  "fs4",
  "futures-util",
  "getrandom 0.4.3",
+ "hmac",
  "httpmock",
  "insta",
  "libc",

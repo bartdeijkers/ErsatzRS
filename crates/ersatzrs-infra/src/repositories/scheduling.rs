@@ -1,5 +1,9 @@
+#[path = "scheduling/artist_items.rs"]
+mod artist_items;
 #[path = "scheduling/classic_groups.rs"]
 mod classic_groups;
+#[path = "scheduling/collection_cache.rs"]
+mod collection_cache;
 
 use crate::repositories::SqlxResultExt as _;
 use std::{
@@ -73,7 +77,8 @@ fn admin_search_state(value: i32) -> Result<ersatzrs_domain::MediaItemState> {
 pub struct SqliteSchedulingContentRepository(
     pub Pool<crate::db::Db>,
     /// Memoized `playout.skip_missing_items` config flag, resolved on first use.
-    tokio::sync::OnceCell<bool>,
+    std::sync::Arc<tokio::sync::OnceCell<bool>>,
+    Option<std::sync::Arc<collection_cache::CollectionItemsCache>>,
 );
 
 struct ClassicScheduleGraph {
@@ -326,7 +331,11 @@ impl SqliteSchedulingContentRepository {
     /// Construct the repository over a database pool.
     #[must_use]
     pub fn new(pool: Pool<crate::db::Db>) -> Self {
-        Self(pool, tokio::sync::OnceCell::new())
+        Self(
+            pool,
+            std::sync::Arc::new(tokio::sync::OnceCell::new()),
+            None,
+        )
     }
 
     /// Resolve and memoize the `playout.skip_missing_items` config flag
@@ -548,6 +557,18 @@ impl BlockPreviewRepository for SqliteSchedulingContentRepository {
         items: &[EffectiveBlockItem],
         policies: &BTreeMap<String, SchedulingSmartShufflePolicy>,
     ) -> Result<SchedulingReferenceData> {
+        self.for_build()
+            .block_preview_content(items, policies)
+            .await
+    }
+}
+
+impl SqliteSchedulingContentRepository {
+    async fn block_preview_content(
+        &self,
+        items: &[EffectiveBlockItem],
+        policies: &BTreeMap<String, SchedulingSmartShufflePolicy>,
+    ) -> Result<SchedulingReferenceData> {
         let mut reference_data = SchedulingReferenceData::default();
         let mut target_ids = BTreeMap::new();
         let mut seen = BTreeSet::new();
@@ -583,9 +604,7 @@ impl BlockPreviewRepository for SqliteSchedulingContentRepository {
         )
         .await
     }
-}
 
-impl SqliteSchedulingContentRepository {
     /// Prepare SQL-backed reference data for Classic program scheduling.
     ///
     /// # Errors
@@ -593,6 +612,17 @@ impl SqliteSchedulingContentRepository {
     /// Returns an error when the playout has no program schedule, when the
     /// schedule cannot be loaded, or when any `SQLite` query fails.
     pub async fn classic_reference_data(
+        &self,
+        playout_id: EntityId,
+        start: DateTime<Utc>,
+        max_playout_offset: Duration,
+    ) -> Result<SchedulingReferenceData> {
+        self.for_build()
+            .classic_reference_data_for_build(playout_id, start, max_playout_offset)
+            .await
+    }
+
+    async fn classic_reference_data_for_build(
         &self,
         playout_id: EntityId,
         start: DateTime<Utc>,
@@ -767,6 +797,18 @@ impl SqliteSchedulingContentRepository {
     /// Returns an error when a `SQLite` query fails or a persisted enum/date
     /// value cannot be decoded.
     pub async fn block_reference_data(
+        &self,
+        playout_id: EntityId,
+        start: DateTime<Utc>,
+        days_to_build: i64,
+        max_playout_offset: Duration,
+    ) -> Result<SchedulingReferenceData> {
+        self.for_build()
+            .block_reference_data_for_build(playout_id, start, days_to_build, max_playout_offset)
+            .await
+    }
+
+    async fn block_reference_data_for_build(
         &self,
         playout_id: EntityId,
         start: DateTime<Utc>,
@@ -1660,6 +1702,13 @@ impl SqliteSchedulingContentRepository {
         &self,
         smart_collection_id: EntityId,
     ) -> Result<Vec<SchedulingMediaItem>> {
+        self.cached_smart_items(smart_collection_id).await
+    }
+
+    async fn load_smart_collection_items(
+        &self,
+        smart_collection_id: EntityId,
+    ) -> Result<Vec<SchedulingMediaItem>> {
         let query = sqlx::query_scalar::<_, String>(
             r#"SELECT "Query" FROM "SmartCollection" WHERE "Id" = ? ORDER BY "Id" LIMIT 1"#,
         )
@@ -2057,6 +2106,7 @@ impl SqliteSchedulingContentRepository {
 
     async fn search_items(&self, query: &str) -> Result<Vec<SchedulingMediaItem>> {
         let (hits, _, _) = self.search_documents_page(query, 0, 0).await?;
+        let (artist_membership, artist_videos) = self.search_artist_items(&hits).await?;
 
         let mut items = Vec::new();
         let mut seen = BTreeSet::new();
@@ -2064,7 +2114,17 @@ impl SqliteSchedulingContentRepository {
             let hit_items = match hit.media_kind.as_str() {
                 "show" => self.items_for_show_id(hit.media_item_id).await?,
                 "season" => self.items_for_season_id(hit.media_item_id).await?,
-                "artist" => self.items_for_artist_id(hit.media_item_id).await?,
+                "artist" => artist_membership
+                    .get(&hit.media_item_id)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|id| artist_videos.get(id).cloned())
+                    .collect(),
+                "music_video" if !artist_videos.is_empty() => artist_videos
+                    .get(&hit.media_item_id)
+                    .cloned()
+                    .into_iter()
+                    .collect(),
                 _ => self.media_item_by_id(hit.media_item_id).await?,
             };
             append_unique(&mut items, &mut seen, hit_items);

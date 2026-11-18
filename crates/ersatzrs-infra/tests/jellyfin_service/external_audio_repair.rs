@@ -93,16 +93,19 @@ async fn jellyfin_negative_audio_repair_rescans_unchanged_movies_and_episodes() 
         scan(&pool, &server, episode).await;
         assert_eq!(
             playback.calls_async().await,
-            1,
-            "unchanged Etag reproduces the stale row"
+            2,
+            "row295 map admission repairs stale audio despite an unchanged Etag"
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "MediaStream" WHERE "Index"<0"#)
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            1
+            0
         );
+        assert_valid_tracks(&pool).await;
+        // Retain the older migration recovery path as a separate control.
+        sqlx::query(r#"INSERT INTO "MediaStream" ("MediaVersionId","Index","Codec","MediaStreamKind","Channels","Default","Forced") SELECT "Id",-1,'aac',2,2,0,0 FROM "MediaVersion" LIMIT 1"#).execute(&pool).await.unwrap();
         sqlx::raw_sql(REPAIR).execute(&pool).await.unwrap();
         scan(&pool, &server, episode).await;
         assert_valid_tracks(&pool).await;
@@ -115,7 +118,7 @@ async fn jellyfin_negative_audio_repair_rescans_unchanged_movies_and_episodes() 
         );
         assert_eq!(
             playback.calls_async().await,
-            2,
+            3,
             "repair forces ordinary replacement playback lookup"
         );
         let streams: Vec<(i64, String)> =
@@ -127,7 +130,7 @@ async fn jellyfin_negative_audio_repair_rescans_unchanged_movies_and_episodes() 
         scan(&pool, &server, episode).await;
         assert_eq!(
             playback.calls_async().await,
-            2,
+            3,
             "restarted/unchanged scans must not repeat repair"
         );
         assert_eq!(

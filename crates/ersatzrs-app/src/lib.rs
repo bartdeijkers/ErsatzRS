@@ -3413,11 +3413,13 @@ impl ApplicationServices {
         &self,
         work: commands::ScanWorkRequest,
     ) -> commands::ExecuteScanOutcome {
-        execute_scan_work_with_runtime(
+        execute_scan_work_with_runtime_and_claim(
             work,
             self.ports.scan_runtime(),
             self.ports.playout_builds(),
+            self.ports.channel_runtime(),
             &self.operations,
+            None,
         )
         .await
     }
@@ -4718,6 +4720,7 @@ async fn execute_durable_scan(
         },
         application.ports.scan_runtime(),
         application.ports.playout_builds(),
+        application.ports.channel_runtime(),
         &application.operations,
         Some(claim),
     )
@@ -4804,19 +4807,29 @@ impl ersatzrs_core::maintenance::ScheduledLibraryScanRequester for ApplicationSe
     }
 }
 
+#[cfg(test)]
 async fn execute_scan_work_with_runtime(
     work: commands::ScanWorkRequest,
     runtime: &dyn ScanRuntime,
     playout_builds: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> commands::ExecuteScanOutcome {
-    execute_scan_work_with_runtime_and_claim(work, runtime, playout_builds, operations, None).await
+    execute_scan_work_with_runtime_and_claim(
+        work,
+        runtime,
+        playout_builds,
+        &scan_execution_tests::ProjectionRuntime::default(),
+        operations,
+        None,
+    )
+    .await
 }
 
 async fn execute_scan_work_with_runtime_and_claim(
     work: commands::ScanWorkRequest,
     runtime: &dyn ScanRuntime,
     playout_builds: &dyn PlayoutBuildQueue,
+    channel_runtime: &dyn ChannelRuntime,
     operations: &OperationCoordinator,
     managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 ) -> commands::ExecuteScanOutcome {
@@ -4872,10 +4885,18 @@ async fn execute_scan_work_with_runtime_and_claim(
         return commands::ExecuteScanOutcome::CleanupUnconfirmed;
     }
 
-    match result.and_then(|report| {
+    let result = result.and_then(|report| {
         commands::require_scan_playout_refreshes(report, playout_builds, operations)
             .map_err(|error| ScanRuntimeError::new(error.to_string()))
-    }) {
+    });
+    let result = match result {
+        Ok(()) => {
+            playout_projection::refresh_scanned_library(channel_runtime, work.request.library_id())
+                .await
+        }
+        Err(error) => Err(error),
+    };
+    match result {
         Ok(()) => {
             guard.complete();
             commands::ExecuteScanOutcome::Completed
@@ -4900,6 +4921,10 @@ impl std::fmt::Debug for ApplicationServices {
 
 #[cfg(test)]
 mod scan_execution_tests {
+    #[path = "scan_projection_tests.rs"]
+    mod projection_tests;
+    pub(super) use projection_tests::ProjectionRuntime;
+
     use std::sync::Mutex;
 
     use async_trait::async_trait;
@@ -5211,6 +5236,7 @@ mod scan_execution_tests {
                         work,
                         &runtime,
                         &queue,
+                        &ProjectionRuntime::default(),
                         &operations,
                         Some(acquired),
                     )

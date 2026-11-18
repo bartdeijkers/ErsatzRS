@@ -20,6 +20,9 @@ use super::{media::MediaRelay, protocol::Source, schedule, selection, source};
 pub(crate) struct Identity {
     pub descriptor: String,
     pub cache_key: String,
+    /// Published AV authority with only mutable caption selection removed.
+    /// Admission still requires an independently signed published caption grant.
+    pub av_descriptor: Option<String>,
 }
 
 /// Owns values only; no scheduler lock survives snapshot preparation.
@@ -224,6 +227,7 @@ pub(crate) async fn fingerprint(
         "path": path, "local": local_revision, "subtitle": subtitle,
         "provider": super::dynamic_provider_identity::identity(pool, media, input).await?,
     });
+    bind_source_indexes(pool, media.media_version_id, projection, &mut binding).await?;
     if let Some(text) = pending.and_then(|pending| pending.source_text.as_ref()) {
         binding
             .as_object_mut()
@@ -257,16 +261,66 @@ pub(crate) async fn fingerprint(
     }
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
+    let descriptor = json!({"binding": binding, "item": projection.item,
+        "canvas": projection.canvas, "song": projection.song,
+        "persisted_item": media.item, "channel": channel, "audio_script": script,
+        "audio_language": preferences.default_audio_language,
+        "subtitle_language": preferences.default_subtitle_language,
+        "fallback_subtitle_language": preferences.fallback_subtitle_language,
+    });
+    let caption_origin = if matches!(input, Source::Local { .. }) {
+        super::dynamic_provider_identity::caption_identity(pool, media)
+            .await
+            .ok()
+    } else {
+        Some(binding["provider"].clone())
+    };
     Ok(Identity {
-        descriptor: digest(&json!({"binding": binding, "item": projection.item,
-            "canvas": projection.canvas, "song": projection.song,
-            "persisted_item": media.item, "channel": channel, "audio_script": script,
-            "audio_language": preferences.default_audio_language,
-            "subtitle_language": preferences.default_subtitle_language,
-            "fallback_subtitle_language": preferences.fallback_subtitle_language,
-        }))?,
+        descriptor: digest(&descriptor)?,
         cache_key: digest(&binding)?,
+        av_descriptor: av_authority(&descriptor, caption_origin)?,
     })
+}
+
+async fn bind_source_indexes(
+    pool: &DbPool,
+    version: i64,
+    projection: &selection::DeferredProjection,
+    binding: &mut serde_json::Value,
+) -> Result<()> {
+    crate::playback::source_indexes::ensure_current(
+        pool,
+        version,
+        projection.source_indexes.as_ref(),
+    )
+    .await?;
+    if let Some(indexes) = &projection.source_indexes {
+        binding.as_object_mut().ok_or_else(unavailable)?.insert(
+            "physical_stream_indexes".into(),
+            serde_json::to_value(indexes).map_err(|_| unavailable())?,
+        );
+    }
+    Ok(())
+}
+
+fn av_authority(
+    descriptor: &serde_json::Value,
+    origin: Option<serde_json::Value>,
+) -> Result<Option<String>> {
+    let Some(origin) = origin else {
+        return Ok(None);
+    };
+    let mut av = descriptor.clone();
+    av["binding"]["subtitle"] = serde_json::Value::Null;
+    if let Some(binding) = av["binding"].as_object_mut() {
+        binding.remove("source_teletext");
+        binding.remove("source_teletext_video");
+    }
+    if let Some(tracks) = av["item"]["tracks"].as_object_mut() {
+        tracks.insert("subtitle".into(), serde_json::Value::Null);
+    }
+    av["caption_provider_origin"] = origin;
+    digest(&av).map(Some)
 }
 
 async fn local_source_identity(input: &Source) -> Result<Option<serde_json::Value>> {

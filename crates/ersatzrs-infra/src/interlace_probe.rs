@@ -6,7 +6,7 @@ use ersatzrs_ffmpeg::SourceVideoStream;
 use sqlx::Row;
 use tokio::{io::AsyncReadExt, process::Command, sync::Mutex, time::Instant};
 
-use crate::{addons::spawn_managed_addon_process, db::DbPool};
+use crate::{addons::spawn_managed_addon_process, db::DbPool, playback::source_indexes};
 
 // Serialize optional probes and re-read cached state after admission. The same
 // deadline bounds admission, database reads, sampling and publication.
@@ -95,6 +95,9 @@ async fn resolve_stored(
         return Ok(None);
     }
     let _guard = PROBE_GATE.lock().await;
+    let indexes = source_indexes::load(pool, version_id)
+        .await
+        .map_err(|_| ProbeError)?;
     let Some(identity) = Identity::load(pool, version_id).await? else {
         return Ok(None);
     };
@@ -113,10 +116,15 @@ async fn resolve_stored(
             .ratio
             .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
         {
+            source_indexes::ensure_current(pool, version_id, indexes.as_ref())
+                .await
+                .map_err(|_| ProbeError)?;
             return Ok(Some(ratio));
         }
     }
-    let ratio = probe(executable, path, stream_index, duration / 3, deadline).await?;
+    let physical =
+        source_indexes::physical(indexes.as_ref(), stream_index).map_err(|_| ProbeError)?;
+    let ratio = probe(executable, path, physical, duration / 3, deadline).await?;
     let after = tokio::fs::metadata(local).await.map_err(|_| ProbeError)?;
     if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
         return Ok(None);
@@ -127,7 +135,14 @@ async fn resolve_stored(
     if !identity.same_source(&current) {
         return Ok(None);
     }
-    if cacheable && !identity.publish(pool, version_id, path, ratio).await? {
+    source_indexes::ensure_current(pool, version_id, indexes.as_ref())
+        .await
+        .map_err(|_| ProbeError)?;
+    if cacheable
+        && !identity
+            .publish(pool, version_id, path, ratio, indexes.as_ref())
+            .await?
+    {
         return Ok(None);
     }
     Ok(Some(ratio))
@@ -243,7 +258,17 @@ impl Identity {
         version_id: i64,
         path: &str,
         ratio: f64,
+        indexes: Option<&source_indexes::StreamIndexes>,
     ) -> Result<bool, ProbeError> {
+        let mut tx = crate::db::begin_write(pool).await.map_err(|_| ProbeError)?;
+        if source_indexes::load(&mut *tx, version_id)
+            .await
+            .map_err(|_| ProbeError)?
+            .as_ref()
+            != indexes
+        {
+            return Ok(false);
+        }
         let updated = sqlx::query(r#"UPDATE "MediaVersion" SET "InterlacedRatio" = ?
             WHERE "Id" = ? AND "DateUpdated" = ? AND "Duration" = ?
             AND "InterlacedRatio" IS NULL
@@ -252,7 +277,8 @@ impl Identity {
             AND (SELECT MIN("Index") FROM "MediaStream" WHERE "MediaVersionId" = ? AND "MediaStreamKind" = 1) = ?"#)
             .bind(ratio).bind(version_id).bind(&self.updated).bind(&self.duration)
             .bind(version_id).bind(version_id).bind(path).bind(version_id).bind(self.first_stream)
-            .execute(pool).await.map_err(|_| ProbeError)?;
+            .execute(&mut *tx).await.map_err(|_| ProbeError)?;
+        tx.commit().await.map_err(|_| ProbeError)?;
         Ok(updated.rows_affected() == 1)
     }
 
@@ -338,6 +364,33 @@ fn parse_ratio(stderr: &str) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn row295_interlace_argv_uses_physical_video_identity() {
+        let mut reference = None;
+        for logical in [[2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [0, 2, 3, 5, 6]] {
+            let pool = crate::next_engine::selection::tests::fixture_pool().await;
+            crate::next_engine::selection::tests::jellyfin_stream_indexes::qualify(&pool, logical)
+                .await;
+            let map = source_indexes::load(&pool, 100).await.unwrap();
+            let physical =
+                source_indexes::physical(map.as_ref(), usize::try_from(logical[0]).unwrap())
+                    .unwrap();
+            let args = ersatzrs_ffmpeg::interlace_probe_arguments(
+                "synthetic.mkv",
+                physical,
+                Duration::from_secs(4),
+            );
+            if let Some(previous) = &reference {
+                assert_eq!(&args, previous);
+            }
+            reference = Some(args);
+        }
+        insta::assert_snapshot!(
+            "row295_interlace_physical_video",
+            reference.unwrap().join("\n")
+        );
+    }
 
     async fn fixture() -> (tempfile::TempDir, DbPool, String) {
         let root = tempfile::tempdir().unwrap();
@@ -443,7 +496,7 @@ mod tests {
             .await
             .unwrap();
             assert!(
-                !identity.publish(&pool, 1, &path, 0.7).await.unwrap(),
+                !identity.publish(&pool, 1, &path, 0.7, None).await.unwrap(),
                 "{mutation}"
             );
             let actual: Option<f64> = sqlx::query_scalar(
@@ -460,8 +513,8 @@ mod tests {
             .await
             .unwrap();
         let identity = Identity::load(&pool, 1).await.unwrap().unwrap();
-        assert!(identity.publish(&pool, 1, &path, 0.7).await.unwrap());
-        assert!(!identity.publish(&pool, 1, &path, 0.2).await.unwrap());
+        assert!(identity.publish(&pool, 1, &path, 0.7, None).await.unwrap());
+        assert!(!identity.publish(&pool, 1, &path, 0.2, None).await.unwrap());
         assert_eq!(
             Identity::load(&pool, 1).await.unwrap().unwrap().ratio,
             Some(0.7)
@@ -704,6 +757,56 @@ mod tests {
             .await
             .unwrap(),
             stored
+        );
+        assert_jellyfin_sampling(&pool, &path, executable).await;
+    }
+
+    async fn assert_jellyfin_sampling(pool: &DbPool, path: &str, executable: &str) {
+        sqlx::raw_sql(r#"INSERT INTO "MediaSource" ("Id") VALUES (1); INSERT INTO "JellyfinMediaSource" ("Id") VALUES (1);
+            INSERT INTO "Library" ("Id","MediaKind","MediaSourceId") VALUES (1,1,1); INSERT INTO "JellyfinLibrary" ("Id","ShouldSyncItems") VALUES (1,1);
+            INSERT INTO "LibraryPath" ("Id","LibraryId","Path") VALUES (1,1,'synthetic'); INSERT INTO "MediaItem" ("Id","LibraryPathId") VALUES (1,1);
+            INSERT INTO "Movie" ("Id") VALUES (1); INSERT INTO "JellyfinMovie" ("Id","ItemId") VALUES (1,'synthetic');
+            UPDATE "MediaVersion" SET "MovieId"=1,"ProviderStreamIndexVersion"=1,"InterlacedRatio"=NULL WHERE "Id"=1;
+            UPDATE "MediaStream" SET "Index"="Index"+2 WHERE "MediaVersionId"=1;
+            INSERT INTO "ProviderStreamIndex" VALUES (1,2,0),(1,3,1);"#).execute(pool).await.unwrap();
+        let primary = resolve(
+            pool,
+            1,
+            path,
+            2,
+            Instant::now() + Duration::from_secs(10),
+            executable,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let alternate = resolve(
+            pool,
+            1,
+            path,
+            3,
+            Instant::now() + Duration::from_secs(10),
+            executable,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(primary <= 0.05);
+        assert!(alternate > 0.05);
+        let stored = Identity::load(pool, 1).await.unwrap().unwrap();
+        assert_eq!(stored.ratio, Some(primary));
+        let map = source_indexes::load(pool, 1).await.unwrap();
+        sqlx::query(r#"DELETE FROM "ProviderStreamIndex" WHERE "StreamIndex"=3"#)
+            .execute(pool)
+            .await
+            .unwrap();
+        assert!(stored
+            .publish(pool, 1, path, 0.9, map.as_ref())
+            .await
+            .is_err());
+        assert_eq!(
+            Identity::load(pool, 1).await.unwrap().unwrap().ratio,
+            Some(primary)
         );
     }
 

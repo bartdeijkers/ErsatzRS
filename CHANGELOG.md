@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Security
 
+- Update the local Next source candidate to quick-xml 0.41.0 and
+  webpki-root-certs 1.0.10, resolving its XML-parser and bundled-certificate
+  advisories before runtime qualification.
+
 - Update the release-notes HTML sanitizer to Ammonia 4.2.5 to address
   RUSTSEC-2026-0533 (mutation XSS with embedded SVG and MathML).
 - rustix is updated to 1.1.6 (RUSTSEC-2026-0486): 1.1.5 could mark unwritten
@@ -26,6 +30,10 @@ release section when tagging a release.
   sqlx updates.
 
 ### Added
+
+- Modern Next sessions and finite previews use an application-owned shared
+  still-watermark cache, with schema checks before process startup. The indexed
+  extension requires its distinct schema; explicit older configurations remain available.
 
 - A new **Teletext elements** page (`/teletext-elements`) keeps a library of
   custom teletext pages. Upload a TTI, T42, EP1 or HTT file (for example from
@@ -72,6 +80,18 @@ release section when tagging a release.
 
 - Replace chrono with Jiff for application clocks and elapsed time. Existing
   database dates, schedules and add-on time formats remain readable.
+
+- Publish the qualified session/cache-capable Next runtime with exact source,
+  provenance and checksums; verify anonymous Linux/Windows acquisition and
+  managed restart while preserving the previous Latest release. Application
+  integration still requires its full CI and ordered catch-up acceptance.
+- Prepare the qualified session/cache-capable Next runtime for application
+  qualification, preserving indexed playout and existing caption/audio safeguards.
+
+- Classic and block builds reuse smart-collection results within each build,
+  including playlist children. Artist searches load video memberships together.
+  Source order, independent playback choices and fresh membership on the next
+  build are preserved.
 
 - Custom-page checks use the add-on page ranges selected by the active
   Lua/Scripted interval. Published pages, their field bindings and their absence
@@ -294,6 +314,57 @@ release section when tagging a release.
 
 ### Fixed
 
+- Health checks accept Next overlay schemas supported by the selected plain or
+  indexed runtime, reject newer schemas, and translate the supported range in
+  all admin languages, including older saved diagnostics.
+
+- Preserve freshly probed framerate, aspect ratio and codec details when
+  mapping Jellyfin stream choices for Next playback; provider metadata must
+  not replace observations from the retained source.
+
+- Keep Next watermark-cache paths out of troubleshooting diagnostics, including
+  directory names containing spaces.
+
+- Jellyfin source-caption qualification compares physical file indexes while
+  retaining saved subtitle identities. Retained provider sources bind their
+  complete stream map, and interlace sampling probes the selected physical video
+  without replacing the primary stream's cached result with an alternate's.
+- Jellyfin embedded subtitle extraction reads physical stream indexes while
+  keeping saved track and cache identities. It uses the owning server's path
+  mapping and publishes staged text only while source and subtitle metadata
+  remain current. Failed extraction retains the previous cached text.
+- Native HLS, MPEG-TS and Direct playback route Jellyfin video, audio and
+  original-file subtitles through the physical stream map after selecting saved
+  tracks. Preparation, subtitle fallback and hardware retries validate that map;
+  prepared inputs preserve their independent indexes.
+- Mapped Jellyfin teletext source scans associate physical observations with
+  the correct saved provider stream, including shifted or colliding indexes.
+  Stored reports require a current complete stream map when read back.
+- Next uses the physical Jellyfin video, audio and embedded-subtitle indexes
+  when external streams precede or interrupt the native tracks. Saved choices
+  and provider subtitle download identities stay unchanged. Changed or missing
+  mappings invalidate prepared playback instead of selecting a different track.
+- Health reports Jellyfin media versions that need stream index repair. An ordinary
+  library scan repairs missing maps even when provider metadata is unchanged,
+  retaining saved track choices and disabled-library settings.
+- Jellyfin scan metadata preserves provider track identities separately from
+  physical stream indexes, keeping saved choices and subtitle download indexes
+  stable. Ordinary scans revisit legacy mappings even with unchanged ETags;
+  failed scans retain the previous metadata and cached-subtitle references.
+
+- Successful library and show scans refresh metadata in affected Next channels,
+  mirrors and browser previews without rebuilding their schedules. Standalone
+  text subtitles carry format and stream hints, including prepared caption files,
+  so Next can avoid probing them again before each item. Disappearing
+  automatically selected local sidecar subtitles no longer stop the programme's
+  video and audio. Ordinary Plex, Jellyfin and Emby text sidecars get the same
+  protection, while exact pins and source-owned caption paths keep their checks.
+- Next receives the channel’s Keep Running choice, idle timeout and initial HLS
+  segment count. Counts below three use three; Next caps larger requests at ten.
+  Larger buffers use the configured startup timeout. Keep Running channels stay
+  active; other channels stop after the configured viewer inactivity. Isolated
+  browser previews retain their own idle expiry.
+
 - The weekly full CI run no longer fails for environment reasons on the
   GitHub-hosted runners it uses while the self-hosted runners are offline at
   night. Firefox there now gets the system video libraries it needs to play the
@@ -304,6 +375,10 @@ release section when tagging a release.
   updates. Run Check and publish again to apply it to existing pages. Check
   refuses unsustainable timed-update demand. Page placement keeps the existing
   bounded wait for available transport capacity.
+- Local library rescans recover unset dates added from file creation times, so
+  existing media appears correctly in date-based searches. Existing dates and
+  metadata are retained; unavailable files are left unchanged. Health reports
+  local items that still need this repair.
 - Legacy MPEG-TS playback keeps a short read-ahead buffer across programme
   changes, preventing source-subtitle preparation from interrupting delivery.
 - Removing the last linked custom teletext page preserves its published original.

@@ -177,6 +177,7 @@ async fn scaling_cases(format: FFmpegProfileVideoFormat, modes: &[ScalingBehavio
             locker,
             root.path().join("playout"),
         ));
+        let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
         let output = root.path().join("output");
         let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
         let task = host
@@ -224,6 +225,7 @@ async fn scaling_cases(format: FFmpegProfileVideoFormat, modes: &[ScalingBehavio
         assert_video_codec(&ffprobe, &output.join(segment), format).await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
+        callback.stop().await;
         assert!(!output.exists());
     }
 }
@@ -377,6 +379,7 @@ async fn real_next_watermark_source_content_edges_follow_padding_but_not_stretch
                 locker,
                 root.path().join("playout"),
             ));
+            let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
             let output = root.path().join("output");
             let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
             let task = host
@@ -430,6 +433,7 @@ async fn real_next_watermark_source_content_edges_follow_padding_but_not_stretch
             assert_selected_audio(&ffmpeg, &output.join(segment)).await;
             assert!(registry.stop_channel("1").await);
             task.await.unwrap();
+            callback.stop().await;
             assert!(!output.exists());
         }
     }

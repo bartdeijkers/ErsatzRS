@@ -6,15 +6,20 @@ use crate::next_engine::protocol::{Source, Track};
 use std::collections::BTreeSet;
 
 pub(super) fn timing(track: &Track) -> (Option<u64>, Option<u64>) {
-    let Source::Local {
-        in_point_ms,
-        out_point_ms,
-        ..
-    } = track.source.as_ref().unwrap()
-    else {
-        panic!("finite local track")
-    };
-    (*in_point_ms, *out_point_ms)
+    match track.source.as_ref().unwrap() {
+        Source::Local {
+            in_point_ms,
+            out_point_ms,
+            ..
+        }
+        | Source::Http {
+            is_live: Some(false),
+            in_point_ms,
+            out_point_ms,
+            ..
+        } => (*in_point_ms, *out_point_ms),
+        _ => panic!("finite local track or non-live caption relay"),
+    }
 }
 
 async fn packets(ffprobe: &Path, path: &Path, stream: &str, video: bool) -> serde_json::Value {

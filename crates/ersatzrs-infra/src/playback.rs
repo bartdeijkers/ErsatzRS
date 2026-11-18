@@ -3,6 +3,9 @@
 
 #[path = "playback_candidate.rs"]
 mod candidate;
+#[path = "playback_stream_indexes.rs"]
+pub(crate) mod source_indexes;
+pub use source_indexes::NativeStreamIndexMap;
 #[path = "playback_source_teletext.rs"]
 pub mod source_teletext;
 #[path = "playback_transient.rs"]
@@ -1378,7 +1381,7 @@ pub async fn load_playback_subtitle_candidates(
 
 /// Filter embedded metadata against the resolved file before preference ranking.
 /// External/generated subtitles are separate sources and remain available.
-async fn load_subtitles_for_media_version(
+pub(crate) async fn load_subtitles_for_media_version(
     pool: &DbPool,
     media_item_id: i64,
     media_version_id: i64,

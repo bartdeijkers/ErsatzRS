@@ -40940,3 +40940,1931 @@ an external execution prerequisite, not a local test failure. No passing GitHub
 acceptance, cohort latency, branch protection mutation or release is claimed.
 The 15-30 minute cohort goal and historical DCI/BSE open evidence remain open.
 '''
+
+
+[[milestone]]
+id = 'ucu-16-continuation'
+phase = 'UCU — Upstream ErsatzTV catch-up'
+title = 'Reconcile local metadata, Next lifecycle, international streams and playout efficiency after the accepted Classic window'
+status = 'In progress'
+feature = 'upstream-baseline-catch-up'
+plan = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-16']
+acceptance = """
+Maintainer continuation2026-11-16: the active upstream catch-up goal includes
+new UCU-16 rows and must check ErsatzTV directly. The verified fixed tail is
+rows290–296 through9c6b3deaca1feb0639134b880e8dd5eed225ee6d. Existing milestone
+ucu-16 remains Complete for286–289; this is new work, not a regression or a
+reopening of its delivered components. No later moving endpoint is selected.
+Finite completion list, in ledger order:
+1. Row290: audit fallback DateAdded and creation-time backfill for existing local
+   media; implement any missing behavior with persisted rescan/idempotency and
+   unavailable-file/platform controls, preserving existing metadata and tracks.
+2. Row291: prove saved Keep Running/idle and initial-segment settings reach
+   Next with upstream default, omission and cap semantics; qualify any required
+   first-party runtime compatibility instead of merely copying a version pin.
+3. Row292: prove affected Next playout synchronization after scans, safe stale
+   or missing-path subtitle delivery and correct text-subtitle probe hints.
+   Preserve publication ownership, actual selected tracks and scan continuity.
+4. Row293: audit the actual managed FFmpeg9 runtime and prove complex Arabic
+   subtitle shaping. A major-version label or HarfBuzz build flag is not proof.
+   Retain the supported FFmpeg9 line; do not downgrade to upstream's8.x build.
+5. Row294: measure repeated collection/state loads across applicable Classic,
+   block and playlist builds. Implement the smallest per-build immutable cache
+   only where a demonstrated gap warrants it; preserve independent enumerators,
+   source identity, ordering and refresh/checkpoint behavior.
+6. Row295: audit and prove Jellyfin source indexes with external streams before,
+   after and interleaved with internal streams. Correct any missing per-index
+   mapping and persisted-state repair/health behavior without losing external
+   subtitles/audio, introducing negative indexes or mutating a live library.
+7. Row296: reconcile required Next runtime/config and still-watermark cache
+   behavior, preserving the first-party patch-retirement contract, Native and
+   bounded application-owned cache/lifecycle behavior.
+For each row: read exact upstream source and all affected Rust consumers;
+prove applicability or implementation with the smallest faithful regression and
+integration evidence, then record an individual reviewed disposition. Do not
+infer Covered/N/A from a title, configured flag or intended performance effect.
+Retain all existing UCU-16 required local/final, persistence/continuity/Health,
+affected headed Chromium/Firefox, actual Native/Next decoded playback,
+smoke/TSDuck, source/artifact/matched-SSR-WASM and four-platform obligations.
+Reuse still-valid evidence within its actual unchanged inputs and scope.
+Required platforms remain native Linux x64/Windows x64 and ARM64/ARMv7
+build/package/emulation; native ARM, macOS and unavailable hardware retain
+approved deferrals. Preserve international audio/subtitles and all completed
+Phase9, Classic and custom-page acceptance. Keep original negative evidence.
+Advance the authoritative pin only after each intervening row has an accepted
+disposition and required proof. Maintainer amendment2026-11-17 explicitly authorizes only the prepared existing
+ErsatzRS-next README commit/push, new fixed next-0.2.5-6c9e0cf-ersatzrs.1 tag
+and exact29-asset publication, retaining current Latest. Other application/
+Docker releases/publication, operator install,
+live-data repair, unrelated CI implementation or paid/macOS provisioning.
+Prepare coherent isolated checkpoints; main integration follows the single-owner
+checkpoint procedure and existing commit/push/merge/CI authorization boundaries.
+Do not push/requalify after each row merely because a local checkpoint exists.
+"""
+evidence = """
+2026-11-16 continuation source/input proof Complete within its explicit scope:
+GitHub ErsatzTV/legacy main resolves to9c6b3deaca1feb0639134b880e8dd5eed225ee6d
+(chore: update next #3146, committed2026-11-15T20:06:32Z). The live compare from
+the accepted Pin table reports exactly7 commits. All seven full SHAs/subjects
+match the unchanged shared checkout's exact first-parent object history:
+29084caf129,29146a334c4,2926bbb38d8,293d1e6d52e,294fafd9b43,
+2951a566770,2969c6b3dea. No post296 commit is observed or selected.
+The shared checkout stays at6bbb38d8; exact git show revisions are used, never
+an unverified moving working tree. GitHub source/compare and joined receipts:
+tmp/evidence/ucu16-tail-9c6b3dea/upstream-observation.json.
+Live recheck on2026-11-16 again resolves main to9c6b3dea and the compare to
+exactly7 commits; no row after296. The unchanged endpoint and direct GitHub
+observations are retained in upstream-live-recheck.json in the same evidence root.
+
+Isolated preparation branch work/ucu16-tail starts at current remote main
+c5aff430. That main already contains observations for rows290–295 and the
+checkpoint delivery docs;
+root main has five local documentation commits and an unrelated untracked plan.
+Preserve that root work. Import only its verified row296 observation into the
+isolated ledger; all existing295 row lines and accepted ucu-16 remain intact.
+Correct stale counts to296 observed/289 processed/7 pending. Registration is
+not acceptance. The accepted Pin table remains unchanged.
+
+2026-11-16 row290 local functionality/persistence/Health component implemented:
+Exact84caf129 changes seven paths. Existing six fallback insertion paths already
+stamp the current date; persisted unset-date repair was missing. The valid
+pre-fix public-rescan regression fails at year1 (row290-baseline.log); the
+initial NOT NULL fixture failure is retained separately and is not defect proof.
+The new pre-scan repair scopes all six metadata tables to the selected path,
+selects the first version/file deterministically and updates only an exact
+minimum UTC DateAdded. Bounded64-row batches read files outside write
+transactions and retain the existing actual-library/operation/token/owner/expiry
+fence before and after writing. Existing dates, IDs, metadata kinds/titles,
+DateUpdated and French audio/Dutch subtitles survive. Missing, pathless and
+unavailable inputs are skipped, future dates clamp to now, supported Unix
+creation-time fallback and canonical100ns UTC storage match the source contract.
+No schema migration, separate Lucene reindex or scheduling checkpoint reset.
+Search Projection Health counts unresolved logical local owners, preserves
+nonlocal/date-fraction controls and clears after repair. Nine language files
+localize the new full and brief Health messages through existing routing.
+
+Verified on native Linux at mainc5aff430 plus the isolated working diff:
+326 scanner/Health cases compose320 passing sandbox cases and six identical
+loopback-mock recovery cases. The original six socket-bind denials are retained.
+Final same-graph focused selection47/47 passes, including exact-date search,
+six metadata kinds, greater-than64 batches, repeated scans, SQLite reopen,
+missing/unavailable/pathless controls, distinct metadata/duplicate file owners,
+forged/reclaimed managed claims, epoch/future/Unix time controls, Health recovery
+and all existing i18n tests including all nine cultures. Run IDs:
+scanner/Health 6b0579bb-4eb5-4b10-845c-270ef65a767a; recovery
+5153a3c4-bd5a-4d8d-aeca-5a577ce7db5c; final
+b89aff47-5830-4d4a-b236-4c41e629839b. Earlier eight-case web selection also passes.
+Architecture lint, hydration lint (31 existing suppressions), formatting,
+new-Clippy-allow policy and progress validation pass. Initial strict lint finds
+one doc-markdown omission and then three test-style issues; all are corrected
+without lint exemptions, with negative logs retained. Health routing uses a
+small helper to preserve the existing router's size bound. Final strict Clippy
+passes for infra/scanner/web with all targets and warnings denied. The final
+47-case selection passes again after those corrections, run
+dff8f1ad-8364-487f-9fb3-c3d084f08d33.
+This local component's stopping condition is Complete; no additional row290
+implementation or local repair experiment is needed before the next row.
+Backfill query plans use the existing path/owner/version/file indexes with a candidate-order temporary sort;
+the Health-only aggregate scans metadata with indexed owner/path lookups.
+Source hashes, original failures, query plans, locale proof and test logs:
+tmp/evidence/ucu16-tail-9c6b3dea/row290-source-audit.json and adjacent receipts.
+
+2026-11-16 row291 local configuration/lifecycle/admission component Complete:
+All seven exact46a334c4 paths and Next8c session semantics are audited. Persisted
+normal/preview configurations now carry default60/custom45 idle seconds,
+Keep Running0, omitted readiness1–3, honored4–10 and capped20→10. Browser preview
+retains its own expiring producer. Database failures are not silently defaulted.
+The modern worker owns idle; only real demand touches its heartbeat. Legacy
+host supervision and Native choices/deadlines remain. A stalled refresh does not
+block demand or cancellation, manufacture viewers or advance on-demand state.
+The TS wrapper caps Next admission at10; Next master/preview/TS startup requests
+share one configured overall budget instead of the hard20s limit. Native keeps
+its original budget. The actual ten-segment case takes about24s.
+
+Actual accepted025 private schema0.1.4 ignores SessionConfig: the isolated real
+worker does not expire at configured1s (valid negative run
+1a695133-325b-4baf-a321-31ffb307749b). A managed bounded describe/identity probe now
+refuses that collision before output mutation. Enabled Next Health uses the
+same contract check, with full/brief messages in all nine cultures. Schema0.1.5+
+within the same breaking series identifies the selected terminal successor;
+this does not claim upstream8c lacks sessions. ADR0135 is Proposed/Partial;
+accepted runtime packages and manifest remain unchanged.
+
+Final native-Linux evidence at c5aff430 plus the isolated diff:
+92 focused config/session/index/manager/Health/i18n tests pass
+(22370ab0-f26f-45a9-b218-a0a163702da8);109 existing HLS/TS request regressions
+pass (59f0edea-4185-40bf-b1aa-04f4b861ebf3). Selections overlap and are not added
+as unique cases. Strict infra/scanner/web all-target Clippy, architecture and
+hydration lint (31 existing suppressions), formatting and new-allow policy pass.
+Original lint failures are retained and corrected without new exemptions.
+Actual old-worker admission control passes (25ed0818-5155-4cc6-a522-ca3b296e67df).
+Exact unpatched6c passes default/4/6/capped10 readiness, worker idle, Keep Running,
+registry/task/output cleanup and capacity release
+(8154b8b7-6f73-402f-ae23-df8b77b89470); no owned worker/FFmpeg remains. Its171MB
+debug binary exceeded the existing128MiB inspection budget. A separate41MB
+objcopy --strip-debug copy retains identical describe data; original/transformed
+hashes and the oversize failure remain recorded. No inspection limit is waived.
+Inputs: fixed6c archive8055f456, Rust1.99.0 and exact retained FFmpeg2.0.10.
+The unpatched capped case logs a missing-input fallback; these controls prove
+session protocol/lifetime, not selected-media decoding or patch retirement.
+Sandbox startup/loopback failures remain distinct from the semantic negative.
+Receipts and source hashes: tmp/evidence/ucu16-tail-9c6b3dea/row291-local-checkpoint.json
+and adjacent raw logs. Consolidated patched successor, indexed/cache contract,
+required packages and decoded international playback remain mandatory.
+
+2026-11-16 row292 scan-notification and probe-hint components locally verified:
+All ten exact6bbb38d8 changed paths are audited. The two C# test/nullability fixes
+introduce no additional Rust behavior. The valid pre-fix control fails both
+independent assertions: a completed durable real local scan sends zero live/
+preview notifications, and serialized standalone text has no format hint
+(run faefb893-86a9-48a0-b522-add49e4999b3). Earlier fixture API/schema mistakes
+are retained separately and do not count as product defect evidence.
+
+The existing projection port now resolves a Library root through persisted
+items and paths, includes Next mirrors of Native sources, and excludes
+unrelated libraries on the same media source. Notification happens only after
+successful provider/local work, post-scan extraction, cleanup confirmation and
+existing scheduler-intent admission, before the operation becomes Complete.
+There is no scheduler Reset/rebuild or viewer touch. Local shallow/deep/repeated
+scans and a neighboring library exercise the actual public durable queue and
+claim path. SQL playout items remain identical. Unit controls cover all four
+providers, targeted remote shows, empty dependencies, failure/cleanup/admission
+refusals and observable projection lookup/notification errors.
+
+Known standalone text now advertises served stream0: SRT/subrip/mov_text maps to
+subrip/srt, ASS/SSA to ass/ass and WebVTT/VTT to webvtt/webvtt. Unknown codecs keep
+ordinary probing; multiplexed embedded sources retain their own track hints.
+Prepared/extracted/provider artifacts derive hints from their written extension;
+live rebased captions, retained provider captions and generated ASS credits use
+the same mapping. Existing seek, selected-track, explicit-Off, pinned-selection,
+provider filtering, source/session and post-preparation checks remain.
+
+Native-Linux verification: first six controls pass (2972ef81-6830-4bc0-9710-13f3f898dfc5).
+The broader82-case selection composes76 passes from00445683-3547-45ea-80c1-072b420af3b0
+and six passing recovery cases65c88bf2-b8cd-47ea-81b6-c2e694250c28. One original
+failure is a loopback denial and three are attempts to create selector fixtures
+in the read-only user directory. Recovery uses owned isolated app data/state and
+local loopback. The remaining two expectations are corrected: rebased captions
+now have the tested hint, while an unavailable directory is skipped rather than
+being a failed scan. No production behavior is changed for those expectations.
+Strict all-target Clippy passes for app/infra/scanner/web; source architecture,
+hydration lint (31 existing suppressions), formatting and new-allow policy pass.
+The exact dependency query over113 current migrations uses existing library,
+media-owner, playout-item and mirror indexes with an order temporary B-tree.
+This is schema/query inspection, not load/performance acceptance.
+
+Actual exact6c/FFmpeg2.0.10 proof passes the two existing isolated text runtime
+regressions, covering seven Burn/Convert/Off/embedded/sidecar/WebVTT cases,
+decoded selected880Hz Dutch audio, cue/seek/settings assertions and cleanup
+(run23e8b255-5500-4450-815f-f7ec66c6fda5). No owned Next/FFmpeg remains. This
+unpatched Linux input does not qualify the consolidated runtime, all patches or
+other platforms. Inputs and scope are retained in row292-real-text-runtime.json.
+Full source hashes, original negatives and component results:
+tmp/evidence/ucu16-tail-9c6b3dea/row292-local-checkpoint.json and adjacent logs.
+
+Row292 remains In progress. The real post-publication input-open barrier now
+reproduces the ordinary local sidecar gap: the present control has blue programme
+video, selected880Hz Dutch audio and visible captions; removing the sidecar after
+publication makes FFmpeg subtitle initialization fail and the worker exits before
+readiness (rune575fd0a-f1e6-477c-b434-4b3c832d0ba6). This is a valid semantic
+negative, retained in row292-caption-race-baseline.log/json. The runner originally
+expected fallback frames and rejected the stronger readiness failure; its narrow
+classification failure does not invalidate the captured defect or justify a rerun.
+
+ADR0136's scoped local caption relay is implemented and locally qualified.
+Independent process-local HMAC grants carry identities/digests, never
+source paths; current active owners, programme/media and caption bindings are
+rechecked around bounded existing Unicode/charset decoding. Only unavailable
+automatic captions may return matching empty text; exact pins, changed media,
+revoked owners, malformed text and storage errors remain failures. Provider,
+prepared and embedded ownership is unchanged and requires separate applicability
+and continuity proof. Direct exact managed FFmpeg subtitles-filter trials accept
+the empty SRT/ASS/WebVTT documents (row292-empty-caption-formats.json); this is
+format compatibility alone. All four actual worker
+present/file-removed/path-cleared/row-replaced Burn cases pass with blue
+programme video, selected880Hz Dutch audio, captions only in the present control
+and joined cleanup (runb98127d0-7312-44c8-b7e4-c258b238de4c;
+row292-caption-burn-race.log/json). Exact source/input hashes are in that receipt;
+no owned worker/FFmpeg remains and the isolated fixture root is removed. Four
+HTTP/listener regressions pass (run4f5a2023-c742-4c16-9b1f-68c54f76b602).
+Five grant regressions initially fail in their
+fixture before grant access: the historical schedule needed current canonical
+SQL dates rather than direct SQLx datetime binding. The corrected fixture now
+passes5/5 (run242cbb85-1254-4efd-b96f-9a05cb278295;
+row292-caption-unit-recovery.log), composing9/9 current controls with the four
+unchanged web cases. They cover strict pins, read limits/charset failures,
+tampering/expiry/unknown fields and cross-host denial before storage, a signing
+key independent from the worker-visible media bearer, revocation after owner
+replacement/Stop or media/item/engine changes, and a Next output mirror of a
+Native source. The original fixture failures remain retained, never classified
+as production negatives. Exact FFmpeg also accepts all three empty formats from
+extensionless isolated HTTP URLs with the expected MIME; the listener joins
+(row292-empty-caption-http-formats.json).
+
+Final current-source trial8331764a-5731-49b3-a575-178c770d6420 passes10/10:
+the nine grant/HTTP controls plus the actual race in both Burn and Convert,
+eight AV cases total. Present captions retain Burn glyphs or mapped spanning
+HLS cues; missing captions yield valid empty HLS text while blue programme video
+and selected880Hz Dutch audio continue. Every worker/listener joins, output
+is removed and no owned worker/FFmpeg remains. Hashes of changed Rust/Cargo
+inputs against the recorded base are retained in row292-caption-race.json,
+with its log. This
+supersedes the composed nine controls after splitting two oversized test helpers;
+the original strict-Clippy length failures remain in row292-caption-clippy.log.
+The two existing real text regressions are rerun against the changed relay and
+pass seven embedded/sidecar Burn/Convert/Off/WebVTT cases with cue/seek/settings
+and audio checks (run2bc8c277-57b7-439c-afe2-d6a0a1a742c6;
+row292-caption-text-runtime.log/json). No owned process remains and its isolated
+fixture root is removed. Functional/security qualification of the ordinary local
+relay is Complete within this scope. Strict all-target Clippy for the four
+affected app/infra/scanner/web crates passes (row292-caption-clippy-final.log).
+Formatting, new-allow policy, architecture lint and the canonical progress check
+also pass. The local component receipt is row292-caption-local-checkpoint.json;
+row292-caption-preservation-check.json confirms the foreign root, old milestones/
+debts, first289 ledger rows, accepted pin and all13 runtime manifests are intact.
+Provider/prepared applicability and all unchanged integrated Health, continuity,
+playback/browser/platform/CI and ordered closeout gates remain.
+
+2026-11-16 ordinary provider-caption continuity component Complete within native
+Linux functional/security scope. Existing provider presence control77f4f577
+passes Plex/Jellyfin/Emby Burn/Convert, including three native provider render
+controls. The valid automatic Plex row-removal trial34328541 passes blue AV,
+selected880Hz Dutch audio and captions while present; removing only that row
+after publication prevents readiness for20s. The old full descriptor changes
+with caption selection and the handler returns503 before preparation. Retained
+row292-provider-caption-race-baseline.log/json owns the negative; its driver's
+lowercase label mismatch is a classifier failure, not an invalid semantic trial.
+
+ADR0136 now separates independently signed ordinary provider-caption admission
+from mutable text selection. The signed AV authority still binds occurrence,
+source/version/file revision, selected video/audio, policy, graphics and provider
+identity. Remote provider identity remains bound even for locally mapped AV.
+An old caption grant can become empty when its ID/path disappears; it cannot
+select a replacement ID, admit another owner/audio/clock, change AV or provider
+servers, or bypass exact pins. Qualified source-caption intents retain their
+original strict pipeline. Provider fetches reuse existing bounded authentication,
+UTF-8/UTF-16 decoding,32MiB artifacts, leases and the source/text cache key;
+consecutive occurrences keep different AV authority but one identical artifact.
+HTTP401/403/500 and malformed Unicode remain observable failures.
+
+Initial focused trial22c60851 passes26/26 including16 real provider races;
+pre-cache-reuse consolidation passes34/34 and is retained separately. Final
+current-source005db666-dab7-46b7-b5c2-916a8fd4eaa8 passes35/35:16 provider
+races plus8 local races,6 existing provider and7 existing text cases (37 actual
+Next cases),26 SQL/grant/identity/cache controls and4 HTTP/listener controls.
+The SQL/grant preview/mirror control retains a Native source, then refuses a changed
+mirror relationship. No owned worker/FFmpeg remains, all fixture roots are
+removed and typed-source hashes are in row292-provider-final-qualification.json.
+Strict four-crate all-target Clippy passes in row292-provider-cache-clippy-final.log.
+The added consecutive-occurrence cache control raises the final replay to35/35
+at005db666-dab7-46b7-b5c2-916a8fd4eaa8. It preserves the original extraction
+cache identity, proves distinct occurrence authority and verifies a single
+artifact after two authenticated reads. The earlier34/34 result is retained as
+row292-provider-before-cache-reuse-qualification.log/json. The final input
+manifest/log is row292-provider-final-qualification.json/log. Two subsequent
+Rust module-doc clarifications change no typed behavior and are identified in
+the component receipt rather than rerunning the same runtime proof.
+Original compile, large-future/function-length and underscore-fixture lint
+failures remain retained. No lint exemption is added. This ordinary component
+does not accept the remaining source-qualified/prepared/transient paths or
+the consolidated runtime/window/platform package.
+Canonical component receipt: row292-provider-caption-checkpoint.json. Format,
+new-allow policy, architecture and progress checks pass; the exact Next/FFmpeg/
+FFprobe input attestation and preservation receipt remain beside it. Earlier
+accepted milestones/debts, first289 rows, baseline and13 runtime manifests and
+the foreign root checkout remain unchanged.
+
+2026-11-16 row292 ordinary immutable-prepared caption component Complete within
+native Linux functionality/security scope. Existing prepared text/audio/seek
+matrix passes after a sandbox-listener recovery. The new controlled race proves
+that clearing only an automatic sidecar Path replaces blue programme AV with
+black fallback; its present and missing-file controls pass. The initial child
+test-selection error is retained separately and is not product-defect evidence.
+Signed prepared-caption authority now excludes only mutable caption selection,
+retaining the frozen source publication/artifact, streams, package/settings,
+profile, graphics, occurrence and selected AV. Each callback/read reuses the
+existing confined artifact resolver; original caption IDs and strict pins remain
+distinct from mutable automatic captions. Final current-source run
+03c964d6-3386-40f3-9f4b-652c3002c1c0 passes48 tests, including50 actual Next
+cases. Eight new prepared Burn/Convert races preserve programme/audio; six SQL
+authority fences, missing AV, malformed caption text, replacement IDs, foreign
+owner/audio and owner revocation are checked in the same isolated runtime trial.
+All affected app/infra/scanner/web targets pass strict Clippy without new allows.
+Canonical receipt: row292-prepared-caption-checkpoint.json, beside the exact
+source/input qualification, original negatives and cleanup records. This closes
+the ordinary prepared component, not transient preview or whole-row acceptance.
+
+Maintainer row292-only closeout2026-11-16: reassess current code/evidence, reuse
+valid proof, preserve all agreed requirements and stronger existing ErsatzRS
+behavior, then pause after row292. Do not start rows293–296 or optional variants.
+Finite remaining row292 list:
+R292-A (covered): successful scan/dependent publication notification and known
+text probe hints reuse the82 composed controls and retained actual text cases.
+R292-B (covered): ordinary persisted local/provider/prepared sidecar continuity
+and security reuse their completed component receipts; final prepared replay
+also proves the earlier ordinary routes and immutable-artifact protections.
+R292-C (locally Complete): ordinary provider sidecars when an
+optional finite source-caption intent is declared. The controlled publication
+boundary reproduces black fallback after removal, with a passing present control.
+The publisher now admits its signed ordinary-caption binding while the callback
+still runs the unchanged complete-source qualifier with actual runtime support.
+Qualified pages retain their existing strict route. A caption-only change during
+optional work can fall back only after independent signed AV/intent revalidation;
+an unchanged full descriptor retains its original error. Four Burn/Convert
+present/removal cases and six existing provider security/cache regressions pass
+together (seven tests; exact run ID is retained in
+row292-optional-source-final.log/json). Strict four-crate all-target Clippy passes
+in row292-optional-source-clippy-recovery.log. The first duplicate-index fixture
+did not reach this boundary and is retained as such, never as defect proof.
+R292-D (locally Complete): automatic sidecars in transient local/prepared preview
+publication. Both real producer controls pass with captions present and fail
+after the one caption mutation; the original isolated child suppressed stderr,
+so retain the paired controlled failures without inventing a particular panic.
+The correction uses the existing relay with one signed preview owner and frozen
+media/profile/occurrence binding, including zero-ID private sessions without
+fake persisted rows. Source, replacement-ID, owner revocation and token-purpose
+controls pass; explicit/custom choices and generated credits retain their paths.
+Existing eager provider/embedded preparation keeps its owned artifact unchanged.
+Current trial d81d9815-a384-4a50-b7a9-c004a3409e82 passes68 tests, including
+eight actual preview Burn/Convert AV cases and the prepared publication/source
+authority controls. Strict four-crate all-target lint passes without new allows.
+Receipts/logs: row292-transient-caption-final.json/log and
+row292-transient-clippy-qualified.log; original paired failures remain in
+row292-transient-caption-baseline.json/log.
+Embedded/extracted tracks and observed source-qualified pages do not call the
+upstream positive-ID sidecar endpoint: embedded Burn is prepared from the owned
+media and Convert keeps its original media stream; retain the existing passing
+embedded/qualified-source proof unless a concrete affected regression appears.
+R292-E (locally Complete): map the remaining affected checks to
+their existing requirement and exact source/artifact inputs, run only missing or
+invalidated proof, retain every agreed final/source/browser/playback/platform/CI
+gate, validate canonical records and record the row292 stopping result. Shared
+window gates are not waived by a completed local component or by this requested
+pause; no authoritative disposition/pin advancement precedes required acceptance.
+Current combined candidate e4865d96-32a6-434e-a504-768dc0fe2854 passes117 tests,
+including62 actual Next cases, prior Native provider controls, both ordinary and
+private preview authority fences, and unchanged troubleshooting/HTTP contracts.
+Exact current source/input hashes and cleanup are retained in
+row292-closeout-regressions.json/log. The82 scan/dependent/hint controls are reused
+within their unchanged source/fixture scope, attested in
+row292-scan-hint-evidence-reuse.json. Existing source qualification and caption
+format proof is retained; no new optional source/codec variant is started.
+The exact current server7978a83da29c87838c1796190f9a06f84d57884510a0eb34130eb80df351986c
+passes Native and Next smoke, including decoded Dutch audio/captions, wrapper
+reconnection, preview and idle cleanup. Required TSDuck passes93 Native checks
+across legacy/hybrid MPEG-TS and segmenter/direct HLS, and86 Next checks across
+Hybrid/HLS, with zero failures. Source, worker/FFmpeg/FFprobe and server hashes,
+all five terminal command results and retained raw captures/fixtures are in
+row292-playback-closeout.json and row292-playback-artifacts. The task-owned
+calibration inputs are checksummed and retained before their temporary originals
+are removed. All test/gate-owned processes are drained and isolated roots removed.
+Strict affected all-target Clippy, formatting, new-allow policy, architecture
+and progress validation pass. Two ADR status-label/link validation failures are
+retained separately; the existing umbrella debt remains open, with ADR0136 Partial
+for shared acceptance. No runtime repair or requirement waiver is inferred from
+that metadata correction. Canonical local row receipt: row292-final-checkpoint.json.
+No row292 functionality or mandatory local proof remains. Shared full-window matched-bundle/browser,
+source/runtime/package/four-platform/CI and ordered delivery gates remain
+mandatory before accepted ledger dispositions or pin advancement.
+
+2026-11-16 row293 local component Complete; reviewed as Covered by the existing
+qualified FFmpeg9 runtime within native Linux x64 scope. Source map: exact
+ErsatzTV d1e6d52e changes .github/ffmpeg.json, CHANGELOG.md and the three
+Dockerfiles only; there are no UI, validator, repository or persisted-state
+changes. Rust filter/simple.rs::subtitles_filter, its subtitle graphics helper
+and pipeline/mod.rs text Burn consumer already use the subtitles filter without
+forcing simple shaping. Existing fontsdir, seek, hardware-transfer and selected
+track behavior remain unchanged. No dependency downgrade or application change
+is needed. Actual managed ErsatzRS-ffmpeg2.0.10/n9.0 binary SHA256
+bb2f58a41e252d115f878e84340317a17caa440e801a4c54126b60b9dcff8cb4
+renders Arabic U+0628 U+0644 U+0627 (lam-alef example) with FreeMono Bold,
+font SHA2567a5ded6ffe5ba84c7c478de521ad0653efae4d2b92b251216bc390c6022e91ac.
+Fontconfig character coverage verifies those letters and U+FEFB present and
+U+FEFF absent; verbose libass font selection confirms that exact font.
+Controlled640x360 RGB24 single-frame ASS rendering: default subtitles and
+explicit ass:shaping=complex are byte-identical, SHA256
+735fd1f39f82738da92aa1a59f3be3dd7e1d47b77aa60feaba169a51564f6f08,
+787 lit pixels; explicit simple has1888 lit pixels and visibly adds a box.
+SRT at the same explicit font/style also equals its converted-ASS complex
+reference, SHA25659a316903fae41ddc6c5d89ebc8b85e507f3cdbbc9733eeb1ebcc219109ebf33,
+1121 lit pixels; simple has2882 lit pixels and differs. ASS and SRT retain their own
+native canvas/scale and are compared only against matching references.
+An initial SRT control used its tiny default Arial style and failed the
+fixture's >100-lit-pixel threshold; that was a fixture mismatch, not a product
+failure. The corrected paired trial fixes the same FreeMono Bold style in
+both SRT and its converted reference. No production setting was changed.
+Reproducer, raw frames, selected-font logs, hashes and visual comparison are
+retained under tmp/evidence/ucu16-tail-9c6b3dea/{run-row293-shaping-proof.py,
+row293-shaping-proof.json,row293-shaping/}. This closes finite list item4's
+local functionality/applicability and mandatory shaping proof; unchanged
+source/package/platform/window gates remain required. No blanket four-platform
+shaping acceptance, final ledger disposition or pin advancement is inferred.
+
+Row294 finite local completion list (source fafd9b43):
+R294-A Complete within local SQLite scope: measure actual SQL loads in Classic, block
+and playlist reference preparation, including duplicated smart sources and
+artist expansion; distinguish bulk state loads already present in ErsatzRS.
+The actual engines consume owned in-memory reference data and do not perform
+repository queries during enumeration. Exact21-path upstream diff/source map
+is retained at tmp/evidence/ucu16-tail-9c6b3dea/row294-source-map.json.
+R294-B implemented and locally verified: only for measured duplicate loads,
+retain successful immutable source material within one build/preparation.
+Never retain membership across builds or share mutable enumerator/override
+state. Preserve the existing SQL order and per-item source identities.
+R294-C Complete within local SQLite scope: prove reduced query counts, unchanged
+ordered reference/playlist data and independent overrides/cursors, fresh
+membership after a later build, affected production continuation/refresh and
+strict lint. Reuse valid existing continuity proof where source is unchanged.
+Stopping condition: A measured, each demonstrated B corrected or proven covered,
+and C passes; then close this component before row295. Existing shared final
+acceptance remains mandatory. Initial Classic measurement is now verified:
+three schedule items with the same smart source perform3 smart-query lookups,
+1 anchor/state bulk query and1 fill-group/state bulk query,37 total SQL
+statements. Run1b5a23c3-1d6f-4519-84e5-186609866f5a passes the actual SQLite
+trial. Source identity correctly remains one reference-data key. The first
+instrumentation attempt saw0 events because a thread-local subscriber did not
+cover SQLx workers; nextest-process-global capture corrects that fixture and
+retains the original failure. Logs: row294-baseline-loads{,-qualified}.log.
+This demonstrates a specific duplicate smart-load gap without a state-loading
+gap. This initial measurement checkpoint is retained as a9eb7e2a; the current
+implementation and qualification below supersede its open-work observation. The final unchanged-count trial
+c47ffc8e-f094-46c8-8630-d1db4ff46eb0 passes after formatting and the test-only clone_into
+lint correction; strict infra scheduling_repository Clippy passes. Final logs:
+row294-baseline-loads-final.log and row294-measurement-clippy-qualified.log.
+
+2026-11-16 row294 implementation proof: all21 upstream paths are mapped.
+The three baseline trials f28cd576-ed83-401e-9b24-b028377432c4 establish
+Classic3/preview3/block4 smart loads, separate standalone flat/structured
+playlist calls2, and2 per-artist membership queries. No per-anchor state loop
+exists in Rust; both state loads already use one joined query. Core engines,
+state serialization, ordering, continuation and health-readiness rules are
+unchanged. The existing batched Classic grouping metadata is also retained.
+Classic/block/preview entry points now create a private build-lifetime cache
+of successful smart-collection material by source ID. Existing OnceCell and
+mutex primitives provide single-flight loading; no new dependency or persistent
+cache is added. Config-flag memoization is shared with the parent repository;
+collection membership never survives the build. Callers own clones before
+per-item overrides or enumerator creation. A failed/cancelled initialization
+is not retained. Standalone playlist calls still remain independent (2 loads),
+matching upstream's null-cache preview/helper contracts; Classic flat and
+structured playlist preparation within one build now uses1 smart load.
+Artist membership uses1 JSON-bound query for all artist hits, and each unique
+video is hydrated once with the existing complete Rust media loader. Original
+search-hit order, ascending per-artist video IDs and stable deduplication remain;
+no unrelated per-video metadata loader rewrite is introduced.
+Runabb06022-c120-4629-98c3-590dc083e763 passes76 existing repository regressions
+and2 new cases; its sole failure was the artist fixture retaining the old
+single-video expected list after adding a second video. The corrected actual
+hit-order assertion is33,31, not a production ordering repair. Final current
+runf3ae0c31-d308-453f-b7d7-7fef20cd7707 passes all4 new controls, including fresh
+membership on the same long-lived repository and different Japanese/Dutch
+playlist choices on identical source media. Together these compose80 passing
+cases. Between those runs production changes were explicit imports/formatting
+only; test changes corrected the fixture expectation and added the independent
+choice control. Existing76-case proof is reused rather than rerun unchanged.
+Classic now loads smart material once (31 total statements versus37 baseline),
+preview once and block once. Raw logs/source identities are retained under
+row294-{all-baseline,repository-regressions,cache-final-tests}.log; original
+compile/lint/fixture failures remain retained. Strict infra all-target Clippy passes in row294-cache-clippy-final.log;
+formatting, architecture and progress validation pass. R294-A/B/C local
+functionality/proof is Complete; all shared acceptance remains open.
+This is local data-loading and continuity proof, not a new exact-server,
+matched-bundle, four-platform or window acceptance claim. The changed scheduling
+code and embedded changelog require current-candidate proof at the retained
+shared final gates; row292's server receipt remains its earlier tested candidate.
+
+Row295 finite local completion list (in progress, source1a566770):
+R295-A projection functionality/proof Complete within unit scope: normalize each physical file index by the
+number of distinct nonnegative external positions below it, independently of
+response order. Preserve external subtitle provider indexes, internal track
+metadata and the existing refusal to treat an external audio file as a physical
+AV stream. Keep source declaration/native-file qualification strict. Existing
+Rust already handled external-last without introducing negative indexes; do
+not import upstream's old whole-list offset behavior. The current red trial
+row295-index-baseline.log reproduces external-first raw2/3/4 versus0/1/2.
+R295-B implementation is locally Complete: stable identity storage/ordinary
+repair, localized Health, Native/Next request routing, extraction and named
+source-reader boundaries are implemented with scoped passing evidence. Mandatory
+C integration is now locally Complete (see2026-11-17 closeout below); this is not full row acceptance. Existing Jellyfin movies/episodes
+must be revisited through ordinary claimed scans even with unchanged or absent
+ETags. Preserve old rows/cache and source ownership until successful transactional
+replacement; preserve disabled-library state. Track pending repair truthfully
+in Health. Audit/remap or refuse stale exact pins so normalization cannot
+silently retarget a saved track; preserve the distinction between physical
+subtitle indexes and external provider indexes when they overlap. The prior
+negative-index-only migration cannot repair positive shifted raw indexes.
+R295-C mandatory integration proof: retain the passing persistence/idempotency,
+failed-scan controls and before/after/interleaved ordinary Next Burn selected
+AV/caption proof. SQLite reopen/restart, Native and actual Convert selected
+AV/caption proof, retained source qualification and applicable strict local
+checks remain required. Reuse unaffected provider/track evidence within its real source scope.
+Stopping condition: A/B implemented or proven covered and all named C controls
+pass; then close this local component before row296. Shared full-window,
+matched-bundle, four-platform, final/CI and ordered delivery gates remain open.
+Source map: tmp/evidence/ucu16-tail-9c6b3dea/row295-source-map.json records all7
+upstream path hashes. MySQL migrations are outside the SQLite-only product;
+the two generated Designer files carry EF model metadata, while migration
+bodies request data rescans. No new upstream schema is being ported wholesale.
+The initial projection checkpoint was limited to projection; no migration or live DB,
+operator install, pin rewrite or accepted ledger disposition has occurred.
+Run6ae579b9-ada6-4d74-945c-d0f694fb0e52 passes10 projection cases. The before/after/interleaved
+matrix also reverses response order; separate gap/negative/missing/duplicate
+external-ID controls preserve the stronger existing Rust behavior. External
+subtitle indexes and internal codec/language/title/channel/default/forced data
+survive. The existing8 projection/source-declaration/external-audio cases pass
+alongside the2 new controls. The exact upstream algorithm's count of negative
+external IDs is not copied: existing Rust tests already prove those IDs refer
+to separate provider files, not source positions. Source declaration indexes
+are normalized consistently with native stream projection; acquisition still
+requires its unchanged independent native layout/source/owner proof.
+The original projection-only storage assumption is superseded by the concrete
+pin-collision evidence below. Its index calculation remains verified. No
+end-to-end runtime acceptance is inferred from this scoped component. Receipt: row295-projection-checkpoint.json. Strict infra all-target
+lint passes in row295-projection-clippy-final.log. Formatting, architecture and
+progress checks pass. R295-B/C remain required before this row can close.
+
+2026-11-16 row295 stable-identity/storage checkpoint (ADR0137 Proposed/Partial):
+The initial controlled pin test did not reach its assertion: incomplete schema
+fixtures omitted required DateAdded/Channels fields. Those failures are retained
+as fixture evidence, not product negatives. The corrected controlled trial
+row295-pin-collision-controlled.log reaches the actual selector assertion:
+provider subtitle2 selects Dutch sidecar ID2 before normalization, then English
+embedded ID1 after the earlier physical-index write. This is a real conflict
+with existing exact-version precedence, not permission to change that precedence.
+The accepted arithmetic is retained as a separate provider-to-physical map;
+MediaStream, Subtitle, exact pins, custom selectors and scheduling identities
+keep their original provider track keys. Current10 projection controls pass
+with source declarations using physical indexes and ordinary metadata retaining
+provider identities. Source acquisition still gets physical clones and performs
+its unchanged independent source/native-layout/claim checks.
+Additive migration202611162205 adds ProviderStreamIndex and a MediaVersion
+projection revision. Legacy records remain0 and ordinary claimed movie/episode
+scans bypass ETag equality until successful transactional map publication.
+No pin/track rows or ETags are rewritten by the migration. Library LastScan is
+reset for Jellyfin only; ShouldSyncItems and other provider libraries remain
+unchanged. Physical map rows and revision1 publish in the same existing
+transaction as metadata, subtitles and claimed source state. Invalid or absent
+mapping refuses preparation instead of guessing source indexes.
+Existing15 service/negative-audio-migration controls pass in
+row295-stable-identity-service-controls.log. Three current repair controls in
+row295-storage-qualified.log additionally prove absent-ETag bypass, movie and
+episode rollback on HTTP503 and a mid-transaction map INSERT failure, original
+caption/map retention, successful same-ETag repair/idempotency, and the actual
+pre-upgrade migration preserving saved playlist pins, cached caption references,
+ETags and a disabled Jellyfin library. The migration fixture's initial missing
+required fields and incorrect choice of CollectionItem (which has no exact pin
+columns) are retained failures; the corrected proof uses the real PlaylistItem
+contract from migration202607271400. Core/infra strict all-target Clippy passes
+in row295-storage-clippy.log. No local/Emby/Plex index contract is changed.
+Remaining finite B functionality after the storage checkpoint: registered/localized
+pending-map Health (closed by the next checkpoint below) and application of the
+qualified physical map at Native/Next video/audio/embedded
+routing and mapped-source readers. Bind the map to mutable source authority;
+missing or changed maps must not silently route an old logical selection.
+Remaining C proof: actual selected AV/captions across the agreed source layouts,
+SQLite reopen/restart, source/ownership and failure refusals, required local
+checks and unchanged shared final gates. No map consumption/runtime acceptance,
+accepted disposition, authoritative pin or release/installation is claimed here.
+
+
+2026-11-16 row295 Health/ordinary repair checkpoint:
+R295-B Health is locally Complete. The registered check counts pending or
+structurally invalid Jellyfin movie/episode version maps, without counting
+non-Jellyfin versions or requiring physical entries for external subtitles.
+Retained attachment mappings are valid even when no MediaStream row projects
+that attachment. Missing native mappings, unsupported projection revisions,
+ambiguous native identities and impossible index bounds produce a warning.
+Health uses the same predicate as scan admission: a revision1 map missing a
+track cannot be hidden by equal provider ETags. Ordinary scans repair it while
+keeping saved choices and disabled-library settings. This is structural stored
+map evidence, not native file/source authority or decoded playback acceptance.
+The title, count, remedy and brief warning are translated in all nine cultures;
+unknown diagnostics remain verbatim and unrelated checks are not relabeled.
+Four Health/registration/persisted-result cases pass in row295-health-tests.log.
+The initial service run row295-health-scan-controls.log passes25 of26 cases,
+including all11 Emby controls and current movie/episode repair. Its one failure
+is an obsolete baseline expectation that negative audio must remain until a
+migration forces a rescan. The new ordinary admission already repairs it.
+The revised existing regression preserves both ordinary repair and the older
+migration path by injecting the same legacy row again before migration; it
+passes in row295-health-audio-repair.log. This composes26 passing service cases
+without discarding the old migration/track/idempotency requirements. All41 i18n
+cases pass in row295-health-i18n.log, including the nine-culture new diagnostic.
+Strict infra/web all-target Clippy passes in row295-health-clippy.log. Formatting,
+architecture, hydration and progress validation pass with no new debt.
+Receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-health-checkpoint.json.
+Remaining B functionality is qualified physical-map consumption at Native/Next
+video/audio/embedded routing and mapped-source readers, bound to mutable source
+authority. Remaining C proof is unchanged: actual selected AV/captions across
+the agreed layouts, SQLite reopen/restart, source/ownership/failure refusals
+and applicable final gates. No final row disposition, baseline advancement,
+matched server/browser/runtime/platform or window acceptance is claimed.
+
+
+
+2026-11-17 row295 ordinary Next physical routing checkpoint:
+The Next subset of R295-B is locally Complete: selected video/audio and ordinary
+embedded subtitles use physical indexes at the wire/extraction boundary; saved
+pins, custom selection and provider sidecar downloads keep logical identities.
+Published physical audio is translated back before existing exact-choice
+validation. Persisted hints use the same map. Preparation descriptors, caption
+cache keys and AV authority include its version/owner/revision and full mapping;
+missing, invalid or changed maps refuse publication instead of selecting another
+track. A map read is scoped to one MediaVersion and observes readiness, owner
+and entries together. Qualified-source caption readers remain a separate open
+consumer requirement; this does not claim their completion.
+The existing local-provider independence regression found an overstrict first
+implementation: locally resolved files must remain usable without remote item,
+connection or credential metadata. The final loader keeps the owning library
+and stored map authoritative for local input; remote identity still requires
+its exact provider item. Losing provider ownership while retaining map rows or
+a projection revision is refused, including removal of both subtype records.
+The unchanged provider caption grace, source identity, callback and selector
+controls are included in row295-next-consumer-final.log. Earlier fixture failures
+and the discovered local independence defect remain visible in
+row295-next-consumer-regressions.log and row295-next-provider-fixtures.log.
+Burn/Convert projection tests cover all three external-entry positions, physical
+hints, exact pins, physical callback audio and unchanged sidecar identity. The
+FFmpeg extraction snapshot selects physical0:4 for logical6. Map-only changes
+invalidate descriptors, preparation cache and caption AV authority even without
+DateUpdated or selected-track changes. Missing maps, legacy revision and owner
+loss have explicit refusal controls. Nested source validation and selection futures are boxed at their caption/preview
+call boundaries to keep executor stack use bounded.
+Actual Linux Next/FFmpeg playback uses the retained unpatched6c worker and
+qualified ErsatzRS-ffmpeg2.0.10/n9.0 hashes, verified before each run. Three
+external-first/last/interleaved sessions decode the pinned alternate880Hz audio
+and visible burned embedded captions. Existing negative-audio repair and unknown
+HDR regressions add two sessions; all enforce capacity and owned cleanup.
+All430 ordinary Next regressions pass in row295-next-consumer-final.log.
+After the final future-allocation correction, all89 affected selection,
+caption/cache, descriptor and preview regressions pass again in
+row295-next-bounded-futures-regressions.log. They overlap the430 cases and are
+not additional unique coverage. The three current ignored runtime tests pass
+in row295-next-map-runtime-qualified.log (five decoded sessions). Strict infra
+all-target Clippy passes in row295-next-map-clippy-bounded.log; formatting,
+architecture and progress validation pass. Source hashes and log receipts:
+tmp/evidence/ucu16-tail-9c6b3dea/row295-next-map-checkpoint.json.
+No fresh matched SSR/WASM, browser, Native, platform or consolidated first-party
+runtime qualification is inferred from these infra tests. R295-B still requires
+Native final input routing, background embedded extraction and mapped/qualified
+source readers; R295-C retains actual Convert, Native, SQLite reopen/restart and
+remaining qualified-source/owner controls. Prior storage/Health proof stays
+valid. Shared final gates, ledger dispositions and accepted pin are unchanged.
+
+2026-11-17 row295 mapped-source report association component:
+The R295-B mapped scan/report parent association is implemented. Review of the
+actual Jellyfin movie/episode transaction found that acquisition and file
+qualification already receive physical clones, while MappedTeletextWrite looked
+up their results against raw MediaStream.Index. A shifted teletext stream could
+therefore fail the scan or resolve another stream with the same raw number.
+The lookup now joins the transactionally published ProviderStreamIndex for
+Jellyfin and validates the complete revision1 map before associating the exact
+stream/file. The stored observation retains the physical index and source
+revision; MediaStream and exact saved choices retain logical provider IDs.
+SourceTeletext parent validation uses the same map within its existing SQL
+transaction on both replace and load, retaining owner/provider/file/claim checks.
+Local, Plex and Emby keep their existing index contracts.
+The controlled regression constructs logical6->physical4 and another teletext
+logical4->physical2. The former raw query demonstrably picks the wrong row403;
+the production resolver selects row401, and the report roundtrips with physical4.
+A file-backed SQLite close/reopen retains both report and logical parent.
+An unsupported projection revision or missing map entry refuses report loading;
+wrong-parent binding remains rejected. Existing provider layout/declaration,
+source ownership, lease expiry, rollback and report/caption-discovery controls
+remain required and are exercised by the focused suite.
+All47 source-report, discovery and provider-layout controls pass in
+row295-mapped-report-qualified.log. The first run's46/47 result is retained in
+row295-mapped-report-tests.log; its one failure was an older Jellyfin discovery
+fixture without a revision1 map, now qualified explicitly. Strict infra
+all-target Clippy passes in row295-mapped-report-clippy-final.log; formatting,
+architecture and progress checks pass. Evidence receipt:
+tmp/evidence/ucu16-tail-9c6b3dea/row295-mapped-report-checkpoint.json.
+This component does not close all mapped/qualified-source readers: playback
+native-layout correspondence and source-caption selection still need their
+physical-map audit and required real-source integration proof. Native final AV
+routing, background embedded extraction, actual Convert/Native and remaining
+restart/source-authority proof stay open in R295-B/C. No full row, accepted pin,
+platform, consolidated runtime, matched browser or shared final gate is claimed.
+
+2026-11-17 row295 Native HLS request boundary checkpoint:
+R295-B Native HLS original-file routing is implemented at the final request
+boundary. The worker captures map authority before loading logical tracks;
+existing pins/selectors and subtitle preference precedence still operate on
+logical provider IDs. Immediately before command construction it revalidates
+the map and translates original video/audio metadata, chosen audio and embedded
+subtitle input indexes. Mapping failure follows the worker's existing command
+refusal/cleanup path. Original-file identity is matched to the active resolved
+path; external JSON, remote-stream and retained/prepared inputs keep their own
+native indexes. Qualified source-page input indexes are already physical and
+are not translated twice. Generated song video, separate caption files and
+unrelated decoration inputs retain their own routing.
+The mapper reproduces the existing pipeline's automatic audio fallback before
+renumbering, preserves exact selection and builds its replacement atomically.
+The HLS builder regression exercises external-first, external-last and
+interleaved layouts and verifies identical final argv selecting physical video0
+and audio2. It also checks automatic first-audio selection, physical embedded
+image index4, standalone prepared caption index0, retained-timestamp bypass
+and atomic refusal for missing native identities. The reviewed snapshot is
+row295_native_hls_physical_tracks. Existing map/revision/pin controls are reused.
+All144 selected HLS and map-selection regressions pass in
+row295-native-hls-regressions.log, including the reviewed snapshot. Strict infra
+all-target Clippy passes in row295-native-hls-clippy-final.log; formatting,
+architecture and progress checks pass. The initial scope error in the check
+trial and the overlong test in the first lint trial are corrected; the current
+implementation uses the active resolved path and a separate test builder.
+Evidence receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-native-hls-checkpoint.json.
+This closes the HLS command-routing implementation/projection proof only.
+MPEG-TS/Direct transport routing, background embedded extraction and the
+remaining mapped/qualified-source readers are still required under R295-B.
+R295-C actual current-candidate Native AV/caption runtime, actual Convert,
+remaining reopen/source-owner and unchanged smoke/TSDuck/final/package/browser/
+platform/CI/delivery gates remain mandatory. The snapshot and builder tests do
+not establish worker runtime acceptance or full Native/row acceptance.
+
+2026-11-17 row295 MPEG-TS/Direct final-request routing checkpoint:
+R295-B transport command routing is implemented. The existing infra map snapshot
+is exposed as an opaque NativeStreamIndexMap adapter; it captures before logical
+track reads, validates current revision/owner/map and applies the same atomic
+original-file mapping used by HLS. The web transport retains its current saved
+pin, custom selector, language/title and subtitle selection paths. Initial and
+ordinary-caption fallback requests map after those choices and before final
+command construction. Runtime hardware retry validates the captured map again,
+then maps both the rebuilt primary request and ordinary-caption fallback.
+Refused authority/translation uses existing startup refusal or retry cleanup,
+including cancellation of a newly prepared retained producer. Prepared/retained,
+external JSON, remote streams, generated song video and qualified page inputs
+keep their independently observed indexes. No new implementation is added to
+FFmpeg's pipeline selector and no persisted identities are rewritten.
+The command regression compares MPEG-TS, Direct MKV and Direct MP4 across all
+three provider layouts. Each format must produce identical final argv with
+physical video0 and selected alternate audio2. Original-file embedded caption4
+and standalone caption0 are checked at the same transport boundary. Captured
+map authority is invalidated by a source revision change before a retry. Review
+also identified a concrete ownership gap in the earlier snapshot: moving the
+same library to another Jellyfin server could preserve version/stream-map fields.
+The snapshot now captures library and media-source IDs; the regression changes
+the owning server independently after a fresh capture and requires refusal.
+The additional binding fields also protect existing Next source fingerprints;
+its focused map/descriptor and HLS boundary regressions are rechecked.
+All77 transport regressions pass in row295-native-transport-regressions.log,
+including cancellation/capacity/retry controls and the reviewed MPEG-TS/MKV/MP4
+snapshot. All16 focused map, descriptor, report and HLS boundary cases pass in
+row295-native-transport-map-controls.log after adding library/source authority.
+Strict infra/web all-target Clippy passes in
+row295-native-transport-clippy-final.log. Formatting, architecture and progress
+validation pass. The first lint trial found a missing test-only import; the
+first snapshot trial is the expected new-snapshot refusal, retained for review.
+Rust/build input hashes are unchanged through the final passing runs.
+Evidence receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-native-transport-checkpoint.json.
+The remaining R295-B implementation is background embedded extraction and
+remaining mapped/qualified-source layout, enrichment and caption readers.
+R295-C actual current-candidate Native AV/caption playback, actual Convert,
+remaining reopen/source-owner and all unchanged smoke/TSDuck/final/package/
+browser/platform/CI/delivery gates remain mandatory. Builder and snapshot proof
+alone does not establish complete Native playback or row295 acceptance.
+
+2026-11-17 row295 embedded extraction component:
+R295-B background extraction is locally Complete within selected-source/cache
+scope. It binds the existing head-file selection to one
+MediaVersion/File before projecting indexes. Jellyfin candidates reuse the
+existing version-aware subtitle filter (codec, language, title and flags),
+then translate only the FFmpeg source index through the captured physical map.
+Subtitle.StreamIndex and relative cache keys remain logical. The owning
+Jellyfin server supplies its path replacements; unrelated servers cannot
+redirect the input. Other provider index contracts remain unchanged, with
+host-platform path conventions supplied by the existing guarded helper.
+FFmpeg writes into a temporary directory under the existing cache lease.
+Publication rechecks the selected file/path, complete version/owner/source map
+and current owning path replacements inside the writer transaction. Each row
+must still have the captured subtitle ID/index/codec/revision, embedded kind
+and media-item owner before its staged file is renamed and metadata updated.
+Changed or missing source/map authority refuses publication; changed subtitle
+state remains pending. Process failure and stale work retain prior cache files.
+Final review identified one introduced batch failure path: a repair-pending
+Jellyfin item must not prevent later valid items from extracting. Source/map
+conflicts now log a per-item refusal and continue the existing batch; ordinary
+database/cache failures retain their error handling. The actual FFmpeg trial
+includes a missing-map item followed by a valid item and asserts pending/done
+metadata separately. This correction belongs to the same extraction safety
+package and does not add another queue or background-work system.
+The same map loader now accepts the existing SQLx executor interface so the
+write fence reads within its transaction, avoiding an independent pool read.
+No new job system, provider API, cache identity or version-selection policy is
+introduced. Font attachment extraction keeps its existing attachment-type
+ordinal; external subtitle/audio positions do not change that type ordinal.
+The source review includes the exact upstream ExtractEmbeddedSubtitlesHandlerBase
+at1a566770 and existing Rust extraction/provider/playback boundaries. Mandatory
+proof covers physical2 extraction for logical4/2/3, retained logical cache keys,
+current publication, stale map/file/path/metadata/owner/kind refusal, a missing
+map and real FFmpeg failure. The owning milestone retains the unchanged overall
+C list; this component does not claim Native video/audio playback acceptance.
+The current87-case trial row295-extraction-qualified.log passes85 cases; two
+new path fixtures failed because the shared replacement helper requires a
+containing directory, not a file prefix. After reading that helper, the fixture
+uses synthetic/clip.mkv under a genuine synthetic directory mapping and asserts
+that the unrelated global mapping would redirect it. The final four-case run
+row295-extraction-final-guards.log passes all three new guards/snapshot cases
+plus the actual FFmpeg matrix. After the batch-continuation correction,
+row295-extraction-batch-guards.log passes those same four cases with the added
+actual pending-item -> valid-item batch proof; it supersedes only the changed
+batch part, retaining all earlier scoped evidence. This composes87 passing ordinary cases without
+rerunning unaffected successes. The first72-case run additionally retained
+five sandbox socket-bind failures and the expected new-snapshot refusal;
+localhost-access rerun covers those failures. All histories remain in the logs.
+The reviewed snapshot selects physical0:2 for logical4/2/3 and preserves each
+original cache key. The real FFmpeg9 test generates a synthetic MKV and extracts
+the expected caption in all three layouts; a real failed input open preserves
+previous text and pending metadata. The four existing public extract-show
+controls also pass in row295-extraction-legacy-runtime.log, including actual
+ordinary local extraction and both configuration gates. Reproducers verify the
+retained qualified ErsatzRS-ffmpeg2.0.10/n9.0 binary SHA before running, with
+isolated data/state/cache paths. This is Linux extraction evidence, not Native
+video/audio playback, a new runtime qualification or platform acceptance.
+Strict infra all-target Clippy passes on the final batch correction in
+row295-extraction-batch-clippy-final.log. Format, architecture and progress
+checks pass; receipts retain final source and log identities. Evidence receipt:
+tmp/evidence/ucu16-tail-9c6b3dea/row295-extraction-checkpoint.json.
+Remaining R295-B functionality is the named mapped/qualified-source native-layout,
+video enrichment and source-caption readers. R295-C actual current-candidate
+Native AV/caption playback, actual Convert, remaining restart/source-owner proof
+and all unchanged smoke/TSDuck/final/package/browser/platform/CI/delivery gates
+remain mandatory. No final disposition, accepted baseline or window is advanced.
+
+2026-11-17 row295 remaining source-reader implementation component:
+R295-B's named reader boundaries are implemented. RetainedSourceIntent captures
+the current complete map before reading the selected file's native layout,
+converts only its private comparison indexes and retains the original database
+stream IDs. Exact file/owner, codec, complete inventory and audio-selection
+semantics stay mandatory. The full map is bound into Jellyfin retained intent
+identity, including unselected entries; other providers keep the prior identity
+shape. Revalidation detects a changed map before publication/preparation reuse.
+Native/Next rich source-page ranking translates the embedded metadata's logical
+index only for comparison against the physically observed request. Returned
+subtitle metadata keeps its ID and logical index, with existing page-language,
+SDH, ambiguity, role/PID/PSI and ordinary-fallback behavior unchanged. Disabled
+embedded captions and explicit Off retain their early exclusions; an unused
+source path does not require a new map read.
+Native interlace sampling translates its selected input index at the probe
+boundary. The existing cache key/primary-video identity stays logical. Cached
+results and fresh samples revalidate map authority; the final cache CAS now
+checks it inside its writer transaction as well as existing source revision,
+path, duration, file-count and primary-index conditions. Alternate-video samples
+cannot overwrite the primary ratio. File metadata/deadline and managed-process
+cleanup guards stay present. QSV header tracing has no provider-number input;
+its existing type-based/default routing requires no scalar-index translation.
+The three-layout reader regressions prove physical0..4 layout correspondence,
+stable row IDs, full audio-language qualification refusal, unselected-map
+invalidation and physical page3 <-> logical5/3/5 metadata association. The
+actual existing FFmpeg9 idet trial now adds Jellyfin logical2/3 -> physical0/1:
+progressive/interlaced results differ correctly, the primary cache survives an
+alternate sample, and a missing map refuses further cache publication.
+Current consumer run row295-reader-consumer-regressions.log passes519 of520
+cases. Its only failure is the new interlace argv snapshot awaiting review;
+the reviewed physical0:0, seek4s,200-frame idet argv then passes in
+row295-reader-snapshot-qualified.log. This composes520 passing checks without
+repeating unchanged successes. Initial argument-name shadowing caused a compile
+failure and was corrected; no functional negative was hidden. Strict infra
+all-target Clippy passes in row295-reader-clippy-qualified.log. The actual idet
+trial passes in row295-reader-runtime.log on the digest-verified retained
+ErsatzRS-ffmpeg2.0.10/n9.0 runtime. This is Linux reader/probe evidence, not full
+Native/Next selected playback, decoded source-caption or platform acceptance.
+Receipt: tmp/evidence/ucu16-tail-9c6b3dea/row295-reader-checkpoint.json.
+R295-A/B implementation stopping conditions are locally met. The finite
+remaining local completion item is R295-C: actual current-candidate selected
+Native AV/captions and actual Next Convert across the agreed source layouts,
+remaining restart/source-owner qualification/refusal proof, applicable strict
+local checks and unchanged smoke/TSDuck acceptance. Reuse the recorded ordinary
+Next Burn, storage, repair/Health, metadata/cache and command-boundary evidence
+where compiled inputs and assumptions remain valid. Any actual integration
+defect reopens its affected component; no acceptance requirement is waived.
+Shared full-window, consolidated first-party runtime, matched SSR/WASM/browser,
+four-platform/final/CI and ordered delivery remain open. No row disposition or
+accepted pin is advanced, and row296 does not start before this row's local C
+stopping condition is met.
+
+
+2026-11-17 R295-C Next Convert/reopen component Complete within Linux scope:
+The actual production Next host now passes the external-first, external-last
+and interleaved ordinary-scan matrix with Convert, using a file-backed SQLite
+database closed and reopened before host creation. The complete persisted map
+is unchanged after reopen; original logical pins drive actual selected Dutch
+880Hz audio and timed WebVTT captions repeated consistently across adjacent
+segments. Decoded video remains free of burned glyphs. Capacity admission,
+duplicate-session refusal and owned shutdown retain the existing host assertions.
+Run0b3a99c3-5e6f-4c89-8fd9-4d07ba3a33e5 passes the three-layout grouped test in
+row295-next-convert-runtime.log. The shared assertion refactor also passes the
+three existing Burn/legacy-audio/unknown-HDR tests (five sessions) in
+row295-next-burn-control.log. After splitting fixture setup to satisfy the
+function-size lint, final run38986024-7a20-4850-ac1e-cd3b1a599bec passes all four
+runtime controls (eight sessions) in row295-next-convert-qualified-runtime.log.
+Strict infra all-target lint passes in row295-next-convert-clippy-qualified.log; formatting,
+architecture and progress checks pass. The reproducer verifies unchanged worker,
+FFmpeg and ffprobe hashes before execution; receipt row295-next-convert-checkpoint.json.
+This closes actual ordinary Next Convert and its map/pin SQLite-reopen proof.
+Actual Native selected AV/captions, remaining qualified-source/owner controls
+and unchanged smoke/TSDuck acceptance remain in C; full-window, consolidated
+first-party runtime, matched-bundle/browser, platform/final/CI and ordered delivery
+remain open. No row disposition or accepted pin advances.
+
+
+2026-11-17 R295-C Native HLS/finite-source component Complete within Linux scope:
+Run683fbff8-93f3-4099-aeeb-2102c4a157a0 passes the grouped public-router Native
+HLS proof in row295-native-hls-runtime.log. A genuine claimed Jellyfin scan
+acquires the generated two-audio/200/888 source through the owning server's
+local path mapping. External-first0/1, external-last4/5 and interleaved1/4
+provider declarations reverse response order while preserving physical file
+order. Each layout passes segmenter Off, segmenter Burn and direct-HLS Burn:
+nine actual public HTTP playback sessions. FFprobe verifies H264/AAC with Dutch
+metadata; decoded660Hz confirms the selected alternate audio. Independently
+decoded source pixels distinguish exact page888 from page200 and plain video.
+Off preserves plain programme video. Every session retires its owned HLS worker
+and capacity; every provider claim completes and observed source reports bind
+physical stream2 to the correct logical metadata parent and exact owner.
+The same three real acquired source receipts also pass existing inventory,
+command/request/interval seals and changed-owning-path-map/mtime refusal before
+open. These negative controls select the exact ordinary command without claiming
+child execution; the separate nine positive/Off sessions prove actual playback.
+Strict web all-target lint, formatting, architecture, progress and staged lint
+allow policy pass. Receipt: row295-native-hls-runtime-checkpoint.json; reproducer
+run-row295-native-hls-runtime.py verifies the retained FFmpeg/ffprobe digests.
+The test application has synthetic startup capabilities and real source tools;
+this does not establish managed startup adoption or matched SSR/WASM acceptance.
+Expected explicit-stop cancellation diagnostics remain in the preserved log;
+all session/teletext/capacity shutdown assertions pass.
+This closes the Native HLS selected AV/caption and mapped finite-source
+qualification/refusal component. Existing MPEG-TS/MKV/MP4 physical-command and
+owner/server-fence controls remain valid within their prior scope. R295-C still
+retains remaining retained-source/owner qualification and current-server
+Native/Next smoke/TSDuck proof before local row closure; all shared full-window,
+consolidated-runtime, browser, platform/final/CI and delivery gates stay open.
+No new row disposition, accepted pin, live mutation or remote delivery occurs.
+
+
+2026-11-17 R295-C retained HTTP source/owner component Complete within Linux scope:
+Runfd34a98c-2f86-4db7-8ebb-5ab8922a0ee1 passes three actual Next retained-source
+sessions for logical2/3/4/5,0/1/2/3 and0/2/3/5 over the same physical file
+layout. Each acquires exactly one complete authenticated HTTP response, with
+zero ordinary media callbacks and no durable SourceTeletextMetadata readiness.
+Actual retained-source callbacks serve AV and independently qualified page889
+captions on the same source clock; copied AV and the original9.2s outpoint pass
+the existing decoded oracle. A changed physical map revokes both describe/open
+access to the existing source grant; restoring it permits the remaining
+playback. A presentation-only edit retains the grant, while changing the exact
+source file path revokes it. Every case confirms bounded stop, empty source
+storage and zero active source work. Receipt: row295-retained-source-qualified.json,
+with per-case provider-source-proof.json records and exact source/tool digests.
+Strict infra all-target lint passes in row295-retained-clippy.log; formatting,
+architecture, progress and staged lint-policy checks pass. Existing storage,
+repair/Health, extraction, readers, Native and ordinary Next evidence remains
+valid within its recorded scope. The shared physical-map loader's later change
+only generalized its executor and exposed the owning source ID; its SQL and
+Native conversion/refusal behavior are unchanged from the retained controls.
+The actual current server builds with SHA256
+1ee807c70673c529992ef4653e2460133af7c2b7c78a191cdad9bf9fa508d502.
+Native and Next smoke pass on that exact server in row295-native-smoke.log and
+row295-next-smoke.log, including Next selected AV/captions, reconnects, preview
+and owned idle cleanup. The remaining local C list is only Native TSDuck and
+Next TSDuck on this same candidate. They are running in the existing bounded
+gate; clip generation is not transport acceptance. Current step state and exact
+commands are retained in row295-playback-closeout.json. No row closure is
+claimed until both required transport checks pass. Consolidated first-party
+runtime/private-patch retirement, full-window, matched-bundle/browser, required
+platform/final/CI and ordered delivery gates remain open independently.
+
+
+2026-11-17 row295 local closeout — R295-A/B/C Complete:
+The finite local stopping condition is met. Index projection, stable logical
+identity persistence/ordinary repair, Health, Native/Next routing, extraction,
+source readers and all named local C proof are implemented or verified.
+Reuse the scoped passing component evidence above; no missing local row295
+functionality or mandatory local evidence remains. Reopen only for a concrete
+regression, rather than adding adjacent variants after this stopping condition.
+The final exact-server Native and Next smoke gates pass. Native TSDuck passes
+93 checks and Next TSDuck passes86, both with zero failures and clean known-
+failure-signature log scans. The candidate remains SHA256
+1ee807c70673c529992ef4653e2460133af7c2b7c78a191cdad9bf9fa508d502 throughout
+all four runtime gates. Receipts/logs: row295-playback-closeout.json,
+row295-native-smoke.log, row295-next-smoke.log, row295-native-tsduck.log and
+row295-next-tsduck.log. No full matching web-bundle or platform claim follows
+from these Linux runtime checks. Current producer inputs, retained component
+proof, requirement coverage and limitations are indexed by
+row295-local-closeout.json under tmp/evidence/ucu16-tail-9c6b3dea.
+All nine freshly generated default calibration inputs are hash-verified and
+retained under row295-playback-artifacts/inputs/calibration-clips; their exact
+producer/template/tool and180s/1080p60 configuration are in
+row295-calibration-inputs.json. Only those verified task-owned worktree inputs
+are removed. The isolated runtime root is removed, zero owned media processes
+remain and captured runtime artifacts are retained. The active window worktree
+and unique authorized commits stay available for row296 and ordered delivery.
+This closes the local row component, not its accepted ledger disposition or
+the full continuation milestone. Every unchanged shared first-party runtime/
+private-patch retirement, full-window, matched SSR/WASM/browser, required
+platform/final/CI and ordered delivery gate remains mandatory. The accepted
+pin and296 observed/289 processed/7 pending ledger counts stay unchanged.
+
+
+2026-11-17 row296 exact source audit and finite local package list:
+Exact9c6b3dea changes six legacy paths and pins worker6c9e0cf7. The worker's
+still-image optimization is already in that fixed source; this does not prove
+that accepted Next025 or current application configuration covers it. Legacy
+adds channel schema0.1.5 and cache.folder under application-data/cache/next.
+The fixed worker pre-renders the optimized still-image prefix to keyed raw
+frames; animated/media/canvas and time-dependent behavior stay separate. It
+uses the still-images subfolder,30 unused-day default,30s render/fetch defaults
+and original-image fallback on refusal. Current Rust omits Cache and emits
+modern0.1.4; saved live/preview and standalone configuration entrypoints are
+named in row296-source-map.json. Native has its own working image/dynamic/drawvg
+paths and must not be replaced by this worker-specific optimization.
+R296-A: complete schema0.1.5 cache ownership for modern complete-file channels
+and0.1.6 for the ADR0135 indexed extension, preserving explicit older-reader
+compatibility. Carry one application-owned shared cache root into saved normal,
+browser preview and standalone preview configurations. Match runtime admission
+and Health to the emitted schema before output mutation. Stopping condition:
+focused config/legacy/admission/Health regressions and strict affected checks pass.
+R296-B: prove the actual fixed-worker cold/warm still-image reuse and key
+invalidation, source/render semantics, bounded retention/operation/whole-process
+lifecycle and original-image failure path, preserving selected AV/captions,
+Native, animations, ordered graphics and canvas behavior. Reuse valid existing
+watermark/track proof; do not investigate extra variants without a named gap.
+R296-C retains the existing consolidated first-party/indexed successor,
+independent private-patch retirement and full-window/platform/final/ordered
+acceptance. It is not replaced by a local config or unpatched-worker pass.
+No accepted runtime distribution, ledger disposition or pin is changed.
+
+
+2026-11-17 R296-A configuration/admission component Complete:
+The valid baseline row296-config-baseline.log fails because cache.folder is
+absent on a real saved-host configuration. Modern normal and browser-preview
+hosts now emit one shared application-owned cache/next folder, explicit30
+unused-day retention and schema0.1.5 for complete-file or0.1.6 for indexed
+playouts. Both standalone media/channel preview preparation entrypoints use the
+same conversion. The legacy base factory and explicit legacy host omit Cache;
+zero/negative retention settings are rejected by the actual positive wire type.
+No schema label is treated as proof by itself: bounded executable-bound
+admission checks the actual matching descriptor before output mutation for both
+live and finite cache sessions. Modern indexed admission requires0.1.6 and the
+existing indexed playout contract; the older reader permit remains available
+for explicit legacy configurations. Health uses the same5/6 choice based on the
+selected reader, instead of reporting a cached legacy index as modern support.
+Verification:91 composed passing cases, comprising66 distinct infra config,
+legacy, process/refusal, manager and Health controls plus25 existing web preview
+preparation/track/pin/seek/window/credits/ownership regressions. Initial infra
+run passes65 cases; the separate Health routing test adds one. The final portable
+path-join test replaces its earlier single-host version without rerunning the
+unchanged successes. Source/log/run identities are in row296-config-checkpoint.json.
+Strict infra/web all-target lint passes. The final infra-only lint confirms the
+portable test update; web code and its compiled inputs are unchanged from the
+combined lint. A mistaken first web-module filter selected zero tests; that
+exit4 is retained and does not count as passing evidence. The corrected module
+passes25/25. Formatting, architecture, progress and staged lint policy pass.
+This is configuration and admission evidence only. It closes R296-A's stopping
+condition, not actual cache efficiency/lifecycle or indexed runtime acceptance.
+R296-B's fixed-worker cold/warm reuse, invalidation, image/graphics/fallback and
+bounded lifecycle proof is next; R296-C and every shared source/private-patch,
+window/platform/final/CI/ordered delivery gate remain required. No native FFmpeg
+pipeline, accepted distribution, ledger disposition, baseline or live data is
+changed. Reopen this completed component only for a demonstrated regression.
+
+2026-11-17 R296-B local cache/runtime/safety component Complete:
+Exact unpatched6c and retained qualified FFmpeg9 pass the application-owned
+cache boundary on Linux x64. Five saved-host runs use a3200x1600 synthetic
+logo: cold rendering creates one small raw frame; another channel and source
+pathname with identical bytes retain the same frame content and creation time,
+while last-use time advances. Changing the source at the same path creates a
+second frame and visibly changes red to green. Changing scale/opacity creates
+a third frame and visibly changes size/alpha. Stopping every session removes
+its output while preserving the shared cache. A deliberately unusable cache
+namespace falls back to the original large image with correct selected880Hz
+Dutch audio and burned captions. Actual sweeping removes a31-day-unused raw
+frame and a2-hour abandoned temporary file, retaining recent raw/temp files,
+unrelated files and an old raw file outside the owned still-images subfolder.
+Separate isolated actual-worker trials prove that an animated GIF advances
+from red to green without creating a baked frame. The unchanged passing
+periodic test now enables caching: visible/fading/hidden phases and a permanent
+layer share one baked prefix while preserving audio and Burn. A real FFmpeg
+prescale barrier proves cancellation and a5s host startup deadline both join
+cleanup and terminate the descendant before readiness. The worker's own30s
+render deadline terminates the hung prescaler, becomes Ready through original-
+image fallback, and preserves the decoded overlay, selected audio and captions.
+All registry entries and session outputs are released. Three existing actual
+watermark regressions retain local/HTTP logos, ordering, size, dynamic Burn,
+Convert/off and DisableWatermarks; the production HTTP canvas regression also
+passes its three template/dynamic/disabled cases. These compose eight passing
+top-level tests and24 actual worker sessions, not24 separate test functions.
+The first combined run had two successes and a fresh-cache fixture precondition
+failure because its tests shared application data. Both new test packages now
+reuse the existing isolated-child owner. The final three-test run passes;
+retain the mixed-outcome run and reuse its unchanged passing periodic case.
+The extended lifecycle case supersedes its earlier two-case success. No product
+failure or full-run pass is inferred from that fixture failure.
+A concrete affected diagnostic invariant was found during review: the new
+cache.folder was omitted from explicit full-path redactions, so generic word
+redaction retained the middle of a directory containing spaces. The qualified
+negative reproduces that leak; an earlier invalid default-codec fixture is
+retained separately and proves nothing. Adding this one folder to the existing
+redaction list makes all eight diagnostic tests pass, including synthetic Unix
+and Windows path cases. The only production-code change in this B checkpoint
+is that diagnostic redaction; runtime behavior proof remains valid. Later test
+edits only express identical durations in larger units and fix documentation.
+Verification records are row296-cache-checkpoint.json, the named runtime/log
+receipts and row296-cache-cleanup.json under the existing continuation proof
+root. Independent OS inspection finds zero task-owned worker/media/prescaler
+processes. Isolated final child roots are removed; scoped initial synthetic
+cache artifacts remain hash-inventoried as evidence. Final strict infra
+all-target lint passes after the diagnostic correction and equivalent test
+cleanup; the initial documentation/duration lint failures are retained. This
+closes R296-B within its explicit local Linux x64/unpatched-worker scope.
+R296-C and every existing consolidated indexed-runtime/private-patch retirement,
+first-party package, full-window, matched-browser, required platform/final/CI
+and ordered-delivery obligation remain unchanged. Native code, routes, profiles,
+accepted runtime manifests, ledger dispositions and baseline are untouched.
+
+2026-11-17 R296-C consolidated source candidate prepared and locally exercised:
+The separate recipe scripts/release/next-patches/ucu16-session-cache/manifest.json
+pins exact6c/archive8055f456, Rust1.99.0, unchanged original lock519da3f5 and
+prepared lock061ba2cf. It retains all12 existing corrections and every unchanged
+retire_when requirement. No accepted production recipe, download, package pin
+or runtime installation changes. Per-patch review is row296-retirement-review.json.
+The original archive's289 regular files match before instrumentation. Only the
+unchanged previously accepted test functions are appended inside cfg(test).
+Eight actual unpatched-source cases yield six required failures and two passing
+controls: RTSP shortest buffering, static/animated WebP, selected-audio metadata
+and text-Burn clock corrections remain necessary. Original/prepared lock and all
+worker Cargo manifests, MPP binding/probe, single-use/frame-cut contract sources
+and the copied-caption seek method are byte-identical to the prior reviewed
+negative inputs within their explicit scopes. Retained actual025 negatives are
+reused only for those unchanged controls; they do not establish current native
+hardware, physical playback or full policy acceptance. No patch is retired.
+Existing patches1–8/10/12 initially apply;9 and11 need source-context rebases.
+Patch9 preserves upstream LocalInputSource and still-image boundary/filter APIs;
+patch11 preserves SessionConfig/CacheConfig and advances its additive indexed
+schema to0.1.6. Final patch10 changes only import wrapping. Rust schema generators
+produce the actual channel and describe files; Session/Cache fields remain.
+Strict clean replay reproduces all294 prepared source files. Initial replay
+passes; the first formatting-only patch regeneration strips required trailing
+context whitespace and is correctly refused as corrupt. Its log is retained;
+regeneration preserves that context and the final strict replay passes without
+fuzzy application. Both recipes and file inventories remain in the proof root.
+Chosen worker/channel/playout/core and describe/dynamic/schema tests pass425/425
+with one separately ignored test not claimed as run. An initial sandbox run
+stops on12 socket-bind refusals and leaves378 unexecuted; the permitted recovery
+uses no-fail-fast and executes the entire selected set. This is source/contract
+proof, not the remaining serial software or platform suite. Full source-workspace
+all-feature/all-target strict Clippy passes. Final equivalent import/blank-line
+formatting passes; the source unit/lint evidence is reused for those nonsemantic
+edits, and the final worker is rebuilt from the exact replayed files. Existing
+source-identity and package-recipe tests pass10/10 and9/9 respectively.
+A42MB strip-debug copy has identical describe output and stays within the actual
+bounded admission limit; original/transformed hashes and exact final producer
+inventory are retained in row296-consolidated-binary.json. Its channel schema is
+0.1.6 and the accepted indexed layout is advertised. Actual local source-candidate
+cache proof passes five saved-host sessions, including reuse, invalidation,
+retention, original-image fallback and selected Dutch audio/Burn. The existing
+simultaneous indexed normal/browser-preview regression initially fails playout
+publication because its older fixture omitted the current caption-relay server.
+The retained diagnostic trial identifies publication refusal. Adding the same
+owned callback server already used by other runtime fixtures makes that unchanged
+AV/codec/caption/capacity/independent-shutdown oracle pass for both sessions.
+Only the test fixture and warning diagnostics change; no application production
+code or accepted behavior is weakened. The composed local runtime result is two
+passing top-level tests across seven sessions; the mixed-outcome initial run is
+not labeled green. Current source, producer, replay and gate identities belong to
+row296-consolidated-checkpoint.json in the existing continuation proof root.
+Remaining R296-C work stays finite and mandatory: current dependency-policy and
+all retained runtime retirement controls, serial software acceptance, all four
+required packages/companions and native Linux/Windows plus ARM emulation proof;
+then unchanged integrated application/window, matched-browser, playback/transport,
+final/CI and ordered delivery. Local source preparation is a completed component,
+not consolidated runtime acceptance or an accepted row disposition. Native,
+FFmpeg9 and every approved platform/hardware deferral remain unchanged.
+
+2026-11-17 R296-C serial software and current dependency-policy gates Complete:
+The actual fixed6c software suite contains662 cases, including the two upstream
+pre-scaled/full-image comparisons. All662 pass serially in675.115s with zero
+skips/retries and the exact qualified FFmpeg2.0.10 tools; no global filter hiding
+is enabled. Original recipe, source/fixture inventory, test executable, tool
+hashes, nextest run and raw results are retained by row296-software-inputs.json
+and row296-software.log. This closes the existing serial software obligation;
+it does not establish hardware, platform packages or application/window acceptance.
+The unchanged full dependency policy initially refuses three advisories in the
+12-patch candidate: quick-xml0.40.0 (RUSTSEC-2026-0194/0195) and bundled
+webpki-root-certs1.0.7 (RUSTSEC-2026-0383). Licenses, bans and sources pass.
+This isolated minus0013 negative is retained. Patch0013 updates only the XML
+workspace requirement to0.41.0 and the two exact lock entries to0.41.0/1.0.10.
+No advisory ignore or policy allowance is added. Cargo's unrelated Windows
+edge-resolution changes are excluded; every other package record, checksum,
+version and dependency edge remains exact. The new prepared lock is a7436ca2;
+original upstream lock519da3f5 and every prior patch/retirement requirement stay.
+The corrected13-patch source cleanly replays all294 files. The final full policy
+passes advisories/yanked, licenses, bans and sources against current fetched
+public advisory metadata. Context7's quota and docs.rs availability prevent that
+documentation path; checksum-verified quick-xml0.41 package source and official
+RustSec remediation settle the actual API/version boundary. Existing XMLTV
+entity/child/display-name controls and a focused generator Unicode/escaping/
+exclusive-retention-boundary regression pass within nine affected helper tests.
+No XMLTV production logic is changed. Final whole-source workspace/all-feature/
+all-target strict Clippy and formatting pass.
+The running software input is kept immutable while the separate security copy
+is reviewed. FFmpeg/pipeline/core/playout source and fixtures remain byte-identical.
+Normalized Linux normal/build/dev dependency AND feature graphs match exactly
+before/after the minimal update, so all662 passing cases remain valid. The same
+check proves Linux worker compiled inputs unchanged; rebuilding its exact current
+source yields the byte-identical original executable. Existing425 source-contract
+and seven indexed/preview/cache session results remain valid within their Linux
+scope. Changed XML helpers have the separate nine-case proof; the Windows trust
+input still requires native Windows package/runtime qualification and is not
+inferred from Linux. Producer/input/replay/policy/negative identities and evidence
+reuse are indexed by row296-security-software-checkpoint.json under the existing
+continuation proof root. None of the original12 corrections is retired;0013 has
+its own unchanged-gate upstream retirement condition. The accepted production
+recipe/downloads, baseline, row dispositions, operator state and Native/FFmpeg9
+behavior remain untouched.
+Next bounded R296-C work: finish the retained actual runtime retirement controls
+and the four required source packages/companions plus native Linux/Windows and
+ARM emulation acceptance. Then complete every unchanged integrated application/
+window, matched-browser, transport/playback/final/CI and ordered-delivery gate.
+Do not rerun these completed software/policy components without relevant source,
+compiled-input or advisory changes. Current native ARM/macOS/hardware deferrals
+retain their explicit scopes.
+
+2026-11-17 R296-C retained Linux runtime controls Complete within this scope:
+The finite21 infra and three public-route tests pass with the same qualified
+FFmpeg9 tools and exact6c plus13-patch worker c7adddb8. The21 tests cover the
+ten retained compatibility controls, RTSP EOF/handoff, copied-caption original
+outpoint, still/animated image seek/repeat/handoff and indexed Refresh continuity.
+Reuse the16 initially passing controls. Four older fixtures lacked the current
+caption listener; their owned listeners now start and join explicitly. The fifth
+expected a local ordinary caption path. It now reads the actual live session
+relay before revocation and keeps the exact complete-text/cue/AV/outpoint checks.
+All five corrected controls pass; the affected HLS/provider/preview control is
+also rerun after the production correction below. Original failures remain.
+Both unchanged public M2TS Burn controls initially fail whole-TS equality. Their
+actual commands use GOP48 and an extra SAR filter instead of the retained GOP50
+reference. This demonstrates a row295 integration regression: preparing logical
+Jellyfin choices overwrites freshly probed physical metadata with incomplete
+provider metadata, losing framerate/SAR/codec observations. Keep an existing
+physical source hint and synthesize the persisted hint only when absent; logical
+selection, physical mapping and final source/map authority fences remain intact.
+The new three-layout regression and existing selection/probe controls compose
+51 passing tests. Three initial environment failures attempted the read-only
+default selector folder; only those three rerun with fresh owned data/state/temp
+namespaces, and pass. No operator files are modified. The third public control
+also had an obsolete local-caption expectation; it now verifies the actual
+session relay's complete response equals the independently verified sidecar,
+retaining original AV/caption interval, payload/clock and cleanup assertions.
+After correction all three public controls pass. The two original seek2164/
+seek2143 Burn oracles keep their encoder/profile, literal frame/caption boundaries
+and strict comparisons unchanged: all six full baseline/debug/tap TS reconstructions
+equal public output byte-for-byte. Both grants return410 after stop; work and
+capacity are zero and retained storage contains only its budget lock. The grouped
+one-shot Off/Convert/Burn delivery keeps its coded payload/alternate-audio,
+caption timing, single-consumer and joined cleanup checks. The fixed argv unit
+control also passes. No clock tolerance, profile change or weakened assertion.
+Strict affected infra/web all-target Clippy and formatting pass. Independent OS
+inventory finds no owned worker/FFmpeg/ffprobe/MediaMTX process. Exact inputs,
+source/test and raw-evidence hashes, original negatives and composed reuse are
+indexed by row296-runtime-checkpoint.json in the existing continuation proof root.
+The worker recipe/source/binary and completed425 source,662 software, policy and
+cache components are unchanged and retained. This closes the named positive
+Linux runtime proof, not source-package/native-Windows/ARM or full-window acceptance.
+Next bounded item: four required source packages/companions with native Linux/
+Windows and ARM emulation, including MPP companion/no-device/channel fallback.
+The retained package/runtime completion list is:
+P1. Build and independently inventory all four required archives from the exact
+294-file source and13-patch recipe with Rust1.99.0. Preserve license/companion
+hashes and source/lock/patch/compiler provenance, and the Linux GLIBC ceiling.
+P2. Exercise independently extracted Linux x64/ARM64/ARMv7 packages through
+their existing decoded AV/caption and indexed ownership controls. Retain actual
+ARM64 private-companion/no-device/whole-channel software fallback proof; ARM
+execution remains emulation. Prove the new cache path within this platform
+package scope without repeating the completed Linux variant matrix.
+P3. Exercise the independently extracted native Windows package with the
+existing software and available CUDA H264/HEVC selected-track/caption controls,
+current cache behavior, truthful schema/description and bounded cleanup.
+Stopping condition: P1/P2/P3 pass with exact producer/input identities. No native
+ARM, unavailable hardware or macOS claim is added. The existing shared final
+gates below remain separate and mandatory.
+Current build preflight: the previously installed Docker Desktop was stopped;
+it is started once and the three original Linux builder image identities are
+verified locally. No new image/toolchain is installed. Native Windows Rust1.99
+and its MSVC target are present, with264.5GiB free on the system volume. The
+first source build runs offline in its qualified image, using the prepared
+source's default target directory and two compilation jobs. Original source,
+lock, recipe and patch hashes are checked before/after each build.
+
+2026-11-17 R296-C P1 four-source-package component Complete:
+All four exact6c/13-patch archives are built with Rust1.99.0 from the same
+294-file prepared source, original archive8055f456, locka7436ca2 and recipe
+12059881. The three original pinned Linux builders run offline, unprivileged,
+without capabilities/network, with two jobs and the source default target.
+Linux x64/ARM64 require GLIBC2.28 and ARMv7 requires2.34; all remain below the
+unchanged2.36 ceiling.
+Native Windows uses the installed1.99/MSVC target and its resolved source-default
+target directory. Missing Windows dependencies are fetched against the locked
+source; no version is resolved anew. A script-file execution refusal is retained;
+native Cargo commands run without changing that policy. An initial temporary
+command substitution error stops before compilation; its corrected native build
+passes in304.328s. Neither failure is treated as product or runtime proof.
+The existing packager produces the four private archives. Independent fresh
+extraction verifies exact inventories, every payload/companion/license checksum,
+complete source/patch/lock/compiler provenance and actual ELF/PE architecture,
+including ARMv7 hard-float. The Windows VPL and ARM64 private MPP companions
+retain their exact reviewed hashes and notices; MPP source/build-recipe ownership
+remains pinned. Source/lock/patch bytes are rechecked after every build.
+Archive SHA prefixes: linux-x64 b6aef853, linux-arm64 ecf16345, linux-arm dd23603f,
+win-x64 170c6d17. Full hashes, payload inventories, provenance and independent
+extracted locations are in row296-platform/source-packages-verified.json under
+the existing continuation proof root. Build commands/logs and original failures
+are retained beside it. No owned Linux build container or native compiler
+remains; the fresh Windows compiler temporary namespace is safely removed after
+artifact verification. Shared caches and the active source/evidence are retained.
+All four previously qualified FFmpeg2.0.10 archives are reused only after matching
+their accepted archive and executable hashes; their fresh extractions and tool
+identities are row296-platform/ffmpeg/inputs.json. Existing software/source/policy
+and Linux positive runtime results remain scoped and valid; no broad rerun merely
+to obtain another green result. P1 proves packages, not actual package playback.
+Next bounded work is P2/P3: use these independently extracted worker/FFmpeg
+archives for the unchanged native Linux/Windows and ARM-emulated runtime,
+MPP fallback, indexed ownership and current cache obligations. The original
+runtime image identities and independent decoder are available. No accepted
+distribution, baseline/pin, ledger disposition, publication, install or live-data
+mutation occurs. Native ARM/macOS/unavailable-hardware limitations remain.
+
+2026-11-17 R296-C P2/P3 four-worker-package runtime component Complete:
+All four independently extracted P1 workers run with the exact qualified
+FFmpeg2.0.10 archives. Descriptions report the correct6c/distribution identities,
+channel schema0.1.6 and indexed layout. The retained indexed day, synthetic
+two-audio programme, independent SRT and font are reused. File/worker/tool/input
+identities and unchanged day hashes are recorded; no operator library or DB is used.
+Native Linux x64 and ARM64/ARMv7 emulation each pass the original baseline plus
+one cold/warm cache package: nine actual worker sessions. All independently decode
+200 frames at160x90, selected880Hz audio and the caption-reference mask. ARM64's
+private MPP library loads but truthfully reports no initialized hardware codecs,
+empty decode/encode sets and failed availability. Every actual ARM64 output
+report selects whole-channel software, preserving scaling, audio, captions and
+cache. This is the required bundled-library/no-device fallback, not native ARM
+or working Rockchip hardware proof.
+Native Windows passes its three retained software/CUDA-H264/CUDA-HEVC cases and
+one software cold/warm cache package: five actual worker sessions. All retain
+200 frames at160x90, correct output codecs, selected880Hz audio and the unchanged
+independent caption-mask thresholds. Hardware cases require actual CUDA pipeline
+reports, not merely available capabilities or a software fallback. The exact
+retained independent Linux FFmpeg9 decoder (50ee90f7) decodes these Windows outputs;
+the original mask/frequency/frame thresholds stay unchanged. Native font rendering
+is not claimed pixel-identical to the Linux reference; exact mask/error results
+and complete TS/source/font inputs are retained. No profile or tolerance changes.
+On every RID the cached logo is independently visible in decoded output. A cold
+run creates the raw frame; the warm run preserves its path/content hash, refreshes
+its aged timestamp and emits the actual worker cache-hit message. Linux also
+preserves inode identity. This closes cache portability without repeating the
+completed source/render/retention/lifecycle variant matrix. Current reader/source
+contract and actual indexed Refresh proof remain valid within their unchanged scope.
+The initial Windows fixture stops before running any worker because its no-profile
+session lacks Get-FileHash. Its fresh setup and failure are retained and cleaned;
+the same SHA256 checks then use existing .NET cryptography in a new owned namespace.
+No script policy, tool or acceptance requirement changes. Native inputs are hashed
+again after all runs, complete output/report/config/cache evidence is preserved,
+and independent OS inventory finds no owned worker/FFmpeg/ffprobe process. Both
+fresh Windows fixture roots are removed with reparse-point guards; all Linux
+runtime containers terminate and are removed. Shared caches/installations stay.
+All14 sessions and their source/input/output/evidence hashes are indexed by
+row296-platform/runtime-checkpoint.json and runtime-evidence-files.json under the
+existing continuation proof root. P1/P2/P3 meet their explicit stopping condition;
+no missing bare-worker source-package/runtime item remains in that finite list.
+The full continuation is still In progress: next close the unchanged integrated
+application source/packages, matched SSR/WASM/browser Health refresh/recovery,
+Native/Next playback/transport/final/CI and ordered-delivery gates. No first-party
+patch is retired, no accepted distribution/pin/disposition is changed and no
+publication, operator install or live-data mutation is performed. Existing native
+ARM/macOS/unavailable-hardware deferrals retain their exact boundaries.
+Every unchanged integrated application, matched SSR/WASM/browser, transport/
+playback/final/CI and ordered-delivery gate remains mandatory. Original private
+patch retirement conditions and native ARM/macOS/hardware deferrals remain.
+No accepted runtime, production pin, ledger disposition or remote delivery changes.
+
+2026-11-17 matched web/affected Health browser package Complete:
+One cargo-leptos0.3.6 build on Rust1.97.1 produces the matched current server
+and hydration assets from14f646bb, with no compiled-source working diff.
+Server SHA25668570299a78c7f7806e303526eecdd43bb2b5369f363977db367a6f11de03d1f;
+hash-files remains false. The actual bundle gate resolves both JS/WASM URLs.
+Headed Chromium and Firefox on owned Xvfb displays prove eighteen candidate
+cases: eight local DateAdded/Jellyfin-index Health cases, eight actual Next
+session/cache Health cases and two existing responsive Next-version cases.
+English/Dutch, both themes, hydrated/no-JS, actual Refresh POST200/303,
+persisted warning/Pass transitions, no page/console errors and mobile overflow
+controls pass. The disabled Jellyfin library and stored streams remain intact.
+Backend rescan/repair proof is reused; browser fixtures reproduce its persisted
+effects and do not independently prove scanning or channel-editor actions.
+The actual source-package worker97399b21 is admitted for enabled Next channels.
+Eight separate headed C5 worker e5e5a160 compatibility cases correctly show the
+localized session refusal, recovery with the unsupported channel disabled and
+refusal again when re-enabled. This never treats disabling as a worker upgrade.
+The original two browser failures/six skipped cases are retained: the seeded
+host had another enabled Next channel, so Health correctly stayed Fail after
+only the synthetic channel was disabled. Isolate that seeded channel and restore
+its exact enabled choice afterwards; no product change or assertion weakening.
+The final eight Next cases pass on each actual executable, without retries or
+skips. Reuse the ten unchanged metadata/navigation successes from the original
+eighteen-case run; do not count the repeated candidate Next cases twice.
+App/worker/tool/site bytes are checked before/after and every actual runtime
+copy matches the same server/site inventory. One complete matched snapshot,
+all four database/log states, screenshots, initial failures, final source and
+retention mapping are preserved. No task-owned host remains; only verified
+duplicate temporary payloads are removed. Exact build flags, worker describe,
+producer/tool/source hashes, results and proof inventory are retained under
+tmp/evidence/ucu16-tail-9c6b3dea/row296-app/ and browser-checkpoint.json.
+This removes the affected matched-bundle headed Health/no-JS proof item from
+the finite mandatory list. No browser/Health implementation remains for this
+package. Next close the unchanged integrated application final gates and
+current-candidate Native/Next smoke/TSDuck, followed by required application
+packages/platform acceptance and eligible full CI/ordered delivery. Worker-only
+platform proof remains distinct. No acceptance requirement, accepted pin,
+distribution, row disposition, runtime installation or publication changes.
+
+2026-11-17 native Linux integrated local-final/playback component Complete:
+The full default workspace selection executes8714 cases across124 binaries;
+the568 standard ignored cases retain their separate required/deferred scopes.
+The original canonical wrapper exits100 with8705 passes and nine failures.
+Six managed-runtime cases incorrectly inherit this proof runner's explicit
+FFmpeg overrides; two default-layout cases expect the .ersatzrs basename.
+Both are corrected in the isolated test environment, without product changes.
+The ninth failure is an old HDR-migration fixture applying later migrations
+while asserting the HDR repair leaves scan dates alone. ADR0137's later Jellyfin
+index repair intentionally invalidates those dates. Limit the HDR fixture to
+its own migration boundary, preserving every ETag/stream/disabled-choice/date
+and rollback assertion. Its two cases pass; the separate Jellyfin migration
+control also passes in the broad selection. No production migration is changed.
+Ten targeted cases pass: eight environment controls and both HDR-fixture users.
+Replace the original affected passed rollback case as well as all nine failures;
+8704 unchanged successes plus ten final successes cover exactly8714 distinct
+current cases. Retain the original negative; do not claim a single-pass green
+initial wrapper. No automatic retry or missing case is hidden. The canonical
+doctest-only component exits0 across eleven crate doc targets, with zero
+runnable examples. Case identities and exact composition are machine-checked.
+Strict workspace/all-target Clippy and formatting pass before and after the
+test-only correction. Full workspace dependency policy passes advisories, bans,
+licenses and sources against the unchanged policy; existing approved exceptions
+retain their original boundaries. Parity progress, architecture and hydration
+checks pass with31 existing suppressions. Its documented skips only reuse the
+separately completed workspace Clippy/format/test components; no gate is waived.
+
+The retained matched server68570299 is produced at14f646bb; product Rust,
+Cargo, migrations and assets remain unchanged at b250a0fe plus this test-only
+fixture correction. Reuse that exact snapshot, never the overwritten ordinary
+Cargo server. Actual source-package Linux worker97399b21 and qualified FFmpeg9
+tools pass both current Native/Next smoke gates. Four delivered Next outputs
+decode selected880Hz audio,35 subtitle pixels and the retained blue programme.
+The unchanged TSDuck gate passes93 Native and86 Next checks with zero failures;
+no transport threshold or runtime-failure signature is relaxed. This is native
+Linux functional/transport proof, not application-package or other-platform proof.
+All owned hosts/workers are closed and the temporary calibration copy is removed.
+The124 current test executables are inventoried before required build-cache
+cleanup (about81GiB); the exact matched server/site, qualified worker packages, tool, source,
+logs, metrics, original failures and case/retention identities remain outside
+that configured target. No other worktree or target is cleaned.
+Canonical receipts under tmp/evidence/ucu16-tail-9c6b3dea/row296-app-final/:
+local-final-checkpoint.json, unit-integration-cases.json, test-artifacts.json,
+playback-checkpoint.json, dependency-policy.json and cache-clean.json.
+This closes the integrated local-final and current-candidate Linux playback/
+transport items. Next qualify the four required application source/packages and
+native Linux/Windows plus ARM emulation, then eligible full CI and ordered
+dispositions/delivery. Worker-only P1/P2/P3 and this local proof do not replace
+those application gates. Managed runtime adoption, accepted distributions/pin,
+row dispositions, operator state and publication remain unchanged.
+
+2026-11-17 P4 application source proposal (acceptance remains open):
+The isolated branch proposes the already-qualified6c worker source/patch and
+four archive/payload pins for actual bundled application qualification. All13
+corrections remain; compiled worker inputs match the separately qualified
+recipe. The archived C5 recipe and both deferred macOS package identities are
+preserved. This is not accepted main/operator adoption or a ledger advancement.
+The existing unmodified strict staging function verifies all four real source
+archives, payloads, toolchain, licenses and companions. A later human-readable
+retirement-note correction changes no staging or compiled input. Stage-time
+and current manifests are retained separately. Existing package tests retain
+same-length tamper rejection and actual install/relocation controls.
+Application Health still capped overlays at0.1.4 although the qualified plain
+session contract accepts0.1.5 and indexed accepts0.1.6. Its schema diagnostic
+also missed the translation router. Derive the ceiling from the existing
+validated selected-runtime contract; retain invalid, future, non-file, size,
+timeout and unrelated-channel guards. Current and historical ranges route
+through all nine language files. All48 focused infra/web cases now pass,
+including selected-runtime qualification and current/historical diagnostics.
+The actual matched-package browser verification of
+invalid0.1.7 to valid0.1.6 recovery remains in P4, not claimed by unit tests.
+Canonical current preparation evidence:
+tmp/evidence/ucu16-tail-9c6b3dea/row296-app-platform/manifest-proposal.json,
+strict-staging.json, manager-tests.log, manager-tests-recovery.log and
+overlay-health-tests.log. The29 staging and10 source-review cases pass; nine
+unchanged source-package recipe controls remain valid. The original manager
+run has19 passes and two fixture/metadata failures; the two corrected cases
+pass separately. The changed Health manager case also passes in the final48.
+No original failure is hidden and no worker source/runtime proof is replaced.
+The initial affected Clippy run finds one manual-let-else style issue. Its
+mechanical correction preserves the tested return/error paths; reuse the48
+behavioral cases. Retain the original lint result beside the final result.
+Final strict infra/web all-target Clippy passes, with no new lint exemptions.
+Formatting, architecture, hydration (31 existing suppressions), progress and
+staged diff/allow-policy checks pass. This closes only the P4 source-preparation
+checkpoint. Its machine-readable scope and case list are retained in
+row296-app-platform/source-checkpoint.json under the same evidence root.
+
+2026-11-17 P4 four-application-package/platform component Complete:
+All four private development-profile archives are built from exact source
+ece7813c6abf648608d11a512e9065c6921525c9 with Rust1.97.1, the configured
+worktree target and matched component-erasure settings. The four previously
+qualified Rust1.99 worker payloads, licenses, provenance and companions are
+strictly staged without rebuilding or retiring corrections. All application
+archives contain byte-identical assets from the matched server/site snapshot;
+the source and each archive/server/worker/site digest are retained separately.
+Linux and both ARM independent extractions check exact inventories and ELF/ABI,
+boot fresh SQLite/state/data, execute the packaged healthcheck, select Bundled
+Next with verified candidate-pin identity and serve byte-identical JS/WASM.
+ARM64/ARMv7 execution is QEMU, not verified native ARM. Windows independently
+checks every ZIP file, launches the actual packaged server through ErsatzRS.exe,
+checks its child digest and matching served assets, and passes native headed
+Edge hydration/menu/form/server-function proof at1440/390 pixels. Structural
+web-bundle gates pass on Linux and Windows before browser interpretation.
+Actual independent Linux and Windows packages pass Native/Next smoke without
+a Next override. Eight delivered Next captures decode selected880/882Hz audio
+and captions (Linux35/Windows53 white pixels), with original thresholds and
+reconnect/preview/session cleanup intact. Reuse the unchanged93/86 TSDuck
+components: transport/pipeline/Cargo inputs, the qualified worker and FFmpeg
+bytes are unchanged; manager changes only the separately tested Health helper.
+The current matched frontend passes10 headed Chromium/Firefox cases for
+Next session/overlay Health and version navigation, English/Dutch, light/dark,
+JS/no-JS, including actual0.1.7 refusal to0.1.6 recovery. Eight unchanged prior
+date-added/Jellyfin cases and eight actual C5 controls retain their own tested
+source/artifact scopes. Override acquisition does not consult the changed
+automatic version pin; legacy session refusal precedes overlay inspection.
+Do not describe this composition as one fresh26-case current-artifact run.
+Two evidence-helper failures are preserved: the successful Linux build's asset
+copy used a crate-relative rather than workspace site path; Windows UNC cache
+removal failed after all runtime copies/checksums and owned-root removals.
+Retention and cache cleanup are recovered without repeating product tests or
+relaxing any oracle. The exact matched files,97 Windows runtime files and
+original errors remain. All owned hosts/workers/containers and the three native
+Windows namespaces/browser profile are closed or removed; private archives,
+inventories, synthetic DB/log/capture evidence and compiler recipes remain.
+Canonical evidence under tmp/evidence/ucu16-tail-9c6b3dea/row296-app-platform/:
+platform-checkpoint.json, linux-checkpoint.json, arm64-checkpoint.json,
+windows-checkpoint.json, armv7-checkpoint.json and browser-checkpoint.json.
+This closes P4 private application build/package/platform and affected-browser
+proof. It does not establish public acquisition, eligible full CI, ordered row
+acceptance, main/operator adoption, application publication or native ARM.
+
+2026-11-17 current-main CI provisioning integration Complete within scope:
+Refresh confirms fixed remote main3f729d9e. Integrate its two existing commits
+on the isolated branch; only CHANGELOG conflicts, and both complete entries
+are retained. The existing CI example opts into a job-token reference for
+GitHub release metadata; the product constructor still sets None and the
+asset-download method is unchanged. No credential value is read or recorded.
+The hosted-browser dependency step retains the existing self-hosted queue,
+matrix and host lock. All15 focused FFmpeg runtime cases pass, including
+default/blank-client handling, override precedence, cold/cache/update and
+checksum/architecture controls. Strict affected all-target Clippy compiles the
+provisioning example and passes. Formatting and the four existing queue/host
+regressions pass. Actionlint1.7.12 uses only BUILD.md's existing queue-schema
+diagnostic exclusion; all other diagnostics stay fatal. The initial sandbox
+launcher and unchanged queue-key rejection are not product regressions.
+Cargo/dependency/toolchain, Next source/patch/payload identities, UI/islands,
+playback pipeline and scheduling/source-authority code are unchanged. P4 keeps
+its exact ece7813c producer/artifact scope: its explicit FFmpeg inputs bypass
+metadata acquisition, and product-default anonymous behavior is preserved.
+Do not relabel those packages as artifacts produced by the merge. The required
+full CI must test/build the eventual exact integrated candidate, including the
+actual hosted provisioning/browser environment. Local focused proof does not
+claim that remote acceptance. Evidence:
+row296-app-platform/integration-main/inputs.json, runtime-tests.log,
+clippy-result.json, actionlint-compatible.log and host-lock-tests.log under
+the same canonical evidence root. No main mutation, push, CI or publication.
+
+Historical prerequisite (closed by the approved publication below): direct
+release lookup at2026-11-17T06:49:59Z returns
+HTTP404 for next-0.2.5-6c9e0cf-ersatzrs.1. No public/default automatic acquisition
+proof is possible for that proposed release yet. Private bundled qualification
+can continue independently. Closure requires the exact qualified archives at
+the pinned release URLs and verified anonymous acquisition, or an explicit
+maintainer scope decision. Publication remains excluded and requires separate
+authorization; do not merge/adopt a default pin with unavailable downloads.
+The first response is retained in runtime-release-observation.json. After P4,
+the direct GitHub connector recheck at2026-11-17T09:02:18Z still returns404;
+runtime-release-recheck.json retains that current CI-eligibility observation.
+No unchanged negative runtime/acquisition trial needs repeating.
+
+2026-11-17 publication prerequisite prepared for a maintainer scope decision:
+Existing distribution main is verified as794f5156. The29 locally staged assets
+include the same four qualified worker archives and sidecars, thirteen pinned
+patches, exact upstream archive/provenance, source/preparation manifests,
+preparation script, license, README and SHA256SUMS. All294 replayed source-file
+hashes match the qualified source; no worker is rebuilt or repacked. The extra
+qualified-source manifest closes the explicit original-recipe digest reference.
+Distribution README and release-note proposals are ready; the existing Next
+checkout and remote are unchanged. Canonical proposal and verification:
+tmp/evidence/ucu16-tail-9c6b3dea/row296-runtime-publication/proposal.json and
+verification.json. Source manifests and private application evidence retain
+their tested scopes. The requested new authority would cover the existing
+distribution repository's README commit/push, new fixed tag and exact-asset
+publication, followed by independent public acquisition. Existing Latest
+selection is preserved. Application releases, operator installs and all retained
+deferrals remain outside that proposed scope. No publication is performed;
+the explicit no-new-publication boundary needs a maintainer amendment.
+
+2026-11-17 approved publication/public-acquisition component Complete:
+The maintainer explicitly approves the prepared narrow publication amendment.
+Existing distribution main794f5156 advances by README-only commitb2ed3a37;
+the new fixed next-0.2.5-6c9e0cf-ersatzrs.1 tag targets that exact commit.
+All29 approved assets pass GitHub server size/digest checks before publication
+and independent anonymous public-download size/SHA256 checks afterward.
+The four qualified archives are neither rebuilt nor repacked. Source replay,
+provenance, licenses and original recipe remain exact. Existing Latest remains
+next-0.2.5-c5cb065-ersatzrs.1. No previously published bytes or tags change.
+Actual native Linux and Windows application hosts at their retained ece7813c
+producer scope start with fresh owned state, no bundled worker and no override.
+Both select Downloaded with published_pin_verified=true, reach healthz200,
+then select Managed on restart with all payload hashes and cache file ages
+unchanged. Credential environment references are removed in the proof hosts;
+no authentication header or credential value is used for asset acquisition.
+Owned hosts stop; the disposable Windows extraction/state is removed. This
+closes the prior release-404 prerequisite and required public managed acquisition.
+Original404 and draft-tag lookup failures remain historical evidence. Canonical
+proof: tmp/evidence/ucu16-tail-9c6b3dea/row296-runtime-publication/checkpoint.json,
+draft-verification.json, public-verification.json, linux-managed/receipt.json
+and windows-managed/receipt.json. Full integrated CI and ordered delivery remain;
+no other acceptance or platform/hardware deferral is changed.
+
+2026-11-17 integrated candidate CI checkpoint and concrete blockers:
+Application source checkpointd07cd5ea is pushed as PR165; eligible full run
+44128505670 and PR run44128511807 test that exact candidate. The completed
+small run44128454621 fails commit lint and the current dependency policy;
+it is not accepted as full proof. Preserve all original job logs in
+row296-runtime-publication/ci/. The full run also reproduces commit lint failure.
+Fifteen earlier checkpoint subjects use scopes outside the existing allowlist;
+one body line exceeds100 characters. Correct only commit metadata, preserving
+every tree and retaining original history in a verified Git bundle. The complete
+corrected history passes the unchanged local commitlint configuration. Existing
+application/worker artifacts retain their actual original producer identities;
+the correction never relabels them or changes compiled inputs. Source/tree and
+old/new commit maps are in scope-correction.json and body-correction.json.
+This demonstrated broken candidate may be superseded by its corrective checkpoint
+under CONTRIBUTING; no queued/slow run alone justifies branch advancement.
+Current RustSec now reports RUSTSEC-2026-0543: informational unmaintained chrono,
+all versions, no patched release. The direct RustSec record and upstream
+maintainer confirmation are checked; this is a maintenance advisory, not a
+claimed concrete vulnerability. Actual graph includes workspace and SQLx
+consumers;539 Rust files reference chrono. Original passing dependency evidence
+retains its tested advisory-database scope and cannot close this newly observed
+current-policy failure. No dependency check is weakened and no chrono migration
+starts. A reviewable exact-ID temporary exception is prepared in
+ci/proposed-deny.toml but is not applied. External decision prerequisite:
+maintainer authorizes that named temporary exception with visible migration debt,
+or requests a separately scoped complete migration; otherwise Cargo deny remains
+open. Pending question records that approval boundary. Other policy checks and
+all unchanged platform/functional gates remain mandatory. The seven ordered
+row-review preparations are retained without ledger or baseline mutation.
+
+2026-11-17 maintainer decision: replace chrono with Jiff (ADR 0138).
+This supersedes the earlier request for an advisory policy decision. Keep the
+current dependency policy. Finite migration work before UCU-16 CI:
+1. Remove the SQLx chrono feature and replace its typed binds/reads with the
+   existing SQLite formats. Migrate independent xtask UTC clock usage to Jiff.
+2. Migrate shared UTC and civil time, including signed elapsed durations and
+   the call sites in scheduling, playout, providers, scanner, web and add-ons.
+   Preserve exact UTC and offset text, leap/fraction precision, SQL ordering,
+   saved date sentinels and existing .NET daylight-saving disambiguation.
+   The add-on wire tests require UTC 0000 through the final day of 9999, beyond
+   the upper bound of Jiff Timestamp. Prove that boundary with a civil type.
+3. Prove zero direct and transitive chrono dependencies in the resolved graph
+   and current Cargo deny. Repeat affected scheduling, database reopen, wire,
+   Native/Next media and matched web checks on the migrated source. Then pass
+   all original exact-source UCU-16 qualification and ordered delivery gates.
+
+The SQLite feature component is verified. Workspace all-target type checking
+and strict Clippy pass. All 12 targeted Plex inventory and teletext refresh,
+lease, recovery and health tests pass (nextest
+ba28f5bb-0f73-4980-974d-fe1cc560f3be). The initial HTTP mock failure was a
+sandbox loopback denial and passes with the same test and loopback access.
+Ten xtask runtime-audit and Clippy-ledger tests also pass. The all-feature
+all-target graph has no SQLx chrono edge. A standalone Jiff
+civil-time prototype preserves extreme wire years, offset normalization, leap
+seconds and nanoseconds. It is a feasibility check, separate from integrated
+wire acceptance. Receipts are under row296-runtime-publication/ci/.
+
+The source migration is implemented across the workspace. ADR 0138 records
+the shared Jiff-backed UTC, civil and signed elapsed types, the retained
+wire/SQLite bytes and the add-on source packaging boundary. The resolved
+all-feature, all-target graph contains no chrono dependency. Cargo deny
+passes unchanged. A differential comparison with the former date library
+passes for civil, offset, fractional and elapsed time cases. Local native
+workspace all-target type checking, time-crate Clippy, architecture lint
+and 43 CI domain-selection cases pass. The affected eight-crate nextest
+selection ran 4,968 cases: 4,965 passed directly, the two standard-directory
+cases pass with the corrected isolated .ersatzrs basename, and the final
+time-crate run (63fa709b-aea3-4d15-8463-a130d6d5a79b) passes all three
+standalone tests after the historical offset display fix. Both source
+archives assemble, and the extracted contract binaries and examples build
+against the exact extracted time archive. The original Cargo temporary
+registry failure is retained.
+Migration proof is Complete within its local scope at source50403405. The
+matching server and WASM assets pass the bundle gate and four headed
+Chromium/Firefox cases for the global EPG and Classic deferred save, including
+hydrated and no-JS forms. Both Native and actual Next smoke pass. The transport
+gates pass 93 Native and 86 Next checks with the existing thresholds and exact
+qualified FFmpeg and worker inputs. Owned playback processes are gone.
+The receipts are under row296-runtime-publication/ci/jiff-qualified/. The
+current dependency policy is satisfied locally. Exact integrated full CI and
+the ordered UCU-16 dispositions remain required.
+
+Historical full CI44128505670 and corrected PR CI44129875773 are terminal.
+The corrected PR passed commit lint, Clippy, main Rust tests, Level 1.5 and both
+selected Chromium suites. Cargo deny and Next engine failed. Retain original
+producer and test scope. Next engine logs include schema expectations and
+runtime cases to diagnose during qualification. The full run had an independent
+artifact-build failure. No passing full CI or accepted disposition is inferred.
+
+The earlier Next engine gate had three ordinary-host cadence cases expecting
+channel schema 0.1.3. Row296's ordinary cache-owning host emits 0.1.5. The test
+fixture now asserts that exact schema and reaches its existing media oracles.
+All three cases pass with the fixed 6c9e0cf worker and FFmpeg 2.0.10
+(nextest 3c19abfb-273d-4d82-87cb-d2248ce0843c): disabled passthrough,
+integer copy and handoff, and rational mirror with burned subtitles. The
+original failure and focused Next proof are retained under
+row296-runtime-publication/ci/next-gate-recovery/cadence/.
+
+The row291 refusal gate was also sent the current 0.1.6 worker although it
+asserts rejection of the actual 0.1.4 contract before output mutation. The
+dedicated CI input stages the previous C5 Linux release, verifying its archive
+and executable hashes. The unchanged refusal and marker checks pass against it
+(nextest 56174210-9147-493c-b422-08b7335ed359). The new CI staging block passes
+against the retained archive and the live public asset. Actionlint passes with
+the existing documented queue-key exclusion. Retain the original wrong-worker
+run and the focused receipts under row296-runtime-publication/ci/next-gate-recovery/.
+
+The serial reproduction on the Jiff candidate initially fails the remaining
+12 exact cases. Six fixtures omitted the host's local caption relay. Publication
+requires its loopback address before granting selected sidecars to the worker.
+Bind and join the existing production-path test listener for those sessions.
+All six cases pass with the same reviewed worker and FFmpeg (nextest
+b972a4ea-848d-4457-ad1f-784d26bb7041): QSV fallback, four row291
+readiness/idle settings, success and failure reports, MPEG-2 and H.264 scale
+behavior, and source-relative watermark coordinates. The fixture change retains
+the original admission, language, output, clock and cleanup assertions.
+Record the serial reproduction and six-case recovery under
+row296-runtime-publication/ci/next-gate-recovery/.
+
+The cached-font fixture now binds the same caption listener. The on-demand
+fixture refreshes viewer demand throughout its existing 12-second viewing
+interval, so the worker-owned one-second idle timeout applies to genuine
+viewer absence. Both real Next tests pass (nextest
+c67a13bd-0b07-4b4b-bba5-5717b902f424), including libass font selection,
+preserved resume position and decoded audio/captions. Retain the two-case
+receipt under next-gate-recovery/font-and-resume/.
+
+The provider fixture seeded Jellyfin's physical map before adding the final
+English stream of its bilingual source. The production projector correctly
+refused that incomplete mapping. The existing provider helper now runs after
+all fixture streams exist. The attempted duplicate-map insert and its
+constraint failures are retained. All four real-provider cases pass after
+the fixture order correction (nextest b774a215-7309-4d5d-9cc7-92cef02b9826):
+provider fallback/handoff, authenticated embedded and external text after seek,
+and row292 scanned-away captions with decoded programme and selected audio
+preserved. The exact runtime inputs and original assertions are retained under
+next-gate-recovery/jellyfin-final-streams/. The 16 earlier Next CI failures
+have passing local recovery evidence. Full CI44193407717, Next job
+134451623441, reproduces exactly that 16-case set (539 other cases passed).
+The local pass/run/log mapping is machine-checked by case name in
+next-gate-recovery/full-44193407717-next-failure-recovery.json.
+Exact integrated full CI remains due.
+
+Strict CI lint on the Jiff migration identified redundant UTC method closures.
+The row290 scanner's two corresponding conversions now call the same method
+directly. All six row290 unit and scanner regressions pass, including sentinel
+precision, all six metadata kinds, claim fencing and scan/search continuity
+(nextest e97c667a-8a2d-43f8-8e02-04344c671481; jiff-scanner-lint/nextest.log).
+
+2026-11-18 refreshed private application platform proof after Jiff:
+Build and independently extract Linux x64, Windows x64, ARM64 and ARMv7
+archives from exact local combined source3f615954 and tree110d8094. The pending
+standalone Jiff change and all tested UCU-16 fixture corrections are included.
+All four confirm their archive and file hashes, health and bundled qualified
+Next. Both ARM targets serve the matching assets under QEMU. Native ARM remains
+deferred. Linux and Windows pass the structural SSR/WASM gate and real bundled
+Native/Next smoke. Four Next outputs on each decode the selected Dutch track
+and captions. The actual native Windows launcher selects the verified child;
+headed Edge passes controls and Classic form at1440 and390, with11 server
+function responses and zero console errors. The UNC browser cache deletion
+failed after copying receipts and removing Windows runtime roots; verified
+ownership allowed the Linux-side profile cleanup. Retain94 Windows files,
+four Linux and four Windows decoded outputs, and zero owned processes.
+The exact compiler inputs, source bundle and private archives are retained in
+row296-app-platform-jiff/platform-checkpoint.json and adjacent manifests.
+The final branch must match the relevant build and runtime inputs before
+reusing the four-platform proof. Exact integrated CI and ordered delivery
+remain required. Previously qualified Next/FFmpeg payloads and publication
+proof retain their original source and scope.
+
+The standalone Jiff PR167 reached origin/main at7dfbf348 after full CI
+44213461124 passed all15 jobs and protected PR run44240132857 reused its exact
+verified marker. Integration of that main commit into PR165 preserves the
+four-platform producer's complete build, runtime and browser input tree.
+Only milestones.toml and sessions.ndjson differ from producer3f615954.
+This satisfies source equivalence for the refreshed private platform evidence.
+The two earlier red PR165 runs retain their completed diagnostic and passing
+job results. The current exact integrated full CI and ordered delivery remain
+required for the continuation.
+
+The documentation gate in full run44240611155 fails at job134587347858.
+The isolated Python inventory harness did not supply the Next case selector
+now required by the workflow. Its original inventory and refusal checks are
+preserved with the explicit focused selector. The full runtime job still
+verifies and uses the archived C5 worker. All193 local CI contract cases pass,
+including100 artifact tests. Only sandbox loopback tests required loopback
+access. The unchanged workflow consumers, compiled products, runtime inputs
+and case definitions retain their source scope. The existing recovery path
+now accepts ordinary self-hosted producers only when both source-bound
+local publications, archive digests and complete successful-job identities
+validate. It still restores and verifies the artifacts before reusing proof.
+The earlier real Jiff publisher records pass this validation. The pending
+full candidate keeps running to gather its own completed results.
+
+Executable qualification for source8861d7f5 is Complete. Run44240611155
+passes all runtime and browser checks, including the same 16 earlier Next
+failures within 555 current passing Next cases and both decoded playback
+smokes. Level 1.5 passes2533 workspace and18 real Next runtime cases. All four
+browser jobs pass against the matching SSR/WASM products. The original
+inventory-harness failure and aggregate failure are retained. Full recovery
+run44268846381 then verifies both archives and the eight successful unchanged
+jobs. All seven fresh required recovery checks pass, including the corrected
+documentation gate and CI ok. Verified full-tree marker14412470614 binds the
+composed job identities and artifact digests to the exact recovery source.
+The receipt is row296-runtime-publication/ci/run-44268846381-composed-proof.json.
+Protected PR165, source merge, and the seven ordered dispositions remain due.
+
+Remaining individual-row functionality/proof: rows290–296 are Complete within
+their explicit local component scopes. R296-A/B closes row296 configuration
+and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
+Item2/R296-C worker source/software/runtime and four worker-package components
+are Complete. Its unchanged integrated application/window acceptance remains
+in the shared mandatory list; no private patch is retired. All provisional
+ledger mappings remain unaccepted;289 rows are
+processed,7 are pending and the accepted pin is unchanged.
+Remaining mandatory evidence: eligible exact integrated full CI and ordered
+delivery gates above. Public runtime acquisition is Complete as recorded above. Required private application source/packages/
+platform proof is Complete within P4. The integrated local-final,
+current-candidate Linux playback/transport and affected matched-bundle headed
+Chromium/Firefox Health refresh/recovery/no-JS components are Complete within
+their explicit source, artifact and evidence-reuse boundaries.
+No new native Windows or ARM/platform acceptance is inferred from Linux.
+Delivery follows CONTRIBUTING checkpoint delivery and existing application
+commit/push/CI authority. No application release, operator install or live
+mutation is performed by the runtime publication checkpoint.
+Row292 local functionality/proof checkpoint is Complete and committed as2f49534d.
+The maintainer explicitly resumed the goal. Rows293–295 have now met their
+local stopping conditions, and R296-A/B now meets its local stopping conditions.
+Next run eligible full CI and ordered delivery; completed public acquisition,
+R296-C worker/package, P4 application/platform,
+browser and local-final/playback components
+are reused within their verified source/input boundaries.
+No accepted ledger disposition or authoritative pin advancement here.
+"""

@@ -6,6 +6,18 @@ use sqlx::{sqlite::SqlitePoolOptions, Executor, SqlitePool};
 const REPAIR_VERSION: i64 = 202_610_240_415;
 type StoredStream = (i64, Option<String>, Option<String>, i64, Option<i64>);
 
+fn hdr_repair_migrations() -> sqlx::migrate::Migrator {
+    // Prove the HDR repair's own effects. Later repairs, including Jellyfin
+    // physical stream indexes, intentionally invalidate library scan dates.
+    let all = sqlx::migrate!("../../migrations");
+    sqlx::migrate::Migrator::with_migrations(
+        all.iter()
+            .filter(|migration| migration.version <= REPAIR_VERSION)
+            .cloned()
+            .collect(),
+    )
+}
+
 async fn legacy() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
@@ -119,7 +131,7 @@ async fn hdr_repair_only_invalidates_possible_provider_dv_and_runs_once() {
     let streams: Vec<StoredStream> = sqlx::query_as(
         r#"SELECT "Id","Codec","ColorTransfer","MediaStreamKind","MaxCll" FROM "MediaStream" ORDER BY "Id""#,
     ).fetch_all(&pool).await.unwrap();
-    let all = sqlx::migrate!("../../migrations");
+    let all = hdr_repair_migrations();
     all.run(&pool).await.unwrap();
     for (table, id, affected) in &cases {
         assert_eq!(
@@ -165,7 +177,7 @@ async fn hdr_repair_rolls_back_all_provider_invalidations_on_failure() {
     let cases = cases(&pool).await;
     pool.execute(r#"CREATE TRIGGER fail_hdr_repair BEFORE UPDATE ON "JellyfinEpisode" BEGIN SELECT RAISE(ABORT,'synthetic failure'); END"#)
         .await.unwrap();
-    let all = sqlx::migrate!("../../migrations");
+    let all = hdr_repair_migrations();
     assert!(all.run(&pool).await.is_err());
     for (table, id, _) in &cases {
         assert_eq!(etag(&pool, table, *id).await.as_deref(), Some("cached"));

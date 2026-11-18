@@ -384,7 +384,7 @@ fn local_source(path: String) -> Source {
     }
 }
 
-const fn platform() -> PathPlatform {
+pub(super) const fn platform() -> PathPlatform {
     #[cfg(windows)]
     {
         PathPlatform::Windows

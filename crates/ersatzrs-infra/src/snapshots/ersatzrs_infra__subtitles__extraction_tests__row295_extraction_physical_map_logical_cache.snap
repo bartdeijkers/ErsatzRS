@@ -1,0 +1,33 @@
+---
+source: crates/ersatzrs-infra/src/subtitles_extraction_tests.rs
+expression: "snapshots.join(\"\\n\\n\")"
+---
+-nostdin
+-hide_banner
+-i
+synthetic.mkv
+-map
+0:2
+-c:s
+copy
+cache/AC/1C/AC1C40BAD96C64E71BA83912D0879147.srt
+
+-nostdin
+-hide_banner
+-i
+synthetic.mkv
+-map
+0:2
+-c:s
+copy
+cache/99/62/9962010F20B3700D66E8074C9ADBD656.srt
+
+-nostdin
+-hide_banner
+-i
+synthetic.mkv
+-map
+0:2
+-c:s
+copy
+cache/73/A2/73A2723FAB91B41304E0E85F2074B7AC.srt

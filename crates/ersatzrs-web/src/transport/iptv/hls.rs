@@ -487,6 +487,70 @@ pub(crate) async fn load_initial_segment_count(state: &AppState) -> usize {
     )
 }
 
+pub(crate) async fn load_initial_segment_count_for_engine(
+    state: &AppState,
+    engine: ersatzrs_domain::StreamingEngine,
+) -> usize {
+    initial_segment_count_for_engine(load_initial_segment_count(state).await, engine)
+}
+
+fn initial_segment_count_for_engine(
+    count: usize,
+    engine: ersatzrs_domain::StreamingEngine,
+) -> usize {
+    let count = normalize_initial_segment_count(count);
+    if engine == ersatzrs_domain::StreamingEngine::Next {
+        count.min(10)
+    } else {
+        count
+    }
+}
+
+/// Retain one overall request deadline while allowing the configured Next buffer.
+pub(crate) async fn channel_startup_deadline(
+    state: &AppState,
+    engine: ersatzrs_domain::StreamingEngine,
+    started: std::time::Instant,
+    read_deadline: std::time::Instant,
+) -> Result<std::time::Instant, Response> {
+    if engine != ersatzrs_domain::StreamingEngine::Next {
+        return Ok(read_deadline);
+    }
+    let timeout =
+        tokio::time::timeout_at(read_deadline.into(), load_segmenter_startup_timeout(state))
+            .await
+            .ok();
+    timeout
+        .and_then(|timeout| started.checked_add(timeout))
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "HLS startup deadline expired",
+            )
+                .into_response()
+        })
+}
+
+async fn load_hls_channel_for_startup(
+    state: &AppState,
+    number: &str,
+) -> Result<(Channel, std::time::Instant), Response> {
+    let started = std::time::Instant::now();
+    let deadline = started + Duration::from_secs(20);
+    let channel =
+        match startup_read(deadline, state.repositories.channel.get_by_number(number)).await {
+            Ok(channel) if channel.is_enabled => channel,
+            Ok(_) => return Err(StatusCode::NOT_FOUND.into_response()),
+            Err(error) => {
+                tracing::debug!(%error, number, "channel not found for HLS request");
+                return Err(StatusCode::NOT_FOUND.into_response());
+            }
+        };
+    let deadline =
+        channel_startup_deadline(state, channel.streaming_engine, started, deadline).await?;
+    Ok((channel, deadline))
+}
+
 fn normalize_initial_segment_count(segment_count: usize) -> usize {
     segment_count.max(MIN_STABLE_INITIAL_SEGMENT_COUNT)
 }
@@ -988,21 +1052,10 @@ pub async fn serve_channel_m3u8(
     headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
-    let deadline = std::time::Instant::now() + Duration::from_secs(20);
-    let channel = match startup_read(
-        deadline,
-        state.repositories.channel.get_by_number(channel_number),
-    )
-    .await
-    {
-        Ok(channel) if channel.is_enabled => channel,
-        Ok(_) => return StatusCode::NOT_FOUND.into_response(),
-        Err(error) => {
-            tracing::debug!(%error, channel_number, "channel not found for m3u8 request");
-            return StatusCode::NOT_FOUND.into_response();
-        }
+    let (channel, deadline) = match load_hls_channel_for_startup(state, channel_number).await {
+        Ok(channel) => channel,
+        Err(response) => return response,
     };
-
     let access_token = AccessToken::for_request(
         query.access_token.clone(),
         state.iptv_access_token_verifier.is_enabled(),
@@ -1199,7 +1252,7 @@ async fn serve_hls_segmenter_playlist(
     let Ok((initial_segment_count, startup_timeout)) =
         tokio::time::timeout_at(deadline.into(), async {
             (
-                load_initial_segment_count(state)
+                load_initial_segment_count_for_engine(state, channel.streaming_engine)
                     .await
                     .max(min_initial_segment_count),
                 load_segmenter_startup_timeout(state).await,
@@ -1324,15 +1377,9 @@ pub async fn get_preview_master_playlist(
     headers: HeaderMap,
     Query(query): Query<HlsQuery>,
 ) -> Response {
-    let deadline = std::time::Instant::now() + Duration::from_secs(20);
-    let channel = match startup_read(
-        deadline,
-        state.repositories.channel.get_by_number(&channel_number),
-    )
-    .await
-    {
-        Ok(channel) if channel.is_enabled => channel,
-        Ok(_) | Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    let (channel, deadline) = match load_hls_channel_for_startup(&state, &channel_number).await {
+        Ok(channel) => channel,
+        Err(response) => return response,
     };
     let access_token = AccessToken::for_request(
         query.access_token,
@@ -1385,7 +1432,7 @@ pub async fn get_preview_master_playlist(
     let Ok((initial_segment_count, startup_timeout)) =
         tokio::time::timeout_at(deadline.into(), async {
             (
-                load_initial_segment_count(&state).await,
+                load_initial_segment_count_for_engine(&state, channel.streaming_engine).await,
                 load_segmenter_startup_timeout(&state).await,
             )
         })
@@ -2139,6 +2186,63 @@ mod tests {
         assert_eq!(normalize_initial_segment_count(1), 3);
         assert_eq!(normalize_initial_segment_count(2), 3);
         assert_eq!(normalize_initial_segment_count(4), 4);
+    }
+
+    #[tokio::test]
+    async fn row291_next_wrapper_caps_saved_count_and_uses_configured_startup_budget() {
+        use ersatzrs_domain::StreamingEngine;
+        let state = AppState::for_tests(crate::host::state::IptvAccessTokenVerifier::disabled());
+        sqlx::migrate!("../../migrations")
+            .run(&state.pool)
+            .await
+            .unwrap();
+        state
+            .repositories
+            .config
+            .set(
+                ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
+                "20",
+            )
+            .await
+            .unwrap();
+        state
+            .repositories
+            .config
+            .set(ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, "45")
+            .await
+            .unwrap();
+        let next_count = load_initial_segment_count_for_engine(&state, StreamingEngine::Next).await;
+        let native_count =
+            load_initial_segment_count_for_engine(&state, StreamingEngine::Legacy).await;
+        assert_eq!(next_count, 10);
+        assert_eq!(native_count, 20);
+        let mut playlist = String::from("#EXTM3U\n");
+        for segment in 0..10 {
+            writeln!(
+                playlist,
+                "#EXTINF:4.0,\n#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00Z\nlive{segment}.ts"
+            )
+            .unwrap();
+        }
+        assert!(wrapper_probe_segments(&playlist, next_count).is_some());
+        assert!(wrapper_probe_segments(&playlist, native_count).is_none());
+        let started = std::time::Instant::now();
+        let read_deadline = started + Duration::from_secs(20);
+        let next = channel_startup_deadline(&state, StreamingEngine::Next, started, read_deadline)
+            .await
+            .unwrap();
+        let native =
+            channel_startup_deadline(&state, StreamingEngine::Legacy, started, read_deadline)
+                .await
+                .unwrap();
+        assert_eq!(next.duration_since(started), Duration::from_secs(45));
+        assert_eq!(native, read_deadline);
+        for (requested, expected) in [(1, 3), (2, 3), (3, 3), (4, 4), (10, 10), (20, 10)] {
+            assert_eq!(
+                initial_segment_count_for_engine(requested, StreamingEngine::Next),
+                expected
+            );
+        }
     }
 
     #[test]

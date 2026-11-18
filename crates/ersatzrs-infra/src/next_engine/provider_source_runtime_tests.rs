@@ -52,6 +52,7 @@ async fn real_next_remote_only_provider_teletext_shares_source_clock_audio_and_b
             (&ffmpeg, &ffprobe),
             kind,
             Mode::Convert,
+            None,
         )
         .await;
     }
@@ -63,9 +64,66 @@ async fn real_next_remote_only_provider_teletext_shares_source_clock_audio_and_b
             (&ffmpeg, &ffprobe),
             RemoteMediaSourceKind::Jellyfin,
             mode,
+            None,
         )
         .await;
     }
+}
+
+#[tokio::test]
+#[ignore = "requires exact Next/FFmpeg9; row295 retained authenticated source qualification and grant fencing"]
+async fn row295_real_next_retained_jellyfin_maps_layouts_and_source_grants() {
+    let root = fixture::proof_root();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let clip = fixture::source(&ffmpeg, &root).await;
+    fixture::independent_pages(&ffmpeg, &clip, &root).await;
+    let bytes = Arc::new(tokio::fs::read(&clip).await.unwrap());
+    for logical in [[2, 3, 4, 5], [0, 1, 2, 3], [0, 2, 3, 5]] {
+        run_provider(
+            &root,
+            &clip,
+            &bytes,
+            (&ffmpeg, &ffprobe),
+            RemoteMediaSourceKind::Jellyfin,
+            Mode::Convert,
+            Some(logical),
+        )
+        .await;
+    }
+}
+
+async fn map_provider_layout(pool: &crate::db::DbPool, logical: [i32; 4]) {
+    sqlx::query(r#"DELETE FROM "ProviderStreamIndex" WHERE "MediaVersionId"=100"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    for (physical, raw) in logical.into_iter().enumerate() {
+        // The acquired fixture stores native rows by physical index + 1.
+        let physical = i32::try_from(physical).unwrap();
+        let changed = sqlx::query(
+            r#"UPDATE "MediaStream" SET "Index"=? WHERE "Id"=? AND "MediaVersionId"=100"#,
+        )
+        .bind(raw)
+        .bind(physical + 1)
+        .execute(pool)
+        .await
+        .unwrap();
+        assert_eq!(changed.rows_affected(), 1);
+        sqlx::query(r#"INSERT INTO "ProviderStreamIndex" VALUES (100,?,?)"#)
+            .bind(raw)
+            .bind(physical)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query(
+        r#"UPDATE "Subtitle" SET "StreamIndex"=? WHERE "MovieMetadataId"=20 AND "SubtitleKind"=0"#,
+    )
+    .bind(logical[2])
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 async fn prepare_provider(
@@ -150,10 +208,15 @@ async fn run_provider(
     tools: (&Path, &Path),
     kind: RemoteMediaSourceKind,
     mode: Mode,
+    logical: Option<[i32; 4]>,
 ) {
-    let proof = root.join(format!("{}-{}", kind.provider_name(), mode.name()));
+    let suffix = logical.map_or_else(String::new, |indexes| format!("-{indexes:?}"));
+    let proof = root.join(format!("{}-{}{suffix}", kind.provider_name(), mode.name()));
     tokio::fs::create_dir(&proof).await.unwrap();
     let (pool, locker) = prepare_provider(clip, tools.1, &proof, kind, mode).await;
+    if let Some(logical) = logical {
+        map_provider_layout(&pool, logical).await;
+    }
     let server = fixture_media_server().await;
     let (media, full_reads) = mock_media(&server, kind, bytes).await;
     let _wrong_plex = fixture_provider_connection(&pool, kind, &server).await;

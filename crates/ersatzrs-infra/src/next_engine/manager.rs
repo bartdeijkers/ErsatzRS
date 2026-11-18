@@ -880,6 +880,38 @@ pub async fn validate_published() -> Result<(), NextRuntimeError> {
     validate_selected(&accepted).await
 }
 
+/// Inspect session controls and return the channel-schema revision validated for
+/// this runtime. Availability retains package identity/version validation.
+pub(crate) async fn validate_published_sessions() -> Result<u32, NextRuntimeError> {
+    let accepted = RESOLVED
+        .read()
+        .map_err(|_| NextRuntimeError::Storage)?
+        .clone();
+    let Some(accepted) = accepted else {
+        return Ok(5);
+    };
+    validate_selected_sessions(&accepted).await
+}
+
+async fn validate_selected_sessions(
+    accepted: &NextRuntimeAcquisition,
+) -> Result<u32, NextRuntimeError> {
+    let result = if accepted.indexed_reader.is_some() {
+        super::indexed_runtime::validate_worker_indexed_session(&accepted.binary).await
+    } else {
+        super::indexed_runtime::validate_worker_session(&accepted.binary).await
+    };
+    result
+        .map(|()| {
+            if accepted.indexed_reader.is_some() {
+                6
+            } else {
+                5
+            }
+        })
+        .map_err(indexed_runtime_error)
+}
+
 async fn validate_selected(accepted: &NextRuntimeAcquisition) -> Result<(), NextRuntimeError> {
     validate_indexed(accepted).await?;
     if accepted.source == NextRuntimeSource::Override {

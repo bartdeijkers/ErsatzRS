@@ -300,11 +300,14 @@ pub(super) fn install_fresh_tracks(
         audio: Some(audio),
         subtitle: subtitle.map(|path| protocol::Track {
             source: Some(protocol::Source::Local {
+                probe_hint: super::probe_hint::text_subtitle(
+                    std::path::Path::new(&path)
+                        .extension()
+                        .and_then(|value| value.to_str()),
+                ),
                 path,
                 in_point_ms: None,
                 out_point_ms: None,
-
-                probe_hint: None,
             }),
             stream_index: Some(0),
         }),

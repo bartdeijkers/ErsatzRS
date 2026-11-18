@@ -475,6 +475,11 @@ async fn provider_sidecar_projection_defers_burn_and_convert_without_network_acc
     ] {
         sqlx::query(sql).execute(&pool).await.unwrap();
     }
+    sqlx::raw_sql(r#"
+        UPDATE "MediaVersion" SET "ProviderStreamIndexVersion"=1 WHERE "Id"=100;
+        INSERT INTO "ProviderStreamIndex" ("MediaVersionId","StreamIndex","SourceStreamIndex")
+            SELECT "MediaVersionId","Index","Index" FROM "MediaStream" WHERE "MediaVersionId"=100 AND "MediaStreamKind"<>5;
+    "#).execute(&pool).await.unwrap();
     // There is deliberately no connection or credential: projection must do SQL
     // selection only; the authenticated callback supplies the actual artifact.
     for mode in [
@@ -1597,3 +1602,6 @@ fn local_source_seek_preserves_milliseconds_and_open_ended_intervals() {
 
 #[path = "subtitle_availability_tests.rs"]
 mod subtitle_availability_tests;
+
+#[path = "jellyfin_stream_index_tests.rs"]
+pub(crate) mod jellyfin_stream_indexes;

@@ -1284,6 +1284,24 @@ impl HlsSessionWorker {
             } else {
                 None
             };
+            let native_indexes = if active.external.is_none() && active.remote_stream.is_none() {
+                match self
+                    .startup_read(crate::playback::source_indexes::load(
+                        &pool,
+                        active.media_version_id,
+                    ))
+                    .await
+                {
+                    Ok(indexes) => indexes,
+                    Err(error) => {
+                        tracing::warn!(%error, channel_id=self.channel_id, "HLS source mapping unavailable");
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                }
+            } else {
+                None
+            };
             let source_stream = match self
                 .startup_read(async {
                     if let Some(media) = &active.external {
@@ -2436,6 +2454,23 @@ impl HlsSessionWorker {
                 },
                 song.as_ref(),
             );
+            let native_mapping = if active.external.is_none() && active.remote_stream.is_none() {
+                crate::playback::source_indexes::ensure_current(
+                    &pool,
+                    active.media_version_id,
+                    native_indexes.as_ref(),
+                )
+                .await
+                .and_then(|()| {
+                    crate::playback::source_indexes::apply_native_request(
+                        native_indexes.as_ref(),
+                        &active.media_path,
+                        &mut request,
+                    )
+                })
+            } else {
+                Ok(())
+            };
             crate::playback::apply_live_input_eof_policy(&mut request, is_live_remote);
             apply_hls_bootstrap_readburst(
                 &mut request,
@@ -2489,7 +2524,11 @@ impl HlsSessionWorker {
                     request,
                 )
             };
-            let command = if let Some(error) = subtitle_preparation_error {
+            let command = if native_mapping.is_err() {
+                Err(ersatzrs_ffmpeg::UnsupportedSource {
+                    reason: "Jellyfin source mapping changed or is unavailable".into(),
+                })
+            } else if let Some(error) = subtitle_preparation_error {
                 Err(ersatzrs_ffmpeg::UnsupportedSource {
                     reason: error.to_string(),
                 })
@@ -12546,7 +12585,7 @@ mod tests {
         );
     }
 
-    fn playback_profile() -> PlaybackProfile {
+    pub(super) fn playback_profile() -> PlaybackProfile {
         PlaybackProfile {
             profile: FFmpegProfile {
                 video_format: FFmpegProfileVideoFormat::H264,
@@ -13266,3 +13305,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "hls_native_indexes_tests.rs"]
+mod native_indexes_tests;

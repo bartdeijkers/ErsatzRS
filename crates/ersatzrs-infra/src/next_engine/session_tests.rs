@@ -367,3 +367,80 @@ fn session_model_reports_next_null_cursor_and_touch_without_changing_demand() {
         "startup touches do not become playback demand"
     );
 }
+
+#[tokio::test]
+async fn row291_worker_owned_idle_heartbeats_follow_viewers_during_stalled_refresh() {
+    let root = tempfile::tempdir().unwrap();
+    let process = super::super::process::fixture_process(root.path(), "ready")
+        .await
+        .unwrap();
+    let session = Arc::new(NextSession::new(
+        "1".into(),
+        root.path().into(),
+        Instant::now() + Duration::from_secs(30),
+    ));
+    let (entered, waiting) = oneshot::channel();
+    let mut entered = Some(entered);
+    let running = session.clone();
+    let task = tokio::spawn(async move {
+        running
+            .run_with_policy(async { Ok(process) }, IdlePolicy::Worker, move |_| {
+                entered.take().unwrap().send(()).unwrap();
+                std::future::pending()
+            })
+            .await
+    });
+    session.playout_updated();
+    waiting.await.unwrap();
+    let heartbeat = root.path().join(".heartbeat");
+    wait_for_row291_heartbeat(&heartbeat, false).await;
+    let report = session.session_model().unwrap();
+    let checkpoint = session.checkpoint_time();
+    std::fs::File::options()
+        .write(true)
+        .open(&heartbeat)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(std::time::UNIX_EPOCH))
+        .unwrap();
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(6)).await;
+    tokio::time::resume();
+    // Give any accidental periodic filesystem write a real opportunity to finish.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(
+        std::fs::metadata(&heartbeat).unwrap().modified().unwrap(),
+        std::time::UNIX_EPOCH
+    );
+    assert_eq!(session.session_model().unwrap(), report);
+    assert_eq!(session.checkpoint_time(), checkpoint);
+    assert!(!task.is_finished());
+    session.touch();
+    wait_for_row291_heartbeat(&heartbeat, true).await;
+    session.cancel().await;
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap(),
+        SessionExit::Cancelled
+    );
+    assert_eq!(session.startup_readiness(), HlsStartupReadiness::Failed);
+}
+
+async fn wait_for_row291_heartbeat(path: &std::path::Path, touched: bool) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if std::fs::metadata(path)
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .is_some_and(|time| !touched || time != std::time::UNIX_EPOCH)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}

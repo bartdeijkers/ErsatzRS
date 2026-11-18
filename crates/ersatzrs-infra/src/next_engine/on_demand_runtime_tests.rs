@@ -30,7 +30,12 @@ async fn real_next_on_demand_resume_keeps_viewer_position_audio_and_subtitles() 
     let output = root.path().join("output");
     let (task, session) = start(&host, &registry, &output).await;
     assert_color(&ffmpeg, &output, session.as_ref(), false).await;
-    tokio::time::sleep(Duration::from_secs(12)).await;
+    // An active viewer refreshes demand throughout the playback interval.
+    let watching_until = Instant::now() + Duration::from_secs(12);
+    while Instant::now() < watching_until {
+        session.touch();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
     let touched_before = ersatzrs_time::Utc::now();
     session.touch();
     let touched_after = ersatzrs_time::Utc::now();
@@ -154,6 +159,7 @@ async fn start(
     })
     .await
     .unwrap();
+    session.touch();
     (task, session)
 }
 

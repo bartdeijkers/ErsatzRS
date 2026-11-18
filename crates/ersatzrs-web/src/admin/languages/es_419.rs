@@ -1445,9 +1445,8 @@ TextKey::NonPlayableItems => "Elementos no reproducibles",
         TextKey::HlsSegmenterInitialSegmentCount => {
             "Número inicial de segmentos del segmentador HLS"
         }
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Retrasa el inicio de la emisión hasta que se haya transcodificado el número indicado de segmentos (de 4 segundos); un número mayor ralentiza el inicio, pero puede reducir las pausas de almacenamiento en búfer"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Espera los segmentos iniciales de 4 segundos antes de reproducir. Los valores inferiores a 3 usan 3. Una cantidad mayor retrasa el inicio y puede reducir las pausas de carga. Next usa como máximo 10.",
+
         TextKey::HomeRunning => "El servidor IPTV está en funcionamiento.",
         TextKey::ReleaseNotes => "Notas de la versión",
         TextKey::FullChangelog => "Registro completo de cambios",
@@ -2673,11 +2672,18 @@ TextKey::NonPlayableItems => "Elementos no reproducibles",
         TextKey::TeletextDecoderBitmapFailed => "Falló la decodificación de imágenes de teletexto a color. Seleccione un motor FFmpeg 9 compatible.",
         TextKey::NextRuntimeAvailability => "Disponibilidad del motor Next",
         TextKey::NextOverlayInvalid => "La configuración superpuesta de Next no está disponible o no es válida",
-        TextKey::NextOverlaySchema => "Las configuraciones superpuestas de Next requieren un URI de versión compatible (0.1.0 o 0.1.1). Revisa la configuración de copia antes de actualizar una configuración anterior.",
+        TextKey::NextOverlaySchema => "Las configuraciones superpuestas de Next requieren un URI de versión compatible ({versions}). Revisa la configuración de copia antes de actualizar una configuración anterior.",
         TextKey::NextOverlayIncomplete => "La validación de la configuración superpuesta de Next está incompleta",
+        TextKey::NextSessionContract => "No se pudieron verificar los controles de sesión del entorno Next. Los canales Next habilitados requieren un entorno validado que admita el tiempo de inactividad y el búfer de inicio.",
+        TextKey::NextSessionContractBrief => "Los controles de sesión de Next no están disponibles",
         TextKey::JavascriptAudioSelectionTitle => "Selección de audio JavaScript",
         TextKey::JavascriptAudioSelectionHealthy => "No se registraron errores de selección desde el inicio. Los scripts no ejecutados no están validados.",
         TextKey::JavascriptAudioSelectionFailures => "{count} errores de selección desde el inicio; se usó la selección de audio integrada. Revisa scripts/audio-stream-selector y los límites de ADR 0096. El contador se restablece al reiniciar.",
+        TextKey::JellyfinStreamIndexesTitle => "Índices de flujos de Jellyfin",
+        TextKey::JellyfinStreamIndexesRepairBrief => "Se deben reparar los índices de flujos de Jellyfin",
+        TextKey::JellyfinStreamIndexesRepair => "Se deben reparar los índices de flujos de {count} versiones multimedia de Jellyfin. Vuelve a escanear sus bibliotecas para corregir la selección de audio, video y subtítulos integrados. Se conservan las pistas seleccionadas. Las bibliotecas desactivadas permanecen desactivadas; activa el escaneo solo si lo deseas.",
+        TextKey::LocalDateAddedRepair => "{count} elementos multimedia locales no tienen fecha de incorporación. Vuelve a escanear sus bibliotecas para recuperar las fechas de creación de los archivos; los archivos no disponibles no se modifican. Estos elementos pueden faltar en las búsquedas de incorporaciones recientes hasta que se reparen.",
+        TextKey::LocalDateAddedRepairBrief => "Se deben reparar las fechas de incorporación locales",
         TextKey::AddonListDiskUsageTitle => "Uso del disco de las listas de complementos",
         TextKey::AddonListDiskUsageBrief => "Advertencia de uso del disco de las listas de complementos",
         TextKey::AddonListDiskUsageUnavailable => "No se pudo medir por completo el uso del disco de las listas de complementos. Verifica el acceso al almacenamiento y repite la comprobación de estado.",

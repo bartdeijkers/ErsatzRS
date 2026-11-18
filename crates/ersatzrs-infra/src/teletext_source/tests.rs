@@ -65,6 +65,12 @@ async fn fixture_on_pool(
         }
     };
     sqlx::raw_sql(subtype_sql).execute(&pool).await.unwrap();
+    if provider == MediaSourceKind::Jellyfin {
+        sqlx::raw_sql(r#"INSERT INTO "MediaStream" ("MediaVersionId","Index","MediaStreamKind","Codec","Channels","Default","Forced") VALUES (301,0,1,'h264',0,1,0),(302,0,1,'h264',0,1,0);
+            UPDATE "MediaVersion" SET "ProviderStreamIndexVersion"=1;
+            INSERT INTO "ProviderStreamIndex" SELECT "MediaVersionId","Index","Index" FROM "MediaStream";"#)
+            .execute(&pool).await.unwrap();
+    }
     let repository = SqliteManagedLibraryOperationRepository(pool.clone());
     let operation = repository
         .enqueue_scan(
@@ -581,3 +587,82 @@ mod headers;
 
 #[path = "page_tests.rs"]
 mod pages;
+
+#[tokio::test]
+async fn row295_mapped_jellyfin_report_keeps_physical_observation_and_logical_parent() {
+    let dir = tempfile::tempdir().unwrap();
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(dir.path().join("mapped.db"))
+        .create_if_missing(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options.clone())
+        .await
+        .unwrap();
+    let (pool, claim) = fixture_on_pool(pool, MediaSourceKind::Jellyfin).await;
+    sqlx::raw_sql(r#"UPDATE "MediaStream" SET "Index"=6 WHERE "Id"=401;
+        UPDATE "ProviderStreamIndex" SET "StreamIndex"=6 WHERE "MediaVersionId"=301 AND "StreamIndex"=4;
+        UPDATE "MediaStream" SET "Index"=4,"Codec"='dvb_teletext' WHERE "Id"=403;
+        UPDATE "ProviderStreamIndex" SET "StreamIndex"=4 WHERE "MediaVersionId"=301 AND "StreamIndex"=2;"#)
+        .execute(&pool).await.unwrap();
+    let report = observation(MediaSourceKind::Jellyfin);
+    // The former raw-index lookup selects a different teletext stream.
+    let old_parent: i64 = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "MediaStream" WHERE "MediaVersionId"=301 AND "Index"=4"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(old_parent, 403);
+    let mut tx = begin_write(&pool).await.unwrap();
+    assert_eq!(
+        crate::media_server::teletext::report_parents(
+            &mut tx,
+            ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+            301,
+            4,
+            "fixture/one.ts"
+        )
+        .await
+        .unwrap(),
+        (401, 501)
+    );
+    assert!(replace(&mut tx, &claim, parents(), &report).await.unwrap());
+    assert_eq!(load(&mut tx, 401, 501).await.unwrap().unwrap(), report);
+    tx.commit().await.unwrap();
+    pool.close().await;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .unwrap();
+    assert_eq!(
+        read(&pool).await,
+        report,
+        "physical report and logical parent survive reopen"
+    );
+    let mut tx = begin_write(&pool).await.unwrap();
+    // The report must not bind to logical4, which now names physical2.
+    let wrong = SourceTeletextParents {
+        media_stream_id: 403,
+        ..parents()
+    };
+    assert!(replace(&mut tx, &claim, wrong, &report).await.is_err());
+    sqlx::query(r#"UPDATE "MediaVersion" SET "ProviderStreamIndexVersion"=0 WHERE "Id"=301"#)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    assert!(load(&mut tx, 401, 501).await.is_err());
+    sqlx::query(r#"UPDATE "MediaVersion" SET "ProviderStreamIndexVersion"=1 WHERE "Id"=301"#)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"DELETE FROM "ProviderStreamIndex" WHERE "MediaVersionId"=301 AND "StreamIndex"=6"#,
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    assert!(load(&mut tx, 401, 501).await.is_err());
+    tx.rollback().await.unwrap();
+}

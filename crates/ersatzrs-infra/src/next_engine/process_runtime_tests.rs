@@ -10,6 +10,7 @@ use tokio::io::AsyncReadExt;
 
 use crate::next_engine::{host, schedule, selection};
 use crate::playback::PlaybackProfile;
+use std::sync::Arc;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in test runtime locations, never production configuration.
 fn runtime_path(name: &str) -> PathBuf {
@@ -456,6 +457,7 @@ async fn real_next_copy_profiles_preserve_audio_and_burn_subtitle_fallback() {
             locker,
             root.path().join("playout"),
         ));
+        let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
         assert_next_session(
             &host,
             host::NextStart {
@@ -473,6 +475,7 @@ async fn real_next_copy_profiles_preserve_audio_and_burn_subtitle_fallback() {
             false,
         )
         .await;
+        callbacks.stop().await;
     }
 }
 
@@ -512,6 +515,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
     for muted in [false, true] {
         let (pool, locker) = prepare_schedule(&clip, muted, &profile.profile).await;
         let host = std::sync::Arc::new(host::NextHost::new(pool, locker, playout.clone()));
+        let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
         let request = host::NextStart {
             channel_id: 1,
             preview: false,
@@ -525,6 +529,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
             deadline: Instant::now() + Duration::from_secs(30),
         };
         assert_next_session(&host, request, muted).await;
+        callbacks.stop().await;
     }
     assert_media_server_sessions(
         &binary,
@@ -545,6 +550,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
         .await
         .unwrap();
     let host = std::sync::Arc::new(host::NextHost::new(pool.clone(), locker, playout));
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     assert_preview_sessions(
         &host,
         host::NextStart {
@@ -570,6 +576,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
             .audio_format,
         FFmpegProfileAudioFormat::Ac3
     );
+    callbacks.stop().await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -863,6 +870,15 @@ async fn assert_next_session(
     request: host::NextStart,
     muted: bool,
 ) {
+    assert_next_session_with_text_mode(host, request, muted, false).await;
+}
+
+async fn assert_next_session_with_text_mode(
+    host: &std::sync::Arc<host::NextHost>,
+    request: host::NextStart,
+    muted: bool,
+    convert: bool,
+) {
     use crate::transcode_capacity::{
         active_transcode_snapshot, try_reserve_active_transcode, ActiveTranscodeSlot,
     };
@@ -912,14 +928,30 @@ async fn assert_next_session(
         .start(registry.clone(), request.clone())
         .await
         .is_none());
-    assert_audio_and_subtitle(
-        &request.ffmpeg,
-        &request.ffprobe,
-        &request.output.join(segment),
-        muted,
-        "aac",
-    )
-    .await;
+    if convert {
+        let converted_segment = text_subtitle_runtime_tests::assert_text_playlist(
+            &request.output,
+            &playlist,
+            true,
+            false,
+        )
+        .await;
+        text_subtitle_runtime_tests::assert_text_video_and_audio(
+            &request.ffmpeg,
+            &converted_segment,
+            false,
+        )
+        .await;
+    } else {
+        assert_audio_and_subtitle(
+            &request.ffmpeg,
+            &request.ffprobe,
+            &request.output.join(segment),
+            muted,
+            "aac",
+        )
+        .await;
+    }
     assert!(registry.stop_channel("1").await);
     task.await.unwrap();
     assert_eq!(active_transcode_snapshot(1).active, 0);
@@ -931,6 +963,10 @@ async fn assert_next_session(
 #[tokio::test]
 #[ignore = "requires qualified indexed Next and FFmpeg9; simultaneous normal/browser preview"]
 async fn real_next_indexed_normal_and_browser_preview_preserve_tracks_and_owned_shutdown() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_ansi(false)
+        .try_init();
     let root = tempfile::tempdir().unwrap();
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let clip = root.path().join("fixture.mkv");
@@ -964,6 +1000,7 @@ async fn real_next_indexed_normal_and_browser_preview_preserve_tracks_and_owned_
         ersatzrs_core::programme::ProgrammeClock::named("UTC").unwrap(),
         permit,
     ));
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     assert_preview_sessions(
         &host,
         host::NextStart {
@@ -989,6 +1026,7 @@ async fn real_next_indexed_normal_and_browser_preview_preserve_tracks_and_owned_
             .audio_format,
         FFmpegProfileAudioFormat::Ac3
     );
+    callbacks.stop().await;
     pool.close().await;
 }
 
@@ -1131,6 +1169,7 @@ async fn fixture_child_javascript_audio() {
         locker,
         root.path().join("playout"),
     ));
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     assert_next_session(
         &host,
         host::NextStart {
@@ -1148,6 +1187,7 @@ async fn fixture_child_javascript_audio() {
         false,
     )
     .await;
+    callbacks.stop().await;
 }
 
 #[path = "image_subtitle_runtime_tests.rs"]
@@ -1221,6 +1261,7 @@ async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tra
         host::NextHost::new(pool, locker, root.path().join("playout"))
             .with_config_overlays(overlays.clone()),
     );
+    let mut callbacks = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
     let request = host::NextStart {
         channel_id: 1,
         preview: false,
@@ -1245,6 +1286,7 @@ async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tra
         request.deadline = Instant::now() + Duration::from_secs(30);
         assert_overlay_session(&host, request, expected_width).await;
     }
+    callbacks.stop().await;
 
     // The engine owns parsing/merging; malformed JSON must fail before readiness
     // and the adapter must return only after its managed child has been reaped.
@@ -1383,3 +1425,206 @@ mod output_frame_rate_runtime_tests;
 
 #[path = "playout_refresh_runtime_tests.rs"]
 mod playout_refresh_runtime_tests;
+
+struct Row291Runtime<'a> {
+    binary: &'a Path,
+    ffmpeg: &'a Path,
+    ffprobe: &'a Path,
+    clip: &'a Path,
+    root: &'a Path,
+}
+
+#[tokio::test]
+#[ignore = "requires the accepted 0.1.4 worker in ERSATZRS_NEXT_TEST_LEGACY_BIN"]
+async fn real_next_row291_refuses_the_private_index_only_session_contract() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_LEGACY_BIN");
+    let root = tempfile::tempdir().unwrap();
+    let output = root.path().join("output");
+    std::fs::create_dir(&output).unwrap();
+    let marker = output.join("retain-existing-output");
+    std::fs::write(&marker, b"retained").unwrap();
+    let mut config = super::tests::config();
+    config.session = Some(super::super::protocol::Session::default());
+    let result = NextProcess::start(
+        &binary,
+        "1",
+        &output,
+        &config,
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(ProcessError::Preparation("worker session contract"))
+    ));
+    assert_eq!(std::fs::read(&marker).unwrap(), b"retained");
+    println!("row291 actual accepted worker rejected before output mutation");
+}
+
+#[tokio::test]
+#[ignore = "requires exact selected Next candidate and FFmpeg9; isolated data/state/temp directories"]
+async fn real_next_row291_uses_saved_readiness_and_worker_owned_idle() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(std::io::stderr)
+        .try_init();
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = root.path().join("fixture.mkv");
+    generate_clip(&ffmpeg, &clip).await;
+    let runtime = Row291Runtime {
+        binary: &binary,
+        ffmpeg: &ffmpeg,
+        ffprobe: &ffprobe,
+        clip: &clip,
+        root: root.path(),
+    };
+    for (label, count, ready, keep) in [
+        ("default", None, 3, false),
+        ("four", Some(4), 4, false),
+        ("six", Some(6), 6, false),
+        ("capped", Some(20), 10, true),
+    ] {
+        assert_row291_real_session(&runtime, label, count, ready, keep).await;
+    }
+}
+
+async fn assert_row291_real_session(
+    runtime: &Row291Runtime<'_>,
+    label: &str,
+    count: Option<i32>,
+    ready: usize,
+    keep: bool,
+) {
+    use crate::transcode_capacity::active_transcode_snapshot;
+    let (pool, locker) = prepare_row291_session(runtime, count, keep).await;
+    let host = Arc::new(host::NextHost::new(
+        pool.clone(),
+        locker,
+        runtime.root.join(label).join("playout"),
+    ));
+    let mut callback = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
+    let registry = Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
+    let request = host::NextStart {
+        channel_id: 1,
+        preview: false,
+        number: "1".into(),
+        executable: runtime.binary.to_owned(),
+        output: runtime.root.join(label).join("output"),
+        ffmpeg: runtime.ffmpeg.to_owned(),
+        ffprobe: runtime.ffprobe.to_owned(),
+        replacements: Vec::new(),
+        idle_timeout: None,
+        deadline: Instant::now() + Duration::from_mins(1),
+    };
+    let began = Instant::now();
+    let task = host.start(registry.clone(), request.clone()).await.unwrap();
+    let handle = registry.try_get("1").await.unwrap();
+    timeout(Duration::from_mins(1), async {
+        loop {
+            match handle.startup_readiness() {
+                HlsStartupReadiness::Ready => break,
+                HlsStartupReadiness::Failed => panic!("row291 worker failed before readiness"),
+                _ => tokio::time::sleep(Duration::from_millis(10)).await,
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let playlist = handle.trim_playlist().await.unwrap();
+    let segments = playlist
+        .lines()
+        .filter(|line| {
+            !line.starts_with('#')
+                && Path::new(line)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+        })
+        .count();
+    assert!(
+        segments >= ready,
+        "worker published readiness before the configured segment count"
+    );
+    assert_eq!(active_transcode_snapshot(1).active, 1);
+    let ready_ms = began.elapsed().as_millis();
+    if keep {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert!(!task.is_finished(), "Keep Running stopped without viewers");
+        assert!(registry.stop_channel("1").await);
+    } else {
+        timeout(Duration::from_secs(5), async {
+            while registry.try_get("1").await.is_some() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("worker-owned idle expiry did not remove the session");
+    }
+    timeout(Duration::from_secs(5), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!request.output.exists());
+    assert_eq!(active_transcode_snapshot(1).active, 0);
+    assert!(handle.trim_playlist().await.is_none());
+    callback.stop().await;
+    println!("row291 real-worker case={label} segments={segments} minimum={ready} keep={keep} ready_ms={ready_ms} cleanup=joined");
+    pool.close().await;
+}
+
+async fn prepare_row291_session(
+    runtime: &Row291Runtime<'_>,
+    count: Option<i32>,
+    keep: bool,
+) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
+    use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        video_bitrate: 1000,
+        video_buffer_size: 2000,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..Default::default()
+    };
+    let (pool, locker) = prepare_schedule(runtime.clip, false, &profile).await;
+    // The shared selection fixture names a synthetic subtitle. Supply its real
+    // bytes here so startup can reach the session controls being exercised.
+    let subtitle = runtime.root.join("fixture-nl.srt");
+    std::fs::write(
+        &subtitle,
+        "1\n00:00:00,000 --> 00:01:00,000\n[NL] synthetic timing fixture\n",
+    )
+    .unwrap();
+    sqlx::query(r#"UPDATE "Subtitle" SET "Path"=? WHERE "Id"=2"#)
+        .bind(subtitle.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repositories = crate::repositories::make_repositories(pool.clone());
+    repositories
+        .config
+        .set(ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, "1")
+        .await
+        .unwrap();
+    if let Some(count) = count {
+        repositories
+            .config
+            .set(
+                ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
+                &count.to_string(),
+            )
+            .await
+            .unwrap();
+    }
+    let mut channel = repositories.channel.get_with_profile(1).await.unwrap();
+    channel.idle_behavior = if keep {
+        ersatzrs_domain::ChannelIdleBehavior::KeepRunning
+    } else {
+        ersatzrs_domain::ChannelIdleBehavior::StopOnDisconnect
+    };
+    repositories.channel.upsert(&channel).await.unwrap();
+    (pool, locker)
+}

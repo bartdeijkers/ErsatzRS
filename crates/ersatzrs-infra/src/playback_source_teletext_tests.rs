@@ -415,3 +415,79 @@ async fn explicit_off_returns_before_any_sql_on_a_closed_pool() {
     .unwrap();
     assert!(selected.is_none());
 }
+
+#[tokio::test]
+async fn row295_source_pages_match_physical_requests_and_keep_logical_metadata() {
+    for logical in [[2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [0, 2, 3, 5, 6]] {
+        let pool = crate::next_engine::selection::tests::fixture_pool().await;
+        crate::next_engine::selection::tests::jellyfin_stream_indexes::qualify(&pool, logical)
+            .await;
+        sqlx::raw_sql(
+            r#"UPDATE "MediaStream" SET "Codec"='dvb_teletext' WHERE "Id"=4;
+            UPDATE "Subtitle" SET "Codec"='dvb_teletext' WHERE "Id"=3;
+            DELETE FROM "Subtitle" WHERE "Id"!=3;"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let map = super::super::source_indexes::load(&pool, 100)
+            .await
+            .unwrap();
+        let mut page = candidate(888, "nld", 2);
+        page.request.binding = SourceTeletextBindingIdentity::new(
+            1,
+            MediaSourceKind::Jellyfin,
+            100,
+            300,
+            4,
+            SourceTeletextRevision::new("synthetic-observed-revision".into()).unwrap(),
+        )
+        .unwrap();
+        let rows = load_subtitles_for_media_version(&pool, 10, 100)
+            .await
+            .unwrap();
+        for engine in [
+            SubtitleSelectionEngine::Native,
+            SubtitleSelectionEngine::Next,
+        ] {
+            let sources = vec![&page];
+            let choices = metadata_choices_with_indexes(
+                &rows,
+                100,
+                StreamingMode::TransportStream,
+                true,
+                &sources,
+                engine,
+                map.as_ref(),
+            );
+            assert_eq!(choices.len(), 1);
+            assert_eq!(choices[0].source, Some(0));
+            assert_eq!(choices[0].row.stream_index, logical[3]);
+        }
+        let selected = select_pending_next_source_subtitle(
+            &pool,
+            10,
+            100,
+            &["nld".into()],
+            ChannelSubtitleMode::Any,
+            &[page.clone()],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(selected.subtitle.id, 3);
+        assert_eq!(selected.subtitle.stream_index, logical[3]);
+        assert_eq!(selected.candidate.request.stream_index, 3);
+        sqlx::query(r#"DELETE FROM "ProviderStreamIndex" WHERE "MediaVersionId"=100 AND "SourceStreamIndex"=3"#).execute(&pool).await.unwrap();
+        assert!(select_pending_next_source_subtitle(
+            &pool,
+            10,
+            100,
+            &["nld".into()],
+            ChannelSubtitleMode::Any,
+            &[page]
+        )
+        .await
+        .is_err());
+    }
+}

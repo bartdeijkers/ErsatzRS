@@ -1462,9 +1462,8 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::HlsSegmenterInitialSegmentCount => {
             "Anzahl der initialen Segmente des Segmenters HLS"
         }
-        TextKey::HlsSegmenterInitialSegmentCountHelp => {
-            "Verschiebt den Start des Streams, bis die angegebene Anzahl von (4-Sekunden-)Segmenten transkodiert wurden; eine größere Anzahl bedeutet eine langsamere initiale Wiedergabe, kann aber potenziell weniger Pufferung bedeuten"
-        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => "Wartet vor der Wiedergabe auf die ersten 4-Sekunden-Segmente. Werte unter 3 verwenden 3. Höhere Werte verzögern den Start und können Nachladen reduzieren. Next verwendet höchstens 10.",
+
         TextKey::HomeRunning => "Der IPTV-Server läuft.",
         TextKey::ReleaseNotes => "Versionshinweise",
         TextKey::FullChangelog => "Vollständiges Änderungsprotokoll",
@@ -2684,11 +2683,18 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::TeletextDecoderBitmapFailed => "Die Decodierung von Teletext-Farbbitmaps ist fehlgeschlagen. Wählen Sie eine kompatible FFmpeg-9-Laufzeit.",
         TextKey::NextRuntimeAvailability => "Verfügbarkeit der Next-Laufzeit",
         TextKey::NextOverlayInvalid => "Next-Konfigurationsüberlagerung ist nicht verfügbar oder ungültig",
-        TextKey::NextOverlaySchema => "Next-Konfigurationsüberlagerungen benötigen eine unterstützte Versions-URI (0.1.0 oder 0.1.1). Prüfen Sie die Kopiereinstellungen, bevor Sie eine ältere Überlagerung aktualisieren.",
+        TextKey::NextOverlaySchema => "Next-Konfigurationsüberlagerungen benötigen eine unterstützte Versions-URI ({versions}). Prüfen Sie die Kopiereinstellungen, bevor Sie eine ältere Überlagerung aktualisieren.",
         TextKey::NextOverlayIncomplete => "Validierung der Next-Konfigurationsüberlagerung ist unvollständig",
+        TextKey::NextSessionContract => "Die Sitzungseinstellungen der Next-Laufzeit konnten nicht überprüft werden. Aktivierte Next-Kanäle benötigen eine qualifizierte Laufzeit mit Unterstützung für das Inaktivitätszeitlimit und den Startpuffer.",
+        TextKey::NextSessionContractBrief => "Next-Sitzungseinstellungen sind nicht verfügbar",
         TextKey::JavascriptAudioSelectionTitle => "JavaScript-Audioauswahl",
         TextKey::JavascriptAudioSelectionHealthy => "Seit dem Start wurden keine Auswahlfehler erfasst. Noch nicht ausgeführte Skripte sind nicht validiert.",
         TextKey::JavascriptAudioSelectionFailures => "{count} Auswahlfehler seit dem Start; die integrierte Audioauswahl wurde verwendet. Prüfen Sie scripts/audio-stream-selector und die Grenzen in ADR 0096. Der Zähler wird beim Neustart zurückgesetzt.",
+        TextKey::JellyfinStreamIndexesTitle => "Jellyfin-Streamindizes",
+        TextKey::JellyfinStreamIndexesRepairBrief => "Jellyfin-Streamindizes müssen repariert werden",
+        TextKey::JellyfinStreamIndexesRepair => "Bei {count} Jellyfin-Medienversionen müssen die Streamindizes repariert werden. Scannen Sie deren Bibliotheken erneut, um die Zuordnung von Audio, Video und eingebetteten Untertiteln zu reparieren. Gespeicherte Spurauswahlen bleiben erhalten. Deaktivierte Bibliotheken bleiben deaktiviert; aktivieren Sie das Scannen nur bei Bedarf.",
+        TextKey::LocalDateAddedRepair => "Bei {count} lokalen Medien fehlt das Hinzufügedatum. Scannen Sie die Bibliotheken erneut, um die Erstellungsdaten der Dateien zu übernehmen; nicht verfügbare Dateien bleiben unverändert. Bis zur Reparatur können diese Medien bei der Suche nach kürzlich hinzugefügten Inhalten fehlen.",
+        TextKey::LocalDateAddedRepairBrief => "Lokale Hinzufügedaten müssen repariert werden",
         TextKey::AddonListDiskUsageTitle => "Festplattennutzung der Add-on-Listen",
         TextKey::AddonListDiskUsageBrief => "Warnung zur Festplattennutzung der Add-on-Listen",
         TextKey::AddonListDiskUsageUnavailable => "Die Festplattennutzung der Add-on-Listen konnte nicht vollständig ermittelt werden. Prüfen Sie den Speicherzugriff und wiederholen Sie die Zustandsprüfung.",

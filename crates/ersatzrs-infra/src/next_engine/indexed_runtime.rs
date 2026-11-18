@@ -1,4 +1,4 @@
-//! ADR0131 admission for the explicitly negotiated reader, not a runtime pin.
+//! Bounded executable-bound contract probes for indexed readers and sessions.
 use std::{
     fmt::Write as _,
     io::Read as _,
@@ -51,6 +51,7 @@ struct Description {
 struct Contract {
     channel_config_schema: Schema,
     playout_schema: Schema,
+    #[serde(default)]
     playout_layouts: Vec<String>,
     output_files: OutputFiles,
 }
@@ -82,25 +83,30 @@ impl Schema {
     }
 }
 
-fn validate(output: &[u8]) -> Result<(), IndexedRuntimeError> {
+fn description(output: &[u8]) -> Result<Description, IndexedRuntimeError> {
     if output.len() > OUTPUT_LIMIT {
         return Err(IndexedRuntimeError::Contract);
     }
     let description: Description =
         serde_json::from_slice(output).map_err(|_| IndexedRuntimeError::Contract)?;
     let files = &description.contract.output_files;
-    if files.playlist != "live.m3u8"
+    if description.describe_version != 1
+        || files.playlist != "live.m3u8"
         || files.subtitle_playlist != "live_sub.m3u8"
         || files.ready != ".ready"
         || files.heartbeat != ".heartbeat"
     {
         return Err(IndexedRuntimeError::Contract);
     }
-    if description.describe_version != 1
-        || !description
-            .contract
-            .channel_config_schema
-            .supports("channel", 1, 4)
+    Ok(description)
+}
+
+fn validate(output: &[u8]) -> Result<(), IndexedRuntimeError> {
+    let description = description(output)?;
+    if !description
+        .contract
+        .channel_config_schema
+        .supports("channel", 1, 4)
         || !description
             .contract
             .playout_schema
@@ -114,6 +120,46 @@ fn validate(output: &[u8]) -> Result<(), IndexedRuntimeError> {
         return Err(IndexedRuntimeError::Contract);
     }
     Ok(())
+}
+
+fn validate_session(output: &[u8]) -> Result<(), IndexedRuntimeError> {
+    // ADR0131's private 0.1.4 reader predates upstream SessionConfig. The
+    // selected terminal upstream's 0.1.5 removes that ambiguity (ADR0135).
+    let description = description(output)?;
+    if !description
+        .contract
+        .channel_config_schema
+        .supports("channel", 1, 5)
+    {
+        return Err(IndexedRuntimeError::Contract);
+    }
+    Ok(())
+}
+
+fn validate_indexed_session(output: &[u8]) -> Result<(), IndexedRuntimeError> {
+    validate(output)?;
+    if !description(output)?
+        .contract
+        .channel_config_schema
+        .supports("channel", 1, 6)
+    {
+        return Err(IndexedRuntimeError::Contract);
+    }
+    Ok(())
+}
+
+pub(crate) async fn validate_worker_indexed_session(
+    binary: &Path,
+) -> Result<(), IndexedRuntimeError> {
+    probe_contract(binary, TIMEOUT, None, validate_indexed_session)
+        .await
+        .map(|_| ())
+}
+
+pub(crate) async fn validate_worker_session(binary: &Path) -> Result<(), IndexedRuntimeError> {
+    probe_contract(binary, TIMEOUT, None, validate_session)
+        .await
+        .map(|_| ())
 }
 
 async fn identity(binary: &Path) -> Result<[u8; 32], IndexedRuntimeError> {
@@ -165,63 +211,8 @@ impl IndexedReaderPermit {
         timeout: Duration,
         expected_sha256: Option<&str>,
     ) -> Result<Self, IndexedRuntimeError> {
-        let binary = tokio::fs::canonicalize(binary)
-            .await
-            .map_err(|_| IndexedRuntimeError::Identity)?;
-        let binary = binary.as_path();
-        let digest = identity(binary).await?;
-        if let Some(expected) = expected_sha256 {
-            let mut actual = String::with_capacity(64);
-            for byte in digest {
-                write!(&mut actual, "{byte:02x}").map_err(|_| IndexedRuntimeError::Identity)?;
-            }
-            if actual != expected {
-                return Err(IndexedRuntimeError::Identity);
-            }
-        }
-        let mut command = Command::new(binary);
-        command
-            .arg("describe")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
-        let mut child = crate::addons::spawn_managed_addon_process(command)
-            .map_err(|_| IndexedRuntimeError::Probe)?;
-        let stdout = child.stdout().take().ok_or(IndexedRuntimeError::Probe)?;
-        let mut output = Vec::new();
-        let result = tokio::time::timeout(timeout, async {
-            stdout
-                .take(OUTPUT_LIMIT as u64 + 1)
-                .read_to_end(&mut output)
-                .await
-                .map_err(|_| IndexedRuntimeError::Probe)?;
-            if output.len() > OUTPUT_LIMIT {
-                return Err(IndexedRuntimeError::Probe);
-            }
-            let status = child.wait().await.map_err(|_| IndexedRuntimeError::Probe)?;
-            if !status.success() {
-                return Err(IndexedRuntimeError::Probe);
-            }
-            validate(&output)
-        })
-        .await;
-        match result {
-            Ok(Ok(())) => {}
-            other => {
-                let _ = tokio::time::timeout(TIMEOUT, child.kill()).await;
-                return Err(other
-                    .ok()
-                    .and_then(Result::err)
-                    .unwrap_or(IndexedRuntimeError::Probe));
-            }
-        }
-        if identity(binary).await? != digest {
-            return Err(IndexedRuntimeError::Identity);
-        }
-        Ok(Self {
-            binary: binary.to_owned(),
-            digest,
-        })
+        let (binary, digest) = probe_contract(binary, timeout, expected_sha256, validate).await?;
+        Ok(Self { binary, digest })
     }
 
     /// Recheck the requested executable before indexed session admission.
@@ -248,6 +239,68 @@ impl IndexedReaderPermit {
             digest: [0; 32],
         }
     }
+}
+
+async fn probe_contract(
+    binary: &Path,
+    timeout: Duration,
+    expected_sha256: Option<&str>,
+    validate: fn(&[u8]) -> Result<(), IndexedRuntimeError>,
+) -> Result<(PathBuf, [u8; 32]), IndexedRuntimeError> {
+    let binary = tokio::fs::canonicalize(binary)
+        .await
+        .map_err(|_| IndexedRuntimeError::Identity)?;
+    let binary = binary.as_path();
+    let digest = identity(binary).await?;
+    if let Some(expected) = expected_sha256 {
+        let mut actual = String::with_capacity(64);
+        for byte in digest {
+            write!(&mut actual, "{byte:02x}").map_err(|_| IndexedRuntimeError::Identity)?;
+        }
+        if actual != expected {
+            return Err(IndexedRuntimeError::Identity);
+        }
+    }
+    let mut command = Command::new(binary);
+    command
+        .arg("describe")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = crate::addons::spawn_managed_addon_process(command)
+        .map_err(|_| IndexedRuntimeError::Probe)?;
+    let stdout = child.stdout().take().ok_or(IndexedRuntimeError::Probe)?;
+    let mut output = Vec::new();
+    let result = tokio::time::timeout(timeout, async {
+        stdout
+            .take(OUTPUT_LIMIT as u64 + 1)
+            .read_to_end(&mut output)
+            .await
+            .map_err(|_| IndexedRuntimeError::Probe)?;
+        if output.len() > OUTPUT_LIMIT {
+            return Err(IndexedRuntimeError::Probe);
+        }
+        let status = child.wait().await.map_err(|_| IndexedRuntimeError::Probe)?;
+        if !status.success() {
+            return Err(IndexedRuntimeError::Probe);
+        }
+        validate(&output)
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => {}
+        other => {
+            let _ = tokio::time::timeout(TIMEOUT, child.kill()).await;
+            return Err(other
+                .ok()
+                .and_then(Result::err)
+                .unwrap_or(IndexedRuntimeError::Probe));
+        }
+    }
+    if identity(binary).await? != digest {
+        return Err(IndexedRuntimeError::Identity);
+    }
+    Ok((binary.to_owned(), digest))
 }
 
 #[cfg(test)]

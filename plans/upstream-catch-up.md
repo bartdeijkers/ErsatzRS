@@ -1,12 +1,16 @@
 # Upstream ErsatzTV catch-up
 
-## Accepted catch-up target (2026-11-13)
+## Accepted catch-up and current continuation (2026-11-16)
 
 UCU-00–16 are Complete within their accepted scopes. UCU-16 closes rows286–289
 through the fixed terminal `c41969b3bba66f14bf1d0be9e041b52218f65871`.
 The accepted baseline is owned only by docs/automation/parity-baseline.md.
-Rows290/291 (`84caf129`/`46a334c4`) were explicitly left for afterward and are
-outside this completed window; do not chase a later upstream tip.
+The maintainer resumes the goal on2026-11-16 for newly registered UCU-16
+rows290–296 and requests a direct upstream check. That check confirms exactly
+seven first-parent commits after the accepted boundary, through fixed
+`9c6b3deaca1feb0639134b880e8dd5eed225ee6d`. Milestone
+`ucu-16-continuation` owns this active continuation. The completed Classic
+window286–289 remains accepted; no later moving tip is selected.
 
 Milestone `ucu-16` owns the finite acceptance list, source 237008bd, all four
 required private package/runtime scopes, canonical local gates and full
@@ -29,12 +33,188 @@ of non-applicability. Earlier accepted UCU windows and Phase9 stay closed.
 | UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Complete; advisory debt remains unverified |
 | UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Complete; Native retained |
 | UCU-16 | 286–289 | `c41969b3bba66f14bf1d0be9e041b52218f65871` | Complete; Native retained |
+| UCU-16 continuation | 290–296 | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` | In progress; seven provisional rows |
 
-Within the approved fixed window there are **289 observed, 289 processed and
-0 pending rows**. Every row has its own disposition; approved Deferred rows
+The current ledger has **296 observed, 289 processed and 7 pending rows**.
+The accepted windows through row289 retain zero pending rows. Every processed
+row has its own disposition; approved Deferred rows
 remain explicitly unverified. The source-map notes below retain their original
 component scope and historical pre-acceptance wording. The terminal ledger and
 owning milestones carry final acceptance, required proof and preserved failures.
+
+### Current continuation (2026-11-16)
+
+Process rows290–296 in order against their exact source commits. Current live
+ErsatzTV main ends at row296; the seven registered SHA/subject pairs match the
+first-parent history exactly, with no additional rows observed. Registration
+and the provisional notes in the ledger are not accepted dispositions.
+
+The finite functionality, mandatory proof and delivery conditions belong to
+milestone `ucu-16-continuation`. Rows290–295 local components are Complete;
+Row296 configuration/admission and actual fixed-worker cache/lifecycle proof
+are locally Complete. Item2/R296-C now has a locally verified consolidated
+source candidate. Serial software and current dependency policy now pass.
+The21 retained infra and three public-route runtime controls now pass. A concrete
+Jellyfin projection regression is corrected without changing the strict physical
+oracles: fresh source metadata survives logical-to-physical selection. P1 now
+verifies all four source archives, including independent extraction/provenance,
+actual architecture and pinned companions. P2/P3 now pass14 actual package
+sessions across native Linux/Windows and ARM emulation, including available
+Windows CUDA, actual MPP no-device whole-channel fallback and cold/warm cache.
+The affected matched-bundle Health/browser package is also Complete: eighteen
+candidate cases and eight actual C5 compatibility cases pass in headed Chromium
+and Firefox, including localized Refresh/recovery, both themes and no-JS. The
+initial seeded-channel fixture failure remains recorded. Milestone evidence owns
+the composed results and exact matched snapshot; backend scan proof is reused.
+The integrated local-final and current-candidate Linux Native/Next playback/
+transport package is now Complete. Its composed8714-case workspace proof,
+original environment/fixture failures, preserved HDR assertions and93/86 TSDuck
+checks belong to milestone evidence. Four private application packages/platform proofs are now Complete within
+their exact ece7813c scope. The approved Next distribution publication and
+actual anonymous native Linux/Windows cold/cache acquisition are Complete;
+next run eligible exact integrated full CI, then ordered delivery. No bare-worker, affected
+Health/browser or local-final/playback item remains in the finite list.
+No local row295 functionality or mandatory local proof remains. Reuse valid completed evidence explicitly;
+retain the unchanged local, platform, provenance and final gate requirements.
+The accepted Pin table stays unchanged until ordered acceptance permits an
+advance. Preserve Native, international audio/subtitles and completed Phase9,
+UCU-00–16 and current custom-page deliveries. The explicit2026-11-17 amendment
+authorizes the exact qualified Next distribution only, retaining Latest;
+no application/Docker release or live installation.
+
+#### Row290 source map and local repair package
+
+Exact source `84caf129c8b5b286434004cb3dc235ea9ea00bb3` changes seven paths:
+fallback provider/tests, metadata repository/interface/backfill tests, local scan
+handler and changelog. The six new fallback dates are already stamped by Rust's
+existing generic, music-video and remote-stream insertion paths. Existing-row
+repair was missing: the persisted public-rescan regression retains year1 before
+the fix (`row290-baseline.log`), independently of the earlier invalid fixture.
+
+The scanner now repairs only exact unset UTC dates in the selected library path,
+using first-version/file creation time, .NET's Unix fallback where necessary and
+a future-time clamp. Reads use bounded64-row batches outside writer transactions;
+writes retain the existing managed-operation lease fence and compare the old
+value. Existing metadata IDs, dates, titles, update timestamps and international
+tracks survive. Missing/pathless files stay unchanged. Search reads SQL dates
+directly, so no separate index rebuild or scheduling checkpoint reset is added.
+Search Projection Health counts unresolved logical local owners and points to a
+rescan; it clears when the persisted dates are repaired. No migration is needed.
+
+Local scanner/Health selection:320 pass; its six loopback-mock failures are
+sandbox socket-bind denials. The identical six pass with loopback permitted,
+composing326 passing cases. Existing teletext write-fence cases remain green.
+All six backfill query plans use existing path/owner/version/file indexes; the
+bounded candidate order uses a temporary sort. Receipts and exact source hashes:
+`tmp/evidence/ucu16-tail-9c6b3dea/row290-source-audit.json` and adjacent logs.
+Final integrated local selection47/47 passes, including nine-culture Health
+messages, all existing i18n checks and the platform-independent exact-date
+search oracle. Strict affected all-target lint also passes; the local stopping
+condition is Complete. This is not an accepted row disposition or window
+qualification. Canonical evidence belongs to milestone ucu-16-continuation;
+Row291's following local package is also Complete; row292 is next.
+
+Hydration source map for the Health message: `/system/health`, SSR `HealthPage`,
+existing `HealthIsland`/`render_row`, persisted `AdminHealthSnapshot` and
+`load_health_snapshot`/`RefreshHealthSnapshot`. The ordinary refresh POST and
+no-JS table retain their current behavior. Only `health_check_message_text` and
+nine language files change; no DOM/island boundary changes. Required existing
+browser target: `tests/e2e/health-refresh.spec.ts`, headed Chromium/Firefox,
+including refresh/recovery and no-JS. Matched-bundle/final browser acceptance
+remains with the owning continuation milestone.
+
+#### Row291 source map and session-settings package
+
+- Exact ErsatzTV source `46a334c4ca024b302bda819b6e58629ee454919a`:
+  `ChannelConfigConverter`, `StartFFmpegNextSessionHandler`, generated channel
+  config/types, converter regressions, FFmpeg settings helper text, changelog
+  and Next pin (`8c75907eb72b1160a55308348754bc666b45203c`).
+- Persisted inputs: channel `IdleBehavior`, `ffmpeg.segmenter.timeout_seconds`
+  (default60) and `ffmpeg.segmenter.initial_segment_count` (default1).
+  Keep Running emits idle0. Readiness1–3 is omitted,4–10 is honored, above10
+  caps at10. The worker owns configured idle expiry; real viewer activity owns
+  heartbeat touches. Capacity, cancellation, process-tree cleanup, refresh,
+  normal/preview isolation and on-demand checkpoints remain host-owned.
+  Browser previews retain their existing expiring producer even when the
+  separate live channel is Keep Running (ADR0095).
+- Existing Rust UI/settings validation and persistence already expose both
+  global inputs and the channel's idle choice. `NextHost::configuration`,
+  `protocol::ChannelConfig`, `NextSession::monitor` and the HLS/TS demand paths
+  define their actual Next behavior. Before this work the wire config had no
+  session block; the host owned idle expiry and touched the heartbeat every5s.
+- Runtime boundary: published Next025 lacks SessionConfig. ADR0131's retained
+  indexed-reader patch already advertises channel schema0.1.4 for a different
+  additive extension. Upstream0.1.4 introduces session fields. A schema URI or
+  pin label alone therefore cannot prove this contract. Qualify an exact fixed
+  successor with all required existing patches/retirement controls; do not
+  mutate the accepted pin or operator installation while preparing it.
+- Consumer blockers discovered during mapping: the MPEG-TS wrapper's explicit
+  programme-segment admission would wait for a requested20 while Next only
+  publishes10; ordinary HLS trusts worker readiness. Next master/preview/wrapper
+  requests also retain a hard20s deadline, too short for readiness10 with the
+  worker's12s publication lead. Cap wrapper admission at10 and derive one
+  overall Next request deadline from the persisted startup budget; preserve
+  Native deadlines and keep every read bounded.
+- Smallest initial trial: persisted normal/browser-preview config regression
+  through the real host, using upstream defaults, Keep Running, custom timeout,
+  omitted low readiness and a capped high request. Preserve actual selected
+  audio/subtitles, profile settings and explicit Native/legacy paths.
+- Local stopping condition: source-backed config/persistence regression and
+  supervised viewer-heartbeat/idle/readiness evidence pass without weakening
+  existing cleanup/continuity. Real successor/package/window/platform acceptance
+  stays mandatory and separate. No substitute host-only setting is accepted.
+
+#### Row292 scan projection and subtitle source map
+
+- Exact source `6bbb38d86bb5065ced69bfb0a034b35d0d34f74d` changes ten paths:
+  `NextPlayoutDependents.ForLibrary`, `ScannerService`, subtitle-path query,
+  internal subtitle transport, `PlayoutItemConverter` and its tests, dependency
+  tests, two C# test/nullability corrections and the changelog. No UI form or
+  validator changes. The application operation must synchronize the affected
+  Next channels after a successful local/Plex/Jellyfin/Emby scan.
+- Dependency identity: a distinct Next channel number, rooted in persisted
+  `PlayoutItem -> MediaItem -> LibraryPath -> Library`, including mirrors whose
+  source may use Native. Unrelated libraries/channels must not be notified.
+  Existing `ChannelRuntime` projection notifications reach live and preview
+  registries without touching viewers, restarting workers or rebuilding schedules.
+- Rust path: application scan execution and cleanup/admission gates in
+  `ersatzrs-app`, `NativeScanRuntime`, existing Next dependency resolver and
+  `NativeChannelRuntime`. The original gap omitted the projection update;
+  the completion gate now uses these existing boundaries while retaining
+  managed-claim ownership and scheduler intents.
+- Current local evidence: scan notification and known/unknown hint components
+  pass82 composed controls, strict lint and seven existing real text runtime
+  cases. Milestone `ucu-16-continuation` owns exact runs and scope. The row is
+  still In progress. A real post-publication barrier reproduces sidecar removal
+  killing FFmpeg/Next before readiness, despite a passing present-file AV/caption
+  control. The original negative is retained. ADR0136's local caption relay
+  closes that local component with all four mutations in both Burn and Convert,
+  nine grant/HTTP controls, seven existing text cases and strict affected lint.
+  The completed provider/prepared continuation is retained in the owning milestone.
+- Ordinary provider continuation: `provider_caption_source.rs` reuses the
+  caption grant, authenticated provider fetch and Burn cache. A full mutable
+  subtitle digest reproduced a20s readiness failure after row removal. Signed
+  AV authority now preserves occurrence, source, selected AV and provider roots
+  while the original caption can become empty. Final35 controls include16
+  provider races and the retained local/text/HTTP proof, plus per-source artifact
+  reuse across occurrences. Exact pins and source-owned intents keep their
+  strict paths; the optional-intent and private-preview boundaries are locally closed in the finite milestone list.
+- Subtitle audit: upstream adds an empty ASS response for stale/pathless subtitle
+  IDs. The initial Rust audit found no equivalent mutable subtitle-ID transport;
+  ADR0136 now qualifies the ordinary local/provider/prepared and private-preview
+  boundaries. The finite local list is closed; shared window acceptance remains mandatory.
+  Preserve exact pinned-selection failure and existing source authority.
+- Probe contract: standalone SRT/subrip/mov_text maps to subrip/srt, ASS/SSA to
+  ass/ass and WebVTT/VTT to webvtt/webvtt, always standalone stream0. Unknown
+  codecs retain normal probing. Embedded multiplexed tracks retain media hints;
+  prepared extracted/provider/generated bytes need hints for their actual format.
+- Initial proof: public application scan against persisted dependencies with
+  real local scanner and live/preview spies, plus actual serialized subtitle
+  source regressions. Stopping condition: successful scans notify only affected
+  Next consumers, failure/cleanup gates cannot notify, schedule rows remain
+  intact, stale/pathless subtitle cases and known/unknown hints have faithful
+  source-backed controls. Required decoded playback/window/platform proof stays
+  with the continuation milestone; no live library is mutated.
 
 ### UCU-16 source maps (initial work on 2026-11-11)
 
@@ -1594,15 +1774,16 @@ Canonical acceptance, finite completion list and evidence: `ucu-12` in
 ## Accepted UCU-12 target and ledger state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest approved fixed target (2026-11-07): v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc`
-  — prep for release v26.12.0; supersedes the earlier `06c008b4` observation.
+- Active continuation target (verified live2026-11-16):
+  `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` — chore: update next (#3146).
+  This fixes the new work boundary; it does not advance the accepted Pin table.
 - Fixed accepted UCU-12 target (verified 2026-10-24): `f640c252276d008a5e1697fbfbb65a65fc352a5a`
   — docs: prep for release v26.11.4.
-- Ledger: **295 observed commits**, **285 accepted**, **10 pending in UCU-16**.
-- Accepted release baseline: **285 commits**, **0 pending in the fixed window**
-  through v26.12.0. UCU-10/UCU-11/UCU-12 retain their original completed boundaries;
-  UCU-13 rows255–259, UCU-14 rows260–271 and UCU-15 rows272–285 are complete.
-  UCU-16 rows286–288 are observations outside the approved fixed target.
+- Ledger: **296 observed commits**, **289 processed**, **7 pending in the UCU-16 continuation**.
+- Completed windows through row289 retain **0 pending rows**. The authoritative
+  Pin table owns the accepted boundary. UCU-10–15 retain their completed scopes;
+  UCU-16 rows286–289 remain Complete. Only rows290–296 belong to the active
+  continuation; their source notes remain provisional.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
@@ -6923,9 +7104,10 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 287 | `e51ac60c` | fix: classic schedule discard to fill (#3137) | Port | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Saved discard budgets reach the scheduler. Exact40/40/40/15-minute fixtures, bounded skips/reset/exhaustion, tails/fallback, following-item transition and rejected cursor/filler rollback pass, including production SQLite restart/Continue/Refresh. Required four-platform and final proof is owned by milestone ucu-16. |
 | 288 | `a143968e` | fix: classic schedule bug fixes (#3138) | Port | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Actual show/music-video-artist/song-album-artist/movie/other-video groups use distinct complete keys and independent persisted anchors. Custom shrink/empty resume, ungroupable fallback, duplicate membership, all supported orders, Continue/Refresh and unsafe-checkpoint refusal pass. Milestone ucu-16 owns required final/platform proof. |
 | 289 | `c41969b3` | fix: classic filler expression and random count (#3139) | Adapt (ADR 0098) | classic-scheduling | `cfbce4ce; 237008bd` | ucu-16; accepted 2026-11-13. Chapter filtering preserves source values; seeded Random Count advances across persisted restart/Continue/Refresh with rollback and Health guards. Approved option2 rejects unknown parameters and preserves whole content/padding without internal breaks on invalid expressions, with redacted preset diagnostics. Required four-platform/final proof passes; existing YAML chapter-expression debt remains separate. |
-| 290 | `84caf129` | fix: local library date added (#3140) |  |  |  | ucu-16; provisional: Adapt, half already covered. Upstream gives fallback metadata (missing NFO or other metadata errors) a `DateAdded` of now, and backfills existing local items whose `DateAdded` is unset with the file's creation time on the next library scan (`IMetadataRepository.BackfillDateAdded`, `ScanLocalLibraryHandler`). Our scanner already stamps `DateAdded` on fallback inserts (`crates/ersatzrs-scanner/src/lib.rs:3406`, `insert_fallback_metadata`); the audit should check whether rows written before that existed carry an empty `DateAdded`, and whether a creation-time backfill on rescan is needed. Upstream evidence: `BackfillDateAddedTests`, `FallbackMetadataProviderTests`. |
-| 291 | `46a334c4` | feat: send idle and ready config values to next (#3141) |  |  |  | ucu-16; provisional: Adapt, with a Next pin bump to the develop line (`v0.2.6-8c75907e-develop`). Channel config moves to version `0.1.4` and gains a `session` block: `idle_timeout_seconds` is 0 (never idle) for **Idle Behavior > Keep Running**, otherwise the FFmpeg segmenter timeout (default 60); `ready_segment_count` is sent only when **HLS Segmenter Initial Segment Count** exceeds Next's new default of 3, capped at 10. Audit starts at our channel-config version selection `crates/ersatzrs-infra/src/next_engine/host.rs:262` (already knows `0.1.4`) and the idle timeout we pass to the session (`crates/ersatzrs-infra/src/next_engine/host.rs:129`); confirm Keep Running and the initial-segment setting reach Next. |
-| 292 | `6bbb38d8` | fix: sync next playout after library scan (#3142) |  |  |  | ucu-16; provisional: Adapt, three linked behaviours. (1) After every library scan upstream re-syncs Next playouts for the channels whose items come from that library (`NextPlayoutDependents.ForLibrary`, `ScannerService`), so items whose subtitles a scan replaced no longer play fallback filler. (2) The internal subtitle endpoint serves an empty subtitle for a stale or path-less subtitle id instead of failing the whole item. (3) Text subtitles (srt/mov_text, ass/ssa, webvtt) now carry a probe hint so Next stops probing them before each item. Audit starts at our persisted probe hints `crates/ersatzrs-infra/src/next_engine/probe_hint.rs:70` (subtitle hints) and at whether a completed scan triggers Next publication (`crates/ersatzrs-infra/src/next_engine/publication.rs:57`); also check our subtitle-serving route for the stale-id case. Upstream evidence: `NextPlayoutDependentsTests`, `PlayoutItemConverterTests`. |
-| 293 | `d1e6d52e` | build: ffmpeg 8.1.2-41c82b12-develop (#3143) |  |  |  | ucu-16; provisional: likely Covered by our FFmpeg 9 line, one check. Upstream moves ErsatzTV-ffmpeg to the develop build `8.1.2-41c82b12-develop` (with `last_release` 8.1.2-8) to backport an FFmpeg 9.x fix: the `subtitles` filter now uses complex (HarfBuzz) shaping by default, so Arabic lam-alef ligatures (such as in بلا) no longer show a box in burned-in text subtitles when the font lacks U+FEFF. ErsatzRS runs FFmpeg 9 and builds with `--enable-libharfbuzz` (`crates/ersatzrs-ffmpeg/src/version.rs:82`); the audit should confirm our `subtitles_filter` (`crates/ersatzrs-ffmpeg/src/filter/simple.rs:303`) gets complex shaping by default on the managed runtime, ideally with an Arabic burn-in fixture. International subtitle surface. |
-| 294 | `fafd9b43` | perf: optimize playout builds (#3144) |  |  |  | ucu-16; provisional: Adapt or N/A, performance only. Upstream adds a per-build `CollectionItemsCache` so smart, multi and playlist collections load once per playout build instead of once per use in classic schedules, block schedules and playlists, and loads enumerator state with its owner instead of per fill group/anchor. No behaviour change is intended. Audit starts at our per-name collection loaders `crates/ersatzrs-infra/src/repositories/scheduling.rs:1545` (`collection_items_by_name`) and `:1641` (`smart_collection_items_by_name`): check whether a build re-queries the same smart collection repeatedly, and measure before adapting. |
-| 295 | `1a566770` | fix: jellyfin external stream order (#3145) |  |  |  | ucu-16; provisional: Port, likely a real gap. Jellyfin lists external streams (sidecar subtitles, external audio) before the file's own streams, so raw indexes are shifted; compatible servers such as Silo list them last. Upstream's old fix subtracted the highest external index, which gave negative video/audio indexes when external streams came last and broke Next playback (`expected u32`). The new `SourceStreamIndex` subtracts only the external streams that precede each index, and a migration rescans affected Jellyfin movies and episodes. Our projection writes Jellyfin's raw index unchanged (`crates/ersatzrs-infra/src/jellyfin/projection.rs:440`, `index: stream.index.unwrap_or_default()`) and only filters external streams out of the source declaration (`:390`); the audit should check whether audio/subtitle selection maps to the wrong source stream when external streams are present, port the per-index correction, and decide on a rescan of affected Jellyfin items. International audio/subtitle surface. |
+| 290 | `84caf129` | fix: local library date added (#3140) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending required window qualification. All seven exact upstream paths are audited. Existing six fallback insert paths stamp the current date. The missing existing-item repair now uses file creation time on rescan with scope/lease guards, preserves valid metadata and international tracks, and updates SQL-backed date search. Persisted repeat/reopen, six kinds, greater-than64 batches, missing/pathless/future/Unix controls and localized Health pass with strict lint. Source map above and milestone ucu-16-continuation own evidence and retained failures; platform/browser/final acceptance is still open. |
+| 291 | `46a334c4` | feat: send idle and ready config values to next (#3141) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending consolidated runtime/window qualification. All seven exact source paths are audited. Persisted idle/Keep Running and readiness omission/cap reach the real host; the worker owns idle and only viewer demand touches heartbeat. Preview retains expiry, Native/legacy behavior remains, and Next wrapper/startup budgets match the capped buffer. Bounded executable admission rejects the accepted private schema0.1.4 collision before output mutation; Health is localized in nine cultures.92 focused and109 request regressions, strict lint and actual old/new worker controls pass. Unpatched6c session proof includes fallback and is not decoded-media, patch-retirement or platform acceptance. ADR0135 and milestone ucu-16-continuation own remaining qualification. |
+| 292 | `6bbb38d8` | fix: sync next playout after library scan (#3142) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending required window qualification. All ten exact upstream paths are audited. Successful scans refresh dependent Next live/preview/mirror projections without a schedule reset; known standalone/prepared text hints match the served stream. Scoped grants preserve AV when automatic text sidecars disappear, including ordinary local/provider/prepared and private-preview publication, while retaining source/publication/session/pin authority, owned preparation and cache reuse. The finite R292-A–E local functionality/proof list is closed:117 current regressions include62 actual Next cases and Native provider controls; current Native/Next smoke and93/86 TSDuck checks pass. Checkpoint2f49534d closed the row; the maintainer subsequently resumed the goal. Shared source/runtime/matched-bundle/browser/four-platform/CI and ordered delivery acceptance remains mandatory. Baseline and final dispositions stay unchanged. |
+| 293 | `d1e6d52e` | build: ffmpeg 8.1.2-41c82b12-develop (#3143) |  |  |  | ucu-16-continuation; local component Complete, reviewed Covered by existing managed ErsatzRS-ffmpeg2.0.10/n9.0. All five upstream paths audited. Actual ASS and SRT default subtitles renders equal matching explicit complex-shaping references; simple controls differ and show the lam-alef box with FreeMono Bold lacking U+FEFF. Exact binary/font/frame hashes and reproducer are retained in row293-shaping-proof.json; owning milestone records scope and proof. No filter/runtime downgrade or application change is needed. Shared four-platform/window qualification and final disposition remain pending; baseline unchanged. |
+| 294 | `fafd9b43` | perf: optimize playout builds (#3144) |  |  |  | ucu-16-continuation; local component Complete, final disposition pending shared qualification. All21 upstream paths mapped. Actual SQL trials identify duplicate smart loads; build-lifetime immutable material reduces Classic/preview/block loads3/3/4 to1, preserves existing bulk enumerator-state loads and copies before independent overrides/cursors. Artist memberships use one batched query, retaining hit/video order and stable deduplication.80 composed repository controls cover new membership, independent Japanese/Dutch choices, pins and existing continuation/restart/refresh; strict infra all-target lint, format, architecture and progress pass. Source/negative/recovery evidence is in row294-local-checkpoint.json and the owning milestone. Shared runtime/final/platform/CI gates remain mandatory; baseline unchanged. |
+| 295 | `1a566770` | fix: jellyfin external stream order (#3145) |  |  |  | ucu-16-continuation; local A/B/C Complete, final disposition pending shared acceptance. ADR0137 preserves saved provider track/pin/download identities in a separate selected-version physical map. Atomic ordinary-scan repair, same/absent ETags, failed HTTP/map rollback, migration/Health and nine-culture diagnostics pass. Actual Native HLS and Next Convert cover all three mapped layouts with SQLite reopen, source/owner grant fencing and preserved alternate audio/captions. Fresh probe timing/SAR/codec hints survive physical mapping. Strict seek2164/2143 byte oracles, Native/Next smoke and93/86 TSDuck pass; private four-platform application proof is Complete within the owning milestone. Public acquisition, eligible full CI and ordered delivery remain; no live repair, accepted disposition or baseline move. |
+| 296 | `9c6b3dea` | chore: update next (#3146) |  |  |  | ucu-16-continuation; local R296-A/B and consolidated R296-C worker/application components Complete; final disposition pending shared acceptance. Qualified fixed6c schema0.1.6 retains all13 corrections and indexed/selected-track/caption safety.425 source/contract and662 software cases, unchanged dependency policy, actual cache reuse/invalidation/fallback/lifecycle and four real worker packages/14 runtime sessions pass. Four private application archives at ece7813c pass exact inventories, native Linux/Windows plus ARM-emulated startup/bundled runtime/assets, native Edge and Linux/Windows Native/Next playback. Health uses validated overlay ceilings and all nine cultures; ten affected current headed cases pass with scoped prior-proof reuse. Milestone ucu-16-continuation owns exact artifacts, original failures and public acquisition/full-CI/ordered-delivery prerequisites. Native remains supported; no public/main/operator adoption or baseline advancement. |

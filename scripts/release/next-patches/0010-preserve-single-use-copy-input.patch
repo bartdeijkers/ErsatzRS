@@ -3,16 +3,18 @@ Preserve single-use copy inputs; retain upstream025 dynamic callback module and 
 diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-channel/src/channel_session.rs
 --- a/crates/ersatztv-channel/src/channel_session.rs
 +++ b/crates/ersatztv-channel/src/channel_session.rs
-@@ -14,7 +14,7 @@
+@@ -14,8 +14,8 @@
  };
  use ersatztv_playout::playout::{
      AudioHint, GraphicsLayer, GraphicsLayerKind, PeriodicClock, PlayoutItem, PlayoutItemSource,
 -    PlayoutItemTracks, ProbeHint, SubtitleHint, TrackSelection, VideoHint, WatermarkLocation,
-+    PlayoutItemTracks, ProbeHint, SingleUseInputHint, SubtitleHint, TrackSelection, VideoHint, WatermarkLocation,
-     WatermarkTiming,
+-    WatermarkTiming,
++    PlayoutItemTracks, ProbeHint, SingleUseInputHint, SubtitleHint, TrackSelection, VideoHint,
++    WatermarkLocation, WatermarkTiming,
  };
  use ersatztv_playout::template::expand_template;
-@@ -569,13 +569,13 @@
+ use ffpipeline::copy_decision::{CopyBlocker, CopyDecision};
+@@ -578,13 +578,13 @@
          let subtitle_source_is_video_source =
              subtitle_source.as_ref().is_some_and(|s| s == &video_source);
  
@@ -29,7 +31,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
              Some(video_input_source.clone())
          } else {
              subtitle_source
-@@ -647,6 +647,25 @@
+@@ -656,6 +656,25 @@
          // consider an item to be live if any of its sources are live;
          // live sources can never seek or work ahead
          let is_live = source_is_live(&video_source) || source_is_live(&audio_source);
@@ -55,7 +57,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
  
          let (audio, video) = stream_output_settings(&self.channel_config.normalization);
          let output_settings = OutputSettings {
-@@ -790,6 +809,7 @@
+@@ -799,6 +818,7 @@
                  start_at_zero,
                  realtime,
                  &video_source,
@@ -63,7 +65,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
              )
              .await
          } else {
-@@ -1004,6 +1024,7 @@
+@@ -1020,6 +1040,7 @@
          start_at_zero: bool,
          realtime: bool,
          video_source: &PlayoutItemSource,
@@ -71,7 +73,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
      ) -> Option<(OffsetDateTime, bool)> {
          let resume = self.copy_resume.take().filter(|r| {
              !start_at_zero && r.item_id == current_item.id && r.at == self.transcoded_until
-@@ -1039,14 +1060,18 @@
+@@ -1055,14 +1076,18 @@
              input_settings.video_input.probe_result.path.clone(),
              video_index,
          );
@@ -98,7 +100,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
          }
  
          let mut request = CopySeekRequest {
-@@ -1318,6 +1343,7 @@
+@@ -1334,6 +1359,7 @@
                  Ok(InputSource::Http(HttpInputSource {
                      uri: expanded_uri,
                      options: HttpInputOptions {
@@ -106,7 +108,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
                          headers: expanded_headers,
                          user_agent: expanded_ua,
                          timeout_us,
-@@ -1381,15 +1407,12 @@
+@@ -1397,15 +1423,12 @@
  
          // live content never seeks. limit it to the remaining schedule interval
          // so pipeline duration and graphics timing end at the same point.
@@ -128,7 +130,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
          }
  
          let progress_ms = if start_at_zero {
-@@ -1787,6 +1810,7 @@
+@@ -1803,6 +1826,7 @@
                  source: Some(PlayoutItemSource::Lavfi {
                      params: String::from("anullsrc=channel_layout=stereo:sample_rate=48000"),
                      probe_hint: Some(ProbeHint {
@@ -136,7 +138,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
                          video: Vec::new(),
                          audio: vec![AudioHint {
                              stream_index: 0,
-@@ -1814,6 +1838,7 @@
+@@ -1830,6 +1854,7 @@
                              size.width, size.height
                          ),
                          probe_hint: Some(ProbeHint {
@@ -144,7 +146,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
                              video: vec![VideoHint {
                                  frame_rate: Some(frame_rate),
                                  ..VideoHint::new(
-@@ -1846,6 +1871,7 @@
+@@ -1862,6 +1887,7 @@
              in_point_ms: None,
              out_point_ms: None,
              probe_hint: Some(ProbeHint {
@@ -152,7 +154,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
                  video: Vec::new(),
                  audio: Vec::new(),
                  subtitle: vec![SubtitleHint {
-@@ -2021,6 +2047,64 @@
+@@ -2037,6 +2063,64 @@
      }
  }
  
@@ -217,7 +219,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
  fn source_is_live(source: &PlayoutItemSource) -> bool {
      matches!(
          source,
-@@ -2144,6 +2228,100 @@
+@@ -2160,6 +2244,100 @@
      use ffpipeline::output_format::OutputFormat;
      use serde_json::json;
      use time::macros::datetime;
@@ -318,6 +320,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
  
      fn source_cut_fixture() -> (PlayoutItem, PlayoutItemSource) {
          let start = datetime!(2026-01-01 12:00 UTC);
+
 diff --git a/crates/ersatztv-channel/src/dynamic.rs b/crates/ersatztv-channel/src/dynamic.rs
 --- a/crates/ersatztv-channel/src/dynamic.rs
 +++ b/crates/ersatztv-channel/src/dynamic.rs

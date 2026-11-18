@@ -34,8 +34,12 @@ use tracing::{debug, warn};
 
 use local_teletext::LocalScanProbe;
 
+#[cfg(test)]
+mod date_added_tests;
 mod folder_etag;
 mod library_folder;
+mod local_date_added;
+mod local_scan_claim;
 mod local_teletext;
 pub mod local_television;
 pub mod nfo;
@@ -342,6 +346,7 @@ async fn scan_local_library_with_progress_once(
     let mut processed: usize = 0;
     for bucket in buckets {
         let library_path = bucket.library_path;
+        local_date_added::backfill(pool, &library_path, config.managed_claim.as_ref()).await?;
         match bucket.kind {
             LocalScanBucketKind::Items(items) => {
                 let mut removed_playlist_definitions = std::collections::BTreeSet::new();

@@ -9,7 +9,9 @@ Accepted 2026-11-17.
 Implemented
 
 The workspace, developer tooling and add-on validation use Jiff. SQLite
-binds and reads retain the repository's existing text encodings.
+binds and reads retain the repository's existing text encodings. The
+migration and integrated evidence are tracked under `ucu16-jiff-migration`
+and the UCU-16 continuation milestone.
 
 ## Context
 
@@ -71,3 +73,4 @@ data before accepting the migration.
 - [RustSec maintenance advisory](https://rustsec.org/advisories/RUSTSEC-2026-0543.html)
 - [Jiff](https://github.com/BurntSushi/jiff)
 - [SQLite strategy](0080-standardize-on-sqlite.md)
+- [UCU-16 continuation](../progress/milestones.toml)

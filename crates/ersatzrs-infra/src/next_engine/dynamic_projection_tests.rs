@@ -361,3 +361,48 @@ async fn canvas_projection_defers_mutable_templates_without_invalidating_subtitl
     );
     assert_eq!(first.identity.cache_key, changed.identity.cache_key);
 }
+
+#[tokio::test]
+async fn row295_mapping_changes_invalidate_preparation_cache_and_caption_av_authority() {
+    let (pool, locker, channel, start, _file) = fixture().await;
+    super::super::selection::tests::jellyfin_stream_indexes::qualify(&pool, [2, 3, 4, 5, 6]).await;
+    sqlx::query(r#"UPDATE "PlayoutItem" SET "VideoStreamIndex"=2,"AudioStreamIndex"=3,"SubtitleStreamIndex"=6"#).execute(&pool).await.unwrap();
+    let first = snapshot(&pool, &locker, start).await;
+    assert!(first.identity.av_descriptor.is_some());
+    let media = schedule::read_locked(
+        &pool,
+        &locker,
+        &channel,
+        start,
+        start + Duration::seconds(60),
+    )
+    .await
+    .unwrap()
+    .unwrap()
+    .items[0]
+        .clone();
+    // Even an unselected map entry is part of the physical source's authority.
+    // DateUpdated, chosen tracks and provider metadata intentionally stay equal.
+    sqlx::query(r#"INSERT INTO "ProviderStreamIndex" ("MediaVersionId","StreamIndex","SourceStreamIndex") VALUES (100,8,7)"#).execute(&pool).await.unwrap();
+    assert!(fingerprint(&pool, &media, &first.projection, &channel)
+        .await
+        .is_err());
+    let changed = snapshot(&pool, &locker, start).await;
+    assert_ne!(changed.identity.descriptor, first.identity.descriptor);
+    assert_ne!(changed.identity.cache_key, first.identity.cache_key);
+    assert_ne!(changed.identity.av_descriptor, first.identity.av_descriptor);
+    sqlx::query(r#"DELETE FROM "ProviderStreamIndex" WHERE "StreamIndex"=8"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let restored = snapshot(&pool, &locker, start).await;
+    assert_eq!(restored.identity.descriptor, first.identity.descriptor);
+    assert_eq!(restored.identity.cache_key, first.identity.cache_key);
+    sqlx::query(r#"DELETE FROM "JellyfinLibrary" WHERE "Id"=1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(fingerprint(&pool, &media, &restored.projection, &channel)
+        .await
+        .is_err());
+}
