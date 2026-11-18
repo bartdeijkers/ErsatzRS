@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.3.0-beta.1] - 2026-11-18
+
 ### Security
 
 - Update the local Next source candidate to quick-xml 0.41.0 and
@@ -6467,7 +6469,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.3.0-beta.1...HEAD
+[1.3.0-beta.1]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.2.0...v1.3.0-beta.1
 [1.2.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...v1.1.0
 [1.0.37-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...v1.0.37-beta
