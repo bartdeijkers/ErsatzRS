@@ -142,7 +142,7 @@ async fn external_native_missing_plex_preconditions_return_unavailable() {
         schedule(&state.pool, root.path(), Utc::now(), serde_json::json!([{
             "serverKey": server, "duration": 60000, "plexFile": "/library/parts/1/file.mkv", "ratingKey": "1"
         }])).await;
-        let response = Box::pin(serve_channel_stream_admitted_inner(
+        let response = serve_channel_stream_admitted(
             &state,
             channel.clone(),
             OutputFormat::MpegTs,
@@ -150,7 +150,7 @@ async fn external_native_missing_plex_preconditions_return_unavailable() {
             tokio::time::Instant::now() + Duration::from_secs(5),
             None,
             TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
-        ))
+        )
         .await;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         if server == "Fixture" {
@@ -189,7 +189,7 @@ async fn external_native_stream_plays_without_library_rows() {
         active.remaining_duration(position),
         Some(Duration::from_secs(7))
     );
-    let response = Box::pin(serve_channel_stream_admitted_inner(
+    let response = serve_channel_stream_admitted(
         &state,
         channel,
         OutputFormat::MpegTs,
@@ -197,7 +197,7 @@ async fn external_native_stream_plays_without_library_rows() {
         tokio::time::Instant::now() + Duration::from_secs(20),
         None,
         TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
-    ))
+    )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = tokio::time::timeout(
