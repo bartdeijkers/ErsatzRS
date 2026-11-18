@@ -392,7 +392,6 @@ async fn open(state: &AppState) -> Response {
         &hls::HlsQuery {
             subtitles: None,
             mode: Some("ts-legacy".into()),
-            ..Default::default()
         },
         binding(),
     ))

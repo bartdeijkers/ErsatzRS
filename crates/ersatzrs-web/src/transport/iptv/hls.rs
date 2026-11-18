@@ -2609,7 +2609,6 @@ mod tests {
         let legacy = HlsQuery {
             subtitles: None,
             mode: Some("ts-legacy".into()),
-            ..Default::default()
         };
         assert_eq!(
             stream::serve_transport_stream(state, "1", &HeaderMap::new(), &legacy)

@@ -7808,7 +7808,7 @@ mod tests {
 
     #[tokio::test]
     async fn sub_frame_successor_wait_releases_on_disconnect() {
-        let wait = Duration::from_secs(60);
+        let wait = Duration::from_mins(1);
         let deadline = tokio::time::Instant::now() + wait;
         let (sender, mut receiver) = tokio::sync::oneshot::channel();
         drop(sender);
