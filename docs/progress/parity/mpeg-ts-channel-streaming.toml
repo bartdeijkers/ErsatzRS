@@ -4,6 +4,8 @@ rs_target  = '`crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatz
 status     = 'In progress'
 adr        = ['0135']
 summary    = '''
+Native playback checks the remaining item against the normalized output or source frame rate and advances past a sub-frame interval before encoding (row 299).
+
 Row291 accepts saved Next readiness and viewer-owned idle under ADR0135.
 Milestone ucu-16-continuation owns the real-worker proof.
 

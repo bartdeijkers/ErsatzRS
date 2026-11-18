@@ -735,6 +735,27 @@ impl RetainedTsOutput {
     }
 }
 
+async fn wait_for_sub_frame_successor(
+    deadline: tokio::time::Instant,
+    wait: Duration,
+    cancellation: Option<&mut tokio::sync::oneshot::Receiver<()>>,
+) -> bool {
+    let cancelled = async {
+        match cancellation {
+            Some(receiver) => {
+                let _ = receiver.await;
+            }
+            None => std::future::pending::<()>().await,
+        }
+    };
+    tokio::select! {
+        biased;
+        () = cancelled => false,
+        () = tokio::time::sleep_until(deadline) => false,
+        () = tokio::time::sleep(wait) => true,
+    }
+}
+
 fn serve_channel_stream_admitted(
     state: &AppState,
     channel: Channel,
@@ -744,15 +765,53 @@ fn serve_channel_stream_admitted(
     admission: Option<IntervalStreamAdmission>,
     output: TeletextOutputAdmission,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
-    Box::pin(serve_channel_stream_admitted_inner(
-        state,
-        channel,
-        output_format,
-        mode,
-        deadline,
-        admission,
-        output,
-    ))
+    Box::pin(async move {
+        let mut admission = admission;
+        let mut cursor = None;
+        loop {
+            match serve_channel_stream_admitted_inner(
+                state,
+                channel.clone(),
+                output_format,
+                mode,
+                deadline,
+                admission,
+                output.clone(),
+                cursor,
+            )
+            .await
+            {
+                StreamAttempt::Response(response) => return response,
+                StreamAttempt::Skipped {
+                    finish,
+                    mut next_admission,
+                } => {
+                    if tokio::time::Instant::now() >= deadline {
+                        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    }
+                    if next_admission
+                        .as_ref()
+                        .is_none_or(|a| a.legacy_item.is_none())
+                    {
+                        let wait = (finish - Utc::now()).to_std().unwrap_or_default();
+                        if !wait_for_sub_frame_successor(
+                            deadline,
+                            wait,
+                            next_admission
+                                .as_mut()
+                                .map(|admission| &mut admission.cancellation),
+                        )
+                        .await
+                        {
+                            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                        }
+                    }
+                    cursor = Some(finish);
+                    admission = next_admission;
+                }
+            }
+        }
+    })
 }
 
 /// Source-free capacity waiting; dropping the response signals the owned task.
@@ -1016,7 +1075,27 @@ async fn cancel_retained_startup(
     confirmed
 }
 
-#[allow(clippy::too_many_lines)]
+enum StreamAttempt {
+    Response(Response),
+    Skipped {
+        finish: DateTime<Utc>,
+        next_admission: Option<IntervalStreamAdmission>,
+    },
+}
+
+impl From<StatusCode> for StreamAttempt {
+    fn from(status: StatusCode) -> Self {
+        Self::Response(status.into_response())
+    }
+}
+
+impl From<Response> for StreamAttempt {
+    fn from(response: Response) -> Self {
+        Self::Response(response)
+    }
+}
+
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 async fn serve_channel_stream_admitted_inner(
     state: &AppState,
     channel: Channel,
@@ -1025,10 +1104,15 @@ async fn serve_channel_stream_admitted_inner(
     startup_deadline: tokio::time::Instant,
     mut interval_admission: Option<IntervalStreamAdmission>,
     mut output: TeletextOutputAdmission,
-) -> Response {
+    cursor: Option<DateTime<Utc>>,
+) -> StreamAttempt {
     if output.validate_format(output_format).is_err() {
-        return teletext_output_unavailable();
+        return teletext_output_unavailable().into();
     }
+    let retained_response = interval_admission
+        .as_ref()
+        .is_some_and(|a| a.retained_required);
+    let admission_deadline = interval_admission.as_ref().map(|a| a.deadline);
     let mut legacy_item = interval_admission
         .as_mut()
         .and_then(|admission| admission.legacy_item.take());
@@ -1039,12 +1123,14 @@ async fn serve_channel_stream_admitted_inner(
         .as_ref()
         .is_some_and(LegacyWrapperItemCancellation::is_cancelled)
     {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        return StatusCode::SERVICE_UNAVAILABLE.into();
     }
     let retained_teletext = interval_admission
         .as_ref()
         .and_then(|admission| admission.teletext.clone());
-    let now = if legacy_item.is_some() {
+    let now = if let Some(cursor) = cursor {
+        cursor
+    } else if legacy_item.is_some() {
         Box::pin(legacy_source_playback_time(
             state,
             channel.id,
@@ -1065,7 +1151,7 @@ async fn serve_channel_stream_admitted_inner(
             channel_id = channel.id,
             "stream source discovery exceeded startup deadline"
         );
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        return StatusCode::SERVICE_UNAVAILABLE.into();
     };
     let active = match active {
         Ok(Some(path)) => path,
@@ -1074,7 +1160,9 @@ async fn serve_channel_stream_admitted_inner(
                 channel_number = %channel.number,
                 "no active playout item; returning 503"
             );
-            return (StatusCode::SERVICE_UNAVAILABLE, "no active playout item").into_response();
+            return (StatusCode::SERVICE_UNAVAILABLE, "no active playout item")
+                .into_response()
+                .into();
         }
         Err(
             error @ RepositoryError::Unavailable {
@@ -1083,11 +1171,11 @@ async fn serve_channel_stream_admitted_inner(
             },
         ) => {
             tracing::warn!(%error, channel_id = channel.id, "external JSON programme is unavailable");
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            return StatusCode::SERVICE_UNAVAILABLE.into();
         }
         Err(error) => {
             tracing::error!(%error, channel_number = %channel.number, "failed to load active playout item");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return StatusCode::INTERNAL_SERVER_ERROR.into();
         }
     };
 
@@ -1104,7 +1192,7 @@ async fn serve_channel_stream_admitted_inner(
         .as_ref()
         .is_some_and(LegacyWrapperItemCancellation::is_cancelled)
     {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        return StatusCode::SERVICE_UNAVAILABLE.into();
     }
     let interval_source = active
         .remote_stream
@@ -1117,12 +1205,13 @@ async fn serve_channel_stream_admitted_inner(
         .as_ref()
         .is_some_and(|admission| admission.retained_required)
         && interval_source.is_none()
+        && cursor.is_none()
     {
         tracing::warn!(
             channel_id = channel.id,
             "retained source changed during capacity admission"
         );
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        return StatusCode::SERVICE_UNAVAILABLE.into();
     }
     // Accepted originals need the actual retained attempt's first-byte command
     // identity. The current extension certifies only the initial rate, so never
@@ -1131,10 +1220,10 @@ async fn serve_channel_stream_admitted_inner(
         output = output.without_optional_accepted();
     }
     if interval_source.is_some() && (output.accepted().is_some() || output.live().is_some()) {
-        return teletext_output_unavailable();
+        return teletext_output_unavailable().into();
     }
     if interval_source.is_some() && interval_admission.is_some() && output.has_authored_output() {
-        return teletext_output_unavailable();
+        return teletext_output_unavailable().into();
     }
     if interval_source.is_some() && interval_admission.is_none() {
         return retained_interval_stream_response(
@@ -1144,7 +1233,8 @@ async fn serve_channel_stream_admitted_inner(
             effective_streaming_mode,
             startup_deadline,
             output,
-        );
+        )
+        .into();
     }
 
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
@@ -1164,7 +1254,7 @@ async fn serve_channel_stream_admitted_inner(
             Ok(command) => command,
             Err(error) => {
                 tracing::warn!(channel_id=channel.id,%error,"live source inventory or embedded caption policy is unavailable");
-                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                return StatusCode::SERVICE_UNAVAILABLE.into();
             }
         }
     } else {
@@ -1175,7 +1265,7 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         match load_required_path_replacements(state, &channel, "MPEG-TS stream").await {
             Ok(replacements) => replacements,
-            Err(response) => return response,
+            Err(response) => return response.into(),
         }
     };
 
@@ -1196,7 +1286,7 @@ async fn serve_channel_stream_admitted_inner(
             Ok(indexes) => Some(indexes),
             Err(error) => {
                 tracing::warn!(%error, channel_id=channel.id, "Native source mapping unavailable");
-                return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+                return StatusCode::UNSUPPORTED_MEDIA_TYPE.into();
             }
         }
     } else {
@@ -1227,7 +1317,7 @@ async fn serve_channel_stream_admitted_inner(
                 media_version_id = active.media_version_id,
                 "failed to load source video metadata; refusing to build FFmpeg command"
             );
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return StatusCode::INTERNAL_SERVER_ERROR.into();
         }
     };
     let mut source_audio_streams = match async {
@@ -1248,7 +1338,7 @@ async fn serve_channel_stream_admitted_inner(
                 media_version_id = active.media_version_id,
                 "failed to load source audio metadata; refusing to build FFmpeg command"
             );
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return StatusCode::INTERNAL_SERVER_ERROR.into();
         }
     };
     if let Some(stream_index) = active
@@ -1267,18 +1357,18 @@ async fn serve_channel_stream_admitted_inner(
                 stream_index,
                 "pinned audio stream is unavailable; refusing fallback selection"
             );
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return StatusCode::INTERNAL_SERVER_ERROR.into();
         }
     }
     let playback_profile = match load_channel_playback_profile(&state.pool, channel.id).await {
         Ok(Some(profile)) => profile,
         Ok(None) => {
             tracing::error!(channel_number = %channel.number, "channel has no playback ffmpeg profile");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return StatusCode::INTERNAL_SERVER_ERROR.into();
         }
         Err(error) => {
             tracing::error!(%error, channel_number = %channel.number, "failed to load playback ffmpeg profile");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return StatusCode::INTERNAL_SERVER_ERROR.into();
         }
     };
     let effective_acceleration =
@@ -1311,7 +1401,7 @@ async fn serve_channel_stream_admitted_inner(
                     $controllers,
                 )
                 .await;
-                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                return StatusCode::SERVICE_UNAVAILABLE.into();
             }
         };
     }
@@ -1330,7 +1420,7 @@ async fn serve_channel_stream_admitted_inner(
         let extractor =
             ersatzrs_infra::ffprobe::FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
         let Ok(programme_ms) = u64::try_from(active.content_seek_position(now).as_millis()) else {
-            return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+            return StatusCode::UNSUPPORTED_MEDIA_TYPE.into();
         };
         let mut cancellation = admission.cancellation;
         let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -1370,7 +1460,7 @@ async fn serve_channel_stream_admitted_inner(
                 )
                 .await;
             }
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            return StatusCode::SERVICE_UNAVAILABLE.into();
         }
         match result {
             Ok(Some(playback)) => {
@@ -1379,19 +1469,21 @@ async fn serve_channel_stream_admitted_inner(
                 prepared_playback = Some(PreparedSourcePlayback::Retained(Box::new(playback)));
                 source
             }
-            Ok(None) => return StatusCode::NO_CONTENT.into_response(),
+            Ok(None) => return StatusCode::NO_CONTENT.into(),
             Err(error) => {
                 tracing::warn!(channel_id = channel.id, %error,
                     "retained interval input preparation failed");
-                return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
+                return (StatusCode::SERVICE_UNAVAILABLE, error.to_string())
+                    .into_response()
+                    .into();
             }
         }
     } else if let Some(command) = &streaming_command {
         let Some(cancellation) = retained_cancellation.as_mut() else {
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            return StatusCode::SERVICE_UNAVAILABLE.into();
         };
         if interval_reservation.is_none() {
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            return StatusCode::SERVICE_UNAVAILABLE.into();
         }
         let work = match crate::host::teletext_work::begin(
             &state.application,
@@ -1402,7 +1494,7 @@ async fn serve_channel_stream_admitted_inner(
             Ok(work) => work,
             Err(error) => {
                 tracing::warn!(channel_id=channel.id,%error,"live source caption preparation admission refused");
-                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                return StatusCode::SERVICE_UNAVAILABLE.into();
             }
         };
         let work_hold = work.hold_work();
@@ -1444,7 +1536,7 @@ async fn serve_channel_stream_admitted_inner(
                     work_hold.retain_until_restart();
                 }
             }
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            return StatusCode::SERVICE_UNAVAILABLE.into();
         }
         match result {
             Ok(mut playback) => {
@@ -1465,7 +1557,7 @@ async fn serve_channel_stream_admitted_inner(
                         {
                             work_hold.retain_until_restart();
                         }
-                        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                        return StatusCode::SERVICE_UNAVAILABLE.into();
                     }
                 }
                 playback.video_input = playback.video_input.clone().without_readrate();
@@ -1484,7 +1576,7 @@ async fn serve_channel_stream_admitted_inner(
             }
             Err(error) => {
                 tracing::warn!(channel_id=channel.id,%error,"live source prefix preparation failed");
-                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                return StatusCode::SERVICE_UNAVAILABLE.into();
             }
         }
     } else if active.external.is_some() {
@@ -1528,7 +1620,7 @@ async fn serve_channel_stream_admitted_inner(
                     None,
                 )
                 .await;
-                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                return StatusCode::SERVICE_UNAVAILABLE.into();
             }
         }
     } else {
@@ -1568,7 +1660,7 @@ async fn serve_channel_stream_admitted_inner(
             None,
         )
         .await;
-        return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+        return StatusCode::UNSUPPORTED_MEDIA_TYPE.into();
     }
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
         match load_channel_target_frame_rate(&state.pool, channel.id).await {
@@ -1590,7 +1682,7 @@ async fn serve_channel_stream_admitted_inner(
                     None,
                 )
                 .await;
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return StatusCode::INTERNAL_SERVER_ERROR.into();
             }
         }
     } else {
@@ -1615,7 +1707,7 @@ async fn serve_channel_stream_admitted_inner(
                 None,
             )
             .await;
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return StatusCode::INTERNAL_SERVER_ERROR.into();
         }
     };
     let subtitle_mode = active.subtitle_mode.unwrap_or(channel.subtitle_mode);
@@ -1707,7 +1799,7 @@ async fn serve_channel_stream_admitted_inner(
                     None,
                 )
                 .await;
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return StatusCode::INTERNAL_SERVER_ERROR.into();
             }
         }
     };
@@ -1792,7 +1884,9 @@ async fn serve_channel_stream_admitted_inner(
                     None,
                 )
                 .await;
-                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
+                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string())
+                    .into_response()
+                    .into();
             }
         }
     } else {
@@ -1829,6 +1923,56 @@ async fn serve_channel_stream_admitted_inner(
         audio_selection
     };
     fence_cancelled_startup!(&[], None);
+    // Copy-mode direct output uses the physical source rate. Retained and
+    // live inputs have supplied their selected physical stream by this point.
+    let output_rate = target_frame_rate
+        .filter(|_| {
+            effective_streaming_mode != StreamingMode::HttpLiveStreamingDirect
+                || hls_direct_mpegts_needs_transcode(
+                    output_format,
+                    effective_streaming_mode,
+                    source_stream.as_ref(),
+                    &source_audio_streams,
+                    audio_selection,
+                )
+        })
+        .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate));
+    if let (Some(finish), Some(rate), Some(window)) = (
+        parse_sqlite_utc_timestamp(&active.playout_finish),
+        output_rate,
+        active.remaining_duration(now),
+    ) {
+        if finish > now && rate.is_sub_frame(window) {
+            if !cancel_retained_startup(
+                prepared_playback
+                    .take()
+                    .map(PreparedSourcePlayback::into_prepared),
+                interval_reservation.as_ref(),
+                Some(&mut external_subtitle_owner),
+                &[],
+                None,
+            )
+            .await
+            {
+                return StatusCode::SERVICE_UNAVAILABLE.into();
+            }
+            let next_admission = interval_reservation.zip(retained_cancellation).map(
+                |(reservation, cancellation)| IntervalStreamAdmission {
+                    reservation,
+                    cancellation,
+                    deadline: admission_deadline.unwrap_or(startup_deadline),
+                    teletext: retained_teletext,
+                    retained_required: retained_response,
+                    legacy_item,
+                },
+            );
+            return StreamAttempt::Skipped {
+                finish,
+                next_admission,
+            };
+        }
+    }
+
     let subtitle = if active.has_pinned_stream_selection {
         if let Some(stream_index) = active.subtitle_stream_index {
             match async {
@@ -1867,7 +2011,7 @@ async fn serve_channel_stream_admitted_inner(
                         None,
                     )
                     .await;
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    return StatusCode::INTERNAL_SERVER_ERROR.into();
                 }
             }
         } else {
@@ -1942,7 +2086,7 @@ async fn serve_channel_stream_admitted_inner(
                     None,
                 )
                 .await;
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return StatusCode::INTERNAL_SERVER_ERROR.into();
             }
         }
     };
@@ -1977,7 +2121,7 @@ async fn serve_channel_stream_admitted_inner(
                         None,
                     )
                     .await;
-                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    return StatusCode::SERVICE_UNAVAILABLE.into();
                 }
             }
         }
@@ -2006,7 +2150,8 @@ async fn serve_channel_stream_admitted_inner(
                     StatusCode::SERVICE_UNAVAILABLE,
                     "selected provider subtitle is unavailable",
                 )
-                    .into_response();
+                    .into_response()
+                    .into();
             };
             Some(prepared)
         }
@@ -2052,7 +2197,8 @@ async fn serve_channel_stream_admitted_inner(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "selected source-clock subtitles are unsupported with retained intervals",
         )
-            .into_response();
+            .into_response()
+            .into();
     }
     let metadata = playback_output_metadata(
         Some("ErsatzTV"),
@@ -2079,7 +2225,7 @@ async fn serve_channel_stream_admitted_inner(
                     None,
                 )
                 .await;
-                return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+                return StatusCode::UNSUPPORTED_MEDIA_TYPE.into();
             }
         }
     } else {
@@ -2133,7 +2279,7 @@ async fn serve_channel_stream_admitted_inner(
             None,
         )
         .await;
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return StatusCode::INTERNAL_SERVER_ERROR.into();
     }
     fence_cancelled_startup!(&[], None);
     let subtitle_input = if interval_source.is_some() {
@@ -2152,7 +2298,9 @@ async fn serve_channel_stream_admitted_inner(
                     None,
                 )
                 .await;
-                return (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response();
+                return (StatusCode::UNPROCESSABLE_ENTITY, error.to_string())
+                    .into_response()
+                    .into();
             }
         }
     };
@@ -2207,7 +2355,7 @@ async fn serve_channel_stream_admitted_inner(
                         None,
                     )
                     .await;
-                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    return StatusCode::SERVICE_UNAVAILABLE.into();
                 }
                 match result {
                     Ok(inputs) => inputs,
@@ -2224,7 +2372,7 @@ async fn serve_channel_stream_admitted_inner(
                             None,
                         )
                         .await;
-                        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                        return StatusCode::SERVICE_UNAVAILABLE.into();
                     }
                 }
             } else {
@@ -2318,7 +2466,7 @@ async fn serve_channel_stream_admitted_inner(
                         Some(&mut dynamic_text_controllers),
                     )
                     .await;
-                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    return StatusCode::SERVICE_UNAVAILABLE.into();
                 }
                 result
             } else {
@@ -2389,7 +2537,9 @@ async fn serve_channel_stream_admitted_inner(
                 Some(&mut dynamic_text_controllers),
             )
             .await;
-            return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
+            return (StatusCode::SERVICE_UNAVAILABLE, error.to_string())
+                .into_response()
+                .into();
         }
     };
     fence_cancelled_startup!(&graphics_cleanup_dirs, Some(&mut dynamic_text_controllers));
@@ -2434,7 +2584,7 @@ async fn serve_channel_stream_admitted_inner(
                 .await;
 
                 tracing::warn!(channel_id = channel.id, %error, "song image preparation failed");
-                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                return StatusCode::SERVICE_UNAVAILABLE.into();
             }
         }
     };
@@ -2489,7 +2639,7 @@ async fn serve_channel_stream_admitted_inner(
                     Some(&mut dynamic_text_controllers),
                 )
                 .await;
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return StatusCode::INTERNAL_SERVER_ERROR.into();
             }
         }
     } else {
@@ -2617,7 +2767,9 @@ async fn serve_channel_stream_admitted_inner(
                     Some(&mut dynamic_text_controllers),
                 )
                 .await;
-                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
+                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string())
+                    .into_response()
+                    .into();
             }
         };
     if let Some(playback) = prepared_playback.as_mut() {
@@ -2633,7 +2785,7 @@ async fn serve_channel_stream_admitted_inner(
                 Some(&mut dynamic_text_controllers),
             )
             .await;
-            return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+            return StatusCode::UNSUPPORTED_MEDIA_TYPE.into();
         }
     }
     let slate_metadata = metadata.clone();
@@ -2934,7 +3086,7 @@ async fn serve_channel_stream_admitted_inner(
                         Some(&mut dynamic_text_controllers),
                     )
                     .await;
-                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    return StatusCode::SERVICE_UNAVAILABLE.into();
                 }
                 if effective_streaming_mode != ersatzrs_domain::StreamingMode::TransportStream {
                     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
@@ -2943,7 +3095,8 @@ async fn serve_channel_stream_admitted_inner(
                         StatusCode::SERVICE_UNAVAILABLE,
                         [(axum::http::header::RETRY_AFTER, "1")],
                     )
-                        .into_response();
+                        .into_response()
+                        .into();
                 }
                 if let Some(playback) = prepared_playback.take() {
                     cancel_retained_startup(
@@ -2955,7 +3108,7 @@ async fn serve_channel_stream_admitted_inner(
                     )
                     .await;
 
-                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    return StatusCode::SERVICE_UNAVAILABLE.into();
                 }
                 return mpeg_ts_capacity_wait_response(
                     state,
@@ -2973,7 +3126,8 @@ async fn serve_channel_stream_admitted_inner(
                     output,
                     None,
                 )
-                .await;
+                .await
+                .into();
             }
             Err(error) => {
                 tracing::error!(
@@ -2993,7 +3147,7 @@ async fn serve_channel_stream_admitted_inner(
                 )
                 .await;
 
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return StatusCode::INTERNAL_SERVER_ERROR.into();
             }
         }
     } else {
@@ -3017,11 +3171,13 @@ async fn serve_channel_stream_admitted_inner(
             StatusCode::SERVICE_UNAVAILABLE,
             "retained interval startup deadline expired",
         )
-            .into_response();
+            .into_response()
+            .into();
     }
-    let retained_output = if prepared_playback
-        .as_ref()
-        .is_some_and(PreparedSourcePlayback::is_retained)
+    let retained_output = if retained_response
+        || prepared_playback
+            .as_ref()
+            .is_some_and(PreparedSourcePlayback::is_retained)
     {
         match RetainedTsOutput::from_command(
             &command,
@@ -3054,7 +3210,9 @@ async fn serve_channel_stream_admitted_inner(
                 )
                 .await;
 
-                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, reason).into_response();
+                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, reason)
+                    .into_response()
+                    .into();
             }
         }
     } else {
@@ -3074,7 +3232,7 @@ async fn serve_channel_stream_admitted_inner(
             Some(&mut dynamic_text_controllers),
         )
         .await;
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        return StatusCode::SERVICE_UNAVAILABLE.into();
     }
     match spawn_stream_body_with_lifetime(
         &command,
@@ -3117,6 +3275,7 @@ async fn serve_channel_stream_admitted_inner(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+    .into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7670,6 +7829,21 @@ fn apply_native_indexes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn sub_frame_successor_wait_releases_on_disconnect() {
+        let wait = Duration::from_secs(60);
+        let deadline = tokio::time::Instant::now() + wait;
+        let (sender, mut receiver) = tokio::sync::oneshot::channel();
+        drop(sender);
+        let ready = tokio::time::timeout(
+            Duration::from_secs(1),
+            wait_for_sub_frame_successor(deadline, wait, Some(&mut receiver)),
+        )
+        .await
+        .expect("disconnect must wake the admission wait");
+        assert!(!ready);
+    }
 
     #[test]
     fn legacy_waiting_body_drop_fences_owner_installed_after_disposal() {

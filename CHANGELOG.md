@@ -315,6 +315,7 @@ release section when tagging a release.
 ### Fixed
 
 - Playback troubleshooting can download logs when Next fails before FFmpeg starts.
+- Native playback skips playout windows shorter than one video frame before starting the encoder. This protects VAAPI playback at clipped filler boundaries.
 
 - Health checks accept Next overlay schemas supported by the selected plain or
   indexed runtime, reject newer schemas, and translate the supported range in

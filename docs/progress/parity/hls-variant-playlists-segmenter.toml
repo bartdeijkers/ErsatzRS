@@ -4,6 +4,11 @@ rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_spe
 status     = 'Ported'
 adr        = ['0015', '0016', '0061', '0084', '0106', '0132']
 summary    = '''
+Native playback checks the remaining item against the normalized output or source frame rate and advances past a sub-frame interval before encoding (row 299).
+Classic fallback_items, Block add_default_filler, YAML timing instructions and
+Lua add_duration can each trim media to the time left in a schedule window.
+That window can be shorter than one frame at the playback output rate.
+
 ADR 0106 retains native AV1 with automatic fMP4 HLS selection and explicit
 MPEG-TS rejection. UCU-09 row183 owns passing runtime evidence.
 Rows 130/132 startup ownership/readiness verified.

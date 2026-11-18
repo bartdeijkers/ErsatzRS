@@ -88,6 +88,15 @@ impl FrameRate {
         f64::from(self.numerator) / f64::from(self.denominator)
     }
 
+    /// Whether the output window ends before one complete video frame.
+    #[must_use]
+    pub fn is_sub_frame(self, window: std::time::Duration) -> bool {
+        self.numerator != 0
+            && self.denominator != 0
+            && window.as_nanos() * u128::from(self.numerator)
+                < 1_000_000_000 * u128::from(self.denominator)
+    }
+
     #[must_use]
     pub fn r_frame_rate(self) -> String {
         format!("{}/{}", self.numerator, self.denominator)
