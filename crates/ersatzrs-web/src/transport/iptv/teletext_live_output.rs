@@ -125,6 +125,24 @@ impl TeletextLiveOutputIntent {
 
     async fn current_initial(&self, deadline: Instant) -> Option<Arc<updates::NativeCandidate>> {
         let candidate = self.initial.as_ref()?;
+        // An absent initial authority starts this output without teletext.
+        // Record which fence declined it; the events carry no content.
+        let started = Instant::now();
+        let declined = |stage: &'static str| {
+            tracing::debug!(
+                target: "ersatzrs_web::transport::iptv::teletext_provenance",
+                event = "initial_authority_declined",
+                stage,
+                intent_id = %self.trace_id,
+                channel_id = self.context.channel_id,
+                elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                remaining_ms = u64::try_from(
+                    deadline.saturating_duration_since(Instant::now()).as_millis()
+                )
+                .unwrap_or(u64::MAX),
+                "teletext output starts without its initial authority"
+            );
+        };
         if !candidate
             .confirm(
                 &self.context.application,
@@ -133,12 +151,16 @@ impl TeletextLiveOutputIntent {
             )
             .await
         {
+            declined("confirm-before-prepare");
             return None;
         }
-        let prepared =
+        let Ok(prepared) =
             updates::NativeCandidate::prepare(&self.context, Arc::clone(candidate), None, deadline)
                 .await
-                .ok()?;
+        else {
+            declined("prepare");
+            return None;
+        };
         let confirmed = candidate
             .confirm(
                 &self.context.application,
@@ -146,7 +168,15 @@ impl TeletextLiveOutputIntent {
                 deadline.into_std(),
             )
             .await;
-        (confirmed && prepared.fields_current_at(ersatzrs_time::Utc::now())).then_some(prepared)
+        if !confirmed {
+            declined("confirm-after-prepare");
+            return None;
+        }
+        if !prepared.fields_current_at(ersatzrs_time::Utc::now()) {
+            declined("fields-stale");
+            return None;
+        }
+        Some(prepared)
     }
 }
 
