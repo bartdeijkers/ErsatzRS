@@ -3,7 +3,6 @@
 use std::{fmt::Write as _, time::Instant};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_addon_contract::{
     sanitize_addon_diagnostic_code, validate_operator_source_url, AddonMediaListRecord,
     AddonOperationError, ADDON_OPERATION_ERROR_MARKER, CAPABILITY_MEDIA_LIST_IMPORT_V1,
@@ -13,6 +12,7 @@ use ersatzrs_core::repositories::{
     AddonMediaListSourceProbeRepository, AddonMediaListSourceProbeState, RepositoryError, Result,
 };
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::Row as _;
 use uuid::Uuid;

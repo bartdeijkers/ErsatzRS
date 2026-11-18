@@ -39,9 +39,9 @@ pub async fn preview_graphics_text(
     use crate::host::state::AppState;
     use ersatzrs_core::repositories::GraphicsTextPreviewRequest;
     let state = expect_context::<AppState>();
-    let render_time = chrono::DateTime::parse_from_rfc3339(&request.render_time)
+    let render_time = ersatzrs_time::DateTime::parse_from_rfc3339(&request.render_time)
         .map_err(|_| ServerFnError::new("graphics-preview-invalid-time"))?
-        .with_timezone(&chrono::Utc);
+        .with_timezone(&ersatzrs_time::Utc);
     let request = GraphicsTextPreviewRequest {
         channel_id: request.channel_id,
         element_id: (request.element_id > 0).then_some(request.element_id),

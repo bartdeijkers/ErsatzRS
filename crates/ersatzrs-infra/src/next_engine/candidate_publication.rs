@@ -5,9 +5,9 @@ use crate::{
     next_engine::{protocol, publication, schedule},
     repositories::{make_repositories, PendingPlayoutBuild},
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{ChannelRepository, RepositoryError};
 use ersatzrs_domain::{Channel, StreamingEngine};
+use ersatzrs_time::{DateTime, Utc};
 use std::{
     future::Future,
     sync::{

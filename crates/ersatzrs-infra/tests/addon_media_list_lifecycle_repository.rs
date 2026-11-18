@@ -3,7 +3,6 @@ mod common;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use chrono::{TimeZone, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListDraftOptions, AddonMediaListItemOptionValues, AddonMediaListItemTombstone,
     AddonMediaListLifecycleRepository, AddonMediaListLifecycleSettings, AddonMediaListOptionSchema,
@@ -19,6 +18,7 @@ use ersatzrs_domain::{
 };
 use ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer;
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::{TimeZone, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::{Executor, Row};
 
@@ -894,7 +894,7 @@ async fn assert_checkpoint_storage(pool: &sqlx::SqlitePool) -> (i64, i64) {
                 1,
                 "checkpoint-digest",
                 17,
-                fixed_time() + chrono::Duration::minutes(1),
+                fixed_time() + ersatzrs_time::Duration::minutes(1),
             )
             .await
             .unwrap(),
@@ -908,7 +908,7 @@ async fn assert_checkpoint_storage(pool: &sqlx::SqlitePool) -> (i64, i64) {
             2,
             "checkpoint-digest-next",
             20,
-            fixed_time() + chrono::Duration::minutes(2),
+            fixed_time() + ersatzrs_time::Duration::minutes(2),
         )
         .await
         .unwrap();
@@ -1004,7 +1004,7 @@ async fn assert_import_lifecycle_storage(
             .save_import_lifecycle(
                 &update,
                 "import-owner",
-                fixed_time() + chrono::Duration::minutes(11),
+                fixed_time() + ersatzrs_time::Duration::minutes(11),
             )
             .await,
         Err(RepositoryError::Conflict(_))
@@ -1071,7 +1071,7 @@ async fn assert_lifecycle_job_storage(pool: &sqlx::SqlitePool) {
     .await;
     let mut cross_list_lifecycle = lifecycle.clone();
     cross_list_lifecycle.candidate_import_job_id = Some(31);
-    cross_list_lifecycle.updated_at = fixed_time() + chrono::Duration::minutes(1);
+    cross_list_lifecycle.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(1);
     assert!(matches!(
         repositories
             .addon_media_lists
@@ -1081,7 +1081,7 @@ async fn assert_lifecycle_job_storage(pool: &sqlx::SqlitePool) {
     ));
     lifecycle.phase = AddonMediaListLifecyclePhase::ComparingCandidate;
     lifecycle.candidate_import_job_id = Some(30);
-    lifecycle.updated_at = fixed_time() + chrono::Duration::minutes(1);
+    lifecycle.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(1);
     repositories
         .addon_media_lists
         .save_lifecycle_job(&lifecycle, fixed_time())
@@ -1097,7 +1097,7 @@ async fn assert_lifecycle_job_storage(pool: &sqlx::SqlitePool) {
     );
     let mut stale_lifecycle = lifecycle;
     stale_lifecycle.phase = AddonMediaListLifecyclePhase::EnumeratingSource;
-    stale_lifecycle.updated_at = fixed_time() + chrono::Duration::minutes(2);
+    stale_lifecycle.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(2);
     assert!(matches!(
         repositories
             .addon_media_lists
@@ -1111,7 +1111,7 @@ fn tombstone_fixture() -> AddonMediaListItemTombstone {
     AddonMediaListItemTombstone {
         item_id: 10,
         missing_since: fixed_time(),
-        last_observed_at: fixed_time() + chrono::Duration::days(1),
+        last_observed_at: fixed_time() + ersatzrs_time::Duration::days(1),
         observation_count: 2,
         last_reconcile_generation: 2,
         confirmed_at: None,
@@ -1123,7 +1123,7 @@ async fn assert_tombstone_observation_storage(pool: &sqlx::SqlitePool) {
     let repositories = make_repositories(pool.clone());
     let tombstone = tombstone_fixture();
     let forged_initial_tombstone = AddonMediaListItemTombstone {
-        confirmed_at: Some(fixed_time() + chrono::Duration::days(3)),
+        confirmed_at: Some(fixed_time() + ersatzrs_time::Duration::days(3)),
         ..tombstone.clone()
     };
     assert!(matches!(
@@ -1176,8 +1176,8 @@ async fn assert_tombstone_observation_storage(pool: &sqlx::SqlitePool) {
         Err(RepositoryError::Conflict(_))
     ));
     let mut newer_tombstone = tombstone.clone();
-    newer_tombstone.missing_since = fixed_time() + chrono::Duration::hours(1);
-    newer_tombstone.last_observed_at = fixed_time() + chrono::Duration::days(2);
+    newer_tombstone.missing_since = fixed_time() + ersatzrs_time::Duration::hours(1);
+    newer_tombstone.last_observed_at = fixed_time() + ersatzrs_time::Duration::days(2);
     newer_tombstone.observation_count = 3;
     newer_tombstone.last_reconcile_generation = 3;
     repositories
@@ -1198,7 +1198,7 @@ async fn assert_tombstone_observation_storage(pool: &sqlx::SqlitePool) {
 async fn assert_tombstone_confirmation_storage(pool: &sqlx::SqlitePool) {
     let repositories = make_repositories(pool.clone());
     let tombstone = tombstone_fixture();
-    let confirmed_at = fixed_time() + chrono::Duration::days(3);
+    let confirmed_at = fixed_time() + ersatzrs_time::Duration::days(3);
     assert!(matches!(
         repositories
             .addon_media_lists
@@ -1221,7 +1221,7 @@ async fn assert_tombstone_confirmation_storage(pool: &sqlx::SqlitePool) {
     let mut forward_observation = tombstone.clone();
     forward_observation.last_reconcile_generation = 4;
     forward_observation.observation_count = 4;
-    forward_observation.last_observed_at = fixed_time() + chrono::Duration::days(4);
+    forward_observation.last_observed_at = fixed_time() + ersatzrs_time::Duration::days(4);
     assert!(matches!(
         repositories
             .addon_media_lists
@@ -1230,7 +1230,7 @@ async fn assert_tombstone_confirmation_storage(pool: &sqlx::SqlitePool) {
         Err(RepositoryError::Conflict(_))
     ));
     let mut changed_confirmation = forward_observation.clone();
-    changed_confirmation.confirmed_at = Some(confirmed_at + chrono::Duration::minutes(1));
+    changed_confirmation.confirmed_at = Some(confirmed_at + ersatzrs_time::Duration::minutes(1));
     assert!(matches!(
         repositories
             .addon_media_lists
@@ -1313,7 +1313,7 @@ async fn assert_artifact_storage(pool: &sqlx::SqlitePool) {
     artifact.relative_path = Some("artifacts/ready.bin".into());
     artifact.byte_length = Some(2_048);
     artifact.sha256 = Some("artifact-digest".into());
-    artifact.updated_at = fixed_time() + chrono::Duration::minutes(2);
+    artifact.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(2);
     artifact.completed_at = Some(artifact.updated_at);
     repositories
         .addon_media_lists
@@ -1321,7 +1321,7 @@ async fn assert_artifact_storage(pool: &sqlx::SqlitePool) {
         .await
         .unwrap();
     let mut stale_artifact = artifact.clone();
-    stale_artifact.updated_at = fixed_time() + chrono::Duration::minutes(3);
+    stale_artifact.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(3);
     stale_artifact.relative_path = Some("artifacts/stale.bin".into());
     assert!(matches!(
         repositories
@@ -1377,7 +1377,7 @@ async fn assert_tool_maintenance_storage(pool: &sqlx::SqlitePool) {
         .unwrap();
     first_attempt.state = AddonToolMaintenanceState::WaitingToRetry;
     first_attempt.attempt_count = 1;
-    first_attempt.updated_at = fixed_time() + chrono::Duration::minutes(1);
+    first_attempt.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(1);
     repositories
         .addon_media_lists
         .save_tool_maintenance_attempt(&first_attempt, fixed_time())
@@ -1385,7 +1385,7 @@ async fn assert_tool_maintenance_storage(pool: &sqlx::SqlitePool) {
         .unwrap();
     let mut stale_attempt = first_attempt.clone();
     stale_attempt.attempt_count = 2;
-    stale_attempt.updated_at = fixed_time() + chrono::Duration::minutes(2);
+    stale_attempt.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(2);
     assert!(matches!(
         repositories
             .addon_media_lists
@@ -1399,17 +1399,17 @@ async fn assert_tool_maintenance_storage(pool: &sqlx::SqlitePool) {
             "org.example.lifecycle",
             "fixture-tool",
             AddonToolMaintenanceTrigger::Startup,
-            fixed_time() + chrono::Duration::minutes(1),
+            fixed_time() + ersatzrs_time::Duration::minutes(1),
         )
         .await
         .unwrap();
     restart_attempt.state = AddonToolMaintenanceState::Running;
-    restart_attempt.updated_at = fixed_time() + chrono::Duration::minutes(2);
+    restart_attempt.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(2);
     repositories
         .addon_media_lists
         .save_tool_maintenance_attempt(
             &restart_attempt,
-            fixed_time() + chrono::Duration::minutes(1),
+            fixed_time() + ersatzrs_time::Duration::minutes(1),
         )
         .await
         .unwrap();
@@ -1419,17 +1419,17 @@ async fn assert_tool_maintenance_storage(pool: &sqlx::SqlitePool) {
             "org.example.lifecycle",
             "fixture-tool",
             AddonToolMaintenanceTrigger::Manual,
-            fixed_time() + chrono::Duration::minutes(2),
+            fixed_time() + ersatzrs_time::Duration::minutes(2),
         )
         .await
         .unwrap();
     overlapping_attempt.state = AddonToolMaintenanceState::Running;
-    overlapping_attempt.updated_at = fixed_time() + chrono::Duration::minutes(3);
+    overlapping_attempt.updated_at = fixed_time() + ersatzrs_time::Duration::minutes(3);
     assert!(repositories
         .addon_media_lists
         .save_tool_maintenance_attempt(
             &overlapping_attempt,
-            fixed_time() + chrono::Duration::minutes(2),
+            fixed_time() + ersatzrs_time::Duration::minutes(2),
         )
         .await
         .is_err());
@@ -2048,7 +2048,7 @@ async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
         generation: 1,
         owner_token: "restore-owner".into(),
         lease_owner: "restore-worker".into(),
-        active_at: fixed_time() + chrono::Duration::minutes(10),
+        active_at: fixed_time() + ersatzrs_time::Duration::minutes(10),
     };
     assert_eq!(
         repositories
@@ -2173,7 +2173,7 @@ async fn reset_impact_uses_managed_library_media_for_every_playout_kind() {
     .unwrap();
     let mut managed_item = common::playout_item(501, 50, 301);
     managed_item.start = fixed_time();
-    managed_item.finish = fixed_time() + chrono::Duration::minutes(30);
+    managed_item.finish = fixed_time() + ersatzrs_time::Duration::minutes(30);
     repositories
         .playout
         .upsert_item(&managed_item)
@@ -2181,7 +2181,7 @@ async fn reset_impact_uses_managed_library_media_for_every_playout_kind() {
         .unwrap();
     let mut unrelated_item = common::playout_item(502, 51, 401);
     unrelated_item.start = fixed_time();
-    unrelated_item.finish = fixed_time() + chrono::Duration::minutes(30);
+    unrelated_item.finish = fixed_time() + ersatzrs_time::Duration::minutes(30);
     repositories
         .playout
         .upsert_item(&unrelated_item)
@@ -2224,7 +2224,7 @@ async fn revision_retention_prunes_only_after_active_work_releases_its_pin() {
                 1,
                 revision,
                 revision,
-                fixed_time() + chrono::Duration::minutes(i64::from(revision)),
+                fixed_time() + ersatzrs_time::Duration::minutes(i64::from(revision)),
                 &[],
                 &AddonMediaListRevisionArtifacts::default(),
             )
@@ -2374,7 +2374,7 @@ async fn disk_warning_settings_persist_zero_independently_without_media_or_quota
     ));
 }
 
-fn fixed_time() -> chrono::DateTime<Utc> {
+fn fixed_time() -> ersatzrs_time::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 9, 4, 12, 0, 0).unwrap()
 }
 
@@ -2397,8 +2397,8 @@ fn lifecycle_job_command(
     }
 }
 
-fn precise_time() -> chrono::DateTime<Utc> {
-    fixed_time() + chrono::Duration::nanoseconds(987_654_321)
+fn precise_time() -> ersatzrs_time::DateTime<Utc> {
+    fixed_time() + ersatzrs_time::Duration::nanoseconds(987_654_321)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

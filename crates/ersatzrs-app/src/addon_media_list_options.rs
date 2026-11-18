@@ -783,7 +783,7 @@ mod tests {
                 schema_digest: "fixture-digest".into(),
             },
             definition_json: serde_json::to_string(&definition).unwrap(),
-            created_at: chrono::Utc::now(),
+            created_at: ersatzrs_time::Utc::now(),
         };
         let edit = AddonListOptionEdit {
             list_id: 1,

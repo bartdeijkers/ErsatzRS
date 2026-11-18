@@ -49,12 +49,14 @@ async fn seed(state: &crate::host::state::AppState) {
 }
 
 async fn snapshot(state: &crate::host::state::AppState) -> Vec<ersatzrs_domain::PlayoutItem> {
-    use chrono::TimeZone as _;
-    let start = chrono::Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+    use ersatzrs_time::TimeZone as _;
+    let start = ersatzrs_time::Utc
+        .with_ymd_and_hms(2026, 10, 6, 12, 0, 0)
+        .unwrap();
     state
         .repositories
         .playout
-        .items_in_range(1, start, start + chrono::Duration::minutes(10))
+        .items_in_range(1, start, start + ersatzrs_time::Duration::minutes(10))
         .await
         .unwrap()
 }

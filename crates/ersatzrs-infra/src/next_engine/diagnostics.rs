@@ -210,7 +210,7 @@ fn record(line: &str, tail: &Mutex<Tail>, redactions: &[String]) {
         "TRACE" => tracing::trace!(next_target = %target, "{message}"),
         _ => tracing::debug!(next_target = %target, "{message}"),
     }
-    let time = chrono::Utc::now().format("%H:%M:%S");
+    let time = ersatzrs_time::Utc::now().format("%H:%M:%S");
     tail.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .push(format!("[{time} {level}] [{target}] {message}\n"));

@@ -2,12 +2,12 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use chrono::Timelike as _;
 use ersatzrs_domain::{MediaStream, MediaStreamKind, MediaVersion, ScalingBehavior};
 use ersatzrs_ffmpeg::{
     build_canvas_command, build_canvas_region_command, CanvasRenderRequest, FrameSize,
     GraphicsPipelineOverlay, InputKind, WatermarkOpacityClock,
 };
+use ersatzrs_time::Timelike as _;
 use tokio::{sync::oneshot, time::Instant};
 
 use super::{
@@ -245,7 +245,7 @@ fn output_metadata(
     });
     FfprobeMediaVersion {
         version: MediaVersion {
-            duration: chrono::TimeDelta::from_std(duration).unwrap_or_default(),
+            duration: ersatzrs_time::TimeDelta::from_std(duration).unwrap_or_default(),
             width: i32::try_from(frame.width).unwrap_or_default(),
             height: i32::try_from(frame.height).unwrap_or_default(),
             r_frame_rate: Some(timing.frame_rate().to_owned()),

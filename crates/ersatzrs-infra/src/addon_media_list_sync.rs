@@ -5,7 +5,6 @@ use crate::db::inserted_id;
 use crate::repositories::SqlxResultExt as _;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
@@ -15,6 +14,7 @@ use ersatzrs_domain::{
     ManagedLibraryOperationState, RemoteStreamLiveness, ScanPlayoutRefresh,
     ScanPlayoutRefreshReason,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::{Pool, Row, Transaction};
 
 use crate::db::{Db, DbPool};
@@ -546,7 +546,7 @@ impl AddonMediaListSynchronizer {
     ) -> Result<()> {
         let _list = self.load_list(list_id).await?;
         ensure_not_publishing(&self.pool, list_id).await?;
-        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        let now = crate::repositories::common::encode_datetime(ersatzrs_time::Utc::now());
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaList"
@@ -608,7 +608,7 @@ impl AddonMediaListSynchronizer {
             &mut tx,
             list_id,
             delivery_mode,
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
         )
         .await?;
 
@@ -2818,7 +2818,7 @@ where
                 &mut tx,
                 list_id,
                 mode,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
             )
             .await?;
             tx.commit().await.repository()?;
@@ -3294,7 +3294,7 @@ pub(crate) async fn ensure_not_publishing(pool: &Pool<Db>, list_id: EntityId) ->
         ersatzrs_domain::ManagedLibraryOperationState::Running,
     ))
     .bind(crate::repositories::common::encode_datetime(
-        chrono::Utc::now(),
+        ersatzrs_time::Utc::now(),
     ))
     .bind(list_id)
     .fetch_optional(pool)
@@ -3376,7 +3376,7 @@ pub(crate) async fn ensure_not_publishing_tx(
         ersatzrs_domain::ManagedLibraryOperationState::Running,
     ))
     .bind(crate::repositories::common::encode_datetime(
-        chrono::Utc::now(),
+        ersatzrs_time::Utc::now(),
     ))
     .bind(list_id)
     .fetch_optional(&mut **tx)

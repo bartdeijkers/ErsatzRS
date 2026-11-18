@@ -1,6 +1,5 @@
 //! Read-only runtime authority: fresh source proof or explicit sealed last-good.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     Result, TeletextGenerationMutation as M, TeletextGenerationRejection as R,
     TeletextGuideRefreshOutputCheck as Check,
@@ -8,6 +7,7 @@ use ersatzrs_core::repositories::{
     TeletextGuideRefreshSelection as Selection, TeletextGuideRefreshStatus as Status,
     TeletextPublicationRejection as P,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Transaction;
 use std::time::Instant;
 

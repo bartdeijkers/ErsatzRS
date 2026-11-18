@@ -1,7 +1,7 @@
 //! Classic midnight publication and restart safety through real `SQLite` builds.
 
 use super::*;
-use chrono::TimeZone as _;
+use ersatzrs_time::TimeZone as _;
 
 fn start() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 4, 15, 23, 30, 0).unwrap()

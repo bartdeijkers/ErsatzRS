@@ -2,7 +2,6 @@
 
 use std::time::Instant;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_app::teletext_design_documents::{
     decode_teletext_design_documents, decode_teletext_effective_design_documents,
     TeletextDesignDocumentBudget, TeletextSavedDocumentSource, TeletextSavedGuideInputs,
@@ -17,6 +16,7 @@ use ersatzrs_domain::{
     TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextEncodingRegion};
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{FreshGuideBaseline, GuideRefreshNativeError as Error};
 use crate::host::{

@@ -4,11 +4,11 @@
 use super::*;
 use crate::editorial_imports::http_routes as editorial_http;
 use crate::{authoring, channel_documents, designs, guide_capture, scripted_controls};
-use chrono::Timelike as _;
 use ersatzrs_app::teletext_design_documents::TeletextSavedGuideInputs;
 use ersatzrs_core::repositories::{PlayoutRepository as _, TeletextGuideSourceFence};
 use ersatzrs_domain::{PlayoutItem, TeletextPageContract};
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextRaster};
+use ersatzrs_time::Timelike as _;
 use ersatzrs_web::host::{
     teletext_authoring::{
         observe_effective_teletext_authoring_selection, observe_teletext_authoring_selection,
@@ -71,10 +71,10 @@ async fn fixture() -> (Fixture, TeletextProfile) {
                 playout_id: 20,
                 media_item_id: 20,
                 guide_group: 7,
-                start: at + chrono::Duration::minutes(offset),
-                finish: at + chrono::Duration::minutes(offset + 10),
-                in_point: chrono::Duration::minutes(source),
-                out_point: chrono::Duration::minutes(source + 10),
+                start: at + ersatzrs_time::Duration::minutes(offset),
+                finish: at + ersatzrs_time::Duration::minutes(offset + 10),
+                in_point: ersatzrs_time::Duration::minutes(source),
+                out_point: ersatzrs_time::Duration::minutes(source + 10),
                 ..PlayoutItem::default()
             })
             .await
@@ -404,7 +404,7 @@ async fn effective_prepare(
         &script,
         1,
         true,
-        (Utc::now() - chrono::Duration::seconds(1))
+        (Utc::now() - ersatzrs_time::Duration::seconds(1))
             .with_nanosecond(0)
             .unwrap(),
     )

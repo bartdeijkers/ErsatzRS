@@ -106,10 +106,10 @@ pub struct ScheduleLanguageOption {
 pub struct ScheduleDeferredChange {
     pub playout_id: EntityId,
     pub channel_name: String,
-    pub saved_at: chrono::DateTime<chrono::Utc>,
-    pub effective_after: Option<chrono::DateTime<chrono::Utc>>,
-    pub applied_from: Option<chrono::DateTime<chrono::Utc>>,
-    pub last_build: Option<chrono::DateTime<chrono::Utc>>,
+    pub saved_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    pub effective_after: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
+    pub applied_from: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
+    pub last_build: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
     pub build_succeeded: Option<bool>,
     pub build_message: Option<String>,
 }

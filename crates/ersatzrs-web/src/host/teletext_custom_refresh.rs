@@ -1,7 +1,6 @@
 //! Response-owned cells from an immutable published recipe, without authoring.
 
 use super::{teletext_channel_documents::TeletextChannelDocumentEncodingPolicy, teletext_work};
-use chrono::{DateTime, Timelike as _, Utc};
 use ersatzrs_app::{
     teletext_design_documents::{
         decode_teletext_design_documents, decode_teletext_effective_design_documents,
@@ -27,6 +26,7 @@ use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service_before, EncodedTeletextAuthoredService,
     TeletextServiceResourceTransmission,
 };
+use ersatzrs_time::{DateTime, Timelike as _, Utc};
 use std::{
     collections::BTreeSet,
     sync::Arc,
@@ -331,7 +331,7 @@ impl PublishedCustomRefresh {
             self.programme_transition
         };
         if projection_due {
-            let poll = chrono::Duration::from_std(poll).map_err(|_| RefreshError)?;
+            let poll = ersatzrs_time::Duration::from_std(poll).map_err(|_| RefreshError)?;
             let reconciliation = captured.checked_add_signed(poll).ok_or(RefreshError)?;
             next_projection = Some(
                 projection
@@ -519,7 +519,7 @@ fn next_wake(
     let next_minute = now
         .with_second(0)
         .and_then(|at| at.with_nanosecond(0))
-        .and_then(|at| at.checked_add_signed(chrono::Duration::minutes(1)))
+        .and_then(|at| at.checked_add_signed(ersatzrs_time::Duration::minutes(1)))
         .ok_or(RefreshError)?;
     let next = projection.map_or(next_minute, |at| at.min(next_minute));
     let duration = (next - now).to_std().unwrap_or(Duration::ZERO);

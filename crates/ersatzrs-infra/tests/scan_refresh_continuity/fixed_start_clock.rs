@@ -61,7 +61,7 @@ async fn classic_local_midnight_dst_survives_persisted_continue_and_refresh() {
         let future = |rows: Vec<PlaylistTimelineRow>| {
             rows.into_iter()
                 .filter(|row| {
-                    chrono::NaiveDateTime::parse_from_str(&row.1, "%Y-%m-%d %H:%M:%S%.f")
+                    ersatzrs_time::NaiveDateTime::parse_from_str(&row.1, "%Y-%m-%d %H:%M:%S%.f")
                         .unwrap()
                         .and_utc()
                         >= seam

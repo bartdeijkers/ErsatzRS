@@ -10,7 +10,6 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract as wire;
 use ersatzrs_domain::{
     is_teletext_custom_pages_producer, teletext_element_page_label, EntityId,
@@ -18,6 +17,7 @@ use ersatzrs_domain::{
     TeletextElementBindingSource, TeletextProfileValue, TeletextSelectionSnapshot,
     TELETEXT_CUSTOM_PAGES_SCHEMA,
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use super::fields::{apply_field_values, find_field_markers};
 use super::model::ElementPage;
@@ -493,14 +493,14 @@ mod tests {
                 playout_id: 1,
                 interval: TeletextOverrideInterval {
                     start: now,
-                    finish: now + chrono::Duration::minutes(5),
+                    finish: now + ersatzrs_time::Duration::minutes(5),
                     state,
                 },
             })
         };
         let selection = TeletextEffectiveChannelSelectionSnapshot {
             channel_id: 1,
-            valid_until: Some(now + chrono::Duration::minutes(5)),
+            valid_until: Some(now + ersatzrs_time::Duration::minutes(5)),
             bindings: vec![
                 Binding::Base(host.clone()),
                 Binding::Base(base),

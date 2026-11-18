@@ -9,12 +9,12 @@ use std::{
     },
 };
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     locking::EntityLocker,
     repositories::{ChannelRepository, RepositoryError},
 };
 use ersatzrs_domain::{Channel, StreamingEngine};
+use ersatzrs_time::{DateTime, Utc};
 use tokio::sync::Mutex;
 
 use crate::{db::DbPool, repositories::make_repositories};

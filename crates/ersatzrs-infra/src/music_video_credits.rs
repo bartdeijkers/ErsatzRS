@@ -2,9 +2,9 @@ use crate::repositories::SqlxResultExt as _;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{Channel, ChannelMusicVideoCreditsMode, Resolution};
+use ersatzrs_time::Duration;
 use sqlx::Row;
 use uuid::Uuid;
 

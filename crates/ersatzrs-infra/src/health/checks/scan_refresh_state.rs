@@ -2,7 +2,7 @@ use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckError, HealthCheckResult,
     HealthCheckStatus, Pool, Result, Row,
 };
-use chrono::{Duration, Utc};
+use ersatzrs_time::{Duration, Utc};
 
 const STALE_AFTER_MINUTES: i64 = 15;
 const RESOLUTION_STATE_RESOLVING: i64 = 0;

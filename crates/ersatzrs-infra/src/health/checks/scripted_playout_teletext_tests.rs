@@ -294,7 +294,7 @@ async fn changed_valid_scope_does_not_relabel_an_accepted_original_as_current() 
     let (pool, now, finish, _) = accepted_fixture().await;
     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish" = ?"#)
         .bind(crate::repositories::common::encode_datetime(
-            finish + chrono::Duration::hours(1),
+            finish + ersatzrs_time::Duration::hours(1),
         ))
         .execute(&pool)
         .await
@@ -349,8 +349,8 @@ async fn valid_off_does_not_require_healthy_package_or_profile() {
     let now = Utc::now();
     insert(
         &pool,
-        now - chrono::Duration::hours(1),
-        now + chrono::Duration::hours(1),
+        now - ersatzrs_time::Duration::hours(1),
+        now + ersatzrs_time::Duration::hours(1),
         None,
     )
     .await;
@@ -376,10 +376,10 @@ async fn valid_off_does_not_require_healthy_package_or_profile() {
 async fn valid_on_reports_missing_scoped_native_generation_until_expiry_without_writes() {
     let (pool, candidate) = setup().await;
     let now = Utc::now();
-    let finish = now + chrono::Duration::hours(1);
+    let finish = now + ersatzrs_time::Duration::hours(1);
     insert(
         &pool,
-        now - chrono::Duration::hours(1),
+        now - ersatzrs_time::Duration::hours(1),
         finish,
         Some(snapshot(&candidate)),
     )
@@ -409,10 +409,10 @@ async fn stale_malformed_or_missing_membership_remains_unavailable_until_origina
     ] {
         let (pool, candidate) = setup().await;
         let now = Utc::now();
-        let finish = now + chrono::Duration::hours(1);
+        let finish = now + ersatzrs_time::Duration::hours(1);
         insert(
             &pool,
-            now - chrono::Duration::hours(1),
+            now - ersatzrs_time::Duration::hours(1),
             finish,
             Some(snapshot(&candidate)),
         )
@@ -436,11 +436,11 @@ async fn stale_malformed_or_missing_membership_remains_unavailable_until_origina
 async fn future_override_and_mirror_channel_do_not_report_active_source_state() {
     let (pool, candidate) = setup().await;
     let now = Utc::now();
-    let start = now + chrono::Duration::hours(1);
+    let start = now + ersatzrs_time::Duration::hours(1);
     insert(
         &pool,
         start,
-        start + chrono::Duration::hours(1),
+        start + ersatzrs_time::Duration::hours(1),
         Some(snapshot(&candidate)),
     )
     .await;

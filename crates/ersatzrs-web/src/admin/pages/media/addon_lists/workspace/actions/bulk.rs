@@ -5,7 +5,7 @@ use super::{
 use crate::admin::server_fns::addon_media_lists::{
     AddonMediaListDraftDiffRow, AddonMediaListItemRow,
 };
-use chrono::Datelike as _;
+use ersatzrs_time::Datelike as _;
 use std::collections::BTreeSet;
 
 pub(super) async fn preview_bulk(
@@ -247,7 +247,7 @@ fn preview(
     if intent == "auto-number" {
         targets = super::super::super::order_by_first_aired(targets);
     }
-    let mut previous_date: Option<chrono::NaiveDate> = None;
+    let mut previous_date: Option<ersatzrs_time::NaiveDate> = None;
     let mut changed = fields.clone();
     for row in targets {
         if !row_has_edits(fields, row.id) {

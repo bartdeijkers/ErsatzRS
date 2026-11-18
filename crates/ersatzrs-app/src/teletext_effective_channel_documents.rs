@@ -6,7 +6,6 @@
 
 use std::{fmt, future::Future, sync::Arc, time::Instant};
 
-use chrono::Utc;
 use ersatzrs_addon_contract as wire;
 use ersatzrs_core::{
     locking::TeletextWorkHold,
@@ -17,6 +16,7 @@ use ersatzrs_domain::{
     TeletextEffectiveChannelSelectionSnapshot as Selection, TeletextOverrideState,
     TeletextPageContract,
 };
+use ersatzrs_time::Utc;
 
 use crate::{
     teletext_channel_documents::{

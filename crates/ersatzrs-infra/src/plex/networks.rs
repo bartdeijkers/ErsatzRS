@@ -255,7 +255,7 @@ async fn reconcile(
         }
     }
     sqlx::query(r#"UPDATE "PlexLibrary" SET "LastNetworksScan" = ? WHERE "Id" = ?"#)
-        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(ersatzrs_time::Utc::now().to_rfc3339())
         .bind(library_id)
         .execute(&mut *tx)
         .await

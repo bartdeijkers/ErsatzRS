@@ -501,7 +501,10 @@ pub(super) fn html(
         ("preview_seek".into(), "0".into()),
     ]);
     #[cfg(feature = "ssr")]
-    preview.insert("preview_time".into(), chrono::Utc::now().to_rfc3339());
+    preview.insert(
+        "preview_time".into(),
+        ersatzrs_time::Utc::now().to_rfc3339(),
+    );
     preview.extend(preview_fields.clone());
     for (name, key, input_type, attrs) in [
         ("preview_time", TextKey::PreviewTimestamp, "text", ""),

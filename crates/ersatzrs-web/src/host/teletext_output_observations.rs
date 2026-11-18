@@ -150,7 +150,7 @@ impl TeletextOutputObserver for Owner {
                 self.channel_id,
                 TeletextOutputFailure {
                     kind,
-                    at: chrono::Utc::now(),
+                    at: ersatzrs_time::Utc::now(),
                 },
             );
         }
@@ -190,7 +190,7 @@ impl Owner {
                     self.channel_id,
                     TeletextCustomFieldFailure {
                         pages: pages.into_iter().collect(),
-                        at: chrono::Utc::now(),
+                        at: ersatzrs_time::Utc::now(),
                     },
                 );
             }

@@ -1,8 +1,8 @@
 //! Admit saved-draft interval metadata before publication owns the managed library.
 
-use chrono::Utc;
 use ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_INTERVAL_METADATA_V1;
 use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_time::Utc;
 use sqlx::Row as _;
 
 use crate::{

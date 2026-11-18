@@ -10,7 +10,7 @@ use super::{
     TailMode,
 };
 #[cfg(test)]
-use chrono::Utc;
+use ersatzrs_time::Utc;
 #[cfg(test)]
 use std::collections::BTreeMap;
 
@@ -100,8 +100,8 @@ mod tests {
     use super::super::tests::schedule_item;
     use super::*;
     use crate::scheduling::SchedulingPlaylistItem;
-    use chrono::TimeZone;
     use ersatzrs_domain::{CollectionType, Playout, PlayoutMode, PlayoutScheduleKind};
+    use ersatzrs_time::TimeZone;
 
     fn request() -> SchedulingRequest {
         let item = ProgramScheduleItem {

@@ -104,7 +104,7 @@ pub(super) fn playback(w: &Workspace) -> AnyView {
         </div></fieldset>
         <p id="addon-delivery-help">{tr(TextKey::AddonDeliveryHelp)}</p><p hidden=supports_download>{tr(TextKey::AddonDeliveryUnavailable)}</p>
         {w.form.delivery_cutoff_at.clone().filter(|_|w.form.delivery_mode==AddonMediaListDeliveryMode::DownloadAheadNewVideos).map(|cutoff| {
-            let label=chrono::DateTime::parse_from_rfc3339(&cutoff).ok().and_then(|t|format_progress_timestamp(&t.with_timezone(&chrono::Utc).to_rfc3339())).unwrap_or_else(||cutoff.clone());
+            let label=ersatzrs_time::DateTime::parse_from_rfc3339(&cutoff).ok().and_then(|t|format_progress_timestamp(&t.with_timezone(&ersatzrs_time::Utc).to_rfc3339())).unwrap_or_else(||cutoff.clone());
             view! {<p data-testid="addon-delivery-cutoff">{tr(TextKey::AddonDeliveryCutoff)}": "<time datetime=cutoff>{label}</time></p>}
         })}
         <p class="fresh-cutoff-notice" hidden={w.form.delivery_mode==AddonMediaListDeliveryMode::DownloadAheadNewVideos}>{tr(TextKey::AddonDeliveryFreshCutoff)}</p>
@@ -313,9 +313,9 @@ mod tests {
     use crate::admin::server_fns::addon_list_options::ItemAccessEditor;
 
     fn rendered(state: State) -> String {
-        let retained = chrono::DateTime::parse_from_rfc3339("2026-09-18T07:00:58Z")
+        let retained = ersatzrs_time::DateTime::parse_from_rfc3339("2026-09-18T07:00:58Z")
             .unwrap()
-            .with_timezone(&chrono::Utc);
+            .with_timezone(&ersatzrs_time::Utc);
         let access = ItemAccessEditor {
             item_id: 638,
             saved_revision: 176,

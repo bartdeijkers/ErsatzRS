@@ -182,7 +182,7 @@ fn effective_fence(
     let now = Instant::now();
     let mut deadline = Instant::from_std(deadline).min(now + EXECUTION_TIMEOUT);
     if let Some(boundary) = selection.valid_until {
-        let remaining = (boundary - chrono::Utc::now())
+        let remaining = (boundary - ersatzrs_time::Utc::now())
             .to_std()
             .map_err(|_| TeletextInvocationError::TimedOut)?;
         deadline = deadline.min(now + remaining.min(EXECUTION_TIMEOUT));
@@ -768,14 +768,17 @@ impl ProfileAuthority<'_> {
                 let current = match host_membership {
                     EffectiveHostMembership::Current => {
                         profiles
-                            .recheck_effective_channel_snapshot(selection, chrono::Utc::now())
+                            .recheck_effective_channel_snapshot(
+                                selection,
+                                ersatzrs_time::Utc::now(),
+                            )
                             .await
                     }
                     EffectiveHostMembership::Published => {
                         profiles
                             .published_effective_channel_dependencies(
                                 selection.channel_id,
-                                chrono::Utc::now(),
+                                ersatzrs_time::Utc::now(),
                             )
                             .await
                     }

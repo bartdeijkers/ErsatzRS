@@ -5,7 +5,7 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     use super::super::{canvas::CanvasBinding, protocol::ProbeHint};
     let relay = MediaRelay::new();
     relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
-    let start = chrono::DateTime::from_timestamp(1_000, 0).unwrap();
+    let start = ersatzrs_time::DateTime::from_timestamp(1_000, 0).unwrap();
     let binding = CanvasBinding {
         playout_start: None,
         region: None,
@@ -17,10 +17,10 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
         version: 4,
         file: 5,
         start,
-        finish: start + chrono::TimeDelta::minutes(5),
+        finish: start + ersatzrs_time::TimeDelta::minutes(5),
         in_point_ms: 10_000,
         out_point_ms: 0,
-        expires: start + chrono::TimeDelta::minutes(6),
+        expires: start + ersatzrs_time::TimeDelta::minutes(6),
     };
     let hint = ProbeHint {
         single_use: None,
@@ -83,7 +83,7 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
 fn assert_canvas_region_tampering(
     relay: &MediaRelay,
     binding: &super::super::canvas::CanvasBinding,
-    start: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) {
     let mut regional = binding.clone();
     regional.region = Some(ersatzrs_ffmpeg::CanvasRegion {
@@ -123,7 +123,7 @@ fn assert_canvas_tampering(
     relay: &MediaRelay,
     binding: &super::super::canvas::CanvasBinding,
     ticket: &str,
-    start: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) {
     for field in [
         "channel",
@@ -148,12 +148,14 @@ fn assert_canvas_tampering(
             "media" => changed.media += 1,
             "version" => changed.version += 1,
             "file" => changed.file += 1,
-            "start" => changed.start += chrono::TimeDelta::seconds(1),
-            "finish" => changed.finish += chrono::TimeDelta::seconds(1),
+            "start" => changed.start += ersatzrs_time::TimeDelta::seconds(1),
+            "finish" => changed.finish += ersatzrs_time::TimeDelta::seconds(1),
             "in" => changed.in_point_ms += 1,
             "out" => changed.out_point_ms += 1,
             "session" => changed.session = Some(Uuid::nil()),
-            "playout_start" => changed.playout_start = Some(start + chrono::TimeDelta::seconds(1)),
+            "playout_start" => {
+                changed.playout_start = Some(start + ersatzrs_time::TimeDelta::seconds(1));
+            }
             "video_stream_index" => changed.video_stream_index = Some(1),
             "region" => {
                 changed.region = Some(ersatzrs_ffmpeg::CanvasRegion {
@@ -163,7 +165,7 @@ fn assert_canvas_tampering(
                     height: 16,
                 });
             }
-            _ => changed.expires += chrono::TimeDelta::seconds(1),
+            _ => changed.expires += ersatzrs_time::TimeDelta::seconds(1),
         }
         assert!(!relay.authorized_canvas(&changed, ticket, start), "{field}");
     }

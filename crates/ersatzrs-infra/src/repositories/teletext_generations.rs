@@ -226,7 +226,7 @@ impl TeletextGenerationRepository for SqliteTeletextGenerationRepository {
         if !super::playout::teletext_intervals::active_in_transaction(
             &mut transaction,
             generation.request.channel_id,
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
         )
         .await?
         .is_empty()

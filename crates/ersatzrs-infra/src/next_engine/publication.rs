@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use chrono::Datelike;
+use ersatzrs_time::Datelike;
 
 use super::protocol::{Playout, PLAYOUT_VERSION};
 

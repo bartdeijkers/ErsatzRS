@@ -1,8 +1,8 @@
 //! Deferred song background identity; credentials are installed only at publication.
 
-use chrono::{DateTime, TimeDelta, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{Channel, ChannelSongVideoMode, PlayoutItem, Resolution};
+use ersatzrs_time::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::db::DbPool;

@@ -15,7 +15,6 @@ mod fixed_start_clock;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, ProgramScheduleRepository};
@@ -33,6 +32,7 @@ use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use ersatzrs_infra::scan_refresh::{
     self, complete_resolution_in_tx, persist_refresh_intents, DurableScanPlayoutRefresh,
 };
+use ersatzrs_time::{DateTime, Duration, Timelike, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Executor, Row, SqlitePool};
 

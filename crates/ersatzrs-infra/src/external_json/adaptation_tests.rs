@@ -1,5 +1,5 @@
 use super::*;
-use chrono::{Duration, TimeZone};
+use ersatzrs_time::{Duration, TimeZone};
 
 fn start() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 10, 4, 23, 59, 0).unwrap()

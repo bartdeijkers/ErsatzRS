@@ -192,10 +192,10 @@ pub(super) async fn accepted_variant(
 ) {
     let (pool, candidate) = setup().await;
     let now = Utc::now();
-    let finish = now + chrono::Duration::hours(1);
+    let finish = now + ersatzrs_time::Duration::hours(1);
     insert(
         &pool,
-        now - chrono::Duration::hours(1),
+        now - ersatzrs_time::Duration::hours(1),
         finish,
         on.then(|| snapshot(&candidate)),
     )
@@ -359,7 +359,7 @@ async fn effective_health_retains_original_scope_budget_and_deadline_controls_af
     set_policy(&pool, &policy(4096).to_string()).await;
     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=?"#)
         .bind(crate::repositories::common::encode_datetime(
-            finish + chrono::Duration::hours(1),
+            finish + ersatzrs_time::Duration::hours(1),
         ))
         .execute(&pool)
         .await

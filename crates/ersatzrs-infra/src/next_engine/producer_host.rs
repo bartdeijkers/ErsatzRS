@@ -1,5 +1,5 @@
 //! Session-owned ordinary installed producers; no independent probe or script fallback.
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use std::collections::BTreeMap;
 type ProducerTiming = (
     std::time::Duration,
@@ -476,7 +476,7 @@ mod tests {
             item: protocol::PlayoutItem {
                 id: "fixture".into(),
                 start,
-                finish: start + chrono::Duration::seconds(30),
+                finish: start + ersatzrs_time::Duration::seconds(30),
                 watermark: None,
                 graphics: Vec::new(),
                 source: None,
@@ -527,7 +527,7 @@ mod tests {
         tokio::fs::write(&path, b"fixture").await.unwrap();
         let path = path.to_str().unwrap();
         let mut projection = projection(path);
-        let now = projection.item.start + chrono::Duration::seconds(2);
+        let now = projection.item.start + ersatzrs_time::Duration::seconds(2);
         let subtitle = producer_subtitle(
             &projection,
             path,

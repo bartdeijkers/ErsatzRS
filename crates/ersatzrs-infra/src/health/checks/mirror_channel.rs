@@ -2,7 +2,7 @@ use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckResult, HealthCheckStatus, Pool, Result,
     Row,
 };
-use chrono::Duration;
+use ersatzrs_time::Duration;
 
 pub(crate) struct MirrorChannelHealthCheck {
     pool: Pool<Db>,

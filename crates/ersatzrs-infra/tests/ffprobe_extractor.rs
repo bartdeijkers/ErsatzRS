@@ -98,7 +98,7 @@ fn parses_ffprobe_json_to_media_version_snapshot() {
     "###);
 }
 
-fn assert_content_duration(probe: &serde_json::Value, expected: chrono::Duration) {
+fn assert_content_duration(probe: &serde_json::Value, expected: ersatzrs_time::Duration) {
     let projected =
         parse_ffprobe_json("synthetic.mkv", &serde_json::to_vec(probe).unwrap()).unwrap();
     assert_eq!(projected.version.duration, expected, "probe: {probe}");
@@ -152,7 +152,7 @@ fn content_duration_matches_upstream_video_audio_and_tag_fixtures() {
             100_000,
         ),
     ] {
-        assert_content_duration(&probe, chrono::Duration::milliseconds(expected_ms));
+        assert_content_duration(&probe, ersatzrs_time::Duration::milliseconds(expected_ms));
     }
 }
 
@@ -200,7 +200,7 @@ fn content_duration_selects_primary_video_and_requires_all_audio_durations() {
             100,
         ),
     ] {
-        assert_content_duration(&probe, chrono::Duration::seconds(seconds));
+        assert_content_duration(&probe, ersatzrs_time::Duration::seconds(seconds));
     }
 }
 
@@ -210,7 +210,7 @@ fn content_duration_guards_matroska_container_estimates_and_preserves_numeric_pr
         {"index":0,"codec_type":"video","codec_name":"h264","duration":"20.000000","tags":{"DURATION":"00:00:01.000000000"}},
         {"index":1,"codec_type":"subtitle","codec_name":"subrip","tags":{"language":"nld","title":"Dutch","DURATION":"00:00:20.000000000"}}
     ]});
-    assert_content_duration(&probe, chrono::Duration::seconds(1));
+    assert_content_duration(&probe, ersatzrs_time::Duration::seconds(1));
     let projected =
         parse_ffprobe_json("synthetic.mkv", &serde_json::to_vec(&probe).unwrap()).unwrap();
     assert_eq!(projected.streams[1].language.as_deref(), Some("nld"));
@@ -218,18 +218,18 @@ fn content_duration_guards_matroska_container_estimates_and_preserves_numeric_pr
 
     for format in [serde_json::json!("mov,mp4,m4a"), serde_json::Value::Null] {
         probe["format"]["format_name"] = format;
-        assert_content_duration(&probe, chrono::Duration::seconds(20));
+        assert_content_duration(&probe, ersatzrs_time::Duration::seconds(20));
     }
     probe["format"]["format_name"] = serde_json::json!("matroska,webm");
     probe["streams"][0]["duration"] = serde_json::json!("10");
-    assert_content_duration(&probe, chrono::Duration::seconds(10));
+    assert_content_duration(&probe, ersatzrs_time::Duration::seconds(10));
     probe["streams"][0]["duration"] = serde_json::json!("20");
     probe["streams"][0]["tags"]["DURATION"] = serde_json::json!("00:00:25.000000000");
-    assert_content_duration(&probe, chrono::Duration::seconds(20));
+    assert_content_duration(&probe, ersatzrs_time::Duration::seconds(20));
     probe["streams"][0]["tags"] = serde_json::json!({"duration-eng":"00:00:01.000000000"});
-    assert_content_duration(&probe, chrono::Duration::seconds(1));
+    assert_content_duration(&probe, ersatzrs_time::Duration::seconds(1));
     probe["streams"][0]["tags"]["DURATION"] = serde_json::json!("00:00:02.000000000");
-    assert_content_duration(&probe, chrono::Duration::seconds(2));
+    assert_content_duration(&probe, ersatzrs_time::Duration::seconds(2));
 }
 
 #[test]
@@ -254,22 +254,23 @@ fn content_duration_rejects_invalid_tags_and_unrepresentable_values_without_pani
         "9223372036854775807:00:01",
     ] {
         probe["streams"][0]["tags"]["DURATION"] = serde_json::json!(invalid);
-        assert_content_duration(&probe, chrono::Duration::seconds(20));
+        assert_content_duration(&probe, ersatzrs_time::Duration::seconds(20));
     }
     probe["streams"][0]["tags"]["DURATION"] = serde_json::json!(123);
-    assert_content_duration(&probe, chrono::Duration::seconds(20));
+    assert_content_duration(&probe, ersatzrs_time::Duration::seconds(20));
     probe["streams"][0]["tags"]["DURATION"] = serde_json::json!("25:00:01.123456789");
     for invalid in ["0", "-1", "NaN", "inf", "1.é", "9223372036854775807"] {
         probe["streams"][0]["duration"] = serde_json::json!(invalid);
         assert_content_duration(
             &probe,
-            chrono::Duration::seconds(90_001) + chrono::Duration::nanoseconds(123_456_789),
+            ersatzrs_time::Duration::seconds(90_001)
+                + ersatzrs_time::Duration::nanoseconds(123_456_789),
         );
     }
     probe["streams"][0]["tags"] = serde_json::json!({});
-    assert_content_duration(&probe, chrono::Duration::seconds(20));
+    assert_content_duration(&probe, ersatzrs_time::Duration::seconds(20));
     probe["format"]["duration"] = serde_json::json!("9223372036854775807");
-    assert_content_duration(&probe, chrono::Duration::zero());
+    assert_content_duration(&probe, ersatzrs_time::Duration::zero());
 }
 
 #[tokio::test]
@@ -324,7 +325,10 @@ async fn real_content_duration_excludes_subtitles_past_video_eof() {
     .unwrap();
     assert!(generated.status.success(), "synthetic mux must succeed");
     let projected = FfprobeExtractor::new(ffprobe).extract(&clip).await.unwrap();
-    assert_eq!(projected.version.duration, chrono::Duration::seconds(1));
+    assert_eq!(
+        projected.version.duration,
+        ersatzrs_time::Duration::seconds(1)
+    );
     assert!(projected.streams.iter().any(|stream| {
         stream.kind == ersatzrs_domain::MediaStreamKind::Subtitle
             && stream.language.as_deref() == Some("nld")

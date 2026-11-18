@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{TeletextProfileCandidateSnapshot, TeletextProfileValue};
 use crate::EntityId;

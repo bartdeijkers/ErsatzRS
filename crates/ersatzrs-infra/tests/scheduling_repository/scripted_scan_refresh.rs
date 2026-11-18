@@ -62,7 +62,7 @@ async fn adaptation_status(pool: &SqlitePool) -> ersatzrs_core::repositories::Pl
 
 async fn requested_refresh(
     pool: &SqlitePool,
-    start: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
 ) -> ersatzrs_infra::maintenance::Result<bool> {
     ersatzrs_infra::maintenance::run_requested_playout_build_cancellable(
         pool,
@@ -75,7 +75,7 @@ async fn requested_refresh(
     .await
 }
 
-async fn assert_requested_refresh_defers(pool: &SqlitePool, start: chrono::DateTime<Utc>) {
+async fn assert_requested_refresh_defers(pool: &SqlitePool, start: ersatzrs_time::DateTime<Utc>) {
     let mut tx = ersatzrs_infra::db::begin_write(pool).await.unwrap();
     scan_refresh::persist_unowned_refresh_intents(
         &mut tx,

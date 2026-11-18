@@ -2,8 +2,8 @@
 
 use std::{fmt, num::NonZeroU8};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Utc};
 use serde::{
     de::{MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize,

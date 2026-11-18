@@ -5,8 +5,8 @@ use crate::{
     teletext_channel_documents::{preflight_requests, TeletextChannelRequestTemplates},
     teletext_guide::{SuppliedTeletextGuideContext, TeletextGuideChannel},
 };
-use chrono::TimeZone as _;
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
+use ersatzrs_time::TimeZone as _;
 
 fn request_context() -> SuppliedTeletextGuideContext<'static> {
     const CHANNELS: &[TeletextGuideChannel<'static>] = &[TeletextGuideChannel {
@@ -20,7 +20,7 @@ fn request_context() -> SuppliedTeletextGuideContext<'static> {
         locale: "nl",
         supported_locales: &["nl"],
         timezone: "Europe/Amsterdam",
-        captured_at: chrono::Utc
+        captured_at: ersatzrs_time::Utc
             .with_ymd_and_hms(2026, 10, 11, 12, 0, 0)
             .unwrap(),
         channels: CHANNELS,

@@ -626,7 +626,7 @@ fn audit_publication_history(connection: &Connection) -> Result<PublicationHisto
         return Ok(PublicationHistoryAudit::default());
     }
 
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = jiff::Timestamp::now().to_string();
     let (
         streams,
         correlations,
@@ -782,7 +782,7 @@ fn audit_addon_lifecycle(connection: &Connection) -> Result<AddonLifecycleAudit>
         return Ok(AddonLifecycleAudit::default());
     }
 
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = jiff::Timestamp::now().to_string();
     connection
         .query_row(
             r#"SELECT

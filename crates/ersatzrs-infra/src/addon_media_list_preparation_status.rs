@@ -116,7 +116,7 @@ pub(crate) async fn preparation_summary(
     list_id: i64,
     revision: i32,
     tasks: &BTreeMap<(i64, i32), bool>,
-    now: chrono::DateTime<chrono::Utc>,
+    now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> Result<ersatzrs_domain::AddonMediaListPreparationSummary> {
     use crate::repositories::common::decode_datetime;
     let mut summary = ersatzrs_domain::AddonMediaListPreparationSummary::default();
@@ -166,33 +166,29 @@ pub(crate) async fn preparation_summary(
             "preparation activity",
             &row.try_get::<String, _>("UpdatedAt").repository()?,
         )?;
-        started = Some(
-            started.map_or(created, |value: chrono::DateTime<chrono::Utc>| {
-                value.min(created)
-            }),
-        );
-        activity = Some(
-            activity.map_or(updated, |value: chrono::DateTime<chrono::Utc>| {
-                value.max(updated)
-            }),
-        );
+        started = Some(started.map_or(
+            created,
+            |value: ersatzrs_time::DateTime<ersatzrs_time::Utc>| value.min(created),
+        ));
+        activity = Some(activity.map_or(
+            updated,
+            |value: ersatzrs_time::DateTime<ersatzrs_time::Utc>| value.max(updated),
+        ));
         if let Some(value) = row
             .try_get::<Option<String>, _>("CompletedAt")
             .repository()?
         {
             let value = decode_datetime("preparation completion", &value)?;
             if *complete && row.try_get::<i32, _>("State").repository()? == 2 {
-                progress = Some(
-                    progress.map_or(value, |previous: chrono::DateTime<chrono::Utc>| {
-                        previous.max(value)
-                    }),
-                );
+                progress = Some(progress.map_or(
+                    value,
+                    |previous: ersatzrs_time::DateTime<ersatzrs_time::Utc>| previous.max(value),
+                ));
             }
-            completed = Some(
-                completed.map_or(value, |previous: chrono::DateTime<chrono::Utc>| {
-                    previous.max(value)
-                }),
-            );
+            completed = Some(completed.map_or(
+                value,
+                |previous: ersatzrs_time::DateTime<ersatzrs_time::Utc>| previous.max(value),
+            ));
         }
         if *complete {
             continue;
@@ -218,9 +214,9 @@ pub(crate) async fn preparation_summary(
 
 fn count_pending_job(
     row: &sqlx::sqlite::SqliteRow,
-    now: chrono::DateTime<chrono::Utc>,
+    now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     summary: &mut ersatzrs_domain::AddonMediaListPreparationSummary,
-    retry: &mut Option<chrono::DateTime<chrono::Utc>>,
+    retry: &mut Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
 ) -> Result<bool> {
     use crate::repositories::common::decode_datetime;
     let eligible = row
@@ -276,9 +272,9 @@ mod summary_tests {
         tasks.insert((1, 2), false);
         tasks.insert((1, 3), false);
         tasks.insert((2, 1), false);
-        let now = chrono::DateTime::parse_from_rfc3339("2026-09-14T12:00:00Z")
+        let now = ersatzrs_time::DateTime::parse_from_rfc3339("2026-09-14T12:00:00Z")
             .unwrap()
-            .with_timezone(&chrono::Utc);
+            .with_timezone(&ersatzrs_time::Utc);
         for (item, kind, state, eligible, lease) in [
             (1, 2, 1, None, Some("2026-09-14 12:05:00")),
             (1, 3, 0, Some("2026-09-14 12:01:00"), None),

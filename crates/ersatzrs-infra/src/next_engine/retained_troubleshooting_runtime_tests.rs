@@ -125,14 +125,15 @@ async fn preview_selection(
         .execute(pool)
         .await
         .unwrap();
-    let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
+    let start =
+        ersatzrs_time::DateTime::from_timestamp(ersatzrs_time::Utc::now().timestamp(), 0).unwrap();
     let media = schedule::bind_media(
         pool,
         ersatzrs_domain::PlayoutItem {
             start,
-            finish: start + chrono::Duration::seconds(14),
-            in_point: chrono::Duration::seconds(10),
-            out_point: chrono::Duration::seconds(24),
+            finish: start + ersatzrs_time::Duration::seconds(14),
+            in_point: ersatzrs_time::Duration::seconds(10),
+            out_point: ersatzrs_time::Duration::seconds(24),
             ..selection::tests::item()
         },
     )

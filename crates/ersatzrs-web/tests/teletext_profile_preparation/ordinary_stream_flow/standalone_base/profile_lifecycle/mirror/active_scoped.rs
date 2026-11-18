@@ -134,14 +134,20 @@ async fn publish_lua(trial: &Trial) -> TeletextOverrideInterval {
     assert_eq!(result.teletext_intervals.len(), 1);
     let interval = result.teletext_intervals[0].clone();
     assert_eq!(interval.start, start);
-    assert_eq!(interval.finish - start, chrono::Duration::seconds(12));
+    assert_eq!(
+        interval.finish - start,
+        ersatzrs_time::Duration::seconds(12)
+    );
     assert!(
         matches!(&interval.state, TeletextOverrideState::Enabled(value)
         if value.channel_id == 3 && value.profile_id == trial.target.id && value.profile_revision == trial.target.revision)
     );
     scripted_controls::publish_result(fixture, &result).await;
     let repository = SqlitePlayoutRepository(fixture.state.pool.clone());
-    for when in [start, interval.finish - chrono::Duration::milliseconds(1)] {
+    for when in [
+        start,
+        interval.finish - ersatzrs_time::Duration::milliseconds(1),
+    ] {
         assert_eq!(
             repository
                 .published_teletext_intervals_at(3, when)
@@ -344,7 +350,7 @@ async fn transition(
         updates::write_stage(root, "admin-off-scoped-on", &retained);
     }
     let start = updates::positions(origin)[1];
-    let remaining = (interval.finish - chrono::Duration::milliseconds(700))
+    let remaining = (interval.finish - ersatzrs_time::Duration::milliseconds(700))
         .signed_duration_since(Utc::now())
         .to_std()
         .expect("preparation/publication must leave a real scoped display interval");

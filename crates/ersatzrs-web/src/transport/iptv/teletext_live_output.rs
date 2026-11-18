@@ -172,7 +172,7 @@ impl TeletextLiveOutputIntent {
             declined("confirm-after-prepare");
             return None;
         }
-        if !prepared.fields_current_at(chrono::Utc::now()) {
+        if !prepared.fields_current_at(ersatzrs_time::Utc::now()) {
             declined("fields-stale");
             return None;
         }

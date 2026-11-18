@@ -10,13 +10,13 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
 use ersatzrs_core::xmltv::{IconSizeHint, XmltvProgramme, XmltvTimeZone};
 use ersatzrs_domain::{Channel, CONFIG_KEY_XMLTV_DAYS_TO_BUILD, CONFIG_KEY_XMLTV_TIME_ZONE};
 use ersatzrs_infra::xmltv_templates::{
     self, ChannelGuideTemplates, RenderChannelInput, RenderProgrammeInput,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::writer::Writer;
 
@@ -354,7 +354,7 @@ fn format_xmltv_time(value: DateTime<Utc>, time_zone: XmltvTimeZone) -> String {
     match time_zone {
         XmltvTimeZone::Utc => value.format("%Y%m%d%H%M%S +0000").to_string(),
         XmltvTimeZone::Local => value
-            .with_timezone(&chrono::Local)
+            .with_timezone(&ersatzrs_time::Local)
             .format("%Y%m%d%H%M%S %z")
             .to_string(),
     }
@@ -363,9 +363,9 @@ fn format_xmltv_time(value: DateTime<Utc>, time_zone: XmltvTimeZone) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
     use ersatzrs_core::xmltv::{XmltvItemKind, XmltvProgrammeContent};
     use ersatzrs_domain::Channel;
+    use ersatzrs_time::TimeZone;
     use uuid::Uuid;
 
     #[test]

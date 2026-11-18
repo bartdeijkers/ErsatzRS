@@ -2,11 +2,11 @@ use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckError, HealthCheckResult,
     HealthCheckStatus, Pool, Result, Row,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract::{
     AddonManifest, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
     CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
 };
+use ersatzrs_time::{DateTime, Utc};
 use semver::Version;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};

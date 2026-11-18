@@ -1,12 +1,12 @@
 //! Opaque effective observations; no settings or producer authority leave the host.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::TeletextProfileMutation;
 use ersatzrs_domain::{
     TeletextEffectiveBindingSnapshot as Binding,
     TeletextEffectiveChannelSelectionSnapshot as Selection, TeletextInstallationSnapshot,
     TeletextOverrideState, TeletextProfileSetting, MAX_TELETEXT_OVERRIDE_COMMANDS,
 };
+use ersatzrs_time::{DateTime, Utc};
 use std::fmt::Write as _;
 
 use super::{

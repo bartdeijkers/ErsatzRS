@@ -5,12 +5,12 @@ use super::super::{
 };
 use super::*;
 use crate::transport::iptv::teletext_binding::{TeletextOutputAdmission, TeletextOutputRole};
-use chrono::Timelike as _;
 use ersatzrs_core::repositories::ChannelRepository as _;
 use ersatzrs_core::repositories::FfmpegProfileRepository as _;
 use ersatzrs_domain::StreamingMode;
 use ersatzrs_ffmpeg::OutputFormat;
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_time::Timelike as _;
 use sqlx::Executor as _;
 
 #[path = "stream_external_http_tests.rs"]
@@ -170,7 +170,7 @@ async fn external_native_stream_plays_without_library_rows() {
     schedule(&state.pool, root.path(), now, serde_json::json!([{
         "title": "Fixture", "serverKey": "Fixture", "file": clip.to_str().unwrap(), "duration": 8000
     }])).await;
-    let position = now + chrono::Duration::seconds(1);
+    let position = now + ersatzrs_time::Duration::seconds(1);
     let active = load(
         &state,
         1,

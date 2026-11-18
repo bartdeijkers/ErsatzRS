@@ -119,7 +119,7 @@ async fn shared_manifest_gaps_reach_normal_and_preview_sessions_only_on_their_ch
             contexts.insert(
                 instance,
                 super::super::host::DynamicContext {
-                    started_at: chrono::Utc::now(),
+                    started_at: ersatzrs_time::Utc::now(),
                     request,
                     transfers: Arc::default(),
                     source_files: std::sync::Arc::default(),
@@ -202,7 +202,7 @@ pub(in crate::next_engine) async fn fixture(
     host.dynamic_contexts.lock().await.insert(
         instance,
         super::super::host::DynamicContext {
-            started_at: chrono::Utc::now(),
+            started_at: ersatzrs_time::Utc::now(),
             request: super::super::host::NextStart {
                 channel_id: 1,
                 preview: false,

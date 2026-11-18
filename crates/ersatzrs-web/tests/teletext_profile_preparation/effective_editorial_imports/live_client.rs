@@ -9,7 +9,6 @@ use super::super::{
     scripted_controls, Fixture, ADDON,
 };
 use super::{export, import, original, stable_state, v3_fixture};
-use chrono::{Timelike as _, Utc};
 use ersatzrs_app::teletext_design_documents::decode_teletext_effective_design_documents;
 use ersatzrs_core::repositories::ChannelRepository as _;
 use ersatzrs_core::scheduling::{
@@ -20,6 +19,7 @@ use ersatzrs_domain::{
     ChannelSubtitleMode, Playout, PlayoutScheduleKind, StreamingMode, TeletextDesignRevision,
     TeletextEffectiveBindingSnapshot, TeletextOverrideState,
 };
+use ersatzrs_time::{Timelike as _, Utc};
 use ersatzrs_web::host::{
     teletext_authoring::{
         observe_effective_teletext_authoring_selection, prepare_static_teletext_design,
@@ -114,7 +114,7 @@ async fn publish_lua_state(fixture: &AuthoringFixture, channel: i64, index: Opti
         |index| format!("assert(teletext_profile('{ADDON}',{}).ok)\nassert(teletext_enabled('{ADDON}',true).ok)",fixture.profiles[index].id),
     );
     std::fs::write(&file, format!("{controls}\nadd_count('clip',4)")).unwrap();
-    let start = (Utc::now() - chrono::Duration::seconds(1))
+    let start = (Utc::now() - ersatzrs_time::Duration::seconds(1))
         .with_nanosecond(0)
         .unwrap();
     let request = SchedulingRequest {
@@ -126,12 +126,15 @@ async fn publish_lua_state(fixture: &AuthoringFixture, channel: i64, index: Opti
             ..Default::default()
         },
         start,
-        finish: start + chrono::Duration::minutes(5),
+        finish: start + ersatzrs_time::Duration::minutes(5),
         mode: PlayoutBuildMode::Reset,
         reference_data: SchedulingReferenceData {
             media_by_key: BTreeMap::from([(
                 "clip".to_owned(),
-                vec![SchedulingMediaItem::new(71, chrono::Duration::seconds(60))],
+                vec![SchedulingMediaItem::new(
+                    71,
+                    ersatzrs_time::Duration::seconds(60),
+                )],
             )]),
             ..Default::default()
         },
@@ -151,14 +154,14 @@ async fn publish_lua_state(fixture: &AuthoringFixture, channel: i64, index: Opti
     assert_eq!(result.teletext_intervals.len(), 1);
     assert_eq!(
         result.teletext_intervals[0].finish - result.teletext_intervals[0].start,
-        chrono::Duration::minutes(4)
+        ersatzrs_time::Duration::minutes(4)
     );
     assert!(result
         .added_items
         .iter()
         .all(|item| item.playout_id == 92 + channel
             && item.media_item_id == 71
-            && item.finish - item.start == chrono::Duration::seconds(60)));
+            && item.finish - item.start == ersatzrs_time::Duration::seconds(60)));
     scripted_controls::publish_result(&fixture.fixture, &result).await;
 }
 
@@ -383,7 +386,7 @@ pub(super) fn channel_facts(flow: &Flow, index: usize) -> Value {
     assert_eq!(scope.selection(), accepted.selection());
     assert_eq!(published.playout_id, 93 + i64::try_from(index).unwrap());
     let original_valid_until = scope.selection().valid_until.unwrap();
-    assert!(original_valid_until > Utc::now() + chrono::Duration::seconds(180));
+    assert!(original_valid_until > Utc::now() + ersatzrs_time::Duration::seconds(180));
     let request = &accepted.generation().request;
     json!({"channel_id":request.channel_id,"theme":if index==0 {"day"} else {"night"},
       "addon_id":profile.addon_id,"profile_id":profile.profile_id,"profile_revision":profile.profile_revision,

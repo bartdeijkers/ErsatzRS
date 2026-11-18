@@ -6,7 +6,6 @@ use std::sync::{
 };
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     ChannelTeletextBindingSave, Result as RepositoryResult, TeletextProfileSave,
     TeletextProfileSaveResult,
@@ -16,6 +15,7 @@ use ersatzrs_domain::{
     TeletextOverrideInterval, TeletextOverrideState, TeletextProfileCandidateSnapshot,
     TeletextProfileRead, TeletextPublishedOverride,
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use super::*;
 use crate::teletext_channel_documents::tests as fixtures;
@@ -159,8 +159,8 @@ fn scripted(base: ersatzrs_domain::TeletextSelectionSnapshot) -> Binding {
     Binding::Scripted(TeletextPublishedOverride {
         playout_id: 93,
         interval: TeletextOverrideInterval {
-            start: Utc::now() - chrono::Duration::minutes(1),
-            finish: Utc::now() + chrono::Duration::minutes(10),
+            start: Utc::now() - ersatzrs_time::Duration::minutes(1),
+            finish: Utc::now() + ersatzrs_time::Duration::minutes(10),
             state: TeletextOverrideState::Enabled(candidate),
         },
     })
@@ -170,8 +170,8 @@ fn off() -> Binding {
     Binding::Scripted(TeletextPublishedOverride {
         playout_id: 93,
         interval: TeletextOverrideInterval {
-            start: Utc::now() - chrono::Duration::minutes(1),
-            finish: Utc::now() + chrono::Duration::minutes(10),
+            start: Utc::now() - ersatzrs_time::Duration::minutes(1),
+            finish: Utc::now() + ersatzrs_time::Duration::minutes(10),
             state: TeletextOverrideState::Off {
                 channel_id: 9,
                 addon_id: OFF.to_owned(),
@@ -279,9 +279,9 @@ async fn effective_rendered_scope_is_checked_before_preflight_and_first_producer
                 let Binding::Scripted(published) = &mut expected.bindings[1] else {
                     unreachable!()
                 };
-                published.interval.start += chrono::Duration::seconds(1);
+                published.interval.start += ersatzrs_time::Duration::seconds(1);
             }
-            5 => expected.valid_until = Some(Utc::now() + chrono::Duration::minutes(1)),
+            5 => expected.valid_until = Some(Utc::now() + ersatzrs_time::Duration::minutes(1)),
             _ => expected.channel_id += 1,
         }
         let result = prepare_with_ports_expected(
@@ -669,7 +669,7 @@ async fn effective_expiry_and_original_deadline_are_not_renewed() {
     assert!(matches!(error, Error::TimedOut));
     assert_eq!(repo.reads.load(Ordering::SeqCst), 0);
     let mut repo = Repository::new(vec![Binding::Base(fixtures::binding(A, 1))]);
-    repo.selection.valid_until = Some(Utc::now() - chrono::Duration::seconds(1));
+    repo.selection.valid_until = Some(Utc::now() - ersatzrs_time::Duration::seconds(1));
     let error = prepare_with_ports(
         &repo,
         9,
@@ -684,7 +684,7 @@ async fn effective_expiry_and_original_deadline_are_not_renewed() {
     assert!(matches!(error, Error::TimedOut));
     assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
     let mut repo = Repository::new(vec![Binding::Base(fixtures::binding(A, 1))]);
-    repo.selection.valid_until = Some(Utc::now() + chrono::Duration::seconds(2));
+    repo.selection.valid_until = Some(Utc::now() + ersatzrs_time::Duration::seconds(2));
     let original = Instant::now() + std::time::Duration::from_secs(1);
     let input = prepare_with_ports(
         &repo,
@@ -846,7 +846,7 @@ async fn published_effective_recheck_retains_host_membership_without_renewing_sc
     for published_host in [false, true] {
         for current_host in [false, true] {
             let mut original = Repository::new(vec![off()]).selection;
-            original.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+            original.valid_until = Some(Utc::now() + ersatzrs_time::Duration::minutes(5));
             if published_host {
                 original.bindings.insert(
                     0,
@@ -875,7 +875,7 @@ async fn published_effective_recheck_retains_host_membership_without_renewing_sc
             ));
             assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
             let mut expired = original.clone();
-            expired.valid_until = Some(Utc::now() - chrono::Duration::seconds(1));
+            expired.valid_until = Some(Utc::now() - ersatzrs_time::Duration::seconds(1));
             assert!(matches!(
                 recheck_published(&repo, &expired, deadline()).await,
                 Err(Error::SelectionChanged)
@@ -921,7 +921,7 @@ async fn effective_guide_preparation_keeps_published_host_presence_and_absence()
         let host = Binding::Base(ersatzrs_domain::teletext_custom_pages_selection(9));
         let mut original =
             Repository::new(vec![scripted(fixtures::binding(A, 1)), off()]).selection;
-        original.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+        original.valid_until = Some(Utc::now() + ersatzrs_time::Duration::minutes(5));
         let mut current = original.clone();
         if published_host {
             original.bindings.insert(0, host.clone());
@@ -981,7 +981,7 @@ async fn effective_guide_preparation_keeps_published_host_presence_and_absence()
 #[test]
 fn effective_guide_source_association_and_real_scope_changes_stay_strict() {
     let mut original = Repository::new(vec![scripted(fixtures::binding(A, 1)), off()]).selection;
-    original.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+    original.valid_until = Some(Utc::now() + ersatzrs_time::Duration::minutes(5));
     let wire = published_custom_wire();
     assert!(matches!(
         preparation_selection(
@@ -1051,7 +1051,7 @@ fn effective_guide_source_association_and_real_scope_changes_stay_strict() {
 async fn effective_guide_rechecks_real_scope_after_invocation_without_adopting_new_host() {
     for change in ["host", "owner", "profile", "expiry"] {
         let mut repo = Repository::new(vec![scripted(fixtures::binding(A, 1)), off()]);
-        repo.selection.valid_until = Some(Utc::now() + chrono::Duration::minutes(5));
+        repo.selection.valid_until = Some(Utc::now() + ersatzrs_time::Duration::minutes(5));
         let mut changed = repo.selection.clone();
         match change {
             "host" => changed.bindings.insert(

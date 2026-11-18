@@ -2,8 +2,8 @@
 
 use std::{io, io::Write as _, path::Path, sync::Arc};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_ffmpeg::{HlsMpegTsSegments, OutputFormat};
+use ersatzrs_time::{DateTime, Utc};
 use tempfile::TempDir;
 use tokio::{io::AsyncReadExt as _, sync::Mutex};
 
@@ -147,7 +147,7 @@ impl MpegTsProducerPlaylist {
         let merged = merge(&self.prefix, producer);
         let retained = select_retained_segments(
             &segments(&merged),
-            now - chrono::Duration::seconds(PLAYLIST_FILTER_BEFORE_SECONDS),
+            now - ersatzrs_time::Duration::seconds(PLAYLIST_FILTER_BEFORE_SECONDS),
             None,
         );
         validate_retained_files(&worker.working_dir, &retained).await?;
@@ -202,7 +202,7 @@ fn checked_playlist(body: &str, start: DateTime<Utc>) -> io::Result<Option<Parse
             .ok_or_else(invalid_list)?;
         let duration =
             std::time::Duration::try_from_secs_f64(seconds).map_err(|_| invalid_list())?;
-        let duration = chrono::Duration::from_std(duration).map_err(|_| invalid_list())?;
+        let duration = ersatzrs_time::Duration::from_std(duration).map_err(|_| invalid_list())?;
         end = end.checked_add_signed(duration).ok_or_else(invalid_list)?;
         count += 1;
     }

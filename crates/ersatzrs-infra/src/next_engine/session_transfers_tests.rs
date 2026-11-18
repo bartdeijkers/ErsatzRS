@@ -13,7 +13,7 @@ fn binding() -> TransferBinding {
         media_file_id: 4,
         publication: "synthetic-publication".into(),
         start: Utc::now(),
-        finish: Utc::now() + chrono::Duration::seconds(30),
+        finish: Utc::now() + ersatzrs_time::Duration::seconds(30),
     }
 }
 

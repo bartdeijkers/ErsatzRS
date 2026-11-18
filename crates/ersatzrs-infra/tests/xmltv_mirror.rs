@@ -1,8 +1,8 @@
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository, PlayoutRepository};
 use ersatzrs_infra::{repositories::make_repositories, xmltv::load_xmltv_programmes};
+use ersatzrs_time::Duration;
 use sqlx::Executor;
 
 async fn fixture() -> ersatzrs_infra::db::DbPool {

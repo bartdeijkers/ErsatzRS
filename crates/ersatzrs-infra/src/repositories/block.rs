@@ -1069,7 +1069,7 @@ fn map_block(row: &DbRow) -> Result<Block> {
         block_group_id: row.try_get("BlockGroupId").repository()?,
         name: row.try_get("Name").repository()?,
         updated_ticks,
-        duration: chrono::Duration::minutes(minutes),
+        duration: ersatzrs_time::Duration::minutes(minutes),
         stop_scheduling: decode_enum_column("block stop_scheduling", row, "StopScheduling")?,
         item_ids: Vec::new(),
     })

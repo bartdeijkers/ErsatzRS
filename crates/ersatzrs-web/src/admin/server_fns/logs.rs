@@ -48,7 +48,7 @@ pub async fn load_recent_log_entries(
     sort_descending: Option<bool>,
 ) -> Result<AdminLogSnapshot, ServerFnError> {
     use crate::host::state::AppState;
-    use chrono::Local;
+    use ersatzrs_time::Local;
     use std::path::PathBuf;
 
     fn newest_log_file() -> Option<PathBuf> {
@@ -67,8 +67,8 @@ pub async fn load_recent_log_entries(
         let open = line.find('[')?;
         let close = line[open..].find(']')? + open;
         let timestamp =
-            chrono::DateTime::parse_from_str(line[..open].trim(), "%Y-%m-%d %H:%M:%S%.f %z")
-                .or_else(|_| chrono::DateTime::parse_from_rfc3339(line[..open].trim()))
+            ersatzrs_time::DateTime::parse_from_str(line[..open].trim(), "%Y-%m-%d %H:%M:%S%.f %z")
+                .or_else(|_| ersatzrs_time::DateTime::parse_from_rfc3339(line[..open].trim()))
                 .ok()?
                 .with_timezone(&Local);
         let level = match &line[open + 1..close] {
@@ -99,7 +99,7 @@ pub async fn load_recent_log_entries(
             "ERROR" => "Error",
             _ => return None,
         };
-        let timestamp = chrono::DateTime::parse_from_rfc3339(timestamp)
+        let timestamp = ersatzrs_time::DateTime::parse_from_rfc3339(timestamp)
             .ok()?
             .with_timezone(&Local);
 
@@ -166,7 +166,7 @@ pub async fn load_recent_log_entries(
 
 #[derive(Debug, Clone)]
 struct ParsedEntry {
-    timestamp: chrono::DateTime<chrono::Local>,
+    timestamp: ersatzrs_time::DateTime<ersatzrs_time::Local>,
     level: &'static str,
     message: String,
 }
@@ -242,7 +242,7 @@ fn level_rank(level: &str) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Local, TimeZone};
+    use ersatzrs_time::{Local, TimeZone};
 
     fn entry(second: u32, level: &'static str, message: &str) -> ParsedEntry {
         ParsedEntry {

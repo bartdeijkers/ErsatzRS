@@ -87,7 +87,10 @@ async fn database(url: &str, order: PlaybackOrder, fill: FillWithGroupMode) -> S
     pool
 }
 
-async fn reference(pool: &SqlitePool, start: chrono::DateTime<Utc>) -> SchedulingReferenceData {
+async fn reference(
+    pool: &SqlitePool,
+    start: ersatzrs_time::DateTime<Utc>,
+) -> SchedulingReferenceData {
     make_repositories(pool.clone())
         .scheduling
         .classic_reference_data(901, start, Duration::zero())
@@ -97,8 +100,8 @@ async fn reference(pool: &SqlitePool, start: chrono::DateTime<Utc>) -> Schedulin
 
 async fn build(
     pool: &SqlitePool,
-    start: chrono::DateTime<Utc>,
-    finish: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
+    finish: ersatzrs_time::DateTime<Utc>,
     mode: PlayoutBuildMode,
 ) -> (Playout, SchedulingResult) {
     let repos = make_repositories(pool.clone());

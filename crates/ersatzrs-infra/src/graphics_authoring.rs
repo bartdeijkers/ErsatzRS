@@ -5,7 +5,6 @@ use crate::{
     graphics_template::{graphics_template_variables, GraphicsMedia, GraphicsTemplateContext},
     playback::{self, PlaybackGraphicsRenderContext, ResolvedPlaybackGraphicsElement},
 };
-use chrono::Timelike as _;
 use ersatzrs_core::repositories::{
     validate_authored_graphics, GraphicsRenderPreview, GraphicsRenderPreviewRequest,
     GraphicsTextPreviewRequest, RepositoryError, Result,
@@ -15,6 +14,7 @@ use ersatzrs_ffmpeg::{
     build_canvas_preview_command, ffmpeg_path, CanvasRenderRequest, FrameSize, GraphicsFrameRate,
     WatermarkOpacityClock,
 };
+use ersatzrs_time::Timelike as _;
 use std::{process::Stdio, time::Duration};
 use tokio::{io::AsyncReadExt as _, process::Command};
 
@@ -32,7 +32,7 @@ async fn context(
     if !request.seek_seconds.is_finite() || !(0.0..=86400.0).contains(&request.seek_seconds) {
         return Err(invalid("graphics-authoring-invalid"));
     }
-    let offset = chrono::Duration::from_std(Duration::from_secs_f64(request.seek_seconds))
+    let offset = ersatzrs_time::Duration::from_std(Duration::from_secs_f64(request.seek_seconds))
         .map_err(|_| invalid("graphics-authoring-invalid"))?;
     if !(16..=8192).contains(&request.width) || !(16..=8192).contains(&request.height) {
         return Err(invalid("graphics-authoring-invalid"));
@@ -72,7 +72,7 @@ async fn context(
         media_path: String::new(),
         channel_start_time: request.render_time,
         content_start_time: request.render_time,
-        content_finish_time: Some(request.render_time + chrono::Duration::days(1)),
+        content_finish_time: Some(request.render_time + ersatzrs_time::Duration::days(1)),
         stream_seek_seconds: request.seek_seconds,
         duration_seconds: 86400.0,
         frame_width: request.width,

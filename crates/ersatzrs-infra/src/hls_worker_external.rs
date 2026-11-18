@@ -131,7 +131,7 @@ pub(super) async fn load(
             let expires = resolved
                 .occurrence
                 .finish
-                .checked_add_signed(chrono::Duration::hours(2))
+                .checked_add_signed(ersatzrs_time::Duration::hours(2))
                 .ok_or_else(|| failure("external media lifetime overflow"))?;
             worker
                 .media_relay
@@ -244,7 +244,7 @@ mod tests {
     async fn external_hls_admission_needs_no_provider_or_media_tables() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("schedule.json");
-        let now = chrono::Utc::now();
+        let now = ersatzrs_time::Utc::now();
         std::fs::write(
             &path,
             serde_json::to_vec(&serde_json::json!({
@@ -279,7 +279,7 @@ mod tests {
         // must only classify the timeline, even when no slot is available.
         assert_eq!(retained(&pool, 1, &[], now).await.unwrap(), Some(false));
         assert_eq!(
-            retained(&pool, 1, &[], now + chrono::Duration::seconds(61))
+            retained(&pool, 1, &[], now + ersatzrs_time::Duration::seconds(61))
                 .await
                 .unwrap(),
             None

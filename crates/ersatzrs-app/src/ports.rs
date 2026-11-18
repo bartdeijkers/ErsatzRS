@@ -755,8 +755,8 @@ pub struct AddonItemAccessRead {
     pub job_id: i64,
     pub state: AddonItemAccessState,
     pub outcome: Option<ersatzrs_addon_contract::MediaListAccessCheckOutcome>,
-    pub next_eligible_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub next_eligible_at: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
+    pub expires_at: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
 }
 
 /// Failure from the native add-on lifecycle adapter.

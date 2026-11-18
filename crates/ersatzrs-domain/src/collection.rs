@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{EntityId, PlaybackOrder};

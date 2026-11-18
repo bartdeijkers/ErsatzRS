@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     EntityId, Playout, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use super::Result;
 use crate::scheduling::SchedulingResult;
@@ -226,7 +226,7 @@ pub trait PlayoutRepository: Send + Sync {
         &self,
         result: &SchedulingResult,
         playout: &Playout,
-        max_playout_offset: chrono::Duration,
+        max_playout_offset: ersatzrs_time::Duration,
     ) -> Result<()>;
     async fn upsert_item(&self, item: &PlayoutItem) -> Result<()>;
     async fn delete_items_before(&self, playout_id: EntityId, cutoff: DateTime<Utc>) -> Result<()>;

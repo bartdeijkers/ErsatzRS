@@ -3,7 +3,7 @@ use std::{
     time::{Duration as WallDuration, SystemTime},
 };
 
-use chrono::Duration;
+use ersatzrs_time::Duration;
 
 use super::*;
 use crate::next_engine::protocol::{PlayoutItem, Source, Track, Tracks, PLAYOUT_VERSION};

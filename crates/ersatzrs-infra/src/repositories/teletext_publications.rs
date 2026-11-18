@@ -329,7 +329,7 @@ pub(super) async fn check_current_source_at(
     tx: &mut Transaction<'_, Db>,
     fence: &TeletextGuideSourceFence,
     check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
-    now: chrono::DateTime<chrono::Utc>,
+    now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> std::result::Result<
     ersatzrs_core::repositories::TeletextGuideGenerationQualification,
     ersatzrs_core::repositories::TeletextGenerationRejection,
@@ -341,7 +341,7 @@ async fn check_current_source_clock(
     tx: &mut Transaction<'_, Db>,
     fence: &TeletextGuideSourceFence,
     check: &ersatzrs_core::repositories::TeletextGuideGenerationCheck,
-    now: Option<chrono::DateTime<chrono::Utc>>,
+    now: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
 ) -> std::result::Result<
     ersatzrs_core::repositories::TeletextGuideGenerationQualification,
     ersatzrs_core::repositories::TeletextGenerationRejection,
@@ -365,7 +365,7 @@ async fn check_current_source_clock(
         .ok_or(G::GuideFreshnessRequired)?
         .map_err(|_| G::GuideFreshnessRequired)?;
     qualification
-        .validate_current(now.unwrap_or_else(chrono::Utc::now))
+        .validate_current(now.unwrap_or_else(ersatzrs_time::Utc::now))
         .map_err(|_| G::GuideFreshnessRequired)?;
     Ok(qualification)
 }
@@ -384,7 +384,7 @@ async fn check_source_inner(
     tx: &mut Transaction<'_, Db>,
     check: SourceCheck<'_>,
     current_role: bool,
-    now: Option<chrono::DateTime<chrono::Utc>>,
+    now: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>,
 ) -> std::result::Result<SourceProof, R> {
     if Instant::now() >= check.deadline {
         return Err(R::GuideTimedOut);
@@ -454,7 +454,7 @@ async fn check_source_inner(
                     .channels()
                     .iter()
                     .flat_map(crate::xmltv::CapturedGuideChannel::occurrences),
-                now.unwrap_or_else(chrono::Utc::now),
+                now.unwrap_or_else(ersatzrs_time::Utc::now),
             )
         });
         if Instant::now() >= deadline {

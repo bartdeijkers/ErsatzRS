@@ -4,9 +4,9 @@ use super::{
     failure, limit, TeletextDesignDocumentBudget, TeletextDesignDocumentError,
     TeletextDesignDocumentFailure,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract::TeletextPagesRequest;
 use ersatzrs_core::repositories::{TeletextGuideSourceFence, MAX_TELETEXT_GUIDE_SOURCE_CHANNELS};
+use ersatzrs_time::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::io;
 
@@ -83,7 +83,7 @@ pub(super) fn associate(
     Ok(())
 }
 
-// Serialize the exact chrono scalar into a counting sink, not a temporary JSON
+// Serialize the exact UTC scalar into a counting sink, not a temporary JSON
 // buffer. RFC 3339 consists of unescaped ASCII; remove only its two JSON quotes.
 fn date_bytes(date: &DateTime<Utc>) -> Result<usize, TeletextDesignDocumentError> {
     let mut counter = Counter(0);

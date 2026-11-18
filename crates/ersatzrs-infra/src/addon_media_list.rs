@@ -1168,7 +1168,7 @@ printf '%s\n' '{"outcome":"unchanged","validator":"next-opaque-etag","source_upd
             "settings": [],
             "panels": []
         });
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = ersatzrs_time::Utc::now().to_rfc3339();
         let content_sha256 = crate::addons::calculate_addon_content_sha256(root)
             .await
             .expect("hash fixture package");

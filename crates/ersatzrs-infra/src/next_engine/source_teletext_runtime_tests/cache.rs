@@ -18,7 +18,7 @@ struct Fixture {
     locker: EntityLocker,
     relay: MediaRelay,
     cache: BurnCache,
-    start: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ffmpeg: PathBuf,
     ffprobe: PathBuf,
     clip: PathBuf,
@@ -156,10 +156,10 @@ impl Fixture {
         let mut item = selection::tests::item();
         item.id = 1;
         item.playout_id = 1;
-        item.start = chrono::Utc::now();
-        item.finish = item.start + chrono::Duration::seconds(20);
-        item.in_point = chrono::Duration::zero();
-        item.out_point = chrono::Duration::seconds(20);
+        item.start = ersatzrs_time::Utc::now();
+        item.finish = item.start + ersatzrs_time::Duration::seconds(20);
+        item.in_point = ersatzrs_time::Duration::zero();
+        item.out_point = ersatzrs_time::Duration::seconds(20);
         crate::repositories::make_repositories(pool.clone())
             .playout
             .upsert_item(&item)
@@ -185,7 +185,7 @@ impl Fixture {
             1,
             1,
             self.start,
-            self.start + chrono::Duration::seconds(20),
+            self.start + ersatzrs_time::Duration::seconds(20),
             &[],
             Some(3),
         )

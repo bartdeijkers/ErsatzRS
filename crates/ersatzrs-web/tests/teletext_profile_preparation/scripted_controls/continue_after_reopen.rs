@@ -4,7 +4,6 @@ use super::{
     assert_no_publication_or_invocation, bindings, build, configuration, publish_result,
     seed_publication_inputs, Fixture, ADDON,
 };
-use chrono::Utc;
 use ersatzrs_core::repositories::PlayoutRepository as _;
 use ersatzrs_core::scheduling::{
     PlayoutBuildMode, SchedulingMediaItem, SchedulingReferenceData, SchedulingRequest,
@@ -14,6 +13,7 @@ use ersatzrs_domain::{
     TeletextInstallationRead, TeletextOverrideState, TeletextProfileRead, TeletextProfileValue,
 };
 use ersatzrs_infra::repositories::{SqlitePlayoutRepository, SqliteSchedulingContentRepository};
+use ersatzrs_time::Utc;
 use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Debug, PartialEq)]
@@ -59,7 +59,7 @@ fn assert_candidate(result: &SchedulingResult, channel: i64, profile: i64, theme
 
 async fn continue_from_storage(
     fixture: &Fixture,
-    start: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
 ) -> SchedulingResult {
     let playout = SqlitePlayoutRepository(fixture.state.pool.clone())
         .get_with_anchor(93)
@@ -76,12 +76,15 @@ async fn continue_from_storage(
     assert!(!reference_data.existing_history.is_empty());
     reference_data.media_by_key.insert(
         "clip".to_owned(),
-        vec![SchedulingMediaItem::new(71, chrono::Duration::minutes(1))],
+        vec![SchedulingMediaItem::new(
+            71,
+            ersatzrs_time::Duration::minutes(1),
+        )],
     );
     let request = SchedulingRequest {
         playout,
         start,
-        finish: boundary + chrono::Duration::minutes(1),
+        finish: boundary + ersatzrs_time::Duration::minutes(1),
         mode: PlayoutBuildMode::Continue,
         reference_data,
     };

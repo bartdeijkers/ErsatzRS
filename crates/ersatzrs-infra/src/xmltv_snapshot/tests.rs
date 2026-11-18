@@ -4,9 +4,9 @@ use crate::{
     repositories::make_repositories,
     xmltv_read::{GuideExpansionLimits, GuideReadLimits},
 };
-use chrono::TimeZone;
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository, PlayoutRepository};
 use ersatzrs_domain::{Channel, FFmpegProfile, FillerKind, PlayoutItem};
+use ersatzrs_time::TimeZone;
 use sha2::Digest as _;
 use sqlx::Executor;
 

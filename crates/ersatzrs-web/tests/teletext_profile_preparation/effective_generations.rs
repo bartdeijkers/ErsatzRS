@@ -315,7 +315,7 @@ async fn actual_lua_off_accepts_absence_and_preserves_separate_existing_base_his
 async fn scoped_original_expiry_cannot_be_revived_by_acceptance_or_recovery() {
     let (mut fixture, _, day, _) = originals::installed(true).await;
     let start = ersatzrs_core::scheduling::truncate_to_persisted_precision(
-        Utc::now() - chrono::Duration::seconds(55),
+        Utc::now() - ersatzrs_time::Duration::seconds(55),
     );
     let result=scripted_controls::build_at(&fixture,&format!("assert(teletext_profile('{ADDON}', {}).ok)\nassert(teletext_enabled('{ADDON}',true).ok)\nadd_count('clip',1)",day.id),1,true,start).await.unwrap();
     let finish = result.teletext_intervals[0].finish;

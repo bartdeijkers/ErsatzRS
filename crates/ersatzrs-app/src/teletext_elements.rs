@@ -13,13 +13,13 @@ pub mod level1;
 pub mod model;
 pub mod refresh;
 
-use chrono::{DateTime, Local, Utc};
 use ersatzrs_core::repositories::{RepositoryError, TeletextElementRepository};
 use ersatzrs_domain::{
     validate_teletext_element_bindings, ChannelTeletextElement, EntityId, TeletextElement,
     TeletextElementBinding, TeletextElementSummary, TeletextElementUsage,
     MAX_TELETEXT_ELEMENT_NAME_BYTES, TELETEXT_ELEMENT_CYCLE_SECONDS,
 };
+use ersatzrs_time::{DateTime, Local, Utc};
 
 use crate::ApplicationServices;
 use fields::{
@@ -445,8 +445,8 @@ impl ApplicationServices {
             .get_watch_state(
                 channel_id,
                 now,
-                now - chrono::Duration::hours(6),
-                now + chrono::Duration::hours(24),
+                now - ersatzrs_time::Duration::hours(6),
+                now + ersatzrs_time::Duration::hours(24),
             )
             .await
             .map_err(storage)?;

@@ -288,7 +288,7 @@ mod tests {
                 1,
                 1,
                 1,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &[],
                 &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
             )
@@ -337,7 +337,7 @@ mod tests {
             }
             super::super::make_repositories(pool.clone())
                 .addon_media_lists
-                .retain_published_revision(1, 2, 2, chrono::Utc::now(), &[], &artifacts)
+                .retain_published_revision(1, 2, 2, ersatzrs_time::Utc::now(), &[], &artifacts)
                 .await
                 .unwrap();
             for (add, mutation, expected) in [
@@ -590,7 +590,7 @@ mod tests {
                 1,
                 2,
                 2,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &[],
                 &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
             )
@@ -642,7 +642,7 @@ mod tests {
                 1,
                 2,
                 2,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &[],
                 &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
             )

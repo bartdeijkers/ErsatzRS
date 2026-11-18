@@ -1,8 +1,8 @@
 //! ErsatzTV-compatible generated and mirror-channel playout resolution.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{Channel, ChannelPlayoutSource, EntityId};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Row;
 
 use crate::{
@@ -125,7 +125,7 @@ pub async fn load_channel_playout_context(
 #[cfg(test)]
 mod tests {
     use super::ChannelPlayoutContext;
-    use chrono::{Duration, TimeZone, Utc};
+    use ersatzrs_time::{Duration, TimeZone, Utc};
 
     #[test]
     fn delayed_mirror_queries_source_in_the_past_and_projects_back() {

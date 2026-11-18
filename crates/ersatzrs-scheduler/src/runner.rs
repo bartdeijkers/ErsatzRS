@@ -184,7 +184,7 @@ async fn run_queued_build(
         pool,
         locker,
         request,
-        chrono::Utc::now(),
+        ersatzrs_time::Utc::now(),
         execution,
     )
     .await
@@ -222,9 +222,13 @@ async fn repair_classic_playouts_on_startup(
     locker: &EntityLocker,
     execution: PlayoutExecution<'_>,
 ) -> anyhow::Result<()> {
-    let repaired =
-        repair_invalid_classic_playouts_with_execution(pool, locker, chrono::Utc::now(), execution)
-            .await?;
+    let repaired = repair_invalid_classic_playouts_with_execution(
+        pool,
+        locker,
+        ersatzrs_time::Utc::now(),
+        execution,
+    )
+    .await?;
     if repaired > 0 {
         info!(
             repaired,

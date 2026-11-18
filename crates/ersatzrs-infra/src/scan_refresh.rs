@@ -1,8 +1,8 @@
 //! Restart-safe scan-to-playout refresh intent persistence.
 
-use chrono::Utc;
 use ersatzrs_core::scheduling::{PlayoutPublicationGuard, PlayoutSourceRevision};
 use ersatzrs_domain::{EntityId, ScanPlayoutRefreshReason};
+use ersatzrs_time::Utc;
 use sqlx::{Row, Transaction};
 
 use crate::db::{begin_write, Db, DbPool};
@@ -518,7 +518,7 @@ pub async fn defer_refresh(
     pool: &DbPool,
     playout_id: EntityId,
     generation: i64,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     defer_refresh_with_diagnostic(
         pool,
@@ -534,7 +534,7 @@ pub(crate) async fn defer_boundary_refresh(
     pool: &DbPool,
     playout_id: EntityId,
     generation: i64,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     defer_refresh_with_diagnostic(
         pool,
@@ -550,7 +550,7 @@ pub(crate) async fn defer_session_publication(
     pool: &DbPool,
     playout_id: EntityId,
     generation: i64,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     defer_refresh_with_diagnostic(
         pool,
@@ -566,7 +566,7 @@ async fn defer_refresh_with_diagnostic(
     pool: &DbPool,
     playout_id: EntityId,
     generation: i64,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
     diagnostic: &'static str,
 ) -> Result<(), sqlx::Error> {
     let mut tx = begin_write(pool).await?;
@@ -590,7 +590,7 @@ async fn defer_refresh_with_diagnostic(
         )
         .bind(INTENT_STATE_PENDING)
         .bind(crate::repositories::common::encode_datetime(
-            now + chrono::Duration::seconds(delay),
+            now + ersatzrs_time::Duration::seconds(delay),
         ))
         .bind(diagnostic)
         .bind(now.to_rfc3339())
@@ -641,7 +641,7 @@ mod tests {
         .await
         .unwrap();
         tx.commit().await.unwrap();
-        let now = chrono::DateTime::from_timestamp(Utc::now().timestamp(), 0).unwrap();
+        let now = ersatzrs_time::DateTime::from_timestamp(Utc::now().timestamp(), 0).unwrap();
         for delay in [30, 60, 120, 240, 300, 300] {
             let generation = mark_refresh_building(&pool, 1).await.unwrap().unwrap();
             defer_refresh(&pool, 1, generation, now).await.unwrap();
@@ -653,7 +653,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 crate::repositories::common::decode_datetime("retry", &next).unwrap(),
-                now + chrono::Duration::seconds(delay)
+                now + ersatzrs_time::Duration::seconds(delay)
             );
             assert!(pending_refreshes(&pool).await.unwrap().is_empty());
         }
@@ -667,7 +667,7 @@ mod tests {
         .await
         .unwrap();
         tx.commit().await.unwrap();
-        defer_refresh(&pool, 1, 1, now + chrono::Duration::hours(1))
+        defer_refresh(&pool, 1, 1, now + ersatzrs_time::Duration::hours(1))
             .await
             .unwrap();
         let after: (i64, String) = sqlx::query_as(r#"SELECT "Attempts", "NextAttempt" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = 1"#).fetch_one(&pool).await.unwrap();

@@ -75,7 +75,7 @@ pub(super) async fn build_at(
     script: &str,
     channel_id: i64,
     inject: bool,
-    start: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
 ) -> Result<SchedulingResult, ersatzrs_core::scheduling::SchedulingError> {
     let file = fixture
         .root
@@ -106,12 +106,15 @@ pub(super) async fn build_at(
             ..Playout::default()
         },
         start,
-        finish: start + chrono::Duration::minutes(3),
+        finish: start + ersatzrs_time::Duration::minutes(3),
         mode: PlayoutBuildMode::Reset,
         reference_data: SchedulingReferenceData {
             media_by_key: BTreeMap::from([(
                 "clip".to_owned(),
-                vec![SchedulingMediaItem::new(71, chrono::Duration::minutes(1))],
+                vec![SchedulingMediaItem::new(
+                    71,
+                    ersatzrs_time::Duration::minutes(1),
+                )],
             )]),
             ..SchedulingReferenceData::default()
         },
@@ -308,7 +311,7 @@ pub(super) async fn publish_result(fixture: &Fixture, result: &SchedulingResult)
         finish
     );
     let mut pending = repository
-        .prepare_build_result(result, &playout, chrono::Duration::zero())
+        .prepare_build_result(result, &playout, ersatzrs_time::Duration::zero())
         .await
         .unwrap();
     let prepared = pending.items_in_range(start, finish).await.unwrap();

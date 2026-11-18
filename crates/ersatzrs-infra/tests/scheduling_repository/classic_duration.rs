@@ -62,8 +62,8 @@ async fn database(url: &str, attempts: i32) -> SqlitePool {
 
 async fn build(
     pool: &SqlitePool,
-    start: chrono::DateTime<Utc>,
-    finish: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
+    finish: ersatzrs_time::DateTime<Utc>,
     mode: PlayoutBuildMode,
 ) -> (Playout, SchedulingResult) {
     let repos = make_repositories(pool.clone());

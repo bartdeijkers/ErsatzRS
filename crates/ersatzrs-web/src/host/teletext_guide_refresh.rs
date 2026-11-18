@@ -14,7 +14,6 @@ use super::{
     },
     teletext_work,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_app::ApplicationServices;
 use ersatzrs_core::{
     locking::TeletextWorkGuard,
@@ -28,6 +27,7 @@ use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextEffectiveBindingSnapshot,
 };
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_time::{DateTime, Utc};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -832,7 +832,7 @@ async fn same_settings(application: &ApplicationServices, runtime: &str, authori
 }
 fn wall_deadline(now: DateTime<Utc>, deadline: Instant) -> Option<DateTime<Utc>> {
     now.checked_add_signed(
-        chrono::Duration::from_std(deadline.checked_duration_since(Instant::now())?).ok()?,
+        ersatzrs_time::Duration::from_std(deadline.checked_duration_since(Instant::now())?).ok()?,
     )
 }
 async fn record_failure(
@@ -842,7 +842,7 @@ async fn record_failure(
     deadline: Instant,
 ) {
     let now = Utc::now();
-    let Some(next) = now.checked_add_signed(chrono::Duration::seconds(60)) else {
+    let Some(next) = now.checked_add_signed(ersatzrs_time::Duration::seconds(60)) else {
         return;
     };
     // This terminal-only budget does not renew the lease. The same-owner CAS

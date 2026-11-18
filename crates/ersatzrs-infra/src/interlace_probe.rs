@@ -627,10 +627,10 @@ mod tests {
             INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","Seed") VALUES (1,1,0,1);
             INSERT INTO "ConfigElement" ("Key","Value") VALUES ('ffmpeg.probe_for_interlaced_frames','True');
         "#).execute(pool).await.unwrap();
-        let now = chrono::Utc::now();
+        let now = ersatzrs_time::Utc::now();
         sqlx::query(r#"INSERT INTO "PlayoutItem" ("DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint","MediaItemId","OutPoint","PlayoutId","Start") VALUES (1,0,?,0,'00:00:00',1,'01:00:00',1,?)"#)
-            .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::hours(1)))
-            .bind(crate::repositories::common::encode_datetime(now - chrono::Duration::seconds(1)))
+            .bind(crate::repositories::common::encode_datetime(now + ersatzrs_time::Duration::hours(1)))
+            .bind(crate::repositories::common::encode_datetime(now - ersatzrs_time::Duration::seconds(1)))
             .execute(pool).await.unwrap();
     }
 

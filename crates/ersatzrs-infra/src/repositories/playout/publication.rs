@@ -94,7 +94,7 @@ impl SqlitePlayoutRepository {
         &self,
         result: &SchedulingResult,
         playout: &Playout,
-        max_playout_offset: chrono::Duration,
+        max_playout_offset: ersatzrs_time::Duration,
     ) -> Result<PendingPlayoutBuild> {
         validate_deadline(result.publication_deadline)?;
         let source_fence = if playout.schedule_kind
@@ -145,7 +145,7 @@ impl SqlitePlayoutRepository {
         if result.clear_items {
             if let Some(seam) = result.retain_through {
                 let cutoff = result.remove_before.unwrap_or(seam)
-                    - max_playout_offset.max(chrono::Duration::zero());
+                    - max_playout_offset.max(ersatzrs_time::Duration::zero());
                 sqlx::query(
                     r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?
                        AND ("Finish" > ? OR "Finish" < ?)"#,
@@ -172,7 +172,7 @@ impl SqlitePlayoutRepository {
                     .repository()?;
             }
             if let Some(cutoff) = result.remove_before {
-                let cutoff = cutoff - max_playout_offset.max(chrono::Duration::zero());
+                let cutoff = cutoff - max_playout_offset.max(ersatzrs_time::Duration::zero());
                 sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
                     .bind(playout.id)
                     .bind(encode_datetime(cutoff))
@@ -251,7 +251,7 @@ impl SqlitePlayoutRepository {
         if result.clear_items {
             if let Some(seam) = result.retain_through {
                 let cutoff = result.remove_before.unwrap_or(seam)
-                    - max_playout_offset.max(chrono::Duration::zero());
+                    - max_playout_offset.max(ersatzrs_time::Duration::zero());
                 sqlx::query(
                     r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?
                        AND ("When" >= ? OR "Finish" > ? OR "Finish" < ?)"#,

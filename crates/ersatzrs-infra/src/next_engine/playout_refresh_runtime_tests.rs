@@ -88,9 +88,9 @@ async fn run(root: &Path, indexed: bool) -> Result<(), String> {
     initial.id = 1;
     initial.playout_id = 1;
     initial.media_item_id = 11;
-    initial.in_point = chrono::Duration::zero();
-    initial.finish = initial.start + chrono::Duration::seconds(INITIAL_SECONDS);
-    initial.out_point = chrono::Duration::seconds(INITIAL_SECONDS);
+    initial.in_point = ersatzrs_time::Duration::zero();
+    initial.finish = initial.start + ersatzrs_time::Duration::seconds(INITIAL_SECONDS);
+    initial.out_point = ersatzrs_time::Duration::seconds(INITIAL_SECONDS);
     initial.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
         media_version_id: 100,
         video_stream_index: 0,
@@ -193,7 +193,7 @@ async fn prepare_remote(pool: &crate::db::DbPool, uri: &str) -> Result<(), Strin
 #[derive(Clone)]
 struct Segment {
     sequence: u64,
-    at: chrono::DateTime<chrono::Utc>,
+    at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     duration: f64,
     file: String,
 }
@@ -208,9 +208,9 @@ fn segments(body: &str) -> Result<Vec<Segment>, String> {
             sequence = value.parse().ok();
         } else if let Some(value) = line.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:") {
             at = Some(
-                chrono::DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f%z")
+                ersatzrs_time::DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f%z")
                     .map_err(|error| format!("invalid Next programme timestamp {value}: {error}"))?
-                    .with_timezone(&chrono::Utc),
+                    .with_timezone(&ersatzrs_time::Utc),
             );
         } else if let Some(value) = line.strip_prefix("#EXTINF:") {
             duration = value.split(',').next().and_then(|value| value.parse().ok());
@@ -259,7 +259,7 @@ async fn observe(
             .map(|s| (s.sequence, s))
             .collect();
         if seen.values().any(|s| s.at >= initial.finish)
-            || chrono::Utc::now() + chrono::Duration::seconds(3) >= initial.finish
+            || ersatzrs_time::Utc::now() + ersatzrs_time::Duration::seconds(3) >= initial.finish
         {
             return Err("fixture missed the active-item update window".into());
         }
@@ -269,8 +269,8 @@ async fn observe(
         let mut replacement = initial.clone();
         replacement.id = 2;
         replacement.media_item_id = 10;
-        replacement.finish = initial.start + chrono::Duration::seconds(60);
-        replacement.out_point = chrono::Duration::seconds(60);
+        replacement.finish = initial.start + ersatzrs_time::Duration::seconds(60);
+        replacement.out_point = ersatzrs_time::Duration::seconds(60);
         sqlx::query(
             r#"UPDATE "MediaVersion" SET "MovieId"=10,"RemoteStreamId"=NULL WHERE "Id"=100"#,
         )

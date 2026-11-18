@@ -334,10 +334,11 @@ async fn load_custom_pages(
         .map_err(|_| ServerFnError::new("unavailable"))?;
     // The same plan the host producer runs at Check, so the page shows exactly
     // what would block it. A failed plan shows no per-page reasons.
-    let issues = Box::pin(application.plan_teletext_custom_pages(channel_id, chrono::Utc::now()))
-        .await
-        .map(|plan| plan.issues)
-        .unwrap_or_default();
+    let issues =
+        Box::pin(application.plan_teletext_custom_pages(channel_id, ersatzrs_time::Utc::now()))
+            .await
+            .map(|plan| plan.issues)
+            .unwrap_or_default();
     let issue_for = |link_id: i64| {
         use ersatzrs_app::teletext_elements::broadcast::CustomPageIssueKind as K;
         issues
@@ -557,7 +558,7 @@ async fn readiness(
         last_failure_at: failure.map(|failure| {
             failure
                 .at
-                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+                .to_rfc3339_opts(ersatzrs_time::SecondsFormat::Secs, true)
         }),
     }
 }

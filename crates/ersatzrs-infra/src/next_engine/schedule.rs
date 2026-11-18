@@ -1,9 +1,9 @@
 //! Read the persisted channel timeline without multiplying items by media files.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::locking::{EntityLocker, PlayoutReadGuard};
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError, Result};
 use ersatzrs_domain::{Channel, PlayoutItem};
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::Row;
 
 use crate::channel_playout::ChannelPlayoutContext;

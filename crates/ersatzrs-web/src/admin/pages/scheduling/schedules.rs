@@ -1046,7 +1046,7 @@ fn escape_html(value: &str) -> String {
 fn deferred_status_html(
     rows: &[crate::admin::server_fns::schedules::ScheduleDeferredChange],
 ) -> String {
-    fn timestamp(value: Option<chrono::DateTime<chrono::Utc>>) -> String {
+    fn timestamp(value: Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>>) -> String {
         value.map_or_else(
             || tr(TextKey::NotAvailable).to_owned(),
             |value| value.format("%Y-%m-%d %H:%M:%S%.f UTC").to_string(),

@@ -299,7 +299,7 @@ impl PumpControl {
             end_packet = u128::from(schedule.first_packet()) + schedule.packet_count() as u128,
             first_due_elapsed_ns = schedule.first_due().as_nanos(),
             prepared_elapsed_ns = now.as_nanos(),
-            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
             "teletext sink window prepared before delivery"
         );
     }
@@ -318,7 +318,7 @@ impl PumpControl {
             active_sequence = self.trace_active_sequence,
             first_packet,
             written_elapsed_ns = now.as_nanos(),
-            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
             "teletext sink wrote the first packet of a prepared window"
         );
     }
@@ -339,7 +339,7 @@ impl PumpControl {
             first_packet,
             end_packet = receipt.end_packet(),
             accepted_elapsed_ns = now.as_nanos(),
-            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
             cycle_boundary = receipt.is_cycle_boundary(),
             complete_cycle = receipt.contains_complete_cycle(),
             signalling_announced = receipt.signalling_announced(),
@@ -363,7 +363,7 @@ impl PumpControl {
             action = match action { InstalledAction::Replace => "replace", InstalledAction::Withdraw => "withdraw" },
             end_packet = receipt.end_packet(),
             accepted_elapsed_ns = now.as_nanos(),
-            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            observed_utc = %ersatzrs_time::Utc::now().to_rfc3339(),
             cycle_boundary = receipt.is_cycle_boundary(),
             complete_cycle = receipt.contains_complete_cycle(),
             signalling_announced = receipt.signalling_announced(),

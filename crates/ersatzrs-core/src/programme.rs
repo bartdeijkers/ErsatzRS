@@ -5,8 +5,8 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU8;
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{FillerKind, PlayoutScheduleKind};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use jiff::{tz::TimeZone, Span, Timestamp};
 
 use crate::xmltv::{project_programmes, XmltvBlockBehavior, XmltvGuideItem, XmltvProgramme};
@@ -339,9 +339,6 @@ impl ProgrammeClock {
     /// # Errors
     /// Returns an error for timestamps outside Jiff's supported range.
     ///
-    /// # Panics
-    /// Panics if a valid Jiff timestamp cannot be represented by Chrono, whose
-    /// supported year range includes Jiff's entire supported range.
     pub fn day_bounds(
         &self,
         now: DateTime<Utc>,
@@ -353,10 +350,7 @@ impl ProgrammeClock {
             .tomorrow()?
             .to_zoned(self.0.clone())?
             .timestamp();
-        Ok((
-            DateTime::from_timestamp(start.as_second(), 0).expect("Jiff fits Chrono"),
-            DateTime::from_timestamp(finish.as_second(), 0).expect("Jiff fits Chrono"),
-        ))
+        Ok((start.into(), finish.into()))
     }
 
     /// Return UTC bounds for one through 255 civil dates starting with today.
@@ -371,9 +365,6 @@ impl ProgrammeClock {
     /// Returns an error for unsupported timestamps (including leap seconds) or
     /// end dates, or if resolution produces an empty or reversed interval.
     ///
-    /// # Panics
-    /// Panics if a valid Jiff timestamp cannot be represented by Chrono, whose
-    /// supported year range includes Jiff's entire supported range.
     pub fn calendar_day_bounds(
         &self,
         captured_at: DateTime<Utc>,
@@ -403,10 +394,7 @@ impl ProgrammeClock {
                 "civil calendar window must have increasing UTC boundaries"
             )));
         }
-        Ok((
-            DateTime::from_timestamp(start.as_second(), 0).expect("Jiff fits Chrono"),
-            DateTime::from_timestamp(finish.as_second(), 0).expect("Jiff fits Chrono"),
-        ))
+        Ok((start.into(), finish.into()))
     }
 
     /// Format an existing instant in the channel's local clock, retaining its offset.

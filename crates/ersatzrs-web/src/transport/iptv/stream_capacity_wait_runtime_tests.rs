@@ -385,7 +385,7 @@ async fn start_capacity_programme(state: &AppState, item: i64, mode: StreamingMo
     // this synthetic item is extended; admission and worker timeouts are real.
     sqlx::query(r#"UPDATE "PlayoutItem" SET "Finish"=?,"OutPoint"='00:01:00' WHERE "PlayoutId"=1"#)
         .bind(super::super::super::encode_sql_datetime(
-            Utc::now() + chrono::Duration::seconds(60),
+            Utc::now() + ersatzrs_time::Duration::seconds(60),
         ))
         .execute(&state.pool)
         .await

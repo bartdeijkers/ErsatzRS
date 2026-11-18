@@ -7,8 +7,8 @@
 use std::collections::BTreeMap;
 
 use crate::repositories::ArtworkReference;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::FillerKind;
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 /// `ErsatzTV` `XmltvBlockBehavior`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -248,7 +248,7 @@ fn divide_duration(duration: Duration, divisor: i32) -> Duration {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use ersatzrs_time::TimeZone;
 
     use super::*;
 

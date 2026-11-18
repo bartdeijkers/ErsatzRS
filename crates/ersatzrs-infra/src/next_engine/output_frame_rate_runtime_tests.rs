@@ -215,15 +215,18 @@ async fn install_sources(pool: &crate::db::DbPool, clips: &[PathBuf; 2], rates: 
 
 async fn install_schedule(
     pool: &crate::db::DbPool,
-) -> (chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) {
+) -> (
+    ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+) {
     let repos = crate::repositories::make_repositories(pool.clone());
     sqlx::query(r#"DELETE FROM "PlayoutItem""#)
         .execute(pool)
         .await
         .unwrap();
-    let start = chrono::Utc::now() - chrono::Duration::seconds(1);
+    let start = ersatzrs_time::Utc::now() - ersatzrs_time::Duration::seconds(1);
     let red_seconds = i64::from(SOURCE_SECONDS[1]);
-    let finish = start + chrono::Duration::seconds(FIRST_PROGRAMME_SECONDS + red_seconds);
+    let finish = start + ersatzrs_time::Duration::seconds(FIRST_PROGRAMME_SECONDS + red_seconds);
     for (id, media, version, offset, length) in [
         (1, 10, 100, 0, FIRST_PROGRAMME_SECONDS),
         (2, 11, 101, FIRST_PROGRAMME_SECONDS, red_seconds),
@@ -234,10 +237,10 @@ async fn install_schedule(
                 id,
                 playout_id: 1,
                 media_item_id: media,
-                start: start + chrono::Duration::seconds(offset),
-                finish: start + chrono::Duration::seconds(offset + length),
-                in_point: chrono::Duration::zero(),
-                out_point: chrono::Duration::seconds(length),
+                start: start + ersatzrs_time::Duration::seconds(offset),
+                finish: start + ersatzrs_time::Duration::seconds(offset + length),
+                in_point: ersatzrs_time::Duration::zero(),
+                out_point: ersatzrs_time::Duration::seconds(length),
                 pinned_stream_selection: Some(PinnedStreamSelection {
                     media_version_id: version,
                     video_stream_index: 0,
@@ -301,8 +304,8 @@ struct PersistedState {
 async fn persisted_state(
     pool: &crate::db::DbPool,
     requested: i64,
-    start: chrono::DateTime<chrono::Utc>,
-    finish: chrono::DateTime<chrono::Utc>,
+    start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    finish: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 ) -> PersistedState {
     let repos = crate::repositories::make_repositories(pool.clone());
     let items = repos
@@ -350,7 +353,7 @@ async fn scanned_sources(
         let metadata = extractor.extract(&clips[index]).await.unwrap();
         assert!(
             (metadata.version.duration
-                - chrono::Duration::seconds(i64::from(SOURCE_SECONDS[index])))
+                - ersatzrs_time::Duration::seconds(i64::from(SOURCE_SECONDS[index])))
             .num_milliseconds()
             .abs()
                 < 50,

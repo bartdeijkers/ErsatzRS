@@ -6,7 +6,6 @@ mod health;
 #[path = "external_json_snapshot/worker.rs"]
 mod worker;
 
-use chrono::Duration;
 use ersatzrs_core::{
     repositories::ChannelRepository,
     scheduling::{PlayoutBuildMode, PlayoutPreservation},
@@ -20,6 +19,7 @@ use ersatzrs_infra::{
     },
     repositories::make_repositories,
 };
+use ersatzrs_time::Duration;
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     Executor,

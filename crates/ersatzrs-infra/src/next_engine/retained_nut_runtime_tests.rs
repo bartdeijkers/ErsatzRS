@@ -231,7 +231,7 @@ fn prepare_config(
     ffprobe: &Path,
 ) -> protocol::ChannelConfig {
     let playout = folder.join("playout");
-    let start = chrono::Utc::now();
+    let start = ersatzrs_time::Utc::now();
     let source = protocol::Source::Http {
         uri: format!("http://{address}/retained.nut"),
         probe_hint: Some(hint),
@@ -252,7 +252,7 @@ fn prepare_config(
             items: vec![protocol::PlayoutItem {
                 id: "retained-transport".into(),
                 start,
-                finish: start + chrono::Duration::seconds(24),
+                finish: start + ersatzrs_time::Duration::seconds(24),
                 source: Some(source),
                 watermark: None,
                 graphics: Vec::new(),

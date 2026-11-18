@@ -132,9 +132,9 @@ async fn error_card_case(
 }
 
 async fn write_error_playout(root: &Path, playout: &Path, failed_media: bool) {
-    let now = chrono::Utc::now();
-    let begin = now - chrono::Duration::seconds(5);
-    let finish = now + chrono::Duration::minutes(2);
+    let now = ersatzrs_time::Utc::now();
+    let begin = now - ersatzrs_time::Duration::seconds(5);
+    let finish = now + ersatzrs_time::Duration::minutes(2);
     let items = if failed_media {
         vec![serde_json::from_value(serde_json::json!({
             "id": "synthetic-failed-item", "start": begin, "finish": finish,

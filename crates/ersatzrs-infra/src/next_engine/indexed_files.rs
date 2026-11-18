@@ -6,7 +6,7 @@ use std::{
     time::Instant,
 };
 
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 
 use super::super::io_error;
 use super::{
@@ -109,7 +109,7 @@ pub(super) fn load_previous(
     let mut live = BTreeMap::new();
     let mut total = 0;
     let cutoff = now
-        .checked_sub_signed(chrono::Duration::minutes(5))
+        .checked_sub_signed(ersatzrs_time::Duration::minutes(5))
         .ok_or(PublicationError::InvalidWindow)?;
     for reference in &index.days {
         super::check(is_current, deadline)?;

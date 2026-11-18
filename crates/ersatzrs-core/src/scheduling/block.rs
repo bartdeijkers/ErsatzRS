@@ -7,11 +7,11 @@ mod preservation;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
 use ersatzrs_domain::{
     BlockStopScheduling, CollectionType, DecoBreakPlacement, EntityId, FillerKind, PlaybackOrder,
     PlayoutItem,
 };
+use ersatzrs_time::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -236,15 +236,15 @@ fn matches_integer_filter(values: &[i32], needle: i32) -> bool {
     values.is_empty() || values.contains(&needle)
 }
 
-fn csharp_day_of_week(weekday: chrono::Weekday) -> i32 {
+fn csharp_day_of_week(weekday: ersatzrs_time::Weekday) -> i32 {
     match weekday {
-        chrono::Weekday::Mon => 1,
-        chrono::Weekday::Tue => 2,
-        chrono::Weekday::Wed => 3,
-        chrono::Weekday::Thu => 4,
-        chrono::Weekday::Fri => 5,
-        chrono::Weekday::Sat => 6,
-        chrono::Weekday::Sun => 0,
+        ersatzrs_time::Weekday::Mon => 1,
+        ersatzrs_time::Weekday::Tue => 2,
+        ersatzrs_time::Weekday::Wed => 3,
+        ersatzrs_time::Weekday::Thu => 4,
+        ersatzrs_time::Weekday::Fri => 5,
+        ersatzrs_time::Weekday::Sat => 6,
+        ersatzrs_time::Weekday::Sun => 0,
     }
 }
 
@@ -1523,8 +1523,8 @@ fn history_key_for_default_filler(deco: &EffectiveDeco) -> String {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, Duration, NaiveTime, Utc};
     use ersatzrs_domain::{Playout, PlayoutItem};
+    use ersatzrs_time::{DateTime, Duration, NaiveTime, Utc};
 
     use super::*;
     use crate::scheduling::{

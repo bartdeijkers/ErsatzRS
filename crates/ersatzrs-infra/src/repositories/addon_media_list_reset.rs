@@ -104,7 +104,7 @@ async fn ensure_current(
     job: &AddonMediaListLifecycleJob,
     phase: AddonMediaListLifecyclePhase,
 ) -> Result<()> {
-    let now = encode_datetime(chrono::Utc::now());
+    let now = encode_datetime(ersatzrs_time::Utc::now());
     let current: bool = sqlx::query_scalar(
         r#"SELECT EXISTS (
                SELECT 1 FROM "AddonMediaListLifecycleJob" AS "job"
@@ -144,7 +144,7 @@ async fn quiesce(
     claim: &ManagedLibraryOperationClaim,
     job: &AddonMediaListLifecycleJob,
 ) -> Result<()> {
-    let now = encode_datetime(chrono::Utc::now());
+    let now = encode_datetime(ersatzrs_time::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_current_tx(
         &mut tx,
@@ -265,7 +265,7 @@ async fn unpublish_projection(
     AddonMediaListSynchronizer::new(pool.clone())
         .empty_generated_playlist_for_reset(job.list_id)
         .await?;
-    let now = encode_datetime(chrono::Utc::now());
+    let now = encode_datetime(ersatzrs_time::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_current_tx(
         &mut tx,
@@ -295,7 +295,7 @@ async fn clear_provider_state(
     claim: &ManagedLibraryOperationClaim,
     job: &AddonMediaListLifecycleJob,
 ) -> Result<()> {
-    let now = encode_datetime(chrono::Utc::now());
+    let now = encode_datetime(ersatzrs_time::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_current_tx(
         &mut tx,
@@ -326,7 +326,7 @@ async fn clear_provider_state(
     crate::addon_media_list_delivery::reset_identity_in_tx(
         &mut tx,
         job.list_id,
-        chrono::Utc::now(),
+        ersatzrs_time::Utc::now(),
     )
     .await?;
     let updated = sqlx::query(
@@ -390,7 +390,7 @@ async fn clear_checkpoints(
             remove_relative_archive(Path::new(&data_root), &relative_path).await?;
         }
     }
-    let now = encode_datetime(chrono::Utc::now());
+    let now = encode_datetime(ersatzrs_time::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_current_tx(
         &mut tx,
@@ -518,7 +518,7 @@ async fn clear_checkpoints(
     })?
     .map_err(|error| reset_fs_error("finalize add-on media-list reset files", &error))?;
 
-    let now = encode_datetime(chrono::Utc::now());
+    let now = encode_datetime(ersatzrs_time::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_current_tx(
         &mut tx,
@@ -727,7 +727,6 @@ fn reset_fs_error(
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
     use ersatzrs_core::repositories::{
         AddonMediaListLifecycleJob, ManagedLibraryOperation, ManagedLibraryOperationClaim,
         ManagedLibraryOperationRepository as _,
@@ -736,6 +735,7 @@ mod tests {
         AddonMediaListLifecycleJobKind, AddonMediaListLifecyclePhase, ManagedLibraryOperationKind,
         ManagedLibraryOperationState,
     };
+    use ersatzrs_time::Utc;
 
     use super::*;
 
