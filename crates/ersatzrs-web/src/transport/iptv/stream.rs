@@ -761,7 +761,7 @@ fn serve_channel_stream_admitted(
         let mut admission = admission;
         let mut cursor = None;
         loop {
-            match serve_channel_stream_admitted_inner(
+            match Box::pin(serve_channel_stream_admitted_inner(
                 state,
                 channel.clone(),
                 output_format,
@@ -770,7 +770,7 @@ fn serve_channel_stream_admitted(
                 admission,
                 output.clone(),
                 cursor,
-            )
+            ))
             .await
             {
                 StreamAttempt::Response(response) => return response,

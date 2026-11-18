@@ -1,5 +1,5 @@
 use super::super::{
-    build_stream_command, serve_channel_stream_admitted_inner, Channel, ChannelSubtitleMode,
+    build_stream_command, serve_channel_stream_admitted, Channel, ChannelSubtitleMode,
     FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, FfmpegCapabilityReport,
     FfmpegRuntimeReport, OutputMetadata, PlaybackProfile, StatusCode,
 };
