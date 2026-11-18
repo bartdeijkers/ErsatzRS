@@ -163,7 +163,7 @@ jobs:
     outputs:
       # `github-hosted` when no self-hosted runner is online (see the
       # "Choose the runner pool" step); empty means the self-hosted pool.
-      pool: ${{ steps.pool.outputs.pool }}
+      pool: ${{ steps.hosted_delivery.outcome == 'success' && 'github-hosted' || steps.pool.outputs.pool }}
       skip: ${{ steps.pr_proof.outputs.skip || steps.select.outputs.skip || steps.duplicate.outputs.skip }}
       lane: ${{ steps.pr_proof.outputs.lane || steps.select.outputs.lane || steps.duplicate.outputs.lane }}
       tree: ${{ steps.duplicate.outputs.tree }}
@@ -510,9 +510,13 @@ jobs:
             cat "$RUNNER_TEMP/selection.json"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - id: hosted_delivery
+        name: Use GitHub-hosted runners for this delivery
+        if: ${{ !inputs.runner && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.title, '[github-hosted]')) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[github-hosted]'))) }}
+        run: echo "GitHub-hosted runners requested for this delivery."
       - id: pool
         name: Choose the runner pool
-        if: ${{ !inputs.runner }}
+        if: ${{ !inputs.runner && steps.hosted_delivery.outcome == 'skipped' }}
         # The pool choice is an optimisation: whatever goes wrong here, the run
         # keeps the self-hosted pool instead of failing.
         continue-on-error: true

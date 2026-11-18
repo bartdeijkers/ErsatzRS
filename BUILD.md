@@ -124,6 +124,10 @@ separate hosted shards. Cargo tools are prepared in the build job; execution
 jobs use its verified nextest/helper executables. The full test selection remains
 intact. Hosted execution remains an explicit fallback rather than the default.
 
+For a single delivery on GitHub-hosted runners, include `[github-hosted]` in
+the same-repository PR title and the merge commit message. Automatic PR and
+push checks then use the hosted pool even when local runners are online.
+
 **Automatic hosted fallback.** When the repository secret
 `CI_RUNNER_STATUS_TOKEN` is set, a run that was not dispatched with an explicit
 `runner` checks the runner status in Preflight. If no self-hosted runner with
@@ -749,7 +753,7 @@ prevents the automatic full PR run; the manual dispatch still checks that commit
 Run the full suite on the combined candidate branch:
 
 ```bash
-gh workflow run ci.yml --ref integrate/ucu16-rows-297-305 -f runner=self-hosted -f qualify_next_candidate=true
+gh workflow run ci.yml --ref integrate/ucu16-rows-297-305 -f runner=github-hosted -f qualify_next_candidate=true
 ```
 
 CI packages the reviewed Next source for Linux x64, ARM64, ARMv7 and Windows

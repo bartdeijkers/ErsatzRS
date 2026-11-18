@@ -1693,11 +1693,28 @@ class FocusedAuditSelection(unittest.TestCase):
                                              ("self-hosted", "", False), ("github-hosted", "", True)):
                     self.assertEqual(self.evaluate(pick, dict(runner=runner), preflight(pool=pool)), hosted)
         step = self.jobs["preflight"].split("name: Choose the runner pool", 1)[1]
-        self.assertIn("if: ${{ !inputs.runner }}", step)
+        self.assertIn("!inputs.runner && steps.hosted_delivery.outcome == 'skipped'", step)
         self.assertIn("secrets.CI_RUNNER_STATUS_TOKEN", step)
         self.assertIn("continue-on-error: true", step.split("script:", 1)[0])
         self.assertIn("github-authentication-token-expiration", step)
-        self.assertIn("pool: ${{ steps.pool.outputs.pool }}", self.jobs["preflight"])
+        self.assertIn("steps.hosted_delivery.outcome == 'success' && 'github-hosted' || steps.pool.outputs.pool", self.jobs["preflight"])
+
+    def test_hosted_delivery_marker_is_scoped_to_the_requested_pr_or_push(self):
+        step = self.jobs["preflight"].split("name: Use GitHub-hosted runners for this delivery", 1)[1]
+        condition = re.search(r"^        if: (.+)$", step, re.M)[1]
+        for event, same_repo, title, message, runner, expected in [
+            ("pull_request", True, "[github-hosted]", "", "", True),
+            ("pull_request", False, "[github-hosted]", "", "", False),
+            ("pull_request", True, "regular", "", "", False),
+            ("push", True, "", "merge PR [github-hosted]", "", True),
+            ("push", True, "", "regular", "", False),
+            ("workflow_dispatch", True, "", "[github-hosted]", "self-hosted", False),
+        ]:
+            expr = condition.replace("github.event_name", repr(event)).replace(
+                "github.event.pull_request.head.repo.full_name == github.repository", str(same_repo)).replace(
+                "contains(github.event.pull_request.title, '[github-hosted]')", str("[github-hosted]" in title)).replace(
+                "contains(github.event.head_commit.message, '[github-hosted]')", str("[github-hosted]" in message))
+            self.assertEqual(self.evaluate(expr, dict(runner=runner), SimpleNamespace()), expected)
 
     def test_reuse_has_no_download_fallback_and_has_an_honest_job_name(self):
         self.assertIn("name: ${{ inputs.reuse_artifacts && 'Verify reused CI artifacts' || 'Build CI artifacts' }}",

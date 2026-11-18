@@ -78,6 +78,8 @@ release section when tagging a release.
 
 ### Changed
 
+- A delivery can use GitHub-hosted runners for both its pull request and its merge to main by marking the PR title and merge commit with `[github-hosted]`.
+
 - Full CI can qualify the next playback worker on all four required targets and verify that troubleshooting downloads preserve an invalid scheduled item when playback fails before FFmpeg starts.
 
 - **BREAKING CHANGE** IPTV and HDHomeRun streams are unauthenticated. Remove the legacy JWT signing key and restart to enable streaming. Use a VPN or authenticated reverse proxy for remote access.
