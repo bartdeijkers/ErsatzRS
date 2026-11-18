@@ -21,7 +21,7 @@ pub async fn list_sessions(State(state): State<AppState>) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::host::state::IptvAccessTokenVerifier;
+
     use axum::{body::Body, http::Request};
     use ersatzrs_core::hls::HlsSessionHandle;
     use ersatzrs_infra::{hls_worker::HlsSessionWorker, next_engine::session::NextSession};
@@ -57,7 +57,7 @@ mod tests {
             br#"{"ApiKey":"synthetic-session-key"}"#,
         )
         .unwrap();
-        let mut state = AppState::for_tests(IptvAccessTokenVerifier::from_optional_secret(None));
+        let mut state = AppState::for_tests(false);
         state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
         let app = crate::host::router::build_app(state.clone());
         assert_eq!(report(app.clone()).await, serde_json::json!([]));
@@ -135,7 +135,7 @@ mod tests {
             br#"{"ApiKey":"synthetic-session-key"}"#,
         )
         .unwrap();
-        let mut state = AppState::for_tests(IptvAccessTokenVerifier::from_optional_secret(None));
+        let mut state = AppState::for_tests(false);
         state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
         let app = crate::host::router::build_app(state.clone());
         for header in [

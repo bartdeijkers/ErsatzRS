@@ -232,32 +232,11 @@ When using a reverse proxy for login, prevent direct access to the management
 listener so clients cannot bypass the proxy's authentication.
 Protect the complete management surface, including `/artwork/*` image requests,
 with that same proxy login policy. Browser images do not carry the machine API
-key. `/iptv/artwork/*` instead follows the optional IPTV JWT policy on both the
-management and streaming listeners; a machine key or management cookie cannot
-substitute for an IPTV token. Do not exempt `/artwork/*` from management login
-when exposing the management listener through a proxy.
-A separate streaming listener exposes neither machine nor browser action APIs.
-IPTV JWT and private callback capability checks remain independent.
+key. Protect the streaming listener separately when exposing IPTV artwork.
 
-## IPTV JWT protection
+## IPTV streaming access
 
-HDHomeRun discovery and lineup HTTP endpoints, together with UDP discovery,
-are disabled when IPTV JWT protection is enabled. HDHomeRun clients cannot use
-the required IPTV tokens. The HDHomeRun settings page explains this and disables
-saving; existing UUID and tuner-count values are retained for use after JWT
-protection is disabled and the server is restarted.
-
-| Variable | Purpose |
-|---|---|
-| `JWT__IssuerSigningKey` | Enables HS256 JWT validation for IPTV routes |
-| `JWT:IssuerSigningKey` | Compatibility spelling where the environment supports colons |
-
-When neither variable contains a non-empty value, IPTV routes are open. When a
-key is configured, clients must supply a valid HS256 JWT with an `exp` claim as
-a bearer token or an `access_token` query value.
-
-Treat the signing key and generated tokens as secrets. See the
-[HTTP endpoint reference](http-endpoints.md) for request forms.
+IPTV and HDHomeRun streams are unauthenticated. For remote access, use a VPN or an authenticated reverse proxy. If either `JWT__IssuerSigningKey` or `JWT:IssuerSigningKey` is set, remove it and restart ErsatzRS to enable streaming.
 
 ## Provider add-on credentials
 

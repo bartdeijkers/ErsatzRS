@@ -419,10 +419,7 @@ mod tests {
 
     #[tokio::test]
     async fn production_router_authenticates_before_maintenance_admission() {
-        use crate::host::{
-            artwork_cleanup::TokioArtworkCleanupQueue,
-            state::{AppState, IptvAccessTokenVerifier},
-        };
+        use crate::host::{artwork_cleanup::TokioArtworkCleanupQueue, state::AppState};
         use std::sync::Arc;
 
         let root = tempfile::tempdir().unwrap();
@@ -431,7 +428,7 @@ mod tests {
             br#"{"ApiKey":"synthetic-fixture-key"}"#,
         )
         .unwrap();
-        let mut state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        let mut state = AppState::for_tests(false);
         state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
         let (queue, mut receiver) = TokioArtworkCleanupQueue::channel();
         state.artwork_cleanup = Arc::new(queue);

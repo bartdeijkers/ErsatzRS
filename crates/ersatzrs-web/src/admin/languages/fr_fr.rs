@@ -2742,7 +2742,7 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
         }
         TextKey::Troubleshooting => "Dépannage",
         TextKey::TunerCount => "Nombre de tuners",
-        TextKey::HdhrDisabledByJwt => "Les points de terminaison HDHomeRun sont désactivés car la protection JWT pour IPTV est activée. Ces paramètres sont sans effet.",
+        TextKey::HdhrDisabledByJwt => "Supprimez JWT__IssuerSigningKey / JWT:IssuerSigningKey et redémarrez ErsatzRS pour activer IPTV et HDHomeRun. Les flux sont accessibles sans authentification. Pour un accès distant, utilisez un VPN ou un proxy inverse avec authentification.",
         TextKey::TvShows => "Séries TV",
         TextKey::Ui => "Interface",
         TextKey::UnavailableLocalMediaMessage => "{count} éléments sont indisponibles car ErsatzRS ne les trouve pas sur le disque, notamment : {items}",

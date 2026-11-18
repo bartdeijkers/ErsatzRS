@@ -147,7 +147,6 @@ use super::teletext_accepted_output::{
 use super::teletext_binding::{TeletextOutputAdmission, TeletextOutputBinding, TeletextOutputRole};
 use super::teletext_output::TeletextPumpError;
 use crate::host::state::AppState;
-use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::{hls, hls::HlsQuery, LegacyWrapperQuery};
 
 static NEXT_GRAPHICS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
@@ -278,14 +277,7 @@ async fn serve_transport_stream_with_binding(
 
     match mode {
         TransportStreamMode::RedirectToHls => {
-            let access_token = AccessToken::for_request(
-                query.access_token.clone(),
-                state.iptv_access_token_verifier.is_enabled(),
-            );
-            let target = format!(
-                "/iptv/channel/{channel_number}.m3u8{}",
-                access_token.query()
-            );
+            let target = format!("/iptv/channel/{channel_number}.m3u8");
             axum::response::Redirect::temporary(&target).into_response()
         }
         TransportStreamMode::Legacy => {
@@ -293,7 +285,7 @@ async fn serve_transport_stream_with_binding(
         }
         TransportStreamMode::HybridWrapper => {
             Box::pin(serve_segmenter_wrapper_stream(
-                state, &channel, query, output, deadline,
+                state, &channel, output, deadline,
             ))
             .await
         }
@@ -3326,7 +3318,6 @@ fn resolve_transport_stream_mode(
 async fn serve_segmenter_wrapper_stream(
     state: &AppState,
     channel: &Channel,
-    query: &HlsQuery,
     output: TeletextOutputAdmission,
     startup_deadline: tokio::time::Instant,
 ) -> Response {
@@ -3380,16 +3371,8 @@ async fn serve_segmenter_wrapper_stream(
             Err(response) => return response,
         };
     let aac_latm_audio = playback_profile.profile.audio_format == FFmpegProfileAudioFormat::AacLatm;
-    let access_token = AccessToken::for_request(
-        query.access_token.clone(),
-        state.iptv_access_token_verifier.is_enabled(),
-    );
-    let hls_url = build_segmenter_wrapper_hls_url(
-        *streaming_addr,
-        &channel.number,
-        channel.streaming_engine,
-        &access_token,
-    );
+    let hls_url =
+        build_segmenter_wrapper_hls_url(*streaming_addr, &channel.number, channel.streaming_engine);
     let metadata = channel_stream_metadata(channel);
     let wrapper_muxrate_bps = mpeg_ts_wrapper_muxrate_bps(&playback_profile);
     let (command, cleanup_paths) = match segmenter_wrapper_command(
@@ -4207,20 +4190,13 @@ fn build_segmenter_wrapper_hls_url(
     address: std::net::SocketAddr,
     channel_number: &str,
     engine: ersatzrs_domain::StreamingEngine,
-    access_token: &AccessToken,
 ) -> String {
     // ADR 0099: live WebVTT in a master stalls FFmpeg's MPEG-TS copy wrapper.
     // Converted text stays on HLS; this already-started session carries video/audio.
     if engine == ersatzrs_domain::StreamingEngine::Next {
-        return format!(
-            "http://{address}/iptv/session/{channel_number}/hls.m3u8{}",
-            access_token.query()
-        );
+        return format!("http://{address}/iptv/session/{channel_number}/hls.m3u8");
     }
-    format!(
-        "http://{address}/iptv/channel/{channel_number}.m3u8?mode=segmenter{}",
-        access_token.query_amp()
-    )
+    format!("http://{address}/iptv/channel/{channel_number}.m3u8?mode=segmenter")
 }
 
 fn channel_stream_metadata(channel: &Channel) -> OutputMetadata {
@@ -9617,38 +9593,30 @@ mod tests {
     }
 
     #[test]
-    fn segmenter_wrapper_url_preserves_access_token() {
-        let token = AccessToken::new(Some("abc123".to_owned()));
+    fn segmenter_wrapper_url_uses_only_the_mode_query() {
         assert_eq!(
             build_segmenter_wrapper_hls_url(
                 "127.0.0.1:8409".parse().unwrap(),
                 "7",
                 ersatzrs_domain::StreamingEngine::Legacy,
-                &token
             ),
-            "http://127.0.0.1:8409/iptv/channel/7.m3u8?mode=segmenter&access_token=abc123"
+            "http://127.0.0.1:8409/iptv/channel/7.m3u8?mode=segmenter"
         );
     }
 
     #[test]
     fn next_segmenter_wrapper_uses_authenticated_media_playlist_without_webvtt() {
-        let token = AccessToken::new(Some("synthetic-token".to_owned()));
         let url = build_segmenter_wrapper_hls_url(
             "127.0.0.1:8409".parse().unwrap(),
             "7",
             ersatzrs_domain::StreamingEngine::Next,
-            &token,
         );
-        assert_eq!(
-            url,
-            "http://127.0.0.1:8409/iptv/session/7/hls.m3u8?access_token=synthetic-token"
-        );
+        assert_eq!(url, "http://127.0.0.1:8409/iptv/session/7/hls.m3u8");
         assert_eq!(
             build_segmenter_wrapper_hls_url(
                 "127.0.0.1:8409".parse().unwrap(),
                 "7",
                 ersatzrs_domain::StreamingEngine::Next,
-                &AccessToken::default(),
             ),
             "http://127.0.0.1:8409/iptv/session/7/hls.m3u8"
         );
@@ -9903,9 +9871,7 @@ mod tests {
             },
         };
         let data = MpegTsScriptRenderData {
-            hls_url:
-                "http://localhost:8409/iptv/channel/7.m3u8?mode=segmenter&access_token=synthetic"
-                    .into(),
+            hls_url: "http://localhost:8409/iptv/channel/7.m3u8?mode=segmenter".into(),
             channel_name: "Télévision \"日本語\"".into(),
             ffmpeg_path: "outils été/映像/ffmpeg".into(),
             muxrate_bps: 9_830_400,

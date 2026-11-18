@@ -16,7 +16,7 @@ use ersatzrs_infra::maintenance::run_requested_playout_build;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use ersatzrs_time::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_web::host::scanning::NativeScanRuntime;
-use ersatzrs_web::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+use ersatzrs_web::host::state::{AppState, SystemStartup};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Executor, Row, SqlitePool};
 use uuid::Uuid;
@@ -868,7 +868,7 @@ fn restarted_app_state(
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         Uuid::nil(),
         1,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         playout_build_tx,
         scan_work_tx,
         EntityLocker::new(),

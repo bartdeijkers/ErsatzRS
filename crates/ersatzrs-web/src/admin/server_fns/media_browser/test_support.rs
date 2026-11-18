@@ -9,7 +9,7 @@ mod remote_stream_tests {
     use super::{
         add_media_items_to_playlist, list_remote_streams, remote_stream_page_map, MediaBrowserKind,
     };
-    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::{AppState, SystemStartup};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
     use leptos::prelude::{provide_context, Owner};
@@ -33,7 +33,7 @@ mod remote_stream_tests {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             1,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );
@@ -99,7 +99,7 @@ mod remote_stream_tests {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             1,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );
@@ -230,7 +230,7 @@ mod remote_stream_tests {
 #[cfg(all(test, feature = "ssr"))]
 mod local_show_identity_browser_tests {
     use super::{get_season_details, get_show_details, list_shows};
-    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::{AppState, SystemStartup};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
     use leptos::prelude::{provide_context, Owner};
@@ -256,7 +256,7 @@ mod local_show_identity_browser_tests {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             1,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );
@@ -454,7 +454,7 @@ mod season_detail_tests {
     use super::{
         get_media_item_info_json, get_season_details, list_other_videos, list_trash_items,
     };
-    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::{AppState, SystemStartup};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
     use leptos::prelude::{provide_context, Owner};
@@ -480,7 +480,7 @@ mod season_detail_tests {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             1,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );
@@ -557,7 +557,7 @@ mod season_detail_tests {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             1,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );
@@ -596,7 +596,7 @@ mod season_detail_tests {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             1,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );
@@ -2320,7 +2320,7 @@ mod tests {
             ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
             uuid::Uuid::nil(),
             1,
-            crate::host::state::IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );

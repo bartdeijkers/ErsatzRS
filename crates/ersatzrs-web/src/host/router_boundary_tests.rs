@@ -6,29 +6,26 @@ use axum::{
 use std::net::SocketAddr;
 use tower::ServiceExt;
 
-use crate::host::state::{AppState, IptvAccessTokenVerifier};
+use crate::host::state::AppState;
 
 #[tokio::test]
-async fn hdhr_routes_are_absent_with_jwt_even_when_credentials_are_supplied() {
+async fn legacy_streaming_key_blocks_iptv_and_hdhr_even_with_credentials() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(
         root.path().join("api-secrets.json"),
         br#"{"ApiKey":"synthetic-key"}"#,
     )
     .unwrap();
-    let mut state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    let mut state = AppState::for_tests(true);
     state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
-    let token = jsonwebtoken::encode(
-        &jsonwebtoken::Header::default(),
-        &serde_json::json!({ "exp": ersatzrs_time::Utc::now().timestamp() + 60 }),
-        &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
-    )
-    .unwrap();
     for app in [
         super::build_app(state.clone()),
         super::build_streaming_app(state.clone()),
     ] {
         for path in [
+            "/iptv/channels.m3u",
+            "/iptv/xmltv.xml",
+            "/iptv/logos/gen",
             "/discover.json",
             "/device.xml",
             "/lineup_status.json",
@@ -40,14 +37,18 @@ async fn hdhr_routes_are_absent_with_jwt_even_when_credentials_are_supplied() {
                     .oneshot(
                         Request::builder()
                             .method(method)
-                            .uri(format!("{path}?access_token={token}"))
+                            .uri(format!("{path}?access_token=obsolete"))
                             .header("X-Ers-Api-Key", "synthetic-key")
                             .body(Body::empty())
                             .unwrap(),
                     )
                     .await
                     .unwrap();
-                assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
+                assert_eq!(
+                    response.status(),
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "{method} {path}"
+                );
             }
         }
     }
@@ -84,7 +85,7 @@ async fn hdhr_routes_remain_available_without_jwt() {
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         2,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         build_tx,
         ersatzrs_core::locking::EntityLocker::default(),
     );
@@ -134,7 +135,7 @@ async fn hdhr_routes_remain_available_without_jwt() {
 
 #[tokio::test]
 async fn public_iptv_routes_never_dispatch_internal_callbacks_for_forged_local_headers() {
-    let state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    let state = AppState::for_tests(true);
     for app in [
         super::build_iptv_router(&state).with_state(state.clone()),
         super::build_streaming_app(state.clone()),
@@ -227,7 +228,7 @@ fn public_ffmpeg_profile_shapes_keep_both_existing_admin_aliases() {
 
 #[tokio::test]
 async fn internal_routes_require_actual_loopback_peer_and_keep_capability_checks() {
-    let state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    let state = AppState::for_tests(true);
     let app = super::build_internal_app(state.clone());
     for (peer, expected) in [
         (None, StatusCode::NOT_FOUND),
@@ -263,14 +264,14 @@ async fn internal_routes_require_actual_loopback_peer_and_keep_capability_checks
 }
 
 #[tokio::test]
-async fn streaming_listener_omits_management_and_keeps_public_iptv_authentication() {
+async fn streaming_listener_omits_management_and_blocks_iptv_with_a_legacy_key() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(
         root.path().join("api-secrets.json"),
         br#"{"ApiKey":"synthetic-fixture-key"}"#,
     )
     .unwrap();
-    let mut state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    let mut state = AppState::for_tests(true);
     state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
     let app = super::build_streaming_app(state.clone());
     for path in [
@@ -349,13 +350,13 @@ async fn streaming_listener_omits_management_and_keeps_public_iptv_authenticatio
                     .unwrap();
                 assert_eq!(
                     response.status(),
-                    StatusCode::UNAUTHORIZED,
+                    StatusCode::SERVICE_UNAVAILABLE,
                     "{method} {suffix}"
                 );
                 assert_eq!(
                     state.pool.size(),
                     0,
-                    "cached URL authentication must precede channel discovery"
+                    "the legacy configuration guard must precede channel discovery"
                 );
                 assert!(state.hls_sessions.active_channels().await.is_empty());
             }
@@ -371,16 +372,10 @@ async fn artwork_routes_keep_management_and_iptv_admission_separate() {
         br#"{"ApiKey":"synthetic-fixture-key"}"#,
     )
     .unwrap();
-    let mut state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    let mut state = AppState::for_tests(true);
     state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
     let management = super::build_app(state.clone());
     let streaming = super::build_streaming_app(state.clone());
-    let token = jsonwebtoken::encode(
-        &jsonwebtoken::Header::default(),
-        &serde_json::json!({ "exp": ersatzrs_time::Utc::now().timestamp() + 60 }),
-        &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
-    )
-    .unwrap();
     // Invalid IDs/cache names make admission observable without touching a
     // database or an operator's image files. Row 124 covers successful serving.
     for suffix in [
@@ -406,7 +401,7 @@ async fn artwork_routes_keep_management_and_iptv_admission_separate() {
             // trusted-network/authenticated-proxy boundary, not the machine key.
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
             for app in [&management, &streaming] {
-                for credential in [None, Some("invalid"), Some(token.as_str())] {
+                for credential in [None, Some("obsolete")] {
                     let uri = match credential {
                         Some(value) => format!("/iptv/artwork/{suffix}?access_token={value}"),
                         None => format!("/iptv/artwork/{suffix}"),
@@ -426,18 +421,14 @@ async fn artwork_routes_keep_management_and_iptv_admission_separate() {
                         .unwrap();
                     assert_eq!(
                         response.status(),
-                        if credential == Some(token.as_str()) {
-                            StatusCode::NOT_FOUND
-                        } else {
-                            StatusCode::UNAUTHORIZED
-                        },
+                        StatusCode::SERVICE_UNAVAILABLE,
                         "{method} {suffix}"
                     );
                 }
             }
         }
     }
-    let open = super::build_streaming_app(AppState::for_tests(IptvAccessTokenVerifier::disabled()));
+    let open = super::build_streaming_app(AppState::for_tests(false));
     let response = open
         .oneshot(
             Request::get("/iptv/artwork/posters/invalid-cache")
@@ -450,6 +441,6 @@ async fn artwork_routes_keep_management_and_iptv_admission_separate() {
     assert_eq!(
         state.pool.size(),
         0,
-        "authorization must precede repository access"
+        "the legacy configuration guard must precede repository access"
     );
 }

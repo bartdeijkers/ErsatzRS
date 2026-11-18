@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::state::{IptvAccessTokenVerifier, SystemStartup};
+use crate::host::state::SystemStartup;
 use axum::{http::Request, routing::get, Router};
 use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus};
 use tower::ServiceExt as _;
@@ -79,7 +79,7 @@ async fn provider_fixture() -> ProviderFixture {
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         1,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         build_tx,
         ersatzrs_core::locking::EntityLocker::default(),
     );

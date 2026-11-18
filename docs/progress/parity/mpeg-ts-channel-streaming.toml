@@ -5,6 +5,7 @@ status     = 'In progress'
 adr        = ['0135']
 summary    = '''
 Native playback checks the remaining item against the normalized output or source frame rate and advances past a sub-frame interval before encoding (row 299).
+Row 302 retires streaming JWTs. A configured legacy signing key disables IPTV and HDHomeRun until removed. Generated stream and guide URLs omit access tokens.
 
 Row291 accepts saved Next readiness and viewer-owned idle under ADR0135.
 Milestone ucu-16-continuation owns the real-worker proof.
@@ -19,7 +20,7 @@ Both ErsatzTV `.ts` behaviors are ported. Empty/mixed `.ts` mode resolves the
 channel streaming setting, HLS-configured channels redirect to `.m3u8`,
 `mode=ts` selects the modern hybrid wrapper, and `mode=ts-legacy` selects the
 legacy concat branch. The modern wrapper starts/touches the HLS segmenter,
-reads `/iptv/channel/{n}.m3u8?mode=segmenter[&access_token=...]`, emits the
+reads `/iptv/channel/{n}.m3u8?mode=segmenter`, emits the
 upstream copy-all/readrate/mpegts stdout shape with ErsatzRS CBR mux-rate and
 20 ms PCR-period hardening so FFmpeg emits regular PCR, and selects the AAC-LATM decoder when
 the profile requires it. The legacy branch ports ErsatzTV's

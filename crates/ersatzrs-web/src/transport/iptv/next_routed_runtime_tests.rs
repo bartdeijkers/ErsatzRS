@@ -120,7 +120,7 @@ async fn observe(
 }
 
 fn state(pool: ersatzrs_infra::db::DbPool, root: &Path) -> AppState {
-    use crate::host::state::{IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::SystemStartup;
     use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus};
     let locker = ersatzrs_core::locking::EntityLocker::default();
     let (tx, _rx) = mpsc::unbounded_channel();
@@ -134,7 +134,7 @@ fn state(pool: ersatzrs_infra::db::DbPool, root: &Path) -> AppState {
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         1,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         tx,
         locker.clone(),
     );

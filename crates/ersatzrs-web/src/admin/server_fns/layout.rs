@@ -200,7 +200,7 @@ mod tests {
         load_ffmpeg_runtime_notification, load_health_snapshot, media_state_revision,
         refresh_health_snapshot,
     };
-    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::{AppState, SystemStartup};
     use ersatzrs_ffmpeg::{FfmpegRuntimeReport, FfmpegRuntimeSource};
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
     use leptos::prelude::{provide_context, Owner};
@@ -372,7 +372,7 @@ mod tests {
             runtime,
             Uuid::nil(),
             1,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );

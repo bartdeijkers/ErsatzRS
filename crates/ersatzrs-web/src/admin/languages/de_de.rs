@@ -2754,7 +2754,7 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         }
         TextKey::Troubleshooting => "Fehlerbehebung",
         TextKey::TunerCount => "Anzahl der Tuner",
-        TextKey::HdhrDisabledByJwt => "HDHomeRun-Endpunkte sind deaktiviert, weil der JWT-Schutz für IPTV aktiviert ist. Diese Einstellungen haben keine Wirkung.",
+        TextKey::HdhrDisabledByJwt => "Entfernen Sie JWT__IssuerSigningKey / JWT:IssuerSigningKey und starten Sie ErsatzRS neu, um IPTV und HDHomeRun zu aktivieren. Streams sind ohne Anmeldung zugänglich. Nutzen Sie für den Fernzugriff ein VPN oder einen Reverse-Proxy mit Authentifizierung.",
         TextKey::TvShows => "Fernsehserien",
         TextKey::Ui => "Benutzeroberfläche",
         TextKey::UnavailableLocalMediaMessage => "{count} Elemente sind nicht verfügbar, weil ErsatzRS sie nicht auf dem Datenträger finden kann, darunter: {items}",

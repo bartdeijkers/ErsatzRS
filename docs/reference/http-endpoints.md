@@ -62,26 +62,7 @@ pipeline controls and are not stable client configuration.
 
 ## IPTV authentication
 
-IPTV routes are open when no JWT signing key is configured. When
-`JWT__IssuerSigningKey` is set, all IPTV routes except logos require a valid
-HS256 JWT with an `exp` claim.
-
-Supply the token through either:
-
-```text
-Authorization: Bearer <jwt>
-```
-
-or:
-
-```text
-?access_token=<jwt>
-```
-
-When the M3U request uses `access_token`, ErsatzRS propagates it into the XMLTV,
-logo, HLS, segment, and MPEG-TS URLs it generates. Query-string tokens can
-appear in client history and proxy logs; use bearer authentication where the
-client supports it.
+IPTV and HDHomeRun streams are unauthenticated. For remote access, use a VPN or an authenticated reverse proxy. If either `JWT__IssuerSigningKey` or `JWT:IssuerSigningKey` is set, remove it and restart ErsatzRS to enable streaming.
 
 ## Readiness behavior
 

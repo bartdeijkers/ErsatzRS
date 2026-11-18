@@ -4,8 +4,8 @@ import { execFileSync } from 'child_process';
 const jwtEnabled = process.env.E2E_HDHR_JWT_ENABLED === '1';
 const dbPath = process.env.E2E_DB_PATH;
 const languages = [
-  ['en-us', 'HDHomeRun endpoints are disabled because IPTV JWT protection is enabled. These settings have no effect.'],
-  ['nl', 'HDHomeRun-eindpunten zijn uitgeschakeld omdat JWT-beveiliging voor IPTV is ingeschakeld. Deze instellingen hebben geen effect.'],
+  ['en-us', 'Remove JWT__IssuerSigningKey / JWT:IssuerSigningKey and restart ErsatzRS to enable IPTV and HDHomeRun. Streams are unauthenticated. Use a VPN or an authenticated reverse proxy for remote access.'],
+  ['nl', 'Verwijder JWT__IssuerSigningKey / JWT:IssuerSigningKey en herstart ErsatzRS om IPTV en HDHomeRun in te schakelen. Streams hebben geen toegangscontrole. Gebruik voor toegang op afstand een VPN of een reverse proxy met authenticatie.'],
 ] as const;
 
 function storedTuners(): string {
@@ -51,12 +51,12 @@ test.describe('HDHomeRun JWT policy', () => {
           if (jwtEnabled) {
             await expect(tuner).toBeDisabled();
             await expect(save).toBeDisabled();
-            await expect(form.getByRole('status')).toHaveText(warning);
-            await expect(form.getByRole('status')).toBeVisible();
+            await expect(page.getByText(warning, { exact: true })).toHaveText(warning);
+            await expect(page.getByText(warning, { exact: true })).toBeVisible();
           } else {
             await expect(tuner).toBeEnabled();
             await expect(save).toBeEnabled();
-            await expect(form.getByRole('status')).toBeHidden();
+            await expect(page.getByText(warning, { exact: true })).toBeHidden();
           }
         }
         if (javascript && testInfo.project.name === 'chromium') {
@@ -73,10 +73,13 @@ test.describe('HDHomeRun JWT policy', () => {
           await page.screenshot({ path: testInfo.outputPath('hdhr-settings-mobile.png'), animations: 'disabled' });
         }
         for (const path of ['/discover.json', '/device.xml', '/lineup_status.json', '/lineup.json']) {
-          expect((await context.request.get(path)).status(), path).toBe(jwtEnabled ? 404 : 200);
-          expect((await context.request.head(path)).status(), `HEAD ${path}`).toBe(jwtEnabled ? 404 : 200);
+          expect((await context.request.get(path)).status(), path).toBe(jwtEnabled ? 503 : 200);
+          expect((await context.request.head(path)).status(), `HEAD ${path}`).toBe(jwtEnabled ? 503 : 200);
         }
         if (jwtEnabled) {
+          for (const path of ['/iptv/channels.m3u', '/iptv/xmltv.xml', '/iptv/channel/1.ts', '/iptv/channel/1.m3u8']) {
+            expect((await context.request.get(path)).status(), path).toBe(503);
+          }
           const response = await context.request.post('/admin-api/settings/hdhr/save', {
             form: { tuner_count: '7', uuid: 'ignored' }, maxRedirects: 0,
           });

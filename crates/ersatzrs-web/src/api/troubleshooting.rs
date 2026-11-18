@@ -397,7 +397,7 @@ mod tests {
     ) {
         use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
         use sqlx::Executor;
-        let state = AppState::for_tests(crate::host::state::IptvAccessTokenVerifier::disabled());
+        let state = AppState::for_tests(false);
         sqlx::migrate!("../../migrations")
             .run(&state.pool)
             .await

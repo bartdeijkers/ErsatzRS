@@ -78,6 +78,8 @@ release section when tagging a release.
 
 ### Changed
 
+- **BREAKING CHANGE** IPTV and HDHomeRun streams are unauthenticated. Remove the legacy JWT signing key and restart to enable streaming. Use a VPN or authenticated reverse proxy for remote access.
+
 - Replace chrono with Jiff for application clocks and elapsed time. Existing
   database dates, schedules and add-on time formats remain readable.
 

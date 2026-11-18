@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -10,24 +10,12 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use ersatzrs_core::repositories::ChannelRepository;
 use ersatzrs_domain::{Channel, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingMode};
-use serde::Deserialize;
 
 use crate::host::state::AppState;
-use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::identifier::{channel_identifier, parse_channel_number};
 use crate::transport::iptv::streaming_specs::{self, ChannelStreamingSpec};
 
-#[derive(Debug, Deserialize, Default)]
-pub struct PlaylistQuery {
-    #[serde(default)]
-    pub access_token: Option<String>,
-}
-
-pub async fn get_channels_m3u(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<PlaylistQuery>,
-) -> Response {
+pub async fn get_channels_m3u(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let channels = match state.repositories.channel.list_enabled().await {
         Ok(channels) => channels,
         Err(error) => {
@@ -57,20 +45,8 @@ pub async fn get_channels_m3u(
         .get(header::USER_AGENT)
         .and_then(|value| value.to_str().ok())
         .unwrap_or("");
-    let access_token = AccessToken::for_request(
-        query.access_token,
-        state.iptv_access_token_verifier.is_enabled(),
-    );
 
-    let body = build_m3u(
-        &scheme,
-        &host,
-        user_agent,
-        &access_token,
-        &channels,
-        &specs,
-        &logo_paths,
-    );
+    let body = build_m3u(&scheme, &host, user_agent, &channels, &specs, &logo_paths);
 
     let mut response = body.into_response();
     response.headers_mut().insert(
@@ -85,7 +61,6 @@ pub fn build_m3u(
     scheme: &str,
     host: &str,
     user_agent: &str,
-    access_token: &AccessToken,
     channels: &[Channel],
     specs: &HashMap<i64, ChannelStreamingSpec>,
     logo_paths: &HashMap<i64, String>,
@@ -95,9 +70,7 @@ pub fn build_m3u(
         parse_channel_number(&a.number).total_cmp(&parse_channel_number(&b.number))
     });
 
-    let token_uri = access_token.query();
-    let token_uri_amp = access_token.query_amp();
-    let xmltv = format!("{scheme}://{host}/iptv/xmltv.xml{token_uri}");
+    let xmltv = format!("{scheme}://{host}/iptv/xmltv.xml");
 
     let mut out = String::new();
     let _ = writeln!(out, "#EXTM3U url-tvg=\"{xmltv}\" x-tvg-url=\"{xmltv}\"");
@@ -119,25 +92,14 @@ pub fn build_m3u(
             out.push_str("#KODIPROP:inputstream.ffmpegdirect.open_mode=ffmpeg\n");
         }
 
-        let logo = channel_logo_url(
-            scheme,
-            host,
-            channel,
-            logo_paths,
-            &token_uri,
-            &token_uri_amp,
-        );
+        let logo = channel_logo_url(scheme, host, channel, logo_paths);
         let short_id = short_unique_id(channel.unique_id);
         let tvg_id = channel_identifier(&channel.number);
         let format_suffix = match channel.streaming_mode {
-            StreamingMode::HttpLiveStreamingDirect => {
-                format!("m3u8?mode=hls-direct{token_uri_amp}")
-            }
-            StreamingMode::HttpLiveStreamingSegmenter => {
-                format!("m3u8?mode=segmenter{token_uri_amp}")
-            }
-            StreamingMode::TransportStreamHybrid => format!("ts{token_uri}"),
-            StreamingMode::TransportStream => format!("ts?mode=ts-legacy{token_uri_amp}"),
+            StreamingMode::HttpLiveStreamingDirect => "m3u8?mode=hls-direct",
+            StreamingMode::HttpLiveStreamingSegmenter => "m3u8?mode=segmenter",
+            StreamingMode::TransportStreamHybrid => "ts",
+            StreamingMode::TransportStream => "ts?mode=ts-legacy",
         };
 
         let spec = specs.get(&channel.id);
@@ -195,12 +157,10 @@ pub(crate) fn channel_logo_url(
     host: &str,
     channel: &Channel,
     logo_paths: &HashMap<i64, String>,
-    token_uri: &str,
-    token_uri_amp: &str,
 ) -> String {
     let Some(path) = logo_paths.get(&channel.id).map(|path| path.trim()) else {
         return format!(
-            "{scheme}://{host}/iptv/logos/gen?text={}{token_uri_amp}",
+            "{scheme}://{host}/iptv/logos/gen?text={}",
             channel.web_encoded_name()
         );
     };
@@ -208,9 +168,9 @@ pub(crate) fn channel_logo_url(
     if path.starts_with("http://") || path.starts_with("https://") {
         path.to_string()
     } else if let Some(filename) = path.strip_prefix("iptv/logos/") {
-        format!("{scheme}://{host}/iptv/logos/{filename}{token_uri}")
+        format!("{scheme}://{host}/iptv/logos/{filename}")
     } else {
-        format!("{scheme}://{host}/iptv/logos/{path}{token_uri}")
+        format!("{scheme}://{host}/iptv/logos/{path}")
     }
 }
 
@@ -383,7 +343,6 @@ mod tests {
             "http",
             "example.test:8080",
             "",
-            &AccessToken::default(),
             &channels,
             &specs,
             &logo_paths,
@@ -408,7 +367,6 @@ mod tests {
             "http",
             "example.test:8080",
             "Kodi/20.2 (Linux 6.6; x86_64)",
-            &AccessToken::default(),
             &channels,
             &specs,
             &logo_paths,
@@ -417,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn build_m3u_propagates_access_token() {
+    fn build_m3u_generates_tokenless_urls() {
         let channels = vec![fixture_channel(
             1,
             "1",
@@ -433,12 +391,12 @@ mod tests {
             "http",
             "example.test:8080",
             "",
-            &AccessToken::new(Some("secret")),
             &channels,
             &specs,
             &logo_paths,
         );
-        insta::assert_snapshot!("m3u_access_token", output);
+        assert!(!output.contains("access_token"));
+        assert!(output.contains("/iptv/channel/1.m3u8?mode=segmenter"));
     }
 
     #[test]

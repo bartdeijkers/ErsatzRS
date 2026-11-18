@@ -821,14 +821,15 @@ pub(crate) fn build_streaming_app(app_state: AppState) -> Router {
 }
 
 fn build_hdhr_router(app_state: &AppState) -> Router<AppState> {
-    if app_state.iptv_access_token_verifier.is_enabled() {
-        return Router::new();
-    }
     Router::new()
         .route("/discover.json", get(hdhr::get_discover_json))
         .route("/device.xml", get(hdhr::get_device_xml))
         .route("/lineup_status.json", get(hdhr::get_lineup_status_json))
         .route("/lineup.json", get(hdhr::get_lineup_json))
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            iptv::require_streaming_available,
+        ))
 }
 
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
@@ -883,7 +884,7 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
         )
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
-            iptv::access_token::require_iptv_access,
+            iptv::require_streaming_available,
         ))
 }
 

@@ -3448,7 +3448,7 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
         }
         TextKey::Troubleshooting => "Probleemoplossing",
         TextKey::TunerCount => "Aantal tuners",
-        TextKey::HdhrDisabledByJwt => "HDHomeRun-eindpunten zijn uitgeschakeld omdat JWT-beveiliging voor IPTV is ingeschakeld. Deze instellingen hebben geen effect.",
+        TextKey::HdhrDisabledByJwt => "Verwijder JWT__IssuerSigningKey / JWT:IssuerSigningKey en herstart ErsatzRS om IPTV en HDHomeRun in te schakelen. Streams hebben geen toegangscontrole. Gebruik voor toegang op afstand een VPN of een reverse proxy met authenticatie.",
         TextKey::TvShows => "Series",
         TextKey::Ui => "Interface",
         TextKey::UnavailableLocalMediaMessage => "Er zijn {count} items niet beschikbaar omdat ErsatzRS ze niet op schijf kan vinden, waaronder: {items}",

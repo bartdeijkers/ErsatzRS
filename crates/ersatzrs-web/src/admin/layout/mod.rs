@@ -24,6 +24,12 @@ pub fn AppShell(children: Children) -> impl IntoView {
         Err(error) => ("dark".to_owned(), Some(error)),
     };
 
+    #[cfg(feature = "ssr")]
+    let legacy_streaming_key = use_context::<crate::host::state::AppState>()
+        .is_some_and(|state| state.legacy_streaming_key_configured);
+    #[cfg(not(feature = "ssr"))]
+    let legacy_streaming_key = false;
+
     view! {
         <div
             class=style::shell
@@ -36,6 +42,7 @@ pub fn AppShell(children: Children) -> impl IntoView {
                 <div class=style::content_col>
                     <main class=style::main>
                         {theme_error.map(|error| view! { <AdminErrorState error/> })}
+                        {legacy_streaming_key.then(|| view! { <p role="status" class=style::warning>{tr(TextKey::HdhrDisabledByJwt)}</p> })}
                         {children()}
                     </main>
                 </div>

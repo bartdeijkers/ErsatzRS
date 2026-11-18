@@ -15,7 +15,6 @@ use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus, DbPool};
 use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::hls::InMemoryHlsSessionRegistry;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
-use jsonwebtoken::{DecodingKey, EncodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
@@ -91,14 +90,7 @@ pub struct AppState {
     pub next_engine: Arc<ersatzrs_infra::next_engine::host::NextHost>,
     pub preview_hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
-    pub iptv_access_token_verifier: IptvAccessTokenVerifier,
-}
-
-#[derive(Clone)]
-pub struct IptvAccessTokenVerifier {
-    pub(crate) validation: Option<Validation>,
-    pub(crate) decoding_key: Option<DecodingKey>,
-    pub(crate) encoding_key: Option<EncodingKey>,
+    pub legacy_streaming_key_configured: bool,
 }
 
 impl AppState {
@@ -111,7 +103,7 @@ impl AppState {
         ffmpeg_runtime: FfmpegRuntimeReport,
         device_uuid: Uuid,
         tuner_count: i32,
-        iptv_access_token_verifier: IptvAccessTokenVerifier,
+        legacy_streaming_key_configured: bool,
         playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
         playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
@@ -123,7 +115,7 @@ impl AppState {
             ffmpeg_runtime,
             device_uuid,
             tuner_count,
-            iptv_access_token_verifier,
+            legacy_streaming_key_configured,
             playout_build_tx,
             scan_work_tx,
             playout_locker,
@@ -141,7 +133,7 @@ impl AppState {
         ffmpeg_runtime: FfmpegRuntimeReport,
         device_uuid: Uuid,
         tuner_count: i32,
-        iptv_access_token_verifier: IptvAccessTokenVerifier,
+        legacy_streaming_key_configured: bool,
         playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
         scan_work_tx: mpsc::UnboundedSender<ersatzrs_app::commands::ScanWorkRequest>,
         playout_locker: ersatzrs_core::locking::EntityLocker,
@@ -252,13 +244,13 @@ impl AppState {
             preview_hls_sessions,
             hls_direct_indices: Arc::new(RwLock::new(HashMap::new())),
             next_engine,
-            iptv_access_token_verifier,
+            legacy_streaming_key_configured,
         }
     }
 
     #[cfg(test)]
     #[must_use]
-    pub fn for_tests(iptv_access_token_verifier: IptvAccessTokenVerifier) -> Self {
+    pub fn for_tests(legacy_streaming_key_configured: bool) -> Self {
         let pool =
             ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
         let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
@@ -273,7 +265,7 @@ impl AppState {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             2,
-            iptv_access_token_verifier,
+            legacy_streaming_key_configured,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         )
@@ -417,7 +409,7 @@ fn health_services(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use super::{AppState, SystemStartup};
     use ersatzrs_infra::db::DatabaseSchemaStatus;
     use std::sync::Arc;
 
@@ -450,7 +442,7 @@ mod tests {
 
     #[tokio::test]
     async fn app_state_tuner_count_updates_in_place() {
-        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        let state = AppState::for_tests(false);
         assert_eq!(state.tuner_count(), 2);
 
         state.set_tuner_count(4);
@@ -460,7 +452,7 @@ mod tests {
 
     #[tokio::test]
     async fn app_state_constructs_concrete_application_ports_and_shared_operations() {
-        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        let state = AppState::for_tests(false);
 
         assert!(matches!(
             state

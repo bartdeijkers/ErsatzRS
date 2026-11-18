@@ -34,7 +34,7 @@ use tower::ServiceExt as _;
 use super::super::teletext_retained_output::runtime_tests::{decode_text, exact_tool, probe};
 use crate::host::{
     router::{build_app, build_internal_app},
-    state::{AppState, IptvAccessTokenVerifier, SystemStartup},
+    state::{AppState, SystemStartup},
     teletext_channel_documents::prepare_channel_teletext_document_candidate,
     teletext_designs::{
         request_original_teletext_design_publication, save_original_teletext_design_candidate,
@@ -319,7 +319,7 @@ async fn application(root: &Path, provider: &Server) -> AppState {
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         2,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         sender,
         ersatzrs_core::locking::EntityLocker::default(),
     )

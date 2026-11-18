@@ -43,7 +43,7 @@ Partition the existing axum host's routes by listener, within the same process:
   generators, including legacy concat playlists. Existing callback path names
   need no public compatibility alias: they are internal implementation details.
 - Hybrid MPEG-TS wrappers read public HLS from the actual bound streaming
-  address, mapping wildcard binds to loopback and preserving access tokens.
+  address, mapping wildcard binds to loopback. Under the 2026-11-18 row 302 decision, wrapper URLs carry no streaming token.
   Request and forwarded headers cannot redirect these server-side requests.
 - Bind every required listener before launching host background work. Startup
   failures release already-bound sockets. All listeners share the host shutdown
