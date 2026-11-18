@@ -744,6 +744,21 @@ the duplicate-run check. It is scoped test evidence, not full CI acceptance.
 When deliberately preserving earlier checks, `[skip ci]` on the repair commit
 prevents the automatic full PR run; the manual dispatch still checks that commit.
 
+### Qualify the row 305 worker alongside full application CI
+
+Run the full suite on the combined candidate branch:
+
+```bash
+gh workflow run ci.yml --ref integrate/ucu16-rows-297-305 -f runner=self-hosted -f qualify_next_candidate=true
+```
+
+CI packages the reviewed Next source for Linux x64, ARM64, ARMv7 and Windows
+x64 one at a time. The Next engine job verifies the Linux package receipt,
+exercises playback and checks that the troubleshooting ZIP contains the invalid
+scheduled item and its outcome. The general Chromium job exercises the streaming
+JWT migration. Packages stay attached to the run for 14 days. Managed worker
+promotion is a separate decision under ADR 0135.
+
 ### Rerun only Next engine checks after a fixture repair
 
 For a correction confined to the Next engine gate, dispatch its existing job:

@@ -1,0 +1,147 @@
+--- a/crates/ffpipeline/src/probe.rs
++++ b/crates/ffpipeline/src/probe.rs
+@@ -27,7 +27,7 @@
+     "pgs",
+ ];
+ 
+-static STILL_IMAGE_CODECS: &[&str] = &["png", "mjpeg", "bmp", "tiff"];
++static STILL_IMAGE_CODECS: &[&str] = &["png", "mjpeg", "bmp", "tiff", "webp"];
+ 
+ static DOLBY_VISION_SIDE_DATA: &str = "DOVI configuration record";
+ static HDR10_SIDE_DATA: &[&str] = &["Mastering display metadata", "Content light level metadata"];
+@@ -686,6 +686,27 @@
+         }
+     }
+ 
++    #[test]
++    fn webp_stills_are_distinct_from_animated_webp_and_gif() {
++        for (codec, format, expected) in [
++            ("webp", "webp_pipe", true),
++            ("webp", "image2", true),
++            ("webp", "webp_anim", false),
++            ("webp_anim", "webp_anim", false),
++            ("gif", "gif", false),
++        ] {
++            let mut stream = video_stream(Some(320), Some(180), None, None);
++            stream.codec = codec.to_owned();
++            let result = ProbeResult {
++                path: "synthetic-image".to_owned(),
++                streams: vec![ProbeResultStream::Video(Box::new(stream))],
++                duration: Some(Duration::from_secs(60)),
++                format_name: Some(format.to_owned()),
++            };
++            assert_eq!(result.is_still_image(), expected, "{codec}/{format}");
++        }
++    }
++
+     #[rstest]
+     // a usable SAR always decides on its own
+     #[case(720, 480, Some("32:27"), Some("16:9"), true)]
+--- a/crates/ffpipeline/src/pipeline.rs
++++ b/crates/ffpipeline/src/pipeline.rs
+@@ -322,6 +322,7 @@
+         seek: Duration,
+         realtime: bool,
+         decoder: VideoDecoder,
++        extra_input_args: ArgVec,
+     },
+     Subtitle {
+         input_source: InputSource,
+@@ -676,6 +677,28 @@
+                 },
+                 realtime: final_output_settings.realtime && !final_output_settings.is_live,
+                 decoder: video_decoder,
++                // Reopen animations after one cycle; embedded finite loops must not
++                // end a scheduled image early or freeze it to its first frame.
++                extra_input_args: if !final_output_settings.is_live
++                    && matches!(
++                        (
++                            video_stream.codec.as_str(),
++                            input_settings
++                                .video_input
++                                .probe_result
++                                .format_name
++                                .as_deref()
++                        ),
++                        ("gif", Some("gif")) | ("webp_anim", Some("webp_anim"))
++                    )
++                    && matches!(
++                        input_settings.video_input.input_source,
++                        InputSource::Local(_) | InputSource::Http(_)
++                    ) {
++                    args!["-ignore_loop", "1", "-stream_loop", "-1"]
++                } else {
++                    vec![]
++                },
+             },
+         ];
+ 
+@@ -1302,11 +1325,13 @@
+                     seek,
+                     realtime,
+                     decoder,
++                    extra_input_args,
+                     ..
+                 } => {
+                     input_paths.push(path.as_str());
+ 
+                     result.extend(decoder.as_arg());
++                    result.extend(extra_input_args.clone());
+ 
+                     if let Some((audio_path, audio_args)) = &audio_decoder_args
+                         && *audio_path == path.as_str()
+@@ -1688,6 +1713,54 @@
+             subtitle_force_style: None,
+             reports_folder: None,
+             report_id: None,
++        }
++    }
++
++    #[test]
++    fn animated_programme_loops_all_frames_with_input_options_and_output_bound() {
++        for (codec, container, live, http, repeated) in [
++            ("gif", "gif", false, false, true),
++            ("gif", "gif", false, true, true),
++            ("gif", "gif", true, true, false),
++            ("webp_anim", "webp_anim", false, false, true),
++            ("webp_anim", "webp_anim", false, true, true),
++            ("webp_anim", "webp_anim", true, false, false),
++            ("webp_anim", "webp_anim", true, true, false),
++            ("webp_anim", "matroska", false, false, false),
++            ("gif", "matroska", false, false, false),
++            ("webp", "webp_pipe", false, false, false),
++            ("h264", "matroska", false, false, false),
++        ] {
++            let mut input = multichannel_ac3_input("image-input");
++            let crate::probe::ProbeResultStream::Video(stream) =
++                &mut input.video_input.probe_result.streams[0]
++            else {
++                panic!("fixture must have video");
++            };
++            stream.codec = codec.to_owned();
++            input.video_input.probe_result.format_name = Some(container.to_owned());
++            if http {
++                input.video_input.input_source = InputSource::Http(crate::input::HttpInputSource {
++                    uri: "https://media.example.test/animation.gif".to_owned(),
++                    options: crate::input::HttpInputOptions::default(),
++                });
++            }
++            let mut output = stereo_output();
++            output.is_live = live;
++            let mut pipeline = Pipeline::full(&FfmpegInfo::default(), input, output).unwrap();
++            pipeline.optimize();
++            let argv = pipeline.args();
++            let args: Vec<&str> = argv.iter().map(|arg| arg.as_ref()).collect();
++            let loop_pos = args
++                .windows(4)
++                .position(|w| w == ["-ignore_loop", "1", "-stream_loop", "-1"]);
++            assert_eq!(loop_pos.is_some(), repeated, "{codec}/{container}");
++            if let Some(position) = loop_pos {
++                let input_pos = args.iter().position(|arg| *arg == "-i").unwrap();
++                assert!(position < input_pos);
++                assert!(args.windows(2).any(|w| w == ["-t", "30000ms"]));
++                assert!(!args.iter().any(|arg| arg.contains("loop=-1:1")));
++            }
+         }
+     }
+ 

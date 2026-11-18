@@ -705,6 +705,12 @@ class RequiredPrProof(unittest.TestCase):
         options.update(changes)
         return artifacts.resume_pr_plan(**options)
 
+    def test_candidate_requires_the_qualified_source_tree_marker(self):
+        with self.assertRaises(ValueError):
+            self.plan(candidate=True)
+        marker = dict(self.artifact, name="ci-next-qualified-" + "c" * 40)
+        self.assertEqual(self.plan(candidate=True, artifact=marker)["run_id"], self.run["id"])
+
     def test_full_manual_proof_is_bound_to_source_tree_and_execution(self):
         self.assertEqual(self.plan(), dict(run_id=123, source_sha=SHA, execution_sha='b' * 40,
                                           source_tree='c' * 40, artifact_id=456))
@@ -820,6 +826,16 @@ class CompletedCheckReuse(unittest.TestCase):
                        references=self.references, producer_log=self.producer_log)
         options.update(changes)
         return artifacts.resume_plan(**options)
+
+    def test_ordinary_resume_accepts_only_skipped_candidate_packages(self):
+        candidate = dict(id=9999, run_id=123, name="Qualify Next candidate / Candidate linux-x64",
+                         status="completed", conclusion="skipped")
+        self.jobs["jobs"].append(candidate)
+        self.jobs["total_count"] += 1
+        self.plan()
+        candidate["conclusion"] = "success"
+        with self.assertRaisesRegex(ValueError, "ordinary full CI job inventory"):
+            self.plan()
 
     def test_only_actual_successes_are_reused_and_failed_checks_remain_required(self):
         proof = self.plan()
@@ -1030,12 +1046,12 @@ class FocusedAuditSelection(unittest.TestCase):
         return bool(eval(expression.strip(), {"__builtins__": {}}, {
             "inputs": SimpleNamespace(**inputs), "needs": needs,
             "github": SimpleNamespace(event_name="workflow_dispatch"),
-            "always": lambda: True, "cancelled": lambda: False, "true": True, "false": False,
+            "always": lambda: True, "cancelled": lambda: False, "failure": lambda: False, "true": True, "false": False,
             "env": env or SimpleNamespace(),
         }))
 
     def scheduled(self, lane="full", selection=None, **selected):
-        inputs = dict(audit_only=False, test_only=False, next_engine_only=False,
+        inputs = dict(qualify_next_candidate=False, audit_only=False, test_only=False, next_engine_only=False,
                       teletext_only="none", browser_only="none", browser_case_set="fixtures", reuse_artifacts="", next_case_set="all")
         inputs.update(selected)
         scheduled = set()
@@ -1059,10 +1075,20 @@ class FocusedAuditSelection(unittest.TestCase):
         return scheduled
 
     def test_default_manual_run_keeps_every_job(self):
-        self.assertEqual(self.scheduled(), set(self.jobs))
+        self.assertEqual(self.scheduled(), set(self.jobs) - {"next_candidate_packages"})
+
+    def test_candidate_packages_are_required_on_selected_full_and_pr_runs(self):
+        for lane in ("full", "pr"):
+            outputs = {"next_candidate": "true"}
+            self.assertEqual(self.scheduled(lane=lane, selection=outputs), set(self.jobs))
+            self.assertEqual(self.ci_ok_exit(lane, {}, outputs=outputs), 0)
+            self.assertNotEqual(self.ci_ok_exit(lane, {"next_candidate_packages": "skipped"}, outputs=outputs), 0)
+        result = self.preflight_diff([{"filename": "scripts/release/next-patches/row305/manifest.json",
+                                       "status": "added"}])
+        self.assertEqual(json.loads(result.stdout)["output"]["next_candidate"], "true")
 
     def test_full_reuse_keeps_every_gate_and_requires_complete_scope(self):
-        self.assertEqual(self.scheduled(reuse_artifacts='{"rust":{},"web":{}}'), set(self.jobs))
+        self.assertEqual(self.scheduled(reuse_artifacts='{"rust":{},"web":{}}'), set(self.jobs) - {'next_candidate_packages'})
         provider = self.jobs["build"].split("name: Reuse verified CI artifacts", 1)[1].split("      - uses:", 1)[0]
         self.assertIn("REQUIRE_FULL_WORKSPACE:", provider)
         self.assertIn('"$kind" == \'rust\' && "$REQUIRE_FULL_WORKSPACE" == \'true\'', provider)
@@ -1269,7 +1295,7 @@ class FocusedAuditSelection(unittest.TestCase):
         })["include"]
 
     def test_lanes_schedule_only_their_jobs(self):
-        everything = set(self.jobs)
+        everything = set(self.jobs) - {"next_candidate_packages"}
         self.assertEqual(self.scheduled(lane="pr"), everything)
         self.assertEqual(self.scheduled(lane="light"),
                          everything - {"build", "test", "next_engine", "teletext", "hydration"})
@@ -1297,7 +1323,7 @@ class FocusedAuditSelection(unittest.TestCase):
                     self.assertEqual(self.evaluate(expression, inputs, preflight(lane=lane, **outputs)), expected)
         selected = dict(run_test="false", run_next="false", run_teletext="false", run_browser="true")
         self.assertEqual(self.scheduled(lane="pr", selection=selected),
-                         set(self.jobs) - {"test", "next_engine", "teletext"})
+                         set(self.jobs) - {"test", "next_engine", "teletext", "next_candidate_packages"})
 
     def test_artifact_consumers_require_their_executable_capabilities(self):
         for job, capability in (("test", "rust-tests"), ("next_engine", "smoke-server"),
@@ -1347,6 +1373,9 @@ class FocusedAuditSelection(unittest.TestCase):
         needs["preflight"]["outputs"] = {"skip": skip, "lane": lane, "tree": "", "deselected": deselected}
         if lane == "pr":
             omitted = set(json.loads(deselected))
+            if (outputs or {}).get("next_candidate") != "true":
+                omitted.add("next_candidate_packages")
+            needs["preflight"]["outputs"]["deselected"] = json.dumps(sorted(omitted))
             flags = {key: job not in omitted for job, key in (("test", "run_test"), ("next_engine", "run_next"),
                      ("teletext", "run_teletext"), ("hydration", "run_browser"))}
             flags.update(build_rust=any(flags[key] for key in ("run_test", "run_next", "run_teletext")),
@@ -1363,7 +1392,7 @@ class FocusedAuditSelection(unittest.TestCase):
         flags = dict(run_test='false', run_next='true', run_teletext='true',
                      run_browser='false', reuse_clippy='true')
         self.assertEqual(self.scheduled(selection=flags, reuse_artifacts='{"rust":{},"web":{}}'),
-                         set(self.jobs) - {'test', 'hydration', 'clippy'})
+                         set(self.jobs) - {'test', 'hydration', 'clippy', 'next_candidate_packages'})
         expression = re.search(r"^      matrix: (.+)$", self.jobs["hydration"], re.M)[1]
         expression = expression.removeprefix("${{").removesuffix("}}").strip()
         expression = expression.replace("&&", " and ").replace("||", " or ")

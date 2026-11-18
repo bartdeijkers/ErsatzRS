@@ -558,13 +558,16 @@ Commit 9133cd28 preserves invalid scheduled item JSON in playout_item.json and
 writes a dossier on troubleshooting errors before FFmpeg starts. Row 304
 accepts existing logs or an outcome and includes JSON files in the ZIP.
 
-The current manifest's 13 checked patches apply to 6c9e0cf7 and reproduce the
-pinned Cargo.lock digest. That prepared source still returns the troubleshooting
-error directly and lacks the invalid-item dossier builder and NVIDIA shutdown
-guard. On 9133cd28 the first two patches apply. Patch 0003-update-worker-security-lock.patch
-fails at Cargo.lock:75. Reconcile the lock and remaining patches against the
-successor, retaining their regression checks. Verify an invalid scheduled item
-produces a downloadable dossier with its input JSON and outcome before FFmpeg
-starts, and verify the NVIDIA probe lifecycle within the existing hardware and
-platform scope. ADR 0135 governs package qualification and managed adoption.
+Candidate 0.2.7-9133cd28-ersatzrs.candidate.1 is reproducible from the pinned
+source archive using scripts/release/next-patches/row305/manifest.json. The 12
+patches reproduce the reviewed source and Cargo.lock. Upstream includes the
+dependency fixes previously carried by patch 0003. Four retained patches were
+rebased, including the XMLTV regressions. Cargo resolves the locked worker
+graph for all four required targets.
+
+The combined CI run must build and exercise the four packages, run the Linux
+worker regressions and playback, and archive the real invalid-item dossier
+with its original JSON and outcome. NVIDIA hardware execution retains its
+existing hardware prerequisite. Managed promotion under ADR 0135 requires
+qualified package identities and remains open. Production still uses 6c9e0cf7.
 '''

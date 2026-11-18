@@ -78,6 +78,8 @@ release section when tagging a release.
 
 ### Changed
 
+- Full CI can qualify the next playback worker on all four required targets and verify that troubleshooting downloads preserve an invalid scheduled item when playback fails before FFmpeg starts.
+
 - **BREAKING CHANGE** IPTV and HDHomeRun streams are unauthenticated. Remove the legacy JWT signing key and restart to enable streaming. Use a VPN or authenticated reverse proxy for remote access.
 
 - Replace chrono with Jiff for application clocks and elapsed time. Existing

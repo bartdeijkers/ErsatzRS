@@ -2865,6 +2865,36 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires the invalid-item dossier emitted by the candidate worker"]
+    async fn troubleshooting_archive_includes_worker_fixture() {
+        use std::io::Read as _;
+
+        #[allow(clippy::disallowed_methods)]
+        let root = PathBuf::from(std::env::var_os("ERSATZRS_TEST_INVALID_ITEM_DOSSIER").unwrap());
+        let bytes = build_troubleshooting_archive_from(&root)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let names: Vec<_> = archive
+            .file_names()
+            .map(|name| name.unwrap().into_owned())
+            .collect();
+        for suffix in ["/playout_item.json", "/outcome.txt"] {
+            let mut matches = names.iter().filter(|name| name.ends_with(suffix));
+            let name = matches.next().expect("dossier member");
+            assert!(matches.next().is_none());
+            let mut actual = Vec::new();
+            archive
+                .by_name(name)
+                .unwrap()
+                .read_to_end(&mut actual)
+                .unwrap();
+            assert_eq!(actual, tokio::fs::read(root.join(name)).await.unwrap());
+        }
+    }
+
+    #[tokio::test]
     async fn troubleshooting_archive_preserves_same_named_reports_without_duplicates() {
         use std::io::Read as _;
         let root = tempfile::tempdir().unwrap();

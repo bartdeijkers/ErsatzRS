@@ -392,6 +392,14 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
     browser_names = [f"Playwright E2E ({row['suite']}, {row['project']})" for row in browsers]
     required = {"Preflight", "Format", "Documentation links", "Clippy", "Commit lint",
                 "Cargo deny", "Test", "Next engine", "Teletext 1.5", "CI ok", *browser_names}
+    # GitHub can report a skipped reusable workflow in an ordinary full run.
+    # Accept only skipped candidate jobs here. Active candidate runs have their
+    # own package and runtime evidence and cannot supply ordinary resume proof.
+    candidate_jobs = {"Qualify Next candidate", "Qualify Next candidate / package",
+                      *(f"Qualify Next candidate / Candidate {rid}" for rid in
+                        ("linux-x64", "linux-arm64", "linux-arm", "win-x64"))}
+    required.update(name for name in candidate_jobs
+                    if name in by_name and by_name[name].get("conclusion") == "skipped")
     producers = set(by_name) & {'Build CI artifacts', 'Verify reused CI artifacts'}
     if (len(producers) != 1 or set(by_name) != required | producers
             or len(rows) != len(by_name) or jobs.get("total_count") != len(rows)
@@ -441,7 +449,7 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
 
 
 def resume_pr_plan(run, artifact, repository, producer, tree, execution,
-                   changes, old_helper, new_helper, old_workflow, new_workflow):
+                   changes, old_helper, new_helper, old_workflow, new_workflow, *, candidate=False):
     """Bridge a completed full proof into an eligible PR check without retesting."""
     if (any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (producer, tree, execution))
             or run.get("head_sha") != producer or run.get("status") != "completed"
@@ -452,7 +460,7 @@ def resume_pr_plan(run, artifact, repository, producer, tree, execution,
             or type(run.get("id")) is not int or run["id"] <= 0
             or type(artifact.get("id")) is not int or artifact["id"] <= 0
             or artifact.get("expired") is not False
-            or artifact.get("name") != f"ci-full-{tree}"
+            or artifact.get("name") != f"{'ci-next-qualified' if candidate else 'ci-full'}-{tree}"
             or artifact.get("workflow_run", {}).get("id") != run["id"]):
         raise ValueError("PR proof requires a completed same-source full CI marker")
     allowed = {".github/workflows/ci.yml", "scripts/ci-build-artifacts.py",
@@ -475,7 +483,7 @@ def resume_pr_plan(run, artifact, repository, producer, tree, execution,
             "source_tree": tree, "artifact_id": artifact["id"]}
 
 
-def resume_pr_checks(repository, head, execution):
+def resume_pr_checks(repository, head, execution, *, candidate=False):
     """Consider only the PR head's direct parent; absent proof keeps ordinary CI."""
     if any(not re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (head, execution)):
         raise ValueError("PR proof requires full commit SHAs")
@@ -491,7 +499,8 @@ def resume_pr_checks(repository, head, execution):
     def api(path):
         return json.loads(subprocess.check_output(["gh", "api", f"repos/{repository}/{path}"], text=True))
     try:
-        inventory = api(f"actions/artifacts?name=ci-full-{tree}&per_page=100")
+        prefix = "ci-next-qualified" if candidate else "ci-full"
+        inventory = api(f"actions/artifacts?name={prefix}-{tree}&per_page=100")
     except subprocess.CalledProcessError:
         print("Full proof lookup unavailable; ordinary PR checks remain required", file=sys.stderr)
         return None
@@ -512,7 +521,7 @@ def resume_pr_checks(repository, head, execution):
                 source(producer, "scripts/ci-build-artifacts.py"),
                 source(execution, "scripts/ci-build-artifacts.py"),
                 source(producer, ".github/workflows/ci.yml"),
-                source(execution, ".github/workflows/ci.yml"))
+                source(execution, ".github/workflows/ci.yml"), candidate=candidate)
         except ValueError as error:
             print(f"Full proof not reusable; ordinary PR checks remain required: {error}", file=sys.stderr)
     return None

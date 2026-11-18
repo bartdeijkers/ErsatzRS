@@ -33,6 +33,10 @@ on:
         options:
           - self-hosted
           - github-hosted
+      qualify_next_candidate:
+        description: Include the row 305 worker packages and application integration in this full run
+        type: boolean
+        default: false
       test_only:
         description: Run only the Rust Test job (does not establish full CI acceptance)
         type: boolean
@@ -150,7 +154,7 @@ jobs:
   # separately. A draft never establishes a passing required merge check.
   preflight:
     name: Preflight
-    if: ${{ inputs.audit_only || (!inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none')) }}
+    if: ${{ inputs.qualify_next_candidate || inputs.audit_only || (!inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none')) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -165,6 +169,7 @@ jobs:
       tree: ${{ steps.duplicate.outputs.tree }}
       # Domain selection of a `pr` lane run. Empty for every other lane, which
       # the jobs read as "run".
+      next_candidate: ${{ steps.duplicate.outputs.next_candidate || inputs.qualify_next_candidate }}
       run_next: ${{ steps.resume.outputs.run_next || steps.select.outputs.run_next }}
       run_teletext: ${{ steps.resume.outputs.run_teletext || steps.select.outputs.run_teletext }}
       run_browser: ${{ steps.resume.outputs.run_browser || steps.select.outputs.run_browser }}
@@ -183,6 +188,11 @@ jobs:
       deselected: ${{ steps.select.outputs.deselected }}
       required_jobs: ${{ steps.select.outputs.required_jobs }}
     steps:
+      - name: Check candidate qualification mode
+        if: ${{ inputs.qualify_next_candidate && (inputs.resume_run || inputs.audit_only || inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none')) }}
+        run: |
+          echo "::error::Next candidate qualification requires a full run with fresh behavioral checks."
+          exit 1
       - name: Reject mixed audit mode
         if: ${{ inputs.audit_only && (inputs.test_only || inputs.next_engine_only || (inputs.teletext_only && inputs.teletext_only != 'none') || (inputs.browser_only && inputs.browser_only != 'none') || (inputs.browser_case_set && inputs.browser_case_set != 'fixtures') || inputs.reuse_artifacts || (inputs.next_case_set && inputs.next_case_set != 'all')) }}
         run: |
@@ -249,6 +259,13 @@ jobs:
                   throw new Error('Malformed PR file metadata; refusing to deselect checks');
                 }
                 names.add(file.filename);
+              }
+              const candidateInput = path => path && (
+                path.startsWith('scripts/release/next-patches/row305/') ||
+                ['.github/workflows/next-candidate-packages.yml', 'scripts/e2e/next-invalid-item-dossier.py',
+                 'scripts/release/unpack-next-candidate.py'].includes(path));
+              if (files.some(file => candidateInput(file.filename) || candidateInput(file.previous_filename))) {
+                core.setOutput('next_candidate', 'true');
               }
               const docsOnly = files.length > 0 && files.every(
                 (file) => nonCode(file.filename)
@@ -415,6 +432,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          NEXT_CANDIDATE: ${{ steps.duplicate.outputs.next_candidate }}
         run: |
           python3 scripts/ci-build-artifacts_test.py
           python3 - >> "$GITHUB_OUTPUT" <<'PY'
@@ -423,7 +441,7 @@ jobs:
           artifacts = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(artifacts)
           proof = artifacts.resume_pr_checks(os.environ['GITHUB_REPOSITORY'],
-              os.environ['PR_HEAD_SHA'], os.environ['GITHUB_SHA'])
+              os.environ['PR_HEAD_SHA'], os.environ['GITHUB_SHA'], candidate=os.environ['NEXT_CANDIDATE'] == 'true')
           if proof:
               print('qualified_pr_proof=' + json.dumps(proof, separators=(',', ':')))
               print('lane=skip')
@@ -431,6 +449,8 @@ jobs:
           PY
       - id: select
         name: Select touched domains
+        env:
+          NEXT_CANDIDATE: ${{ steps.duplicate.outputs.next_candidate }}
         if: ${{ steps.duplicate.outputs.lane == 'pr' && steps.pr_proof.outputs.skip != 'true' }}
         run: |
           # The checkout is the merge result; its first parent is the base the
@@ -443,7 +463,7 @@ jobs:
           python3 scripts/ci-domains.py select "$RUNNER_TEMP/changed-files.txt" \
             --added-files "$RUNNER_TEMP/added-files.txt" "${base[@]}" > "$RUNNER_TEMP/selection.json"
           python3 - "$RUNNER_TEMP/selection.json" >> "$GITHUB_OUTPUT" <<'PY'
-          import json, sys
+          import json, os, sys
           s = json.load(open(sys.argv[1]))
           print(json.dumps(s, indent=1), file=sys.stderr)
           if not (all(type(s[key]) is bool for key in ("next", "teletext_rust", "teletext_browser"))
@@ -464,7 +484,7 @@ jobs:
                                "web": bool(rows), "smoke_server": s["next"]}:
               raise ValueError("Selected products and consumers disagree")
           deselected = [job for job, on in (("test", bool(s["rust_packages"])), ("next_engine", s["next"]), ("teletext", s["teletext_rust"]),
-                                            ("hydration", bool(rows))) if not on]
+                                            ("hydration", bool(rows)), ("next_candidate_packages", s["next"] and os.environ.get("NEXT_CANDIDATE") == "true")) if not on]
           nothing = not (s["products"]["rust"] or rows)
           print(f"lane={'light' if nothing else 'pr'}")
           print('skip=false')
@@ -481,7 +501,7 @@ jobs:
           print(f"general_filter={s['general_filter']}")
           print(f"teletext_filter={s['teletext_filter']}")
           print("deselected=" + json.dumps(sorted(deselected), separators=(",", ":")))
-          jobs = {"preflight", "fmt", "clippy", "build", "test", "next_engine", "teletext", "hydration", "deny", "commitlint", "docs"}
+          jobs = {"preflight", "fmt", "clippy", "build", "test", "next_engine", "next_candidate_packages", "teletext", "hydration", "deny", "commitlint", "docs"}
           print("required_jobs=" + json.dumps(sorted(jobs - set(deselected)), separators=(",", ":")))
           PY
           {
@@ -912,14 +932,22 @@ jobs:
           "$CI_XTASK" progress check
           "$CI_XTASK" architecture-lint
 
+  next_candidate_packages:
+    name: Qualify Next candidate
+    needs: [preflight, build, test, clippy, deny, teletext, hydration]
+    if: ${{ always() && !cancelled() && !failure() && needs.build.result == 'success' && needs.preflight.outputs.next_candidate == 'true' && needs.preflight.outputs.run_next != 'false' && !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    uses: ./.github/workflows/next-candidate-packages.yml
+    with:
+      pool: ${{ github.event.pull_request.head.repo.fork && 'github-hosted' || inputs.runner || needs.preflight.outputs.pool || 'self-hosted' }}
+
   next_engine:
     name: Next engine
     defaults:
       run:
         shell: bash
     runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
-    needs: [preflight, build]
-    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.run_next != 'false' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
+    needs: [preflight, build, next_candidate_packages]
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && (needs.preflight.outputs.next_candidate != 'true' || needs.next_candidate_packages.result == 'success') && needs.preflight.outputs.lane != 'light' && needs.preflight.outputs.run_next != 'false' && !inputs.test_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ (inputs.runner == 'github-hosted' || needs.preflight.outputs.pool == 'github-hosted') && '8' || '2' }}
@@ -1049,6 +1077,29 @@ jobs:
         run: |
           smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
           ERSATZRS_SMOKE_PORT="$smoke_port" "$CI_XTASK" smoke --server-bin "$CI_SMOKE_SERVER" --next-convert --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke-convert.log
+      - name: Fetch the Linux candidate built in this run
+        if: needs.next_candidate_packages.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: next-row305-linux-x64
+          path: ci-input/next-row305
+      - name: Verify the candidate dossier, archive and playback
+        if: needs.next_candidate_packages.result == 'success'
+        run: |
+          native_port="$(python3 -c 'import socket; sock=socket.socket(); sock.bind(("127.0.0.1",0)); print(sock.getsockname()[1]); sock.close()')"
+          ERSATZRS_SMOKE_PORT="$native_port" "$CI_XTASK" smoke --server-bin "$CI_SMOKE_SERVER"
+          manifest=scripts/release/next-patches/row305/manifest.json
+          candidate="$TMPDIR/next-row305"
+          export ETV_NEXT_FOLDER="$candidate" ERSATZRS_NEXT_TEST_BIN="$candidate/ersatztv-channel"
+          python3 scripts/release/unpack-next-candidate.py "$manifest" ci-input/next-row305 "$candidate"
+          export ERSATZRS_TEST_INVALID_ITEM_DOSSIER="$TMPDIR/invalid-item-dossier"
+          python3 scripts/e2e/next-invalid-item-dossier.py --worker "$ERSATZRS_NEXT_TEST_BIN" \
+            --ffmpeg "$FFMPEG_PATH" --ffprobe "$FFPROBE_PATH" --reports-output "$ERSATZRS_TEST_INVALID_ITEM_DOSSIER"
+          "$CI_NEXTEST" nextest run --archive-file "$CI_NEXTEST_ARCHIVE" --workspace-remap "$GITHUB_WORKSPACE" \
+            --profile ci --run-ignored ignored-only --no-tests fail -E \
+            'package(=ersatzrs-web) & test(=host::troubleshooting::tests::troubleshooting_archive_includes_worker_fixture)'
+          smoke_port="$(python3 -c 'import socket; sock=socket.socket(); sock.bind(("127.0.0.1",0)); print(sock.getsockname()[1]); sock.close()')"
+          ERSATZRS_SMOKE_PORT="$smoke_port" "$CI_XTASK" smoke --server-bin "$CI_SMOKE_SERVER" --next --hls-lifecycle --keep-temp
       - name: Collect Next diagnostics
         if: always()
         run: |
@@ -1290,6 +1341,7 @@ jobs:
           echo "ERSATZRS_FFMPEG_DIR=$runtime_tmp/ffmpeg" >> "$GITHUB_ENV"
       - name: Playwright E2E suite or bounded fixture recovery
         env:
+          COMBINED_CANDIDATE: ${{ needs.preflight.outputs.next_candidate }}
           BROWSER_ONLY: ${{ inputs.browser_only }}
           BROWSER_PROJECT: ${{ matrix.project }}
           BROWSER_SUITE: ${{ matrix.suite }}
@@ -1328,6 +1380,14 @@ jobs:
           # suites at once (it made results unreliable and their fixed ports
           # collide), also across workflow runs.
           python3 scripts/e2e/host-lock.py -- scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
+          if [[ "$COMBINED_CANDIDATE" == true && "$BROWSER_SUITE" == general && "$BROWSER_PROJECT" == chromium ]]; then
+            for key in JWT__IssuerSigningKey JWT:IssuerSigningKey; do
+              result_dir="test-results-migration/${key//:/-}"
+              env "$key=" E2E_HDHR_JWT_ENABLED=1 ERSATZRS_E2E_RESULT_DIR="$result_dir" \
+                python3 scripts/e2e/host-lock.py -- scripts/e2e/playwright-e2e.sh \
+                tests/e2e/hdhr-jwt.spec.ts --project=chromium --output="$result_dir/artifacts"
+            done
+          fi
       - name: Upload Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@v7
@@ -1336,6 +1396,7 @@ jobs:
           path: |
             test-results/
             playwright-report/
+            test-results-migration/
           if-no-files-found: ignore
 
   deny:
@@ -1457,7 +1518,7 @@ jobs:
   # modes do not establish full CI and therefore do not run it.
   ci_ok:
     name: CI ok
-    needs: [preflight, fmt, clippy, build, test, next_engine, teletext, hydration, deny, commitlint, docs]
+    needs: [preflight, fmt, clippy, build, test, next_engine, next_candidate_packages, teletext, hydration, deny, commitlint, docs]
     if: ${{ always() && !inputs.audit_only && !inputs.test_only && !inputs.next_engine_only && (!inputs.teletext_only || inputs.teletext_only == 'none') && (!inputs.browser_only || inputs.browser_only == 'none') }}
     runs-on: ubuntu-24.04
     steps:
@@ -1491,6 +1552,9 @@ jobs:
               sys.exit(0)
           # The weekly run has no new commit range to lint.
           optional = {"commitlint"} if os.environ["EVENT_NAME"] == "schedule" else set()
+          candidate_required = lane in ("full", "pr") and outputs.get("next_candidate") == "true" and outputs.get("run_next") != "false"
+          if not candidate_required:
+              optional.add("next_candidate_packages")
           raw_proof = outputs.get("resumed_checks", "")
           if os.environ.get("RESUME_RUN_ID") or raw_proof:
               proof = json.loads(raw_proof or "null")
@@ -1551,6 +1615,8 @@ jobs:
                   sys.exit("::error::PR consumers and build products disagree")
               omitted = {job for job, key in (("test", "run_test"), ("next_engine", "run_next"),
                          ("teletext", "run_teletext"), ("hydration", "run_browser")) if not selected[key]}
+              if not candidate_required:
+                  omitted.add("next_candidate_packages")
               # An explicit required set must account for every current gate.
               # Neither missing output nor a broad list of skips grants a pass.
               if (json.loads(outputs.get("deselected", "null")) != sorted(omitted)
@@ -1594,5 +1660,11 @@ jobs:
         if: ${{ needs.preflight.outputs.lane == 'full' && needs.preflight.outputs.tree != '' }}
         with:
           name: ci-full-${{ needs.preflight.outputs.tree }}
+          path: ci-full.txt
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: ${{ needs.preflight.outputs.lane == 'full' && needs.next_candidate_packages.result == 'success' && needs.preflight.outputs.tree != '' }}
+        with:
+          name: ci-next-qualified-${{ needs.preflight.outputs.tree }}
           path: ci-full.txt
           retention-days: 14
